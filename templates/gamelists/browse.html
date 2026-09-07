@@ -28,21 +28,13 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
                     </p>
                 </div>
 
-                <div class="flex items-center gap-3 shrink-0">
-                    <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block">
-                        <span id="gl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
-                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists shown</span>
-                    </div>
-                    {% if user.is_authenticated and user.profile %}
-                    {% comment %}`.pp-cta`, not DaisyUI's `btn` -- its sibling page argues the same
-                    point in its own header, and two pages of one feature using two button systems is
-                    the drift this rebuild removes. `aria-label` unconditionally, because the label
-                    span is `hidden` below md and `hidden` drops it from the accessibility tree.{% endcomment %}
-                    <a href="{% url 'my_lists' %}" class="pp-cta shrink-0" aria-label="My lists">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                        <span class="hidden md:inline">My lists</span>
-                    </a>
-                    {% endif %}
+                {% comment %}The tally stands ALONE here. Every other rebuilt header on the site is
+                identity plus its headline number and nothing else, and a button sharing that slot
+                puts a control at the same optical level as a display number, so the two compete.
+                The action moved to the toolbar row, where controls live.{% endcomment %}
+                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
+                    <span id="gl-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists shown</span>
                 </div>
             </div>
         </div>
@@ -107,6 +99,18 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
                     <span class="pp-gl-range__dash" aria-hidden="true">&ndash;</span>
                     <input type="number" name="max_games" value="{{ request.GET.max_games }}" min="0" inputmode="numeric" placeholder="max" aria-label="Maximum games" />
                 </span>
+            
+                {% comment %}Primary destination at the right end of the control row -- the convention
+                every filter toolbar worth copying uses, and the reason it is here rather than in the
+                header card. It is a NAVIGATION, not a filter, so it is separated from them and does
+                not participate in the form. When the Community hub is re-formed this becomes a
+                subnav item and this link goes away.{% endcomment %}
+                {% if user.is_authenticated and user.profile %}
+                <a href="{% url 'my_lists' %}" class="pp-cta pp-cta--ghost shrink-0" aria-label="My lists">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                    <span class="hidden md:inline">My lists</span>
+                </a>
+                {% endif %}
             </div>
         </div>
 

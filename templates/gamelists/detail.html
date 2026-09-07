@@ -114,9 +114,17 @@ below with no outer wrapper.
             </div>
 
             {% comment %}Actions. A visitor gets the two social acts; the owner gets the things only
-            an owner can do. Nobody gets both, because there is no state in which both apply.{% endcomment %}
+            an owner can do. Nobody gets both, because there is no state in which both apply.
+
+            These stay IN the header, unlike the browse and My Lists page actions that moved out to
+            their toolbars -- because these act on the very thing the header describes, and the
+            toolbar below is about the GAMES, not the list. What was wrong was the seam, not the
+            place: a bare wrap row at `mt-5` read as buttons loose under the title rather than as a
+            band, and the explanatory line beside them made it look like a sentence had sprouted
+            controls. A rule and its own rhythm separate the two registers, which is what the header
+            card wanted all along.{% endcomment %}
             {% if can_act or is_owner %}
-            <div class="flex flex-wrap items-center gap-2 mt-5">
+            <div class="gl-actions">
                 {% if can_act %}
                 <button type="button" class="pp-cta{% if not viewer_has_liked %} pp-cta--ghost{% endif %}"
                         data-gl-like data-url="{% url 'list_like' game_list.id %}"

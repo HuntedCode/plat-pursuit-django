@@ -411,3 +411,24 @@
         animation: glPublishSweep 900ms cubic-bezier(0.3, 0.7, 0.3, 1) both;
     }
 }
+
+/* The list's own actions, as a BAND inside the header card rather than a wrap row loose beneath the
+   title. They belong in the header -- they act on the thing it describes, and the toolbar below is
+   about the games -- so the fix was the seam, not the location. A hairline and its own rhythm give
+   the controls a register distinct from the identity block above, which is what stopped them
+   reading as a sentence that had sprouted buttons.
+
+   The explanatory line is pushed to its own row below `sm` so a phone shows the controls and their
+   caption stacked rather than a button wedged against ten words of prose. */
+.gl-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--pp-divider);
+}
+@media (max-width: 519px) {
+    .gl-actions > span:not(.contents) { flex-basis: 100%; }
+}

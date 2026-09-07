@@ -941,3 +941,24 @@ def test_the_rename_control_is_a_real_touch_target():
 
     assert 'width:44px' in declarations, f'the pencil is under the 44px minimum: {declarations}'
     assert 'cursor:pointer' in declarations
+
+
+def test_the_header_card_holds_no_page_action(client):
+    """Every other rebuilt header on the site is identity plus its headline number and nothing else.
+    A button sharing the tally's slot sits at the same optical level as a display number and the two
+    compete -- which is why browse's "My lists" and My Lists' "New list" moved to their toolbars.
+
+    The detail page's actions are the exception ON PURPOSE: they act on the very thing the header
+    describes, and the toolbar below is about the games. So they stay, in their own band with a rule
+    above them rather than loose under the title.
+    """
+    owner = _staff(client)
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'gl-actions' in body
+    head = body[body.index('pp-head-cascade'):body.index('gl-actions')]
+    # The identity block and the tallies -- and no controls competing with them.
+    assert 'data-game-count' in head
+    assert 'data-gl-publish' not in head, 'an action is back in the identity row'

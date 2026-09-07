@@ -42,27 +42,12 @@ notification system this release -- so the tab is the feature, not decoration on
                     {% endif %}
                 </div>
 
-                <div class="flex items-center gap-3 shrink-0">
-                    <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block">
-                        <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ list_count }}<span class="text-base-content/40">/{{ list_cap }}</span></span>
-                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists</span>
-                    </div>
-                    {% comment %}`aria-disabled`, NOT `disabled`. A truly disabled button takes no
-                    pointer events (so its title never renders as a tooltip) and leaves the tab order
-                    (so it can never be focused or announced) -- the at-cap explanation was
-                    unreachable by every route including the mouse. This stays focusable and
-                    announced, and the reason is rendered as visible text below rather than hidden in
-                    an attribute. The `aria-label` is unconditional because the label span is
-                    `hidden` below md, and `hidden` removes it from the accessibility tree, leaving
-                    the page's primary action announced as bare "button".{% endcomment %}
-                    {% comment %}`.pp-cta`, the shared button primitive, rather than DaisyUI's `btn` --
-                    it carries the house glow-on-hover and focus ring, and it is what the modal's own
-                    actions use, so the button and the thing it opens speak the same language.{% endcomment %}
-                    <button type="button" class="pp-cta shrink-0" data-gl-open
-                            aria-label="New list"{% if at_cap %} aria-disabled="true"{% endif %}>
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                        <span class="hidden md:inline">New list</span>
-                    </button>
+                {% comment %}The tally alone, as every other rebuilt header has it. The action moved
+                down to the switcher row: a control sharing the display slot sat at the same optical
+                level as the number and the two competed.{% endcomment %}
+                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ list_count }}<span class="text-base-content/40">/{{ list_cap }}</span></span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists</span>
                 </div>
             </div>
         </div>
@@ -75,7 +60,11 @@ notification system this release -- so the tab is the feature, not decoration on
 
     An earlier cut used plain links with `role="group"`. That was an honest description of what it
     did and a dishonest one of what it should do: on this site a segmented switcher swaps.{% endcomment %}
-    <div class="flex items-center justify-end mt-5 mb-3">
+    {% comment %}A real toolbar row: the CONTROL on the left, the page's primary action pinned right
+    -- the same arrangement the browse page's filter bar now uses, and the convention every toolbar
+    worth copying follows. It was `justify-end` with the switcher alone while "New list" sat up in
+    the header's display slot.{% endcomment %}
+    <div class="flex items-center justify-between gap-3 mt-5 mb-3">
         <div class="pp-switch" role="tablist" aria-label="Which lists to show" data-gl-scopes>
             {% for value, label in scopes %}
             <a href="?scope={{ value }}"
@@ -97,6 +86,24 @@ notification system this release -- so the tab is the feature, not decoration on
             </a>
             {% endfor %}
         </div>
+
+        {% comment %}`aria-disabled`, NOT `disabled`. A truly disabled button takes no pointer events
+        (so its title never renders as a tooltip) and leaves the tab order (so it can never be focused
+        or announced) -- the at-cap explanation was unreachable by every route including the mouse.
+        This stays focusable and announced, and the reason is rendered as visible text in the header
+        above rather than hidden in an attribute.
+
+        `.pp-cta`, the shared button primitive, rather than DaisyUI's `btn`: it carries the house
+        glow-on-hover and focus ring, and it is what the modal's own actions use, so the button and
+        the thing it opens speak the same language. The label is hidden below `md` because this row
+        also holds the switcher, and two labelled controls do not fit at 375px -- which is why the
+        `aria-label` is unconditional, since `hidden` drops the span from the accessibility tree and
+        would leave the page's primary action announced as a bare "button".{% endcomment %}
+        <button type="button" class="pp-cta shrink-0" data-gl-open
+                aria-label="New list"{% if at_cap %} aria-disabled="true"{% endif %}>
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="hidden md:inline">New list</span>
+        </button>
     </div>
 
     {% comment %}A STABLE WRAPPER as the swap target, with `innerHTML` -- which is what every other

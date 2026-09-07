@@ -437,3 +437,18 @@ def test_a_signed_in_reader_without_a_profile_is_offered_nothing_they_cannot_do(
     resp = staff_client.get(BROWSE)
 
     assert 'Make a list' not in resp.content.decode()
+
+
+def test_the_browse_action_sits_in_the_toolbar_not_the_header(linked_staff_client):
+    """The tally slot is a DISPLAY register. A control in it reads at the same optical level as the
+    number, so the two compete -- and no other rebuilt header on the site does it. The destination
+    belongs at the right end of the control row, which is where every filter toolbar worth copying
+    puts it."""
+    body = linked_staff_client.get(BROWSE).content.decode()
+
+    header_end = body.index('</section>')
+    assert 'My lists' not in body[:header_end], 'the action is back in the header card'
+    assert 'My lists' in body[header_end:]
+    # And it is inside the toolbar's control row rather than floating between the two.
+    bar = body[body.index('pp-gbrowse__bar'):]
+    assert 'My lists' in bar[:bar.index('</form>')]
