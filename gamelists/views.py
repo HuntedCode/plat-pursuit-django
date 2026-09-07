@@ -129,8 +129,13 @@ class BrowseListsView(_DevelopmentGate, HtmxListMixin, ListView):
 
         sort = self._selected_sort()
         if sort == 'alpha':
-            # `Lower()` because Postgres sorts uppercase before lowercase, so a plain `name` sort
-            # files "apex" after "Zenith" -- the house rule for every front-facing name column.
+            # `Lower()` is the house rule for every front-facing name column, but the reason written
+            # here was wrong and is worth correcting rather than deleting: it claimed Postgres files
+            # "apex" after "Zenith" without it. Not on this database -- `lc_collate` is `en_US.utf8`,
+            # whose collation already ignores case for ordering, so raw and `lower()` return the same
+            # order (verified against the server, not assumed). That is only true under the `C`
+            # collation. Keep `Lower()` because it makes the order explicit and
+            # collation-INDEPENDENT, not because the default would otherwise be wrong here.
             return queryset.order_by(Lower('name'))
         return queryset.order_by(*self._ORDERING[sort])
 
@@ -337,12 +342,18 @@ class GameListDetailView(_DevelopmentGate, DetailView):
     #: Sorts as DATA, one list read by the toolbar and the queryset both. Deliberately fewer than the
     #: thirteen the old page carried (of which four were unreachable): a curated list has an ORDER
     #: its author chose, so that is the default and the rest are ways to interrogate it.
+    # A COLLECTION IS UNORDERED. It has no curated sequence, so it offers no "List order" and no
+    # drag: what a hunter wants from a shelf is to find things on it, which is what A-Z is for.
+    # An ordered list is a different TYPE (Ranked), coming with the type system -- see
+    # docs/design/game-list-types.md. `GameListItem.position` stays and stays DENSE regardless: it is
+    # insertion order here, and `attach_cover_games` bounds the tile mosaic on `position__lt=4`.
     SORT_CHOICES = (
-        ('position', 'List order'),
         ('name', 'A-Z'),
+        ('name_desc', 'Z-A'),
         ('added', 'Recently added'),
+        ('oldest', 'First added'),
     )
-    _DEFAULT_SORT = 'position'
+    _DEFAULT_SORT = 'name'
 
     def get_queryset(self):
         # `select_related('owner')` for the byline; the cover art is attached per-item below.
@@ -371,13 +382,25 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         viewer = self._viewer()
 
         sort = self._selected_sort()
+        # `Lower()` on the title sorts. NOT for the reason usually given: this database is
+        # `en_US.utf8`, whose collation already ignores case for ordering, so a raw column sort
+        # produces the same rows in the same order (checked directly -- raw, `lower()` and the
+        # documented claim disagree only under the `C` collation, which files every uppercase title
+        # before every lowercase one). The real reason to keep it is that it makes the ordering
+        # explicit and collation-INDEPENDENT, so a restore into a differently-collated cluster does
+        # not silently reshuffle the page.
+        #
+        # `position` tiebreaks EVERY sort, not just the date ones. `added_at` is `auto_now_add`, set
+        # in Python, so ties are rare rather than impossible and a bulk-add path would tie outright;
+        # and two concepts can share a title outright. Without a total order the same list renders in
+        # two different orders on two loads, which reads as a bug and cannot be reproduced on demand.
+        title = Lower('concept__unified_title')
         order = {
-            'name': ('concept__unified_title',),
-            # `position` as the tiebreak: `added_at` is `auto_now_add`, set in Python, so ties are
-            # rare rather than impossible -- and a future bulk-add path would tie outright. Without
-            # it the same list renders in two different orders on two loads.
+            'name': (title.asc(), 'position'),
+            'name_desc': (title.desc(), 'position'),
             'added': ('-added_at', 'position'),
-        }.get(sort, ('position',))
+            'oldest': ('added_at', 'position'),
+        }.get(sort, (title.asc(), 'position'))
 
         # `concept__igdb_match`, deferred, because the tile calls `concept.game_page_url` -- whose
         # own docstring says callers rendering many concepts must select_related it "or this walks
@@ -427,25 +450,6 @@ class GameListDetailView(_DevelopmentGate, DetailView):
             {'text': 'Game Lists', 'url': reverse_lazy('lists_browse')},
             {'text': game_list.name},
         ]
-
-        # Reorder is offered only when all three hold, and each one matters:
-        #
-        #   owner          -- it writes.
-        #   sort=position  -- the CURATED order, and the only one a drag can express. Under either of
-        #                     the other two the drop would compute an order from rows arranged by
-        #                     something else (alphabetically, or by when they were added) and
-        #                     silently overwrite the order the hunter actually arranged. Note this is
-        #                     `position`, not `added`: "Recently added" is a DERIVED sort too, so
-        #                     dragging there is exactly as incoherent as dragging under A-Z.
-        #   not truncated  -- `reorder` refuses a partial ordering (rightly: a subset would drop the
-        #                     entries the client never rendered), so past MAX_ITEMS_RENDERED the drag
-        #                     could only ever fail. Better to withhold the affordance than to offer
-        #                     one whose every use is refused.
-        context['can_reorder'] = (
-            context['is_owner']
-            and context['sort'] == self._DEFAULT_SORT
-            and not context['items_truncated']
-        )
 
         # The in-place edit form needs the same ceilings the create dialog uses. Without them
         # `maxlength="{{ name_max_length }}"` renders empty, browsers ignore it, and the character
@@ -539,12 +543,21 @@ class UpdateListView(_ListActionView):
 class ReorderItemsView(_ListActionView):
     """Set the list's order to exactly the posted ids.
 
+    NO UI REACHES THIS YET, and that is deliberate rather than an oversight. A Collection is an
+    UNORDERED list -- it offers A-Z and date sorts and no drag -- so this endpoint waits for the
+    Ranked type (docs/design/game-list-types.md), whose server side is exactly this. The drag UI that
+    briefly existed here was deleted rather than left dormant, because Ranked will present ordering
+    differently and a half-built interface is worse than none.
+
+    Kept rather than deleted because it is finished, tested work for a decided type, not speculation:
+    the client half will be rewritten, the server half will not. If Ranked is ever dropped, delete
+    this, `game_list_service.reorder`, and their tests together.
+
     The service refuses a partial ordering rather than applying it, which is right -- a subset means
     the client and the server disagree about what is on the list, and applying it would silently drop
-    whatever the client did not send. The consequence is that a list longer than
-    `MAX_ITEMS_RENDERED` cannot be drag-reordered, because the page never rendered the rest to post
-    them back. The UI disables dragging there and says so rather than letting the refusal surface as
-    an error the hunter cannot act on.
+    whatever the client did not send. That means a list longer than `MAX_ITEMS_RENDERED` can never be
+    reordered from a rendered page, so whatever UI Ranked grows must withhold the affordance there
+    rather than offer one whose every use is refused.
     """
 
     @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))

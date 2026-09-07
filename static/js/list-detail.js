@@ -655,54 +655,6 @@
         if (unpublish) { unpublish.addEventListener('click', function () { set(unpublish, false); }); }
     }
 
-    /* ----------------------------------------------------------------- reorder ---- */
-
-    var dragManager = null;
-
-    /**
-     * Drag to reorder, when the server said it is possible.
-     *
-     * `data-can-reorder` is set by the view and requires owner + `sort=added` + an untruncated list.
-     * The sort condition is the subtle one: dragging while sorted by NAME would compute an order from
-     * rows the hunter is reading alphabetically and silently overwrite the order they curated.
-     */
-    function initDrag() {
-        if (dragManager && dragManager.destroy) { dragManager.destroy(); }
-        dragManager = null;
-
-        var grid = document.getElementById('gl-items');
-        if (!grid || !grid.hasAttribute('data-can-reorder') || !PP.DragReorderManager) { return; }
-
-        dragManager = new PP.DragReorderManager({
-            container: grid,
-            itemSelector: '.gl-item',
-            handleSelector: '[data-gl-drag]',
-            placeholderClass: 'gl-item--ghost',
-            onStart: function () { grid.classList.add('gl-items-dragging'); },
-            onEnd: function () { grid.classList.remove('gl-items-dragging'); },
-            onReorder: function () {
-                // Read the order off the DOM after the drop rather than trusting the arguments: the
-                // DOM is what the hunter can see, and it is the thing the server must be made to
-                // agree with.
-                var ids = Array.prototype.map.call(
-                    grid.querySelectorAll('.gl-item'),
-                    function (el) { return el.dataset.itemId; });
-
-                var body = new FormData();
-                ids.forEach(function (id) { body.append('item_ids[]', id); });
-
-                return postJson(grid.dataset.reorderUrl, body)
-                    .then(function () { announce('Order saved.'); })
-                    .catch(function (err) {
-                        // The server refused, so the DOM is now lying about the stored order. Re-render
-                        // from the server rather than trying to undo the drop by hand.
-                        toastError(err, 'That new order could not be saved.');
-                        return refreshItems();
-                    });
-            },
-        });
-    }
-
     /* -------------------------------------------------------------------- boot ---- */
 
     // One delegated listener for every button on the page, bound to document.body exactly once.
@@ -733,11 +685,6 @@
         if (grid && grid === handledGrid) { return; }
         handledGrid = grid;
         initReveal();
-        // The grid is a fresh node, so the old Sortable instance is bound to an element that is no
-        // longer in the document. Re-created, or dropped entirely when the new render says reorder is
-        // no longer available -- sorting by name removes `data-can-reorder`, and a drag left wired
-        // there would rewrite a curated order from an alphabetical view of it.
-        initDrag();
 
         // The sort toolbar is rendered `{% if items %}` and lives OUTSIDE the swapped panel, so it
         // cannot appear or disappear on its own. Add the first game to an empty list and the grid
@@ -780,7 +727,6 @@
         wireIdentityEditor();
         wireVisibility();
         initReveal();
-        initDrag();
         if (PP.wireCharCounters) { PP.wireCharCounters(); }
         if (first) {
             document.body.addEventListener('click', onBodyClick);

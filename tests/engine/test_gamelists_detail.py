@@ -284,20 +284,31 @@ def test_entries_link_to_the_game_not_to_a_trophy_list(client):
 
 
 @pytest.mark.parametrize('sort, expected', [
-    ('position', ['Zulu', 'Alpha', 'Mike']),
-    ('name', ['Alpha', 'Mike', 'Zulu']),
-    ('added', ['Mike', 'Alpha', 'Zulu']),
+    ('name', ['alpha', 'Mike', 'Zulu']),
+    ('name_desc', ['Zulu', 'Mike', 'alpha']),
+    ('added', ['Mike', 'alpha', 'Zulu']),
+    ('oldest', ['Zulu', 'alpha', 'Mike']),
 ])
 def test_every_offered_sort_actually_sorts(client, sort, expected):
     """Order, not an echo of the parameter.
 
     The titles are deliberately NOT in alphabetical insertion order. They were First/Second/Third,
     whose alphabetical order IS their insertion order -- so the `name` case expected exactly what
-    `position` produces, and a view that ignored `sort=name` entirely passed it.
+    insertion order produces, and a view that ignored `sort=name` entirely passed it.
+
+    `alpha` is lowercase on purpose, though NOT for the reason first written here. That docstring
+    claimed a raw column sort would file it after Zulu and only `Lower()` puts it first. False on
+    this database: `lc_collate` is `en_US.utf8`, whose collation already ignores case for ordering,
+    so raw and `lower()` agree. Swapping `Lower()` for a plain column sort was mutation-tested and
+    passed, which is what exposed the claim.
+
+    So this asserts the ORDER, which is what a reader cares about, and does not pretend to pin the
+    `Lower()` call -- nothing observable on this database can, and a test that claims otherwise is
+    the vacuous kind. The mixed case is kept because it is realistic, not because it discriminates.
     """
     owner = _staff(client)
     game_list = _list(owner)
-    for title in ('Zulu', 'Alpha', 'Mike'):
+    for title in ('Zulu', 'alpha', 'Mike'):
         concept = ConceptFactory(unified_title=title)
         GameFactory(concept=concept, title_platform=['PS5'])
         svc.add_concept(game_list, owner, concept)
@@ -307,12 +318,40 @@ def test_every_offered_sort_actually_sorts(client, sort, expected):
     assert [i.concept.unified_title for i in resp.context['items']] == expected
 
 
-def test_a_junk_sort_falls_back_to_the_authors_order(client):
-    """A curated list has an order its author chose; dropping to no ordering loses it silently."""
+def test_a_collection_offers_no_curated_order(client):
+    """A Collection is UNORDERED by design, so it has no "List order" sort and no drag. An ordered
+    list is a different TYPE (Ranked); see docs/design/game-list-types.md.
+
+    `position` itself stays and stays dense -- it is insertion order here, and `attach_cover_games`
+    bounds the tile mosaic on `position__lt=4`, so a gap would render a three-cover mosaic on a
+    four-game list.
+    """
+    owner = _staff(client)
+    game_list = _list(owner, 3)
+
+    resp = client.get(_url(game_list))
+    body = resp.content.decode()
+
+    assert resp.context['sort'] == 'name', 'a shelf should default to being findable, i.e. A-Z'
+    assert 'position' not in dict(resp.context['sort_choices'])
+    assert 'List order' not in body
+    assert 'data-gl-drag' not in body
+
+    # The field is still dense, which is what the mosaic depends on.
+    assert list(game_list.items.order_by('position').values_list('position', flat=True)) == [0, 1, 2]
+
+
+def test_a_junk_sort_falls_back_to_the_default(client):
+    """An unrecognised `?sort=` must land somewhere deterministic rather than dropping to no
+    ordering, which would let the same list render differently on two loads."""
     owner = _staff(client)
     game_list = _list(owner, 2)
 
-    assert client.get(_url(game_list), {'sort': 'nonsense'}).context['sort'] == 'position'
+    resp = client.get(_url(game_list), {'sort': 'nonsense'})
+
+    assert resp.context['sort'] == 'name'
+    # The retired value degrades the same way, so an old bookmark still lands on a real page.
+    assert client.get(_url(game_list), {'sort': 'position'}).context['sort'] == 'name'
 
 
 # ── the sort swap ────────────────────────────────────────────────────────────────────────────────
@@ -748,68 +787,6 @@ def test_the_results_panel_is_an_overlay_not_in_flow():
     body = rule.group(1)
     assert 'position:absolute' in body, 'the results panel is still in flow'
     assert 'z-index' in body
-
-
-def test_reorder_is_offered_only_when_it_could_actually_work(client):
-    """Three conditions, each for its own reason.
-
-    The sort condition is the subtle one, and the first version of this code got it wrong by naming a
-    constant instead of reading one: it allowed dragging under `added`. But "Recently added" is a
-    DERIVED order just like A-Z, so a drop there computes an order from rows arranged by when they
-    were added and silently overwrites the one the hunter curated. Only `position` -- the curated
-    order itself -- can express a drag.
-
-    Past MAX_ITEMS_RENDERED the service refuses a partial ordering (rightly: a subset drops the
-    entries the client never rendered), so the drag could only ever fail.
-    """
-    owner = _staff(client)
-    game_list = _list(owner, 3)
-
-    curated = client.get(_url(game_list))                      # position, the default
-    assert curated.context['sort'] == 'position'
-    assert curated.context['can_reorder'] is True
-    assert 'data-can-reorder' in curated.content.decode()
-    assert 'data-gl-drag' in curated.content.decode()
-
-    # BOTH derived sorts, not just A-Z -- the one that was wrong is the one worth pinning.
-    for derived in ('name', 'added'):
-        resp = client.get(_url(game_list), {'sort': derived})
-        assert resp.context['sort'] == derived
-        assert resp.context['can_reorder'] is False, f'drag offered under derived sort {derived!r}'
-        assert 'data-gl-drag' not in resp.content.decode()
-        assert 'data-can-reorder' not in resp.content.decode()
-
-
-def test_a_visitor_is_never_offered_the_drag_handle(client):
-    author = ProfileFactory(is_linked=True, psn_username='author')
-    game_list = _list(author, 2)
-    _staff(client, psn='reader')
-
-    resp = client.get(_url(game_list))
-
-    assert resp.context['can_reorder'] is False
-    body = resp.content.decode()
-    assert 'data-gl-drag' not in body
-    assert 'data-can-reorder' not in body
-    assert body.count('data-gtile') == 2, 'the games are missing -- this passed for the wrong reason'
-
-
-def test_reorder_is_withheld_on_a_list_too_long_to_post_back(client):
-    """`reorder` refuses a partial ordering, and a truncated page can only ever post a subset."""
-    from gamelists.views import MAX_ITEMS_RENDERED
-
-    owner = _staff(client)
-    game_list = _list(owner, 0)
-    for n in range(MAX_ITEMS_RENDERED + 2):
-        svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'Bulk {n:04d}'))
-
-    resp = client.get(_url(game_list))
-
-    assert resp.context['items_truncated'] is True
-    assert resp.context['can_reorder'] is False
-    assert 'data-gl-drag' not in resp.content.decode()
-
-
 def test_the_edit_form_carries_the_same_ceilings_as_the_create_dialog(client):
     """Without them `maxlength="{{ name_max_length }}"` renders empty, browsers ignore it, and the
     counter has no ceiling -- so the field accepts more than the service will store and the first a
@@ -838,3 +815,40 @@ def test_a_visitor_gets_no_edit_form_at_all(client):
     assert 'data-gl-visibility' not in body
     # The list itself still rendered, so the absences above mean something.
     assert 'data-gl-identity-view' in body
+
+
+@pytest.mark.parametrize('sort', ['name', 'name_desc', 'added', 'oldest'])
+def test_every_sort_asks_the_database_for_a_TOTAL_order(client, sort):
+    """`position` tiebreaks every sort, so tied rows can never come back in two different orders.
+
+    Why this asserts the QUERY and not the rows: tied-row order is not reliably observable from the
+    application layer. Postgres leaves it unspecified, and in practice a small fresh table comes back
+    in physical order -- which, in every fixture I could build, coincided with the answer the tiebreak
+    produces. Three successive attempts to catch a removed tiebreak by comparing rendered orders all
+    passed the mutation: first because sequential `auto_now_add` values never tie, then because
+    physical order equalled insertion order, then because the UPDATEs that reordered `position`
+    rewrote the rows in the very order being asserted. A test that only passes by coincidence is
+    worse than none, because it reads as protection.
+
+    So this checks the mechanism, which is the thing actually guaranteed: the ORDER BY that reaches
+    Postgres names `position` as well as its primary key. That cannot be satisfied by luck.
+
+    It matters because `added_at` is `auto_now_add`, set in Python -- ties are rare rather than
+    impossible, and a bulk-add path would tie outright -- and two concepts can share a title. Without
+    a total order the same list renders differently on two loads: a flicker that reads as a bug and
+    cannot be reproduced on demand.
+    """
+    owner = _staff(client)
+    game_list = _list(owner, 3)
+
+    with CaptureQueriesContext(connection) as captured:
+        client.get(_url(game_list), {'sort': sort})
+
+    ordered = [q['sql'] for q in captured.captured_queries
+               if 'gamelists_gamelistitem' in q['sql'] and 'ORDER BY' in q['sql']]
+    assert ordered, 'no ordered query against the items table -- the scan is broken, not the view'
+
+    order_by = ordered[0].rsplit('ORDER BY', 1)[1]
+    assert 'position' in order_by, f'{sort!r} has no tiebreak: ORDER BY{order_by}'
+    # And the tiebreak is a TIEBREAK, not the primary key -- it must not be the only term.
+    assert order_by.count(',') >= 1, f'{sort!r} orders by position alone: ORDER BY{order_by}'

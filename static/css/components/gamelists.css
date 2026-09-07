@@ -350,46 +350,6 @@
 .gl-edit { display: flex; flex-direction: column; gap: 10px; max-width: 34rem; }
 .gl-edit__foot { display: flex; align-items: center; gap: 8px; }
 
-/* ---- Reorder ---------------------------------------------------------------
-   The handle is its own target rather than the whole tile: the tile is a LINK, and making the entire
-   card draggable means every attempt to open a game risks starting a drag instead. `DragReorderManager`
-   takes a `handleSelector` for exactly this. */
-.gl-item__drag {
-    position: absolute; top: 6px; left: 6px; z-index: 2;
-    display: grid; place-items: center;
-    width: 26px; height: 26px;
-    border-radius: 999px;
-    border: 1px solid var(--pp-border);
-    background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
-    color: var(--pp-text-dim);
-    cursor: grab;
-    opacity: 0;
-    transition: opacity 0.16s ease, color 0.16s ease;
-    /* Without this a touch-drag scrolls the page instead of moving the tile. */
-    touch-action: none;
-}
-.gl-item__drag svg { width: 13px; height: 13px; }
-.gl-item__drag:active { cursor: grabbing; }
-.gl-item:hover .gl-item__drag,
-.gl-item__drag:focus-visible { opacity: 1; }
-.gl-item__drag:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-/* Touch has no hover, and a drag handle nobody can see is a feature nobody finds. */
-@media (hover: none) {
-    .gl-item__drag { opacity: 1; width: 32px; height: 32px; }
-}
-@media (prefers-reduced-motion: no-preference) {
-    .pp-reveal .gl-item .gl-item__drag { opacity: 0; }
-}
-
-/* The gap the tile leaves behind while it is being dragged. */
-.gl-item--ghost { opacity: 0.35; }
-.gl-item--ghost .pp-gtile {
-    border-style: dashed;
-    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
-}
-/* While a drag is live, kill the tile hover so the card under the cursor does not light up. */
-.gl-items-dragging .pp-gtile { pointer-events: none; }
-
 /* ---- The publish beat ------------------------------------------------------
    Publishing is the one moment on this page worth marking. A single sweep across the header card and
    nothing else -- the standard asks for deliberate restraint, and a list going public is a quiet
