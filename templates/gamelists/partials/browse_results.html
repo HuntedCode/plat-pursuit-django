@@ -20,6 +20,18 @@ elements, so a class added by JS in afterSwap is wiped again and the cards unhid
         <p class="pp-gtile-empty__title">No public lists yet</p>
         <p class="pp-gtile-empty__hint">Lists are how hunters share a backlog, a ranking, or a run. Be the first to publish one.</p>
         {% endif %}
+
+        {% comment %}"Try a different term" is advice; this is the button that follows it. A reader who
+        has narrowed to nothing should not have to work out WHICH of four controls did it -- the
+        Career page goes further and names the filter to drop, which is the bar this is reaching
+        toward. Plain navigation rather than an htmx reset, because it must also clear the URL.{% endcomment %}
+        <div class="pp-gtile-empty__action">
+            {% if has_filters %}
+            <a href="{% url 'lists_browse' %}" class="pp-cta pp-cta--ghost">Clear filters</a>
+            {% elif user.is_authenticated and user.profile %}
+            <a href="{% url 'my_lists' %}" class="pp-cta">Make a list</a>
+            {% endif %}
+        </div>
     </div>
     {% endfor %}
 </div>

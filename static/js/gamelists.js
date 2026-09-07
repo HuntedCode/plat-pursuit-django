@@ -41,10 +41,14 @@
             }, 400);
         };
 
-        document.querySelectorAll('[data-gl-open]').forEach(function (opener) {
-            opener.addEventListener('click', function () {
-                if (dialog.showModal && !dialog.open) { dialog.showModal(); }
-            });
+        // DELEGATED, not bound per element. An opener can now appear inside `#my-lists-panel`, which
+        // is replaced on every scope switch -- and `wireCreateDialog` returns early on re-entry
+        // because the dialog is already wired, so a per-element binding would never reach it. The
+        // button would render, look right, and do nothing: the same half-a-pattern trap as baking
+        // `pp-reveal` with no observer.
+        document.body.addEventListener('click', function (e) {
+            if (!e.target.closest || !e.target.closest('[data-gl-open]')) { return; }
+            if (dialog.showModal && !dialog.open) { dialog.showModal(); }
         });
 
         dialog.querySelectorAll('[data-gl-close]').forEach(function (button) {

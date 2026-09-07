@@ -382,3 +382,58 @@ def test_the_browse_scroll_branch_answers_a_real_page_fetch(staff_client):
     assert staff_client.get(
         BROWSE, {'page': 99}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 404
 
+
+
+# ── empty states offer a way out ─────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def linked_staff_client(client):
+    """Staff (the gate) WITH a linked profile -- "Make a list" is gated on `user.profile`, and the
+    file's plain `staff_client` has none, so it could never see that branch."""
+    user = UserFactory()
+    user.role = 'admin'
+    user.save()
+    ProfileFactory(user=user, is_linked=True, psn_username='curator')
+    client.force_login(user)
+    return client
+
+
+def test_a_narrowed_to_nothing_grid_offers_to_clear_the_filters(linked_staff_client):
+    """An empty state that names the situation and offers no action is a dead end. "Try a different
+    term" is advice; this is the button that follows it -- a reader should not have to work out
+    which of four controls emptied the grid."""
+    resp = linked_staff_client.get(BROWSE, {'q': 'zzzznothingmatchesthis'})
+    body = resp.content.decode()
+
+    assert resp.context['has_filters'] is True
+    assert 'Clear filters' in body
+    assert 'Make a list' not in body, 'the wrong action for a filtered grid'
+
+
+def test_a_genuinely_empty_catalogue_offers_to_start_one(linked_staff_client):
+    """The opposite situation needs the opposite answer: nothing to clear, so offer the thing that
+    would fill it."""
+    resp = linked_staff_client.get(BROWSE)
+    body = resp.content.decode()
+
+    assert resp.context['has_filters'] is False
+    assert 'Make a list' in body
+    assert 'Clear filters' not in body, 'offering to clear filters that are not applied'
+
+
+def test_junk_filters_do_not_count_as_filters(linked_staff_client):
+    """Read through the same parsers the queryset uses. `_count_filter` discards junk, so
+    `?min_games=abc` narrows nothing and must not claim a filter is on -- otherwise the empty state
+    offers to clear a filter that was never applied."""
+    resp = linked_staff_client.get(BROWSE, {'min_games': 'abc'})
+
+    assert resp.context['has_filters'] is False
+    assert 'Make a list' in resp.content.decode()
+
+
+def test_a_signed_in_reader_without_a_profile_is_offered_nothing_they_cannot_do(staff_client):
+    """No linked profile means no lists, so the empty state offers no action rather than a button
+    that would bounce them to PSN linking."""
+    resp = staff_client.get(BROWSE)
+
+    assert 'Make a list' not in resp.content.decode()

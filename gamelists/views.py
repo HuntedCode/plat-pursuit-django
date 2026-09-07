@@ -166,6 +166,19 @@ class BrowseListsView(_DevelopmentGate, HtmxListMixin, ListView):
         context['current_sort'] = self._selected_sort()
         context['query'] = (self.request.GET.get('q') or '').strip()
 
+        # Does the empty state offer "Clear filters" or "Make a list"? Those are opposite answers to
+        # opposite situations -- "you narrowed it to nothing" versus "there is nothing yet" -- and
+        # offering the wrong one is worse than offering neither.
+        #
+        # Read through the SAME parsers the queryset uses, not the raw querystring: `_count_filter`
+        # discards junk, so `?min_games=abc` narrows nothing and must not claim a filter is on. Sort
+        # is excluded on purpose -- re-ordering an empty grid is not what emptied it.
+        context['has_filters'] = bool(
+            context['query']
+            or _count_filter(self.request.GET.get('min_games')) is not None
+            or _count_filter(self.request.GET.get('max_games')) is not None
+        )
+
         viewer = self._viewer()
         if viewer is not None and lists:
             # One query for the page's likes, not one per card. Bounded by the page slice.

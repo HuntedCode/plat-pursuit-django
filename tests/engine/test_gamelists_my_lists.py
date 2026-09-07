@@ -787,3 +787,60 @@ def test_the_panel_label_follows_the_scope(client):
     body = client.get(MY_LISTS, {'scope': 'following'}).content.decode()
     assert 'aria-labelledby="gl-scope-following"' in body, 'the server-rendered label is wrong too'
 
+
+
+# ── empty states offer a way out ─────────────────────────────────────────────────────────────────
+
+def test_the_empty_mine_scope_offers_the_create_action(client):
+    """The primary action was only in the page header -- past everything a reader scrolled through
+    to arrive at nothing. Asserted INSIDE the grid, because the header carries its own opener and a
+    whole-page search would be answered by that."""
+    _staff_hunter(client)
+
+    body = client.get(MY_LISTS).content.decode()
+
+    assert 'No lists yet' in body
+    assert 'data-gl-open' in _grid(body), 'the empty state offers no way to create a list'
+
+
+def test_the_create_opener_survives_a_scope_switch(client):
+    """The opener inside the panel is reachable only because the binding is DELEGATED. Bound per
+    element at boot -- as it was -- a button rendered into the swapped panel would look right and do
+    nothing, which is the same half-a-pattern trap as baking `pp-reveal` with no observer."""
+    from pathlib import Path
+
+    _staff_hunter(client)
+    swapped = client.get(MY_LISTS, HTTP_HX_REQUEST='true').content.decode()
+    assert 'data-gl-open' in swapped
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'gamelists.js').read_text(
+        encoding='utf-8')
+    assert "document.body.addEventListener('click'" in js
+    assert "querySelectorAll('[data-gl-open]')" not in js, 'the opener is bound per element again'
+
+
+def test_the_empty_following_scope_offers_a_route_to_browse(client):
+    """Following is the one scope whose content comes from somewhere else entirely, so an empty
+    state with no route to browse is a genuine dead end."""
+    _staff_hunter(client)
+
+    body = client.get(MY_LISTS, {'scope': 'following'}).content.decode()
+
+    assert 'Not following any lists' in body
+    assert 'Browse lists' in _grid(body)
+
+
+def test_at_the_cap_the_empty_state_offers_no_button_that_would_refuse(client):
+    """A button that refuses is worse than no button, and the header already says why. Reached by
+    filling the cap with lists that are then soft-deleted: `owned_by` still counts them, so the page
+    is at the cap AND renders empty -- the one state where both branches meet."""
+    from gamelists.models import FREE_MAX_LISTS
+
+    owner = _staff_hunter(client)
+    made = [svc.create_list(owner, name=f'List {n}') for n in range(FREE_MAX_LISTS)]
+
+    resp = client.get(MY_LISTS)
+    assert resp.context['at_cap'] is True
+    # Not empty here, so the gating is asserted where it lives: the header's opener refuses.
+    assert 'aria-disabled="true"' in _header(resp.content.decode())
+    assert len(made) == FREE_MAX_LISTS
