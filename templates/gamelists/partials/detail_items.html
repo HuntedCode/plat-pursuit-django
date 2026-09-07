@@ -6,7 +6,8 @@ elements), and `gamelists.js` wires the observer that clears it. Both halves, de
 the class with nothing to reveal it is what left the My Lists panel blank.
 {% endcomment %}
 {% load humanize %}
-<div id="gl-items" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}">
+<div id="gl-items" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}"
+     {% if can_reorder %}data-can-reorder data-reorder-url="{% url 'list_reorder' game_list.id %}"{% endif %}>
     {% for item in items %}
     {% comment %}The wrapper exists so the owner's remove control can sit BESIDE the tile rather than
     inside it: the tile is an <a>, and a <button> nested in a link is invalid HTML that swallows the
@@ -14,7 +15,19 @@ the class with nothing to reveal it is what left the My Lists panel blank.
     DOM shape. Safe to add because `.pp-gtile-grid` styles no direct children -- it sets only
     grid-template-columns and gap -- and `.pp-gtile` takes its height from `aspect-ratio`, so the
     wrapper becomes the grid item and the tile fills it.{% endcomment %}
-    <div class="gl-item">
+    <div class="gl-item" data-item-id="{{ item.pk }}">
+        {% if can_reorder %}
+        {% comment %}A handle, not a draggable tile. The tile is a LINK, so making the whole card
+        draggable turns every attempt to open a game into a possible drag. Keyboard users get the
+        buttons below rather than a drag they cannot perform.{% endcomment %}
+        <button type="button" class="gl-item__drag" data-gl-drag
+                aria-label="Reorder {{ item.concept.unified_title }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/>
+                <circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>
+            </svg>
+        </button>
+        {% endif %}
     {% comment %}Links to the CONCEPT page -- the site's word "game" -- rather than to a trophy list,
     which is the whole reason entries are concept-keyed.{% endcomment %}
     <a href="{{ item.concept.game_page_url }}" class="pp-gtile" data-gtile

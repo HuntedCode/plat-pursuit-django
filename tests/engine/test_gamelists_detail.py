@@ -137,18 +137,28 @@ def test_a_visitor_gets_the_social_actions_and_the_owner_does_not(client):
 
 def test_the_owner_gets_a_publish_affordance_only_while_it_is_private(client):
     """Publishing is the deliberate second act. Once done there is nothing to offer, so the page says
-    what state it is in rather than showing a button that would do nothing."""
+    what state it is in rather than showing a button that would do nothing.
+
+    BOTH states are now rendered and `hidden` picks which shows, so that publishing completes on the
+    page it started on instead of needing a reload. The assertion therefore moved from presence to
+    visibility -- the intent is unchanged, and a bug that showed both at once still fails here.
+    """
     owner = _staff(client)
     private = _list(owner, 1, name='Draft', public=False)
 
     body = client.get(_url(private)).content.decode()
     assert 'data-gl-publish' in body
     assert 'Only you can see this so far' in body
+    assert 'data-gl-private-state hidden' not in body, 'the publish control is hidden while private'
+    assert 'data-gl-public-state hidden' in body
 
     svc.update_list(private, owner, is_public=True)
     body = client.get(_url(private)).content.decode()
-    assert 'data-gl-publish' not in body
+    assert 'data-gl-private-state hidden' in body, 'publish is still offered on a published list'
+    assert 'data-gl-public-state hidden' not in body
     assert 'Published' in body
+    # Unpublishing is offered, which the service always allowed and the UI never could.
+    assert 'data-gl-unpublish' in body
 
 
 def test_an_anonymous_reader_gets_no_action_buttons(client):
@@ -738,3 +748,93 @@ def test_the_results_panel_is_an_overlay_not_in_flow():
     body = rule.group(1)
     assert 'position:absolute' in body, 'the results panel is still in flow'
     assert 'z-index' in body
+
+
+def test_reorder_is_offered_only_when_it_could_actually_work(client):
+    """Three conditions, each for its own reason.
+
+    The sort condition is the subtle one, and the first version of this code got it wrong by naming a
+    constant instead of reading one: it allowed dragging under `added`. But "Recently added" is a
+    DERIVED order just like A-Z, so a drop there computes an order from rows arranged by when they
+    were added and silently overwrites the one the hunter curated. Only `position` -- the curated
+    order itself -- can express a drag.
+
+    Past MAX_ITEMS_RENDERED the service refuses a partial ordering (rightly: a subset drops the
+    entries the client never rendered), so the drag could only ever fail.
+    """
+    owner = _staff(client)
+    game_list = _list(owner, 3)
+
+    curated = client.get(_url(game_list))                      # position, the default
+    assert curated.context['sort'] == 'position'
+    assert curated.context['can_reorder'] is True
+    assert 'data-can-reorder' in curated.content.decode()
+    assert 'data-gl-drag' in curated.content.decode()
+
+    # BOTH derived sorts, not just A-Z -- the one that was wrong is the one worth pinning.
+    for derived in ('name', 'added'):
+        resp = client.get(_url(game_list), {'sort': derived})
+        assert resp.context['sort'] == derived
+        assert resp.context['can_reorder'] is False, f'drag offered under derived sort {derived!r}'
+        assert 'data-gl-drag' not in resp.content.decode()
+        assert 'data-can-reorder' not in resp.content.decode()
+
+
+def test_a_visitor_is_never_offered_the_drag_handle(client):
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 2)
+    _staff(client, psn='reader')
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['can_reorder'] is False
+    body = resp.content.decode()
+    assert 'data-gl-drag' not in body
+    assert 'data-can-reorder' not in body
+    assert body.count('data-gtile') == 2, 'the games are missing -- this passed for the wrong reason'
+
+
+def test_reorder_is_withheld_on_a_list_too_long_to_post_back(client):
+    """`reorder` refuses a partial ordering, and a truncated page can only ever post a subset."""
+    from gamelists.views import MAX_ITEMS_RENDERED
+
+    owner = _staff(client)
+    game_list = _list(owner, 0)
+    for n in range(MAX_ITEMS_RENDERED + 2):
+        svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'Bulk {n:04d}'))
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['items_truncated'] is True
+    assert resp.context['can_reorder'] is False
+    assert 'data-gl-drag' not in resp.content.decode()
+
+
+def test_the_edit_form_carries_the_same_ceilings_as_the_create_dialog(client):
+    """Without them `maxlength="{{ name_max_length }}"` renders empty, browsers ignore it, and the
+    counter has no ceiling -- so the field accepts more than the service will store and the first a
+    hunter hears of it is a refusal on save."""
+    from gamelists.models import DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH
+
+    owner = _staff(client)
+    game_list = _list(owner, 1)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert f'maxlength="{NAME_MAX_LENGTH}"' in body
+    assert f'maxlength="{DESCRIPTION_MAX_LENGTH}"' in body
+    assert 'data-charcount' in body
+
+
+def test_a_visitor_gets_no_edit_form_at_all(client):
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 1)
+    _staff(client, psn='reader')
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-identity-edit' not in body
+    assert 'data-gl-edit-open' not in body
+    assert 'data-gl-visibility' not in body
+    # The list itself still rendered, so the absences above mean something.
+    assert 'data-gl-identity-view' in body

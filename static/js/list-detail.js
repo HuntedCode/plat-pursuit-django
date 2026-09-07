@@ -511,6 +511,198 @@
         });
     }
 
+    /* ------------------------------------------------------------------ rename ---- */
+
+    /**
+     * Edit the name and description where they are shown.
+     *
+     * Both the read view and the form are server-rendered and JS swaps which is `hidden`, so there is
+     * no markup built in the client and nothing to keep in step with the template.
+     */
+    function wireIdentityEditor() {
+        var root = document.querySelector('[data-gl-identity]');
+        if (!root || root.dataset.wired === '1') { return; }
+        var form = root.querySelector('[data-gl-identity-edit]');
+        var view = root.querySelector('[data-gl-identity-view]');
+        if (!form || !view) { return; }          // a visitor: no form rendered
+        root.dataset.wired = '1';
+
+        var nameField = form.querySelector('[name="name"]');
+        var descField = form.querySelector('[name="description"]');
+
+        function open() {
+            view.hidden = true;
+            form.hidden = false;
+            nameField.focus();
+            nameField.setSelectionRange(nameField.value.length, nameField.value.length);
+        }
+
+        function close() {
+            form.hidden = true;
+            view.hidden = false;
+            var opener = root.querySelector('[data-gl-edit-open]');
+            if (opener) { opener.focus(); }       // focus goes back where it came from
+        }
+
+        function reset() {
+            // Cancel restores from the DOM the server rendered, not from a snapshot taken at open --
+            // a successful save updates that DOM, so a later cancel must not resurrect the old text.
+            nameField.value = (root.querySelector('[data-gl-name]') || {}).textContent.trim();
+            var desc = root.querySelector('[data-gl-description]');
+            descField.value = desc && !desc.hidden ? desc.textContent.trim() : '';
+            [nameField, descField].forEach(function (el) {
+                el.dispatchEvent(new Event('input', { bubbles: true }));   // resync the counters
+            });
+        }
+
+        var opener = root.querySelector('[data-gl-edit-open]');
+        if (opener) { opener.addEventListener('click', open); }
+
+        var cancel = form.querySelector('[data-gl-edit-cancel]');
+        if (cancel) { cancel.addEventListener('click', function () { reset(); close(); }); }
+
+        form.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { e.preventDefault(); reset(); close(); }
+        });
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var save = form.querySelector('[data-gl-edit-save]');
+            if (save && save.dataset.busy === '1') { return; }
+            if (save) { save.dataset.busy = '1'; }
+
+            var body = new FormData();
+            body.append('name', nameField.value);
+            body.append('description', descField.value);
+
+            postJson(root.dataset.updateUrl, body)
+                .then(function (data) {
+                    // Render what the SERVER stored. `_check_name` trims and sanitizes, so echoing
+                    // the typed value would show a name the database does not hold.
+                    var heading = root.querySelector('[data-gl-name]');
+                    if (heading) { heading.textContent = data.name; }
+                    var desc = root.querySelector('[data-gl-description]');
+                    if (desc) {
+                        desc.textContent = data.description;
+                        desc.hidden = !data.description;
+                    }
+                    document.title = data.name;
+                    announce('List renamed to ' + data.name + '.');
+                    close();
+                })
+                .catch(function (err) { toastError(err, 'Those changes could not be saved.'); })
+                .finally(function () { if (save) { save.dataset.busy = ''; } });
+        });
+    }
+
+    /* ----------------------------------------------------------------- publish ---- */
+
+    function wireVisibility() {
+        var root = document.querySelector('[data-gl-visibility]');
+        if (!root || root.dataset.wired === '1') { return; }
+        root.dataset.wired = '1';
+
+        var privateState = root.querySelector('[data-gl-private-state]');
+        var publicState = root.querySelector('[data-gl-public-state]');
+
+        function paint(isPublic, celebrate) {
+            if (privateState) { privateState.hidden = isPublic; }
+            if (publicState) { publicState.hidden = !isPublic; }
+            var chip = document.querySelector('[data-gl-private-chip]');
+            if (chip) { chip.hidden = isPublic; }
+            var likes = document.querySelector('[data-gl-tally-likes]');
+            if (likes) { likes.hidden = !isPublic; }
+
+            // The one moment on this page worth marking, and only in the publishing direction --
+            // taking a list back down is housekeeping, not an achievement.
+            if (!celebrate) { return; }
+            var card = document.querySelector('[data-gl-identity]');
+            card = card && card.closest('section');
+            if (!card) { return; }
+            card.classList.remove('gl-published');
+            void card.offsetWidth;                 // restart the animation if it is replayed
+            card.classList.add('gl-published');
+            setTimeout(function () { card.classList.remove('gl-published'); }, 1000);
+        }
+
+        function set(btn, isPublic) {
+            if (btn.dataset.busy === '1') { return; }
+            btn.dataset.busy = '1';
+            var body = new FormData();
+            body.append('is_public', isPublic ? 'true' : 'false');
+            postJson(root.dataset.updateUrl, body)
+                .then(function (data) {
+                    paint(data.is_public, data.is_public);
+                    if (PP.ToastManager) {
+                        PP.ToastManager.show(
+                            data.is_public
+                                ? 'Published. Anyone with the link can read this list.'
+                                : 'This list is private again.',
+                            'success');
+                    }
+                    announce(data.is_public ? 'List published.' : 'List is now private.');
+                })
+                .catch(function (err) {
+                    toastError(err, isPublic ? 'That list could not be published.'
+                                             : 'That list could not be made private.');
+                })
+                .finally(function () { btn.dataset.busy = ''; });
+        }
+
+        var publish = root.querySelector('[data-gl-publish]');
+        if (publish) { publish.addEventListener('click', function () { set(publish, true); }); }
+        var unpublish = root.querySelector('[data-gl-unpublish]');
+        if (unpublish) { unpublish.addEventListener('click', function () { set(unpublish, false); }); }
+    }
+
+    /* ----------------------------------------------------------------- reorder ---- */
+
+    var dragManager = null;
+
+    /**
+     * Drag to reorder, when the server said it is possible.
+     *
+     * `data-can-reorder` is set by the view and requires owner + `sort=added` + an untruncated list.
+     * The sort condition is the subtle one: dragging while sorted by NAME would compute an order from
+     * rows the hunter is reading alphabetically and silently overwrite the order they curated.
+     */
+    function initDrag() {
+        if (dragManager && dragManager.destroy) { dragManager.destroy(); }
+        dragManager = null;
+
+        var grid = document.getElementById('gl-items');
+        if (!grid || !grid.hasAttribute('data-can-reorder') || !PP.DragReorderManager) { return; }
+
+        dragManager = new PP.DragReorderManager({
+            container: grid,
+            itemSelector: '.gl-item',
+            handleSelector: '[data-gl-drag]',
+            placeholderClass: 'gl-item--ghost',
+            onStart: function () { grid.classList.add('gl-items-dragging'); },
+            onEnd: function () { grid.classList.remove('gl-items-dragging'); },
+            onReorder: function () {
+                // Read the order off the DOM after the drop rather than trusting the arguments: the
+                // DOM is what the hunter can see, and it is the thing the server must be made to
+                // agree with.
+                var ids = Array.prototype.map.call(
+                    grid.querySelectorAll('.gl-item'),
+                    function (el) { return el.dataset.itemId; });
+
+                var body = new FormData();
+                ids.forEach(function (id) { body.append('item_ids[]', id); });
+
+                return postJson(grid.dataset.reorderUrl, body)
+                    .then(function () { announce('Order saved.'); })
+                    .catch(function (err) {
+                        // The server refused, so the DOM is now lying about the stored order. Re-render
+                        // from the server rather than trying to undo the drop by hand.
+                        toastError(err, 'That new order could not be saved.');
+                        return refreshItems();
+                    });
+            },
+        });
+    }
+
     /* -------------------------------------------------------------------- boot ---- */
 
     // One delegated listener for every button on the page, bound to document.body exactly once.
@@ -541,6 +733,11 @@
         if (grid && grid === handledGrid) { return; }
         handledGrid = grid;
         initReveal();
+        // The grid is a fresh node, so the old Sortable instance is bound to an element that is no
+        // longer in the document. Re-created, or dropped entirely when the new render says reorder is
+        // no longer available -- sorting by name removes `data-can-reorder`, and a drag left wired
+        // there would rewrite a curated order from an alphabetical view of it.
+        initDrag();
 
         // The sort toolbar is rendered `{% if items %}` and lives OUTSIDE the swapped panel, so it
         // cannot appear or disappear on its own. Add the first game to an empty list and the grid
@@ -580,7 +777,11 @@
         handledGrid = null;
         searchField = null;
         wireAdder();
+        wireIdentityEditor();
+        wireVisibility();
         initReveal();
+        initDrag();
+        if (PP.wireCharCounters) { PP.wireCharCounters(); }
         if (first) {
             document.body.addEventListener('click', onBodyClick);
             document.body.addEventListener('htmx:afterSwap', onAfterSwap);

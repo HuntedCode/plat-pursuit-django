@@ -427,6 +427,32 @@ class GameListDetailView(_DevelopmentGate, DetailView):
             {'text': 'Game Lists', 'url': reverse_lazy('lists_browse')},
             {'text': game_list.name},
         ]
+
+        # Reorder is offered only when all three hold, and each one matters:
+        #
+        #   owner          -- it writes.
+        #   sort=position  -- the CURATED order, and the only one a drag can express. Under either of
+        #                     the other two the drop would compute an order from rows arranged by
+        #                     something else (alphabetically, or by when they were added) and
+        #                     silently overwrite the order the hunter actually arranged. Note this is
+        #                     `position`, not `added`: "Recently added" is a DERIVED sort too, so
+        #                     dragging there is exactly as incoherent as dragging under A-Z.
+        #   not truncated  -- `reorder` refuses a partial ordering (rightly: a subset would drop the
+        #                     entries the client never rendered), so past MAX_ITEMS_RENDERED the drag
+        #                     could only ever fail. Better to withhold the affordance than to offer
+        #                     one whose every use is refused.
+        context['can_reorder'] = (
+            context['is_owner']
+            and context['sort'] == self._DEFAULT_SORT
+            and not context['items_truncated']
+        )
+
+        # The in-place edit form needs the same ceilings the create dialog uses. Without them
+        # `maxlength="{{ name_max_length }}"` renders empty, browsers ignore it, and the character
+        # counter has no ceiling to count against -- so the field silently accepts more than the
+        # service will store and the first a hunter hears of it is a refusal on save.
+        context['name_max_length'] = NAME_MAX_LENGTH
+        context['description_max_length'] = DESCRIPTION_MAX_LENGTH
         return context
 
 

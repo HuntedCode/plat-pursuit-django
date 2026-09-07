@@ -27,27 +27,71 @@ below with no outer wrapper.
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
             <div class="flex items-start justify-between gap-3 flex-wrap">
-                <div class="min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ game_list.name }}</h1>
-                        {% if not game_list.is_public %}
-                        {% comment %}The private state is marked; the public one is not. A list is
-                        private when it is born, so the chip marks the exception.{% endcomment %}
-                        <span class="pp-gtile__stat" title="Only you can see this list">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                            Private
-                        </span>
-                        {% endif %}
+                {% comment %}Both the read view and the edit form are rendered, and JS swaps which is
+                `hidden`. The owner edits HERE, where the result is visible, which is the whole reason
+                there is no separate edit page.{% endcomment %}
+                <div class="min-w-0 flex-1" data-gl-identity
+                     {% if is_owner %}data-update-url="{% url 'list_update' game_list.id %}"{% endif %}>
+                    <div data-gl-identity-view>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h1 class="text-lg md:text-xl lg:text-2xl font-bold" data-gl-name>{{ game_list.name }}</h1>
+                            {% comment %}The private state is marked; the public one is not. A list is
+                            private when it is born, so the chip marks the exception. Always rendered
+                            now (hidden when public) so publishing can dissolve it in place rather
+                            than needing a reload to remove it.{% endcomment %}
+                            <span class="pp-gtile__stat" title="Only you can see this list"
+                                  data-gl-private-chip {% if game_list.is_public %}hidden{% endif %}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                Private
+                            </span>
+                            {% if is_owner %}
+                            <button type="button" class="gl-edit-open" data-gl-edit-open
+                                    aria-label="Edit this list's name and description">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                            </button>
+                            {% endif %}
+                        </div>
+
+                        {% comment %}Always rendered, hidden when empty: a description added in place
+                        needs somewhere to land, and a `{% templatetag openblock %} if {% templatetag closeblock %}` leaves nothing to fill.{% endcomment %}
+                        <p class="text-xs md:text-sm text-base-content/60 mt-1 max-w-prose"
+                           data-gl-description {% if not game_list.description %}hidden{% endif %}>{{ game_list.description }}</p>
+
+                        <p class="text-xs text-base-content/50 mt-2">
+                            by <a href="{% url 'profile_detail' game_list.owner.psn_username %}"
+                                  class="link link-hover font-semibold">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</a>
+                        </p>
                     </div>
 
-                    {% if game_list.description %}
-                    <p class="text-xs md:text-sm text-base-content/60 mt-1 max-w-prose">{{ game_list.description }}</p>
-                    {% endif %}
+                    {% if is_owner %}
+                    <form data-gl-identity-edit hidden class="gl-edit">
+                        <div class="stg-field">
+                            <label class="stg-field__label" for="gl-edit-name">Name</label>
+                            <input type="text" id="gl-edit-name" name="name" class="stg-input" required
+                                   maxlength="{{ name_max_length }}" data-charcount autocomplete="off"
+                                   aria-describedby="gl-edit-name-count" value="{{ game_list.name }}" />
+                            <span class="gl-countchars" id="gl-edit-name-count"
+                                  data-charcount-for="gl-edit-name" aria-live="polite"></span>
+                        </div>
 
-                    <p class="text-xs text-base-content/50 mt-2">
-                        by <a href="{% url 'profile_detail' game_list.owner.psn_username %}"
-                              class="link link-hover font-semibold">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</a>
-                    </p>
+                        <div class="stg-field">
+                            <label class="stg-field__label" for="gl-edit-description">
+                                Description <span class="stg-field__hint">optional</span>
+                            </label>
+                            <textarea id="gl-edit-description" name="description" class="stg-input" rows="2"
+                                      maxlength="{{ description_max_length }}" data-charcount
+                                      aria-describedby="gl-edit-description-count"
+                                      placeholder="What is this list for?">{{ game_list.description }}</textarea>
+                            <span class="gl-countchars" id="gl-edit-description-count"
+                                  data-charcount-for="gl-edit-description" aria-live="polite"></span>
+                        </div>
+
+                        <div class="gl-edit__foot">
+                            <button type="submit" class="pp-cta" data-gl-edit-save>Save</button>
+                            <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-cancel>Cancel</button>
+                        </div>
+                    </form>
+                    {% endif %}
                 </div>
 
                 <div class="flex items-center gap-4 shrink-0 text-right">
@@ -55,12 +99,12 @@ below with no outer wrapper.
                         <span class="pp-tally text-primary leading-none font-bold text-xl md:text-3xl" data-game-count>{{ game_list.game_count|intcomma }}</span>
                         <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">games</span>
                     </div>
-                    {% if game_list.is_public %}
-                    <div>
+                    {% comment %}Hidden rather than absent while private, so publishing reveals the
+                    tally in place instead of leaving the header a reload behind.{% endcomment %}
+                    <div data-gl-tally-likes {% if not game_list.is_public %}hidden{% endif %}>
                         <span class="pp-tally leading-none font-bold text-xl md:text-3xl" data-like-count>{{ game_list.like_count|intcomma }}</span>
                         <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">likes</span>
                     </div>
-                    {% endif %}
                 </div>
             </div>
 
@@ -91,16 +135,29 @@ below with no outer wrapper.
 
                 {% if is_owner %}
                 {% comment %}Publishing is the deliberate second act, so it gets a real affordance and
-                says what it does. Wired in the next commit alongside the in-place edits.{% endcomment %}
-                {% if not game_list.is_public %}
-                <button type="button" class="pp-cta" data-gl-publish disabled title="Coming in the next commit">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
-                    <span>Publish</span>
-                </button>
-                <span class="text-xs text-base-content/50">Only you can see this so far.</span>
-                {% else %}
-                <span class="text-xs text-base-content/50">Published. Anyone with the link can read it.</span>
-                {% endif %}
+                says what it does rather than being a checkbox on a form somewhere else.
+
+                BOTH states are rendered and JS swaps `hidden`, so the act completes on the page it
+                started on. Unpublishing is offered too: the service has always allowed it (its
+                docstring is explicit that a restricted hunter may still take their own list down),
+                and until now nothing in the UI could.{% endcomment %}
+                <span data-gl-visibility data-update-url="{% url 'list_update' game_list.id %}"
+                      class="contents">
+                    <span class="contents" data-gl-private-state {% if game_list.is_public %}hidden{% endif %}>
+                        <button type="button" class="pp-cta" data-gl-publish>
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                            <span>Publish</span>
+                        </button>
+                        <span class="text-xs text-base-content/50">Only you can see this so far.</span>
+                    </span>
+                    <span class="contents" data-gl-public-state {% if not game_list.is_public %}hidden{% endif %}>
+                        <span class="text-xs text-base-content/50">Published. Anyone with the link can read it.</span>
+                        <button type="button" class="pp-cta pp-cta--ghost" data-gl-unpublish>
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            <span>Make private</span>
+                        </button>
+                    </span>
+                </span>
                 {% endif %}
             </div>
             {% endif %}
