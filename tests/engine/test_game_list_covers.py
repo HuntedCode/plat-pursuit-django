@@ -37,7 +37,7 @@ def _list_with(profile, name, concepts):
 
 def test_a_concept_resolves_to_one_of_its_trophy_lists():
     concept = ConceptFactory()
-    game = GameFactory(concept=concept, title_platform='PS4')
+    game = GameFactory(concept=concept, title_platform=['PS4'])
 
     assert covers.cover_games_for([concept.pk])[concept.pk].pk == game.pk
 
@@ -46,9 +46,9 @@ def test_the_newest_platform_wins():
     """Free when the concept has a trusted IGDB match (every stack returns the same cover) and
     decisive when it does not: PS5 key art versus a PS3 icon."""
     concept = ConceptFactory()
-    GameFactory(concept=concept, title_platform='PS3')
-    ps5 = GameFactory(concept=concept, title_platform='PS5')
-    GameFactory(concept=concept, title_platform='PS4')
+    GameFactory(concept=concept, title_platform=['PS3'])
+    ps5 = GameFactory(concept=concept, title_platform=['PS5'])
+    GameFactory(concept=concept, title_platform=['PS4'])
 
     assert covers.cover_games_for([concept.pk])[concept.pk].pk == ps5.pk
 
@@ -58,8 +58,8 @@ def test_the_pick_is_stable_when_two_lists_share_a_platform():
     different cover on two consecutive loads -- a flicker that reads as a bug and cannot be
     reproduced on demand."""
     concept = ConceptFactory()
-    first = GameFactory(concept=concept, title_platform='PS4')
-    GameFactory(concept=concept, title_platform='PS4')
+    first = GameFactory(concept=concept, title_platform=['PS4'])
+    GameFactory(concept=concept, title_platform=['PS4'])
 
     picks = {covers.cover_games_for([concept.pk])[concept.pk].pk for _ in range(5)}
 
@@ -76,8 +76,8 @@ def test_a_concept_with_no_trophy_list_is_omitted_rather_than_returned_as_none()
 
 def test_an_unknown_platform_sorts_last_rather_than_crashing():
     concept = ConceptFactory()
-    GameFactory(concept=concept, title_platform='PSVR3000')
-    known = GameFactory(concept=concept, title_platform='PS4')
+    GameFactory(concept=concept, title_platform=['PSVR3000'])
+    known = GameFactory(concept=concept, title_platform=['PS4'])
 
     assert covers.cover_games_for([concept.pk])[concept.pk].pk == known.pk
 
@@ -95,7 +95,7 @@ def test_one_query_answers_any_number_of_concepts():
     """The whole reason this exists rather than calling the concept page's `_host_game` per item."""
     concepts = [ConceptFactory() for _ in range(12)]
     for concept in concepts:
-        GameFactory(concept=concept, title_platform='PS5')
+        GameFactory(concept=concept, title_platform=['PS5'])
 
     with CaptureQueriesContext(connection) as one:
         covers.cover_games_for([concepts[0].pk])
@@ -117,7 +117,7 @@ def test_the_browse_grid_costs_the_same_for_two_lists_as_for_eight():
         for n in range(count):
             concepts = [ConceptFactory() for _ in range(4)]
             for concept in concepts:
-                GameFactory(concept=concept, title_platform='PS5')
+                GameFactory(concept=concept, title_platform=['PS5'])
             _list_with(profile, f'List {n}-{count}', concepts)
 
     # The queryset is materialized OUTSIDE the capture: measuring `attach_cover_games` means
@@ -146,7 +146,7 @@ def test_the_cover_join_does_not_drag_the_igdb_blob_along():
     """`raw_response` is the ~30 KB IGDB payload no cover template reads, and the direct trigger for
     the May 2026 web-server OOM. Every queryset that joins `igdb_match` for art has to defer it."""
     concept = ConceptFactory()
-    GameFactory(concept=concept, title_platform='PS5')
+    GameFactory(concept=concept, title_platform=['PS5'])
 
     with CaptureQueriesContext(connection) as captured:
         covers.cover_games_for([concept.pk])
@@ -164,7 +164,7 @@ def test_only_the_first_four_games_become_covers():
     profile = _hunter()
     concepts = [ConceptFactory() for _ in range(7)]
     for concept in concepts:
-        GameFactory(concept=concept, title_platform='PS5')
+        GameFactory(concept=concept, title_platform=['PS5'])
     game_list = _list_with(profile, 'Long', concepts)
 
     covers.attach_cover_games([game_list])
@@ -178,7 +178,7 @@ def test_a_short_list_gets_what_it_has_rather_than_padding():
     profile = _hunter()
     concepts = [ConceptFactory() for _ in range(2)]
     for concept in concepts:
-        GameFactory(concept=concept, title_platform='PS5')
+        GameFactory(concept=concept, title_platform=['PS5'])
     game_list = _list_with(profile, 'Short', concepts)
 
     covers.attach_cover_games([game_list])
@@ -200,7 +200,7 @@ def test_covers_follow_list_order_not_database_order():
     """A curated list is ordered on purpose; the mosaic should show the top of it."""
     profile = _hunter()
     concepts = [ConceptFactory() for _ in range(4)]
-    games = [GameFactory(concept=c, title_platform='PS5') for c in concepts]
+    games = [GameFactory(concept=c, title_platform=['PS5']) for c in concepts]
     game_list = _list_with(profile, 'Ordered', concepts)
 
     covers.attach_cover_games([game_list])
@@ -213,10 +213,60 @@ def test_a_game_missing_its_cover_source_is_skipped_not_rendered_as_a_hole():
     profile = _hunter()
     real = [ConceptFactory() for _ in range(2)]
     for concept in real:
-        GameFactory(concept=concept, title_platform='PS5')
+        GameFactory(concept=concept, title_platform=['PS5'])
     stub = ConceptFactory()
     game_list = _list_with(profile, 'Mixed', [real[0], stub, real[1]])
 
     covers.attach_cover_games([game_list])
 
     assert len(game_list.cover_items) == 2
+
+
+# -- the shape the schema actually holds ----------------------------------------------------------
+
+def test_title_platform_is_a_list_and_the_rank_must_treat_it_as_one():
+    """The root cause, pinned at the source.
+
+    `_sort_key` read this as a scalar (`RANK.get(game.title_platform, ...)`) -- a dict lookup on a
+    list, i.e. `TypeError: unhashable type: 'list'` for every row the database can actually produce.
+    It 500'd all four cover surfaces: browse tiles, My Lists tiles, the detail items and the adder
+    search.
+
+    Every test in this file passed throughout, because they handed `title_platform='PS5'` -- a
+    STRING, overriding the factory's correct `['PS5']` and inventing a shape the schema cannot hold.
+    The factory was right and the tests overrode it.
+    """
+    from django.db.models import JSONField
+
+    from trophies.models import Game
+
+    field = Game._meta.get_field('title_platform')
+    assert isinstance(field, JSONField)
+    assert field.default is list
+
+
+def test_a_cross_buy_game_ranks_by_its_newest_platform():
+    """The case that makes `title_platform` a list in the first place: one trophy list, two
+    platforms. It must rank as PS5, not fall to the unknown bucket."""
+    from trophies.util_modules.constants import (PLATFORM_PRIORITY_ORDER,
+                                                 platform_priority_rank)
+
+    assert platform_priority_rank(['PS4', 'PS5']) == PLATFORM_PRIORITY_ORDER.index('PS5')
+    assert platform_priority_rank(['PS5', 'PS4']) == PLATFORM_PRIORITY_ORDER.index('PS5')
+    assert platform_priority_rank(['PS3']) == PLATFORM_PRIORITY_ORDER.index('PS3')
+    # Neither of these can be ranked, and neither may raise.
+    assert platform_priority_rank([]) == len(PLATFORM_PRIORITY_ORDER)
+    assert platform_priority_rank(None) == len(PLATFORM_PRIORITY_ORDER)
+    assert platform_priority_rank(['PSVR3000']) == len(PLATFORM_PRIORITY_ORDER)
+
+
+def test_a_cross_buy_stack_wins_the_cover_over_an_older_single_platform_list():
+    """End to end through `cover_games_for`, not just the rank function: a PS4+PS5 cross-buy list
+    represents the concept over a PS3-only one."""
+    concept = ConceptFactory(unified_title='Cross Buy')
+    GameFactory(concept=concept, title_platform=['PS3'])
+    cross_buy = GameFactory(concept=concept, title_platform=['PS4', 'PS5'])
+
+    picked = covers.cover_games_for([concept.pk])
+
+    assert picked[concept.pk].pk == cross_buy.pk

@@ -27,7 +27,7 @@ def _staff(client, psn='hunter'):
 
 def _concept(title='A Game'):
     concept = ConceptFactory(unified_title=title)
-    GameFactory(concept=concept, title_platform='PS5')
+    GameFactory(concept=concept, title_platform=['PS5'])
     return concept
 
 

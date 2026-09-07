@@ -36,7 +36,7 @@ def _list(owner, games=0, *, name='A list', public=True):
     game_list = svc.create_list(owner, name=name, is_public=public)
     for n in range(games):
         concept = ConceptFactory(unified_title=f'Game {n:03d}')
-        GameFactory(concept=concept, title_platform='PS5')
+        GameFactory(concept=concept, title_platform=['PS5'])
         svc.add_concept(game_list, owner, concept)
     return game_list
 
@@ -261,7 +261,7 @@ def test_entries_link_to_the_game_not_to_a_trophy_list(client):
     """Entries are concept-keyed, which is the whole point -- so they link to the concept page."""
     owner = _staff(client)
     concept = ConceptFactory(unified_title='Linked Game')
-    GameFactory(concept=concept, title_platform='PS5')
+    GameFactory(concept=concept, title_platform=['PS5'])
     game_list = _list(owner)
     svc.add_concept(game_list, owner, concept)
 
@@ -289,7 +289,7 @@ def test_every_offered_sort_actually_sorts(client, sort, expected):
     game_list = _list(owner)
     for title in ('Zulu', 'Alpha', 'Mike'):
         concept = ConceptFactory(unified_title=title)
-        GameFactory(concept=concept, title_platform='PS5')
+        GameFactory(concept=concept, title_platform=['PS5'])
         svc.add_concept(game_list, owner, concept)
 
     resp = client.get(_url(game_list), {'sort': sort})

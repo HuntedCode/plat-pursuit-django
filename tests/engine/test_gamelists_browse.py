@@ -47,7 +47,7 @@ def _list(owner, games, *, name, public=True):
     game_list = svc.create_list(owner, name=name, is_public=public)
     for _ in range(games):
         concept = ConceptFactory()
-        GameFactory(concept=concept, title_platform='PS5')
+        GameFactory(concept=concept, title_platform=['PS5'])
         svc.add_concept(game_list, owner, concept)
     return game_list
 

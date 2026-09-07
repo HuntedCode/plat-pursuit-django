@@ -69,6 +69,7 @@
      * caller's fallback is used.
      */
     function toastError(err, fallback) {
+        logFailure('write', err);
         var show = function (msg) {
             if (PP.ToastManager) { PP.ToastManager.show(msg || fallback, 'error'); }
         };
@@ -79,6 +80,43 @@
             return;
         }
         show(null);
+    }
+
+    function statusOf(err) {
+        return (err && err.response && err.response.status) || 0;
+    }
+
+    /**
+     * Say what actually failed, in the console, every time.
+     *
+     * The first version of this file caught errors as `catch(function () { note('...') })` -- no
+     * parameter at all. That collapsed a 404, a refused rate limit and a 500 into one sentence and
+     * DISCARDED the only evidence of which had happened, so the first real failure became a guessing
+     * game with nothing to go on. A catch that drops its error is worse than no catch: it converts a
+     * diagnosable fault into a mystery, and it looks like handling.
+     */
+    function logFailure(what, err) {
+        if (!window.console || !window.console.error) { return; }
+        var status = statusOf(err);
+        window.console.error(
+            '[list-detail] ' + what + ' failed',
+            { status: status || 'no response (network or CORS)', error: err });
+    }
+
+    /**
+     * A person can act on "wait a moment"; they cannot act on "something went wrong".
+     *
+     * The bare status is included on purpose while this is behind the staff dev gate -- it is the
+     * difference between one message and five round trips. REVISIT BEFORE LAUNCH: the parenthetical
+     * is developer copy, and the site's rule is short and literal, never meta.
+     */
+    function failureCopy(status) {
+        if (status === 429 || status === 403) {
+            return 'Too many searches just now. Wait a moment and try again.';
+        }
+        if (status === 404) { return 'This list is no longer available.'; }
+        if (status === 400) { return 'That search was too long.'; }
+        return 'That search could not be run (error ' + (status || 'network') + ').';
     }
 
     /**
@@ -296,9 +334,10 @@
                     if (mine !== seq) { return; }
                     render((data && data.results) || []);
                 })
-                .catch(function () {
+                .catch(function (err) {
                     if (mine !== seq) { return; }
-                    note('That search could not be run. Try again in a moment.');
+                    logFailure('search ' + root.dataset.searchUrl, err);
+                    note(failureCopy(statusOf(err)));
                     say('Search failed.');
                 })
                 .finally(function () {

@@ -162,7 +162,7 @@ def test_the_page_is_query_flat_as_lists_are_added(client):
             game_list = svc.create_list(profile, name=f'{tag}{n}')
             for _ in range(3):
                 concept = ConceptFactory()
-                GameFactory(concept=concept, title_platform='PS5')
+                GameFactory(concept=concept, title_platform=['PS5'])
                 svc.add_concept(game_list, profile, concept)
 
     def measure():

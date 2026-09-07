@@ -25,10 +25,7 @@ same IGDB cover whichever of its lists you ask, so the order is free. A concept 
 through to PSN art, and then "which stack" decides whether you get the PS5 key art or a PS3 icon.
 """
 from trophies.models import Game
-from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER
-
-_RANK = {platform: index for index, platform in enumerate(PLATFORM_PRIORITY_ORDER)}
-_UNRANKED = len(PLATFORM_PRIORITY_ORDER)
+from trophies.util_modules.constants import platform_priority_rank
 
 
 def cover_games_for(concept_ids):
@@ -72,8 +69,15 @@ def _sort_key(game):
     resolve by whatever order the database happened to return, so the same list could render a
     different cover on two consecutive loads -- the kind of flicker that reads as a bug and cannot
     be reproduced on request.
+
+    `title_platform` is a LIST (`JSONField(default=list)`), because a cross-buy game is on PS4 AND
+    PS5. This read it as a scalar and did `_RANK.get(game.title_platform, ...)`, which is a dict
+    lookup on a list: `TypeError: unhashable type: 'list'` for every real row. It took out all four
+    cover surfaces -- browse tiles, My Lists tiles, the detail items, and the adder search -- and no
+    test caught it because the tests handed `title_platform='PS5'`, a STRING, overriding the
+    factory's correct `['PS5']` and inventing a shape the schema cannot hold.
     """
-    return (_RANK.get(game.title_platform, _UNRANKED), game.pk)
+    return (platform_priority_rank(game.title_platform), game.pk)
 
 
 def attach_cover_games(lists, *, per_list=4):
