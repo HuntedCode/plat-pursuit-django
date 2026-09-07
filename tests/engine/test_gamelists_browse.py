@@ -336,3 +336,49 @@ def test_the_tile_uses_the_sites_own_cover_chain(staff_client):
 
     assert 'display_image_url' in tile
     assert 'item.title_image' not in tile
+
+
+def test_only_controls_that_submit_dim_the_grid():
+    """A dim is a promise that something is coming.
+
+    `onFormChangeDim` used to dim for anything that was not a text or search input, which caught this
+    toolbar's `min_games` / `max_games` NUMBER inputs -- and `browse-filters.js` auto-submits only
+    checkboxes, radios, selects and `[data-auto-submit]`. So changing a game-count value greyed
+    `#browse-results` to 40% and no request ever fired to clear it. Live, visible, and inherited
+    verbatim from the page this one was ported from.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    js = (root / 'static' / 'js' / 'lists-browse.js').read_text(encoding='utf-8')
+    tpl = (root / 'templates' / 'gamelists' / 'browse.html').read_text(encoding='utf-8')
+
+    assert 'type="number"' in tpl, 'the number inputs this guards moved or were renamed'
+
+    dim = js[js.index('function onFormChangeDim'):]
+    dim = dim[:dim.index('\n    }')]
+    assert "t.type === 'checkbox'" in dim and "t.tagName === 'SELECT'" in dim, (
+        'the dim no longer matches what browse-filters.js actually submits'
+    )
+    assert "'text'" not in dim, 'back to an exclusion list, which is what let number inputs through'
+
+
+def test_the_browse_scroll_branch_answers_a_real_page_fetch(staff_client):
+    """`X-Requested-With` PLUS `?page` -- what the scroller actually sends. The existing test sent
+    the header alone, so `_is_scroll_fetch()` was False and the countless branch never ran."""
+    # Spread across owners: 26 lists is past any one hunter's cap, and a public catalogue is made of
+    # many people's lists anyway.
+    for n in range(26):
+        _list(_hunter(psn=f'scroller{n}'), 1, name=f'Scrolled {n}')
+
+    first = staff_client.get(BROWSE, {'page': 1}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    assert first.status_code == 200
+    assert first['X-Has-Next'] == '1'
+
+    second = staff_client.get(BROWSE, {'page': 2}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    assert second['X-Has-Next'] == '0'
+    assert '<!doctype html' not in second.content.decode().lower()
+
+    assert staff_client.get(
+        BROWSE, {'page': 99}, HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code == 404
+

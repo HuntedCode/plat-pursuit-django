@@ -106,8 +106,19 @@ notification system this release -- so the tab is the feature, not decoration on
     swapping. A wrapper the swap never destroys is also what lets anything that must OUTLIVE a swap
     (a sentinel, a spinner) live beside the grid later.{% endcomment %}
     <div id="my-lists-panel" role="tabpanel"
-         aria-labelledby="gl-scope-{{ scope }}">
+         aria-labelledby="gl-scope-{{ scope }}" data-gl-panel>
         {% include 'gamelists/partials/my_lists_results.html' %}
+    </div>
+
+    {% comment %}Infinite scroll: sentinel + spinner OUTSIDE the swapped panel so they survive every
+    scope switch, exactly as the browse page does it. Not decoration -- `MyListsView` sets
+    `paginate_by`, and Following is UNCAPPED (you can follow any number of lists), so without a
+    scroller the 25th followed list was unreachable by any route: no pager, no page-2 link, and the
+    chip's href carries no page. Shipping `paginate_by` with no way to reach page two is the same
+    half-a-contract mistake as baking `pp-reveal` with nothing to reveal it.{% endcomment %}
+    <div id="gl-my-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="gl-my-loading" class="pp-gbrowse__loading hidden">
+        <span class="pp-gbrowse__spinner" aria-hidden="true"></span>
     </div>
 </div>
 

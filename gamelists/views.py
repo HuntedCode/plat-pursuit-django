@@ -247,12 +247,15 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
         # The cap, shown rather than discovered by being refused. `owned_by` excludes soft-deleted
         # rows, which is the same count `create_list` enforces against -- so the number on screen and
         # the number the service will act on cannot disagree.
-        # On the `mine` scope the paginator has already counted exactly this queryset, so asking
-        # again is a second COUNT for the same answer.
-        context['list_count'] = (
-            context['paginator'].count if scope == 'mine'
-            else GameList.objects.owned_by(profile).count()
-        )
+        # `paginator.count` is only the real total on the NON-scroll branches. `HtmxListMixin`'s
+        # countless scroll path hands back a fake paginator over one page's rows (its docstring says
+        # so out loud), so reusing it there would render "3/10" on a hunter with ten lists. The
+        # header is full-page-only, but a wrong number that is merely unrendered is a trap for
+        # whoever renders it next.
+        if scope == 'mine' and not self._is_scroll_fetch():
+            context['list_count'] = context['paginator'].count
+        else:
+            context['list_count'] = GameList.objects.owned_by(profile).count()
         context['list_cap'] = svc.max_lists_for(profile)
         context['at_cap'] = context['list_count'] >= context['list_cap']
         context['suggested_names'] = svc.SUGGESTED_NAMES

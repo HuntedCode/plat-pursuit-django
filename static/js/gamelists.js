@@ -97,6 +97,7 @@
      * also bind click, or the panel switches twice.
      */
     var revealHandle = null;
+    var scroller = null;
 
     /**
      * The staggered tile reveal, on the shared engine -- the same grammar every other tile grid on
@@ -131,7 +132,29 @@
         });
     }
 
-    function wireScopeSwitcher() {
+    /**
+     * Infinite scroll for the panel.
+     *
+     * `MyListsView` sets `paginate_by`, and Following is uncapped -- without this the 25th followed
+     * list is unreachable by every route. The sentinel and spinner live OUTSIDE the swapped panel so
+     * they survive a scope switch; the scroller is re-created against the fresh grid after each one.
+     */
+    function initScroller() {
+        if (scroller && scroller.destroy) { scroller.destroy(); scroller = null; }
+        if (!window.PlatPursuit || !window.PlatPursuit.InfiniteScroller) { return; }
+        scroller = window.PlatPursuit.InfiniteScroller.create({
+            gridId: 'my-lists-grid',
+            sentinelId: 'gl-my-sentinel',
+            loadingId: 'gl-my-loading',
+            paginateBy: 24,               // matches MyListsView.paginate_by
+            cardSelector: '.pp-gtile',
+            // Newly appended tiles carry the same server-baked `pp-reveal`, so they need the
+            // observer too or they append invisible -- the identical trap the swap path hit.
+            onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
+        });
+    }
+
+    function wireScopeSwitcher(first) {
         var strip = document.querySelector('[data-gl-scopes]');
         if (!strip || strip.dataset.wired === '1') { return; }
         strip.dataset.wired = '1';
@@ -139,27 +162,76 @@
         var chips = strip.querySelectorAll('.pp-switch__chip');
         var order = Array.prototype.map.call(chips, function (c) { return c.dataset.scope; });
 
+        var tablist = null;
         if (window.PlatPursuit && window.PlatPursuit.wireTablist) {
-            window.PlatPursuit.wireTablist(chips, { manual: true });
+            // Keep the handle: it returns `syncTabindex`, which is the documented way to re-sync the
+            // roving tabindex after the active chip moves. Discarding it and re-implementing the
+            // same two lines inline is a second copy to keep in step.
+            tablist = window.PlatPursuit.wireTablist(chips, { manual: true });
         }
 
-        // Active state moves on the REQUEST, not on the response: the chip should light the instant
-        // it is pressed rather than after a round trip, which is what makes the switch feel local.
-        document.body.addEventListener('htmx:beforeRequest', function (e) {
-            var chip = e.target.closest ? e.target.closest('[data-gl-scopes] .pp-switch__chip') : null;
-            if (!chip) { return; }
+        function markActive(chip) {
             Array.prototype.forEach.call(chips, function (c) {
                 var on = c === chip;
                 c.classList.toggle('is-active', on);
                 c.setAttribute('aria-selected', on ? 'true' : 'false');
-                c.tabIndex = on ? 0 : -1;
             });
+            if (tablist && tablist.syncTabindex) { tablist.syncTabindex(); }
+        }
+
+        function activeChip() {
+            for (var i = 0; i < chips.length; i++) {
+                if (chips[i].classList.contains('is-active')) { return chips[i]; }
+            }
+            return null;
+        }
+
+        // Everything below binds on DOCUMENT.BODY, which SURVIVES an htmx history restore -- so it
+        // binds exactly once. Element wiring above re-runs every time because those nodes are new;
+        // these would double-bind. That split is the whole point of `onPageReady(fn(first))`.
+        if (!first) { return; }
+
+        // Active state moves on the REQUEST, not on the response: the chip should light the instant
+        // it is pressed rather than after a round trip, which is what makes the switch feel local.
+        document.body.addEventListener('htmx:beforeRequest', function (e) {
+            var el = (e.detail && e.detail.elt) || e.target;
+            var chip = el && el.closest
+                ? el.closest('[data-gl-scopes] .pp-switch__chip') : null;
+            if (!chip) { return; }
+            // Re-clicking the tab you are already on: cancel it. Otherwise every press refetches,
+            // re-swaps, replays the reveal on tiles that never moved, and -- because the chips carry
+            // `hx-push-url` -- pushes a duplicate history entry, so Back needs six presses to
+            // escape. Lifted from the badge list, which already learned this.
+            if (chip.classList.contains('is-active')) { e.preventDefault(); return; }
+            markActive(chip);
             if (window.PlatPursuit && window.PlatPursuit.igniteTab) {
                 window.PlatPursuit.igniteTab(chip);
             }
         });
 
+        // The other half of the optimistic update. If the request 500s, is aborted, or is refused by
+        // the gate, no swap happens and the chip is left lit on a scope the panel is not showing.
+        // Reconcile against what is actually RENDERED rather than against what was clicked, so a
+        // superseded request (two fast clicks, no `hx-sync` on the chips) settles correctly too.
+        document.body.addEventListener('htmx:afterRequest', function (e) {
+            var el = (e.detail && e.detail.elt) || e.target;
+            if (!el || !el.closest || !el.closest('[data-gl-scopes] .pp-switch__chip')) { return; }
+            var grid = document.getElementById('my-lists-grid');
+            if (!grid) { return; }
+            var rendered = null;
+            Array.prototype.forEach.call(chips, function (c) {
+                if (c.dataset.scope === grid.dataset.scope) { rendered = c; }
+            });
+            if (rendered && rendered !== activeChip()) { markActive(rendered); }
+        });
+
         document.body.addEventListener('htmx:afterSwap', function (e) {
+            // Guard on htmx's OWN swap target, not on `e.target` (which can be a swapped-IN child)
+            // and not merely on the grid existing. Without it this runs for every swap that bubbles
+            // to body -- a toast, an out-of-band update, a future follow button on this page.
+            var target = (e.detail && e.detail.target) || e.target;
+            if (!target || target.id !== 'my-lists-panel') { return; }
+
             var grid = document.getElementById('my-lists-grid');
             if (!grid) { return; }
             // Direction comes from the panel's own `data-scope`, which the server rendered -- so the
@@ -170,26 +242,45 @@
                 window.PlatPursuit.slideViewIn(grid, from, to, order);
             }
             strip.dataset.lastScope = to;
+
+            // The panel's label is rendered once, outside the swap, so it keeps whichever chip was
+            // active on page load unless something moves it -- announcing the Following panel as
+            // labelled by the Mine chip.
+            var panel = document.querySelector('[data-gl-panel]');
+            if (panel) { panel.setAttribute('aria-labelledby', 'gl-scope-' + to); }
+
             // The swapped grid is a fresh node carrying a server-baked `pp-reveal`, so it needs its
-            // own observer or its tiles never become visible.
+            // own observer or its tiles never become visible -- and the scroller is watching a grid
+            // that no longer exists.
             initReveal();
+            initScroller();
         });
 
         var current = document.getElementById('my-lists-grid');
         if (current) { strip.dataset.lastScope = current.dataset.scope; }
     }
 
-    function boot() {
+    /**
+     * `onPageReady(fn(first))` is the shared contract for every HTMX view-swap page, and it exists
+     * because the two halves of a restore behave differently: htmx replaces the history element's
+     * INNER HTML, so element nodes are all fresh (re-wire them every time -- the old bindings died
+     * with the old nodes), while `document.body` itself PERSISTS, so body-level listeners survive
+     * and re-binding them would double-fire.
+     *
+     * The hand-rolled `DOMContentLoaded` + `htmx:historyRestore` pair this replaces got that split
+     * wrong -- it re-ran everything, body listeners included -- and its comment asserted htmx
+     * replaces the body wholesale, which the shared helper's own docstring contradicts.
+     */
+    function boot(first) {
         wireCreateDialog();
-        wireScopeSwitcher();
+        wireScopeSwitcher(first);
         initReveal();
+        initScroller();
     }
 
-    document.addEventListener('DOMContentLoaded', boot);
-    // `base.html` sets no `hx-history-elt`, so htmx replaces document.body WHOLESALE on a history
-    // restore -- every node here is fresh and unwired after a browser Back, and listeners die with
-    // the node they were on. Re-running is safe: both wirings guard on `dataset.wired`, which is
-    // itself a fresh (absent) attribute on the restored nodes. Documented the same way in
-    // plat-cards.js, which paid for this lesson first.
-    document.body.addEventListener('htmx:historyRestore', boot);
+    if (window.PlatPursuit && window.PlatPursuit.onPageReady) {
+        window.PlatPursuit.onPageReady(boot);
+    } else {
+        document.addEventListener('DOMContentLoaded', function () { boot(true); });
+    }
 })();

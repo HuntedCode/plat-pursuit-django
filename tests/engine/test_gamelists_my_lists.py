@@ -608,16 +608,23 @@ def test_the_swap_targets_a_stable_wrapper_the_way_every_other_switcher_does():
     assert 'hx-target="#my-lists-panel"' in tpl
 
 
-def test_the_page_rewires_itself_after_a_history_restore():
-    """`base.html` sets no `hx-history-elt`, so htmx replaces document.body wholesale on a Back --
-    every node is fresh and unwired, and listeners die with the node they were on. Without this the
-    create button and the scope chips are inert after a browser Back."""
+def test_the_page_uses_the_shared_page_ready_contract():
+    """`onPageReady(fn(first))`, not a hand-rolled DOMContentLoaded + historyRestore pair.
+
+    The two halves of a restore differ: htmx replaces the history element's INNER HTML, so element
+    nodes are fresh and must be re-wired, while `document.body` PERSISTS, so body-level listeners
+    survive and re-binding them double-fires. The hand-rolled version re-ran everything, body
+    listeners included, and its comment asserted htmx replaces the body wholesale -- which the
+    shared helper's own docstring contradicts.
+    """
     from pathlib import Path
 
     js = (Path(__file__).resolve().parents[2]
           / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
 
-    assert 'htmx:historyRestore' in js
+    assert 'PlatPursuit.onPageReady(' in js
+    assert 'function boot(first)' in js, 'boot ignores the first/restore distinction'
+    assert 'if (!first) { return; }' in js, 'body-level listeners are not bound once'
 
 
 def test_the_swapped_grid_has_something_that_will_actually_reveal_it():
@@ -659,4 +666,124 @@ def test_swapping_back_to_mine_returns_the_tiles(client):
 
     assert 'Comes back' in body
     assert 'pp-gtile' in body, 'the tile markup is missing, not merely invisible'
+
+
+# -- what the swap-machinery audit found: more of the same half-a-pattern class -------------------
+
+def test_following_can_reach_more_than_one_page(client):
+    """`MyListsView` sets `paginate_by`, and Following is UNCAPPED -- you can follow any number of
+    lists. Shipping pagination with no pager and no scroller made the 25th followed list unreachable
+    by every route: no page-2 link, no scroll, and the chip's href carries no page. The same
+    half-a-contract shape as baking `pp-reveal` with nothing to reveal it.
+    """
+    profile = _staff_hunter(client)
+    # One list each from 26 different authors -- which is also what following 26 lists actually
+    # looks like, and it stays inside the per-hunter cap the service enforces.
+    for n in range(26):
+        author = ProfileFactory(is_linked=True, psn_username=f'author{n}')
+        svc.set_follow(svc.create_list(author, name=f'Followed {n}', is_public=True),
+                       profile, following=True)
+
+    page_two = client.get(
+        MY_LISTS, {'scope': 'following', 'page': 2},
+        HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+    assert page_two.status_code == 200
+    assert 'Followed' in page_two.content.decode()
+    assert page_two['X-Has-Next'] == '0', 'the scroller is not told when to stop'
+
+
+def test_the_scroll_branch_is_wired_end_to_end(client):
+    """The countless-pagination path: `X-Requested-With` PLUS `?page`, which is what the scroller
+    actually sends. Every earlier test sent the header with no page, so `_is_scroll_fetch()` was
+    False and this whole branch -- the +1 probe, the `_ScrollPage`, `X-Has-Next`, the past-end 404 --
+    was never executed on either of these views."""
+    profile = _staff_hunter(client)
+    for n in range(30):
+        author = ProfileFactory(is_linked=True, psn_username=f'writer{n}')
+        svc.set_follow(svc.create_list(author, name=f'F{n}', is_public=True),
+                       profile, following=True)
+
+    first = client.get(MY_LISTS, {'scope': 'following', 'page': 1},
+                       HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    assert first['X-Has-Next'] == '1'
+
+    past_end = client.get(MY_LISTS, {'scope': 'following', 'page': 99},
+                          HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    assert past_end.status_code == 404, 'past the end must 404 -- the scroller\'s stop contract'
+
+
+def test_the_scroller_is_wired_and_its_ids_match_the_markup():
+    """A scroller whose ids disagree with the page is silently inert: no error, no scroll."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    js = (root / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+    tpl = (root / 'templates' / 'gamelists' / 'my_lists.html').read_text(encoding='utf-8')
+
+    assert 'InfiniteScroller.create(' in js
+    # And that it is CALLED -- on load and again after each swap, because the swapped grid is a new
+    # node and a scroller bound once is watching an element that no longer exists. Asserting only
+    # that the create() call EXISTS let a mutation that renamed the function and deleted every call
+    # pass green.
+    assert js.count('initScroller();') >= 2, 'the scroller is defined but never (re)wired'
+    for element_id in ('my-lists-grid', 'gl-my-sentinel', 'gl-my-loading'):
+        assert f"'{element_id}'" in js, f'the scroller does not reference {element_id}'
+    for element_id in ('gl-my-sentinel', 'gl-my-loading'):
+        assert f'id="{element_id}"' in tpl, f'{element_id} is missing from the page'
+    # The sentinel must sit OUTSIDE the swapped panel or a scope switch tears out the thing
+    # watching for the next page.
+    assert tpl.index('id="gl-my-sentinel"') > tpl.index('</div>', tpl.index('data-gl-panel'))
+
+
+def test_the_active_chip_is_reconciled_when_a_request_does_not_swap():
+    """The other half of the optimistic update. The chip lights on `beforeRequest`; if the request
+    500s, is aborted or is refused by the gate, no swap happens and the chip is left lit on a scope
+    the panel is not showing."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2]
+          / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    assert 'htmx:afterRequest' in js, 'nothing reconciles the chip when no swap occurs'
+    assert 'htmx:beforeRequest' in js
+
+
+def test_reclicking_the_active_chip_is_cancelled():
+    """The chips carry `hx-push-url`, so a re-click refetches, re-swaps, replays the reveal on tiles
+    that never moved, and pushes a duplicate history entry -- Back then needs six presses."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2]
+          / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    assert "chip.classList.contains('is-active')" in js
+    assert 'preventDefault' in js
+
+
+def test_the_swap_handler_guards_on_htmxs_own_target():
+    """Otherwise it runs for every swap that bubbles to body -- a toast, an out-of-band update, a
+    follow button added to this page later."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2]
+          / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    assert 'e.detail && e.detail.target' in js or '(e.detail && e.detail.target)' in js
+    assert "target.id !== 'my-lists-panel'" in js
+
+
+def test_the_panel_label_follows_the_scope(client):
+    """`aria-labelledby` is rendered once, outside the swap, so without JS moving it the Following
+    panel stays announced as labelled by the Mine chip."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2]
+          / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    assert "setAttribute('aria-labelledby'" in js
+
+    _staff_hunter(client)
+    body = client.get(MY_LISTS, {'scope': 'following'}).content.decode()
+    assert 'aria-labelledby="gl-scope-following"' in body, 'the server-rendered label is wrong too'
 

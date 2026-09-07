@@ -65,7 +65,16 @@
     // stale until the response lands.
     function onFormChangeDim(e) {
         var t = e.target;
-        if (t && (t.type === 'text' || t.type === 'search')) { return; }
+        if (!t) { return; }
+        // Dim only for controls that ACTUALLY submit. `browse-filters.js` auto-submits checkboxes,
+        // radios, selects and anything marked `[data-auto-submit]` -- and nothing else. The old
+        // guard excluded text and search and let everything else through, which caught this
+        // toolbar's `min_games` / `max_games` number inputs: changing one dimmed `#browse-results`
+        // to 40% and no request ever fired to clear it, so the grid stayed greyed until an
+        // unrelated filter change. A dim is a promise that something is coming.
+        var submits = t.type === 'checkbox' || t.type === 'radio'
+            || t.tagName === 'SELECT' || (t.closest && t.closest('[data-auto-submit]'));
+        if (!submits) { return; }
         var r = document.getElementById('browse-results');
         if (r) { r.classList.add('is-swapping'); }
     }
