@@ -30,7 +30,6 @@ GATED_PAGES = [
 ]
 
 PAGES = [
-    '/community/lists/1/',
     '/community/lists/1/edit/',
     '/lists/',                # the pre-2026 paths, which used to 301 into the ones above
     '/lists/1/',
@@ -49,7 +48,6 @@ def test_the_redirect_is_temporary_so_it_can_be_taken_back():
     """A 301 is cached by the browser indefinitely. Using one here would keep sending people to the
     homepage long after the rebuilt system ships -- and specifically the people who used lists most,
     because they are the ones holding the bookmarks."""
-    assert client_status('/community/lists/1/') == 302
     assert client_status('/community/lists/1/edit/') == 302
 
 

@@ -1,0 +1,53 @@
+{% comment %}
+The games on a list -- the sort swap's payload, and nothing else.
+
+`pp-reveal` is baked in on htmx requests only (settle strips a JS-added class from id'd swapped
+elements), and `gamelists.js` wires the observer that clears it. Both halves, deliberately: baking
+the class with nothing to reveal it is what left the My Lists panel blank.
+{% endcomment %}
+{% load humanize %}
+<div id="gl-items" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}">
+    {% for item in items %}
+    {% comment %}Links to the CONCEPT page -- the site's word "game" -- rather than to a trophy list,
+    which is the whole reason entries are concept-keyed.{% endcomment %}
+    <a href="{{ item.concept.game_page_url }}" class="pp-gtile" data-gtile
+       aria-label="{{ item.concept.unified_title }}">
+        {% if item.cover %}
+        <span class="pp-gtile__art">
+            <img src="{{ item.cover.display_image_url }}" alt="" loading="lazy"
+                 class="pp-gtile__tile-art{% if not item.cover.has_cover_art %} pp-gtile__tile-art--icon{% endif %}" />
+        </span>
+        {% else %}
+        <span class="pp-gtile__art pp-gtile__art--empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+        </span>
+        {% endif %}
+
+        <span class="pp-gtile__scrim" aria-hidden="true"></span>
+
+        <span class="pp-gtile__body">
+            <span class="pp-gtile__name">{{ item.concept.unified_title }}</span>
+            {% if item.note %}
+            {% comment %}`pr-1` because the note is italic inside a line-clamp, and italic glyphs
+            slant past the text box where the clamp cuts them.{% endcomment %}
+            <span class="pp-gtile__author italic pr-1">{{ item.note }}</span>
+            {% endif %}
+        </span>
+    </a>
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        {% if is_owner %}
+        <p class="pp-gtile-empty__title">No games yet</p>
+        <p class="pp-gtile-empty__hint">Add the first one and this list starts to look like something.</p>
+        {% else %}
+        <p class="pp-gtile-empty__title">Nothing on this list yet</p>
+        <p class="pp-gtile-empty__hint">Its author has not added any games.</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

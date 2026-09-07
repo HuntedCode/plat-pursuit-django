@@ -15,12 +15,12 @@ from django.db.models import Q
 from django.db.models.functions import Lower
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
-from django.views.generic import ListView, View
+from django.views.generic import DetailView, ListView, View
 
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, GameList,
                              GameListFollow, GameListLike)
 from gamelists.services import game_list_service as svc
-from gamelists.services.covers import attach_cover_games
+from gamelists.services.covers import attach_cover_games, cover_games_for
 from trophies.mixins import HtmxListMixin, StaffRequiredMixin
 
 #: How many covers the `.pp-gtile` mosaic composes around (`is-1` .. `is-4`).
@@ -301,3 +301,99 @@ class CreateListView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequire
 
         messages.success(request, f'"{game_list.name}" is ready. Add some games to it.')
         return redirect('my_lists')
+
+
+class GameListDetailView(_DevelopmentGate, DetailView):
+    """One list, and where its owner edits it IN PLACE.
+
+    THREE SURFACES, NOT FIVE. The system this replaces had a separate `/edit/` address, so renaming a
+    list you were looking at cost three round trips. Editing happens here, where you can see the
+    result -- which is also how the rest of the rebuilt site behaves.
+
+    PUBLIC OR YOURS, and nothing else. `readable_by` is the single supported read, so a private list
+    404s for everybody but its owner rather than 403ing -- a 403 confirms the list exists and who it
+    belongs to, from nothing but an id.
+    """
+
+    model = GameList
+    template_name = 'gamelists/detail.html'
+    context_object_name = 'game_list'
+    pk_url_kwarg = 'list_id'
+
+    #: Sorts as DATA, one list read by the toolbar and the queryset both. Deliberately fewer than the
+    #: thirteen the old page carried (of which four were unreachable): a curated list has an ORDER
+    #: its author chose, so that is the default and the rest are ways to interrogate it.
+    SORT_CHOICES = (
+        ('position', 'List order'),
+        ('name', 'A-Z'),
+        ('added', 'Recently added'),
+    )
+    _DEFAULT_SORT = 'position'
+
+    def get_queryset(self):
+        # `select_related('owner')` for the byline; the cover art is attached per-item below.
+        return GameList.objects.readable_by(self._viewer()).select_related('owner')
+
+    def _viewer(self):
+        if not self.request.user.is_authenticated:
+            return None
+        return getattr(self.request.user, 'profile', None)
+
+    def _selected_sort(self):
+        raw = self.request.GET.get('sort', self._DEFAULT_SORT)
+        return raw if raw in dict(self.SORT_CHOICES) else self._DEFAULT_SORT
+
+    def get_template_names(self):
+        # The sort swap returns the items only. Same shape as the browse pages, and the same reason:
+        # re-sorting a 200-game list should not re-render the header, the toolbar and the chrome.
+        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        if self.request.htmx or is_xhr:
+            return ['gamelists/partials/detail_items.html']
+        return [self.template_name]
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        game_list = self.object
+        viewer = self._viewer()
+
+        sort = self._selected_sort()
+        order = {
+            'name': ('concept__unified_title',),
+            'added': ('-added_at',),
+        }.get(sort, ('position',))
+
+        # `concept__igdb_match`, deferred, because the tile calls `concept.game_page_url` -- whose
+        # own docstring says callers rendering many concepts must select_related it "or this walks
+        # the FK per row". It did: one query per item, each dragging the ~30 KB `raw_response` blob.
+        # The flatness test could not see it (it counts gamelists_ and trophies_game tables), which
+        # is the same blind spot an audit flagged on the browse page; the raw_response guard caught
+        # it instead.
+        items = list(
+            game_list.items
+            .select_related('concept', 'concept__igdb_match')
+            .defer('concept__igdb_match__raw_response')
+            .order_by(*order)
+        )
+        # One batched query for every cover on the page, not one per row -- the same helper the
+        # browse tiles use, for the same reason.
+        covers = cover_games_for([item.concept_id for item in items])
+        for item in items:
+            item.cover = covers.get(item.concept_id)
+
+        context['items'] = items
+        context['sort'] = sort
+        context['sort_choices'] = self.SORT_CHOICES
+        context['is_owner'] = viewer is not None and game_list.owner_id == viewer.id
+        context['can_act'] = viewer is not None and not context['is_owner']
+        if context['can_act']:
+            context['viewer_has_liked'] = GameListLike.objects.filter(
+                game_list=game_list, profile=viewer).exists()
+            context['viewer_follows'] = GameListFollow.objects.filter(
+                game_list=game_list, profile=viewer).exists()
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Game Lists', 'url': reverse_lazy('lists_browse')},
+            {'text': game_list.name},
+        ]
+        return context

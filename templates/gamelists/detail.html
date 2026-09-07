@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+{% block title %}{{ game_list.name }}{% endblock %}
+{% comment %}A private list must never be indexed, and a public one is worth indexing -- but not once
+per sort permutation, which is the same guard the browse page and Franchises carry.{% endcomment %}
+{% block robots %}{% if not game_list.is_public or request.GET %}noindex, nofollow{% else %}{{ block.super }}{% endif %}{% endblock %}
+
+{% comment %}
+List detail. Ported from the 2026-08 rebuild -- which was finished work on the standard -- and
+re-keyed onto the new models, with three changes the design conversation settled:
+
+1. NO SEPARATE EDIT PAGE. Three surfaces, not five: the owner edits here, where the result is
+   visible. The old page's "Edit" button opened a whole other address.
+2. NO COPY BUTTON. Cloning was considered and not chosen; the social layer is follow, like and share.
+3. PUBLISHING IS AN ACT, not a checkbox on a form somewhere else -- so a private list carries its own
+   publish affordance and says what publishing will do.
+
+Structure is the site-wide rule: STACKED chrome cards (header, toolbar), then the games flowing FREE
+below with no outer wrapper.
+{% endcomment %}
+
+{% block content %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Identity ───────────────────────────────────────────────────────────────────────────── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ game_list.name }}</h1>
+                        {% if not game_list.is_public %}
+                        {% comment %}The private state is marked; the public one is not. A list is
+                        private when it is born, so the chip marks the exception.{% endcomment %}
+                        <span class="pp-gtile__stat" title="Only you can see this list">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            Private
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    {% if game_list.description %}
+                    <p class="text-xs md:text-sm text-base-content/60 mt-1 max-w-prose">{{ game_list.description }}</p>
+                    {% endif %}
+
+                    <p class="text-xs text-base-content/50 mt-2">
+                        by <a href="{% url 'profile_detail' game_list.owner.psn_username %}"
+                              class="link link-hover font-semibold">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</a>
+                    </p>
+                </div>
+
+                <div class="flex items-center gap-4 shrink-0 text-right">
+                    <div>
+                        <span class="pp-tally text-primary leading-none font-bold text-xl md:text-3xl">{{ game_list.game_count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">games</span>
+                    </div>
+                    {% if game_list.is_public %}
+                    <div>
+                        <span class="pp-tally leading-none font-bold text-xl md:text-3xl" data-like-count>{{ game_list.like_count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">likes</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% comment %}Actions. A visitor gets the two social acts; the owner gets the things only
+            an owner can do. Nobody gets both, because there is no state in which both apply.{% endcomment %}
+            {% if can_act or is_owner %}
+            <div class="flex flex-wrap items-center gap-2 mt-5">
+                {% if can_act %}
+                <button type="button" class="pp-cta{% if not viewer_has_liked %} pp-cta--ghost{% endif %}"
+                        data-gl-like data-list-id="{{ game_list.id }}"
+                        aria-pressed="{% if viewer_has_liked %}true{% else %}false{% endif %}">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if viewer_has_liked %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <span data-gl-like-label>{% if viewer_has_liked %}Liked{% else %}Like{% endif %}</span>
+                </button>
+
+                {% comment %}"Save" rather than "Follow": there is no notification surface this
+                release, so a follow is a bookmark that puts the list in your My Lists. Calling it
+                Follow would promise alerts that cannot arrive.{% endcomment %}
+                <button type="button" class="pp-cta{% if not viewer_follows %} pp-cta--ghost{% endif %}"
+                        data-gl-follow data-list-id="{{ game_list.id }}"
+                        aria-pressed="{% if viewer_follows %}true{% else %}false{% endif %}">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if viewer_follows %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    <span data-gl-follow-label>{% if viewer_follows %}Saved{% else %}Save{% endif %}</span>
+                </button>
+                {% endif %}
+
+                {% if is_owner %}
+                {% comment %}Publishing is the deliberate second act, so it gets a real affordance and
+                says what it does. Wired in the next commit alongside the in-place edits.{% endcomment %}
+                {% if not game_list.is_public %}
+                <button type="button" class="pp-cta" data-gl-publish disabled title="Coming in the next commit">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                    <span>Publish</span>
+                </button>
+                <span class="text-xs text-base-content/50">Only you can see this so far.</span>
+                {% else %}
+                <span class="text-xs text-base-content/50">Published. Anyone with the link can read it.</span>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %}Sort toolbar. Swaps the items only -- re-sorting a 200-game list should not
+    re-render the header and the chrome. `innerHTML` into a stable wrapper, which is the pattern that
+    works on this site (the outerHTML variant duplicated the page on My Lists).{% endcomment %}
+    {% if items %}
+    <form data-browse-form id="gl-detail-form"
+          hx-get="{% url 'list_detail' game_list.id %}"
+          hx-target="#gl-items-panel"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+          hx-trigger="submit"
+          hx-indicator="#gl-items-panel">
+        <div class="pp-toolbar-card pp-gbrowse__toolbar">
+            <div class="pp-gbrowse__bar">
+                <span class="pp-ltoolbar__title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    Games
+                </span>
+                <label class="pp-gbrowse__sort">
+                    <span class="sr-only">Sort games</span>
+                    <select name="sort" class="pp-gallery__select">
+                        {% for value, display in sort_choices %}
+                        <option value="{{ value }}"{% if sort == value %} selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+
+    <div id="gl-items-panel">
+        {% include 'gamelists/partials/detail_items.html' %}
+    </div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/gamelists.js' %}"></script>
+{% endblock %}
