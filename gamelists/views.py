@@ -469,6 +469,76 @@ class _ListActionView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequir
         return JsonResponse({'error': str(exc)}, status=status)
 
 
+class UpdateListView(_ListActionView):
+    """Rename, re-describe and publish -- the owner's three edits, through one endpoint.
+
+    One view rather than three because they are one service call. `update_list` already takes each
+    field optionally and touches only what it is given, and splitting them would mean three
+    permission stacks that have to agree with each other forever.
+
+    `'field' in request.POST` rather than `.get('field')`: an empty description is a real edit ("clear
+    it"), and `.get()` cannot tell that apart from "not sent". Absent means leave alone; present and
+    empty means set to empty.
+    """
+
+    FIELDS = ('name', 'description')
+
+    @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+
+        fields = {name: request.POST[name] for name in self.FIELDS if name in request.POST}
+        if 'is_public' in request.POST:
+            fields['is_public'] = request.POST['is_public'] == 'true'
+        if not fields:
+            return self.fail('Nothing to change.')
+
+        try:
+            updated = svc.update_list(game_list, self._viewer(request), **fields)
+        except svc.ListError as exc:
+            return self.fail(exc)
+
+        # The STORED values, not the submitted ones. `_check_name` sanitizes and trims, so what the
+        # hunter typed and what the list now holds are not always the same string -- and a client
+        # that re-renders its own input would show a name the database does not have.
+        return JsonResponse({
+            'name': updated.name,
+            'description': updated.description,
+            'is_public': updated.is_public,
+        })
+
+
+class ReorderItemsView(_ListActionView):
+    """Set the list's order to exactly the posted ids.
+
+    The service refuses a partial ordering rather than applying it, which is right -- a subset means
+    the client and the server disagree about what is on the list, and applying it would silently drop
+    whatever the client did not send. The consequence is that a list longer than
+    `MAX_ITEMS_RENDERED` cannot be drag-reordered, because the page never rendered the rest to post
+    them back. The UI disables dragging there and says so rather than letting the refusal surface as
+    an error the hunter cannot act on.
+    """
+
+    @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+
+        # `getlist`, because an order is a sequence and a single-entry list must still arrive as one.
+        item_ids = request.POST.getlist('item_ids[]') or request.POST.getlist('item_ids')
+        if not item_ids:
+            return self.fail('That order is not valid. Reload and try again.')
+
+        try:
+            svc.reorder(game_list, self._viewer(request), item_ids)
+        except svc.ListError as exc:
+            return self.fail(exc)
+        return JsonResponse({'ordered': len(item_ids)})
+
+
 class ToggleLikeView(_ListActionView):
     @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))
     def post(self, request, list_id):

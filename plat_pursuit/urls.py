@@ -25,7 +25,8 @@ from django.views.generic import RedirectView, TemplateView
 
 from gamelists.views import (AddConceptView, BrowseListsView, CreateListView,
                             GameListDetailView, ListGameSearchView, MyListsView,
-                            RemoveItemView, ToggleFollowView, ToggleLikeView)
+                            RemoveItemView, ReorderItemsView, ToggleFollowView,
+                            ToggleLikeView, UpdateListView)
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
@@ -396,6 +397,9 @@ urlpatterns = [
     # The list's own write endpoints. Under the page's path rather than /api/v1/, because they are
     # this page's behaviour and share its gate -- routing them through the API app would mean a
     # second permission stack that has to agree with the first.
+    # Rename, description and publish are ONE endpoint because they are one service call.
+    path('community/lists/<int:list_id>/update/', UpdateListView.as_view(), name='list_update'),
+    path('community/lists/<int:list_id>/reorder/', ReorderItemsView.as_view(), name='list_reorder'),
     path('community/lists/<int:list_id>/like/', ToggleLikeView.as_view(), name='list_like'),
     path('community/lists/<int:list_id>/follow/', ToggleFollowView.as_view(), name='list_follow'),
     path('community/lists/<int:list_id>/add/', AddConceptView.as_view(), name='list_add_game'),

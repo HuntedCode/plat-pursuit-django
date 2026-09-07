@@ -463,3 +463,152 @@ def test_the_cache_does_not_leak_one_hunters_list_into_anothers_results(client):
     assert results_b[0]['already_added'] is False, "the cache leaked another hunter's list state"
     cache.clear()
 
+
+
+# ── rename, publish, reorder ─────────────────────────────────────────────────────────────────────
+
+def test_the_owner_can_rename_and_redescribe(client):
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Old name', description='Old words')
+
+    resp = client.post(reverse('list_update', args=[game_list.id]),
+                       {'name': 'New name', 'description': 'New words'})
+
+    assert resp.status_code == 200
+    game_list.refresh_from_db()
+    assert game_list.name == 'New name'
+    assert game_list.description == 'New words'
+    # The STORED values come back, not the submitted ones -- the client re-renders from these.
+    assert resp.json()['name'] == 'New name'
+
+
+def test_an_edit_returns_what_was_stored_not_what_was_sent(client):
+    """`_check_name` trims and sanitizes, so the two are not always the same string. A client that
+    re-rendered its own input would show a name the database does not hold."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Fine')
+
+    resp = client.post(reverse('list_update', args=[game_list.id]),
+                       {'name': '   Padded out   '})
+
+    game_list.refresh_from_db()
+    assert resp.json()['name'] == game_list.name
+    assert resp.json()['name'] == 'Padded out'
+
+
+def test_clearing_the_description_is_a_real_edit(client):
+    """Absent means leave alone; present-and-empty means set to empty. `.get()` cannot tell those
+    apart, which is why the view tests membership instead."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='A list', description='Something')
+
+    client.post(reverse('list_update', args=[game_list.id]), {'description': ''})
+
+    game_list.refresh_from_db()
+    assert game_list.description == ''
+
+
+def test_a_field_that_is_not_sent_is_left_alone(client):
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Keep me', description='Keep this too')
+
+    client.post(reverse('list_update', args=[game_list.id]), {'name': 'Renamed'})
+
+    game_list.refresh_from_db()
+    assert game_list.name == 'Renamed'
+    assert game_list.description == 'Keep this too', 'an untouched field was overwritten'
+
+
+def test_publishing_is_the_same_endpoint(client):
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Draft', is_public=False)
+
+    resp = client.post(reverse('list_update', args=[game_list.id]), {'is_public': 'true'})
+
+    assert resp.status_code == 200
+    assert resp.json()['is_public'] is True
+    game_list.refresh_from_db()
+    assert game_list.is_public is True
+
+
+def test_a_visitor_cannot_rename_or_publish_someone_elses_list(client):
+    """The list is PUBLIC, so `readable_by` resolves it -- ownership is the service's job, and this
+    asserts against the database rather than trusting the status code."""
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = svc.create_list(author, name='Theirs', is_public=True)
+    _staff(client, psn='intruder')
+
+    renamed = client.post(reverse('list_update', args=[game_list.id]), {'name': 'Mine now'})
+    hidden = client.post(reverse('list_update', args=[game_list.id]), {'is_public': 'false'})
+
+    assert renamed.status_code == 400
+    assert hidden.status_code == 400
+    game_list.refresh_from_db()
+    assert game_list.name == 'Theirs'
+    assert game_list.is_public is True
+
+
+def test_an_empty_update_is_refused_rather_than_silently_touching_the_row(client):
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Untouched')
+
+    assert client.post(reverse('list_update', args=[game_list.id]), {}).status_code == 400
+
+
+def test_reorder_sets_the_order_and_keeps_positions_dense(client):
+    """Dense positions are load-bearing well beyond this page: `attach_cover_games` bounds the tile
+    mosaic on `position__lt=4`, so a gap silently renders a three-cover mosaic on a four-game list."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Order me')
+    items = []
+    for n in range(4):
+        concept = ConceptFactory(unified_title=f'Game {n}')
+        items.append(svc.add_concept(game_list, owner, concept))
+
+    reversed_ids = [i.id for i in reversed(items)]
+    resp = client.post(reverse('list_reorder', args=[game_list.id]),
+                       {'item_ids[]': reversed_ids})
+
+    assert resp.status_code == 200
+    stored = list(game_list.items.order_by('position').values_list('id', 'position'))
+    assert [i for i, _ in stored] == reversed_ids
+    assert [p for _, p in stored] == [0, 1, 2, 3], 'positions are no longer dense'
+
+
+def test_reorder_refuses_a_partial_order_rather_than_dropping_entries(client):
+    """A subset means the client and server disagree about what is on the list. Applying it would
+    silently drop whatever was not sent."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Order me')
+    items = [svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'G{n}'))
+             for n in range(3)]
+    before = list(game_list.items.order_by('position').values_list('id', flat=True))
+
+    resp = client.post(reverse('list_reorder', args=[game_list.id]),
+                       {'item_ids[]': [items[0].id, items[1].id]})
+
+    assert resp.status_code == 400
+    assert list(game_list.items.order_by('position').values_list('id', flat=True)) == before
+
+
+def test_a_visitor_cannot_reorder_someone_elses_list(client):
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = svc.create_list(author, name='Theirs', is_public=True)
+    items = [svc.add_concept(game_list, author, ConceptFactory(unified_title=f'G{n}'))
+             for n in range(3)]
+    before = list(game_list.items.order_by('position').values_list('id', flat=True))
+    _staff(client, psn='intruder')
+
+    resp = client.post(reverse('list_reorder', args=[game_list.id]),
+                       {'item_ids[]': list(reversed(before))})
+
+    assert resp.status_code == 400
+    assert list(game_list.items.order_by('position').values_list('id', flat=True)) == before
+
+
+def test_an_empty_reorder_is_refused(client):
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Order me')
+    svc.add_concept(game_list, owner, ConceptFactory(unified_title='Only one'))
+
+    assert client.post(reverse('list_reorder', args=[game_list.id]), {}).status_code == 400
