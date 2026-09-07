@@ -76,14 +76,16 @@ below with no outer wrapper.
                     <span data-gl-like-label>{% if viewer_has_liked %}Liked{% else %}Like{% endif %}</span>
                 </button>
 
-                {% comment %}"Save" rather than "Follow": there is no notification surface this
-                release, so a follow is a bookmark that puts the list in your My Lists. Calling it
-                Follow would promise alerts that cannot arrive.{% endcomment %}
+                {% comment %}"Follow", named for where this is going rather than for what it does
+                today. Notifications are coming; a social verb is a word people LEARN, and renaming
+                one later costs more than the small gap now. What stays honest is the surrounding
+                copy: nothing here claims an alert that cannot yet arrive, so when the notification
+                surface lands there is a feature to add and nothing to walk back.{% endcomment %}
                 <button type="button" class="pp-cta{% if not viewer_follows %} pp-cta--ghost{% endif %}"
                         data-gl-follow data-list-id="{{ game_list.id }}"
                         aria-pressed="{% if viewer_follows %}true{% else %}false{% endif %}">
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if viewer_follows %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                    <span data-gl-follow-label>{% if viewer_follows %}Saved{% else %}Save{% endif %}</span>
+                    <span data-gl-follow-label>{% if viewer_follows %}Following{% else %}Follow{% endif %}</span>
                 </button>
                 {% endif %}
 

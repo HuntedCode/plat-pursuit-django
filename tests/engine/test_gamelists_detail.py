@@ -144,19 +144,45 @@ def test_the_like_state_reflects_the_viewer(client):
     assert 'Liked' in body
 
 
-def test_the_save_button_does_not_call_itself_follow(client):
-    """There is no notification surface this release, so a follow is a bookmark. Calling it "Follow"
-    would promise alerts that cannot arrive."""
+def test_the_follow_button_says_follow(client):
+    """Named for where the feature is going, not for what it does today.
+
+    The notification surface is not built yet, so right now a follow only surfaces under
+    My Lists > Following -- but a social verb is a word people LEARN, and renaming one after they
+    have learned it costs more than the gap. Jeffrey's call, and the right one.
+
+    The honesty lives in the surrounding copy instead: this asserts that nothing beside the button
+    promises an alert that cannot yet arrive, so when notifications land there is a feature to add
+    and nothing to walk back.
+    """
     author = ProfileFactory(is_linked=True, psn_username='author')
     game_list = _list(author, 1)
     _staff(client, psn='reader')
 
     body = client.get(_url(game_list)).content.decode()
-    actions = body[body.index('data-gl-follow'):]
-    actions = actions[:actions.index('</button>')]
+    button = body[body.index('data-gl-follow'):]
+    button = button[:button.index('</button>')]
 
-    assert 'Save' in actions
-    assert 'Follow' not in actions
+    assert 'Follow' in button
+    assert 'Save' not in button
+
+    # No claim of alerts anywhere on the page while there is nowhere for one to arrive.
+    for promise in ('notify', 'notified', 'alert', "we'll let you know", 'get updates'):
+        assert promise not in body.lower(), f'the page promises {promise!r} with no surface for it'
+
+
+def test_a_followed_list_reads_as_following(client):
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = _list(author, 1)
+    reader = _staff(client, psn='reader')
+    svc.set_follow(game_list, reader, following=True)
+
+    body = client.get(_url(game_list)).content.decode()
+    button = body[body.index('data-gl-follow'):]
+    button = button[:button.index('</button>')]
+
+    assert 'Following' in button
+    assert 'aria-pressed="true"' in button
 
 
 # ── the games ────────────────────────────────────────────────────────────────────────────────────

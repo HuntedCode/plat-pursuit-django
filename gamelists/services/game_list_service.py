@@ -404,11 +404,14 @@ def set_like(game_list, profile, *, liked):
 
 @transaction.atomic
 def set_follow(game_list, profile, *, following):
-    """Follow or unfollow. Ungated: a follow is a private bookmark with no public effect.
+    """Follow or unfollow. Ungated: a follow is private and has no public effect.
 
-    NOTE FOR CALLERS: there is no notification surface behind this, and there will not be one this
-    release -- the notifications system is itself withdrawn. Following a list means it appears under
-    "Lists I follow". The UI must not imply an alert that cannot arrive.
+    NOTE FOR CALLERS: there is no notification surface behind this YET -- the notifications system is
+    itself withdrawn -- so today a follow only surfaces under My Lists > Following. The button is
+    still labelled "Follow" on purpose, named for where this is going: a social verb is a word people
+    learn, and renaming one after they have learned it costs more than the gap. What the UI must not
+    do meanwhile is claim an alert that cannot yet arrive; when the notification surface lands there
+    should be a feature to add here and nothing to walk back.
     """
     return _set_social(GameListFollow, game_list, profile, on=following, field='follower_count')
 

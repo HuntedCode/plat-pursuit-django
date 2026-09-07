@@ -198,10 +198,11 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
     BEHAVIOUR match the site -- the cheaper of the two fixes and the wrong one. With a real panel
     swap, `role="tab"` is simply true.
 
-    This is also where following finally MEANS something. There is no notification surface and there
-    will not be one this release, so a follow is a bookmark; "Following" is where the bookmark
-    lives. Building the follow button without this tab would have shipped a promise with nowhere to
-    land.
+    This is also where following MEANS something today. The notification surface is not built yet,
+    so for now a follow shows up here and nowhere else -- and building the follow button without this
+    tab would have shipped a word with nowhere to land at all. The button says "Follow" rather than
+    "Save" deliberately: it is named for where the feature is going, because a social verb is a word
+    people learn and renaming one later costs more than the gap now.
     """
 
     template_name = 'gamelists/my_lists.html'
