@@ -125,8 +125,7 @@
         });
 
         document.body.addEventListener('htmx:afterSwap', function (e) {
-            var grid = e.target && e.target.id === 'my-lists-grid'
-                ? e.target : document.getElementById('my-lists-grid');
+            var grid = document.getElementById('my-lists-grid');
             if (!grid) { return; }
             // Direction comes from the panel's own `data-scope`, which the server rendered -- so the
             // slide follows what actually arrived rather than what was clicked.
@@ -142,8 +141,16 @@
         if (current) { strip.dataset.lastScope = current.dataset.scope; }
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function boot() {
         wireCreateDialog();
         wireScopeSwitcher();
-    });
+    }
+
+    document.addEventListener('DOMContentLoaded', boot);
+    // `base.html` sets no `hx-history-elt`, so htmx replaces document.body WHOLESALE on a history
+    // restore -- every node here is fresh and unwired after a browser Back, and listeners die with
+    // the node they were on. Re-running is safe: both wirings guard on `dataset.wired`, which is
+    // itself a fresh (absent) attribute on the restored nodes. Documented the same way in
+    // plat-cards.js, which paid for this lesson first.
+    document.body.addEventListener('htmx:historyRestore', boot);
 })();

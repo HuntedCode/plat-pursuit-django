@@ -80,11 +80,11 @@ notification system this release -- so the tab is the feature, not decoration on
             {% for value, label in scopes %}
             <a href="?scope={{ value }}"
                hx-get="{% url 'my_lists' %}?scope={{ value }}"
-               hx-target="#my-lists-grid"
-               hx-swap="outerHTML"
+               hx-target="#my-lists-panel"
+               hx-swap="innerHTML"
                hx-push-url="true"
                role="tab" id="gl-scope-{{ value }}"
-               aria-controls="my-lists-grid"
+               aria-controls="my-lists-panel"
                aria-selected="{% if scope == value %}true{% else %}false{% endif %}"
                data-scope="{{ value }}"
                class="pp-switch__chip{% if scope == value %} is-active{% endif %}">
@@ -99,8 +99,16 @@ notification system this release -- so the tab is the feature, not decoration on
         </div>
     </div>
 
-    {# ── Content, flowing free. The swap target. ── #}
-    {% include 'gamelists/partials/my_lists_results.html' %}
+    {% comment %}A STABLE WRAPPER as the swap target, with `innerHTML` -- which is what every other
+    switcher on this site does (Badges into `#badge-view`, browse into `#browse-results`). The first
+    cut swapped the grid element itself by its outer HTML, replacing the target node on every switch;
+    that diverged from the one pattern known to work here, and it duplicated the page instead of
+    swapping. A wrapper the swap never destroys is also what lets anything that must OUTLIVE a swap
+    (a sentinel, a spinner) live beside the grid later.{% endcomment %}
+    <div id="my-lists-panel" role="tabpanel"
+         aria-labelledby="gl-scope-{{ scope }}">
+        {% include 'gamelists/partials/my_lists_results.html' %}
+    </div>
 </div>
 
 {% comment %}

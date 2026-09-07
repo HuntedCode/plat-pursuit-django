@@ -539,8 +539,9 @@ def test_the_chips_are_a_real_tablist_now_that_there_is_a_panel(client):
 
     assert 'role="tablist"' in body
     assert body.count('role="tab"') >= 2
-    assert body.count('aria-controls="my-lists-grid"') >= 2
-    assert 'id="my-lists-grid"' in body
+    assert body.count('aria-controls="my-lists-panel"') >= 2
+    assert 'id="my-lists-panel"' in body
+    assert 'role="tabpanel"' in body, 'aria-controls points at something that is not a panel'
     # Both states rendered, so the active chip is announced rather than merely tinted.
     assert 'aria-selected="true"' in body and 'aria-selected="false"' in body
 
@@ -553,7 +554,7 @@ def test_the_chips_keep_an_href_so_they_work_without_javascript(client):
 
     assert 'href="?scope=mine"' in body
     assert 'href="?scope=following"' in body
-    assert 'hx-get' in body and 'hx-target="#my-lists-grid"' in body
+    assert 'hx-get' in body and 'hx-target="#my-lists-panel"' in body
 
 
 def test_the_swapped_panel_says_which_scope_it_is(client):
@@ -589,4 +590,32 @@ def test_the_switcher_uses_the_shared_motion_helpers_rather_than_its_own(client)
     assert 'manual: true' in stripped, (
         'wireTablist must not also bind click on hx-get chips, or the panel switches twice'
     )
+
+
+def test_the_swap_targets_a_stable_wrapper_the_way_every_other_switcher_does():
+    """`innerHTML` into a wrapper the swap never destroys -- Badges into `#badge-view`, browse into
+    `#browse-results`. The first cut pointed `outerHTML` at the grid itself, replacing the target
+    node on every switch; it diverged from the only pattern known to work on this site and
+    duplicated the page instead of swapping.
+    """
+    from pathlib import Path
+
+    tpl = (Path(__file__).resolve().parents[2]
+           / 'templates' / 'gamelists' / 'my_lists.html').read_text(encoding='utf-8')
+
+    assert 'hx-swap="innerHTML"' in tpl
+    assert 'hx-swap="outerHTML"' not in tpl, 'back to replacing the swap target itself'
+    assert 'hx-target="#my-lists-panel"' in tpl
+
+
+def test_the_page_rewires_itself_after_a_history_restore():
+    """`base.html` sets no `hx-history-elt`, so htmx replaces document.body wholesale on a Back --
+    every node is fresh and unwired, and listeners die with the node they were on. Without this the
+    create button and the scope chips are inert after a browser Back."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2]
+          / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    assert 'htmx:historyRestore' in js
 
