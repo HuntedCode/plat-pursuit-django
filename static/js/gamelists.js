@@ -96,6 +96,41 @@
      * ask a tab group for. `{manual: true}` because the chips are `<a hx-get>`: wireTablist must not
      * also bind click, or the panel switches twice.
      */
+    var revealHandle = null;
+
+    /**
+     * The staggered tile reveal, on the shared engine -- the same grammar every other tile grid on
+     * the site uses.
+     *
+     * NOT optional here, and that is the whole point: the results partial bakes `pp-reveal` into its
+     * markup on htmx requests (it has to -- htmx's settle step restores server attributes on id'd
+     * swapped elements, so a class added afterwards is wiped). `.pp-reveal .pp-gtile { opacity: 0 }`
+     * then holds every tile hidden until something reveals it. With no observer wired, swapped-in
+     * tiles stayed invisible forever and the panel read as blank. The Following tab hid the bug by
+     * being empty -- no tiles, nothing to hide -- so it only showed on the way back to Mine.
+     *
+     * `staggerReveal` bails (returning null, adding no class) under reduced motion or with no cards,
+     * and the CSS above is gated on `prefers-reduced-motion: no-preference`, so neither path can
+     * leave a tile stuck hidden.
+     */
+    function initReveal() {
+        if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
+        var grid = document.getElementById('my-lists-grid');
+        if (!grid || !window.PlatPursuit || !window.PlatPursuit.staggerReveal) { return; }
+        var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+        var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+        revealHandle = window.PlatPursuit.staggerReveal({
+            grid: grid, cardSelector: '.pp-gtile', step: 22,
+            reveal: function (el, delayMs) {
+                if (!el.animate) { return; }
+                el.animate([{ opacity: 0 }, { opacity: 1 }],
+                           { duration: 420, delay: delayMs, easing: fadeEase, fill: 'backwards' });
+                el.animate([{ transform: 'translateY(14px) scale(0.965)' }, { transform: 'none' }],
+                           { duration: 500, delay: delayMs, easing: springEase, fill: 'backwards' });
+            },
+        });
+    }
+
     function wireScopeSwitcher() {
         var strip = document.querySelector('[data-gl-scopes]');
         if (!strip || strip.dataset.wired === '1') { return; }
@@ -135,6 +170,9 @@
                 window.PlatPursuit.slideViewIn(grid, from, to, order);
             }
             strip.dataset.lastScope = to;
+            // The swapped grid is a fresh node carrying a server-baked `pp-reveal`, so it needs its
+            // own observer or its tiles never become visible.
+            initReveal();
         });
 
         var current = document.getElementById('my-lists-grid');
@@ -144,6 +182,7 @@
     function boot() {
         wireCreateDialog();
         wireScopeSwitcher();
+        initReveal();
     }
 
     document.addEventListener('DOMContentLoaded', boot);

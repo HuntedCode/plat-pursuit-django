@@ -619,3 +619,44 @@ def test_the_page_rewires_itself_after_a_history_restore():
 
     assert 'htmx:historyRestore' in js
 
+
+def test_the_swapped_grid_has_something_that_will_actually_reveal_it():
+    """The partial bakes `pp-reveal` into its markup on htmx requests, and
+    `.pp-reveal .pp-gtile { opacity: 0 }` then holds every tile hidden until an observer reveals it.
+    The grouping-tile CSS says so in as many words: "added by JS only when it will observe, so tiles
+    never stick hidden."
+
+    My Lists baked the class and wired no observer, so swapped-in tiles were invisible forever and
+    the panel read as blank. Following hid it by being empty -- no tiles, nothing to hide -- so it
+    only appeared on the way back to Mine, which is a good reminder that an empty state can conceal
+    a rendering bug rather than prove one absent.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    partial = (root / 'templates' / 'gamelists' / 'partials'
+               / 'my_lists_results.html').read_text(encoding='utf-8')
+    js = (root / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
+
+    if 'pp-reveal' in partial:
+        assert 'PlatPursuit.staggerReveal(' in js, (
+            'the partial hides its tiles with pp-reveal and nothing reveals them'
+        )
+        # After a swap specifically: the grid is a fresh node, so an observer bound once on load is
+        # attached to an element that no longer exists.
+        # `initReveal();` WITH the semicolon: the bare name also matches the function's own
+        # definition line, so counting that let a removed call slip through a mutation.
+        assert js.count('initReveal();') >= 2, 'the reveal is not re-run after a swap'
+
+
+def test_swapping_back_to_mine_returns_the_tiles(client):
+    """The behaviour-level version of the bug: Following, then Mine, and the lists are there."""
+    profile = _staff_hunter(client)
+    svc.create_list(profile, name='Comes back')
+
+    client.get(MY_LISTS, {'scope': 'following'}, HTTP_HX_REQUEST='true')
+    body = client.get(MY_LISTS, {'scope': 'mine'}, HTTP_HX_REQUEST='true').content.decode()
+
+    assert 'Comes back' in body
+    assert 'pp-gtile' in body, 'the tile markup is missing, not merely invisible'
+
