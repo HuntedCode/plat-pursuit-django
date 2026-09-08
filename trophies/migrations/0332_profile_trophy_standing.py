@@ -30,9 +30,7 @@ class Migration(migrations.Migration):
                 ("clean_golds", models.PositiveIntegerField(default=0)),
                 (
                     "country_code",
-                    models.CharField(
-                        blank=True, db_index=True, default="", max_length=5
-                    ),
+                    models.CharField(blank=True, default="", max_length=5),
                 ),
                 ("is_linked", models.BooleanField(default=False)),
                 ("updated_at", models.DateTimeField(auto_now=True)),

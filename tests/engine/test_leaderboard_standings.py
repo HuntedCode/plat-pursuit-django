@@ -556,7 +556,14 @@ def test_the_denormalized_country_column_is_no_narrower_than_its_source():
         and 'country_code' in {f.name for f in model._meta.get_fields()}
         and 'profile' in {f.name for f in model._meta.get_fields()}
     ]
-    assert mirrors, 'no mirrored stores discovered -- the discovery itself has broken'
+    # Not merely "found something": a broken predicate that discovered ONE model would satisfy that and
+    # then check one column. The propagation list is the independent statement of which stores these are,
+    # so the two are asserted EQUAL -- if they ever legitimately diverge, that is itself worth failing on.
+    from trophies.signals import profile_mirrored_standings
+    assert set(mirrors) == set(profile_mirrored_standings()), (
+        f'discovery and the propagation list disagree: '
+        f'{sorted(m.__name__ for m in set(mirrors) ^ set(profile_mirrored_standings()))}'
+    )
 
     narrow = {
         model.__name__: model._meta.get_field('country_code').max_length

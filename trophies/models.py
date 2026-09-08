@@ -568,11 +568,13 @@ class FeaturedProfile(models.Model):
 #: read by `Game.is_shovelware` and by every queryset that filters on it.
 #:
 #: Note what is NOT here. `manually_cleared` means a human looked at a flagged game and said it was fine,
-#: so it counts as CLEAN; `clean` is merely the never-examined default. Writing the rule as
-#: `status == 'clean'` therefore excludes exactly the games somebody took the trouble to vouch for --
-#: which `core/services/community_trophy_tracker.py` currently does, and is a third spelling of this rule
-#: that predates this constant. Repointing the existing consumers is deliberately NOT part of the branch
-#: that introduced this: they move live figures on unrelated surfaces and want their own change.
+#: so under THIS rule it counts as clean; `clean` is merely the never-examined default.
+#:
+#: A STRICTER rule exists on purpose and must not be folded into this one. The community trophy tracker
+#: counts only `status == 'clean'`, which also excludes the manually-cleared games, and
+#: docs/features/community-trophy-tracker.md records that as deliberate: it is a daily celebration post,
+#: so it takes the narrower reading. Two rules, two documented meanings. What this constant fixes is the
+#: RE-TYPING of this particular tuple across the codebase, not the existence of a second policy.
 SHOVELWARE_FLAGGED_STATUSES = ('auto_flagged', 'manually_flagged')
 
 
@@ -3982,7 +3984,15 @@ class ProfileTrophyStanding(models.Model):
     # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies -- see
     # ProfileCareerStanding: a mirror narrower than its source turns an over-long value into a DataError
     # on the propagating UPDATE, i.e. a 500 on profile save, for data the source column accepts.
-    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+    #
+    # NO `db_index`, unlike every sibling store, and the divergence is deliberate. A standalone index here
+    # would be TWO (Postgres adds a `varchar_pattern_ops` companion for a CharField) and neither would
+    # have a reader: every country-sliced read of this board goes through `pts_country_board_idx` below,
+    # which leads with this column, and this store is not one of `active_countries()`' three sources --
+    # `clean_trophies > 0` implies `total_trophies > 0`, so its countries are already a subset of the
+    # Trophies board's DISTINCT. Two unread indexes are not free on a table the nightly recompute
+    # rewrites in full. The siblings carry theirs for non-board reads that this store has none of.
+    country_code = models.CharField(max_length=5, blank=True, default='')
     # The board PREDICATE, denormalized for the same reason as everywhere else: a predicate on another
     # table cannot go in this table's partial indexes. No `db_index` of its own -- a standalone btree on
     # a two-value column is close to useless; it earns its keep as the CONDITION below.

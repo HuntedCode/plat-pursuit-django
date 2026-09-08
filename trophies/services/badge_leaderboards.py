@@ -57,6 +57,13 @@ def _linked(qs):
     and an unlinked hunter's badges are legitimate content there -- they are just not a competitor. Reading
     it this way also means verifying an account puts you on the boards immediately, with no re-evaluation.
 
+    ONE CARVE-OUT: `ProfileTrophyStanding` (Shovelware Free). Its rows serve this board and nothing else,
+    so `recompute_clean_standings` writes them for LINKED hunters only rather than for everybody -- about
+    250,000 rows that would otherwise be computed, stored and never read. The read gate below is still
+    what excludes an unlinked hunter whose row survives from before they unlinked; what differs is that a
+    newly-verified hunter has no row yet, so they join that board on the next nightly run rather than the
+    moment they verify.
+
     Game boards are the one exception and do not live here: they record who PLAYED a game, which is
     catalogue data, and `game_leaderboard_service` owns them with its own `members_only` toggle.
 

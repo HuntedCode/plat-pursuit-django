@@ -268,11 +268,18 @@ def test_shovelware_free_rank_equals_position_across_a_two_deep_tie():
 
 def test_shovelware_free_rank_equals_position_under_a_country_slice():
     """A slice is a different board with a different population, so the rank must be counted against the
-    same slice the rows came from."""
-    for _ in range(5):
-        _clean(2, 50, country='CA')
+    same slice the rows came from.
+
+    THE GB ROWS ARE SEEDED FIRST, and that ordering is the test. Every figure here is tied, so the board
+    is ordered entirely by the `profile_id` tail -- which means creating CA first would give the CA
+    hunters the LOWEST ids, and a country-blind rank would return exactly the same 1..5 the slice does.
+    The test would pass with `_slice` deleted. Seeding GB first puts three foreign rows ahead of every CA
+    row in id order, so dropping the slice reports 4..8 against slots 1..5 and fails loudly.
+    """
     for _ in range(3):
         _clean(2, 50, country='GB')
+    for _ in range(5):
+        _clean(2, 50, country='CA')
 
     _assert_agrees(lb.clean_rows(limit=100, country='CA'),
                    lambda pid: lb.clean_rank(pid, country='CA'), 'Shovelware Free (CA)')

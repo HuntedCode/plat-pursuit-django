@@ -39,12 +39,14 @@ NOT_FLAGGED = ('clean', 'manually_cleared')
 
 
 def test_manually_cleared_counts_as_clean():
-    """THE trap this constant exists for, and the one a third spelling of the rule already fell into.
+    """The half of this rule that is easy to get wrong and invisible once it is: the figure is merely
+    lower than it should be.
 
-    `manually_cleared` means a human looked at a flagged game and said it was fine. `clean` is merely the
-    never-examined default. So writing the rule as `shovelware_status == 'clean'` -- which
-    `core/services/community_trophy_tracker.py` does -- excludes precisely the games somebody took the
-    trouble to vouch for, while admitting every game nobody has ever looked at. Backwards, and silent.
+    `manually_cleared` means a human looked at a flagged game and passed it, where `clean` is the
+    never-examined default -- so on THIS board a vouched-for game counts. The community trophy tracker
+    deliberately takes the narrower `status == 'clean'` reading (see
+    docs/features/community-trophy-tracker.md); that is a second POLICY, not a bug, and this test pins
+    only what the board does.
     """
     cleared = GameFactory(shovelware_status='manually_cleared')
     assert cleared.is_shovelware is False
