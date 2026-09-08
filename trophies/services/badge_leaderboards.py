@@ -100,7 +100,7 @@ _ASC, _DESC, _ASC_NULLS_LAST = 'asc', 'desc', 'asc_nulls_last'
 # count and asserted against the ORDER BY by test_rank_equals_position.
 XP_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
 # The Trophies board reads Profile directly, so its unique tail is `id`, not `profile_id`.
-TROPHY_KEYS = (('total_plats', _DESC), ('total_trophies', _DESC), ('id', _ASC))
+TROPHY_KEYS = (('total_plats', _DESC), ('total_trophies_raw', _DESC), ('id', _ASC))
 CAREER_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
 #: The Shovelware Free board. Same SHAPE as TROPHY_KEYS -- platinums, then total trophies, then the unique
 #: tail -- so the two trophy boards rank by one rule over two populations. The tail is `profile_id` rather
@@ -423,9 +423,13 @@ def trophy_store():
 
     `is_linked` is the public gate every other hunter-facing board has used -- an unowned or scout profile
     is catalogue data, not a competitor.
+
+    `total_trophies_raw`, not `total_trophies`: the latter honours the owner's `hide_hiddens` setting, so
+    membership of a public board would have depended on a private display preference -- and a hunter who
+    hid their whole library would have dropped off it entirely.
     """
     from trophies.models import Profile
-    return Profile.objects.filter(is_linked=True, total_trophies__gt=0)
+    return Profile.objects.filter(is_linked=True, total_trophies_raw__gt=0)
 
 
 def trophy_rows(limit=50, offset=0, country=None):
@@ -433,8 +437,14 @@ def trophy_rows(limit=50, offset=0, country=None):
     [(profile_id, platinums, total_trophies, bronze, silver, gold), ...].
 
     Reads `Profile`'s own counters, which are maintained incrementally by the EarnedTrophy signals and
-    reconciled nightly by `recalc_profile_counters`. Nothing here is badge-specific and nothing is
-    denormalized for this board's sake.
+    reconciled nightly by `recalc_profile_counters`. Nothing here is badge-specific.
+
+    BOTH FIGURES ARE UNFILTERED. The tiebreak was `total_trophies` until 2026-09, which honours the
+    owner's `hide_hiddens` setting -- so two hunters level on platinums were separated by a rule one of
+    them had configured privately, and the board could not be reproduced by anyone but its owner.
+    `total_trophies_raw` exists for this; see its comment on `Profile`. The bronze/silver/gold columns
+    this used to fetch went with the change: `page()` passes only the two figures `board_window`'s
+    `extra` maps, so they were read on every board page and discarded.
 
     This REPLACED a "Badge Trophies" board that counted trophies across badge-stage games. That figure
     needed a full-library aggregate per profile in the badge write seam, which became a per-sync cost when
@@ -447,9 +457,8 @@ def trophy_rows(limit=50, offset=0, country=None):
     """
     return list(
         _slice(trophy_store(), country)
-        .order_by('-total_plats', '-total_trophies', 'id')
-        .values_list('id', 'total_plats', 'total_trophies',
-                     'total_bronzes', 'total_silvers', 'total_golds')[offset:offset + limit]
+        .order_by('-total_plats', '-total_trophies_raw', 'id')
+        .values_list('id', 'total_plats', 'total_trophies_raw')[offset:offset + limit]
     )
 
 
@@ -457,7 +466,7 @@ def trophy_rank(profile_id, country=None):
     """Position on the Trophies board. The COUNT expresses the board's FULL key list, tail included --
     ahead means more platinums, or equal platinums and more trophies, or tied on both and a lower id."""
     store = _slice(trophy_store(), country)
-    mine = store.filter(pk=profile_id).values('total_plats', 'total_trophies').first()
+    mine = store.filter(pk=profile_id).values('total_plats', 'total_trophies_raw').first()
     if mine is None:
         return None      # unlinked, no trophies, or not in this country -- not on this board
     return store.filter(_ahead_q(TROPHY_KEYS, {**mine, 'id': profile_id})).count() + 1
@@ -519,12 +528,10 @@ def clean_store():
 
 def clean_rows(limit=50, offset=0, country=None):
     """The Shovelware Free board -- platinums on non-shovelware games, total clean trophies as the
-    tiebreak: [(profile_id, clean_plats, clean_trophies, bronze, silver, gold), ...].
+    tiebreak: [(profile_id, clean_plats, clean_trophies), ...].
 
-    The same shape and the same ordering as `trophy_rows`, over a different population. The tier
-    breakdown is read from THIS store rather than from Profile's counters: a row pairing filtered
-    platinums with an unfiltered bronze/silver/gold split would describe two different libraries on one
-    line.
+    The same shape and the same ordering as `trophy_rows`, over a different population, and UNFILTERED in
+    the same way: every trophy synced to us counts, whatever its owner hides from their own profile view.
 
     No `edition` parameter, for the same reason `trophy_rows` has none -- an edition is a badge concept,
     and these are trophies across every (unflagged) game.
@@ -532,8 +539,7 @@ def clean_rows(limit=50, offset=0, country=None):
     return list(
         _slice(clean_store(), country).filter(clean_trophies__gt=0)
         .order_by('-clean_plats', '-clean_trophies', 'profile_id')
-        .values_list('profile_id', 'clean_plats', 'clean_trophies',
-                     'clean_bronzes', 'clean_silvers', 'clean_golds')[offset:offset + limit]
+        .values_list('profile_id', 'clean_plats', 'clean_trophies')[offset:offset + limit]
     )
 
 

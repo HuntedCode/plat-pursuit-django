@@ -93,9 +93,14 @@ def test_flagged_games_are_excluded_and_cleared_ones_are_not():
     )
 
 
-def test_the_tier_breakdown_is_filtered_too():
-    """A row pairing filtered platinums with an unfiltered bronze/silver/gold split would describe two
-    different libraries on one line."""
+def test_every_tier_counts_and_flagged_games_are_dropped_from_all_of_them():
+    """`clean_trophies` sums ALL four tiers with the shovelware exclusion applied to each -- not platinums
+    with a total bolted on. A bronze earned on a flagged game must not reach the tiebreak.
+
+    The three per-tier columns this used to assert are gone: nothing read them (`page()` passes only the
+    two figures `board_window`'s `extra` maps), so they were speculative storage and were dropped before
+    they shipped.
+    """
     profile = ProfileFactory(is_linked=True)
     clean, junk = GameFactory(shovelware_status='clean'), GameFactory(shovelware_status='auto_flagged')
     _earn(profile, clean, 'bronze', 3)
@@ -105,40 +110,31 @@ def test_the_tier_breakdown_is_filtered_too():
     _earn(profile, junk, 'gold', 9)
 
     row = _standing(profile)
-    assert (row.clean_bronzes, row.clean_silvers, row.clean_golds) == (3, 2, 1)
-    assert row.clean_trophies == 6, 'clean_trophies must be the sum of the tiers it reports'
+    assert row.clean_trophies == 6, 'the tiebreak did not sum every clean tier, or admitted a flagged one'
+    assert row.clean_plats == 0
 
 
-def test_hidden_games_are_excluded_for_a_hunter_who_hides_them():
-    """`hide_hiddens` is honoured, the same courtesy `Profile.total_trophies` extends -- so the trophy
-    figure beside a hunter's name means the same thing on both trophy boards.
+@pytest.mark.parametrize('hides', [True, False])
+def test_hidden_games_COUNT_whatever_the_owner_hides_from_their_own_view(hides):
+    """UNFILTERED, and pinned in BOTH directions because this was built the other way first.
 
-    Every counter obeys it, not just the total: a row pairing a filtered platinum count with an unfiltered
-    trophy total would describe two different libraries on one line.
+    `hide_hiddens` is a per-hunter DISPLAY preference -- "keep these out of MY list" -- not a claim about
+    what was earned. Honouring it on a leaderboard ranks two hunters by two different rules and leaves the
+    board unreproducible by anyone but its owner. `user_hidden` is not even a PlatPursuit action: sync
+    infers it from PSN no longer returning the game.
+
+    Parametrized so the rule cannot be satisfied by a filter that drops hidden trophies for EVERYBODY --
+    the figure has to come out the same either way.
     """
-    profile = ProfileFactory(is_linked=True, hide_hiddens=True)
+    profile = ProfileFactory(is_linked=True, hide_hiddens=hides)
     game = GameFactory(shovelware_status='clean')
     _earn(profile, game, 'platinum')
     _earn(profile, game, 'bronze', 3)
     EarnedTrophy.objects.filter(profile=profile, trophy__trophy_type='bronze').update(user_hidden=True)
 
     row = _standing(profile)
-    assert row.clean_bronzes == 0, 'a hidden game\'s trophies counted for a hunter who hides them'
-    assert row.clean_plats == 1 and row.clean_trophies == 1
-
-
-def test_hidden_games_still_count_for_a_hunter_who_does_not_hide_them():
-    """The other direction, so the filter above cannot pass by dropping hidden trophies for everybody.
-    `user_hidden` is set by sync on any game PSN stopped returning; it only MEANS "leave this out" for a
-    hunter who asked."""
-    profile = ProfileFactory(is_linked=True, hide_hiddens=False)
-    game = GameFactory(shovelware_status='clean')
-    _earn(profile, game, 'platinum')
-    _earn(profile, game, 'bronze', 3)
-    EarnedTrophy.objects.filter(profile=profile, trophy__trophy_type='bronze').update(user_hidden=True)
-
-    row = _standing(profile)
-    assert row.clean_bronzes == 3 and row.clean_trophies == 4
+    assert row.clean_trophies == 4, 'a hidden game stopped counting'
+    assert row.clean_plats == 1
 
 
 def test_hide_zeros_cannot_move_an_earned_count():
@@ -160,10 +156,13 @@ def test_hide_zeros_cannot_move_an_earned_count():
     assert _standing(off).clean_trophies == _standing(on).clean_trophies == 1
 
 
-def test_toggling_hide_hiddens_moves_the_figure_on_the_next_run():
-    """The setting is read at RECOMPUTE time, so a hunter who changes it sees the board follow on the next
-    nightly rather than immediately -- which is the same lag every other figure in this store has, and
-    worth pinning so the delay is a known property rather than a bug report."""
+def test_toggling_hide_hiddens_does_not_move_a_board_figure():
+    """A hunter cannot change where they sit on a public board by changing a private display setting.
+
+    That is the point of the board reading unfiltered counts, and it is worth pinning as BEHAVIOUR rather
+    than as the absence of a filter -- the absence is easy to "fix" by someone who reads the profile page
+    and the board as though they must agree. They deliberately do not.
+    """
     profile = ProfileFactory(is_linked=True, hide_hiddens=False)
     game = GameFactory(shovelware_status='clean')
     _earn(profile, game, 'gold', 2)
@@ -172,7 +171,7 @@ def test_toggling_hide_hiddens_moves_the_figure_on_the_next_run():
 
     profile.hide_hiddens = True
     profile.save(update_fields=['hide_hiddens'])
-    assert _standing(profile).clean_trophies == 0, 'the recompute did not pick the setting up'
+    assert _standing(profile).clean_trophies == 2, 'a display preference moved a leaderboard figure'
 
 
 def test_unearned_trophies_do_not_count():

@@ -339,15 +339,38 @@ Three things that are easy to get wrong:
   computed, stored and never read. The cost: a newly-verified hunter joins this board on the next nightly
   rather than instantly. That is the one exception to the "verifying puts you on the boards immediately"
   rule stated above.
-- **`clean_trophies` honours `hide_hiddens`, like `Profile.total_trophies` does**, so the trophy figure
-  beside a hunter's name means the same thing on both trophy boards. Every counter in the store obeys it,
-  including `clean_plats` -- which diverges from `Profile.total_plats`, an UNFILTERED signal-maintained
-  counter. The Trophies board therefore sorts on an unfiltered key and breaks ties on a filtered one;
-  this board is internally consistent instead. `hide_zeros` is not applied and cannot be: it drops games
-  with zero earned trophies, which contribute nothing to a count of earned ones.
-- **`clean_trophies > 0` still does NOT imply `total_trophies > 0`**, because the two are written at
-  different TIMES -- `total_trophies` at `sync_complete`, this store nightly. A hunter whose sync wrote
-  `EarnedTrophy` rows and then failed sits on this board with `total_trophies` at 0, which is why
-  `active_countries()` needs this store as a fourth source; omitting it left their country unselectable
-  on the very board they appear on.
+- **Every board figure is UNFILTERED** (2026-09). `hide_hiddens` is a per-hunter DISPLAY preference --
+  "keep these out of MY list" -- not a claim about what was earned, so honouring it on a leaderboard
+  ranks two hunters by two different rules and leaves the board unreproducible by anyone but its owner.
+  `hide_zeros` could not apply in any case: it drops games with zero earned trophies, which contribute
+  nothing to a count of earned ones (it does not move `Profile.total_trophies` either, for the same
+  reason). Both boards rank on "every trophy synced to us" -- see `Profile.total_trophies_raw` below.
+- **`clean_trophies > 0` still does NOT imply `total_trophies_raw > 0`**, because the two are written at
+  different TIMES -- the profile counters by signal plus a nightly reconcile, this store nightly only.
+  That is why `active_countries()` needs this store as a fourth source; omitting it left a country
+  unselectable on the very board its hunters appear on.
 
+## `Profile.total_trophies_raw` (2026-09)
+
+The Trophies board sorted on `total_plats` (unfiltered) and broke ties on `total_trophies` -- which is
+**filter-respecting**: `update_profile_trophy_counts` honours the owner's `hide_hiddens` when it writes.
+So two hunters level on platinums were separated by a private setting, and a hunter who hid their whole
+library fell off the board entirely, `total_trophies == 0` failing the membership rule.
+
+`total_trophies_raw` is the unfiltered grand total -- the sum of the four type counters, which were
+already unfiltered. The board's ordering, its tiebreak and its membership rule all moved onto it, and the
+two partial indexes moved with them (migration `0333`). An index left on the old column would simply stop
+matching, silently, taking `trophy_rank` back to the seq scan 0307 measured at 16 ms.
+
+| | maintained by | reconciled |
+|---|---|---|
+| `total_trophies` (filtered) | `sync_complete`, settings POST | **nothing** -- a cron cannot recompute it without each profile's settings |
+| `total_trophies_raw` | `EarnedTrophy` signals | `recalc_profile_counters`, nightly, from ground truth |
+
+That second row is the other half of the argument: the filtered figure is the one with no safety net, so
+a missed write there persists until that hunter next syncs. It is still what a PROFILE shows, which is
+right -- a personal view should honour a personal preference. A shared scale should not.
+
+The backfill is exact and lives in the migration rather than in a deploy step: every earned trophy is one
+of the four types, so the new value is their sum and the whole fill is one arithmetic UPDATE over columns
+that already exist. There is no window where the board reads zeros.

@@ -133,6 +133,21 @@ _TROPHY_TYPE_TO_PROFILE_FIELD = {
 }
 
 
+def _bump(type_field, delta):
+    """The UPDATE payload for one trophy moving in or out of a profile's counters.
+
+    Moves the tier counter AND `total_trophies_raw` together, in one statement. They are the same fact
+    counted at two grains, so splitting them into two writes is how they drift -- and `total_trophies_raw`
+    is the leaderboard's tiebreak, so drift there reorders a public board.
+
+    The decrement is guarded by the CALLER's `{type_field}__gt: 0` filter, which is not quite a guard for
+    the raw total: a profile could in principle hold the tier at 0 and the total above it. The nightly
+    `recalc_profile_counters` reconciles both from ground truth, which is the real floor under either.
+    """
+    op = (lambda f: F(f) + 1) if delta > 0 else (lambda f: F(f) - 1)
+    return {type_field: op(type_field), 'total_trophies_raw': op('total_trophies_raw')}
+
+
 def _resolve_trophy_type(instance):
     """Read trophy type from the instance, preferring a sync-stamped attribute
     over the FK lookup. Sync paths set `_trophy_type` on the EarnedTrophy
@@ -156,9 +171,7 @@ def update_profile_type_counts_on_save(sender, instance, created, **kwargs):
             return
         type_field = _TROPHY_TYPE_TO_PROFILE_FIELD.get(_resolve_trophy_type(instance))
         if type_field:
-            Profile.objects.filter(pk=instance.profile_id).update(
-                **{type_field: F(type_field) + 1}
-            )
+            Profile.objects.filter(pk=instance.profile_id).update(**_bump(type_field, +1))
         return
 
     prev = _resolve_previous_earned(instance)
@@ -170,13 +183,10 @@ def update_profile_type_counts_on_save(sender, instance, created, **kwargs):
         return
 
     if prev is False and instance.earned is True:
-        Profile.objects.filter(pk=instance.profile_id).update(
-            **{type_field: F(type_field) + 1}
-        )
+        Profile.objects.filter(pk=instance.profile_id).update(**_bump(type_field, +1))
     elif prev is True and instance.earned is False:
         Profile.objects.filter(pk=instance.profile_id, **{f'{type_field}__gt': 0}).update(
-            **{type_field: F(type_field) - 1}
-        )
+            **_bump(type_field, -1))
 
 
 @receiver(post_delete, sender=EarnedTrophy, dispatch_uid="update_profile_type_counts_on_delete")
@@ -188,8 +198,7 @@ def update_profile_type_counts_on_delete(sender, instance, **kwargs):
     if not type_field:
         return
     Profile.objects.filter(pk=instance.profile_id, **{f'{type_field}__gt': 0}).update(
-        **{type_field: F(type_field) - 1}
-    )
+        **_bump(type_field, -1))
 
 
 # ──────────────────────────────────────────────────────────────────────

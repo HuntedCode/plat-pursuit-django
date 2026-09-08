@@ -178,6 +178,26 @@ class Profile(models.Model):
     total_silvers = models.PositiveIntegerField(default=0)
     total_golds = models.PositiveIntegerField(default=0)
     total_plats = models.PositiveIntegerField(default=0)
+    #: Every earned trophy we hold, IGNORING `hide_hiddens` -- i.e. the sum of the four type counters
+    #: above, which are themselves unfiltered.
+    #:
+    #: It exists because `total_trophies` below is FILTER-RESPECTING, and a leaderboard cannot rank on
+    #: that. A board figure has to mean the same thing on every row; `hide_hiddens` is a per-hunter
+    #: display preference, so ranking on it interleaves two rankings and makes the board unreproducible
+    #: by anyone but its owner. The Trophies board sorts on `total_plats` (unfiltered) and used to break
+    #: ties on `total_trophies` (filtered), which was the inconsistency this closes.
+    #:
+    #: The NAMING is backwards and that is historical: every counter here is unfiltered except
+    #: `total_trophies`, so the suffix landed on the new column rather than on the odd one out. Renaming
+    #: `total_trophies` -> `total_trophies_filtered` would be the honest fix and touches ~44 call sites.
+    #:
+    #: Maintained exactly like the four type counters -- incrementally by the `EarnedTrophy` signals in
+    #: `trophies/signals.py`, reconciled nightly from ground truth by `recalc_profile_counters`. That
+    #: safety net is the point: `total_trophies` has no cron reconciling it (it cannot have one, since a
+    #: filter-respecting figure needs each profile's settings), so a missed write there persists until
+    #: that hunter next syncs.
+    total_trophies_raw = models.PositiveIntegerField(
+        default=0, help_text="All earned trophies, ignoring hide_hiddens. The leaderboard sort figure.")
     total_hiddens = models.PositiveIntegerField(default=0)
     total_games = models.PositiveIntegerField(default=0)
     total_completes = models.PositiveIntegerField(default=0)
@@ -245,11 +265,16 @@ class Profile(models.Model):
             # abandoned the index entirely for a seq scan of a 48-column table (16.0 ms) on EVERY
             # authenticated page view. Partial takes all three reads to Index Only Scans (2.6 / 4.2 /
             # 3.9 ms) and shrinks the index to the ranked population rather than every profile row.
-            models.Index(fields=['-total_plats', '-total_trophies', 'id'], name='profile_board_idx',
-                         condition=Q(is_linked=True, total_trophies__gt=0)),
-            models.Index(fields=['country_code', '-total_plats', '-total_trophies', 'id'],
+            #
+            # ON `total_trophies_raw` SINCE 2026-09, not `total_trophies`. The board's tiebreak and its
+            # membership rule moved to the unfiltered column, and an index still keyed on the filtered one
+            # would simply stop matching -- silently, and straight back into the seq scan measured above.
+            # The two must move together, which is why they are named in one comment.
+            models.Index(fields=['-total_plats', '-total_trophies_raw', 'id'], name='profile_board_idx',
+                         condition=Q(is_linked=True, total_trophies_raw__gt=0)),
+            models.Index(fields=['country_code', '-total_plats', '-total_trophies_raw', 'id'],
                          name='profile_board_cc_idx',
-                         condition=Q(is_linked=True, total_trophies__gt=0)),
+                         condition=Q(is_linked=True, total_trophies_raw__gt=0)),
             models.Index(fields=['is_linked', 'sync_tier'], name='profile_linked_tier_idx'),
             models.Index(fields=['is_discord_verified', 'discord_linked_at'], name='profile_discord_idx'),
         ]
@@ -3974,18 +3999,17 @@ class ProfileTrophyStanding(models.Model):
     # The board's sort key and its tiebreak, mirroring the Trophies board's own ordering
     # (`badge_leaderboards.TROPHY_KEYS`) so the two boards rank by the same rule on different populations.
     #
-    # Both honour the owner's `hide_hiddens` setting, exactly as `Profile.total_trophies` does, so the
-    # trophy figure beside a hunter's name means the same thing on both trophy boards. `hide_zeros` is
-    # not applied and cannot be: it drops games with ZERO earned trophies, which contribute nothing to a
-    # count of earned ones. (It does not move `Profile.total_trophies` either, for the same reason.)
+    # UNFILTERED, both of them: every trophy synced to us counts, whatever the owner has chosen to hide
+    # from their own profile view. A board figure has to mean the same thing on every row, and
+    # `hide_hiddens` is a per-hunter DISPLAY preference -- ranking on it would interleave two rankings and
+    # make the board unreproducible by anyone but its owner. The Trophies board's `total_plats` is
+    # unfiltered for the same reason (see `Profile.total_trophies_raw`, which exists to finish the job).
+    #
+    # There were three more columns here (clean_bronzes / silvers / golds), justified as "the tier
+    # breakdown the row renders". The row does not render it: `page()` passes only the two figures
+    # `board_window`'s `extra` maps. Speculative storage, removed before it shipped.
     clean_plats = models.PositiveIntegerField(default=0)
     clean_trophies = models.PositiveIntegerField(default=0)
-    # The tier breakdown the row renders. Materialized alongside rather than derived, because a row
-    # showing filtered platinums beside an UNfiltered bronze/silver/gold split would be describing two
-    # different libraries in one line.
-    clean_bronzes = models.PositiveIntegerField(default=0)
-    clean_silvers = models.PositiveIntegerField(default=0)
-    clean_golds = models.PositiveIntegerField(default=0)
     # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies -- see
     # ProfileCareerStanding: a mirror narrower than its source turns an over-long value into a DataError
     # on the propagating UPDATE, i.e. a 500 on profile save, for data the source column accepts.

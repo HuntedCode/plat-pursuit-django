@@ -25,9 +25,6 @@ class Migration(migrations.Migration):
                 ),
                 ("clean_plats", models.PositiveIntegerField(default=0)),
                 ("clean_trophies", models.PositiveIntegerField(default=0)),
-                ("clean_bronzes", models.PositiveIntegerField(default=0)),
-                ("clean_silvers", models.PositiveIntegerField(default=0)),
-                ("clean_golds", models.PositiveIntegerField(default=0)),
                 (
                     "country_code",
                     models.CharField(blank=True, default="", max_length=5),
