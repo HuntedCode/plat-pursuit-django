@@ -22,6 +22,26 @@ is a PERCENTAGE (12.3 means 12.3%) and is rendered directly as `{{ trophy_earn_r
 `earn_rate` is a FRACTION rendered with `|multiply:100`. Feeding the wrong one in scales every score by
 100 and nothing errors.
 
+HOW THE SUM SHOULD BE TAKEN. Not by sorting a hunter's trophies and slicing the first TOP_N: for a
+250,000-trophy hunter that is a 250,000-row sort, per hunter, and the codebase has already dropped one
+sort of this shape on cost (Browse Hunters' `rarest_avg_plat`). Aggregate by RATE instead --
+
+    .values('profile_id', 'trophy__trophy_earn_rate').annotate(n=Count('id'))
+
+-- then walk the buckets rarest-first in Python, taking `min(n, remaining)` from each. PSN reports rates
+to one decimal, so there are at most ~1,000 distinct values across the whole catalogue: the result set is
+bounded by the RATE VOCABULARY rather than by library size, and a hash aggregate in bounded work_mem
+replaces the sort. The answer is identical, because every figure this board stores is a function of the
+rate alone (see the tie note below).
+
+TIES ARE ARBITRARY AND THAT IS SAFE, but only for as long as nothing row-identified is stored. Points are
+strictly decreasing in rate only ABOVE the floor; at and below it every trophy is worth MAX_POINTS. With
+~1,000 distinct rates over ~1.03M trophies, the TOP_N boundary lands inside a tie bucket for essentially
+every qualifying hunter, so "the rarest 1,000" is not a well-defined SET of rows. It does not matter:
+`pp_score` and `avg_earn_rate` are both functions of the rate, so any choice of tie members yields the
+same two numbers. That stops being true the moment something stores a row identity taken from the slice
+-- a rarest-trophy pointer, a per-trophy breakdown, a cached list of the scoring thousand.
+
 BASE GAME ONLY. DLC trophies are excluded outright, because PSN divides a DLC trophy's earners by everyone
 who owns the BASE GAME rather than the DLC -- so DLC rarity is systematically overstated, often wildly.
 Our own data cannot fix it either: `ProfileTrophyGroup` rows exist only where a hunter EARNED something in
@@ -70,6 +90,26 @@ def scorable_q(prefix=''):
         f'{prefix}trophy_group_id': BASE_GAME_GROUP,
         f'{prefix}trophy_earn_rate__gt': 0,
     })
+
+
+def scorable_earned(qs, prefix='trophy__'):
+    """The EARNED, scorable rows a hunter's score is built from. Use this; never re-spell it.
+
+    It exists because the filter and the selection ORDER cannot safely be written apart.
+
+    `scorable_q` excludes unknown rates (0.0) -- and under the points-DESC ordering that reads as
+    defensive, because a 0-point row sorts last and a forgotten filter costs nothing. The recompute does
+    NOT order by points: it orders by RATE, because rate is indexed and the function is monotonic. Under
+    THAT ordering an unknown rate is 0.0, which sorts FIRST. So a top-N selection that forgets the filter
+    fills every slot with 0-point rows: the score collapses toward zero while `scored_count` still reaches
+    TOP_N, so the hunter passes the membership rule and lands on the board with a nonsense figure. Silent,
+    and the wrong way round from what the ordering makes it look like.
+
+    `earned=True` is folded in for the same reason. PSN sync writes `EarnedTrophy` rows for trophies a
+    hunter has NOT earned -- that is how progress is tracked -- so a filter that omits it ranks library
+    ownership rather than achievement, which is a different board that looks plausible.
+    """
+    return qs.filter(scorable_q(prefix), earned=True)
 
 
 def points_for(rate):
