@@ -667,6 +667,21 @@ so it would have produced a board that looks migrated and still tiebreaks wrong.
   ends, so it lives inside `[data-lb-page]` and every swap hands the observer a detached node --
   `StickyReveal.init()` is idempotent and re-runnable for exactly this, and is called per mount. Putting
   the BAR inside too would tear it out from under a reader mid-scroll and kill its wired-once listeners.
+- **Never copy a figure off an element that is mid-animation.** The minibar's count proxied the board
+  card's Tally by reading that element's `textContent`, and `mount()` calls `boardEntrance` (which starts
+  the count-up) immediately BEFORE `syncMinibar`. `countUp`'s first write is the FROM value, so the text
+  at that instant is `0` — and the bar keeps it, because it is synced per mount and never again. Every
+  board's bar read "0 hunters" while the card beside it ticked to the real figure, which reads as an
+  unwired proxy rather than a mis-timed one. A proxy reads the SOURCE (`data-countup`, what the server
+  sent); rendered text is a frame, not a value. Applies to anything proxying a `.pp-tally`.
+- **The bar does NOT count up, and that is deliberate.** Making the proxy tick in sympathy with the card
+  was tried and reverted: `.pp-minibar` is `visibility: hidden` until StickyReveal pins it, and it is only
+  ever pinned once the board card has scrolled AWAY — the bar exists *because* the card is gone. The two
+  are never on screen together, so the animation ran behind a hidden element on the load path and on every
+  swap (`swap()` scrolls to top before re-mounting). It also put the only surviving-across-swaps animated
+  node on the page into `countUp`, which has no re-entrancy guard, so two quick swaps left two rAF loops
+  writing to one element. A proxy that is only ever read AFTER its source is gone should settle, not
+  perform. The other browse minibars all snap their counts for the same reason.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
   sums them — the architecture seals them apart on purpose.
 

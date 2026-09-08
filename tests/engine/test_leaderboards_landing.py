@@ -667,6 +667,142 @@ def test_the_board_carries_a_sticky_minibar(client):
         assert attr not in bar, f'the minibar reuses {attr}, so one of the two will never be wired'
 
 
+def test_the_minibar_count_reads_the_tally_source_value_not_its_text(client):
+    """REGRESSION, reported from the browser as "the minibar says 0 on every board".
+
+    The bar's count proxies the board card's Tally, and it was copied off that element's rendered TEXT.
+    `mount()` calls `boardEntrance` -- which STARTS the Tally's count-up -- and then `syncMinibar`, and
+    `countUp`'s first write is the FROM value. So the text at the instant the bar reads it is "0", and
+    the bar keeps it: it is synced per mount and never again, so the figure stayed 0 on every board while
+    the card beside it ticked up to the real one. The header was right the whole time, which is what made
+    it read as a wiring fault rather than a counting one.
+
+    The fix reads `data-countup`, the figure the server sent, which no animation frame can be mistaken
+    for. Pinned over the page source because the fault is in this page's own script -- there is no JS
+    harness -- so the guard is that the count branch reaches for the ATTRIBUTE and not the text.
+    """
+    import re
+
+    for i in range(4):
+        _ranked(f'H{i}', plats=100 - i, trophies=500)
+
+    body = client.get(URL).content.decode()
+
+    # The server's own render carries the real figure, so a reader with no JS sees it too.
+    span = body[body.index('data-lb-mb-count'):]
+    assert span[span.index('>') + 1:span.index('</span>')].strip() == '4', (
+        'the minibar does not render the board population on the server'
+    )
+
+    # The count block ONLY. The slice used to run to the end of `syncMinibar`, which swept in the rank
+    # chip's block too -- so the negative assertion below could have fired on unrelated code, and passed
+    # while the count block was wrong. Guarded rather than left to raise a bare ValueError: reformatting
+    # the inline script's indentation should say what broke, not hand over a traceback into slicing.
+    sync = body[body.index('function syncMinibar()'):]
+    assert '\n    }' in sync, "syncMinibar's close moved; this test's slicing needs rewriting"
+    sync = sync[:sync.index('\n    }')]                       # the function's own close, at 4 spaces
+    assert 'if (card && count) {' in sync, 'the count block is gone or renamed'
+    branch = sync[sync.index('if (card && count) {'):]
+    assert '\n        }' in branch, "the count block's close moved; this test's slicing needs rewriting"
+    branch = branch[:branch.index('\n        }')]             # that block's close, at 8 spaces
+
+    # The `.dataset.countup` READ is the property. NOT pinned to `parseFloat` or to a variable name --
+    # `Number(...)` is the same fix and a rename is a harmless refactor; neither must fail this.
+    assert re.search(r'\w+\.dataset\.countup', branch), (
+        'the minibar count no longer reads the tally SOURCE value; a mid-animation read prints 0'
+    )
+    # ...and NO rendered-text read of any spelling. Deliberately not anchored on `\w+\.`: the original
+    # bug's one-line form is `card.querySelector('.pp-tally').textContent`, where the preceding character
+    # is `)`. The lookahead excludes the WRITE (`count.textContent = ...`) while still counting a
+    # comparison read (`== '0'`), whose second `=` fails the inner match.
+    reads = re.findall(r'\.(?:textContent|innerText|innerHTML)(?!\s*=[^=])', branch)
+    assert not reads, (
+        f'the minibar reads rendered text ({reads}), which is a frame of the count-up animation'
+    )
+    # ...and the value it reads has to be there to read. Scoped to the board card's OWN tally: the page
+    # carries a dozen other `.pp-tally` elements and `data-countup` is the house idiom, so an unscoped
+    # substring would stay green on a page where the card had lost its attribute.
+    tallyblock = body[body.index('lb-boardcard__tally'):]
+    tallyblock = tallyblock[:tallyblock.index('</div>')]
+    assert 'data-countup=' in tallyblock, 'the board card tally carries no source value to read'
+
+
+def test_the_minibar_and_boardentrance_look_for_the_same_tally(client):
+    """The selector the minibar uses to find the card's Tally is written in THREE places -- the class on
+    the card partial, `boardEntrance` in `utils.js`, and this page's own script -- and nothing made them
+    agree. They diverged once already (`.pp-tally[data-countup]` here vs `.lb-boardcard__tally
+    [data-countup]` there), which is survivable only while both happen to match the same node.
+
+    Rename the class in the partial and in `utils.js` but miss this template and the card still ticks
+    while `querySelector` here returns null -- the count silently stops updating, which is exactly the
+    reported symptom, with a green suite. So the literal is EXTRACTED from the page's script and checked
+    against the other two rather than typed a fourth time here.
+    """
+    import re
+    from pathlib import Path
+
+    _ranked('Someone', plats=5, trophies=50)
+    body = client.get(URL).content.decode()
+
+    branch = body[body.index('if (card && count) {'):]
+    branch = branch[:branch.index('\n        }')]
+
+    found = re.search(r"querySelector\('\.([\w-]+)\s*\[data-countup\]'\)", branch)
+    assert found, 'the minibar no longer finds the tally by class + [data-countup]'
+    selector = found.group(1)
+
+    assert f'class="{selector}"' in body, (
+        f'the minibar looks for .{selector}, which the board card partial does not render'
+    )
+    utils = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    entrance = utils[utils.index('function boardEntrance('):]
+    entrance = entrance[:entrance.index('\n}')]            # the function's own close, at column 0
+    assert f'.{selector} [data-countup]' in entrance, (
+        f'boardEntrance and the minibar have diverged again: the bar looks for .{selector}'
+    )
+
+
+def test_every_board_renders_its_own_population_into_the_bar_server_side(client):
+    """The SERVER's half, per board: `{{ ranked_total }}` in the bar equals `{{ total }}` on the card.
+
+    Deliberately NOT the regression pin for the reported bug. That fault was entirely client-side, and the
+    Django test client runs no JS -- reintroducing the exact pre-fix script leaves this test green (I
+    checked). What it does pin is that a reader with JS off, or one reading before `mount()` runs, gets
+    the right figure on EVERY board rather than only the default one, and that the two template variables
+    behind those figures never drift apart. The JS half is pinned by shape, above.
+
+    The seeds give the three boards DIFFERENT populations on purpose: with all three equal, a bar
+    hardcoded to the default board's total would pass on every tab and the per-board claim would be
+    hollow.
+    """
+    _ranked('Trophied', plats=7, trophies=70, points=400, career=900, level=8)
+    _ranked('Second', plats=2, trophies=20, points=100, career=50, level=2)
+    _ranked('CareerOnly', career=10, level=1)
+
+    seen = {}
+    for tab in ('trophies', 'points', 'career'):
+        body = client.get(URL, {'tab': tab}).content.decode()
+
+        bar = body[body.index('data-lb-mb-count'):]
+        bar = bar[bar.index('>') + 1:bar.index('</span>')].strip()
+
+        card = body[body.index('lb-boardcard__tally'):]
+        card = card[card.index('data-countup="') + len('data-countup="'):]
+        card = card[:card.index('"')]
+
+        # `intcomma` on one side, the raw int on the other: they agree in VALUE, and only look alike
+        # while every seeded population stays under four figures.
+        seen[tab] = bar.replace(',', '')
+        assert bar.replace(',', '') == card, (
+            f'{tab}: the minibar says {bar!r} and the board card it proxies says {card!r}'
+        )
+
+    # The populations really are distinct, so the loop above could not have passed on one figure repeated.
+    assert len(set(seen.values())) > 1, (
+        f'every board seeded to the same population {seen}, so the per-board claim is untested'
+    )
+
+
 def test_the_minibar_lives_outside_the_swapped_wrapper(client):
     """A tab or filter change replaces `[data-lb-page]`'s innerHTML. A minibar inside it would be torn out
     and rebuilt under a reader mid-scroll -- and its listeners, which are wired once, would die with it."""
