@@ -120,11 +120,6 @@ class GameList(models.Model):
         default=False,
         help_text='Opt-IN. A list is private until its author decides otherwise.',
     )
-    selected_theme = models.CharField(
-        max_length=50, blank=True, default='',
-        help_text='Gradient theme key from trophies.themes.GRADIENT_THEMES. Members only.',
-    )
-
     #: Denormalized, maintained by the service with F() expressions. Never written by hand: the
     #: counts are what the browse grid sorts on, so a drifted count silently reorders the page.
     game_count = models.PositiveIntegerField(default=0)

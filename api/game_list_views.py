@@ -763,68 +763,16 @@ class GameListCopyView(APIView):
 
 # --- Game Search ---
 
-class GameSearchView(APIView):
-    """Search games for adding to a list (typeahead)."""
-    authentication_classes = [SessionAuthentication, TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    @method_decorator(ratelimit(key='user', rate='120/m', method='GET', block=True))
-    def get(self, request):
-        """
-        GET /api/v1/games/search/?q=<query>&limit=20&exclude_list=<list_id>&platform=PS5,PS4&region=NA,EU
-        Returns matching games with basic info for typeahead.
-        """
-        try:
-            query = (request.query_params.get('q') or '').strip()
-            if len(query) < 2:
-                return Response({'results': []})
-
-            limit = min(safe_int(request.query_params.get('limit', 20), 20), 50)
-            exclude_list_id = safe_int(request.query_params.get('exclude_list'), None)
-
-            # Parse optional filter params (comma-separated)
-            platforms_raw = (request.query_params.get('platform') or '').strip()
-            platforms = [p for p in platforms_raw.split(',') if p in ALL_PLATFORMS] if platforms_raw else []
-
-            regions_raw = (request.query_params.get('region') or '').strip()
-            valid_regions = REGIONS + ['global']
-            regions = [r for r in regions_raw.split(',') if r in valid_regions] if regions_raw else []
-
-            games = Game.objects.filter(Q(title_name__icontains=query))
-
-            if platforms:
-                games = games.for_platform(platforms)
-            if regions:
-                games = games.for_region(regions)
-
-            games = games.order_by('-played_count')[:limit]
-
-            # If excluding games already in a list
-            exclude_game_ids = set()
-            if exclude_list_id:
-                exclude_game_ids = set(
-                    GameListItem.objects.filter(
-                        game_list_id=exclude_list_id
-                    ).values_list('game_id', flat=True)
-                )
-
-            results = []
-            for game in games:
-                results.append({
-                    'id': game.id,
-                    'np_communication_id': game.np_communication_id,
-                    'title_name': game.title_name,
-                    'display_image_url': game.display_image_url,
-                    'title_platform': game.title_platform or [],
-                    'is_regional': game.is_regional,
-                    'region': game.region or [],
-                    'defined_trophies': game.defined_trophies or {},
-                    'played_count': game.played_count,
-                    'already_in_list': game.id in exclude_game_ids,
-                })
-
-            return Response({'results': results})
-
-        except Exception as e:
-            logger.exception(f"Game search error: {e}")
-            return Response({'error': 'Internal error.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+# `GameSearchView` was here and is DELETED (2026-09).
+#
+# It was kept when the rest of this module was unrouted, on the grounds that it was "a general
+# game-search endpoint that happens to live in this module". Two things ended that: its only caller
+# (`static/js/game-lists.js`, loaded solely by `game_list_detail.html` and `game_list_edit.html`)
+# became unreachable when `list_detail` started resolving to the rebuilt `gamelists` app and
+# `list_edit` became a redirect stub -- and it carried a real privacy hole. `?exclude_list=<id>`
+# read `GameListItem` for ANY list id with no ownership and no `is_public` check, so any
+# authenticated user could infer a private list's contents from which games came back excluded.
+#
+# The rebuilt feature has its own scoped equivalent, `gamelists.views.ListGameSearchView`, which
+# resolves the list through `readable_by` first. If a general catalogue search API is ever wanted,
+# that is the shape to copy -- not this.

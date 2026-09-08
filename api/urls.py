@@ -28,8 +28,6 @@ from .share_temp_views import serve_share_temp_image
 # The twelve list views are no longer imported: their paths are withdrawn while the lists system is
 # hidden, and an import with no route is just a name to trip over later. They are untouched in
 # api/game_list_views.py -- restoring the system restores this import alongside the paths.
-# GameSearchView stays: it is a general game-search endpoint that happens to live in this module.
-from .game_list_views import GameSearchView
 from .game_picker_views import GameBackgroundSearchView, ConceptBannerImagesView
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
@@ -132,7 +130,6 @@ urlpatterns = [
     # The views are untouched in api/game_list_views.py; restoring the system is restoring these paths.
 
     # Game search (for list typeahead)
-    path('games/search/', GameSearchView.as_view(), name='game-search'),
 
     # Game players
     path('games/<str:np_communication_id>/players/', GamePlayersAPIView.as_view(), name='game-players'),

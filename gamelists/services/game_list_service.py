@@ -42,7 +42,6 @@ from gamelists.models import (
 )
 from trophies.models import Profile
 from trophies.services.comment_service import CommentService
-from trophies.themes import GRADIENT_THEMES
 from users.services import restriction_service
 
 
@@ -159,25 +158,6 @@ def _check_description(raw):
     return text
 
 
-def _check_theme(profile, raw):
-    """Validate against the real theme catalogue, which the rewrite had dropped.
-
-    The inline view this replaces checked exactly this, as do the recap and shareable endpoints.
-    Without it, any 50-character string reached a column the renderer looks up by key.
-    `requires_game_image` themes are excluded because a list has no single game to draw from.
-    """
-    theme = (raw or '').strip()
-    if not theme:
-        return ''
-    if not profile.user_is_premium:
-        raise ListError('Themes are a member perk.')
-    if theme not in GRADIENT_THEMES or GRADIENT_THEMES[theme].get('requires_game_image'):
-        raise ListError('That theme is not available.')
-    return theme
-
-
-# ── locking ──────────────────────────────────────────────────────────────────────────────────────
-
 def _lock_list(game_list):
     """Re-read the list FOR UPDATE and re-assert the precondition on the row that came back.
 
@@ -246,8 +226,7 @@ def create_list(profile, *, name, description='', is_public=False):
 
 
 @transaction.atomic
-def update_list(game_list, profile, *, name=None, description=None,
-                is_public=None, selected_theme=None):
+def update_list(game_list, profile, *, name=None, description=None, is_public=None):
     """Edit a list you own. Every argument is optional; only what is passed is touched.
 
     The restriction gate is scoped to the acts that PUT WORDS IN FRONT OF PEOPLE, in either of the
@@ -285,9 +264,6 @@ def update_list(game_list, profile, *, name=None, description=None,
     if is_public is not None:
         game_list.is_public = bool(is_public)
         changed.append('is_public')
-    if selected_theme is not None:
-        game_list.selected_theme = _check_theme(profile, selected_theme)
-        changed.append('selected_theme')
 
     if changed:
         game_list.save(update_fields=[*changed, 'updated_at'])

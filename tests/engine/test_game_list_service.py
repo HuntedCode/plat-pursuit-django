@@ -449,55 +449,6 @@ def test_an_unlinked_hunter_cannot_write_at_all():
 
 # -- themes -------------------------------------------------------------------------------------
 
-def test_a_theme_must_be_a_real_theme():
-    """The rewrite dropped the whitelist the inline view had, so any 50-character string reached a
-    column the renderer looks up by key."""
-    profile = _hunter(premium=True)
-    game_list = svc.create_list(profile, name='Themed')
-
-    with pytest.raises(svc.ListError, match='not available'):
-        svc.update_list(game_list, profile, selected_theme='<script>')
-
-    game_list.refresh_from_db()
-    assert game_list.selected_theme == ''
-
-
-def test_a_real_theme_is_accepted_for_a_member_and_refused_for_everybody_else():
-    from trophies.themes import GRADIENT_THEMES
-
-    real = next(k for k, v in GRADIENT_THEMES.items() if not v.get('requires_game_image'))
-    member, free = _hunter('member', premium=True), _hunter('free')
-
-    members_list = svc.create_list(member, name='Themed')
-    svc.update_list(members_list, member, selected_theme=real)
-    members_list.refresh_from_db()
-    assert members_list.selected_theme == real
-
-    frees_list = svc.create_list(free, name='Plain')
-    with pytest.raises(svc.ListError, match='member perk'):
-        svc.update_list(frees_list, free, selected_theme=real)
-
-
-def test_a_lapsed_member_can_still_clear_a_theme_but_not_set_one():
-    """Clearing is not setting. Refusing the empty string would strand a lapsed member's list in a
-    theme they can no longer change."""
-    from trophies.themes import GRADIENT_THEMES
-
-    real = next(k for k, v in GRADIENT_THEMES.items() if not v.get('requires_game_image'))
-    profile = _hunter(premium=True)
-    game_list = svc.create_list(profile, name='Themed')
-    svc.update_list(game_list, profile, selected_theme=real)
-
-    profile.user_is_premium = False
-    profile.save(update_fields=['user_is_premium'])
-
-    svc.update_list(game_list, profile, selected_theme='')
-    game_list.refresh_from_db()
-    assert game_list.selected_theme == ''
-
-
-# -- the gate, scoped ------------------------------------------------------------------------------
-
 def test_a_restricted_hunter_can_still_unpublish_their_own_list():
     """A restriction stops new WORDS. Gating the whole of `update_list` trapped somebody's list in
     public as a side effect of a decision about their prose -- the failure `api/rating_views.py`

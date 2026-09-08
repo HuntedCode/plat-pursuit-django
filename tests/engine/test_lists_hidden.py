@@ -10,6 +10,8 @@ The paired `test_lists_browse.py` holds the rebuild's own assertions and is skip
 import re
 from pathlib import Path
 
+import inspect
+
 import pytest
 from django.urls import reverse
 
@@ -295,3 +297,35 @@ def test_the_create_endpoint_refuses_a_post_from_anyone_but_staff(client):
     assert client.post(url, payload).status_code == 302, 'an ordinary hunter can POST'
 
     assert RebuiltGameList.objects.count() == 0, 'a refused POST still created a list'
+
+
+def test_the_old_list_search_endpoint_is_gone():
+    """`/api/v1/games/search/` was the last routed survivor of the old list system, and it leaked.
+
+    `?exclude_list=<id>` read `GameListItem` for ANY list id with no ownership and no `is_public`
+    check, so any authenticated user could infer a private list's contents from which games came
+    back excluded. Its only caller was `static/js/game-lists.js`, loaded solely by
+    `game_list_detail.html` and `game_list_edit.html` -- both unreachable once `list_detail` began
+    resolving to the rebuilt app and `list_edit` became a redirect stub.
+
+    `NoReverseMatch` alone would be a weak pin here (it also fires for a name that merely needs
+    arguments), so the view class is asserted gone as well.
+    """
+    from django.urls import NoReverseMatch, reverse
+
+    import api.game_list_views as old_views
+
+    with pytest.raises(NoReverseMatch):
+        reverse('game-search')
+
+    assert not hasattr(old_views, 'GameSearchView'), 'the leaking view is still importable'
+
+
+def test_the_rebuilt_search_is_scoped_where_the_old_one_was_not():
+    """The replacement resolves the list through `readable_by` BEFORE reading its items, which is
+    the check the deleted endpoint never had. Asserted as a positive control, so the test above
+    cannot pass merely because search stopped existing altogether."""
+    from gamelists.views import ListGameSearchView
+
+    source = inspect.getsource(ListGameSearchView)
+    assert 'readable_by' in source
