@@ -21,7 +21,8 @@ The leaderboard system ranks hunters by badge progress and Badge Points, per ser
 | Career XP | `ProfileCareerStanding` | No Redis equivalent ever existed |
 
 All of it is `trophies/services/badge_leaderboards.py` ("Lane B"): indexed reads over denormalized
-standing columns, written by the recompute the sync path already runs. No cron, no sorted sets, and
+standing columns, written by the recompute the sync path already runs -- with ONE exception, the
+Shovelware Free board, whose store is written by a nightly batch command (see below). No sorted sets, and
 identity is read live at render so a renamed hunter cannot show a stale name.
 
 **What the Redis backend cost, and why it is worth remembering.** It needed a rebuild cron
@@ -65,7 +66,7 @@ as the whole thing.
 
 | Filter | Applies to | Mechanism |
 |---|---|---|
-| Country | all three boards | a WHERE on `country_code`, served by `(country, ...board order)` |
+| Country | all four boards | a WHERE on `country_code`, served by `(country, ...board order)` |
 | Edition | **Badge Points only** (of the three here) | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
 
 Badge detail's Ranks tab carries the same two, and its edition filter works the same way one level down:
@@ -94,7 +95,8 @@ exists to undo after the May 2026 incident.
 
 It is also a better board. "Trophies earned in games that happen to have badges" largely measures how many
 badge-covered games somebody has played; platinums earned is the figure every hunter already knows about
-themselves. The three boards now read one per domain: overall hunting, badges, career.
+themselves. The four boards read one per domain: hunting excluding shovelware (the DEFAULT), all
+hunting, badges, career.
 
 `ProfileEditionStanding` names its columns identically to `ProfileBadgeStanding`, so `badge_store(edition)`
 picks a manager and every board query stays as written. An unrecognised key returns an EMPTY store rather
@@ -233,7 +235,7 @@ They are recomputed from scratch each time, so no incremental writer exists to d
   distinct platform list x tier, bounded by the catalogue's platform vocabulary), never `EarnedTrophy`
   rows. `test_the_aggregate_does_not_grow_with_the_library` is what stops that distinction eroding.
 
-- **Every store with a `country_code` mirror must be in `signals.country_mirrored_standings()`.** Missing
+- **Every store with a `country_code` mirror must be in `signals.profile_mirrored_standings()`.** Missing
   one does not error. It leaves that board ranking a relocated hunter under their old flag while the others
   have already moved them, which only a reader who emigrated would ever notice.
   `ProfileEditionStanding` shipped with the column and without the entry;
@@ -306,3 +308,40 @@ command, not a leaderboard one -- see [badge-system.md](badge-system.md).
 - [Gamification](gamification.md): ProfileGamification model that powers the XP leaderboard
 - [Redis Keys](../reference/redis-keys.md): Complete key map for raw Redis and Django cache
 - [Cron Jobs](../guides/cron-jobs.md): the nightly `evaluate_badges --all` that keeps standings fresh
+
+## The Shovelware Free board (2026-09)
+
+A fourth Global Board, and the one a bare `/leaderboards/` lands on. It ranks the same hunters as the
+Trophies board by the same rule -- platinums, total trophies breaking the tie -- over a narrower
+population: trophies earned on games the shovelware detector has not flagged.
+
+It is a **separate board rather than a filter on Trophies**, and that is forced rather than chosen. The
+Trophies board ranks `Profile.total_plats` / `total_trophies`, which are denormalized INTEGER COLUMNS.
+Country and edition are cheap because they filter the store; shovelware is not a property of the profile,
+so there is nothing to filter -- the number itself has to be different, which means materializing it.
+
+| Piece | Where |
+|---|---|
+| Store | `ProfileTrophyStanding` (migration `0332`) -- one row per linked hunter, `country_code` + `is_linked` mirrored, two partial indexes |
+| Rule | `SHOVELWARE_FLAGGED_STATUSES` in `models.py`; `manually_cleared` counts as CLEAN |
+| Reads | `clean_store()` / `clean_rows()` / `clean_rank()` + `CLEAN_KEYS` in `badge_leaderboards.py` |
+| Writer | `recompute_clean_standings`, `nightly` step 2 -- the ONLY writer |
+
+Three things that are easy to get wrong:
+
+- **It has no incremental path, deliberately.** Shovelware is a property of the GAME, so re-flagging one
+  invalidates every hunter who earned a trophy on it -- a fan-out no per-row signal can see. The
+  equivalent aggregate inside a sync seam is exactly what got `ProfileBadgeStanding`'s trophy counts
+  deleted in 2026-08. It must stay a batch job.
+- **Its store is written for LINKED hunters only**, unlike the badge and career stores. Those are written
+  for everybody because their rows also serve profile pages, so gating at read means verifying reveals a
+  standing that already existed. This store serves one board, so a row for an unlinked profile would be
+  computed, stored and never read. The cost: a newly-verified hunter joins this board on the next nightly
+  rather than instantly. That is the one exception to the "verifying puts you on the boards immediately"
+  rule stated above.
+- **`clean_trophies > 0` does NOT imply `total_trophies > 0`.** `Profile.total_trophies` is
+  filter-respecting (hide_hiddens / hide_zeros) and sync-written; `clean_trophies` is a raw sum off
+  `EarnedTrophy`. A hunter who hides part of their library is on this board and not on Trophies, which is
+  why `active_countries()` needs this store as a fourth source -- omitting it left their country
+  unselectable on the very board they appear on.
+

@@ -1,8 +1,9 @@
 """Global Boards -- the rebuilt `/leaderboards/` landing (step 4).
 
-Three boards as tabs, country as a filter across all of them, and the viewer's own standing shown ONCE in
-the header rather than per row. That last one is not a layout preference: a row identical for every
-viewer is what makes the whole page cacheable, and a personal rank in the wall would forfeit it.
+FOUR boards as tabs since 2026-09 (Shovelware Free leads and is the default), country as a filter across
+all of them, and the viewer's own standing shown ONCE in the header rather than per row. That last one is
+not a layout preference: a row identical for every viewer is what makes the whole page cacheable, and a
+personal rank in the wall would forfeit it.
 
 See docs/design/rebuild/leaderboards-rebuild.md.
 """
@@ -103,10 +104,77 @@ def test_retired_tabs_land_on_the_board_they_MEANT_not_on_the_default(client):
 
     for legacy, expected in (('progress', 'trophies'), ('series', 'trophies'),
                              ('xp', 'points'), ('country', 'points')):
-        body = client.get(URL, {'tab': legacy}).content.decode()
+        resp = client.get(URL, {'tab': legacy})
+        # 200, not a 404: a stale bookmark should land on a board rather than an error. `series` is the
+        # odd one -- it was a DIRECTORY placeholder for a page that was built and then removed, so it
+        # names no board of its own and rides with the rest.
+        assert resp.status_code == 200, f'?tab={legacy} 404s instead of landing somewhere'
+        body = resp.content.decode()
         assert active_board(body) == expected, (
             f'?tab={legacy} landed on {active_board(body)!r}, not the {expected!r} board it named'
         )
+
+
+def test_the_landing_survives_an_empty_default_board(client):
+    """THE POST-DEPLOY STATE, and the reason deploy-checklist #10 exists.
+
+    `ProfileTrophyStanding` ships empty: between migration 0332 and the backfill, the board the landing
+    opens on has no rows at all. That is not a degraded corner of a page, it is the section's front door,
+    so "renders an empty wall" and "500s" are very different outcomes and only one of them is survivable.
+
+    Hunters are seeded on the OTHER boards, so this is specifically the default board being empty rather
+    than an empty site -- which is exactly the shape of the deploy window.
+    """
+    _ranked('Elsewhere', points=500, career=900, level=9, clean_trophies=0)
+    assert not ProfileTrophyStanding.objects.exists(), 'the fixture put someone on the default board'
+
+    resp = client.get(URL)
+
+    assert resp.status_code == 200, 'the landing 500s when its default board has no rows'
+    assert resp.context['active_tab'] == 'clean'
+    assert resp.context['ranked_total'] == 0
+    body = resp.content.decode()
+    assert 'data-board="clean"' in body, 'the tab strip did not survive the empty board'
+    assert 'data-board="trophies"' in body, 'the other boards became unreachable'
+
+
+def test_the_rows_endpoint_serves_the_default_board(client):
+    """Every rows-endpoint test in this file pinned `tab=trophies`, so the board that now serves every
+    bare visit had no window coverage -- and it hydrates through a DIFFERENT path (`_store_for` returns
+    `profile_id` / `profile__`, a join, where Trophies' store IS Profile)."""
+    for i in range(4):
+        _ranked(f'Clean{i}', plats=10 - i, trophies=100 - i)
+
+    resp = client.get(reverse('leaderboard_rows'), {'tab': 'clean', 'range': 2})
+    assert resp.status_code == 200
+    assert 'lb-row' in resp.content.decode(), 'the clean board served no rows'
+
+    suggest = client.get(reverse('leaderboard_rows'), {'tab': 'clean', 'suggest': 'Clean'})
+    assert suggest.status_code == 200
+    players = suggest.json()['players']
+    assert players and all(p['rank'] >= 1 for p in players), 'the clean board typeahead is not ranked'
+
+
+def test_the_default_board_is_a_constant_number_of_queries(client):
+    """Per-row hydration is invisible at test scale and quadratic in production. The existing guard covers
+    the Trophies board; this one covers the board that serves every bare visit, which reads a standing
+    store and therefore JOINS to Profile to hydrate names -- a different path, and the more likely one to
+    grow a per-row read."""
+    for i in range(3):
+        _ranked(f'Few{i}', plats=i, trophies=i * 10)
+    client.get(URL, {'tab': 'clean'})
+    with CaptureQueriesContext(connection) as small:
+        client.get(URL, {'tab': 'clean'})
+
+    for i in range(20):
+        _ranked(f'Many{i}', plats=i, trophies=i * 10)
+    client.get(URL, {'tab': 'clean'})
+    with CaptureQueriesContext(connection) as large:
+        client.get(URL, {'tab': 'clean'})
+
+    assert len(large.captured_queries) == len(small.captured_queries), (
+        f'{len(small.captured_queries)} queries for 3 rows but {len(large.captured_queries)} for 23'
+    )
 
 
 def test_country_is_a_filter_not_a_tab(client):
@@ -240,19 +308,6 @@ def test_the_empty_board_says_which_kind_of_empty_it_is(client):
     sliced = client.get(URL, {'tab': 'trophies', 'country': 'GB'}).content.decode()
     assert 'Elsewhere' in sliced   # sanity: GB has someone on the progress board
 
-
-def test_the_retired_series_tab_lands_on_a_board(client):
-    """`?tab=series` was a DIRECTORY, out of the tab strip, held open as a placeholder for
-    `/leaderboards/badges/`. That page was built and then removed, and the placeholder outlived it while
-    reading the RETIRED tier-era `Badge` model -- a frozen catalogue beside live counts.
-
-    A stale bookmark maps to the default board rather than 404ing, the same courtesy the other retired tab
-    keys (`xp`, `country`, `progress`) get.
-    """
-    resp = client.get(URL, {'tab': 'series'})
-
-    assert resp.status_code == 200
-    assert resp.context['active_tab'] == 'trophies'
 
 def test_a_career_only_hunter_makes_their_country_selectable(client):
     """The two economies are sealed apart, so a hunter can hold Career XP and no badge standing at all.

@@ -211,5 +211,20 @@ Each candidate is re-evaluated via `evaluate_concept`. Because evaluation is ide
 - [Token Keeper](../architecture/token-keeper.md): Sync-time shovelware evaluation
 - [Challenge Systems](../features/challenge-systems.md): Shovelware exclusion in game search
 - [Review Hub](../features/review-hub.md): Shovelware concept exclusion
-- [Cron Jobs](../guides/cron-jobs.md): Daily `update_shovelware` schedule
+- [Cron Jobs](../guides/cron-jobs.md): `update_shovelware` as `nightly` step 1
 - [IGDB Integration](../architecture/igdb-integration.md): How developers are linked via `ConceptCompany`
+
+## The one definition of "flagged"
+
+`SHOVELWARE_FLAGGED_STATUSES` in `trophies/models.py` is the single source: `('auto_flagged',
+'manually_flagged')`. `Game.is_shovelware` and `GameQuerySet.exclude_shovelware()` both read it, so the
+per-game property and the queryset filter cannot answer differently.
+
+`manually_cleared` counts as **clean** -- it means a human looked at a flagged game and passed it, where
+`clean` is the never-examined default. One consumer takes a deliberately STRICTER reading:
+`community_trophy_tracker` counts only `status == 'clean'`, excluding manually-cleared games too, because
+it drives a daily celebration post ([community-trophy-tracker.md](../features/community-trophy-tracker.md)).
+That is a second policy, not a bug -- do not "fix" it by folding it into the constant.
+
+Several other call sites still re-type the tuple or re-derive the rule inline; repointing them at the
+constant is a tracked cleanup, not a behaviour change.

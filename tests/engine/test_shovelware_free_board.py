@@ -38,23 +38,13 @@ def _standing(profile):
 NOT_FLAGGED = ('clean', 'manually_cleared')
 
 
-def test_manually_cleared_counts_as_clean():
-    """The half of this rule that is easy to get wrong and invisible once it is: the figure is merely
-    lower than it should be.
-
-    `manually_cleared` means a human looked at a flagged game and passed it, where `clean` is the
-    never-examined default -- so on THIS board a vouched-for game counts. The community trophy tracker
-    deliberately takes the narrower `status == 'clean'` reading (see
-    docs/features/community-trophy-tracker.md); that is a second POLICY, not a bug, and this test pins
-    only what the board does.
-    """
-    cleared = GameFactory(shovelware_status='manually_cleared')
-    assert cleared.is_shovelware is False
-    assert 'manually_cleared' not in SHOVELWARE_FLAGGED_STATUSES
-
-
 @pytest.mark.parametrize('status,flagged', [
     ('clean', False),
+    # The case that is easy to get wrong and invisible once it is (the figure is merely lower than it
+    # should be): `manually_cleared` means a human looked at a flagged game and PASSED it, where `clean`
+    # is the never-examined default. The community trophy tracker deliberately takes the narrower
+    # `status == 'clean'` reading -- a second POLICY, not a bug; see
+    # docs/features/community-trophy-tracker.md.
     ('manually_cleared', False),
     ('auto_flagged', True),
     ('manually_flagged', True),
@@ -237,15 +227,117 @@ def test_an_unlinked_profile_with_no_row_is_not_swept_in():
 
 
 def test_a_hunter_who_unlinks_keeps_being_corrected():
-    """The other half of that population rule, and why it is not linked-only. A hunter who unlinks still
-    has a row, and a linked-only sweep would never revisit it -- so their figures would sit there frozen
-    at whatever they were the night they left."""
+    """The other half of the population rule, and why it is not linked-only. A hunter who unlinks still
+    has a row, and a linked-only sweep would never revisit it -- so their FIGURES would sit there frozen
+    at whatever they were the night they left.
+
+    The assertion is on the figures, not on `is_linked`. That is the whole test: `Profile.save()` fires
+    `_propagate_country_to_standings`, which sets `is_linked` on the row directly, so an earlier version
+    asserting only that flag passed with the union half of the population deleted -- the signal satisfied
+    it and the recompute was never involved. Corrupting a figure first and watching the sweep repair it is
+    what actually proves the unlinked row is still being visited.
+    """
     profile = ProfileFactory(is_linked=True)
     _earn(profile, GameFactory(shovelware_status='clean'), 'platinum')
     assert _standing(profile).is_linked is True
 
     profile.is_linked = False
     profile.save(update_fields=['is_linked'])
+    ProfileTrophyStanding.objects.filter(profile=profile).update(clean_plats=888)
     call_command('recompute_clean_standings')
 
-    assert ProfileTrophyStanding.objects.get(profile=profile).is_linked is False
+    row = ProfileTrophyStanding.objects.get(profile=profile)
+    assert row.clean_plats == 1, 'the unlinked hunter\'s row was never revisited'
+    assert row.is_linked is False
+
+
+def test_the_country_picker_offers_a_country_that_only_this_board_has():
+    """The picker reads FOUR sources, and this board had to become the fourth.
+
+    It looked like it need not be: `clean_trophies > 0` seems to imply `total_trophies > 0`, making its
+    countries a subset of the Trophies board's. That is false. `Profile.total_trophies` is
+    FILTER-RESPECTING -- it honours the owner's hide_hiddens / hide_zeros settings -- and is only written
+    at `sync_complete`, while `clean_trophies` is a raw sum of tiers off EarnedTrophy. So a hunter who
+    hides part of their library sits on this board with `total_trophies` at 0.
+
+    Left out, their country was unselectable on the very board they appear on, cached for an hour -- word
+    for word the failure `active_countries()`' own docstring already records for the badge store.
+    """
+    from django.core.cache import cache
+    from trophies.services import badge_leaderboards as lb
+
+    cache.clear()
+    hidden = ProfileFactory(is_linked=True, country_code='NZ', total_trophies=0, total_plats=0)
+    ProfileTrophyStanding.objects.create(
+        profile=hidden, clean_plats=1, clean_trophies=40, country_code='NZ', is_linked=True)
+
+    assert lb.clean_rows(limit=10, country='NZ'), 'the fixture is not on the clean board'
+    assert not lb.trophy_rows(limit=10, country='NZ'), 'the fixture is on the Trophies board too'
+    assert 'NZ' in lb.active_countries(), (
+        'the picker does not offer a country whose hunters appear only on the Shovelware Free board'
+    )
+    cache.clear()
+
+
+def test_a_budget_capped_run_RESUMES_rather_than_restarting():
+    """REGRESSION, and the nastiest kind: silent, permanent, and reported as success.
+
+    The sweep restarted at the beginning every run. A budget cap therefore re-processed the same prefix
+    every night -- writing nothing, because change detection skips unchanged rows -- burnt the same budget
+    in the same place, and never reached the tail. The hunters past the cutoff would have been absent from
+    the DEFAULT board forever, while the cron logged a clean run and printed "deferred to the next run",
+    which was simply false.
+
+    Two runs with a budget of zero: the first does one chunk and stops, the second must cover profiles the
+    first did not. Asserted as "night two reached rows night one did not", never as specific ids -- the
+    property is that the sweep ADVANCES.
+    """
+    profiles = [ProfileFactory(is_linked=True) for _ in range(6)]
+    game = GameFactory(shovelware_status='clean')
+    for p in profiles:
+        _earn(p, game, 'platinum')
+
+    # `--max-minutes 0` puts the deadline in the past, so the loop breaks after its first chunk.
+    call_command('recompute_clean_standings', '--chunk-size', '2', '--max-minutes', '0')
+    night_one = set(ProfileTrophyStanding.objects.values_list('profile_id', flat=True))
+
+    call_command('recompute_clean_standings', '--chunk-size', '2', '--max-minutes', '0')
+    night_two = set(ProfileTrophyStanding.objects.values_list('profile_id', flat=True))
+
+    assert night_one, 'the first capped run wrote nothing at all'
+    assert night_two > night_one, (
+        f'the second run made no progress -- it re-processed the same prefix. '
+        f'night one: {sorted(night_one)}, night two: {sorted(night_two)}'
+    )
+
+
+def test_the_population_is_ordered_so_the_cursor_means_something():
+    """A bare UNION has no defined row order in Postgres, which is what this population used to be. The
+    cursor resumes by `id`, so an unordered sweep would skip whatever the previous run happened to pass
+    over -- and which hunters got stranded would not even be reproducible."""
+    from trophies.management.commands.recompute_clean_standings import Command
+
+    made = [ProfileFactory(is_linked=True) for _ in range(5)]
+    ids = list(Command._population())
+    assert ids == sorted(ids), 'the population is not ordered by id'
+
+    resumed = list(Command._population(after_id=made[1].id))
+    assert all(i > made[1].id for i in resumed), 'the resume point does not bound the population'
+    assert set(ids) - set(resumed), 'resuming returned the whole population'
+
+
+def test_a_zero_or_negative_chunk_size_does_not_silently_do_nothing():
+    """`--chunk-size 0` raised ZeroDivisionError, which inside `nightly` aborts the step; a negative made
+    `range` empty, so the command wrote nothing and still printed SUCCESS. A typo'd flag must not look
+    like a clean run."""
+    profile = ProfileFactory(is_linked=True)
+    _earn(profile, GameFactory(shovelware_status='clean'), 'platinum')
+
+    call_command('recompute_clean_standings', '--chunk-size', '0')
+    assert ProfileTrophyStanding.objects.filter(profile=profile).exists(), 'a zero chunk size wrote nothing'
+
+    ProfileTrophyStanding.objects.all().delete()
+    call_command('recompute_clean_standings', '--chunk-size', '-5')
+    assert ProfileTrophyStanding.objects.filter(profile=profile).exists(), (
+        'a negative chunk size wrote nothing and did not complain'
+    )

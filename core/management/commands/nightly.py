@@ -77,6 +77,21 @@ STEPS = [
 ]
 
 
+#: {dependent label: the label it reads from}. Failures are ISOLATED by default, which is right when the
+#: steps are independent -- losing a whole night because one raised is the worse outcome. This is the
+#: exception: `clean standings` rebuilds the Shovelware Free board from the flags `shovelware detection`
+#: writes, and that command applies them PER GAME. A mid-sweep failure leaves a HALF-APPLIED catalogue, so
+#: recomputing over it materializes a board from a flag set that never existed as a consistent snapshot.
+#: Rebuilding over YESTERDAY's flags would be fine and self-heals the next night; rebuilding over half of
+#: today's does not announce itself and does not self-correct in any bounded way.
+#:
+#: Kept beside STEPS rather than as a fourth tuple element so the (label, command, kwargs) shape every
+#: other reader unpacks stays intact.
+DEPENDS_ON = {
+    'clean standings': 'shovelware detection',
+}
+
+
 class Command(BaseCommand):
     help = "Run the nightly maintenance steps in dependency order. One cron entry, isolated failures."
 
@@ -105,7 +120,16 @@ class Command(BaseCommand):
             return
 
         failed = []
+        skipped = []
         for label, command, kwargs in steps:
+            depends_on = DEPENDS_ON.get(label)
+            if depends_on and depends_on in failed:
+                skipped.append(label)
+                self.stderr.write(self.style.WARNING(
+                    f'{label} SKIPPED: it reads what {depends_on!r} writes, and that failed. Rebuilding '
+                    f'from a half-applied result is worse than not rebuilding.'
+                ))
+                continue
             started = time.monotonic()
             self.stdout.write(f'--- {label} ---')
             try:
@@ -123,6 +147,9 @@ class Command(BaseCommand):
 
         if failed:
             # Non-zero so the cron platform reports a failed run rather than a green one with an error
-            # buried in the logs.
-            raise SystemExit(f"nightly: {len(failed)} step(s) failed: {', '.join(failed)}")
+            # buried in the logs. A SKIPPED step counts here too: it did not run, and the reason it did
+            # not is a failure -- reporting green would say the board was rebuilt when it was not.
+            tail = f" ({len(skipped)} skipped: {', '.join(skipped)})" if skipped else ''
+            raise SystemExit(
+                f"nightly: {len(failed)} step(s) failed: {', '.join(failed)}{tail}")
         self.stdout.write(self.style.SUCCESS(f'nightly: all {len(steps)} steps ok'))

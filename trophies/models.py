@@ -3987,11 +3987,18 @@ class ProfileTrophyStanding(models.Model):
     #
     # NO `db_index`, unlike every sibling store, and the divergence is deliberate. A standalone index here
     # would be TWO (Postgres adds a `varchar_pattern_ops` companion for a CharField) and neither would
-    # have a reader: every country-sliced read of this board goes through `pts_country_board_idx` below,
-    # which leads with this column, and this store is not one of `active_countries()`' three sources --
-    # `clean_trophies > 0` implies `total_trophies > 0`, so its countries are already a subset of the
-    # Trophies board's DISTINCT. Two unread indexes are not free on a table the nightly sweep visits in
-    # full. The siblings carry theirs for non-board reads that this store has none of.
+    # have a reader: every country-sliced read of this board, INCLUDING the `active_countries()` DISTINCT,
+    # goes through `pts_country_board_idx` below, which leads with this column. Two unread indexes are not
+    # free on a table the nightly sweep visits in full, and the siblings carry theirs for non-board reads
+    # that this store has none of.
+    #
+    # An earlier version of this comment justified the omission differently: that the store is not an
+    # `active_countries()` source at all, because `clean_trophies > 0` implies `total_trophies > 0` and so
+    # its countries are a subset of the Trophies board's. That was FALSE. `Profile.total_trophies` is
+    # filter-respecting (hide_hiddens / hide_zeros) and is only written at `sync_complete`, while
+    # `clean_trophies` is a raw sum off EarnedTrophy -- so a hunter who hides part of their library, or
+    # whose first sync has not finished, sits on this board with `total_trophies` at 0. The picker was
+    # missing their country as a result. It is a fourth source now.
     country_code = models.CharField(max_length=5, blank=True, default='')
     # The board PREDICATE, denormalized for the same reason as everywhere else: a predicate on another
     # table cannot go in this table's partial indexes. No `db_index` of its own -- a standalone btree on

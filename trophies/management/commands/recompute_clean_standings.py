@@ -18,13 +18,20 @@ Render dashboard -- which is the whole reason `nightly` exists, and which matter
 """
 import time
 
+from django.core.cache import cache
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
 from trophies.models import (
     SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, Profile, ProfileTrophyStanding,
 )
+
+#: Where a budget-capped sweep left off, so the next run resumes rather than restarting. Not a source of
+#: truth for anything -- losing it re-runs a full recompute, which is a no-op.
+CURSOR_KEY = 'lb:clean_standings:cursor'
+CURSOR_TTL = 60 * 60 * 24 * 7
 
 
 class Command(BaseCommand):
@@ -45,35 +52,62 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
-        chunk_size = options['chunk_size']
+        # A zero here is a ZeroDivisionError below and a negative makes `range` empty -- which would write
+        # nothing and still report success, so a typo'd flag would look like a clean run.
+        chunk_size = max(1, options['chunk_size'])
         deadline = time.monotonic() + options['max_minutes'] * 60
         start = time.monotonic()
 
-        all_ids = options['profile_ids']
-        if all_ids:
-            all_ids = sorted(set(all_ids))
+        explicit = options['profile_ids']
+        # RESUME POINT. A budgeted run that always restarted at the beginning would re-process the same
+        # prefix every night, write nothing (change detection skips it), burn the same budget in the same
+        # place, and never reach the tail -- so the hunters past the cutoff would be permanently absent
+        # from the board, with the cron reporting success. The cursor is what makes "deferred to the next
+        # run" true rather than a hopeful phrase. Losing it (cache eviction) restarts the sweep, which is
+        # safe: this command is a full recompute, so a repeated pass is a no-op.
+        after_id = 0 if explicit else (cache.get(CURSOR_KEY) or 0)
+
+        if explicit:
+            all_ids = sorted(set(explicit))
         else:
-            all_ids = list(self._population())
+            all_ids = list(self._population(after_id))
 
         total = len(all_ids)
         chunks_total = (total + chunk_size - 1) // chunk_size
         self.stdout.write(self.style.NOTICE(
             f'recompute_clean_standings starting: {total} profiles, chunk={chunk_size}, '
             f'budget={options["max_minutes"]}min, dry_run={dry_run}'
+            + (f', resuming after profile {after_id}' if after_id else '')
         ))
 
         written = 0
         chunks_done = 0
+        capped = False
         for chunk_start in range(0, total, chunk_size):
-            if time.monotonic() >= deadline:
-                self.stdout.write(self.style.WARNING(
-                    f'Hit max-minutes budget after {chunks_done}/{chunks_total} chunks. '
-                    f'{chunks_total - chunks_done} deferred to the next run.'
-                ))
+            # ALWAYS ONE CHUNK, whatever the budget says. Checking the deadline before any work means a
+            # budget too small for a single chunk does nothing, advances no cursor, and does the same
+            # nothing every night -- which is the starvation this cursor exists to end, reintroduced by
+            # the guard meant to bound the run. One chunk of forward progress per run is the floor.
+            if chunks_done and time.monotonic() >= deadline:
+                capped = True
                 break
-            written += self._process_chunk(all_ids[chunk_start:chunk_start + chunk_size], dry_run)
+            chunk = all_ids[chunk_start:chunk_start + chunk_size]
+            written += self._process_chunk(chunk, dry_run)
             chunks_done += 1
+            if not explicit and not dry_run:
+                # Advanced per CHUNK, not at the end: the point is that the NEXT run starts where this one
+                # actually stopped, and a run killed mid-sweep (deploy, OOM) has stopped too.
+                cache.set(CURSOR_KEY, chunk[-1], CURSOR_TTL)
 
+        if not explicit and not dry_run and not capped:
+            cache.delete(CURSOR_KEY)          # a full pass finished; the next one starts from the top
+
+        if capped:
+            self.stdout.write(self.style.WARNING(
+                f'Hit max-minutes budget after {chunks_done}/{chunks_total} chunks. '
+                f'{chunks_total - chunks_done} deferred; the next run resumes after profile '
+                f'{all_ids[chunk_start - 1] if chunks_done else after_id}.'
+            ))
         verb = 'Would write' if dry_run else 'Wrote'
         self.stdout.write(self.style.SUCCESS(
             f'recompute_clean_standings complete in {time.monotonic() - start:.1f}s. '
@@ -81,8 +115,8 @@ class Command(BaseCommand):
         ))
 
     @staticmethod
-    def _population():
-        """Which profiles get a row: LINKED hunters, plus anyone who already has one.
+    def _population(after_id=0):
+        """Which profiles get a row: LINKED hunters, plus anyone who already has one, ASCENDING BY ID.
 
         The second half is not redundant, and `recompute_job_xp --all` carries the same pair for the same
         reason: a hunter who UNLINKS, or whose trophies were removed, keeps a row that a linked-only sweep
@@ -96,10 +130,18 @@ class Command(BaseCommand):
         never read -- roughly 250,000 of them at current scale. The cost of the deviation is that a
         newly-verified hunter is absent from this board until the next nightly run, rather than appearing
         the moment they verify.
+
+        A LEFT JOIN rather than the `.union()` this started as. A bare UNION has no defined row order in
+        Postgres, so the chunking walked the population in an order that was not merely arbitrary but
+        could differ run to run -- and with a budget cap that decides WHICH hunters get stranded. Ordering
+        is what makes the cursor in `handle` mean anything. `clean_standing` is a OneToOne, so the join
+        cannot multiply rows and no DISTINCT is needed.
         """
         return (
-            Profile.objects.filter(is_linked=True).values('id')
-            .union(ProfileTrophyStanding.objects.values('profile_id'))
+            Profile.objects
+            .filter(Q(is_linked=True) | Q(clean_standing__isnull=False))
+            .filter(id__gt=after_id)
+            .order_by('id')
             .values_list('id', flat=True)
         )
 
@@ -169,13 +211,17 @@ class Command(BaseCommand):
                 to_update.append(row)
 
         if not dry_run:
-            if to_create:
-                ProfileTrophyStanding.objects.bulk_create(to_create, batch_size=500)
-            if to_update:
-                ProfileTrophyStanding.objects.bulk_update(
+            # ONE transaction for the chunk. Without it a bulk_update that raised after a successful
+            # bulk_create left the chunk half-applied -- some hunters recomputed, the rest stale -- and
+            # the command aborted, so nothing revisited them until the sweep next reached this chunk.
+            with transaction.atomic():
+                if to_create:
+                    ProfileTrophyStanding.objects.bulk_create(to_create, batch_size=500)
+                if to_update:
+                    ProfileTrophyStanding.objects.bulk_update(
                     to_update,
-                    ['clean_plats', 'clean_trophies', 'clean_bronzes', 'clean_silvers', 'clean_golds',
-                     'country_code', 'is_linked', 'updated_at'],
-                    batch_size=500,
-                )
+                        ['clean_plats', 'clean_trophies', 'clean_bronzes', 'clean_silvers',
+                         'clean_golds', 'country_code', 'is_linked', 'updated_at'],
+                        batch_size=500,
+                    )
         return len(to_create) + len(to_update)

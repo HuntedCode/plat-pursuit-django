@@ -77,6 +77,49 @@ def test_shovelware_detection_leads_the_chain():
     )
 
 
+def test_the_clean_standings_SKIP_when_the_shovelware_detection_failed(monkeypatch):
+    """Step order alone does not make the dependency real -- failures here are isolated, so step 2 would
+    happily rebuild the whole board after step 1 raised.
+
+    Rebuilding over YESTERDAY's flags would be harmless and self-healing. The danger is the PARTIAL case:
+    `update_shovelware` applies flags per game, so a mid-sweep failure leaves a half-applied catalogue and
+    the recompute would materialize a board from a flag set that never existed as a consistent snapshot.
+    Skipping leaves last night's board standing, which is a state that did exist.
+    """
+    from core.management.commands import nightly
+
+    ran = []
+
+    def fake(command, **kwargs):
+        ran.append(command)
+        if command == 'update_shovelware':
+            raise RuntimeError('detector fell over')
+
+    monkeypatch.setattr(nightly, 'call_command', fake)
+
+    with pytest.raises(SystemExit) as exc:
+        call_command('nightly')
+
+    assert 'update_shovelware' in ran, 'the detector step never ran'
+    assert 'recompute_clean_standings' not in ran, (
+        'the board was rebuilt from a half-applied catalogue'
+    )
+    # ...and the rest of the night is unaffected: only the dependent skips.
+    assert 'evaluate_badges' in ran, 'an unrelated later step was lost too'
+    assert 'skipped' in str(exc.value), 'the skip is not reported in the failure'
+
+
+def test_a_healthy_run_does_not_skip_the_dependent(monkeypatch):
+    """The other direction, so the guard above cannot pass by never running step 2 at all."""
+    from core.management.commands import nightly
+
+    ran = []
+    monkeypatch.setattr(nightly, 'call_command', lambda command, **kw: ran.append(command))
+    call_command('nightly')
+
+    assert 'recompute_clean_standings' in ran
+
+
 def test_the_clean_standings_run_AFTER_the_shovelware_detection():
     """The Shovelware Free board's store is a PROJECTION of the flags `update_shovelware` writes, so the
     two have a real dependency and it is expressed as sequence.
@@ -108,11 +151,22 @@ def test_shovelware_detection_is_not_also_a_separate_cron_entry():
         encoding='utf-8')
     # The COMMAND column (cell 2), not any mention: `evaluate_contract_candidates`'s notes reference
     # `update_shovelware` legitimately, and matching the whole row flagged it as a duplicate entry.
+    #
+    # `startswith`, not equality: a re-added row carrying an argument (`update_shovelware --force`) is the
+    # same duplicate entry and an exact match would wave it through. The struck-out row survives either
+    # way, since its cell opens with `~~`.
+    #
+    # BOTH registers. An operator works from whichever file they opened, and the schedule table in
+    # management-commands.md listed this as a weekly cron for a while after it had been folded in -- so a
+    # guard reading only cron-jobs.md would have watched the wrong page.
+    from pathlib import Path as _P
+    root = _P(__file__).resolve().parents[2] / 'docs' / 'guides'
     rows = []
-    for ln in doc.splitlines():
-        cells = [c.strip() for c in ln.split('|')]
-        if len(cells) > 2 and cells[2] == '`update_shovelware`':
-            rows.append(ln)
+    for name in ('cron-jobs.md', 'management-commands.md'):
+        for ln in (root / name).read_text(encoding='utf-8').splitlines():
+            cells = [c.strip() for c in ln.split('|')]
+            if len(cells) > 2 and cells[2].startswith('`update_shovelware'):
+                rows.append(f'{name}: {ln[:120]}')
     assert not rows, (
         f'update_shovelware still has a live cron row while also being a nightly step: {rows}'
     )

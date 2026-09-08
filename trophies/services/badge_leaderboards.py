@@ -336,6 +336,18 @@ def active_countries():
             career_store().exclude(country_code='')
             .values_list('country_code', flat=True).distinct()
         )
+        codes |= set(
+            # FOUR sources, not three. The Shovelware Free board looked like it needed no entry here --
+            # `clean_trophies > 0` seems to imply `total_trophies > 0`, so its countries seem to be a
+            # subset of the Trophies board's. They are not. `Profile.total_trophies` is FILTER-RESPECTING
+            # (it honours the owner's hide_hiddens / hide_zeros settings) and is only written at
+            # `sync_complete`, while `clean_trophies` is a raw sum of tiers off EarnedTrophy. So a hunter
+            # who hides part of their library, or whose first sync has not finished, is on this board with
+            # `total_trophies` still 0 -- and their country was unselectable on the very board they appear
+            # on, which is the exact failure the badge_store comment above records.
+            clean_store().filter(clean_trophies__gt=0).exclude(country_code='')
+            .values_list('country_code', flat=True).distinct()
+        )
         return sorted(codes)
     return _cached('lb:picker:countries', build)
 
@@ -343,7 +355,7 @@ def active_countries():
 # ------------------------------------------------------------------ global XP ----------------------------
 
 def board_count(tab, country=None, edition=None):
-    """How many hunters are ON one of the three Global Boards -- the population its rows come from.
+    """How many hunters are ON one of the four Global Boards -- the population its rows come from.
 
     ONE definition of each board's membership, read by the paginator AND by the header tally. The view used
     to rebuild these querysets by hand, beside the service that owned the rows, and both of this page's
