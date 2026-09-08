@@ -310,13 +310,22 @@ def test_the_old_list_search_endpoint_is_gone():
 
     `NoReverseMatch` alone would be a weak pin here (it also fires for a name that merely needs
     arguments), so the view class is asserted gone as well.
+
+    AND THE NAME IS NAMESPACED. `api/urls.py` sets `app_name = 'api'`, so `reverse('game-search')`
+    raises `NoReverseMatch` whether or not the route exists -- the bare name never resolves under a
+    namespaced include. The first version asserted exactly that, two lines below a docstring warning
+    about weak reverse pins, and passed with the route restored. Mutation caught it; `api:` is what
+    makes the assertion mean anything. A positive control below proves the namespace itself works.
     """
     from django.urls import NoReverseMatch, reverse
 
     import api.game_list_views as old_views
 
+    # Control: the namespace resolves, so the failure below is about THIS name, not the prefix.
+    assert reverse('api:generate-code').startswith('/api/v1/')
+
     with pytest.raises(NoReverseMatch):
-        reverse('game-search')
+        reverse('api:game-search')
 
     assert not hasattr(old_views, 'GameSearchView'), 'the leaking view is still importable'
 
