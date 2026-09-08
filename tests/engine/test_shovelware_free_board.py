@@ -155,6 +155,37 @@ def test_the_recompute_is_idempotent_and_self_healing():
     assert _standing(profile).clean_plats == 2, 'a drifted row was not corrected'
 
 
+def test_updated_at_advances_when_the_figures_do():
+    """REGRESSION. `updated_at` is `auto_now`, which Django applies inside `Model.save()` -- and
+    `bulk_update` does not call it. So the timestamp sat frozen at row creation while the counts beside it
+    moved every night: the one field whose whole job is answering "how stale is this board" was the one
+    field guaranteed to be wrong, and wrong in the reassuring direction.
+    """
+    profile = ProfileFactory(is_linked=True)
+    game = GameFactory(shovelware_status='clean')
+    _earn(profile, game, 'platinum')
+    first = _standing(profile).updated_at
+
+    _earn(profile, game, 'gold')
+    row = _standing(profile)
+
+    assert row.clean_trophies == 2, 'the fixture did not actually change the figures'
+    assert row.updated_at > first, 'the figures moved but the freshness stamp did not'
+
+
+def test_an_unchanged_row_is_not_rewritten():
+    """Change detection, and it is not just an optimisation. The nightly sweep touches every linked
+    hunter, but a hunter earns nothing on most nights -- so writing all of them would churn the whole
+    table for no reason, and would make `updated_at` mean "the recompute ran" rather than "this hunter's
+    figures changed"."""
+    profile = ProfileFactory(is_linked=True)
+    _earn(profile, GameFactory(shovelware_status='clean'), 'platinum')
+    first = _standing(profile).updated_at
+
+    row = _standing(profile)      # nothing earned in between
+    assert row.updated_at == first, 'an unchanged row was rewritten anyway'
+
+
 def test_the_recompute_stamps_the_mirrors_at_birth():
     """Every recompute seam stamps `country_code` and `is_linked` on the rows it writes; the propagation
     signal only covers the edges BETWEEN runs. A row born without them is a hunter missing from their own

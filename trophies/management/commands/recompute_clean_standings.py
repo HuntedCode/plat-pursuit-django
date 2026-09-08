@@ -20,6 +20,7 @@ import time
 
 from django.core.management.base import BaseCommand
 from django.db.models import Count, Q
+from django.utils import timezone
 
 from trophies.models import (
     SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, Profile, ProfileTrophyStanding,
@@ -104,6 +105,7 @@ class Command(BaseCommand):
 
     def _process_chunk(self, profile_ids, dry_run):
         """One GROUP BY for the chunk's counts, one read of the profiles, one create + one update."""
+        now = timezone.now()
         rows = (
             EarnedTrophy.objects
             .filter(profile_id__in=profile_ids, earned=True)
@@ -159,6 +161,11 @@ class Command(BaseCommand):
             if any(getattr(row, k) != v for k, v in fields.items()):
                 for k, v in fields.items():
                     setattr(row, k, v)
+                # STAMPED BY HAND. `updated_at` is `auto_now`, which Django applies in `Model.save()` --
+                # `bulk_update` does not call it, so without this the timestamp stays frozen at row
+                # creation while the figures beside it move. The one field that answers "how stale is
+                # this board" would have been the one field guaranteed to be wrong.
+                row.updated_at = now
                 to_update.append(row)
 
         if not dry_run:
@@ -168,7 +175,7 @@ class Command(BaseCommand):
                 ProfileTrophyStanding.objects.bulk_update(
                     to_update,
                     ['clean_plats', 'clean_trophies', 'clean_bronzes', 'clean_silvers', 'clean_golds',
-                     'country_code', 'is_linked'],
+                     'country_code', 'is_linked', 'updated_at'],
                     batch_size=500,
                 )
         return len(to_create) + len(to_update)

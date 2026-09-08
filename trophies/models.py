@@ -3990,15 +3990,20 @@ class ProfileTrophyStanding(models.Model):
     # have a reader: every country-sliced read of this board goes through `pts_country_board_idx` below,
     # which leads with this column, and this store is not one of `active_countries()`' three sources --
     # `clean_trophies > 0` implies `total_trophies > 0`, so its countries are already a subset of the
-    # Trophies board's DISTINCT. Two unread indexes are not free on a table the nightly recompute
-    # rewrites in full. The siblings carry theirs for non-board reads that this store has none of.
+    # Trophies board's DISTINCT. Two unread indexes are not free on a table the nightly sweep visits in
+    # full. The siblings carry theirs for non-board reads that this store has none of.
     country_code = models.CharField(max_length=5, blank=True, default='')
     # The board PREDICATE, denormalized for the same reason as everywhere else: a predicate on another
     # table cannot go in this table's partial indexes. No `db_index` of its own -- a standalone btree on
     # a two-value column is close to useless; it earns its keep as the CONDITION below.
     is_linked = models.BooleanField(default=False)
-    # When the nightly recompute last wrote this row. Worth having on a store whose figures depend on
-    # `update_shovelware`'s flags: "is this board stale?" is otherwise unanswerable without recounting.
+    # When this hunter's figures last CHANGED -- not when the recompute last ran. The sweep skips rows
+    # whose values match, so most rows go untouched on most nights and this answers "how stale is this
+    # hunter's standing", which is otherwise unanswerable without recounting.
+    #
+    # `auto_now` covers creation only. `bulk_update` does not call `Model.save()`, so the update path
+    # stamps this by hand -- see `recompute_clean_standings`, where getting that wrong left the timestamp
+    # frozen at row creation while the counts beside it moved.
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
