@@ -26,27 +26,49 @@ from django.core.management.base import BaseCommand
 
 
 #: (label, command, kwargs). Order is a DEPENDENCY order, not a preference:
-#:   1. evaluate_badges --all  writes SeriesBadgeStanding / ProfileBadgeStanding / ProfileEditionStanding
-#:   2. detect_dlc_and_refresh re-evaluates series whose games gained DLC (writes the same tables) AND
+#:   1. update_shovelware      re-evaluates which games are flagged. FIRST -- see below
+#:   2. recompute_clean_standings rebuilds the Shovelware Free board's store from those flags, so it MUST
+#:      follow step 1
+#:   3. evaluate_badges --all  writes SeriesBadgeStanding / ProfileBadgeStanding / ProfileEditionStanding
+#:   4. detect_dlc_and_refresh re-evaluates series whose games gained DLC (writes the same tables) AND
 #:      rewrites ProfileGame.progress for the affected games, dropping owners back below 100%
-#:   3. process_contracts --all reads ProfileGame.progress, so it MUST follow the DLC sweep or it would
-#:      stamp contract reaches that step 2 is about to invalidate
-#:   4. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
+#:   5. process_contracts --all reads ProfileGame.progress, so it MUST follow the DLC sweep or it would
+#:      stamp contract reaches that step 4 is about to invalidate
+#:   6. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
 #:      among the writers
-#:   5. audit_badge_coverage   read-only report; last because it is the least urgent
+#:   7. audit_badge_coverage   read-only report; last because it is the least urgent
 #:
-#: Steps 3 and 4 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
+#: STEPS 1 AND 2 MOVED HERE (2026-09) from `update_shovelware`'s own 04:00 Render entry -- the same slot
+#: this command runs in, so the two overlapped and the order between them was undefined. Folding them in
+#: is what makes the dependency real: `recompute_clean_standings` rebuilds the Shovelware Free board's
+#: store from the flags `update_shovelware` writes, and a recompute that wins that race rebuilds the
+#: board from YESTERDAY's catalogue -- silently, and plausibly.
+#:
+#: WHY SHOVELWARE LEADS rather than sitting beside the recompute further down. `evaluate_contract_
+#: candidates` runs on its own Render entry at 04:45 and reads these same flags ("MUST run after
+#: update_shovelware"), which today is safe because update_shovelware STARTS at 04:00. Putting it
+#: anywhere but first in this chain would push its start behind `evaluate_badges --all`'s pass over
+#: every profile and quietly break that 45-minute assumption. First preserves the existing start time
+#: exactly; nothing earlier in this chain needed to precede it.
+#:
+#: That 04:45 job is still ordered by wall clock, which is the thing this command exists to stop. Folding
+#: it in too is the right end state and is left as the next bite of the standing FOLLOW-UP in
+#: docs/guides/cron-jobs.md, rather than widening a leaderboard branch into the contracts pipeline.
+#:
+#: Steps 5 and 6 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
 #: Sync only evaluates what a sync TOUCHED, so anything authored after a hunter last touched the relevant
 #: game is invisible to them forever without a sweep. `evaluate_badges --all` has always been badges'
 #: net; contracts and milestones had none. A Contract published for a game 10,000 hunters already
 #: platinumed reached exactly zero of them until this ran.
 #:
-#: Step 3 runs INCREMENTAL. A full contract sweep is O(contracts x candidates) and, stacked on step 1's
+#: Step 5 runs INCREMENTAL. A full contract sweep is O(contracts x candidates) and, stacked on step 3's
 #: pass over every profile, put this chain past any plausible window. Incremental sweeps only Contracts
 #: whose `updated_at` moved since the last run -- usually none -- and still forces a full pass weekly,
 #: because a Contract's membership is derived from IGDB matches and can change without the row being
 #: touched. Nightly cost is near zero; the weekly pass is the real net.
 STEPS = [
+    ('shovelware detection', 'update_shovelware', {}),
+    ('clean standings', 'recompute_clean_standings', {}),
     ('badge evaluation', 'evaluate_badges', {'all': True}),
     ('DLC detection', 'detect_dlc_and_refresh', {}),
     ('contract detection', 'process_contracts', {'all_profiles': True, 'incremental': True}),

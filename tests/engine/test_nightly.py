@@ -60,6 +60,64 @@ def test_contract_detection_runs_AFTER_the_dlc_sweep():
     assert labels.index('contract detection') > labels.index('DLC detection')
 
 
+def test_shovelware_detection_leads_the_chain():
+    """Its START time is load-bearing to a job OUTSIDE this chain. `evaluate_contract_candidates` runs on
+    its own 04:45 Render entry and reads these flags, which is safe today only because
+    `update_shovelware` starts at 04:00.
+
+    Folding it into `nightly` preserves that only while it runs FIRST. Anywhere else in this list and its
+    start slides behind `evaluate_badges --all`'s pass over every profile, and the 45-minute assumption
+    breaks silently -- the candidate pipeline would read yesterday's flags with nothing failing.
+    """
+    from core.management.commands.nightly import STEPS
+
+    assert STEPS[0][1] == 'update_shovelware', (
+        'shovelware detection no longer starts the chain, so evaluate_contract_candidates (04:45) may '
+        'now read flags that have not been refreshed'
+    )
+
+
+def test_the_clean_standings_run_AFTER_the_shovelware_detection():
+    """The Shovelware Free board's store is a PROJECTION of the flags `update_shovelware` writes, so the
+    two have a real dependency and it is expressed as sequence.
+
+    It has to be. Both `update_shovelware` and `nightly` were scheduled at 04:00 on separate Render
+    entries, so the order between them was whatever the scheduler felt like -- and a recompute that wins
+    that race rebuilds the board from YESTERDAY's catalogue, silently and plausibly. That failure is the
+    reason this command exists (see its module docstring); this is the first step pair with a dependency
+    strong enough to notice it.
+    """
+    from core.management.commands.nightly import STEPS
+
+    labels = [label for label, _cmd, _kw in STEPS]
+    assert labels.index('clean standings') > labels.index('shovelware detection'), (
+        'the board is rebuilt from flags that have not been refreshed yet'
+    )
+
+
+def test_shovelware_detection_is_not_also_a_separate_cron_entry():
+    """It MOVED into this chain rather than being duplicated into it. Two schedulers running the same
+    catalogue-wide re-evaluation would have it racing itself, and `nightly`'s own docstring is explicit
+    that a step here replaces a cron entry rather than joining it.
+
+    Asserted against the cron doc, which is the register of what Render actually runs.
+    """
+    from pathlib import Path
+
+    doc = (Path(__file__).resolve().parents[2] / 'docs' / 'guides' / 'cron-jobs.md').read_text(
+        encoding='utf-8')
+    # The COMMAND column (cell 2), not any mention: `evaluate_contract_candidates`'s notes reference
+    # `update_shovelware` legitimately, and matching the whole row flagged it as a duplicate entry.
+    rows = []
+    for ln in doc.splitlines():
+        cells = [c.strip() for c in ln.split('|')]
+        if len(cells) > 2 and cells[2] == '`update_shovelware`':
+            rows.append(ln)
+    assert not rows, (
+        f'update_shovelware still has a live cron row while also being a nightly step: {rows}'
+    )
+
+
 def test_milestones_recompute_last_among_the_writers():
     """Milestone metrics read badge standings and ProfileJobXP, both written earlier in this chain."""
     from core.management.commands.nightly import STEPS

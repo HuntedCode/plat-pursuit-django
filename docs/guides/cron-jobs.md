@@ -22,7 +22,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 06:00 UTC daily | `announce_contracts` | Daily | After `nightly` (04:00) finishes, so a wave published by a curator during the day and one made claimable overnight land in ONE post. Silent when nothing is new, which is most days. **Run `announce_contracts --baseline` by hand once before registering this**, or the first run tries to announce everything already live. |
 | Tue 14:00 UTC | `djstripe_sync_models Subscription && audit_subscription_status --fix` (ONE entry, `&&`) | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no USER emails. Also sweeps for ORPHANED subscriptions (live sub, no user -- the account-deletion race; report-only, cancel by hand) and mails the full run report to `AUDIT_REPORT_EMAIL` (operator email, topline counts in the subject; empty setting = no email, `--no-email` skips) |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
-| 04:00 UTC daily | `update_shovelware` | Daily | None |
+| ~~04:00 UTC daily~~ | ~~`update_shovelware`~~ | **Folded into `nightly` (step 1)** | Do NOT create a separate entry. It shares the 04:00 slot with `nightly`, so the order between them was undefined -- which became a real fault when `recompute_clean_standings` (step 2) started reading the flags it writes. It leads the chain so its START time is unchanged, which is what `evaluate_contract_candidates` at 04:45 still depends on. |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
 | 03:45 UTC daily | `recompute_tag_covers` | Daily | Since 2026-08-31 also fills `Franchise/Company.game_count+version_count` and `Genre/Theme.game_count+player_count+avg_rating` -- the columns the Franchises/Companies/Genres browse pages FILTER on, so a browse-visible entity's counts are at most a day stale and a brand-new entity appears after this run. (Its reads are link tables + games/players/ratings; it does NOT depend on `recalc_earn_rates` -- the slot order is historical) |
@@ -81,7 +81,7 @@ shovelware override reads the flags it writes. Idempotent; one bad row cannot ab
 > | 03:00 | `recalc_earn_rates` |
 > | 03:30 | `recalc_profile_counters` |
 > | 03:45 | `recompute_tag_covers` |
-> | 04:00 | `update_shovelware` |
+> | 04:00 | ~~`update_shovelware`~~ (now `nightly` step 1) |
 > | 05:30 | `recompute_milestones` |
 >
 > RESOLVED 2026-08: the example this block used -- `recompute_milestones` needing `recalc_profile_counters` -- was never a real dependency. `recalc_profile_counters` writes only `total_bronzes/silvers/golds/plats`, and no milestone metric reads any of them; the metrics read `total_trophies` and `total_completes`, whose only writers are `sync_complete` and the profile settings POST. No cron ordering can influence those. `recompute_milestones` is now step 4 of `nightly`, where its REAL dependencies (badge standings, ProfileJobXP) are written earlier in the same run and enforced by the step order rather than by wall-clock spacing.
@@ -95,9 +95,13 @@ replaces three separate entries (`evaluate_badges --all`, `detect_dlc_and_refres
 
 - **Command**: `python manage.py nightly`
 - **Order** (dependency, not preference):
-  1. `evaluate_badges --all` -- writes the standing tables
-  2. `detect_dlc_and_refresh` -- re-evaluates series whose games gained DLC (writes the same tables)
-  3. `audit_badge_coverage` -- read-only curator email, least urgent
+  1. `update_shovelware` -- re-evaluates which games are flagged. FIRST so its start time matches the
+     standalone 04:00 entry it replaced, which `evaluate_contract_candidates` (04:45) still assumes
+  2. `recompute_clean_standings` -- rebuilds the Shovelware Free board's store from those flags, so it
+     MUST follow step 1 or the board describes yesterday's catalogue
+  3. `evaluate_badges --all` -- writes the standing tables
+  4. `detect_dlc_and_refresh` -- re-evaluates series whose games gained DLC (writes the same tables)
+  5. `audit_badge_coverage` -- read-only curator email, least urgent
 
   (There was a fourth, `recalc_board_entrants`, which counted the standings the first two write. It went
   with the board directories in 2026-08 -- the `BadgeSeries.entrants` / `Job.entrants` columns it
