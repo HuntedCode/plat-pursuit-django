@@ -514,3 +514,25 @@ def test_the_server_side_range_filter_was_never_the_problem(linked_staff_client)
     assert len(linked_staff_client.get(BROWSE, {'min_games': '9'}).context['game_lists']) == 0
     assert len(linked_staff_client.get(BROWSE, {'min_games': '5', 'max_games': '7'})
                .context['game_lists']) == 1
+
+
+def test_every_submit_path_cancels_a_pending_debounced_one():
+    """The range and the sort select sit side by side in the same bar. Change the range (a submit is
+    scheduled at +120ms), change the sort inside that window (immediate request), and the orphaned
+    timer fires a SECOND identical request -- and with `hx-push-url`, a second history entry. Exactly
+    what the debounce exists to prevent.
+
+    Also pins that the two debounces do not share one handle: they debounce different controls for
+    different reasons, and sharing means a radio change silently cancels a pending range submit on
+    any page that grows both.
+    """
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[2] / 'static' / 'js' / 'browse-filters.js').read_text(
+        encoding='utf-8')
+
+    assert 'let radioTimer' in js and 'let numberTimer' in js, 'the debounces share one handle again'
+    # Cancelled on the immediate-submit path AND on pagination, which lives outside init().
+    assert js.count('cancelPendingSubmit()') >= 3, 'a submit path no longer cancels pending work'
+    # Declared where the pagination delegate can see them.
+    assert js.index('let numberTimer') < js.index('function init()')

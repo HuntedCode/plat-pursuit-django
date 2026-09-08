@@ -27,6 +27,21 @@
 (function () {
   'use strict';
 
+  // Debounce handles, at MODULE scope so every submit path can cancel a pending one -- including
+  // the pagination delegate below, which lives outside `init()` and therefore could not see them
+  // where they used to be declared.
+  //
+  // Two separate timers, not one shared. They debounce different controls for different reasons, and
+  // sharing a handle means a radio change silently cancels a pending range submit on any page that
+  // grows both. No page has both today; that is luck rather than design.
+  let radioTimer = null;
+  let numberTimer = null;
+
+  function cancelPendingSubmit() {
+    clearTimeout(radioTimer);
+    clearTimeout(numberTimer);
+  }
+
   function init() {
     const form = document.querySelector('[data-browse-form]');
     if (!form) return;
@@ -39,7 +54,6 @@
     // still submits within ~120ms, under the threshold where a filter feels laggy.
     //
     // Checkboxes and selects are NOT debounced: each of those changes is a deliberate, separate act.
-    let radioTimer = null;
     form.addEventListener('change', function (e) {
       const el = e.target;
       const isAutoSubmit =
@@ -53,11 +67,11 @@
       // `hx-push-url` -- five history entries, so Back needs six presses to leave. Typing a value
       // and tabbing away still fires one, within the same ~120ms.
       if (el.type === 'number' && el.closest('[data-auto-submit]')) {
-        clearTimeout(radioTimer);
+        clearTimeout(numberTimer);
         const numPage = form.querySelector('input[name="page"]');
         if (numPage) numPage.value = '1';
         updateFilterBadge();
-        radioTimer = setTimeout(function () { htmx.trigger(form, 'submit'); }, 120);
+        numberTimer = setTimeout(function () { htmx.trigger(form, 'submit'); }, 120);
         return;
       }
 
@@ -75,6 +89,14 @@
       }
 
       if (isAutoSubmit) {
+        // Cancel anything already scheduled. The range and the sort select sit side by side in the
+        // same bar, so: change the range (submit scheduled at +120ms), change the sort inside that
+        // window (immediate request), and the orphaned timer then fires a SECOND identical request
+        // -- and with `hx-push-url`, a second history entry. Exactly what the debounce exists to
+        // prevent. Pre-existing in shape for radios; the range is the first control to put a
+        // debounced input beside an undebounced one.
+        cancelPendingSubmit();
+
         // Reset to page 1 on any filter change
         const pageInput = form.querySelector('input[name="page"]');
         if (pageInput) pageInput.value = '1';
@@ -405,6 +427,10 @@
     e.preventDefault();
     const browseForm = document.querySelector('[data-browse-form]');
     if (!browseForm) return;
+
+    // A range change scheduled 120ms ago would otherwise land AFTER this one and re-submit the
+    // page it just set -- two identical requests and two history entries.
+    cancelPendingSubmit();
 
     const page = link.dataset.pageLink;
     const pageInput = browseForm.querySelector('input[name="page"]');

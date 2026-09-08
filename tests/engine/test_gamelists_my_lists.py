@@ -51,8 +51,14 @@ def _grid(body):
 
 
 def _header(body):
-    """The page header, above the dialog. Same reason as `_grid`."""
-    return body[:body.index('<dialog')]
+    """The page header -- bounded at the switcher row, not at the dialog.
+
+    It used to return `body[:body.index('<dialog')]`, and the dialog is the LAST element on this
+    page, so "the header" was two thirds of the document including the navbar, the toolbar and the
+    whole tile grid. Two tests rested on that slice, one of them searching it for the bare word
+    `disabled`.
+    """
+    return body[:body.index('data-gl-scopes')]
 
 
 def _staff_hunter(client, psn='curator', premium=False):
@@ -147,7 +153,10 @@ def test_at_the_cap_the_create_button_is_disabled_not_hidden(client):
     # unconditionally, so a whole-page search stayed green with the button deleted -- precisely the
     # failure this test is named for.
     assert 'New list' in header, 'the button disappeared instead of explaining itself'
-    assert 'disabled' in header, 'the button is enabled at the cap'
+    # On the OPENING TAG of the opener. `disabled` as a bare word matched any attribute on any
+    # element in what used to be most of the page.
+    tag_start = header.index('<button', header.index('data-gl-open') - 300)
+    assert 'aria-disabled="true"' in header[tag_start:header.index('>', tag_start)], 'the button is enabled at the cap'
     assert 'data-gl-open' in header
 
 
@@ -167,7 +176,11 @@ def test_the_page_is_query_flat_as_lists_are_added(client):
 
     def measure():
         with CaptureQueriesContext(connection) as ctx:
-            client.get(MY_LISTS)
+            resp = client.get(MY_LISTS)
+        # A redirect runs no page queries, so `few == many` would hold at 0 == 0 and this would pass
+        # while the page was unreachable. The sibling browse file documents adding exactly this
+        # guard; it was not carried across to here either.
+        assert resp.status_code == 200, f'the page did not render ({resp.status_code})'
         return len([q for q in ctx.captured_queries if 'gamelists_' in q['sql']])
 
     build(2, 'a')
@@ -412,9 +425,13 @@ def test_the_create_modal_uses_the_sites_own_primitives_not_daisyui(client):
     # The header's own action button too -- it opens this dialog, so the two must match.
     assert 'btn btn-' not in body[:body.index('<dialog')], 'the page header is still on DaisyUI buttons'
 
+    # No `or house in body`. `pp-cta` is also on the header's opener, so the DIALOG could drop the
+    # house primitive entirely -- the exact DaisyUI drift this test exists for -- and stay green on
+    # the header's copy. The other six happen to be dialog-only today, which is what let the `or`
+    # sit there looking harmless.
     for house in ('gl-dialog__head', 'gl-dialog__body', 'gl-dialog__foot',
                   'stg-input', 'stg-field__label', 'pp-cta', 'gl-suggest__chip'):
-        assert house in dialog or house in body, f'the page stopped using the shared primitive {house}'
+        assert house in dialog, f'the dialog stopped using the shared primitive {house}'
 
 
 def test_the_dialog_is_a_native_dialog_so_focus_and_escape_come_for_free(client):
@@ -645,7 +662,10 @@ def test_the_swapped_grid_has_something_that_will_actually_reveal_it():
                / 'my_lists_results.html').read_text(encoding='utf-8')
     js = (root / 'static' / 'js' / 'gamelists.js').read_text(encoding='utf-8')
 
-    if 'pp-reveal' in partial:
+    # UNCONDITIONAL. As an `if`, removing `pp-reveal` from the partial skipped the entire body -- a
+    # guard for the half-a-pattern bug that opted itself out the moment that half changed.
+    assert 'pp-reveal' in partial, 'the partial no longer bakes the class this guard exists for'
+    if True:
         assert 'PlatPursuit.staggerReveal(' in js, (
             'the partial hides its tiles with pp-reveal and nothing reveals them'
         )

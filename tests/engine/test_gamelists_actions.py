@@ -413,7 +413,10 @@ def test_every_write_endpoint_is_rate_limited():
     for name in ('ToggleLikeView', 'ToggleFollowView', 'AddConceptView', 'RemoveItemView',
                  'ListGameSearchView'):
         source = inspect.getsource(getattr(views, name))
-        assert 'ratelimit' in source, f'{name} is unthrottled'
+        # `ratelimit(` -- `inspect.getsource` includes the docstring and every comment, and these
+        # classes are heavily commented, so the bare word was satisfiable by prose with the
+        # decorator deleted.
+        assert 'ratelimit(' in source, f'{name} is unthrottled'
 
 
 def test_the_search_is_cached_so_the_catalogue_scan_is_not_per_keystroke(client):

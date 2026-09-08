@@ -8,8 +8,8 @@ from django.contrib.postgres.indexes import GinIndex
 from django.core.serializers.json import DjangoJSONEncoder
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
-from django.db.models import F, IntegerField, Max, Min, Q
-from django.db.models.functions import Cast, Substr
+from django.db.models import Count, F, IntegerField, Max, Min, OuterRef, Q, Subquery
+from django.db.models.functions import Cast, Coalesce, Substr
 import logging
 
 logger = logging.getLogger("psn_api")
@@ -1615,13 +1615,24 @@ class Concept(models.Model):
         # hunter adding the survivor between the read and the write reintroduces that collision.
         from gamelists.models import GameList, GameListItem
 
-        touched = set(
-            GameListItem.objects.filter(concept__in=[self.pk, other.pk])
-            .values_list('game_list_id', flat=True)
+        # ONLY the lists that actually lose a row. A list holding just `other` has its entry
+        # re-pointed and nothing deleted, so its positions stay dense and its count is unchanged --
+        # walking it would be pure work. Collecting every list holding EITHER concept meant a popular
+        # concept dragged thousands of untouched lists through a full re-walk.
+        #
+        # `unique(game_list, concept)` bounds this to exactly ONE deletion per colliding list, which
+        # is what makes the repair below a single shift rather than a renumber.
+        collisions = list(
+            GameListItem.objects
+            .filter(concept=other,
+                    game_list_id__in=GameListItem.objects.filter(concept=self).values('game_list_id'))
+            .values_list('game_list_id', 'position')
         )
         GameListItem.objects.filter(
-            concept=other,
-            game_list_id__in=GameListItem.objects.filter(concept=self).values('game_list_id'),
+            pk__in=GameListItem.objects.filter(
+                concept=other,
+                game_list_id__in=GameListItem.objects.filter(concept=self).values('game_list_id'),
+            ).values('pk')
         ).delete()
         GameListItem.objects.filter(concept=other).update(concept=self)
 
@@ -1630,15 +1641,29 @@ class Concept(models.Model):
         # recomputes it, and the service's own decrements can never bring an inflated counter back
         # down past zero). Positions are consumed as dense by the cover prefetch, so the hole a drop
         # leaves shows three covers on a four-game list.
-        for game_list in GameList.objects.filter(pk__in=touched):
-            items = list(
-                GameListItem.objects.filter(game_list=game_list).order_by('position', 'pk')
+        #
+        # SET-BASED, because this runs inside `Game.add_concept()` and therefore inside SYNC. The
+        # first version materialized every row of every touched list and issued one `save()` per
+        # shifted item: removing position 0 of a 50,000-item list was ~50,000 UPDATE statements in
+        # the sync path, and list size is uncapped and attacker-controlled. Exactly the shape
+        # CLAUDE.md's whale rule forbids, in the worst place to put it.
+        #
+        # One shift per colliding list -- the same single-decrement `remove_concept` already uses --
+        # and one COUNT-driven statement for every count, rather than a query per list.
+        for game_list_id, gap in collisions:
+            GameListItem.objects.filter(game_list_id=game_list_id, position__gt=gap).update(
+                position=F('position') - 1)
+
+        if collisions:
+            GameList.objects.filter(pk__in={lid for lid, _ in collisions}).update(
+                game_count=Coalesce(
+                    Subquery(
+                        GameListItem.objects.filter(game_list=OuterRef('pk'))
+                        .values('game_list').annotate(c=Count('pk')).values('c')[:1]
+                    ),
+                    0,
+                )
             )
-            for index, item in enumerate(items):
-                if item.position != index:
-                    item.position = index
-                    item.save(update_fields=['position'])
-            GameList.objects.filter(pk=game_list.pk).update(game_count=len(items))
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
     def add_title_id(self, title_id: str):

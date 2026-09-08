@@ -181,7 +181,11 @@ def test_the_like_state_reflects_the_viewer(client):
     game_list = _list(author, 1)
     reader = _staff(client, psn='reader')
 
-    assert 'aria-pressed="false"' in client.get(_url(game_list)).content.decode()
+    # Sliced to the LIKE button: the follow button carries `aria-pressed` too and reads "false" for
+    # a fresh viewer, so the unsliced form passed with the like button hardcoded to "true".
+    fresh = client.get(_url(game_list)).content.decode()
+    like_btn = fresh[fresh.index('data-gl-like'):]
+    assert 'aria-pressed="false"' in like_btn[:like_btn.index('</button>')]
 
     svc.set_like(game_list, reader, liked=True)
     body = client.get(_url(game_list)).content.decode()
@@ -632,9 +636,13 @@ def test_the_adder_uses_the_shared_search_chrome(client):
     game_list = _list(owner, 1)
 
     body = client.get(_url(game_list)).content.decode()
-    assert 'data-search-wrap' in body
-    assert 'pp-search-spin' in body
-    assert 'data-search-clear' in body
+    # SCOPED to the adder. `data-search-clear` is on the navbar's own search on every page, so the
+    # third of these three "shared chrome" assertions was answered by the site chrome -- deleting
+    # the adder's clear button left it green.
+    adder = body[body.index('<div class="pp-bgal__search"'):body.index('data-gl-adder-results')]
+    assert 'data-search-wrap' in adder
+    assert 'pp-search-spin' in adder
+    assert 'data-search-clear' in adder
 
     js = _decommented(_read('static/js/list-detail.js'))
     assert 'wireSearchField(' in js
@@ -715,7 +723,9 @@ def test_the_writes_refuse_a_redirected_html_page(client):
 
     assert 'function postJson(' in js
     # Every write goes through the guard; none may call the raw helper directly.
-    assert js.count('postJson(') >= 4
+    # `>= 4` counted the DEFINITION as a call site, so the real floor was three of five writes --
+    # two could bypass the redirect guard. Five call sites plus one definition.
+    assert js.count('postJson(') == 6
     assert 'API.postFormData(' in js, 'postJson should still be built on the shared helper'
     assert js.count('API.postFormData(') == 1, 'a write is bypassing the redirect guard'
 
@@ -727,8 +737,12 @@ def test_owner_actions_have_somewhere_to_announce(client):
     game_list = _list(owner, 1)
 
     owner_body = client.get(_url(game_list)).content.decode()
-    assert 'data-gl-status' in owner_body
-    assert 'aria-live="polite"' in owner_body
+    # The PAIR, on one tag. `aria-live="polite"` renders five times on this page -- both character
+    # counters, the adder's status line, and the navbar's -- so asserting it anywhere in the body
+    # was satisfied by any of them, and stripping it from `data-gl-status` left this green.
+    assert re.search(r'<p[^>]*aria-live="polite"[^>]*data-gl-status', owner_body), (
+        'the owner status region does not announce'
+    )
 
     # Not rendered for someone who cannot act.
     author = ProfileFactory(is_linked=True, psn_username='author')
@@ -749,10 +763,11 @@ def test_the_adder_lives_in_the_toolbar_card_and_uses_the_shared_field(client):
 
     body = client.get(_url(game_list)).content.decode()
 
-    card = body.index('pp-toolbar-card')
-    bar_end = body.index('</div>', body.index('data-gl-adder'))
-    assert body.index('data-gl-adder') > card, 'the adder is not inside the toolbar card'
-    assert bar_end > card
+    # CONTAINMENT, not document order. `bar_end` was derived from the adder's own index, so the
+    # second assertion could not fail arithmetically; the first only proved the adder came after the
+    # card, so moving it into the page footer passed.
+    card = body[body.index('pp-toolbar-card'):body.index('id="gl-items-panel"')]
+    assert 'data-gl-adder' in card, 'the adder is not inside the toolbar card'
 
     assert 'pp-bgal__search' in body, 'the adder is not using the shared search field'
     # The shared chrome, all three pieces, plus the "/" hint the other browse toolbars carry.
@@ -962,3 +977,26 @@ def test_the_header_card_holds_no_page_action(client):
     # The identity block and the tallies -- and no controls competing with them.
     assert 'data-game-count' in head
     assert 'data-gl-publish' not in head, 'an action is back in the identity row'
+
+
+def test_the_action_caption_can_actually_take_its_own_row(client):
+    """The mobile rule for this band matched NOTHING as first written.
+
+    `.gl-actions > span:not(.contents)` looked right and reached nothing: the caption is a
+    GREAT-grandchild, nested under two `display: contents` wrappers. `display: contents` promotes an
+    element into the parent's flex LAYOUT but not into its DOM position, and combinators match the
+    DOM -- so at 375px the caption was still wedged against a button, which is the exact defect the
+    band was introduced to fix. Only the selector was wrong, which is why it looked correct.
+    """
+    owner = _staff(client)
+    private = _list(owner, 1, public=False)
+
+    body = client.get(_url(private)).content.decode()
+    assert 'gl-actions__note' in body, 'the caption carries no hook for the mobile rule'
+
+    built = _read('staticfiles/css/output.css')
+    assert '.gl-actions__note{flex-basis:100%}' in built.replace(' ', ''), (
+        'the caption rule is missing from the built CSS'
+    )
+    # And the dead child-combinator form is gone rather than left beside the working one.
+    assert '.gl-actions>span:not(.contents)' not in built.replace(' ', '')

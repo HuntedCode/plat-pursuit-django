@@ -418,8 +418,16 @@
    the controls a register distinct from the identity block above, which is what stopped them
    reading as a sentence that had sprouted buttons.
 
-   The explanatory line is pushed to its own row below `sm` so a phone shows the controls and their
-   caption stacked rather than a button wedged against ten words of prose. */
+   The explanatory line takes its own row below `sm`, so a phone shows the controls and their caption
+   stacked rather than a button wedged against ten words of prose.
+
+   IT IS TARGETED BY ITS OWN CLASS, not by `> span:not(.contents)`, which is what this rule said
+   first and which matched NOTHING. The caption is a great-grandchild: `.gl-actions` holds a
+   `display: contents` wrapper, which holds another, which holds the caption. `display: contents`
+   promotes an element into the parent's FLEX layout but not into its DOM position, and combinators
+   match the DOM tree -- so the child combinator never reached it and the defect the band was added
+   to fix was still live at 375px. The layout half was right all along; only the selector was wrong,
+   which is why it looked correct. */
 .gl-actions {
     display: flex;
     flex-wrap: wrap;
@@ -430,5 +438,5 @@
     border-top: 1px solid var(--pp-divider);
 }
 @media (max-width: 519px) {
-    .gl-actions > span:not(.contents) { flex-basis: 100%; }
+    .gl-actions__note { flex-basis: 100%; }
 }

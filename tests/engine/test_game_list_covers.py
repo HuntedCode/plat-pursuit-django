@@ -56,14 +56,24 @@ def test_the_newest_platform_wins():
 def test_the_pick_is_stable_when_two_lists_share_a_platform():
     """Without a tiebreak the database's row order decides, so the same list could render a
     different cover on two consecutive loads -- a flicker that reads as a bug and cannot be
-    reproduced on demand."""
+    reproduced on demand.
+
+    PK ORDER IS MADE TO DISAGREE WITH INSERTION ORDER, and that is the whole test. The first version
+    created two PS4 rows in ascending pk order, so the row the tiebreak should pick was also the row
+    that came back first from the unordered queryset and won on the `current is None` branch before
+    `_sort_key` was ever consulted a second time. Deleting `game.pk` from the sort key -- the exact
+    mutation this docstring describes -- passed all five iterations.
+
+    Creating the HIGHER pk first separates the two: without the tiebreak the physically-first row
+    (pk 9999) wins; with it, the lower pk does.
+    """
     concept = ConceptFactory()
-    first = GameFactory(concept=concept, title_platform=['PS4'])
-    GameFactory(concept=concept, title_platform=['PS4'])
+    GameFactory(pk=9999, concept=concept, title_platform=['PS4'])
+    lower = GameFactory(pk=5, concept=concept, title_platform=['PS4'])
 
     picks = {covers.cover_games_for([concept.pk])[concept.pk].pk for _ in range(5)}
 
-    assert picks == {first.pk}
+    assert picks == {lower.pk}, 'the pick is falling back to database row order'
 
 
 def test_a_concept_with_no_trophy_list_is_omitted_rather_than_returned_as_none():
@@ -203,9 +213,17 @@ def test_covers_follow_list_order_not_database_order():
     games = [GameFactory(concept=c, title_platform=['PS5']) for c in concepts]
     game_list = _list_with(profile, 'Ordered', concepts)
 
+    # REORDERED, so list order and database order disagree. Built in one ascending pass, position
+    # order == pk order == insertion order, and the test could not tell the two apart: replacing
+    # `.order_by('game_list_id', 'position')` with `.order_by('id')` passed.
+    item_ids = list(game_list.items.order_by('position').values_list('id', flat=True))
+    svc.reorder(game_list, profile, list(reversed(item_ids)))
+
     covers.attach_cover_games([game_list])
 
-    assert [g.pk for g in game_list.cover_items] == [g.pk for g in games]
+    assert [g.pk for g in game_list.cover_items] == [g.pk for g in reversed(games)], (
+        'the mosaic is following database order rather than the curated one'
+    )
 
 
 def test_a_game_missing_its_cover_source_is_skipped_not_rendered_as_a_hole():

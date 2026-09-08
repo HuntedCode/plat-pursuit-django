@@ -315,3 +315,50 @@ def test_absorb_fixes_the_count_on_a_list_that_only_had_the_doomed_concept():
     assert entry.position == 0
     assert game_list.game_count == 1
 
+
+
+def test_the_list_repair_does_not_scale_with_list_length():
+    """`absorb()` runs inside `Game.add_concept()` and therefore inside SYNC, and list size is
+    uncapped and attacker-controlled -- so the repair must not walk the rows.
+
+    The first version materialized every row of every touched list and issued one `save()` per
+    shifted item. Removing position 0 of a 50,000-item list was ~50,000 UPDATEs in the sync path.
+    Every existing test here passed, because they all use three-item lists where 3 statements and
+    30,000 look the same.
+
+    Query COUNT, not wall time: the point is that the number of statements is flat in list length.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from gamelists.services import game_list_service as svc
+
+    def merge_with_a_list_of(size):
+        owner = ProfileFactory(is_linked=True, psn_username=f'curator-{size}')
+        keeper = ConceptFactory(unified_title=f'Keeper {size}')
+        doomed = ConceptFactory(unified_title=f'Doomed {size}')
+        game_list = svc.create_list(owner, name=f'List of {size}')
+        # Both concepts on one list -- the collision the repair exists for -- plus padding after
+        # them, so a re-walk has something to walk.
+        svc.add_concept(game_list, owner, keeper)
+        svc.add_concept(game_list, owner, doomed)
+        for n in range(size):
+            svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'Pad {size}-{n}'))
+
+        with CaptureQueriesContext(connection) as captured:
+            keeper.absorb(doomed)
+        return len(captured.captured_queries), game_list
+
+    small, small_list = merge_with_a_list_of(3)
+    large, large_list = merge_with_a_list_of(40)
+
+    assert small == large, (
+        f'the merge cost grew from {small} to {large} queries between a 5-item and a 42-item list'
+    )
+
+    # And it is still CORRECT -- flatness is worthless if the repair stopped repairing.
+    for game_list in (small_list, large_list):
+        game_list.refresh_from_db()
+        positions = list(game_list.items.order_by('position').values_list('position', flat=True))
+        assert positions == list(range(len(positions))), f'positions are not dense: {positions}'
+        assert game_list.game_count == len(positions), 'game_count drifted from the rows'
