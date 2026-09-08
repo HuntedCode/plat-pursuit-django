@@ -11,7 +11,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from trophies.models import ProfileBadgeStanding, ProfileCareerStanding
+from trophies.models import ProfileBadgeStanding, ProfileCareerStanding, ProfileTrophyStanding
 from tests.factories import ProfileFactory
 from tests.engine.test_leaderboards_overall_cost import active_board
 
@@ -20,16 +20,29 @@ pytestmark = pytest.mark.django_db
 URL = reverse('overall_badge_leaderboards')
 
 
-def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0, career=0, level=0):
+def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0, career=0, level=0,
+            clean_plats=None, clean_trophies=None):
     """A hunter placed on whichever boards the caller gives them figures for.
 
     `plats`/`trophies` land on PROFILE's own counters, because the Trophies board reads those directly --
     it is not badge-scoped and has no standing row. `points` still needs a ProfileBadgeStanding.
+
+    The Shovelware Free board reads its OWN store, so a hunter given trophy figures gets a matching
+    `ProfileTrophyStanding` -- i.e. a library with no flagged games in it, which is the sensible default
+    for a fixture that is not about shovelware. Pass `clean_plats` / `clean_trophies` to seed a hunter
+    whose clean figures differ from their raw ones. Without this every fixture in this file would leave
+    the DEFAULT board empty, which is what makes it worth stating: the board that leads the strip is the
+    one a test forgets to populate.
     """
     p = ProfileFactory(
         display_psn_username=name, country_code=country, country=country_name,
         is_linked=True, total_plats=plats, total_trophies=trophies,
     )
+    cp = plats if clean_plats is None else clean_plats
+    ct = trophies if clean_trophies is None else clean_trophies
+    if ct:
+        ProfileTrophyStanding.objects.create(
+            profile=p, clean_plats=cp, clean_trophies=ct, country_code=country, is_linked=True)
     if points:
         ProfileBadgeStanding.objects.create(profile=p, country_code=country, total_xp=points, is_linked=True)
     if career:
@@ -38,21 +51,62 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     return p
 
 
-def test_the_landing_offers_three_boards_and_defaults_to_trophies(client):
-    """Trophies leads because it is the board with the most entrants -- every linked hunter with a trophy
-    is on it, which is the one a first-time visitor is most likely to appear on.
+def test_the_landing_offers_four_boards_and_defaults_to_shovelware_free(client):
+    """FOUR boards, and the landing opens on Shovelware Free (2026-09).
 
-    It has been renamed twice: "Progress" (which named the STORE rather than what it ranks), then "Badge
-    Trophies" (badge-scoped, and the only thing in the subsystem needing a full-library aggregate). The
-    label is asserted here as well as the key, because the two are separately changeable and a rename
-    landing in only one of them is the likely half-done state.
+    Trophies led before it, on the grounds that it has the most entrants -- still true, since this board
+    drops anyone whose whole library is flagged. Entrant count stopped being the tie-breaker: the two rank
+    the same hunters by the same rule over different populations, and this one is the more honest answer
+    to "who has done the most".
+
+    The Trophies board has been renamed twice ("Progress", then "Badge Trophies"), which is why labels are
+    asserted alongside keys here: the two are separately changeable and a rename landing in only one of
+    them is the likely half-done state.
     """
+    _ranked('Somebody', plats=3, trophies=30)
     body = client.get(URL).content.decode()
 
-    for key in ('trophies', 'points', 'career'):
+    for key in ('clean', 'trophies', 'points', 'career'):
         assert f'data-board="{key}"' in body, f'the {key} board is missing from the tab strip'
-    assert active_board(body) == 'trophies', 'the landing does not default to Trophies'
-    assert '>Trophies</span>' in body, 'the board is still labelled something else in the strip'
+    assert active_board(body) == 'clean', 'the landing does not default to Shovelware Free'
+    assert '>Shovelware Free</span>' in body, 'the board is labelled something else in the strip'
+    assert '>Trophies</span>' in body, 'the Trophies board lost its tab'
+
+
+def test_the_default_is_derived_from_the_strip_order_not_repeated(client):
+    """Two places could name the default -- the first tab, and the fallback `?tab=` resolves to -- and
+    they must not be able to disagree. `DEFAULT_BOARD` is derived from `BOARDS[0]`, so reordering the
+    strip moves both at once.
+
+    Worth pinning because the failure is quiet: an unknown `?tab=` would land on a board that is no longer
+    first, so the page would render correctly with the WRONG tab lit and nothing would error.
+    """
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
+    assert V.DEFAULT_BOARD == V.BOARDS[0][0], 'the default no longer follows the tab strip'
+    assert V.DEFAULT_BOARD in V.BOARD_KEYS
+
+    _ranked('Somebody', plats=3, trophies=30)
+    unknown = client.get(URL, {'tab': 'not-a-board'}).content.decode()
+    assert active_board(unknown) == V.DEFAULT_BOARD, 'an unknown tab does not fall back to the default'
+
+
+def test_retired_tabs_land_on_the_board_they_MEANT_not_on_the_default(client):
+    """`progress`, `xp`, `country` and `series` are old bookmarks. Each names a board that still exists,
+    so each resolves to THAT board rather than to whatever leads the strip today.
+
+    This became a real distinction in 2026-09, when Shovelware Free took the first slot: mapping these to
+    "the default" would have silently redirected every old Trophies bookmark onto a different board with
+    different numbers.
+    """
+    _ranked('Somebody', plats=3, trophies=30, points=100)
+
+    for legacy, expected in (('progress', 'trophies'), ('series', 'trophies'),
+                             ('xp', 'points'), ('country', 'points')):
+        body = client.get(URL, {'tab': legacy}).content.decode()
+        assert active_board(body) == expected, (
+            f'?tab={legacy} landed on {active_board(body)!r}, not the {expected!r} board it named'
+        )
 
 
 def test_country_is_a_filter_not_a_tab(client):
