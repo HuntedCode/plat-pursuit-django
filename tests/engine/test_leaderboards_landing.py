@@ -138,6 +138,41 @@ def test_the_landing_survives_an_empty_default_board(client):
     assert 'data-board="trophies"' in body, 'the other boards became unreachable'
 
 
+def _order(body, *names):
+    """The order the given hunters appear in a rendered wall."""
+    return sorted(names, key=body.index)
+
+
+def test_the_default_board_serves_ITS_OWN_rows_not_the_trophies_boards(client):
+    """THE headline behaviour, and it had no test that could fail.
+
+    Every fixture in this file used to give a hunter the SAME figures on both trophy boards (`_ranked`
+    mirrors `plats`/`trophies` into the clean columns, and `ProfileFactory` mirrors `total_trophies` into
+    `total_trophies_raw`), so no assertion could tell the two boards apart. Rewiring the `clean` tab to
+    serve `lb.trophy_rows` left 129 tests green -- including the two written specifically to cover that
+    path, whose docstrings say they exist because the clean board hydrates through a different one.
+
+    So this fixture INVERTS them: a hunter who is enormous on Trophies and nearly absent from Shovelware
+    Free, and one who is the reverse. The two boards must then disagree about the order, which is only
+    possible if each is reading its own store.
+    """
+    _ranked('JunkHunter', plats=99, trophies=999, clean_plats=0, clean_trophies=1)
+    _ranked('RealHunter', plats=1, trophies=10, clean_plats=50, clean_trophies=500)
+
+    clean = client.get(URL, {'tab': 'clean'}).content.decode()
+    trophies = client.get(URL, {'tab': 'trophies'}).content.decode()
+
+    assert _order(clean, 'JunkHunter', 'RealHunter') == ['RealHunter', 'JunkHunter'], (
+        'the Shovelware Free board is not ordering by its own store'
+    )
+    assert _order(trophies, 'JunkHunter', 'RealHunter') == ['JunkHunter', 'RealHunter'], (
+        'the fixture does not actually invert the two boards, so the assertion above proves nothing'
+    )
+    # ...and the FIGURE each row shows comes from the same store it was ordered by, or the board would
+    # sort on one number and display another.
+    assert '999' not in clean.split('lb-wall')[1], 'the clean wall is showing raw trophy totals'
+
+
 def test_the_rows_endpoint_serves_the_default_board(client):
     """Every rows-endpoint test in this file pinned `tab=trophies`, so the board that now serves every
     bare visit had no window coverage -- and it hydrates through a DIFFERENT path (`_store_for` returns
@@ -148,6 +183,12 @@ def test_the_rows_endpoint_serves_the_default_board(client):
     resp = client.get(reverse('leaderboard_rows'), {'tab': 'clean', 'range': 2})
     assert resp.status_code == 200
     assert 'lb-row' in resp.content.decode(), 'the clean board served no rows'
+
+    # ...and they are the CLEAN board's rows. Without an inverting fixture this endpoint test passed with
+    # the tab wired to `trophy_rows`, because every hunter had identical figures on both boards.
+    _ranked('OnlyClean', plats=0, trophies=1, clean_plats=900, clean_trophies=9000)
+    top = client.get(reverse('leaderboard_rows'), {'tab': 'clean', 'range': 1}).content.decode()
+    assert 'OnlyClean' in top, 'the rows endpoint served a board this hunter does not lead'
 
     suggest = client.get(reverse('leaderboard_rows'), {'tab': 'clean', 'suggest': 'Clean'})
     assert suggest.status_code == 200

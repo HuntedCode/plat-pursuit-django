@@ -337,17 +337,18 @@ def active_countries():
             .values_list('country_code', flat=True).distinct()
         )
         codes |= set(
-            # FOUR sources, not three. The Shovelware Free board looks like it needs no entry here --
-            # `clean_trophies > 0` seems to imply `total_trophies > 0`, making its countries a subset of
-            # the Trophies board's. It does not, because the two figures are written at different TIMES:
-            # `Profile.total_trophies` is updated at `sync_complete` and on the settings POST, while this
-            # store is rebuilt nightly. A linked hunter whose first sync wrote EarnedTrophy rows and then
-            # failed before completing sits on this board with `total_trophies` still 0, and their country
-            # would be unselectable on the very board they appear on -- the exact failure the badge_store
+            # FOUR sources, not three. The Shovelware Free board looks like it needs no entry here -- its
+            # hunters seem to be a subset of the Trophies board's, since a clean trophy is also a trophy.
+            # They are not, because this store is a NIGHTLY SNAPSHOT while `trophy_store()` reads
+            # `Profile` live. It therefore goes stale HIGH: a hunter who unlinks, or whose earned rows are
+            # removed, keeps a `clean_trophies > 0` standing (and a stale `is_linked` mirror) until the
+            # next run, while the live board has already dropped them. Their country would be
+            # unselectable on the very board they still appear on -- the exact failure the badge_store
             # comment above records.
             #
-            # (The two figures agree on hidden games: both honour `hide_hiddens`. An earlier version of
-            # this comment leaned on that difference, which no longer exists -- the timing one does.)
+            # (Two earlier versions of this comment justified the source by a FILTERING difference between
+            # the two figures. Neither honours `hide_hiddens` now -- both boards rank on every synced
+            # trophy -- so staleness is the argument that survives.)
             clean_store().filter(clean_trophies__gt=0).exclude(country_code='')
             .values_list('country_code', flat=True).distinct()
         )
@@ -434,7 +435,7 @@ def trophy_store():
 
 def trophy_rows(limit=50, offset=0, country=None):
     """The Trophies board -- ALL games, PLATINUMS first, total as the tiebreak:
-    [(profile_id, platinums, total_trophies, bronze, silver, gold), ...].
+    [(profile_id, platinums, total_trophies_raw), ...].
 
     Reads `Profile`'s own counters, which are maintained incrementally by the EarnedTrophy signals and
     reconciled nightly by `recalc_profile_counters`. Nothing here is badge-specific.

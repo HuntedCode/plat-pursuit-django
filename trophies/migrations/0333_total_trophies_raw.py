@@ -11,54 +11,45 @@ profile's settings -- so a missed write there persists until that hunter next sy
 maintained like the four type counters: incrementally by the `EarnedTrophy` signals AND reconciled
 nightly from ground truth.
 
-THE BACKFILL IS EXACT AND CHEAP, which is the reason it can live in the migration rather than in a
-deploy-checklist row. Every earned trophy is exactly one of bronze/silver/gold/platinum, and those four
-counters are already unfiltered -- so the new value is their SUM, and the whole backfill is one
-arithmetic UPDATE over columns that already exist. No aggregate over `EarnedTrophy`, no chunking, and no
-window where the board reads zeros: the column is populated before the indexes that serve the board are
-built.
+THE BACKFILL IS EXACT. Every earned trophy is exactly one of bronze/silver/gold/platinum, and those four
+counters are already unfiltered -- so the new value is their SUM, and the fill is one arithmetic UPDATE
+over columns that already exist. No aggregate over `EarnedTrophy`, no chunking, no deploy-checklist row.
 
-ORDER MATTERS: add the column, fill it, THEN swap the indexes. The replacements are partial on
-`total_trophies_raw > 0`, so building them against an all-zero column would build them empty and then
-grow them row by row during the UPDATE.
+It is NARROWED to profiles that actually hold a trophy. An unfiltered `UPDATE` would rewrite all ~300k
+rows of a 48-column table -- taking a row lock on every one, doubling the table's dead tuples right
+before an index build has to scan it, and blocking the concurrent `Profile.objects.filter(pk=...)
+.update(...)` that the `EarnedTrophy` signals issue during sync. About 250k of those rows are profiles
+whose four counters are all zero, where the computed value equals the column default and the write buys
+nothing. Excluding them is exactly equivalent and cuts the write set to the linked population.
 
-CONCURRENTLY + `atomic = False`, exactly as 0307/0309 do, so a 300k-row `Profile` is not write-locked for
-the rebuild. NOTE: if a CONCURRENTLY build fails partway, Postgres leaves an INVALID index behind that
-must be dropped by hand before re-running:
-
-    DROP INDEX CONCURRENTLY IF EXISTS profile_board_idx;
-    DROP INDEX CONCURRENTLY IF EXISTS profile_board_cc_idx;
-
-Verify afterwards that both exist and are valid:
-
-    SELECT indexrelid::regclass, indisvalid FROM pg_index WHERE indexrelid::regclass::text IN
-      ('profile_board_idx','profile_board_cc_idx');
+THE INDEX SWAP LIVES IN 0334, deliberately not here. `CREATE INDEX CONCURRENTLY` needs `atomic = False`,
+and under `atomic = False` Django commits each operation separately but only records the migration as
+applied after the LAST one. So a CONCURRENTLY build that died partway -- the failure this migration is
+most likely to hit -- would leave `migrate` wanting to replay from operation 0, where `AddField` fails
+with "column already exists". The operator would be stuck hand-dropping a freshly backfilled column at
+the worst possible moment. Split, the backfill is transactional and never has to be redone, and the index
+migration re-runs cleanly after the documented cleanup.
 """
 
-from django.contrib.postgres.operations import AddIndexConcurrently, RemoveIndexConcurrently
 from django.db import migrations, models
-from django.db.models import F, Q
-
-#: The board's population: verified hunters who hold at least one trophy, on the UNFILTERED count.
-_BOARD = Q(is_linked=True, total_trophies_raw__gt=0)
+from django.db.models import F
 
 
 def fill(apps, schema_editor):
-    """One UPDATE. Exact by construction -- every earned trophy is exactly one of the four types."""
+    """One UPDATE, over the profiles that hold a trophy. Exact by construction -- every earned trophy is
+    exactly one of the four types, and a profile with none of them is already correct at the default."""
     Profile = apps.get_model('trophies', 'Profile')
-    Profile.objects.update(
-        total_trophies_raw=F('total_bronzes') + F('total_silvers') + F('total_golds') + F('total_plats')
-    )
+    (Profile.objects
+     .exclude(total_bronzes=0, total_silvers=0, total_golds=0, total_plats=0)
+     .update(total_trophies_raw=(
+         F('total_bronzes') + F('total_silvers') + F('total_golds') + F('total_plats'))))
 
 
 def unfill(apps, schema_editor):
-    """Nothing to undo: the column goes with the reverse of the AddField below."""
+    """Nothing to undo: the column goes with the reverse of the AddField above."""
 
 
 class Migration(migrations.Migration):
-
-    # CREATE/DROP INDEX CONCURRENTLY cannot run inside a transaction.
-    atomic = False
 
     dependencies = [
         ("trophies", "0332_profile_trophy_standing"),
@@ -74,23 +65,4 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.RunPython(fill, unfill),
-        # Drop first: the replacements reuse the same names, and Postgres will not allow a duplicate.
-        RemoveIndexConcurrently(model_name="profile", name="profile_board_idx"),
-        RemoveIndexConcurrently(model_name="profile", name="profile_board_cc_idx"),
-        AddIndexConcurrently(
-            model_name="profile",
-            index=models.Index(
-                fields=["-total_plats", "-total_trophies_raw", "id"],
-                name="profile_board_idx",
-                condition=_BOARD,
-            ),
-        ),
-        AddIndexConcurrently(
-            model_name="profile",
-            index=models.Index(
-                fields=["country_code", "-total_plats", "-total_trophies_raw", "id"],
-                name="profile_board_cc_idx",
-                condition=_BOARD,
-            ),
-        ),
     ]

@@ -149,23 +149,33 @@ def test_shovelware_detection_is_not_also_a_separate_cron_entry():
 
     doc = (Path(__file__).resolve().parents[2] / 'docs' / 'guides' / 'cron-jobs.md').read_text(
         encoding='utf-8')
-    # The COMMAND column (cell 2), not any mention: `evaluate_contract_candidates`'s notes reference
-    # `update_shovelware` legitimately, and matching the whole row flagged it as a duplicate entry.
+    # Not any MENTION: `evaluate_contract_candidates`'s notes reference `update_shovelware` legitimately,
+    # and matching the whole row flagged that as a duplicate entry.
     #
     # `startswith`, not equality: a re-added row carrying an argument (`update_shovelware --force`) is the
     # same duplicate entry and an exact match would wave it through. The struck-out row survives either
     # way, since its cell opens with `~~`.
     #
-    # BOTH registers. An operator works from whichever file they opened, and the schedule table in
-    # management-commands.md listed this as a weekly cron for a while after it had been folded in -- so a
-    # guard reading only cron-jobs.md would have watched the wrong page.
+    # BOTH registers, and NOT a fixed column index -- which is how half of this guard came to be vacuous.
+    # The command sits in cell 2 of cron-jobs.md (`| time | command | frequency | notes |`) but cell 1 of
+    # management-commands.md (`| command | schedule | notes |`), so pinning index 2 read the SCHEDULE
+    # column of the second file and a live cron row re-added there passed straight through.
+    #
+    # A row counts as a live cron entry only if it ALSO carries a schedule. Both files list this command
+    # in a reference table that describes what it does, which is correct and must stay -- the thing that
+    # must not come back is a row that tells an operator to SCHEDULE it. `~~` excludes the struck-out
+    # rows recording that it was folded in.
+    import re
     from pathlib import Path as _P
+
     root = _P(__file__).resolve().parents[2] / 'docs' / 'guides'
+    schedule = re.compile(r'\b(daily|weekly|hourly|monthly|UTC)\b', re.I)
     rows = []
     for name in ('cron-jobs.md', 'management-commands.md'):
         for ln in (root / name).read_text(encoding='utf-8').splitlines():
             cells = [c.strip() for c in ln.split('|')]
-            if len(cells) > 2 and cells[2].startswith('`update_shovelware'):
+            names_it = any(c.startswith('`update_shovelware') for c in cells[1:3])
+            if names_it and schedule.search(ln) and '~~' not in ln:
                 rows.append(f'{name}: {ln[:120]}')
     assert not rows, (
         f'update_shovelware still has a live cron row while also being a nightly step: {rows}'

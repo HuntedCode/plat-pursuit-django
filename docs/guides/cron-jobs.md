@@ -118,7 +118,7 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   overlap, and two processes call `recompute_standing` for the same profiles. That now takes a
   per-profile lock, so a race serializes rather than corrupting -- but two full passes over ~300,000
   profiles serializing is not a thing to leave scheduled.
-- **Failure behaviour**: each step is isolated, so one failure does not cancel the rest -- "the DLC sweep
+- **Failure behaviour**: each step is isolated, so one failure does not cancel the rest -- with ONE exception: `clean standings` declares a dependency on `shovelware detection` (`nightly.DEPENDS_ON`) and is SKIPPED if that step failed, because rebuilding the board from a half-applied catalogue is worse than leaving last night's standing. A skip counts toward the non-zero exit -- "the DLC sweep
   failed" should not also cost you the coverage email. The command still exits NON-ZERO if any step
   failed, so the run goes red rather than green-with-an-error-in-the-logs.
 - **Operator flags**: `--dry-run` lists the order, `--only '<label>'` re-runs one step after a failure
@@ -307,7 +307,7 @@ historical pass after Phase 3's rematch run.
 - **Note**: `Profile.total_trophies`, `total_unearned`, and `avg_progress` are NOT recomputed here — they're filter-respecting (hide_hiddens / hide_zeros) and are recomputed on demand via `update_profile_trophy_counts()` from sync_complete and the profile settings POST.
 - **Dependencies**: None. Read-heavy; off-peak window.
 - **Idempotency**: Fully safe to re-run. Computes deltas and skips rows whose values already match. `--dry-run` reports counts without writing.
-- **Failure impact**: Type counters drift up to 24h until the next run if signals miss something. Users with active trophy hunting could see slightly off bronze/silver/gold/plat counts during that window. No user-facing breakage.
+- **Failure impact**: The FIVE counters it reconciles drift up to 24h if signals miss something. Four are display figures (slightly off bronze/silver/gold/plat tallies). The fifth, `total_trophies_raw`, is the Trophies board's membership rule AND its tiebreak, so drift there misorders a public board and a value stuck at zero removes the hunter from it entirely. Diagnose a single profile with `verify_profile_sync`, repair with `recalc_profile_counters --profile-ids`.
 
 ### audit_badge_coverage
 
@@ -361,7 +361,7 @@ historical pass after Phase 3's rematch run.
   and idempotent -- it is `backfill_shovelware` that resets every auto-flagged status and rebuilds from
   scratch. Respects manual locks and flags.
 - **Dependencies**: none upstream, but current earn-rate data (from recent syncs) improves accuracy. DOWNSTREAM there are two: `recompute_clean_standings` (`nightly` step 2) rebuilds the Shovelware Free board from these flags and is SKIPPED if this step fails, and `evaluate_contract_candidates` (04:45) reads them for its shovelware override.
-- **Idempotency**: Fully safe to re-run. The command resets and rebuilds from scratch each time. Locked and manually flagged games are preserved.
+- **Idempotency**: Fully safe to re-run. The command reconciles incrementally (it is `backfill_shovelware` that resets and rebuilds from scratch). Locked and manually flagged games are preserved.
 - **Failure impact**: The shovelware list becomes stale. New shovelware games are not excluded from challenge eligibility until the next successful run.
 
 ### post_community_trophy_tracker

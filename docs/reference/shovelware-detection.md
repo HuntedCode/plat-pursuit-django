@@ -182,7 +182,10 @@ Use once after schema migrations or when state diverges significantly from what 
 
 ### `update_shovelware`
 
-The recommended cron target (daily cadence is fine thanks to idempotence). Walks a targeted candidate set rather than wiping state:
+Runs as **`nightly` step 1** (04:00 UTC) and must NOT have a standalone cron entry -- `nightly` shares
+that slot, so a separate entry runs the detector twice concurrently and reinstates an undefined-order
+race with `recompute_clean_standings` (step 2), which reads the flags it writes. Idempotent, and it
+walks a targeted candidate set rather than wiping state:
 
 - Concepts with any currently `auto_flagged` game (catches spurious flags + new shield opportunities)
 - Concepts containing *any* version at `>= 80%` earn rate (a superset of median >= 80%; catches missed rule-1 flags, and `evaluate_concept` correctly leaves single-outlier concepts clean)

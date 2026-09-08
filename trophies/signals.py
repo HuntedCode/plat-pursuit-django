@@ -1,7 +1,8 @@
 import logging
 from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save, pre_delete
 from django.dispatch import receiver
-from django.db.models import F
+from django.db.models import F, Value
+from django.db.models.functions import Greatest
 from trophies.models import (
     Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame,
     GroupBadge, UserGroupBadge,
@@ -140,12 +141,22 @@ def _bump(type_field, delta):
     counted at two grains, so splitting them into two writes is how they drift -- and `total_trophies_raw`
     is the leaderboard's tiebreak, so drift there reorders a public board.
 
-    The decrement is guarded by the CALLER's `{type_field}__gt: 0` filter, which is not quite a guard for
-    the raw total: a profile could in principle hold the tier at 0 and the total above it. The nightly
-    `recalc_profile_counters` reconciles both from ground truth, which is the real floor under either.
+    THE DECREMENT IS FLOORED AT ZERO rather than trusting the caller's `{type_field}__gt: 0` filter. That
+    filter guards the TIER, and the two columns can disagree -- staff can edit the tier counters in the
+    admin, and migration 0333 leaves a window where the column exists at 0 while the tiers are already
+    populated. With a tier at 1 and the raw total at 0, the filter passes and the raw total goes to -1,
+    which is a CHECK violation on a `PositiveIntegerField`: a routine unearn or trophy delete raises
+    IntegrityError inside `post_delete`, i.e. inside whatever transaction sync is running.
+
+    `Greatest(... - 1, 0)` cannot raise. A floored decrement can leave the total drifted HIGH, which is
+    the direction that merely misplaces somebody on a board until `recalc_profile_counters` rebuilds both
+    from ground truth that night. A crash on the sync path is not recoverable in the same cheap way.
     """
-    op = (lambda f: F(f) + 1) if delta > 0 else (lambda f: F(f) - 1)
-    return {type_field: op(type_field), 'total_trophies_raw': op('total_trophies_raw')}
+    if delta > 0:
+        return {type_field: F(type_field) + 1,
+                'total_trophies_raw': F('total_trophies_raw') + 1}
+    return {type_field: Greatest(F(type_field) - 1, Value(0)),
+            'total_trophies_raw': Greatest(F('total_trophies_raw') - 1, Value(0))}
 
 
 def _resolve_trophy_type(instance):

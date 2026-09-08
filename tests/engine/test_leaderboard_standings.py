@@ -419,10 +419,11 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     measured at 49.7 ms. 0311 closed it."""
     from django.db.models import Q
     from trophies.models import (
-        ProfileEditionStanding, ProfileTrophyStanding, SeriesEditionStanding, UserGroupBadge,
+        Profile, ProfileEditionStanding, ProfileTrophyStanding, SeriesEditionStanding, UserGroupBadge,
     )
 
     for model, names in (
+        (Profile, ('profile_board_idx', 'profile_board_cc_idx')),
         (SeriesBadgeStanding, ('sbs_series_board_idx', 'sbs_series_cc_board_idx')),
         (SeriesEditionStanding, ('ses_board_idx', 'ses_board_cc_idx')),
         (ProfileEditionStanding, ('pes_ed_xp_idx', 'pes_ed_cc_xp_idx')),
@@ -443,6 +444,10 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     linked = Q(is_linked=True)
     linked_xp = Q(is_linked=True, total_xp__gt=0)
     linked_clean = Q(is_linked=True, clean_trophies__gt=0)
+    # The Trophies board moved onto the UNFILTERED column in 2026-09 (migration 0334). An index left on
+    # `total_trophies` would simply stop matching -- silently, and back into the 16 ms seq scan of a
+    # 48-column table that 0307 measured on EVERY authenticated page view.
+    linked_raw = Q(is_linked=True, total_trophies_raw__gt=0)
     expected = {
         (SeriesBadgeStanding, 'sbs_series_board_idx'): linked,
         (SeriesBadgeStanding, 'sbs_series_cc_board_idx'): linked,
@@ -458,6 +463,8 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
         # The Shovelware Free board's membership rule is `is_linked AND clean_trophies > 0` -- the
         # TIEBREAK column, not the sort key. A hunter can hold clean trophies without a clean platinum,
         # and conditioning on `clean_plats > 0` would silently drop every one of them off the board.
+        (Profile, 'profile_board_idx'): linked_raw,
+        (Profile, 'profile_board_cc_idx'): linked_raw,
         (ProfileTrophyStanding, 'pts_board_idx'): linked_clean,
         (ProfileTrophyStanding, 'pts_country_board_idx'): linked_clean,
     }
