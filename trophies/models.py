@@ -564,6 +564,18 @@ class FeaturedProfile(models.Model):
         ordering = ['-priority']
 
 
+#: The `shovelware_status` values that DISQUALIFY a game -- the ONE definition of "this is shovelware",
+#: read by `Game.is_shovelware` and by every queryset that filters on it.
+#:
+#: Note what is NOT here. `manually_cleared` means a human looked at a flagged game and said it was fine,
+#: so it counts as CLEAN; `clean` is merely the never-examined default. Writing the rule as
+#: `status == 'clean'` therefore excludes exactly the games somebody took the trouble to vouch for --
+#: which `core/services/community_trophy_tracker.py` currently does, and is a third spelling of this rule
+#: that predates this constant. Repointing the existing consumers is deliberately NOT part of the branch
+#: that introduced this: they move live figures on unrelated surfaces and want their own change.
+SHOVELWARE_FLAGGED_STATUSES = ('auto_flagged', 'manually_flagged')
+
+
 class Game(models.Model):
     np_communication_id = models.CharField(
         max_length=50, unique=True, blank=True, null=True
@@ -745,8 +757,12 @@ class Game(models.Model):
 
     @property
     def is_shovelware(self):
-        """Whether this game is flagged as shovelware (auto or manual)."""
-        return self.shovelware_status in ('auto_flagged', 'manually_flagged')
+        """Whether this game is flagged as shovelware (auto or manual).
+
+        Reads the shared constant rather than repeating the tuple, so this property and the querysets
+        that filter on the same rule cannot answer differently for one game.
+        """
+        return self.shovelware_status in SHOVELWARE_FLAGGED_STATUSES
 
     def get_total_defined_trophies(self):
         # Tolerate a missing/partial defined_trophies blob. It defaults to {} on the model, so indexing the
