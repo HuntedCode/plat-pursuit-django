@@ -419,11 +419,13 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     measured at 49.7 ms. 0311 closed it."""
     from django.db.models import Q
     from trophies.models import (
-        Profile, ProfileEditionStanding, ProfileTrophyStanding, SeriesEditionStanding, UserGroupBadge,
+        Profile, ProfileEditionStanding, ProfilePPStanding, ProfileTrophyStanding, SeriesEditionStanding,
+        UserGroupBadge,
     )
 
     for model, names in (
         (Profile, ('profile_board_idx', 'profile_board_cc_idx')),
+        (ProfilePPStanding, ('pps_board_idx', 'pps_country_board_idx')),
         (SeriesBadgeStanding, ('sbs_series_board_idx', 'sbs_series_cc_board_idx')),
         (SeriesEditionStanding, ('ses_board_idx', 'ses_board_cc_idx')),
         (ProfileEditionStanding, ('pes_ed_xp_idx', 'pes_ed_cc_xp_idx')),
@@ -448,6 +450,9 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     # `total_trophies` would simply stop matching -- silently, and back into the 16 ms seq scan of a
     # 48-column table that 0307 measured on EVERY authenticated page view.
     linked_raw = Q(is_linked=True, total_trophies_raw__gt=0)
+    # PP Score's membership rule is a FULL 1,000 scorable trophies, not "more than none": below that the
+    # sum is short by construction. The literal must track `pp_score.TOP_N`, asserted just below.
+    linked_pp = Q(is_linked=True, scored_count__gte=1000)
     expected = {
         (SeriesBadgeStanding, 'sbs_series_board_idx'): linked,
         (SeriesBadgeStanding, 'sbs_series_cc_board_idx'): linked,
@@ -465,9 +470,19 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
         # and conditioning on `clean_plats > 0` would silently drop every one of them off the board.
         (Profile, 'profile_board_idx'): linked_raw,
         (Profile, 'profile_board_cc_idx'): linked_raw,
+        (ProfilePPStanding, 'pps_board_idx'): linked_pp,
+        (ProfilePPStanding, 'pps_country_board_idx'): linked_pp,
         (ProfileTrophyStanding, 'pts_board_idx'): linked_clean,
         (ProfileTrophyStanding, 'pts_country_board_idx'): linked_clean,
     }
+    # The index literal and the Python constant are one rule in two places, and a partial index cannot
+    # reference the constant -- so they are asserted equal here. Changing N means a migration, which is
+    # correct: it redefines the board.
+    from trophies.services import pp_score
+    assert pp_score.TOP_N == 1000, (
+        'pp_score.TOP_N moved without the pps_* index conditions following it'
+    )
+
     for (model, name), cond in expected.items():
         got = {i.name: i for i in model._meta.indexes}[name].condition
         assert got == cond, f'{name} is conditioned on {got}, expected {cond}'

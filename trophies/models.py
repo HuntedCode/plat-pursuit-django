@@ -4067,6 +4067,68 @@ class ProfileTrophyStanding(models.Model):
         return f"{self.profile.psn_username} - {self.clean_plats} clean plats ({self.clean_trophies} trophies)"
 
 
+class ProfilePPStanding(models.Model):
+    """Per-profile PP SCORE -- the third trophy board's store.
+
+    PP Score sums `100 / earn_rate` over a hunter's rarest 1,000 BASE-GAME trophies. The rule itself lives
+    in `services/pp_score.py`; this is only where the answer is kept.
+
+    A sibling of `ProfileTrophyStanding` and built to the same rules -- read that model, and
+    `ProfileCareerStanding` before it, for why `country_code` and `is_linked` are mirrored here rather
+    than joined.
+
+    WHY IT IS MATERIALIZED, which is a stronger reason than the clean board had. That board reads columns
+    that already exist on `Profile`; this one needs a RANKED SLICE per hunter -- order a hunter's earned
+    trophies by rarity, take the first 1,000, sum a function of each. For a hunter with 250,000 trophies
+    that is a 250,000-row sort, and no index can serve it: the rate lives on `Trophy`, so there is no
+    `(profile, rarity)` ordering to walk. Once a night, chunked and cursored, is affordable; per request
+    is not, by a wide margin.
+
+    THE SCORE IS AN INTEGER on purpose. It is a sum of floats, but the board sorts and pages on it, and a
+    float sort key with a unique tail behaves badly at the boundaries (two hunters "tied" at 41210.999999
+    and 41211.000001 order arbitrarily under a different plan). Rounding costs nothing: scores run to the
+    tens of thousands, where a fractional point is invisible.
+    """
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='pp_standing')
+    #: The board's sort key. Bounded 0..1,000,000 by PSN's own rate range (1 point for a 100% trophy,
+    #: 1,000 for a 0.1% one, over at most TOP_N trophies), so it needs no wider column than this.
+    pp_score = models.PositiveIntegerField(default=0)
+    #: The SUPPORTING figure, and deliberately the average across the SCORED set rather than the whole
+    #: library -- it has to explain the number beside it. A hunter whose 1,000 rarest average 2.4% has
+    #: earned that score in a way "2.4% across everything they own" would not describe.
+    avg_earn_rate = models.FloatField(default=0.0)
+    #: How many trophies the sum actually found, capped at TOP_N. Below the cap the sum is structurally
+    #: short, which is what the membership rule below is for -- but storing it means a short score is
+    #: visible rather than mysterious.
+    scored_count = models.PositiveIntegerField(default=0)
+    #: Both mirrors, same contract as every other standing store. max_length MATCHES Profile (5); a
+    #: narrower mirror turns an over-long value into a DataError on the propagating UPDATE.
+    country_code = models.CharField(max_length=5, blank=True, default='')
+    is_linked = models.BooleanField(default=False)
+    #: When this hunter's figures last CHANGED, not when the sweep last ran -- the recompute skips rows
+    #: whose values match. `auto_now` covers creation only; `bulk_update` does not call `Model.save()`, so
+    #: the update path stamps it by hand.
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            # PARTIAL on the board's own population, tail `profile`, as every other board index is.
+            #
+            # THE CONDITION IS THE MEMBERSHIP RULE: a full 1,000 scorable trophies. Below that the sum is
+            # short by construction, so a hunter would rank low for having played less rather than for
+            # having played easier -- which is the one thing this board is not meant to measure. The 1,000
+            # here is `pp_score.TOP_N` and the two MUST move together; a partial index cannot reference a
+            # Python constant, so changing N means a migration, which is correct -- it redefines the board.
+            models.Index(fields=['-pp_score', 'profile'], name='pps_board_idx',
+                         condition=Q(is_linked=True, scored_count__gte=1000)),
+            models.Index(fields=['country_code', '-pp_score', 'profile'], name='pps_country_board_idx',
+                         condition=Q(is_linked=True, scored_count__gte=1000)),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - PP {self.pp_score:,} ({self.scored_count} scored)"
+
+
 class SeriesBadgeStanding(models.Model):
     """Sealed per-(profile, series) standing -- backs the per-series XP + progress ("chasers") leaderboards and a
     profile's per-series breakdown. Recomputed from scratch on every evaluation; a row exists only while the
