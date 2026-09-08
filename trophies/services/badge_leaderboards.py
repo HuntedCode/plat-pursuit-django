@@ -337,14 +337,17 @@ def active_countries():
             .values_list('country_code', flat=True).distinct()
         )
         codes |= set(
-            # FOUR sources, not three. The Shovelware Free board looked like it needed no entry here --
-            # `clean_trophies > 0` seems to imply `total_trophies > 0`, so its countries seem to be a
-            # subset of the Trophies board's. They are not. `Profile.total_trophies` is FILTER-RESPECTING
-            # (it honours the owner's hide_hiddens / hide_zeros settings) and is only written at
-            # `sync_complete`, while `clean_trophies` is a raw sum of tiers off EarnedTrophy. So a hunter
-            # who hides part of their library, or whose first sync has not finished, is on this board with
-            # `total_trophies` still 0 -- and their country was unselectable on the very board they appear
-            # on, which is the exact failure the badge_store comment above records.
+            # FOUR sources, not three. The Shovelware Free board looks like it needs no entry here --
+            # `clean_trophies > 0` seems to imply `total_trophies > 0`, making its countries a subset of
+            # the Trophies board's. It does not, because the two figures are written at different TIMES:
+            # `Profile.total_trophies` is updated at `sync_complete` and on the settings POST, while this
+            # store is rebuilt nightly. A linked hunter whose first sync wrote EarnedTrophy rows and then
+            # failed before completing sits on this board with `total_trophies` still 0, and their country
+            # would be unselectable on the very board they appear on -- the exact failure the badge_store
+            # comment above records.
+            #
+            # (The two figures agree on hidden games: both honour `hide_hiddens`. An earlier version of
+            # this comment leaned on that difference, which no longer exists -- the timing one does.)
             clean_store().filter(clean_trophies__gt=0).exclude(country_code='')
             .values_list('country_code', flat=True).distinct()
         )

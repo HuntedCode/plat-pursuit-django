@@ -15,7 +15,7 @@ See docs/design/rebuild/leaderboards-rebuild.md.
 import pytest
 from django.core.management import call_command
 
-from trophies.models import SHOVELWARE_FLAGGED_STATUSES, Game, ProfileTrophyStanding
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, Game, ProfileTrophyStanding
 from tests.factories import EarnedTrophyFactory, GameFactory, ProfileFactory, TrophyFactory
 
 pytestmark = pytest.mark.django_db
@@ -107,6 +107,72 @@ def test_the_tier_breakdown_is_filtered_too():
     row = _standing(profile)
     assert (row.clean_bronzes, row.clean_silvers, row.clean_golds) == (3, 2, 1)
     assert row.clean_trophies == 6, 'clean_trophies must be the sum of the tiers it reports'
+
+
+def test_hidden_games_are_excluded_for_a_hunter_who_hides_them():
+    """`hide_hiddens` is honoured, the same courtesy `Profile.total_trophies` extends -- so the trophy
+    figure beside a hunter's name means the same thing on both trophy boards.
+
+    Every counter obeys it, not just the total: a row pairing a filtered platinum count with an unfiltered
+    trophy total would describe two different libraries on one line.
+    """
+    profile = ProfileFactory(is_linked=True, hide_hiddens=True)
+    game = GameFactory(shovelware_status='clean')
+    _earn(profile, game, 'platinum')
+    _earn(profile, game, 'bronze', 3)
+    EarnedTrophy.objects.filter(profile=profile, trophy__trophy_type='bronze').update(user_hidden=True)
+
+    row = _standing(profile)
+    assert row.clean_bronzes == 0, 'a hidden game\'s trophies counted for a hunter who hides them'
+    assert row.clean_plats == 1 and row.clean_trophies == 1
+
+
+def test_hidden_games_still_count_for_a_hunter_who_does_not_hide_them():
+    """The other direction, so the filter above cannot pass by dropping hidden trophies for everybody.
+    `user_hidden` is set by sync on any game PSN stopped returning; it only MEANS "leave this out" for a
+    hunter who asked."""
+    profile = ProfileFactory(is_linked=True, hide_hiddens=False)
+    game = GameFactory(shovelware_status='clean')
+    _earn(profile, game, 'platinum')
+    _earn(profile, game, 'bronze', 3)
+    EarnedTrophy.objects.filter(profile=profile, trophy__trophy_type='bronze').update(user_hidden=True)
+
+    row = _standing(profile)
+    assert row.clean_bronzes == 3 and row.clean_trophies == 4
+
+
+def test_hide_zeros_cannot_move_an_earned_count():
+    """Documented, not merely omitted. `hide_zeros` drops games with ZERO earned trophies -- which
+    contribute nothing to a count of EARNED trophies, so it cannot change any figure here.
+
+    It cannot move `Profile.total_trophies` either, for the same reason: excluding rows that add 0 from a
+    SUM leaves the SUM alone. On a profile it only changes `total_unearned` and the average derived from
+    it. Pinned so nobody 'fixes' the omission by adding a filter that does nothing but cost a join.
+    """
+    game = GameFactory(shovelware_status='clean')
+    off = ProfileFactory(is_linked=True, hide_zeros=False)
+    on = ProfileFactory(is_linked=True, hide_zeros=True)
+    for p in (off, on):
+        _earn(p, game, 'platinum')
+        # A game they have opened and earned nothing in -- exactly what hide_zeros is about.
+        EarnedTrophyFactory(profile=p, trophy=TrophyFactory(game=game, trophy_type='gold'), earned=False)
+
+    assert _standing(off).clean_trophies == _standing(on).clean_trophies == 1
+
+
+def test_toggling_hide_hiddens_moves_the_figure_on_the_next_run():
+    """The setting is read at RECOMPUTE time, so a hunter who changes it sees the board follow on the next
+    nightly rather than immediately -- which is the same lag every other figure in this store has, and
+    worth pinning so the delay is a known property rather than a bug report."""
+    profile = ProfileFactory(is_linked=True, hide_hiddens=False)
+    game = GameFactory(shovelware_status='clean')
+    _earn(profile, game, 'gold', 2)
+    EarnedTrophy.objects.filter(profile=profile).update(user_hidden=True)
+    assert _standing(profile).clean_trophies == 2
+
+    profile.hide_hiddens = True
+    profile.save(update_fields=['hide_hiddens'])
+    assert _standing(profile).clean_trophies == 0, 'the recompute did not pick the setting up'
 
 
 def test_unearned_trophies_do_not_count():
@@ -254,11 +320,12 @@ def test_a_hunter_who_unlinks_keeps_being_corrected():
 def test_the_country_picker_offers_a_country_that_only_this_board_has():
     """The picker reads FOUR sources, and this board had to become the fourth.
 
-    It looked like it need not be: `clean_trophies > 0` seems to imply `total_trophies > 0`, making its
-    countries a subset of the Trophies board's. That is false. `Profile.total_trophies` is
-    FILTER-RESPECTING -- it honours the owner's hide_hiddens / hide_zeros settings -- and is only written
-    at `sync_complete`, while `clean_trophies` is a raw sum of tiers off EarnedTrophy. So a hunter who
-    hides part of their library sits on this board with `total_trophies` at 0.
+    It looks like it need not be: `clean_trophies > 0` seems to imply `total_trophies > 0`, making its
+    countries a subset of the Trophies board's. It does not, because the two figures are written at
+    different TIMES. `Profile.total_trophies` is updated at `sync_complete` and on the settings POST;
+    this store is rebuilt nightly. A linked hunter whose sync wrote EarnedTrophy rows and then failed
+    before completing sits on this board with `total_trophies` still 0 -- which is what the fixture below
+    represents.
 
     Left out, their country was unselectable on the very board they appear on, cached for an hour -- word
     for word the failure `active_countries()`' own docstring already records for the badge store.

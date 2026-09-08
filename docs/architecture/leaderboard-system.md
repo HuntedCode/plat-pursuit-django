@@ -339,9 +339,15 @@ Three things that are easy to get wrong:
   computed, stored and never read. The cost: a newly-verified hunter joins this board on the next nightly
   rather than instantly. That is the one exception to the "verifying puts you on the boards immediately"
   rule stated above.
-- **`clean_trophies > 0` does NOT imply `total_trophies > 0`.** `Profile.total_trophies` is
-  filter-respecting (hide_hiddens / hide_zeros) and sync-written; `clean_trophies` is a raw sum off
-  `EarnedTrophy`. A hunter who hides part of their library is on this board and not on Trophies, which is
-  why `active_countries()` needs this store as a fourth source -- omitting it left their country
-  unselectable on the very board they appear on.
+- **`clean_trophies` honours `hide_hiddens`, like `Profile.total_trophies` does**, so the trophy figure
+  beside a hunter's name means the same thing on both trophy boards. Every counter in the store obeys it,
+  including `clean_plats` -- which diverges from `Profile.total_plats`, an UNFILTERED signal-maintained
+  counter. The Trophies board therefore sorts on an unfiltered key and breaks ties on a filtered one;
+  this board is internally consistent instead. `hide_zeros` is not applied and cannot be: it drops games
+  with zero earned trophies, which contribute nothing to a count of earned ones.
+- **`clean_trophies > 0` still does NOT imply `total_trophies > 0`**, because the two are written at
+  different TIMES -- `total_trophies` at `sync_complete`, this store nightly. A hunter whose sync wrote
+  `EarnedTrophy` rows and then failed sits on this board with `total_trophies` at 0, which is why
+  `active_countries()` needs this store as a fourth source; omitting it left their country unselectable
+  on the very board they appear on.
 

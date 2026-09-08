@@ -148,10 +148,25 @@ class Command(BaseCommand):
     def _process_chunk(self, profile_ids, dry_run):
         """One GROUP BY for the chunk's counts, one read of the profiles, one create + one update."""
         now = timezone.now()
+        # HIDDEN GAMES, per the owner's own setting -- the same courtesy `Profile.total_trophies` extends,
+        # so the figure beside a hunter's name means the same thing on both trophy boards.
+        #
+        # `EarnedTrophy.user_hidden` is denormalized onto the row by sync ("True if user has game
+        # hidden/deleted"), so this needs no join to ProfileGame. `.exclude(a, b)` is NOT (a AND b): rows
+        # are dropped only for hunters who asked for it.
+        #
+        # `hide_zeros` is deliberately absent, and it is not an oversight. It excludes games with ZERO
+        # earned trophies -- which contribute nothing to a count of EARNED trophies, so it cannot move any
+        # figure here. It does not move `Profile.total_trophies` either, for the same reason; on the
+        # profile it only changes `total_unearned` and the average progress derived from it.
+        hiders = set(
+            Profile.objects.filter(id__in=profile_ids, hide_hiddens=True).values_list('id', flat=True)
+        )
         rows = (
             EarnedTrophy.objects
             .filter(profile_id__in=profile_ids, earned=True)
             .exclude(trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES)
+            .exclude(profile_id__in=hiders, user_hidden=True)
             .values('profile_id')
             .annotate(
                 bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
@@ -185,10 +200,17 @@ class Command(BaseCommand):
             silver = c.get('silver', 0)
             gold = c.get('gold', 0)
             plat = c.get('platinum', 0)
-            # The SUM OF THE TIERS, deliberately not a mirror of `Profile.total_trophies`. That figure is
-            # filter-respecting (it honours the owner's hide_hiddens / hide_zeros display settings), and a
-            # public board whose ordering moved when a hunter changed a private display preference would
-            # be ranking on something no other reader can see.
+            # The SUM OF THE TIERS, and every tier above was gathered under the SAME filters -- shovelware
+            # excluded, hidden games excluded for hunters who hide them. That matters more than it looks:
+            # a row pairing a filtered platinum count with an unfiltered trophy total would describe two
+            # different libraries on one line, which is the same argument that put the bronze/silver/gold
+            # split in this store rather than reading it off Profile.
+            #
+            # NOTE this diverges from `Profile.total_plats`, which is UNFILTERED (it is signal-maintained,
+            # so it cannot respond to a setting) while `Profile.total_trophies` IS filtered. The Trophies
+            # board therefore sorts on an unfiltered key and breaks ties on a filtered one. This board is
+            # internally consistent instead; the cost is that a hunter who hides games can read a slightly
+            # lower platinum count here than on the board beside it, which is the honest direction to err.
             trophies = bronze + silver + gold + plat
             fields = {
                 'clean_plats': plat, 'clean_trophies': trophies, 'clean_bronzes': bronze,

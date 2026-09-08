@@ -3973,6 +3973,11 @@ class ProfileTrophyStanding(models.Model):
     profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='clean_standing')
     # The board's sort key and its tiebreak, mirroring the Trophies board's own ordering
     # (`badge_leaderboards.TROPHY_KEYS`) so the two boards rank by the same rule on different populations.
+    #
+    # Both honour the owner's `hide_hiddens` setting, exactly as `Profile.total_trophies` does, so the
+    # trophy figure beside a hunter's name means the same thing on both trophy boards. `hide_zeros` is
+    # not applied and cannot be: it drops games with ZERO earned trophies, which contribute nothing to a
+    # count of earned ones. (It does not move `Profile.total_trophies` either, for the same reason.)
     clean_plats = models.PositiveIntegerField(default=0)
     clean_trophies = models.PositiveIntegerField(default=0)
     # The tier breakdown the row renders. Materialized alongside rather than derived, because a row
@@ -3994,11 +3999,10 @@ class ProfileTrophyStanding(models.Model):
     #
     # An earlier version of this comment justified the omission differently: that the store is not an
     # `active_countries()` source at all, because `clean_trophies > 0` implies `total_trophies > 0` and so
-    # its countries are a subset of the Trophies board's. That was FALSE. `Profile.total_trophies` is
-    # filter-respecting (hide_hiddens / hide_zeros) and is only written at `sync_complete`, while
-    # `clean_trophies` is a raw sum off EarnedTrophy -- so a hunter who hides part of their library, or
-    # whose first sync has not finished, sits on this board with `total_trophies` at 0. The picker was
-    # missing their country as a result. It is a fourth source now.
+    # its countries are a subset of the Trophies board's. That was FALSE -- the two are written at
+    # different times (`total_trophies` at `sync_complete`, this store nightly), so a hunter whose sync
+    # wrote EarnedTrophy rows and then failed sits on this board with `total_trophies` at 0. The picker
+    # was missing their country as a result. It is a fourth source now.
     country_code = models.CharField(max_length=5, blank=True, default='')
     # The board PREDICATE, denormalized for the same reason as everywhere else: a predicate on another
     # table cannot go in this table's partial indexes. No `db_index` of its own -- a standalone btree on
