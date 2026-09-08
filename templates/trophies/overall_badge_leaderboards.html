@@ -404,8 +404,26 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             if (name) { title.textContent = name.textContent.trim(); }
         }
         if (card && count) {
-            var tally = card.querySelector('.pp-tally');
-            if (tally) { count.textContent = tally.textContent.trim(); }
+            // The tally's SOURCE VALUE, not its rendered text. `boardEntrance` runs immediately above
+            // this on every mount and starts the Tally's count-up, and countUp's first write is the FROM
+            // value -- so by the time this reads the element it says "0". The bar copied that zero and
+            // kept it, because it is synced per mount and never again: every board read "0 hunters" while
+            // the card beside it finished ticking to the real figure. `data-countup` is what the server
+            // sent; the text is a frame of an animation.
+            //
+            // The SAME selector `boardEntrance` uses to find that tally, deliberately. They were
+            // `.lb-boardcard__tally [data-countup]` there and `.pp-tally[data-countup]` here -- the same
+            // node today, but two ways of naming it, so dropping `pp-tally` from the shared card partial
+            // would leave the card ticking while this returned null and the bar silently went back to
+            // showing the previous board's figure. One name, one failure mode.
+            //
+            // NOT counted up to. The bar is `visibility: hidden` until StickyReveal pins it, and it is
+            // only ever pinned once the board card has scrolled AWAY -- the bar exists because the card
+            // is gone. The two are never on screen together, so a tick here animates behind a hidden
+            // element on the load path and on every swap (which scrolls to top before re-mounting).
+            var tally = card.querySelector('.lb-boardcard__tally [data-countup]');
+            var total = tally ? parseFloat(tally.dataset.countup) : NaN;
+            if (!isNaN(total)) { count.textContent = Math.round(total).toLocaleString(); }
         }
         // The rank chip shows only when the viewer is ON the board being read -- which changes with the
         // tab AND with the filters, so it is re-read from the board root every mount.
