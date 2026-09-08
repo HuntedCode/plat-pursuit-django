@@ -1,8 +1,9 @@
 """Global Boards -- the rebuilt `/leaderboards/` landing (step 4).
 
-Three boards as tabs, country as a filter across all of them, and the viewer's own standing shown ONCE in
-the header rather than per row. That last one is not a layout preference: a row identical for every
-viewer is what makes the whole page cacheable, and a personal rank in the wall would forfeit it.
+FOUR boards as tabs since 2026-09 (Shovelware Free leads and is the default), country as a filter across
+all of them, and the viewer's own standing shown ONCE in the header rather than per row. That last one is
+not a layout preference: a row identical for every viewer is what makes the whole page cacheable, and a
+personal rank in the wall would forfeit it.
 
 See docs/design/rebuild/leaderboards-rebuild.md.
 """
@@ -11,7 +12,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from trophies.models import ProfileBadgeStanding, ProfileCareerStanding
+from trophies.models import ProfileBadgeStanding, ProfileCareerStanding, ProfileTrophyStanding
 from tests.factories import ProfileFactory
 from tests.engine.test_leaderboards_overall_cost import active_board
 
@@ -20,16 +21,29 @@ pytestmark = pytest.mark.django_db
 URL = reverse('overall_badge_leaderboards')
 
 
-def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0, career=0, level=0):
+def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0, career=0, level=0,
+            clean_plats=None, clean_trophies=None):
     """A hunter placed on whichever boards the caller gives them figures for.
 
     `plats`/`trophies` land on PROFILE's own counters, because the Trophies board reads those directly --
     it is not badge-scoped and has no standing row. `points` still needs a ProfileBadgeStanding.
+
+    The Shovelware Free board reads its OWN store, so a hunter given trophy figures gets a matching
+    `ProfileTrophyStanding` -- i.e. a library with no flagged games in it, which is the sensible default
+    for a fixture that is not about shovelware. Pass `clean_plats` / `clean_trophies` to seed a hunter
+    whose clean figures differ from their raw ones. Without this every fixture in this file would leave
+    the DEFAULT board empty, which is what makes it worth stating: the board that leads the strip is the
+    one a test forgets to populate.
     """
     p = ProfileFactory(
         display_psn_username=name, country_code=country, country=country_name,
         is_linked=True, total_plats=plats, total_trophies=trophies,
     )
+    cp = plats if clean_plats is None else clean_plats
+    ct = trophies if clean_trophies is None else clean_trophies
+    if ct:
+        ProfileTrophyStanding.objects.create(
+            profile=p, clean_plats=cp, clean_trophies=ct, country_code=country, is_linked=True)
     if points:
         ProfileBadgeStanding.objects.create(profile=p, country_code=country, total_xp=points, is_linked=True)
     if career:
@@ -38,21 +52,170 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     return p
 
 
-def test_the_landing_offers_three_boards_and_defaults_to_trophies(client):
-    """Trophies leads because it is the board with the most entrants -- every linked hunter with a trophy
-    is on it, which is the one a first-time visitor is most likely to appear on.
+def test_the_landing_offers_four_boards_and_defaults_to_shovelware_free(client):
+    """FOUR boards, and the landing opens on Shovelware Free (2026-09).
 
-    It has been renamed twice: "Progress" (which named the STORE rather than what it ranks), then "Badge
-    Trophies" (badge-scoped, and the only thing in the subsystem needing a full-library aggregate). The
-    label is asserted here as well as the key, because the two are separately changeable and a rename
-    landing in only one of them is the likely half-done state.
+    Trophies led before it, on the grounds that it has the most entrants -- still true, since this board
+    drops anyone whose whole library is flagged. Entrant count stopped being the tie-breaker: the two rank
+    the same hunters by the same rule over different populations, and this one is the more honest answer
+    to "who has done the most".
+
+    The Trophies board has been renamed twice ("Progress", then "Badge Trophies"), which is why labels are
+    asserted alongside keys here: the two are separately changeable and a rename landing in only one of
+    them is the likely half-done state.
     """
+    _ranked('Somebody', plats=3, trophies=30)
     body = client.get(URL).content.decode()
 
-    for key in ('trophies', 'points', 'career'):
+    for key in ('clean', 'trophies', 'points', 'career'):
         assert f'data-board="{key}"' in body, f'the {key} board is missing from the tab strip'
-    assert active_board(body) == 'trophies', 'the landing does not default to Trophies'
-    assert '>Trophies</span>' in body, 'the board is still labelled something else in the strip'
+    assert active_board(body) == 'clean', 'the landing does not default to Shovelware Free'
+    assert '>Shovelware Free</span>' in body, 'the board is labelled something else in the strip'
+    assert '>Trophies</span>' in body, 'the Trophies board lost its tab'
+
+
+def test_the_default_is_derived_from_the_strip_order_not_repeated(client):
+    """Two places could name the default -- the first tab, and the fallback `?tab=` resolves to -- and
+    they must not be able to disagree. `DEFAULT_BOARD` is derived from `BOARDS[0]`, so reordering the
+    strip moves both at once.
+
+    Worth pinning because the failure is quiet: an unknown `?tab=` would land on a board that is no longer
+    first, so the page would render correctly with the WRONG tab lit and nothing would error.
+    """
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
+    assert V.DEFAULT_BOARD == V.BOARDS[0][0], 'the default no longer follows the tab strip'
+    assert V.DEFAULT_BOARD in V.BOARD_KEYS
+
+    _ranked('Somebody', plats=3, trophies=30)
+    unknown = client.get(URL, {'tab': 'not-a-board'}).content.decode()
+    assert active_board(unknown) == V.DEFAULT_BOARD, 'an unknown tab does not fall back to the default'
+
+
+def test_retired_tabs_land_on_the_board_they_MEANT_not_on_the_default(client):
+    """`progress`, `xp`, `country` and `series` are old bookmarks. Each names a board that still exists,
+    so each resolves to THAT board rather than to whatever leads the strip today.
+
+    This became a real distinction in 2026-09, when Shovelware Free took the first slot: mapping these to
+    "the default" would have silently redirected every old Trophies bookmark onto a different board with
+    different numbers.
+    """
+    _ranked('Somebody', plats=3, trophies=30, points=100)
+
+    for legacy, expected in (('progress', 'trophies'), ('series', 'trophies'),
+                             ('xp', 'points'), ('country', 'points')):
+        resp = client.get(URL, {'tab': legacy})
+        # 200, not a 404: a stale bookmark should land on a board rather than an error. `series` is the
+        # odd one -- it was a DIRECTORY placeholder for a page that was built and then removed, so it
+        # names no board of its own and rides with the rest.
+        assert resp.status_code == 200, f'?tab={legacy} 404s instead of landing somewhere'
+        body = resp.content.decode()
+        assert active_board(body) == expected, (
+            f'?tab={legacy} landed on {active_board(body)!r}, not the {expected!r} board it named'
+        )
+
+
+def test_the_landing_survives_an_empty_default_board(client):
+    """THE POST-DEPLOY STATE, and the reason deploy-checklist #10 exists.
+
+    `ProfileTrophyStanding` ships empty: between migration 0332 and the backfill, the board the landing
+    opens on has no rows at all. That is not a degraded corner of a page, it is the section's front door,
+    so "renders an empty wall" and "500s" are very different outcomes and only one of them is survivable.
+
+    Hunters are seeded on the OTHER boards, so this is specifically the default board being empty rather
+    than an empty site -- which is exactly the shape of the deploy window.
+    """
+    _ranked('Elsewhere', points=500, career=900, level=9, clean_trophies=0)
+    assert not ProfileTrophyStanding.objects.exists(), 'the fixture put someone on the default board'
+
+    resp = client.get(URL)
+
+    assert resp.status_code == 200, 'the landing 500s when its default board has no rows'
+    assert resp.context['active_tab'] == 'clean'
+    assert resp.context['ranked_total'] == 0
+    body = resp.content.decode()
+    assert 'data-board="clean"' in body, 'the tab strip did not survive the empty board'
+    assert 'data-board="trophies"' in body, 'the other boards became unreachable'
+
+
+def _order(body, *names):
+    """The order the given hunters appear in a rendered wall."""
+    return sorted(names, key=body.index)
+
+
+def test_the_default_board_serves_ITS_OWN_rows_not_the_trophies_boards(client):
+    """THE headline behaviour, and it had no test that could fail.
+
+    Every fixture in this file used to give a hunter the SAME figures on both trophy boards (`_ranked`
+    mirrors `plats`/`trophies` into the clean columns, and `ProfileFactory` mirrors `total_trophies` into
+    `total_trophies_raw`), so no assertion could tell the two boards apart. Rewiring the `clean` tab to
+    serve `lb.trophy_rows` left 129 tests green -- including the two written specifically to cover that
+    path, whose docstrings say they exist because the clean board hydrates through a different one.
+
+    So this fixture INVERTS them: a hunter who is enormous on Trophies and nearly absent from Shovelware
+    Free, and one who is the reverse. The two boards must then disagree about the order, which is only
+    possible if each is reading its own store.
+    """
+    _ranked('JunkHunter', plats=99, trophies=999, clean_plats=0, clean_trophies=1)
+    _ranked('RealHunter', plats=1, trophies=10, clean_plats=50, clean_trophies=500)
+
+    clean = client.get(URL, {'tab': 'clean'}).content.decode()
+    trophies = client.get(URL, {'tab': 'trophies'}).content.decode()
+
+    assert _order(clean, 'JunkHunter', 'RealHunter') == ['RealHunter', 'JunkHunter'], (
+        'the Shovelware Free board is not ordering by its own store'
+    )
+    assert _order(trophies, 'JunkHunter', 'RealHunter') == ['JunkHunter', 'RealHunter'], (
+        'the fixture does not actually invert the two boards, so the assertion above proves nothing'
+    )
+    # ...and the FIGURE each row shows comes from the same store it was ordered by, or the board would
+    # sort on one number and display another.
+    assert '999' not in clean.split('lb-wall')[1], 'the clean wall is showing raw trophy totals'
+
+
+def test_the_rows_endpoint_serves_the_default_board(client):
+    """Every rows-endpoint test in this file pinned `tab=trophies`, so the board that now serves every
+    bare visit had no window coverage -- and it hydrates through a DIFFERENT path (`_store_for` returns
+    `profile_id` / `profile__`, a join, where Trophies' store IS Profile)."""
+    for i in range(4):
+        _ranked(f'Clean{i}', plats=10 - i, trophies=100 - i)
+
+    resp = client.get(reverse('leaderboard_rows'), {'tab': 'clean', 'range': 2})
+    assert resp.status_code == 200
+    assert 'lb-row' in resp.content.decode(), 'the clean board served no rows'
+
+    # ...and they are the CLEAN board's rows. Without an inverting fixture this endpoint test passed with
+    # the tab wired to `trophy_rows`, because every hunter had identical figures on both boards.
+    _ranked('OnlyClean', plats=0, trophies=1, clean_plats=900, clean_trophies=9000)
+    top = client.get(reverse('leaderboard_rows'), {'tab': 'clean', 'range': 1}).content.decode()
+    assert 'OnlyClean' in top, 'the rows endpoint served a board this hunter does not lead'
+
+    suggest = client.get(reverse('leaderboard_rows'), {'tab': 'clean', 'suggest': 'Clean'})
+    assert suggest.status_code == 200
+    players = suggest.json()['players']
+    assert players and all(p['rank'] >= 1 for p in players), 'the clean board typeahead is not ranked'
+
+
+def test_the_default_board_is_a_constant_number_of_queries(client):
+    """Per-row hydration is invisible at test scale and quadratic in production. The existing guard covers
+    the Trophies board; this one covers the board that serves every bare visit, which reads a standing
+    store and therefore JOINS to Profile to hydrate names -- a different path, and the more likely one to
+    grow a per-row read."""
+    for i in range(3):
+        _ranked(f'Few{i}', plats=i, trophies=i * 10)
+    client.get(URL, {'tab': 'clean'})
+    with CaptureQueriesContext(connection) as small:
+        client.get(URL, {'tab': 'clean'})
+
+    for i in range(20):
+        _ranked(f'Many{i}', plats=i, trophies=i * 10)
+    client.get(URL, {'tab': 'clean'})
+    with CaptureQueriesContext(connection) as large:
+        client.get(URL, {'tab': 'clean'})
+
+    assert len(large.captured_queries) == len(small.captured_queries), (
+        f'{len(small.captured_queries)} queries for 3 rows but {len(large.captured_queries)} for 23'
+    )
 
 
 def test_country_is_a_filter_not_a_tab(client):
@@ -186,19 +349,6 @@ def test_the_empty_board_says_which_kind_of_empty_it_is(client):
     sliced = client.get(URL, {'tab': 'trophies', 'country': 'GB'}).content.decode()
     assert 'Elsewhere' in sliced   # sanity: GB has someone on the progress board
 
-
-def test_the_retired_series_tab_lands_on_a_board(client):
-    """`?tab=series` was a DIRECTORY, out of the tab strip, held open as a placeholder for
-    `/leaderboards/badges/`. That page was built and then removed, and the placeholder outlived it while
-    reading the RETIRED tier-era `Badge` model -- a frozen catalogue beside live counts.
-
-    A stale bookmark maps to the default board rather than 404ing, the same courtesy the other retired tab
-    keys (`xp`, `country`, `progress`) get.
-    """
-    resp = client.get(URL, {'tab': 'series'})
-
-    assert resp.status_code == 200
-    assert resp.context['active_tab'] == 'trophies'
 
 def test_a_career_only_hunter_makes_their_country_selectable(client):
     """The two economies are sealed apart, so a hunter can hold Career XP and no badge standing at all.

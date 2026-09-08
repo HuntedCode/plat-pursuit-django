@@ -25,7 +25,7 @@ import pytest
 
 from trophies.models import (
     ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
-    SeriesBadgeStanding,
+    ProfileTrophyStanding, SeriesBadgeStanding,
 )
 from trophies.services import badge_leaderboards as lb
 from tests.factories import ProfileFactory
@@ -209,6 +209,7 @@ def test_series_EDITION_board_rank_equals_position_on_that_editions_own_date():
     (lb.SERIES_EDITION_KEYS, 'SERIES_EDITION_KEYS'),
     (lb.JOB_KEYS, 'JOB_KEYS'),
     (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
+    (lb.CLEAN_KEYS, 'CLEAN_KEYS'),
 ])
 def test_every_board_order_ends_in_the_unique_key(keys, label):
     """The property the tests above depend on. Without a unique final key the order is not total, ties are
@@ -234,8 +235,98 @@ def test_every_module_level_keys_tuple_is_covered_by_the_test_above():
         (lb.XP_KEYS, 'XP_KEYS'), (lb.TROPHY_KEYS, 'TROPHY_KEYS'), (lb.CAREER_KEYS, 'CAREER_KEYS'),
         (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'),
         (lb.SERIES_EDITION_KEYS, 'SERIES_EDITION_KEYS'), (lb.JOB_KEYS, 'JOB_KEYS'),
-        (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
+        (lb.EARNERS_KEYS, 'EARNERS_KEYS'), (lb.CLEAN_KEYS, 'CLEAN_KEYS'),
     ]}
     assert declared == covered, (
         f'uncovered key tuples: {sorted(declared - covered)}. Add them to the parametrize list above.'
     )
+
+
+# ------------------------------------------------------------------ Shovelware Free ----------------------
+
+def _clean(plats, trophies, country=''):
+    return ProfileTrophyStanding.objects.create(
+        profile=ProfileFactory(country_code=country), clean_plats=plats, clean_trophies=trophies,
+        country_code=country, is_linked=True)
+
+
+def test_shovelware_free_rank_equals_position_across_a_two_deep_tie():
+    """Both visible keys tied, so only the unique tail separates them.
+
+    This board ties HARDER than the Trophies board it sits beside, not less: excluding shovelware pushes
+    hunters DOWN onto shared values, so the clumps at 0, 1 and 2 clean platinums are bigger than the
+    corresponding clumps on the unfiltered board. A rank counted on the visible keys alone would hand
+    every member of a clump the same number.
+    """
+    for _ in range(9):
+        _clean(3, 120)                    # tied on BOTH keys -- separated only by `profile_id`
+    _clean(9, 400)
+    _clean(3, 500)                        # same platinums, more trophies: ahead of the clump
+
+    _assert_agrees(lb.clean_rows(limit=100), lb.clean_rank, 'Shovelware Free')
+
+
+def test_shovelware_free_rank_equals_position_under_a_country_slice():
+    """A slice is a different board with a different population, so the rank must be counted against the
+    same slice the rows came from.
+
+    THE GB ROWS ARE SEEDED FIRST, and that ordering is the test. Every figure here is tied, so the board
+    is ordered entirely by the `profile_id` tail -- which means creating CA first would give the CA
+    hunters the LOWEST ids, and a country-blind rank would return exactly the same 1..5 the slice does.
+    The test would pass with `_slice` deleted. Seeding GB first puts three foreign rows ahead of every CA
+    row in id order, so dropping the slice reports 4..8 against slots 1..5 and fails loudly.
+    """
+    for _ in range(3):
+        _clean(2, 50, country='GB')
+    for _ in range(5):
+        _clean(2, 50, country='CA')
+
+    _assert_agrees(lb.clean_rows(limit=100, country='CA'),
+                   lambda pid: lb.clean_rank(pid, country='CA'), 'Shovelware Free (CA)')
+
+
+def test_a_hunter_whose_whole_library_is_shovelware_is_not_on_the_board():
+    """The membership rule, and the state it deliberately produces. `clean_trophies = 0` is not a missing
+    row -- the nightly recompute writes one for every linked hunter -- so it has to be excluded from the
+    rows AND answer None for its rank.
+
+    Guarding the rank on None alone is the trap `career_xp_rank` records: it hands every zeroed hunter
+    `count(everyone) + 1`, one shared rank pointing at a board none of them appear on.
+    """
+    flagged_only = _clean(0, 0)
+    real = _clean(1, 10)
+
+    rows = lb.clean_rows(limit=100)
+    assert [r[0] for r in rows] == [real.profile_id], 'an all-shovelware library reached the board'
+    assert lb.clean_rank(flagged_only.profile_id) is None, (
+        'a hunter with no clean trophies was given a rank on a board they are not on'
+    )
+    assert lb.clean_rank(real.profile_id) == 1
+
+
+def test_the_board_count_matches_the_rows_the_board_serves():
+    """The count sizes the virtual spacer and the rows fill it. They come from two expressions, and the
+    failure when they disagree is silent: the wall promises N and the reader hits blank space, or the
+    tail is unreachable behind a spacer that is too short.
+
+    The specific hazard here is conditioning the count on `clean_plats` (the SORT key) rather than
+    `clean_trophies` (the MEMBERSHIP rule) -- a hunter with clean trophies and no clean platinum is on
+    this board, and there are many of them.
+    """
+    _clean(0, 40)                         # clean trophies, NO clean platinum -- on the board
+    _clean(2, 90)
+    _clean(0, 0)                          # entirely flagged -- off it
+
+    assert lb.board_count('clean') == len(lb.clean_rows(limit=100)) == 2
+
+
+def test_an_unlinked_hunter_is_off_the_board_even_with_a_standing_row():
+    """The `is_linked` gate is read from the store's OWN mirror, which is what its partial indexes are
+    conditioned on -- so a stale mirror does not merely misfile somebody, it puts an unverified account
+    on a public board."""
+    row = ProfileTrophyStanding.objects.create(
+        profile=ProfileFactory(), clean_plats=99, clean_trophies=999, is_linked=False)
+
+    assert lb.clean_rows(limit=100) == []
+    assert lb.clean_rank(row.profile_id) is None
+    assert lb.board_count('clean') == 0

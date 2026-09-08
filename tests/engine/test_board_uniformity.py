@@ -35,6 +35,7 @@ from tests.factories import (
     ProfileGameFactory,
 )
 from trophies.models import Game, Job, ProfileJobXP, SeriesBadgeStanding
+from trophies.views.badge_views import OverallBadgeLeaderboardsView
 
 pytestmark = pytest.mark.django_db
 
@@ -107,6 +108,11 @@ def _game_board(n=60):
 #: (label, how to render the board, how to render one window past the first)
 SURFACES = ['global', 'badge', 'job', 'game']
 
+#: Which board the `global` surface's bare page actually serves. Read from the view rather than typed, so
+#: promoting a different board to the front of the strip cannot leave the window and typeahead below
+#: fetching a board the page is not showing.
+_GLOBAL_TAB = OverallBadgeLeaderboardsView.DEFAULT_BOARD
+
 
 def _render(surface, client, fresh=True):
     """The BOARD-BEARING response for one surface, plus a window fetch from the same endpoint.
@@ -117,8 +123,14 @@ def _render(surface, client, fresh=True):
     if surface == 'global':
         if fresh:
             _global_board()
+        # The PAGE and its WINDOW must describe ONE board -- that is this file's whole thesis. The page
+        # is a bare `/leaderboards/`, which since 2026-09 serves `clean`, while this passed
+        # `tab=trophies`: two different boards, undetected only because the landing fixtures mirror the
+        # raw counters into the clean store, making them numerically identical. Pinned to the page's own
+        # default so a divergence between the landing board and its rows endpoint cannot hide.
         return (client.get(reverse('overall_badge_leaderboards')),
-                client.get(reverse('leaderboard_rows'), {'tab': 'trophies', 'range': 51}))
+                client.get(reverse('leaderboard_rows'),
+                           {'tab': _GLOBAL_TAB, 'range': 51}))
     if surface == 'badge':
         if fresh:
             _series_board()
@@ -137,7 +149,7 @@ def _render(surface, client, fresh=True):
 def _suggest_for(surface, q):
     """Where each board's typeahead lives. Three share the rows/panel endpoint; game detail has its own."""
     if surface == 'global':
-        return reverse('leaderboard_rows'), {'tab': 'trophies', 'suggest': q}
+        return reverse('leaderboard_rows'), {'tab': _GLOBAL_TAB, 'suggest': q}
     if surface == 'badge':
         return reverse('badge_ranks_panel', args=['uniform']), {'suggest': q}
     if surface == 'job':

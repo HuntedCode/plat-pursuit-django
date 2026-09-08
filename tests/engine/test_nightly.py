@@ -60,6 +60,128 @@ def test_contract_detection_runs_AFTER_the_dlc_sweep():
     assert labels.index('contract detection') > labels.index('DLC detection')
 
 
+def test_shovelware_detection_leads_the_chain():
+    """Its START time is load-bearing to a job OUTSIDE this chain. `evaluate_contract_candidates` runs on
+    its own 04:45 Render entry and reads these flags, which is safe today only because
+    `update_shovelware` starts at 04:00.
+
+    Folding it into `nightly` preserves that only while it runs FIRST. Anywhere else in this list and its
+    start slides behind `evaluate_badges --all`'s pass over every profile, and the 45-minute assumption
+    breaks silently -- the candidate pipeline would read yesterday's flags with nothing failing.
+    """
+    from core.management.commands.nightly import STEPS
+
+    assert STEPS[0][1] == 'update_shovelware', (
+        'shovelware detection no longer starts the chain, so evaluate_contract_candidates (04:45) may '
+        'now read flags that have not been refreshed'
+    )
+
+
+def test_the_clean_standings_SKIP_when_the_shovelware_detection_failed(monkeypatch):
+    """Step order alone does not make the dependency real -- failures here are isolated, so step 2 would
+    happily rebuild the whole board after step 1 raised.
+
+    Rebuilding over YESTERDAY's flags would be harmless and self-healing. The danger is the PARTIAL case:
+    `update_shovelware` applies flags per game, so a mid-sweep failure leaves a half-applied catalogue and
+    the recompute would materialize a board from a flag set that never existed as a consistent snapshot.
+    Skipping leaves last night's board standing, which is a state that did exist.
+    """
+    from core.management.commands import nightly
+
+    ran = []
+
+    def fake(command, **kwargs):
+        ran.append(command)
+        if command == 'update_shovelware':
+            raise RuntimeError('detector fell over')
+
+    monkeypatch.setattr(nightly, 'call_command', fake)
+
+    with pytest.raises(SystemExit) as exc:
+        call_command('nightly')
+
+    assert 'update_shovelware' in ran, 'the detector step never ran'
+    assert 'recompute_clean_standings' not in ran, (
+        'the board was rebuilt from a half-applied catalogue'
+    )
+    # ...and the rest of the night is unaffected: only the dependent skips.
+    assert 'evaluate_badges' in ran, 'an unrelated later step was lost too'
+    assert 'skipped' in str(exc.value), 'the skip is not reported in the failure'
+
+
+def test_a_healthy_run_does_not_skip_the_dependent(monkeypatch):
+    """The other direction, so the guard above cannot pass by never running step 2 at all."""
+    from core.management.commands import nightly
+
+    ran = []
+    monkeypatch.setattr(nightly, 'call_command', lambda command, **kw: ran.append(command))
+    call_command('nightly')
+
+    assert 'recompute_clean_standings' in ran
+
+
+def test_the_clean_standings_run_AFTER_the_shovelware_detection():
+    """The Shovelware Free board's store is a PROJECTION of the flags `update_shovelware` writes, so the
+    two have a real dependency and it is expressed as sequence.
+
+    It has to be. Both `update_shovelware` and `nightly` were scheduled at 04:00 on separate Render
+    entries, so the order between them was whatever the scheduler felt like -- and a recompute that wins
+    that race rebuilds the board from YESTERDAY's catalogue, silently and plausibly. That failure is the
+    reason this command exists (see its module docstring); this is the first step pair with a dependency
+    strong enough to notice it.
+    """
+    from core.management.commands.nightly import STEPS
+
+    labels = [label for label, _cmd, _kw in STEPS]
+    assert labels.index('clean standings') > labels.index('shovelware detection'), (
+        'the board is rebuilt from flags that have not been refreshed yet'
+    )
+
+
+def test_shovelware_detection_is_not_also_a_separate_cron_entry():
+    """It MOVED into this chain rather than being duplicated into it. Two schedulers running the same
+    catalogue-wide re-evaluation would have it racing itself, and `nightly`'s own docstring is explicit
+    that a step here replaces a cron entry rather than joining it.
+
+    Asserted against the cron doc, which is the register of what Render actually runs.
+    """
+    from pathlib import Path
+
+    doc = (Path(__file__).resolve().parents[2] / 'docs' / 'guides' / 'cron-jobs.md').read_text(
+        encoding='utf-8')
+    # Not any MENTION: `evaluate_contract_candidates`'s notes reference `update_shovelware` legitimately,
+    # and matching the whole row flagged that as a duplicate entry.
+    #
+    # `startswith`, not equality: a re-added row carrying an argument (`update_shovelware --force`) is the
+    # same duplicate entry and an exact match would wave it through. The struck-out row survives either
+    # way, since its cell opens with `~~`.
+    #
+    # BOTH registers, and NOT a fixed column index -- which is how half of this guard came to be vacuous.
+    # The command sits in cell 2 of cron-jobs.md (`| time | command | frequency | notes |`) but cell 1 of
+    # management-commands.md (`| command | schedule | notes |`), so pinning index 2 read the SCHEDULE
+    # column of the second file and a live cron row re-added there passed straight through.
+    #
+    # A row counts as a live cron entry only if it ALSO carries a schedule. Both files list this command
+    # in a reference table that describes what it does, which is correct and must stay -- the thing that
+    # must not come back is a row that tells an operator to SCHEDULE it. `~~` excludes the struck-out
+    # rows recording that it was folded in.
+    import re
+    from pathlib import Path as _P
+
+    root = _P(__file__).resolve().parents[2] / 'docs' / 'guides'
+    schedule = re.compile(r'\b(daily|weekly|hourly|monthly|UTC)\b', re.I)
+    rows = []
+    for name in ('cron-jobs.md', 'management-commands.md'):
+        for ln in (root / name).read_text(encoding='utf-8').splitlines():
+            cells = [c.strip() for c in ln.split('|')]
+            names_it = any(c.startswith('`update_shovelware') for c in cells[1:3])
+            if names_it and schedule.search(ln) and '~~' not in ln:
+                rows.append(f'{name}: {ln[:120]}')
+    assert not rows, (
+        f'update_shovelware still has a live cron row while also being a nightly step: {rows}'
+    )
+
+
 def test_milestones_recompute_last_among_the_writers():
     """Milestone metrics read badge standings and ProfileJobXP, both written earlier in this chain."""
     from core.management.commands.nightly import STEPS

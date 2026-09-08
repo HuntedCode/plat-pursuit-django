@@ -834,12 +834,23 @@ class OverallBadgeLeaderboardsView(TemplateView):
     template_name = 'trophies/overall_badge_leaderboards.html'
     paginate_by = board_helpers.PAGE_SIZE
 
-    # (key, label). Order is the tab order; Badge Trophies leads because it has the most entrants.
+    # (key, label). Order is the tab order, and the FIRST is the default a bare `/leaderboards/` lands on.
+    #
+    # Shovelware Free leads (2026-09). Trophies led before it, on the grounds that it has the most
+    # entrants -- which is still true, since this board excludes anyone whose whole library is flagged.
+    # Entrant count stopped being the tie-breaker: the two boards rank the same hunters by the same rule
+    # over different populations, and this one is the more honest answer to "who has done the most", which
+    # is the question a first-time visitor is actually asking. Trophies keeps its tab and its bookmarks.
     BOARDS = (
+        ('clean', 'Shovelware Free'),
         ('trophies', 'Trophies'),
         ('points', 'Badge Points'),
         ('career', 'Career XP'),
     )
+    #: The board a bare `/leaderboards/`, an unknown `?tab=`, or a retired one resolves to. Derived from
+    #: BOARDS rather than repeated, so reordering the strip cannot leave the default naming a board that
+    #: is no longer first -- which is two edits to keep in step, and the kind that gets made once.
+    DEFAULT_BOARD = BOARDS[0][0]
     BOARD_KEYS = {k for k, _ in BOARDS}
     # Only Badge Points slices by edition. An edition is a PlatformGroup, i.e. a BADGE concept; the
     # Trophies board counts trophies across every game and Career XP is the jobs economy, so neither has
@@ -854,12 +865,20 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # in 2026-08, and the placeholder read the RETIRED tier-era `Badge` model, which has had no writer
     # since cutover 5b -- so it rendered a frozen catalogue beside live standing counts. It maps to the
     # default board rather than 404ing: a stale bookmark should land on a board, not on an error.
+    #
+    # They resolve to `trophies` EXPLICITLY, not to the default. Every one of them named the board now
+    # called Trophies, and a bookmark should land where it meant rather than follow whichever board
+    # happens to lead the strip today -- which is what would have happened when Shovelware Free took the
+    # first slot in 2026-09. `series` is the exception and is deliberately left on `trophies` too: it was
+    # a directory placeholder rather than a board, so it has no board it meant, and moving it silently
+    # would be the only way anyone noticed it still existed.
     LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies', 'series': 'trophies'}
 
     #: (primary_label, secondary_label) per board. ONE definition: the column header, the first window and
     #: every window the rows endpoint serves all read it, so the labels above a column and the labels
     #: inside its rows cannot drift -- which is the failure a separate rows endpoint invites.
     FIGURES = {
+        'clean': ('platinums', 'trophies'),
         'trophies': ('platinums', 'trophies'),
         'points': ('points', 'badges'),
         'career': ('XP', 'level'),
@@ -873,6 +892,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: "Badge Points" learns nothing from a lit chip, and this line is the only place on the page that
     #: explains the board they are looking at.
     MEANINGS = {
+        'clean': ('Platinums earned on games that are not shovelware. Total trophies settles a tie.'),
         'trophies': 'Every hunter on the site, ranked by platinums. Total trophies settles a tie.',
         'points': 'Badge points, earned a stage at a time. Every edition counts toward one total.',
         'career': 'Career XP banked from contracts, across all 25 jobs.',
@@ -880,9 +900,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
 
     @classmethod
     def active_tab(cls, request):
-        raw = request.GET.get('tab', 'trophies')
+        raw = request.GET.get('tab', cls.DEFAULT_BOARD)
         raw = cls.LEGACY_TABS.get(raw, raw)
-        return raw if raw in cls.BOARD_KEYS else 'trophies'
+        return raw if raw in cls.BOARD_KEYS else cls.DEFAULT_BOARD
 
     def _active_tab(self):
         return self.active_tab(self.request)
@@ -1029,6 +1049,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
             cc = country or None
             ed = edition or None
             standing = {
+                'clean': lb.clean_rank(profile.id, country=cc),
                 'trophies': lb.trophy_rank(profile.id, country=cc),
                 'points': lb.xp_rank(profile.id, country=cc, edition=ed),
                 'career': lb.career_xp_rank(profile.id, country=cc),
@@ -1071,6 +1092,11 @@ class OverallBadgeLeaderboardsView(TemplateView):
     @staticmethod
     def _store_for(tab, country, edition):
         cc = country or None
+        if tab == 'clean':
+            # Reads a standing store like career/points, so it points AT a profile -- unlike the Trophies
+            # board below, whose store IS Profile.
+            return (lb._slice(lb.clean_store().filter(clean_trophies__gt=0), cc),
+                    lb.CLEAN_KEYS, 'profile_id', 'profile__')
         if tab == 'trophies':
             # The Trophies board's store IS Profile, so its id column is `id` and its name columns are
             # unprefixed -- the other two point AT a profile.
@@ -1100,7 +1126,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
         # is a different hunter from 9 out of 900, and 4,200 points across 30 badges from 4,200 across 6.
         primary_label, secondary_label = OverallBadgeLeaderboardsView.FIGURES[tab]
 
-        if tab == 'trophies':
+        if tab == 'clean':
+            rows = lb.clean_rows(limit=limit, offset=offset, country=cc)
+        elif tab == 'trophies':
             rows = lb.trophy_rows(limit=limit, offset=offset, country=cc)
         elif tab == 'points':
             rows = lb.xp_rows(limit=limit, offset=offset, country=cc, edition=ed)

@@ -63,7 +63,7 @@ second home for them.
 
 | Surface | URL | Role |
 |---|---|---|
-| **Global Boards** (hub landing) | `/leaderboards/` | The three global boards, `.pp-switch` tabs |
+| **Global Boards** (hub landing) | `/leaderboards/` | The four global boards, `.pp-switch` tabs |
 | **Game Boards** | `/leaderboards/games/` | Thin directory → links to game detail's Ranks panel |
 | **Badge Boards** | `/leaderboards/badges/` | Thin directory → links to badge detail's new Ranks panel |
 | **Job Boards** | `/leaderboards/jobs/` | Thin directory → links to job detail's Ranks tab |
@@ -682,6 +682,15 @@ so it would have produced a board that looks migrated and still tiebreaks wrong.
   node on the page into `countUp`, which has no re-entrancy guard, so two quick swaps left two rAF loops
   writing to one element. A proxy that is only ever read AFTER its source is gone should settle, not
   perform. The other browse minibars all snap their counts for the same reason.
+- **A fourth board arrived in 2026-09: Shovelware Free, and it LEADS.** It ranks the same hunters as
+  Trophies by the same rule over a narrower population — platinums on games the detector has not flagged.
+  It is a board rather than a toggle on Trophies because that board ranks `Profile.total_plats` /
+  `total_trophies`, denormalized INT COLUMNS: excluding shovelware cannot be a filter over a column, only
+  a different number, so it needs its own materialized store (`ProfileTrophyStanding`, one nightly writer).
+  Two consequences worth keeping in mind. Its store is **empty until backfilled**, and since it is the
+  DEFAULT tab that is a blank landing page rather than one stale figure — see the deploy checklist. And
+  every retired `?tab=` still resolves to the board it MEANT rather than to "the default", or taking the
+  first slot would have silently redirected every old Trophies bookmark onto different numbers.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
   sums them — the architecture seals them apart on purpose.
 

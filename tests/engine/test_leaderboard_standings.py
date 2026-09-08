@@ -205,7 +205,7 @@ def test_changing_country_propagates_to_every_standing_store():
     """The recompute seams stamp `country_code` on rows they write, which covers a syncing profile. This
     covers the path that bypasses them: the country changing with no recompute behind it, which would
     otherwise leave a hunter ranked in the country they left until their next badge evaluation."""
-    from trophies.models import ProfileEditionStanding
+    from trophies.models import ProfileEditionStanding, ProfileTrophyStanding
 
     profile = ProfileFactory(is_linked=True, country_code='CA')
     ProfileBadgeStanding.objects.create(profile=profile, total_xp=10, country_code='CA')
@@ -214,6 +214,8 @@ def test_changing_country_propagates_to_every_standing_store():
         profile=profile, platform_group_key='ultra-hd', total_xp=10, country_code='CA')
     SeriesBadgeStanding.objects.create(profile=profile, series_slug='s', xp=5, country_code='CA')
     ProfileJobXP.objects.create(profile=profile, job=_job(), total_xp=5, country_code='CA')
+    ProfileTrophyStanding.objects.create(profile=profile, clean_plats=2, clean_trophies=20,
+                                         country_code='CA')
 
     profile.country_code = 'GB'
     profile.save()
@@ -223,6 +225,7 @@ def test_changing_country_propagates_to_every_standing_store():
     assert ProfileEditionStanding.objects.get(profile=profile).country_code == 'GB'
     assert SeriesBadgeStanding.objects.get(profile=profile).country_code == 'GB'
     assert ProfileJobXP.objects.get(profile=profile).country_code == 'GB'
+    assert ProfileTrophyStanding.objects.get(profile=profile).country_code == 'GB'
 
 
 @pytest.mark.parametrize('mirror', ['country_code', 'is_linked'])
@@ -415,13 +418,17 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     reader deep into a popular series walks the index fetching `is_linked` per candidate -- the shape 0307
     measured at 49.7 ms. 0311 closed it."""
     from django.db.models import Q
-    from trophies.models import ProfileEditionStanding, SeriesEditionStanding, UserGroupBadge
+    from trophies.models import (
+        Profile, ProfileEditionStanding, ProfileTrophyStanding, SeriesEditionStanding, UserGroupBadge,
+    )
 
     for model, names in (
+        (Profile, ('profile_board_idx', 'profile_board_cc_idx')),
         (SeriesBadgeStanding, ('sbs_series_board_idx', 'sbs_series_cc_board_idx')),
         (SeriesEditionStanding, ('ses_board_idx', 'ses_board_cc_idx')),
         (ProfileEditionStanding, ('pes_ed_xp_idx', 'pes_ed_cc_xp_idx')),
         (UserGroupBadge, ('ugb_badge_earned_idx', 'ugb_badge_cc_earned_idx')),
+        (ProfileTrophyStanding, ('pts_board_idx', 'pts_country_board_idx')),
     ):
         by_name = {i.name: i for i in model._meta.indexes}
         for name in names:
@@ -436,6 +443,11 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
     # would stay green on `condition is not None` alone.
     linked = Q(is_linked=True)
     linked_xp = Q(is_linked=True, total_xp__gt=0)
+    linked_clean = Q(is_linked=True, clean_trophies__gt=0)
+    # The Trophies board moved onto the UNFILTERED column in 2026-09 (migration 0334). An index left on
+    # `total_trophies` would simply stop matching -- silently, and back into the 16 ms seq scan of a
+    # 48-column table that 0307 measured on EVERY authenticated page view.
+    linked_raw = Q(is_linked=True, total_trophies_raw__gt=0)
     expected = {
         (SeriesBadgeStanding, 'sbs_series_board_idx'): linked,
         (SeriesBadgeStanding, 'sbs_series_cc_board_idx'): linked,
@@ -448,6 +460,13 @@ def test_the_scrolled_board_indexes_are_partial_on_the_population():
         (ProfileEditionStanding, 'pes_ed_cc_xp_idx'): linked_xp,
         (UserGroupBadge, 'ugb_badge_earned_idx'): linked,
         (UserGroupBadge, 'ugb_badge_cc_earned_idx'): linked,
+        # The Shovelware Free board's membership rule is `is_linked AND clean_trophies > 0` -- the
+        # TIEBREAK column, not the sort key. A hunter can hold clean trophies without a clean platinum,
+        # and conditioning on `clean_plats > 0` would silently drop every one of them off the board.
+        (Profile, 'profile_board_idx'): linked_raw,
+        (Profile, 'profile_board_cc_idx'): linked_raw,
+        (ProfileTrophyStanding, 'pts_board_idx'): linked_clean,
+        (ProfileTrophyStanding, 'pts_country_board_idx'): linked_clean,
     }
     for (model, name), cond in expected.items():
         got = {i.name: i for i in model._meta.indexes}[name].condition
@@ -520,26 +539,46 @@ def test_the_evaluation_seam_actually_writes_the_advance_date():
 
 # ---------------------------------------------------------------- audit findings ------------------------
 
-@pytest.mark.parametrize('model_path', [
-    'ProfileBadgeStanding', 'ProfileCareerStanding', 'ProfileEditionStanding', 'SeriesBadgeStanding',
-    'ProfileJobXP',
-])
-def test_the_denormalized_country_column_is_no_narrower_than_its_source(model_path):
+def test_the_denormalized_country_column_is_no_narrower_than_its_source():
     """`Profile.country_code` is max_length=5. A denormalized copy narrower than its source turns any
     over-long value into a DataError on the propagating UPDATE -- a 500 on profile save, for data the
     source column accepts without complaint.
 
     ISO alpha-2 is two characters, which is why these were declared as 2 and why the mismatch looked
     harmless. The source column is the contract, not the standard it nominally holds.
+
+    DISCOVERED from the models, not listed here, for the same reason
+    `test_every_store_with_a_profile_mirror_is_in_the_propagation_list` discovers its subjects: a
+    hand-kept list only checks the stores somebody remembered to add, and a store added later is exactly
+    the one at risk. The list this replaced had gone stale by two stores (`SeriesEditionStanding`, then
+    `ProfileTrophyStanding`) without anything failing.
     """
-    from trophies import models as m
+    from django.apps import apps
     from trophies.models import Profile
 
     source = Profile._meta.get_field('country_code').max_length
-    mirror = getattr(m, model_path)._meta.get_field('country_code').max_length
+    mirrors = [
+        model for model in apps.get_app_config('trophies').get_models()
+        if model is not Profile
+        and 'country_code' in {f.name for f in model._meta.get_fields()}
+        and 'profile' in {f.name for f in model._meta.get_fields()}
+    ]
+    # Not merely "found something": a broken predicate that discovered ONE model would satisfy that and
+    # then check one column. The propagation list is the independent statement of which stores these are,
+    # so the two are asserted EQUAL -- if they ever legitimately diverge, that is itself worth failing on.
+    from trophies.signals import profile_mirrored_standings
+    assert set(mirrors) == set(profile_mirrored_standings()), (
+        f'discovery and the propagation list disagree: '
+        f'{sorted(m.__name__ for m in set(mirrors) ^ set(profile_mirrored_standings()))}'
+    )
 
-    assert mirror >= source, (
-        f'{model_path}.country_code holds {mirror} chars but Profile.country_code allows {source} -- '
+    narrow = {
+        model.__name__: model._meta.get_field('country_code').max_length
+        for model in mirrors
+        if (model._meta.get_field('country_code').max_length or 0) < source
+    }
+    assert not narrow, (
+        f'these mirrors are narrower than Profile.country_code ({source}): {narrow} -- '
         f'propagating a longer value raises DataError'
     )
 
@@ -731,7 +770,7 @@ def test_verifying_an_account_propagates_to_every_store():
     next sync, having just done the one thing that is supposed to put them on."""
     from trophies.models import (
         ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
-        SeriesBadgeStanding, UserGroupBadge,
+        ProfileTrophyStanding, SeriesBadgeStanding, UserGroupBadge,
     )
 
     profile = ProfileFactory(is_linked=False)
@@ -741,6 +780,8 @@ def test_verifying_an_account_propagates_to_every_store():
         ProfileEditionStanding.objects.create(profile=profile, platform_group_key='e', total_xp=100, is_linked=False),
         SeriesBadgeStanding.objects.create(profile=profile, series_slug='s', xp=1, progress_bp=1,
                                            stages_cleared=1, stages_total=1, is_linked=False),
+        ProfileTrophyStanding.objects.create(profile=profile, clean_plats=1, clean_trophies=10,
+                                             is_linked=False),
     ]
 
     profile.is_linked = True

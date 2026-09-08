@@ -27,8 +27,8 @@ page of ids into display rows in ONE query.
 from django.db.models import F, OuterRef, Q, Subquery
 
 from trophies.models import (
-    ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, SeriesBadgeStanding,
-    SeriesEditionStanding, UserGroupBadge, UserTitle,
+    ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileTrophyStanding,
+    SeriesBadgeStanding, SeriesEditionStanding, UserGroupBadge, UserTitle,
 )
 
 
@@ -56,6 +56,13 @@ def _linked(qs):
     The gate is at READ, not at the write seam, deliberately. Standings are also what a PROFILE page reads,
     and an unlinked hunter's badges are legitimate content there -- they are just not a competitor. Reading
     it this way also means verifying an account puts you on the boards immediately, with no re-evaluation.
+
+    ONE CARVE-OUT: `ProfileTrophyStanding` (Shovelware Free). Its rows serve this board and nothing else,
+    so `recompute_clean_standings` writes them for LINKED hunters only rather than for everybody -- about
+    250,000 rows that would otherwise be computed, stored and never read. The read gate below is still
+    what excludes an unlinked hunter whose row survives from before they unlinked; what differs is that a
+    newly-verified hunter has no row yet, so they join that board on the next nightly run rather than the
+    moment they verify.
 
     Game boards are the one exception and do not live here: they record who PLAYED a game, which is
     catalogue data, and `game_leaderboard_service` owns them with its own `members_only` toggle.
@@ -93,8 +100,13 @@ _ASC, _DESC, _ASC_NULLS_LAST = 'asc', 'desc', 'asc_nulls_last'
 # count and asserted against the ORDER BY by test_rank_equals_position.
 XP_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
 # The Trophies board reads Profile directly, so its unique tail is `id`, not `profile_id`.
-TROPHY_KEYS = (('total_plats', _DESC), ('total_trophies', _DESC), ('id', _ASC))
+TROPHY_KEYS = (('total_plats', _DESC), ('total_trophies_raw', _DESC), ('id', _ASC))
 CAREER_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
+#: The Shovelware Free board. Same SHAPE as TROPHY_KEYS -- platinums, then total trophies, then the unique
+#: tail -- so the two trophy boards rank by one rule over two populations. The tail is `profile_id` rather
+#: than `id` because this board reads a standing store, where `id` is the standing row's own key and would
+#: make the order total over the wrong thing.
+CLEAN_KEYS = (('clean_plats', _DESC), ('clean_trophies', _DESC), ('profile_id', _ASC))
 # Postgres orders ASC NULLS LAST by default, which is what `.order_by('advanced_at')` gets and what this
 # mirrors: a hunter who has not advanced sorts below one who has, within the same rung.
 #: The per-series board: BADGE POINTS for this series, first-to-arrive breaking the ties.
@@ -324,6 +336,22 @@ def active_countries():
             career_store().exclude(country_code='')
             .values_list('country_code', flat=True).distinct()
         )
+        codes |= set(
+            # FOUR sources, not three. The Shovelware Free board looks like it needs no entry here -- its
+            # hunters seem to be a subset of the Trophies board's, since a clean trophy is also a trophy.
+            # They are not, because this store is a NIGHTLY SNAPSHOT while `trophy_store()` reads
+            # `Profile` live. It therefore goes stale HIGH: a hunter who unlinks, or whose earned rows are
+            # removed, keeps a `clean_trophies > 0` standing (and a stale `is_linked` mirror) until the
+            # next run, while the live board has already dropped them. Their country would be
+            # unselectable on the very board they still appear on -- the exact failure the badge_store
+            # comment above records.
+            #
+            # (Two earlier versions of this comment justified the source by a FILTERING difference between
+            # the two figures. Neither honours `hide_hiddens` now -- both boards rank on every synced
+            # trophy -- so staleness is the argument that survives.)
+            clean_store().filter(clean_trophies__gt=0).exclude(country_code='')
+            .values_list('country_code', flat=True).distinct()
+        )
         return sorted(codes)
     return _cached('lb:picker:countries', build)
 
@@ -331,7 +359,7 @@ def active_countries():
 # ------------------------------------------------------------------ global XP ----------------------------
 
 def board_count(tab, country=None, edition=None):
-    """How many hunters are ON one of the three Global Boards -- the population its rows come from.
+    """How many hunters are ON one of the four Global Boards -- the population its rows come from.
 
     ONE definition of each board's membership, read by the paginator AND by the header tally. The view used
     to rebuild these querysets by hand, beside the service that owned the rows, and both of this page's
@@ -343,6 +371,11 @@ def board_count(tab, country=None, edition=None):
         return _slice(career_store().filter(total_xp__gt=0), country).count()
     if tab == 'points':
         return _slice(badge_store(edition).filter(total_xp__gt=0), country).count()
+    # `clean_trophies > 0`, the same rule `clean_rows` pages by -- and the TIEBREAK column, not the sort
+    # key. A hunter can hold clean trophies without a clean platinum, so counting `clean_plats > 0` here
+    # would promise a smaller board than the rows deliver and strand the tail behind a short spacer.
+    if tab == 'clean':
+        return _slice(clean_store().filter(clean_trophies__gt=0), country).count()
     return _slice(trophy_store(), country).count()
 
 
@@ -391,18 +424,37 @@ def trophy_store():
 
     `is_linked` is the public gate every other hunter-facing board has used -- an unowned or scout profile
     is catalogue data, not a competitor.
+
+    `total_trophies_raw`, not `total_trophies`: the latter honours the owner's `hide_hiddens` setting, so
+    membership of a public board would have depended on a private display preference -- and a hunter who
+    hid their whole library would have dropped off it entirely.
+
+    A CONSEQUENCE WORTH KNOWING, decided deliberately (2026-09): a hunter now joins this board DURING
+    their first sync rather than at the end of it. `total_trophies` was written once, at `sync_complete`;
+    `total_trophies_raw` is bumped by the `EarnedTrophy` signal on every row, and `is_linked` is already
+    true while the sync runs. So a new hunter appears on their first trophy and climbs as the sync
+    proceeds, ranked on a partial library for those minutes. Judged an acceptable, small case -- it
+    self-corrects the moment the sync finishes and it is visible only to somebody watching their own
+    first sync. Recorded so it is not mistaken for drift; changing it means adding a `sync_status`
+    predicate, which would also have to move into both partial indexes on `Profile`.
     """
     from trophies.models import Profile
-    return Profile.objects.filter(is_linked=True, total_trophies__gt=0)
+    return Profile.objects.filter(is_linked=True, total_trophies_raw__gt=0)
 
 
 def trophy_rows(limit=50, offset=0, country=None):
     """The Trophies board -- ALL games, PLATINUMS first, total as the tiebreak:
-    [(profile_id, platinums, total_trophies, bronze, silver, gold), ...].
+    [(profile_id, platinums, total_trophies_raw), ...].
 
     Reads `Profile`'s own counters, which are maintained incrementally by the EarnedTrophy signals and
-    reconciled nightly by `recalc_profile_counters`. Nothing here is badge-specific and nothing is
-    denormalized for this board's sake.
+    reconciled nightly by `recalc_profile_counters`. Nothing here is badge-specific.
+
+    BOTH FIGURES ARE UNFILTERED. The tiebreak was `total_trophies` until 2026-09, which honours the
+    owner's `hide_hiddens` setting -- so two hunters level on platinums were separated by a rule one of
+    them had configured privately, and the board could not be reproduced by anyone but its owner.
+    `total_trophies_raw` exists for this; see its comment on `Profile`. The bronze/silver/gold columns
+    this used to fetch went with the change: `page()` passes only the two figures `board_window`'s
+    `extra` maps, so they were read on every board page and discarded.
 
     This REPLACED a "Badge Trophies" board that counted trophies across badge-stage games. That figure
     needed a full-library aggregate per profile in the badge write seam, which became a per-sync cost when
@@ -415,9 +467,8 @@ def trophy_rows(limit=50, offset=0, country=None):
     """
     return list(
         _slice(trophy_store(), country)
-        .order_by('-total_plats', '-total_trophies', 'id')
-        .values_list('id', 'total_plats', 'total_trophies',
-                     'total_bronzes', 'total_silvers', 'total_golds')[offset:offset + limit]
+        .order_by('-total_plats', '-total_trophies_raw', 'id')
+        .values_list('id', 'total_plats', 'total_trophies_raw')[offset:offset + limit]
     )
 
 
@@ -425,7 +476,7 @@ def trophy_rank(profile_id, country=None):
     """Position on the Trophies board. The COUNT expresses the board's FULL key list, tail included --
     ahead means more platinums, or equal platinums and more trophies, or tied on both and a lower id."""
     store = _slice(trophy_store(), country)
-    mine = store.filter(pk=profile_id).values('total_plats', 'total_trophies').first()
+    mine = store.filter(pk=profile_id).values('total_plats', 'total_trophies_raw').first()
     if mine is None:
         return None      # unlinked, no trophies, or not in this country -- not on this board
     return store.filter(_ahead_q(TROPHY_KEYS, {**mine, 'id': profile_id})).count() + 1
@@ -465,6 +516,58 @@ def career_xp_rank(profile_id, country=None):
         return None
     ahead = store.filter(total_xp__gt=0).filter(
         _ahead_q(CAREER_KEYS, {'total_xp': mine, 'profile_id': profile_id})).count()
+    return ahead + 1
+
+
+# ------------------------------------------------------------------ shovelware free ----------------------
+
+def clean_store():
+    """The Shovelware Free board's population: linked hunters with a `ProfileTrophyStanding` row.
+
+    Unlike `trophy_store()`, which reads `Profile` directly and can filter the source columns inline, this
+    board reads a materialized store -- so it goes through `_linked` like the badge and career boards and
+    relies on that store's own `is_linked` mirror. See `_linked`'s docstring for why the mirror exists.
+
+    The `clean_trophies > 0` half of the membership rule is applied by the readers below rather than here,
+    matching `career_store()` / `badge_store()`: a row can legitimately exist at zero (the nightly
+    recompute upserts for every linked hunter, including one whose whole library is flagged), and the
+    store is also what `clean_rank` reads to decide whether somebody is on the board at all.
+    """
+    return _linked(ProfileTrophyStanding.objects.all())
+
+
+def clean_rows(limit=50, offset=0, country=None):
+    """The Shovelware Free board -- platinums on non-shovelware games, total clean trophies as the
+    tiebreak: [(profile_id, clean_plats, clean_trophies), ...].
+
+    The same shape and the same ordering as `trophy_rows`, over a different population, and UNFILTERED in
+    the same way: every trophy synced to us counts, whatever its owner hides from their own profile view.
+
+    No `edition` parameter, for the same reason `trophy_rows` has none -- an edition is a badge concept,
+    and these are trophies across every (unflagged) game.
+    """
+    return list(
+        _slice(clean_store(), country).filter(clean_trophies__gt=0)
+        .order_by('-clean_plats', '-clean_trophies', 'profile_id')
+        .values_list('profile_id', 'clean_plats', 'clean_trophies')[offset:offset + limit]
+    )
+
+
+def clean_rank(profile_id, country=None):
+    """Position on the Shovelware Free board, or None if they are not on it.
+
+    Two ways to be off it, and they are different: no standing row at all (never recomputed, or not
+    linked), and a row whose `clean_trophies` is 0 -- a hunter whose entire library is flagged. The second
+    is a REAL state this board deliberately produces, so it is checked explicitly rather than left to a
+    None guard, which is the trap `career_xp_rank` documents: guarding on None alone hands every zeroed
+    hunter `count(everyone) + 1`, one shared rank pointing at a board none of them appear on.
+    """
+    store = _slice(clean_store(), country)
+    mine = store.filter(profile_id=profile_id).values('clean_plats', 'clean_trophies').first()
+    if mine is None or not mine['clean_trophies']:
+        return None
+    ahead = store.filter(clean_trophies__gt=0).filter(
+        _ahead_q(CLEAN_KEYS, {**mine, 'profile_id': profile_id})).count()
     return ahead + 1
 
 

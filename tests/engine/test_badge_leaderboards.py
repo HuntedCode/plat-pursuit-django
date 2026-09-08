@@ -189,6 +189,46 @@ def test_the_trophies_board_ranks_platinums_first_then_total():
     assert lb.trophy_rank(many_trophies.id) == 3
 
 
+def test_the_trophies_board_ignores_the_owners_hide_hiddens_setting():
+    """The board ranks on `total_trophies_raw`, NOT `total_trophies` (2026-09).
+
+    `total_trophies` is filter-respecting: `update_profile_trophy_counts` honours `hide_hiddens` when it
+    writes. Ranking on it meant two hunters level on platinums were separated by a rule one of them had
+    configured privately, and no outside reader could reproduce the board.
+
+    It is also the less trustworthy figure. Being filter-respecting is exactly what stops
+    `recalc_profile_counters` reconciling it -- a cron cannot recompute it without each profile's
+    settings -- so a missed write persists until that hunter next syncs.
+
+    The fixture gives the two hunters IDENTICAL raw totals and different filtered ones, so a board reading
+    the wrong column orders them and a board reading the right one falls through to the id tail.
+    """
+    hides = ProfileFactory(is_linked=True, hide_hiddens=True, total_plats=5,
+                           total_trophies=10, total_trophies_raw=400)
+    shows = ProfileFactory(is_linked=True, hide_hiddens=False, total_plats=5,
+                           total_trophies=399, total_trophies_raw=400)
+
+    order = [r[0] for r in lb.trophy_rows()]
+    assert order == [hides.id, shows.id], (
+        'the board ordered on the filtered column, so a private display setting moved a public rank'
+    )
+    # ...and the figure the row SHOWS is the unfiltered one too, or the board would sort on one number
+    # and display another.
+    assert [r[2] for r in lb.trophy_rows()] == [400, 400]
+
+
+def test_a_hunter_who_hides_their_whole_library_is_still_on_the_trophies_board():
+    """Membership moved to the unfiltered column as well. On the filtered one, a hunter who hid every game
+    had `total_trophies == 0` and dropped off the board entirely -- erased from a public ranking by a
+    display preference."""
+    hidden = ProfileFactory(is_linked=True, hide_hiddens=True, total_plats=3,
+                            total_trophies=0, total_trophies_raw=90)
+
+    assert [r[0] for r in lb.trophy_rows()] == [hidden.id]
+    assert lb.trophy_rank(hidden.id) == 1
+    assert lb.board_count('trophies') == 1
+
+
 def test_an_unlinked_hunter_is_not_on_the_trophies_board():
     """`is_linked` is the public gate every hunter-facing board has used: an unowned or scout profile is
     catalogue data, not a competitor."""
