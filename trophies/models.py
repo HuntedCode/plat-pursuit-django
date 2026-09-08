@@ -3926,6 +3926,75 @@ class ProfileCareerStanding(models.Model):
         return f"{self.profile.psn_username} - career XP {self.total_xp} (Lv {self.pursuer_level})"
 
 
+class ProfileTrophyStanding(models.Model):
+    """Per-profile trophy counts with SHOVELWARE EXCLUDED -- the Shovelware Free board's store.
+
+    A sibling of ProfileCareerStanding and built to the same rules; read that model's comments for why
+    `country_code` and `is_linked` are denormalized rather than joined.
+
+    WHY A TABLE AND NOT COLUMNS ON PROFILE. The Trophies board reads `Profile.total_plats` /
+    `total_trophies` directly, so the obvious move is four more counters beside them. Two reasons not to.
+    Profile is already the 48-column table whose width migration 0307 was measured fighting, and -- the
+    real one -- counters living beside the existing ones would invite the existing `EarnedTrophy` signals
+    to maintain them, which CANNOT work: shovelware status is a property of the GAME, so one game being
+    re-flagged invalidates every profile that ever earned a trophy on it. That fan-out is invisible to a
+    per-row signal. A separate store with ONE writer (the nightly recompute) has no incremental path to
+    keep honest, which is the whole point.
+
+    WHY THIS IS AFFORDABLE, given the history. `ProfileBadgeStanding` used to carry `trophies_*` and they
+    were deleted in 2026-08: maintaining a full-library `EarnedTrophy` aggregate per profile inside the
+    badge write seam became a per-sync cost the moment that seam ran from `sync_complete`. The board that
+    replaced it reads Profile's own counters, which are maintained anyway -- it is free because it is a
+    parasite. This store has no host: it is the first board whose figures exist ONLY for the board. That
+    is affordable only while the aggregate stays in a BATCH seam and never enters a sync path. If a future
+    change is tempted to freshen these rows during sync, it is re-making the 2026-08 mistake.
+
+    The board's membership rule is `is_linked AND clean_trophies > 0` -- a hunter whose entire library is
+    flagged is not on this board at all, which is the point of it.
+    """
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='clean_standing')
+    # The board's sort key and its tiebreak, mirroring the Trophies board's own ordering
+    # (`badge_leaderboards.TROPHY_KEYS`) so the two boards rank by the same rule on different populations.
+    clean_plats = models.PositiveIntegerField(default=0)
+    clean_trophies = models.PositiveIntegerField(default=0)
+    # The tier breakdown the row renders. Materialized alongside rather than derived, because a row
+    # showing filtered platinums beside an UNfiltered bronze/silver/gold split would be describing two
+    # different libraries in one line.
+    clean_bronzes = models.PositiveIntegerField(default=0)
+    clean_silvers = models.PositiveIntegerField(default=0)
+    clean_golds = models.PositiveIntegerField(default=0)
+    # max_length MATCHES Profile.country_code (5), not the 2 that ISO alpha-2 implies -- see
+    # ProfileCareerStanding: a mirror narrower than its source turns an over-long value into a DataError
+    # on the propagating UPDATE, i.e. a 500 on profile save, for data the source column accepts.
+    country_code = models.CharField(max_length=5, blank=True, default='', db_index=True)
+    # The board PREDICATE, denormalized for the same reason as everywhere else: a predicate on another
+    # table cannot go in this table's partial indexes. No `db_index` of its own -- a standalone btree on
+    # a two-value column is close to useless; it earns its keep as the CONDITION below.
+    is_linked = models.BooleanField(default=False)
+    # When the nightly recompute last wrote this row. Worth having on a store whose figures depend on
+    # `update_shovelware`'s flags: "is this board stale?" is otherwise unanswerable without recounting.
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            # PARTIAL on the board's own population, tail `profile`, exactly as migration 0309 built for
+            # the other standing stores. The tail is not decoration: the board numbers a page by SLOT and
+            # computes a rank by COUNTING everyone ahead, and those two agree only because the ordering
+            # ends in a unique key -- having it in the index is what keeps the rank count index-only.
+            #
+            # Declared here rather than added CONCURRENTLY in a follow-up migration the way 0309 had to:
+            # that dance exists to avoid write-locking a populated table, and this one is created empty.
+            models.Index(fields=['-clean_plats', '-clean_trophies', 'profile'], name='pts_board_idx',
+                         condition=Q(is_linked=True, clean_trophies__gt=0)),
+            models.Index(fields=['country_code', '-clean_plats', '-clean_trophies', 'profile'],
+                         name='pts_country_board_idx',
+                         condition=Q(is_linked=True, clean_trophies__gt=0)),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} - {self.clean_plats} clean plats ({self.clean_trophies} trophies)"
+
+
 class SeriesBadgeStanding(models.Model):
     """Sealed per-(profile, series) standing -- backs the per-series XP + progress ("chasers") leaderboards and a
     profile's per-series breakdown. Recomputed from scratch on every evaluation; a row exists only while the
