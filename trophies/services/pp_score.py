@@ -3,11 +3,14 @@
 THE ONE DEFINITION of the scoring rule. The nightly recompute, any per-trophy display, and every test read
 it from here -- a second spelling of this formula would be a second leaderboard.
 
-    points = 100 / earn_rate        (earn_rate is a PERCENTAGE, floored at RATE_FLOOR)
+    points = 100 / earn_rate        (earn_rate is a PERCENTAGE)
 
 It reads as "how many players you would line up to find one who has this": a 1% trophy is worth 100, a
 10% trophy 10, a 50% trophy 2. So a hunter's PP Score is *how many players you would line up in total,
 across their rarest 1,000 base-game trophies* -- which is the whole board explained in one sentence.
+
+The scale runs 1 to 1,000 per trophy, and that range is PSN's rather than ours: it reports no rate above
+100% or below 0.1%. A perfect score is therefore 1,000,000.
 
 PURE RARITY, no trophy-type base (owner's call, 2026-09). A 0.5% bronze outscores a 40% platinum. The
 board answers "who has done the hardest things", and a platinum on an easy game is not a hard thing.
@@ -29,13 +32,21 @@ slots. Excluding them is the honest v1; revisit only with real output in front o
 from django.db.models import Case, F, FloatField, Q, Value, When
 from django.db.models.functions import Greatest
 
-#: Below this earn rate (PERCENT) every trophy scores the same. It is a noise guard, not decoration: PSN's
-#: figure for a brand-new or barely-played game is a rounding artefact, and without a floor one such
-#: trophy outweighs hundreds of legitimately brutal ones.
+#: PSN NEVER REPORTS A RATE BELOW 0.1%, so this matches its own precision rather than imposing a policy.
+#: An earlier version of this comment called it a noise guard against rounding artefacts on barely-played
+#: games; that was wrong, because PSN has already done that flooring for us. What it actually is now is a
+#: DATA-INTEGRITY backstop -- it fires only on a corrupt or hand-edited value, never on anything PSN sent.
+#:
+#: The consequence worth knowing is at the TOP of the board: every trophy PSN reports at 0.1% is worth
+#: exactly MAX_POINTS, so the rarest trophies are indistinguishable from each other. A 0.1% trophy and a
+#: hypothetical 0.001% trophy score the same, because PSN does not tell us they differ. The very top of
+#: this board is therefore "how many 0.1% trophies do you hold", which is a legitimate question but not
+#: quite the same one as "who has the single rarest trophy".
 RATE_FLOOR = 0.1
 
-#: The most any single trophy can be worth -- `100 / RATE_FLOOR`. Derived rather than typed so the two
-#: cannot drift apart.
+#: The most any single trophy can be worth -- `100 / RATE_FLOOR`, i.e. 1,000. REACHABLE, not theoretical:
+#: PSN's floor means real trophies sit exactly here. So a perfect score is TOP_N * MAX_POINTS = 1,000,000,
+#: and the whole scale runs 1 (a 100% trophy) to 1,000. Derived rather than typed so the two cannot drift.
 MAX_POINTS = 100.0 / RATE_FLOOR
 
 #: How many of a hunter's rarest scorable trophies are summed. Volume beyond this buys nothing.

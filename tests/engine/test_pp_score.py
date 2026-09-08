@@ -39,12 +39,24 @@ def test_points_are_how_many_players_you_would_line_up_to_find_one(rate, expecte
     assert pp_score.points_for(rate) == expected
 
 
-def test_an_absurdly_low_rate_is_floored():
-    """A noise guard, not decoration. PSN's figure for a brand-new or barely-played game is a rounding
-    artefact, and unfloored one such trophy outweighs hundreds of legitimately brutal ones."""
+def test_the_scale_matches_PSNs_own_range():
+    """The board's whole scale is 1 to 1,000, and that range is PSN's rather than ours: it reports no rate
+    above 100% or below 0.1%. A perfect score is TOP_N * MAX_POINTS = 1,000,000.
+
+    Worth pinning because it is the answer to "how big can this number get", which is the first thing
+    anyone asks of a new score.
+    """
+    assert pp_score.points_for(100.0) == 1.0
+    assert pp_score.points_for(pp_score.RATE_FLOOR) == pp_score.MAX_POINTS == 1000.0
+    assert pp_score.TOP_N * pp_score.MAX_POINTS == 1_000_000
+
+
+def test_a_corrupt_below_floor_rate_cannot_exceed_the_maximum():
+    """A DATA-INTEGRITY backstop, not a noise guard -- PSN has already floored at 0.1%, so these inputs
+    cannot arrive from sync. What they can arrive from is a hand-edit or a bad import, and without the
+    floor one such row is worth more than every legitimate trophy a hunter owns combined."""
     assert pp_score.points_for(0.01) == pp_score.MAX_POINTS
     assert pp_score.points_for(0.0001) == pp_score.MAX_POINTS
-    assert pp_score.points_for(pp_score.RATE_FLOOR) == pp_score.MAX_POINTS
 
 
 def test_the_cap_is_derived_from_the_floor():
