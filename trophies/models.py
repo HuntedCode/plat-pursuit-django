@@ -196,6 +196,12 @@ class Profile(models.Model):
     #: safety net is the point: `total_trophies` has no cron reconciling it (it cannot have one, since a
     #: filter-respecting figure needs each profile's settings), so a missed write there persists until
     #: that hunter next syncs.
+    #: NOT YET ADOPTED EVERYWHERE, deliberately. Three surfaces still read the filtered `total_trophies`
+    #: and each is its own decision: Browse Hunters' `?sort=trophies` (which ORDERS hunters against each
+    #: other, so it has the same defect the boards just shed), `core/sitemaps.py`'s "has anything to
+    #: show" gate, and `milestones/metrics.py` -- that last one compares against a GLOBAL ladder that
+    #: grants Discord roles, so moving it would retroactively cross tiers and fire notifications, and it
+    #: must not ride along with a leaderboard change.
     total_trophies_raw = models.PositiveIntegerField(
         default=0, help_text="All earned trophies, ignoring hide_hiddens. The leaderboard sort figure.")
     total_hiddens = models.PositiveIntegerField(default=0)

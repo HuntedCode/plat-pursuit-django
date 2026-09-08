@@ -428,6 +428,15 @@ def trophy_store():
     `total_trophies_raw`, not `total_trophies`: the latter honours the owner's `hide_hiddens` setting, so
     membership of a public board would have depended on a private display preference -- and a hunter who
     hid their whole library would have dropped off it entirely.
+
+    A CONSEQUENCE WORTH KNOWING, decided deliberately (2026-09): a hunter now joins this board DURING
+    their first sync rather than at the end of it. `total_trophies` was written once, at `sync_complete`;
+    `total_trophies_raw` is bumped by the `EarnedTrophy` signal on every row, and `is_linked` is already
+    true while the sync runs. So a new hunter appears on their first trophy and climbs as the sync
+    proceeds, ranked on a partial library for those minutes. Judged an acceptable, small case -- it
+    self-corrects the moment the sync finishes and it is visible only to somebody watching their own
+    first sync. Recorded so it is not mistaken for drift; changing it means adding a `sync_status`
+    predicate, which would also have to move into both partial indexes on `Profile`.
     """
     from trophies.models import Profile
     return Profile.objects.filter(is_linked=True, total_trophies_raw__gt=0)
