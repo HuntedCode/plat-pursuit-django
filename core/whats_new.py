@@ -61,6 +61,30 @@ ENTRIES: tuple[Entry, ...] = (
         link_label='See the boards',
         link_url='/leaderboards/?tab=rarity',
     ),
+    #: The rebuild, dated to PP_LAUNCH_DATE on prod. ARCHIVE-ONLY as a consequence of being older than
+    #: the entry above it, not by a flag: `latest()` is ENTRIES[0], so nothing below the top can fire.
+    #: That is deliberate here -- 1.0 has its own greeting modal (_launch_welcome.html), and an entry
+    #: that could also pop would show a hunter the same announcement twice, once in each modal.
+    #: If a future entry ever needs to be recorded without popping while it IS the newest, that is when
+    #: to add the flag; it does not exist yet because this case does not need it.
+    Entry(
+        id='2026-09-platpursuit-1-0',
+        published=date(2026, 9, 1),
+        title='PlatPursuit 1.0',
+        beats=(
+            ('Career and Contracts',
+             'Twenty-five jobs across five disciplines. Contracts are sets of games matched to '
+             'your library: finish one, claim it, and the XP levels the jobs it covers.'),
+            ('Badges became medallions',
+             'Every badge series has handcrafted artwork you can pick up and inspect. The ones '
+             'you have earned are in your Collection.'),
+            ('A rebuilt site',
+             'New home page, leaderboards, game pages and profiles. Everything you had tracked '
+             'is still here.'),
+        ),
+        link_label='See your Career',
+        link_url='/career/',
+    ),
 )
 
 

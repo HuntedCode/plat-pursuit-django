@@ -96,8 +96,19 @@ What's New can: its entry stays undismissed, so it is simply due again. Nothing 
 Decided in `HomeView.get_context_data`, the one place that can see both. `is_due` deliberately knows
 nothing about the greeting.
 
-> Note: the greeting is dormant until `PP_LAUNCH_DATE` is set, so while that is unset this rule is a
-> no-op that becomes real the moment the date is armed. See [onboarding](onboarding.md).
+> `PP_LAUNCH_DATE` is **armed on prod** (2026-09-01), so this rule is live: anyone who joined before
+> that instant and has not dismissed the greeting gets it first, and What's New on their next visit.
+> See [onboarding](onboarding.md).
+
+### The 1.0 entry is on the archive, and only there
+
+`2026-09-platpursuit-1-0` records the rebuild at the launch instant. It is **archive-only**, and by
+position rather than by a flag: `latest()` is `ENTRIES[0]`, so nothing below the top can ever fire.
+
+That is the point. 1.0 already has its own greeting modal, so an entry that could also pop would show a
+hunter the same announcement twice, once in each. If an entry ever needs to be recorded without popping
+*while it is the newest*, that is the moment to add a flag for it — there is no such entry today, so
+there is no flag.
 
 ## The lobby's choreography gate
 

@@ -379,3 +379,24 @@ def test_every_way_out_of_the_modal_dismisses_it():
     # And the links are real links, not buttons wearing a link class -- which is what would make the
     # navigation branch above dead code.
     assert partial.count('<a class="pp-howto__more"') == 2
+
+
+def test_the_1_0_entry_is_on_the_archive_but_can_never_pop():
+    """1.0 has its own greeting modal. An entry that could also fire would show a hunter the same
+    announcement twice, once in each -- and nothing in the code says so, because the property comes from
+    POSITION: `latest()` is ENTRIES[0], so anything below the top is archive-only by construction.
+
+    That makes it exactly the kind of thing that breaks silently. Someone bumps its date, or drops the
+    entry above it, and a duplicate announcement starts popping with every test still green.
+    """
+    entry = whats_new.by_id('2026-09-platpursuit-1-0')
+    assert entry is not None, 'the 1.0 record is gone from the archive'
+    assert whats_new.latest() is not entry, (
+        'the 1.0 entry is now the newest, so it will fire as a modal AND as the launch greeting'
+    )
+
+
+def test_the_archive_carries_the_1_0_record(client):
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+    assert 'PlatPursuit 1.0' in body
+    assert 'September 1, 2026' in body, 'the 1.0 entry lost its launch date'
