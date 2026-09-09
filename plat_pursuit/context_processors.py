@@ -26,7 +26,8 @@ def whats_new_unread(request):
     """
     try:
         from core import whats_new
-        return {'whats_new_unread': whats_new.is_due(getattr(request, 'user', None))}
+        unread = whats_new.is_due(getattr(request, 'user', None)) or whats_new.previewing(request)
+        return {'whats_new_unread': unread}
     except Exception:
         logger.debug("Failed to resolve the What's New unread state", exc_info=True)
         return {}

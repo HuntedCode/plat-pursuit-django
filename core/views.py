@@ -247,10 +247,7 @@ class HomeView(TemplateView):
             #
             # Decided HERE rather than inside either modal, because it is the one place that can see
             # both. `whats_new.is_due` deliberately knows nothing about the greeting.
-            is_previewing = (
-                self.request.GET.get('preview') == 'whats-new'
-                and (user.is_staff or getattr(user, 'is_moderator', False))
-            )
+            is_previewing = whats_new.previewing(self.request)
             # The preview sits INSIDE the precedence guard, not beside it. With `or is_previewing`
             # hanging off the end, a staff member who was also due the 1.0 greeting got BOTH modals:
             # two scrims, two focus traps fighting over the same document, one Escape closing both, and

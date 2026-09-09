@@ -122,6 +122,31 @@ def by_id(entry_id: str) -> Entry | None:
     return next((e for e in ENTRIES if e.id == entry_id), None)
 
 
+#: The querystring that forces the whole feature on for the team, dismissed or not.
+PREVIEW = 'whats-new'
+
+
+def previewing(request) -> bool:
+    """`?preview=whats-new`, team-gated -- the retest door for a one-shot that has been spent.
+
+    ONE definition, used by both the modal's gate and the avatar dot's, because they are two halves of
+    one thing and a door that opens only half of it is not a preview. The modal had this inline and the
+    dot had nothing, so after dismissing you could re-open the modal but never see the marker again
+    without clearing the flag in a shell.
+
+    Mirrors the launch-welcome / syncing / landing doors: staff or moderator, on the live page, with no
+    state written -- so previewing never spends anything and never has to be undone.
+    """
+    if request is None or getattr(request, 'GET', None) is None:
+        return False
+    if request.GET.get('preview') != PREVIEW:
+        return False
+    user = getattr(request, 'user', None)
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    return bool(getattr(user, 'is_staff', False) or getattr(user, 'is_moderator', False))
+
+
 def is_due(user) -> bool:
     """Whether `user` should be shown the newest entry.
 

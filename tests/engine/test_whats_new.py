@@ -768,3 +768,42 @@ def test_the_three_surfaces_wear_THE_SAME_glyph(client):
     assert dome in header_icon, 'the archive header lost the glyph'
     menu = lobby.split('pp-avmenu', 1)[1].split('</div>', 1)[0]
     assert dome in menu, 'the avatar menu entry lost the glyph'
+
+
+def test_the_preview_door_shows_the_DOT_too_after_dismissing(client):
+    """A door that reopens the modal but not the marker is half a preview.
+
+    The modal's `?preview=whats-new` always worked after dismissal; the dot read `is_due` alone, so
+    once an entry was spent the marker could not be seen again without clearing the flag in a shell.
+    Both now read `whats_new.previewing`, which is also the only definition of the gate.
+    """
+    client, profile = _synced_client(client, is_staff=True)
+    profile.user.ui_flags = {'whats_new_seen': whats_new.latest().id}
+    profile.user.save(update_fields=['ui_flags'])
+
+    plain = client.get(reverse('about'), **CF).content.decode()
+    assert 'pp-av__new' not in plain, 'the fixture is wrong: the entry is not dismissed'
+
+    preview = client.get(reverse('about') + '?preview=whats-new', **CF).content.decode()
+    assert 'pp-av__new' in preview, 'the dot cannot be previewed once the entry is spent'
+    assert 'pp-avmenu__new' in preview
+
+
+def test_the_preview_door_writes_nothing(client):
+    """Previewing must never spend anything, or the retest door is single-use too."""
+    client, profile = _synced_client(client, is_staff=True)
+
+    client.get('/?preview=whats-new', **CF)
+
+    profile.user.refresh_from_db()
+    assert 'whats_new_seen' not in (profile.user.ui_flags or {})
+
+
+def test_the_dot_preview_door_does_not_leak_either(client):
+    client, profile = _synced_client(client)
+    profile.user.ui_flags = {'whats_new_seen': whats_new.latest().id}
+    profile.user.save(update_fields=['ui_flags'])
+
+    body = client.get(reverse('about') + '?preview=whats-new', **CF).content.decode()
+
+    assert 'pp-av__new' not in body, 'a non-staff viewer forced the marker on'

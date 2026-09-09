@@ -169,6 +169,41 @@ fully on screen, and it is inherently desktop-only, so the page has to be good w
 earns itself somewhere around 8-10 entries — at which point sticky year markers on the spine are the
 cheaper form, reusing the existing sticky-header pattern that already solves the offset under the chrome.
 
+## Previewing and resetting
+
+**`?preview=whats-new`** (staff/moderators) forces the whole feature on, dismissed or not — the modal
+*and* the avatar dot, on any page. It writes nothing, so previewing never spends the entry and never has
+to be undone. `whats_new.previewing()` is the single definition of that gate; both the view and the
+context processor read it, because a door that reopens the modal but not the marker is half a preview.
+
+To get back to a genuine first-run state instead — the auto-open timing, the choreography gate, the POST
+— clear the marker:
+
+```python
+# manage.py shell
+from django.contrib.auth import get_user_model
+u = get_user_model().objects.get(username='<you>')
+u.ui_flags.pop('whats_new_seen', None); u.save(update_fields=['ui_flags'])
+```
+
+Everyone at once, for a dev database:
+
+```python
+from django.contrib.auth import get_user_model
+for u in get_user_model().objects.filter(ui_flags__has_key='whats_new_seen'):
+    u.ui_flags.pop('whats_new_seen', None); u.save(update_fields=['ui_flags'])
+```
+
+**If the modal still does not appear after clearing the flag**, the device-local fallback is holding it:
+a dismissal whose POST failed writes `pp-whats-new-seen-<entry id>` to `localStorage`, and that suppresses
+the modal on that browser alone. Clear it from the console:
+
+```js
+Object.keys(localStorage).filter(k => k.startsWith('pp-whats-new-seen')).forEach(k => localStorage.removeItem(k))
+```
+
+That key is normally absent — it is only written when the server never heard the dismissal.
+
 ## Precedence against the 1.0 greeting
 
 **Never both on one visit.** The 1.0 launch greeting wins; What's New waits for the next visit.
