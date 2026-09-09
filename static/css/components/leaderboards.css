@@ -84,10 +84,6 @@
    between unrelated things. */
 .lb-bar:has(+ .lb-subbar) { margin-bottom: 8px; }
 
-/* The grouped chip's rank cluster (`#12 · #45 · #7`). The separator needs air or the three run together
-   into one number, which is how it read at first. */
-.lb-chiprank__sep { opacity: 0.4; margin: 0 0.28em; font-weight: 600; }
-
 /* Mobile fit pass for THIS strip. `.pp-switch__chip`'s base padding (6px 14px) is a desktop value that
    `md:` only enlarges, so the mobile pass was never actually done. Three equal chips inside 343px leave
    ~56px of label box once border, padding, icon and gap are taken -- and "Badge Trophies" is ~93px at

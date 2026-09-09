@@ -162,14 +162,15 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
                {% if g.grouped %}data-board-group="{{ g.key }}"{% else %}data-board="{{ g.key }}"{% endif %}>
                 {% include 'trophies/partials/leaderboard_board_icon.html' with key=g.key only %}
                 <span class="pp-switch__lbl">{{ g.label }}</span>
-                {% if my_standing %}
-                {% comment %} A grouped chip shows EVERY member's rank, because the sub-toggle below is
-                only visible while this group is open -- without it a reader on Badge Points could no
-                longer see their trophy standings at all, which the flat strip did show. {% endcomment %}
-                <span class="lb-chiprank pp-tally">
-                    {% for m in g.members %}{% if not forloop.first %}<span class="lb-chiprank__sep" aria-hidden="true">&middot;</span>{% endif %}{% if m.rank %}#{{ m.rank|intcomma }}{% else %}&mdash;{% endif %}{% endfor %}
-                </span>
-                {% endif %}
+                {% comment %} A GROUPED chip carries NO rank, deliberately. The chip-rank works because
+                one chip is one board is one number; a group is not a board, so three numbers on it have
+                no reading -- you cannot tell which is which without opening the thing, and at real rank
+                lengths (`#12,345 · #67,890 · #1,234`) they are wider than the label they hang off.
+
+                Nothing is lost that was legible: one click opens the sub-toggle, which shows all three
+                WITH their labels. A lone chip below still carries its own rank, because it is a board.
+                {% endcomment %}
+                {% if my_standing and not g.grouped %}<span class="lb-chiprank pp-tally">{% if g.members.0.rank %}#{{ g.members.0.rank|intcomma }}{% else %}&mdash;{% endif %}</span>{% endif %}
             </a>
             {% endfor %}
         </nav>

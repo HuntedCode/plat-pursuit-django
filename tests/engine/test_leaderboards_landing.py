@@ -148,21 +148,43 @@ def test_the_sub_toggle_appears_only_for_the_grouped_board(client):
     assert 'lb-subswitch' not in lone, 'a group of one rendered an empty sub-toggle'
 
 
-def test_a_grouped_chip_carries_every_member_rank(client):
-    """The sub-toggle is only visible while its group is open, so without this a reader on Badge Points
-    could no longer see their trophy standings at all -- which the flat five-chip strip did show."""
-    profile = _ranked('Me', plats=3, trophies=30, points=100, pp=500)
+def test_a_grouped_chip_carries_NO_rank_while_a_lone_chip_does(client):
+    """The chip-rank works because one chip is one board is one number. A GROUP is not a board, so a rank
+    on it has no reading: three numbers cannot be told apart without opening the thing, and at real rank
+    lengths (`#12,345 · #67,890 · #1,234`) they are wider than the label they hang off. This was built
+    that way first and removed on sight.
+
+    Nothing legible was lost -- one click opens the sub-toggle, which shows all three WITH labels. Pinned
+    in both directions so the cluster does not drift back: the grouped chip has no rank, and the lone
+    chips still do, because those ARE boards.
+    """
+    profile = _ranked('Me', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
     client.force_login(profile.user)
 
     body = client.get(URL, {'tab': 'points'}).content.decode()
     start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
     strip = body[start:body.index('</nav>', start)]
-    chip = strip[strip.index('data-board-group'):]
-    chip = chip[:chip.index('</a>')]
 
-    # On all three trophy boards, so three ranks -- not one, and not a dash.
-    assert chip.count('#1') == 3, f'the grouped chip does not carry every member rank: {chip}'
-    assert 'lb-chiprank__sep' in chip, 'the ranks are not separated'
+    grouped = strip[strip.index('data-board-group'):]
+    grouped = grouped[:grouped.index('</a>')]
+    assert 'lb-chiprank' not in grouped, f'the grouped chip is carrying a rank: {grouped}'
+
+    lone = strip[strip.index('data-board="points"'):]
+    lone = lone[:lone.index('</a>')]
+    assert 'lb-chiprank' in lone, 'a lone chip lost its rank, which it should keep -- it IS a board'
+
+
+def test_the_sub_chips_carry_their_own_ranks(client):
+    """Where the trophy ranks live now: inside the group, one per chip, each beside its own label. That is
+    what makes dropping them from the parent a relocation rather than a loss."""
+    profile = _ranked('Me', plats=3, trophies=30, points=100, pp=500)
+    client.force_login(profile.user)
+
+    body = client.get(URL, {'tab': 'pp'}).content.decode()
+    sub = body[body.index('lb-subswitch'):]
+    sub = sub[:sub.index('</nav>')]
+
+    assert sub.count('lb-chiprank') == 3, 'the sub-chips do not each carry a rank'
 
 
 def test_every_board_has_its_OWN_icon(client):
