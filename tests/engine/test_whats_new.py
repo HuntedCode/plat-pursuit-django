@@ -654,3 +654,30 @@ def test_the_preview_door_cannot_put_BOTH_modals_on_the_page(client, settings):
     assert not ('id="launch-welcome"' in body and 'id="whats-new"' in body), (
         'both modals rendered on one visit; the gate will settle while one is still on screen'
     )
+
+
+def test_the_three_surfaces_wear_THE_SAME_glyph(client):
+    """The modal, the archive header and the avatar-menu entry are one feature wearing one mark.
+
+    The glyph is inline SVG copied into three templates, so drift is a hand-edit away -- and it has
+    already happened once in the other direction: the original was described in three places as Lucide
+    "sparkles" and was actually a shape with no name, a circle ringed by rays, which read as an eye.
+    Comparing the path data rather than trusting the label is the point.
+    """
+    from django.urls import reverse as _rev
+
+    client, _ = _synced_client(client)
+    lobby = client.get('/', **CF).content.decode()
+    archive = client.get(_rev('whats_new'), **CF).content.decode()
+
+    # The dome arc uniquely identifies Lucide's lightbulb; the two base lines are shared with
+    # other glyphs, so matching on the arc is what makes this specific.
+    dome = 'A6 6 0 0 0 6 8'
+    assert dome in lobby.split('id="whats-new"', 1)[1].split('</script>', 1)[0], 'modal lost the glyph'
+    # Scoped to the header card's own <svg>. Asserting against the whole archive body passed on the
+    # NAVBAR's copy of the glyph, which every page renders -- so the header could drift freely. Caught
+    # by mutation, and it is the same shape as the splits the audit flagged.
+    header_icon = archive.split('md:w-6 md:h-6 text-primary shrink-0', 1)[1].split('</svg>', 1)[0]
+    assert dome in header_icon, 'the archive header lost the glyph'
+    menu = lobby.split('pp-avmenu', 1)[1].split('</div>', 1)[0]
+    assert dome in menu, 'the avatar menu entry lost the glyph'
