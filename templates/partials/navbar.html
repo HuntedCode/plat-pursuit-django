@@ -152,6 +152,15 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                         <a href="{% url 'link_psn' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Link PSN</a>
                     {% endif %}
                     <a href="{% url 'settings' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17 2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V15z"/></svg>Settings</a>
+                    {% comment %} What's New earns its place by the same test the Mod Center passes and the
+                    admin dashboard does not: it has something to say without being visited. It is also the
+                    only recall this modal has -- render == armed, so a dismissed notice leaves NO markup on
+                    the page, and without a door here a hunter who closed it by reflex has no way back to
+                    what it said. Deliberately carries no unread marker: while an entry is unseen the modal
+                    itself fires, so a badge here would only ever appear next to a modal already on screen.
+                    Same glyph as the modal and the page, so the three read as one thing.
+                    {% endcomment %}
+                    <a href="{% url 'whats_new' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3"/><path d="M18.5 5.5 16.4 7.6"/><path d="M21 12h-3"/><path d="M6 12H3"/><path d="M7.6 7.6 5.5 5.5"/><circle cx="12" cy="14" r="5"/></svg>What's New</a>
                     {% comment %} The 2026-08 strip-down took staff links OUT of this menu: staff
                     pages are bookmark-reached (fundraiser admin cross-links its siblings), and the
                     menu reads the same for every signed-in hunter. The Mod Center is the one

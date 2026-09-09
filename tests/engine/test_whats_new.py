@@ -400,3 +400,36 @@ def test_the_archive_carries_the_1_0_record(client):
     body = client.get(reverse('whats_new'), **CF).content.decode()
     assert 'PlatPursuit 1.0' in body
     assert 'September 1, 2026' in body, 'the 1.0 entry lost its launch date'
+
+
+# ── reachable without the modal ───────────────────────────────────────────────────────────────────────
+
+def test_the_avatar_menu_carries_the_only_way_back(client):
+    """The modal is render == armed: a dismissed notice leaves NO markup on the page at all. So without
+    a door in the chrome, a hunter who closed it by reflex has no route back to what it said, and the
+    archive is a page nothing links to."""
+    client, profile = _synced_client(client)
+    profile.user.ui_flags = {'whats_new_seen': whats_new.latest().id}
+    profile.user.save(update_fields=['ui_flags'])
+
+    body = client.get('/', **CF).content.decode()
+
+    assert 'id="whats-new"' not in body, 'the fixture is wrong: the modal is still on the page'
+    menu = body.split('pp-avmenu', 1)[1].split('</div>', 1)[0]
+    assert reverse('whats_new') in menu, 'no way back to the archive once the modal is dismissed'
+
+
+def test_the_footer_carries_it_for_signed_OUT_readers(client):
+    """The archive is public, so the footer is the route for somebody who has no avatar menu."""
+    body = client.get(reverse('about'), **CF).content.decode()
+
+    footer = body.split('<footer', 1)[1]
+    assert reverse('whats_new') in footer
+
+
+def test_the_footer_carries_it_when_signed_in_too(client):
+    client, _ = _synced_client(client)
+    body = client.get(reverse('about'), **CF).content.decode()
+
+    footer = body.split('<footer', 1)[1]
+    assert reverse('whats_new') in footer

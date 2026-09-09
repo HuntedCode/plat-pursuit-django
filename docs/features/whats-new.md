@@ -86,6 +86,21 @@ form can change without breaking anything that reads the page.
 It is not decoration. It is what makes "new" a claim a reader can check rather than one they take on
 trust, and it is what lets the rule above be as simple as it is.
 
+## How people reach it
+
+| Route | Who sees it |
+|---|---|
+| The modal on Home | Signed-in hunters with an undismissed entry, once each |
+| Avatar menu → What's New | Every signed-in hunter, always |
+| Footer → What's New | Everybody, signed in or not |
+
+The chrome links are not optional garnish. The modal is **render == armed**: a dismissed notice leaves no
+markup on the page at all, so without a door in the chrome a hunter who closed it by reflex has no route
+back to what it said, and the archive is a page nothing links to.
+
+The avatar entry deliberately carries **no unread marker**. While an entry is unseen the modal fires on
+its own, so a badge there would only ever appear beside a modal already on screen.
+
 ## Precedence against the 1.0 greeting
 
 **Never both on one visit.** The 1.0 launch greeting wins; What's New waits for the next visit.
