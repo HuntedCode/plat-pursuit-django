@@ -397,8 +397,12 @@ def test_the_avatar_carries_a_dot_when_something_is_unread(client):
     body = client.get(reverse('about'), **CF).content.decode()
 
     assert 'pp-av__new' in body, 'no unread marker anywhere off the lobby'
-    assert 'something new to read' in body, 'the dot is invisible to a screen reader'
-    assert 'pp-avmenu__new' in body, 'the menu row does not say which item the dot was about'
+    # It has to carry a WORD, not just a colour. It shipped as a bare 10px dot and could barely be
+    # seen -- which chrome.css already predicted: a second light on a 38px avatar is a puzzle, a pill
+    # with content is a fact. Losing the text would silently return it to a dot.
+    assert '>New</span>' in body.split('pp-av__new', 1)[1][:40], 'the marker is a bare dot again'
+    assert 'something new to read' in body, 'the marker is invisible to a screen reader'
+    assert 'pp-avmenu__new' in body, 'the menu row does not say which item the marker was about'
 
 
 def test_the_dot_goes_once_the_entry_is_seen(client):

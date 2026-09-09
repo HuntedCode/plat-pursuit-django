@@ -102,8 +102,15 @@ back to what it said, and the archive is a page nothing links to.
 
 ### The attention dot
 
-A primary-coloured dot on the avatar, plus a "New" pill on the menu row, driven by
-`whats_new_unread` (`plat_pursuit/context_processors.py`).
+A small **"New" pill** on the avatar, plus one on the menu row, driven by `whats_new_unread`
+(`plat_pursuit/context_processors.py`).
+
+**It was a bare dot first and nobody could see it.** `chrome.css` had already written down why:
+"two lights of different colours on one 38px avatar is a puzzle; a number is a fact", and "what
+keeps the two apart is SHAPE, not colour". A dot beside the sync LED is a second light the eye has
+to decode; a pill carrying a word is read instantly. Not the queue's error red, though — red is also
+the errored-sync ring and the LED it colours, so a hunter with a failed sync would get three reds at
+once. Shape does the separating, which is what that block says to do.
 
 **It is not redundant with the modal**, which is the objection that kept it out of the first cut. The
 modal fires on the **lobby**, for **synced** hunters only. It reaches nobody who lands deep from a

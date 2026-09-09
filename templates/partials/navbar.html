@@ -109,7 +109,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                 question, and it is aria-hidden because the avatar's own label already says it in
                 words.{% endcomment %}
                 {% if mod_open_count %}<span class="pp-av__queue" aria-hidden="true">{% if mod_open_count > 9 %}9+{% else %}{{ mod_open_count }}{% endif %}</span>{% endif %}
-                {% if whats_new_unread and not mod_open_count %}<span class="pp-av__new" aria-hidden="true"></span>{% endif %}
+                {% if whats_new_unread and not mod_open_count %}<span class="pp-av__new" aria-hidden="true">New</span>{% endif %}
             </div>
             <div tabindex="0" class="dropdown-content pp-avpanel mt-2 z-[100] max-md:fixed max-md:top-16 max-md:right-2" id="nav-sync"
                  {% if navsync %}data-url-sync="{% url 'profile_sync_status' %}" data-url-trigger="{% url 'trigger_sync' %}" data-status="{{ navsync.sync_status }}" data-seconds="{{ navsync.seconds_to_next_sync|default:0 }}"{% endif %}>
