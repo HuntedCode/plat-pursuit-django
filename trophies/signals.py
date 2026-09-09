@@ -288,7 +288,7 @@ def profile_mirrored_standings():
     board after they verify. Neither is something a reader would think to look for.
 
     All nine carry BOTH mirrors -- six as of migration 0310, `SeriesEditionStanding` from birth in 0313,
-    `ProfileTrophyStanding` from birth in 0332 and `ProfilePPStanding` from birth in 0335, which is the
+    `ProfileTrophyStanding` from birth in 0332 and `ProfileRarityStanding` from birth in 0335, which is the
     point: a new standing store is expected to arrive with them rather than be retrofitted. `UserGroupBadge` was the last to get `country_code`,
     and its lateness was historical rather than principled -- it is the badge earn-lifecycle table and
     predates the Lane B standing stores that set the pattern. `_mirrored_fields` reads each store's
@@ -297,10 +297,10 @@ def profile_mirrored_standings():
     """
     from trophies.models import (
         ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
-        ProfilePPStanding, ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding,
+        ProfileRarityStanding, ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding,
         UserGroupBadge,
     )
-    return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfilePPStanding,
+    return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileRarityStanding,
             ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding, ProfileJobXP,
             UserGroupBadge)
 

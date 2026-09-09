@@ -1,7 +1,7 @@
-"""Rebuild `ProfilePPStanding` -- the PP Score board's store -- from EarnedTrophy.
+"""Rebuild `ProfileRarityStanding` -- the Rarity Score board's store -- from EarnedTrophy.
 
-PP Score sums `100 / earn_rate` over a hunter's rarest 1,000 base-game trophies. The RULE lives in
-`services/pp_score.py`; this command only applies it.
+Rarity Score sums `100 / earn_rate` over a hunter's rarest 1,000 base-game trophies. The RULE lives in
+`services/rarity_score.py`; this command only applies it.
 
 THE ONLY WRITER, like every standing store here. There is no incremental path and there should not be
 one: a hunter's score depends on WHICH of their trophies are the rarest thousand, so a single new trophy
@@ -34,12 +34,12 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from trophies.models import EarnedTrophy, Profile, ProfilePPStanding
-from trophies.services import pp_score
+from trophies.models import EarnedTrophy, Profile, ProfileRarityStanding
+from trophies.services import rarity_score
 
 #: Where a budget-capped sweep left off. Not a source of truth: losing it re-runs a full recompute, which
 #: is a no-op, and the sweep always advances at least one chunk so it cannot stall.
-CURSOR_KEY = 'lb:pp_standings:cursor'
+CURSOR_KEY = 'lb:rarity_standings:cursor'
 CURSOR_TTL = 60 * 60 * 24 * 7
 
 #: The rate column, reached from EarnedTrophy. Named once because it appears in the values(), the
@@ -48,7 +48,7 @@ RATE = 'trophy__trophy_earn_rate'
 
 
 class Command(BaseCommand):
-    help = 'Rebuild ProfilePPStanding (the PP Score board) from EarnedTrophy.'
+    help = 'Rebuild ProfileRarityStanding (the Rarity Score board) from EarnedTrophy.'
 
     def add_arguments(self, parser):
         parser.add_argument('--dry-run', action='store_true',
@@ -82,7 +82,7 @@ class Command(BaseCommand):
         total = len(all_ids)
         chunks_total = (total + chunk_size - 1) // chunk_size
         self.stdout.write(self.style.NOTICE(
-            f'recompute_pp_standings starting: {total} profiles, chunk={chunk_size}, '
+            f'recompute_rarity_standings starting: {total} profiles, chunk={chunk_size}, '
             f'budget={options["max_minutes"]}min, dry_run={dry_run}'
             + (f', resuming after profile {after_id}' if after_id else '')
         ))
@@ -114,7 +114,7 @@ class Command(BaseCommand):
             ))
         verb = 'Would write' if dry_run else 'Wrote'
         self.stdout.write(self.style.SUCCESS(
-            f'recompute_pp_standings complete in {time.monotonic() - start:.1f}s. '
+            f'recompute_rarity_standings complete in {time.monotonic() - start:.1f}s. '
             f'{verb} {written} standing(s) across {chunks_done} chunk(s).'
         ))
 
@@ -132,7 +132,7 @@ class Command(BaseCommand):
         """
         return (
             Profile.objects
-            .filter(Q(is_linked=True) | Q(pp_standing__isnull=False))
+            .filter(Q(is_linked=True) | Q(rarity_standing__isnull=False))
             .filter(id__gt=after_id)
             .order_by('id')
             .values_list('id', flat=True)
@@ -147,7 +147,7 @@ class Command(BaseCommand):
         # docstring for why they must not be written apart here.
         buckets = {}
         rows = (
-            pp_score.scorable_earned(EarnedTrophy.objects.filter(profile_id__in=profile_ids))
+            rarity_score.scorable_earned(EarnedTrophy.objects.filter(profile_id__in=profile_ids))
             .values('profile_id', RATE)
             .annotate(n=Count('id'))
             .order_by('profile_id', RATE)          # rarest first within each hunter
@@ -163,7 +163,7 @@ class Command(BaseCommand):
             Profile.objects.filter(id__in=profile_ids, is_linked=True).values_list('id', flat=True)
         )
         existing = {
-            s.profile_id: s for s in ProfilePPStanding.objects.filter(profile_id__in=profile_ids)
+            s.profile_id: s for s in ProfileRarityStanding.objects.filter(profile_id__in=profile_ids)
         }
 
         to_create, to_update = [], []
@@ -172,13 +172,13 @@ class Command(BaseCommand):
                 continue                       # deleted between the population read and now
             score, avg_rate, scored = self._score(buckets.get(pid, ()))
             fields = {
-                'pp_score': score, 'avg_earn_rate': avg_rate, 'scored_count': scored,
+                'rarity_score': score, 'avg_earn_rate': avg_rate, 'scored_count': scored,
                 'country_code': owners[pid] or '', 'is_linked': pid in linked,
             }
 
             row = existing.get(pid)
             if row is None:
-                to_create.append(ProfilePPStanding(profile_id=pid, **fields))
+                to_create.append(ProfileRarityStanding(profile_id=pid, **fields))
                 continue
             if any(getattr(row, k) != v for k, v in fields.items()):
                 for k, v in fields.items():
@@ -191,11 +191,11 @@ class Command(BaseCommand):
         if not dry_run:
             with transaction.atomic():
                 if to_create:
-                    ProfilePPStanding.objects.bulk_create(to_create, batch_size=500)
+                    ProfileRarityStanding.objects.bulk_create(to_create, batch_size=500)
                 if to_update:
-                    ProfilePPStanding.objects.bulk_update(
+                    ProfileRarityStanding.objects.bulk_update(
                         to_update,
-                        ['pp_score', 'avg_earn_rate', 'scored_count', 'country_code', 'is_linked',
+                        ['rarity_score', 'avg_earn_rate', 'scored_count', 'country_code', 'is_linked',
                          'updated_at'],
                         batch_size=500,
                     )
@@ -203,18 +203,18 @@ class Command(BaseCommand):
 
     @staticmethod
     def _score(rate_buckets):
-        """(pp_score, avg_earn_rate, scored_count) from `[(rate, count), ...]` sorted rarest-first.
+        """(rarity_score, avg_earn_rate, scored_count) from `[(rate, count), ...]` sorted rarest-first.
 
         Walks buckets taking `min(n, remaining)` from each, so the boundary bucket contributes only its
         share. Every figure here is a function of the RATE, which is what makes it irrelevant that a tied
         bucket's members are interchangeable.
 
-        ROUNDED, not truncated. `pp_score` is a PositiveIntegerField and Django's `get_prep_value` is
+        ROUNDED, not truncated. `rarity_score` is a PositiveIntegerField and Django's `get_prep_value` is
         `int(value)`, so storing 41210.999 yields 41210 -- a consistent downward bias of about half a
         point per hunter. Invisible in magnitude, but it makes the stored figure disagree with the one the
         formula produces, which is the kind of gap that costs an afternoon later.
         """
-        remaining = pp_score.TOP_N
+        remaining = rarity_score.TOP_N
         total_points = 0.0
         total_rate = 0.0
         scored = 0
@@ -227,7 +227,7 @@ class Command(BaseCommand):
             if remaining <= 0:
                 break
             take = min(n, remaining)
-            total_points += take * pp_score.points_for(rate)
+            total_points += take * rarity_score.points_for(rate)
             total_rate += take * rate
             scored += take
             remaining -= take

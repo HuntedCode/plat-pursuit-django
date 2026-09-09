@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name="ProfilePPStanding",
+            name="ProfileRarityStanding",
             fields=[
                 (
                     "id",
@@ -23,7 +23,7 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                ("pp_score", models.PositiveIntegerField(default=0)),
+                ("rarity_score", models.PositiveIntegerField(default=0)),
                 ("avg_earn_rate", models.FloatField(default=0.0)),
                 ("scored_count", models.PositiveIntegerField(default=0)),
                 (
@@ -36,7 +36,7 @@ class Migration(migrations.Migration):
                     "profile",
                     models.OneToOneField(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="pp_standing",
+                        related_name="rarity_standing",
                         to="trophies.profile",
                     ),
                 ),
@@ -47,15 +47,15 @@ class Migration(migrations.Migration):
                         condition=models.Q(
                             ("is_linked", True), ("scored_count__gte", 1000)
                         ),
-                        fields=["-pp_score", "profile"],
-                        name="pps_board_idx",
+                        fields=["-rarity_score", "profile"],
+                        name="prs_board_idx",
                     ),
                     models.Index(
                         condition=models.Q(
                             ("is_linked", True), ("scored_count__gte", 1000)
                         ),
-                        fields=["country_code", "-pp_score", "profile"],
-                        name="pps_country_board_idx",
+                        fields=["country_code", "-rarity_score", "profile"],
+                        name="prs_country_board_idx",
                     ),
                 ],
             },

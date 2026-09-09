@@ -4067,11 +4067,11 @@ class ProfileTrophyStanding(models.Model):
         return f"{self.profile.psn_username} - {self.clean_plats} clean plats ({self.clean_trophies} trophies)"
 
 
-class ProfilePPStanding(models.Model):
+class ProfileRarityStanding(models.Model):
     """Per-profile PP SCORE -- the third trophy board's store.
 
-    PP Score sums `100 / earn_rate` over a hunter's rarest 1,000 BASE-GAME trophies. The rule itself lives
-    in `services/pp_score.py`; this is only where the answer is kept.
+    Rarity Score sums `100 / earn_rate` over a hunter's rarest 1,000 BASE-GAME trophies. The rule itself lives
+    in `services/rarity_score.py`; this is only where the answer is kept.
 
     A sibling of `ProfileTrophyStanding` and built to the same rules -- read that model, and
     `ProfileCareerStanding` before it, for why `country_code` and `is_linked` are mirrored here rather
@@ -4089,10 +4089,10 @@ class ProfilePPStanding(models.Model):
     and 41211.000001 order arbitrarily under a different plan). Rounding costs nothing: scores run to the
     tens of thousands, where a fractional point is invisible.
     """
-    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='pp_standing')
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='rarity_standing')
     #: The board's sort key. Bounded 0..1,000,000 by PSN's own rate range (1 point for a 100% trophy,
     #: 1,000 for a 0.1% one, over at most TOP_N trophies), so it needs no wider column than this.
-    pp_score = models.PositiveIntegerField(default=0)
+    rarity_score = models.PositiveIntegerField(default=0)
     #: The SUPPORTING figure, and deliberately the average across the SCORED set rather than the whole
     #: library -- it has to explain the number beside it. A hunter whose 1,000 rarest average 2.4% has
     #: earned that score in a way "2.4% across everything they own" would not describe.
@@ -4117,16 +4117,16 @@ class ProfilePPStanding(models.Model):
             # THE CONDITION IS THE MEMBERSHIP RULE: a full 1,000 scorable trophies. Below that the sum is
             # short by construction, so a hunter would rank low for having played less rather than for
             # having played easier -- which is the one thing this board is not meant to measure. The 1,000
-            # here is `pp_score.TOP_N` and the two MUST move together; a partial index cannot reference a
+            # here is `rarity_score.TOP_N` and the two MUST move together; a partial index cannot reference a
             # Python constant, so changing N means a migration, which is correct -- it redefines the board.
-            models.Index(fields=['-pp_score', 'profile'], name='pps_board_idx',
+            models.Index(fields=['-rarity_score', 'profile'], name='prs_board_idx',
                          condition=Q(is_linked=True, scored_count__gte=1000)),
-            models.Index(fields=['country_code', '-pp_score', 'profile'], name='pps_country_board_idx',
+            models.Index(fields=['country_code', '-rarity_score', 'profile'], name='prs_country_board_idx',
                          condition=Q(is_linked=True, scored_count__gte=1000)),
         ]
 
     def __str__(self):
-        return f"{self.profile.psn_username} - PP {self.pp_score:,} ({self.scored_count} scored)"
+        return f"{self.profile.psn_username} - PP {self.rarity_score:,} ({self.scored_count} scored)"
 
 
 class SeriesBadgeStanding(models.Model):

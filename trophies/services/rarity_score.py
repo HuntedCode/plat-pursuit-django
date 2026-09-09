@@ -1,4 +1,4 @@
-"""PP Score: what a trophy is worth, and which trophies count.
+"""Rarity Score: what a trophy is worth, and which trophies count.
 
 THE ONE DEFINITION of the scoring rule. The nightly recompute, any per-trophy display, and every test read
 it from here -- a second spelling of this formula would be a second leaderboard.
@@ -6,7 +6,7 @@ it from here -- a second spelling of this formula would be a second leaderboard.
     points = 100 / earn_rate        (earn_rate is a PERCENTAGE)
 
 It reads as "how many players you would line up to find one who has this": a 1% trophy is worth 100, a
-10% trophy 10, a 50% trophy 2. So a hunter's PP Score is *how many players you would line up in total,
+10% trophy 10, a 50% trophy 2. So a hunter's Rarity Score is *how many players you would line up in total,
 across their rarest 1,000 base-game trophies* -- which is the whole board explained in one sentence.
 
 The scale runs 1 to 1,000 per trophy, and that range is PSN's rather than ours: it reports no rate above
@@ -38,7 +38,7 @@ TIES ARE ARBITRARY AND THAT IS SAFE, but only for as long as nothing row-identif
 strictly decreasing in rate only ABOVE the floor; at and below it every trophy is worth MAX_POINTS. With
 ~1,000 distinct rates over ~1.03M trophies, the TOP_N boundary lands inside a tie bucket for essentially
 every qualifying hunter, so "the rarest 1,000" is not a well-defined SET of rows. It does not matter:
-`pp_score` and `avg_earn_rate` are both functions of the rate, so any choice of tie members yields the
+`rarity_score` and `avg_earn_rate` are both functions of the rate, so any choice of tie members yields the
 same two numbers. That stops being true the moment something stores a row identity taken from the slice
 -- a rarest-trophy pointer, a per-trophy breakdown, a cached list of the scoring thousand.
 

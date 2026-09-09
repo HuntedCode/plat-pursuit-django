@@ -1,9 +1,9 @@
 """Every model change has a migration.
 
 The suite reads `model._meta`, so a model and its migrations can disagree and every test stays green --
-while the DATABASE is built from the migrations. That gap is not hypothetical here: the PP Score board's
+while the DATABASE is built from the migrations. That gap is not hypothetical here: the Rarity Score board's
 membership rule lives as a literal inside two partial index conditions in migration `0335`, and a
-guard that pins it against `pp_score.TOP_N` reads the MODEL's copy. Hand-edit the migration's literal and
+guard that pins it against `rarity_score.TOP_N` reads the MODEL's copy. Hand-edit the migration's literal and
 the deployed indexes gate at a different number from the board, with nothing failing.
 
 One check closes the whole class, for every app, not just this one.

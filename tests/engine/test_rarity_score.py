@@ -1,4 +1,4 @@
-"""PP Score -- the scoring rule (leaderboards, 2026-09).
+"""Rarity Score -- the scoring rule (leaderboards, 2026-09).
 
 `points = 100 / earn_rate`, summed over a hunter's rarest 1,000 BASE-GAME trophies. Pure rarity: no
 trophy-type base, so a 0.5% bronze outscores a 40% platinum.
@@ -7,13 +7,13 @@ What is pinned here is the rule itself -- what a trophy is worth and which troph
 sums it lives elsewhere; these tests exist so the formula has one definition and cannot quietly acquire a
 second.
 
-See trophies/services/pp_score.py.
+See trophies/services/rarity_score.py.
 """
 import pytest
 from django.db.models import Sum
 
 from trophies.models import Trophy
-from trophies.services import pp_score
+from trophies.services import rarity_score
 from tests.factories import GameFactory, TrophyFactory
 
 pytestmark = pytest.mark.django_db
@@ -36,7 +36,7 @@ def _trophy(rate, group='default', tier='bronze', game=None):
 def test_points_are_how_many_players_you_would_line_up_to_find_one(rate, expected):
     """The reading that makes the score explainable: a 1% trophy is worth 100 because you would line up
     100 players to find one who has it."""
-    assert pp_score.points_for(rate) == expected
+    assert rarity_score.points_for(rate) == expected
 
 
 def test_the_scale_matches_PSNs_own_range():
@@ -46,17 +46,17 @@ def test_the_scale_matches_PSNs_own_range():
     Worth pinning because it is the answer to "how big can this number get", which is the first thing
     anyone asks of a new score.
     """
-    assert pp_score.points_for(100.0) == 1.0
-    assert pp_score.points_for(pp_score.RATE_FLOOR) == pp_score.MAX_POINTS == 1000.0
-    assert pp_score.TOP_N * pp_score.MAX_POINTS == 1_000_000
+    assert rarity_score.points_for(100.0) == 1.0
+    assert rarity_score.points_for(rarity_score.RATE_FLOOR) == rarity_score.MAX_POINTS == 1000.0
+    assert rarity_score.TOP_N * rarity_score.MAX_POINTS == 1_000_000
 
 
 def test_a_corrupt_below_floor_rate_cannot_exceed_the_maximum():
     """A DATA-INTEGRITY backstop, not a noise guard -- PSN has already floored at 0.1%, so these inputs
     cannot arrive from sync. What they can arrive from is a hand-edit or a bad import, and without the
     floor one such row is worth more than every legitimate trophy a hunter owns combined."""
-    assert pp_score.points_for(0.01) == pp_score.MAX_POINTS
-    assert pp_score.points_for(0.0001) == pp_score.MAX_POINTS
+    assert rarity_score.points_for(0.01) == rarity_score.MAX_POINTS
+    assert rarity_score.points_for(0.0001) == rarity_score.MAX_POINTS
 
 
 def test_the_cap_is_what_the_FORMULA_yields_at_the_floor():
@@ -68,8 +68,8 @@ def test_the_cap_is_what_the_FORMULA_yields_at_the_floor():
     DIVERGING, whenever either moves without the other. (A literal typed while it still happens to be
     correct is not a bug; the divergence is, and this fires on it.)
     """
-    assert pp_score.MAX_POINTS == pp_score.points_for(pp_score.RATE_FLOOR)
-    assert pp_score.MAX_POINTS == 1000.0, 'the documented ceiling moved; the docs and board copy say 1,000'
+    assert rarity_score.MAX_POINTS == rarity_score.points_for(rarity_score.RATE_FLOOR)
+    assert rarity_score.MAX_POINTS == 1000.0, 'the documented ceiling moved; the docs and board copy say 1,000'
 
 
 def test_rarer_scores_STRICTLY_higher_above_the_floor():
@@ -84,7 +84,7 @@ def test_rarer_scores_STRICTLY_higher_above_the_floor():
     region where the function legitimately IS flat -- which is where the tie question lives.
     """
     rates = [90.0, 50.0, 25.0, 10.0, 5.0, 1.0, 0.5, 0.2]
-    points = [pp_score.points_for(r) for r in rates]
+    points = [rarity_score.points_for(r) for r in rates]
 
     assert all(a < b for a, b in zip(points, points[1:])), (
         f'points are not strictly increasing as rate falls: {list(zip(rates, points))}'
@@ -98,10 +98,10 @@ def test_every_trophy_at_or_below_the_floor_is_worth_the_SAME():
     ours -- which means real trophies sit exactly there (3,683 of them in the catalogue) and are genuinely
     indistinguishable. The recompute must not assume its rarest-1,000 is a well-defined set of ROWS.
     """
-    assert (pp_score.points_for(pp_score.RATE_FLOOR)
-            == pp_score.points_for(pp_score.RATE_FLOOR / 2)
-            == pp_score.points_for(0.0001)
-            == pp_score.MAX_POINTS)
+    assert (rarity_score.points_for(rarity_score.RATE_FLOOR)
+            == rarity_score.points_for(rarity_score.RATE_FLOOR / 2)
+            == rarity_score.points_for(0.0001)
+            == rarity_score.MAX_POINTS)
 
 
 def test_ordering_by_RATE_gives_the_same_points_as_ordering_by_POINTS():
@@ -117,9 +117,9 @@ def test_ordering_by_RATE_gives_the_same_points_as_ordering_by_POINTS():
     shuffled = rates[:]
     random.shuffle(shuffled)
 
-    by_rate = [pp_score.points_for(r) for r in sorted(shuffled)]
-    by_points = [pp_score.points_for(r)
-                 for r in sorted(shuffled, key=pp_score.points_for, reverse=True)]
+    by_rate = [rarity_score.points_for(r) for r in sorted(shuffled)]
+    by_points = [rarity_score.points_for(r)
+                 for r in sorted(shuffled, key=rarity_score.points_for, reverse=True)]
 
     assert by_rate == by_points, 'ordering by rate and by points disagree on the points sequence'
 
@@ -134,16 +134,16 @@ def test_an_unknown_rate_scores_ZERO_not_infinity():
     `100 / rate` a hunter with a few hundred unsynced trophies would top the board outright, and the
     failure is silent: no error, just an impossible score.
     """
-    assert pp_score.points_for(0.0) == 0.0
-    assert pp_score.points_for(None) == 0.0
-    assert pp_score.points_for(-1.0) == 0.0
+    assert rarity_score.points_for(0.0) == 0.0
+    assert rarity_score.points_for(None) == 0.0
+    assert rarity_score.points_for(-1.0) == 0.0
 
 
 def test_a_trophy_with_an_unknown_rate_is_not_scorable():
     known = _trophy(5.0)
     unknown = _trophy(0.0)
 
-    scorable = set(Trophy.objects.filter(pp_score.scorable_q()).values_list('id', flat=True))
+    scorable = set(Trophy.objects.filter(rarity_score.scorable_q()).values_list('id', flat=True))
     assert known.id in scorable
     assert unknown.id not in scorable, 'a trophy with no known rarity reached the board'
 
@@ -159,7 +159,7 @@ def test_DLC_trophies_are_not_scorable():
     base = _trophy(5.0, group='default', game=game)
     dlc = _trophy(0.5, group='001', game=game)     # rarer on paper, and excluded anyway
 
-    scorable = set(Trophy.objects.filter(pp_score.scorable_q()).values_list('id', flat=True))
+    scorable = set(Trophy.objects.filter(rarity_score.scorable_q()).values_list('id', flat=True))
     assert base.id in scorable
     assert dlc.id not in scorable, 'a DLC trophy reached the board'
 
@@ -176,7 +176,7 @@ def test_scorable_q_reaches_through_a_prefix():
     EarnedTrophyFactory(profile=profile, trophy=_trophy(0.0, game=game), earned=True)
     EarnedTrophyFactory(profile=profile, trophy=_trophy(1.0, group='001', game=game), earned=True)
 
-    assert EarnedTrophy.objects.filter(pp_score.scorable_q('trophy__')).count() == 1
+    assert EarnedTrophy.objects.filter(rarity_score.scorable_q('trophy__')).count() == 1
 
 
 def test_an_UNEARNED_trophy_never_scores():
@@ -195,10 +195,10 @@ def test_an_UNEARNED_trophy_never_scores():
     EarnedTrophyFactory(profile=profile, trophy=_trophy(1.0, game=game), earned=True)
     EarnedTrophyFactory(profile=profile, trophy=_trophy(0.5, game=game), earned=False)
 
-    rows = pp_score.scorable_earned(EarnedTrophy.objects.filter(profile=profile))
+    rows = rarity_score.scorable_earned(EarnedTrophy.objects.filter(profile=profile))
 
     assert rows.count() == 1, 'an unearned trophy reached the scoring set'
-    total = rows.aggregate(t=Sum(pp_score.points_expression('trophy__')))['t']
+    total = rows.aggregate(t=Sum(rarity_score.points_expression('trophy__')))['t']
     assert total == pytest.approx(100.0), 'the unearned trophy contributed points'
 
 
@@ -227,7 +227,7 @@ def test_an_UNKNOWN_rate_row_sorts_FIRST_by_rate_which_is_why_the_filter_is_mand
                       .values_list('trophy__trophy_earn_rate', flat=True))
     assert unfiltered[0] == 0.0, 'the premise changed: unknown rates no longer sort first'
 
-    filtered = list(pp_score.scorable_earned(EarnedTrophy.objects.filter(profile=profile))
+    filtered = list(rarity_score.scorable_earned(EarnedTrophy.objects.filter(profile=profile))
                     .order_by('trophy__trophy_earn_rate')
                     .values_list('trophy__trophy_earn_rate', flat=True))
     assert filtered == [0.5], 'the helper let an unknown rate into the scoring set'
@@ -243,9 +243,9 @@ def test_the_ORM_expression_agrees_with_the_python_one(rate):
     """
     _trophy(rate)
 
-    got = Trophy.objects.aggregate(total=Sum(pp_score.points_expression()))['total'] or 0.0
+    got = Trophy.objects.aggregate(total=Sum(rarity_score.points_expression()))['total'] or 0.0
 
-    assert got == pytest.approx(pp_score.points_for(rate)), (
+    assert got == pytest.approx(rarity_score.points_for(rate)), (
         f'the SQL and Python spellings disagree at rate={rate}'
     )
 
@@ -258,7 +258,7 @@ def test_the_expression_sums_only_what_it_should_across_many_trophies():
     _trophy(0.0, game=game)                      # unknown -- excluded
     _trophy(0.5, group='001', game=game)         # DLC -- excluded
 
-    total = (Trophy.objects.filter(pp_score.scorable_q())
-             .aggregate(total=Sum(pp_score.points_expression()))['total'])
+    total = (Trophy.objects.filter(rarity_score.scorable_q())
+             .aggregate(total=Sum(rarity_score.points_expression()))['total'])
 
     assert total == pytest.approx(110.0)

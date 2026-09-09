@@ -29,7 +29,7 @@ from django.core.management.base import BaseCommand
 #:   1. update_shovelware      re-evaluates which games are flagged. FIRST -- see below
 #:   2. recompute_clean_standings rebuilds the Shovelware Free board's store from those flags, so it MUST
 #:      follow step 1
-#:   3. recompute_pp_standings rebuilds the PP Score board. NO dependency on anything above it: it reads
+#:   3. recompute_rarity_standings rebuilds the Rarity Score board. NO dependency on anything above it: it reads
 #:      `Trophy.trophy_earn_rate`, PSN's own figure written during SYNC, not our `Trophy.earn_rate`.
 #:      Placed beside the other board rebuild because they are the same kind of work, not because it
 #:      needs to follow one.
@@ -73,7 +73,7 @@ from django.core.management.base import BaseCommand
 STEPS = [
     ('shovelware detection', 'update_shovelware', {}),
     ('clean standings', 'recompute_clean_standings', {}),
-    ('pp standings', 'recompute_pp_standings', {}),
+    ('pp standings', 'recompute_rarity_standings', {}),
     ('badge evaluation', 'evaluate_badges', {'all': True}),
     ('DLC detection', 'detect_dlc_and_refresh', {}),
     ('contract detection', 'process_contracts', {'all_profiles': True, 'incremental': True}),

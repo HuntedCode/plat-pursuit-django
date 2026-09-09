@@ -843,7 +843,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # is the question a first-time visitor is actually asking. Trophies keeps its tab and its bookmarks.
     BOARDS = (
         ('clean', 'Shovelware Free'),
-        ('pp', 'PP Score'),
+        ('rarity', 'Rarity Score'),
         ('trophies', 'All Trophies'),
         ('points', 'Badge Points'),
         ('career', 'Career XP'),
@@ -869,7 +869,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: bookmark, every `LEGACY_TABS` mapping and the rows endpoint keep working untouched. A nested
     #: `?tab=trophies&view=pp` would have been a URL migration bought nothing.
     BOARD_GROUPS = (
-        ('Trophies', ('clean', 'pp', 'trophies')),
+        ('Trophies', ('clean', 'rarity', 'trophies')),
         ('Badge Points', ('points',)),
         ('Career XP', ('career',)),
     )
@@ -902,7 +902,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
         'clean': ('platinums', 'trophies'),
         # The supporting figure is a PERCENTAGE, and the shared row partial has no suffix slot -- it
         # renders `{{ value }} {{ label }}`. So the label carries the unit rather than the number.
-        'pp': ('points', 'avg rarity %'),
+        'rarity': ('points', 'avg rarity %'),
         'trophies': ('platinums', 'trophies'),
         'points': ('points', 'badges'),
         'career': ('XP', 'level'),
@@ -924,7 +924,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: thing distinguishing it.
     MEANINGS = {
         'clean': 'Platinums earned on games that are not shovelware. Total trophies settles a tie.',
-        'pp': ('Your 1,000 rarest base-game trophies. Rarer scores higher: a 1% trophy is worth 100, '
+        'rarity': ('Your 1,000 rarest base-game trophies. Rarer scores higher: a 1% trophy is worth 100, '
                'a 10% trophy 10.'),
         'trophies': ('Every game counts, shovelware included. Ranked by platinums, with total trophies '
                      'settling a tie.'),
@@ -1463,7 +1463,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # is the question a first-time visitor is actually asking. Trophies keeps its tab and its bookmarks.
     BOARDS = (
         ('clean', 'Shovelware Free'),
-        ('pp', 'PP Score'),
+        ('rarity', 'Rarity Score'),
         ('trophies', 'All Trophies'),
         ('points', 'Badge Points'),
         ('career', 'Career XP'),
@@ -1489,7 +1489,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: bookmark, every `LEGACY_TABS` mapping and the rows endpoint keep working untouched. A nested
     #: `?tab=trophies&view=pp` would have been a URL migration bought nothing.
     BOARD_GROUPS = (
-        ('Trophies', ('clean', 'pp', 'trophies')),
+        ('Trophies', ('clean', 'rarity', 'trophies')),
         ('Badge Points', ('points',)),
         ('Career XP', ('career',)),
     )
@@ -1522,7 +1522,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
         'clean': ('platinums', 'trophies'),
         # The supporting figure is a PERCENTAGE, and the shared row partial has no suffix slot -- it
         # renders `{{ value }} {{ label }}`. So the label carries the unit rather than the number.
-        'pp': ('points', 'avg rarity %'),
+        'rarity': ('points', 'avg rarity %'),
         'trophies': ('platinums', 'trophies'),
         'points': ('points', 'badges'),
         'career': ('XP', 'level'),
@@ -1544,7 +1544,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: thing distinguishing it.
     MEANINGS = {
         'clean': 'Platinums earned on games that are not shovelware. Total trophies settles a tie.',
-        'pp': ('Your 1,000 rarest base-game trophies. Rarer scores higher: a 1% trophy is worth 100, '
+        'rarity': ('Your 1,000 rarest base-game trophies. Rarer scores higher: a 1% trophy is worth 100, '
                'a 10% trophy 10.'),
         'trophies': ('Every game counts, shovelware included. Ranked by platinums, with total trophies '
                      'settling a tie.'),
@@ -1727,7 +1727,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
             ed = edition or None
             standing = {
                 'clean': lb.clean_rank(profile.id, country=cc),
-                'pp': lb.pp_rank(profile.id, country=cc),
+                'rarity': lb.rarity_rank(profile.id, country=cc),
                 'trophies': lb.trophy_rank(profile.id, country=cc),
                 'points': lb.xp_rank(profile.id, country=cc, edition=ed),
                 'career': lb.career_xp_rank(profile.id, country=cc),
@@ -1777,12 +1777,12 @@ class OverallBadgeLeaderboardsView(TemplateView):
             # board below, whose store IS Profile.
             return (lb._slice(lb.clean_store().filter(clean_trophies__gt=0), cc),
                     lb.CLEAN_KEYS, 'profile_id', 'profile__')
-        if tab == 'pp':
-            # The gate is a FULL TOP_N, not `> 0` -- and it must match `pp_rows` exactly, or the search
+        if tab == 'rarity':
+            # The gate is a FULL TOP_N, not `> 0` -- and it must match `rarity_rows` exactly, or the search
             # would offer a hunter the wall does not contain.
-            from trophies.services.pp_score import TOP_N
-            return (lb._slice(lb.pp_store().filter(scored_count__gte=TOP_N), cc),
-                    lb.PP_KEYS, 'profile_id', 'profile__')
+            from trophies.services.rarity_score import TOP_N
+            return (lb._slice(lb.rarity_store().filter(scored_count__gte=TOP_N), cc),
+                    lb.RARITY_KEYS, 'profile_id', 'profile__')
         if tab == 'trophies':
             # The Trophies board's store IS Profile, so its id column is `id` and its name columns are
             # unprefixed -- the other two point AT a profile.
@@ -1814,8 +1814,8 @@ class OverallBadgeLeaderboardsView(TemplateView):
 
         if tab == 'clean':
             rows = lb.clean_rows(limit=limit, offset=offset, country=cc)
-        elif tab == 'pp':
-            rows = lb.pp_rows(limit=limit, offset=offset, country=cc)
+        elif tab == 'rarity':
+            rows = lb.rarity_rows(limit=limit, offset=offset, country=cc)
         elif tab == 'trophies':
             rows = lb.trophy_rows(limit=limit, offset=offset, country=cc)
         elif tab == 'points':
