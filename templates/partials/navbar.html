@@ -99,7 +99,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
         <div class="dropdown dropdown-end" id="nav-account">
             <div tabindex="0" role="button" class="pp-av"{% if navsync %} data-nav-avatar data-sync="{{ navsync.sync_status }}"{% endif %} aria-label="Account{% if navsync %} and sync status{% endif %}{% if mod_open_count %}, {{ mod_open_count }} report{{ mod_open_count|pluralize }} waiting to be moderated{% endif %}" aria-haspopup="true" aria-expanded="false">
                 <span class="pp-av__img">
-                    {% if user.profile %}<img alt="" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
+                    {% if user.profile.avatar_url %}<img alt="" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
                     {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{% endif %}
                 </span>
                 {% if navsync %}<span class="pp-av__dot"></span>{% endif %}

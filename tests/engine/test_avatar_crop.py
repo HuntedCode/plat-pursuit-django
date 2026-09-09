@@ -58,7 +58,10 @@ def test_every_round_avatar_container_clips_its_image():
         if block is None:
             offences.append(f'{sheet}: .{selector} has no rule at all')
             continue
-        if 'overflow' not in block:
+        # The VALUE, not the property name: `overflow: visible` -- the bug under test, stated as
+        # explicitly as it can be stated -- satisfied a bare `'overflow' not in block`. So did
+        # `overflow-x: hidden` alone, which does not clip vertically.
+        if not re.search(r'overflow\s*:\s*(hidden|clip)[\s;}]', block + ';'):
             offences.append(f'{sheet}: .{selector} rounds its corners but never clips its child')
     assert not offences, 'containers that do not crop:\n  ' + '\n  '.join(offences)
 
@@ -73,10 +76,17 @@ def test_the_cover_fit_is_on_the_IMAGE_not_the_container():
         if child is None:
             offences.append(f'{sheet}: .{selector} never sizes the img inside it')
             continue
-        if 'object-fit' not in child.group(1):
+        decls = child.group(1)
+        # COVER specifically. `object-fit: contain` (letterbox) and `fill` (skew, and banned outright by
+        # CLAUDE.md) both satisfied a bare `'object-fit' not in`, while the message promised otherwise.
+        if not re.search(r'object-fit\s*:\s*cover[\s;}]', decls + ';'):
             offences.append(f'{sheet}: .{selector} img does not cover-fit, so it will letterbox or skew')
-        if 'width' not in child.group(1) or 'height' not in child.group(1):
-            offences.append(f'{sheet}: .{selector} img is not sized, so it renders at its natural size')
+        # `width`, not `max-width`. The substring version was satisfied by `max-width` -- which is
+        # precisely the Tailwind-preflight-only state that produced the original bug.
+        for prop in ('width', 'height'):
+            if not re.search(r'(?<![-\w])' + prop + r'\s*:', decls):
+                offences.append(f'{sheet}: .{selector} img has no explicit {prop}; it will render at '
+                                f'its natural size')
 
         container = _block(css, selector)
         if container and 'object-fit' in container:
@@ -84,3 +94,36 @@ def test_the_cover_fit_is_on_the_IMAGE_not_the_container():
                 f'{sheet}: .{selector} declares object-fit on the CONTAINER, where it does nothing'
             )
     assert not offences, 'broken image fits:\n  ' + '\n  '.join(offences)
+
+
+def test_the_avatar_SHELL_must_never_clip():
+    """The one edit that would break everything, and nothing guarded it.
+
+    The clip belongs on the inner `.pp-av__img`, never on `.pp-av` itself. `.pp-av` is the positioning
+    context for four things that deliberately hang OUTSIDE its box: the status ring (`::after`, inset
+    -4px), the syncing arc (`::before`), the sync LED (`right/bottom: -2px`) and the moderation queue
+    badge (`right/top: -5px`). `overflow: hidden` there silently deletes all four -- and it is the
+    obvious "fix" for anyone who sees the crop bug and reaches for the outer element first.
+    """
+    block = _block(_css('chrome.css'), 'pp-av')
+    assert block is not None, '.pp-av has no rule'
+    assert 'overflow' not in block, (
+        '.pp-av must not clip: the ring, the syncing arc, the sync LED and the queue badge all sit '
+        'outside its box and would vanish'
+    )
+
+
+def test_the_navbar_avatar_guards_on_the_URL_not_the_profile():
+    """`avatar_url` is nullable, so `{% if user.profile %}` renders `<img src="">` for a linked hunter
+    with no avatar: the browser fetches the page as an image and shows a broken-image icon, and the SVG
+    fallback is never reached. Harmless-looking until the crop fix lands, which then stretches that
+    placeholder to fill the whole circle. The sync-panel instance 17 lines below always had it right.
+    """
+    navbar = (Path(dj_settings.BASE_DIR) / 'templates' / 'partials' / 'navbar.html').read_text(encoding='utf-8')
+    for chunk in navbar.split('class="pp-av__img"')[1:]:
+        head = chunk.split('{% endif %}', 1)[0]
+        if '<img' not in head:
+            continue          # the anon glyph-only instance
+        assert 'avatar_url %}' in head, (
+            'an avatar renders <img src=""> when the profile has no avatar_url; guard on the URL'
+        )
