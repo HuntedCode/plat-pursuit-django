@@ -339,3 +339,43 @@ def test_the_gate_arms_only_when_a_modal_is_actually_due(client):
     assert 'ppAfterHomeModal' in body, 'the gate must still publish, or home-motion has nothing to call'
     gate = body.split('ppAfterHomeModal')[0]
     assert 'var pending = false' in gate, 'the gate armed with no modal on the page'
+
+
+def test_a_dismissing_LINK_still_navigates():
+    """The bug this pins was shipped and caught by a question, not by a test.
+
+    Every close control carries the dismiss attribute, and two of them are <a href> links. The
+    controller's handler called preventDefault on all of them -- correct while every consumer's only
+    control was a <button>, and wrong the moment a link had one: clicking "See the boards" dismissed the
+    modal and went NOWHERE.
+
+    Not preventing at all is the opposite failure: an in-flight request is cancelled on unload, so the
+    dismissal is lost and the reader meets the same notice again having already clicked through it. The
+    handler has to hold the navigation until the write settles, and cap that wait.
+
+    A source pin because this is a click through a live network call -- there is no Django test client
+    path to it. What it can pin is that the branch still exists, since the way this regresses is somebody
+    tidying the handler back down to one preventDefault.
+    """
+    js = _code(Path(dj_settings.BASE_DIR) / 'static' / 'js' / 'utils.js')
+    handler = js.split('function DetailModal', 1)[1]
+
+    assert "closest('a[href]')" in handler, 'the controller no longer treats a dismissing link specially'
+    assert 'location.assign' in handler, 'a dismissing link is prevented but never navigated'
+    assert 'e.metaKey' in handler and 'e.button !== 0' in handler, (
+        'a ctrl/middle click is being intercepted; it belongs to the browser'
+    )
+
+
+def test_every_way_out_of_the_modal_dismisses_it():
+    """All three controls mark it seen. A reader who clicked through to the feature has been told about
+    it, and finding the notice waiting again next visit reads as the dismissal having failed."""
+    partial = _code(Path(dj_settings.BASE_DIR) / 'templates' / 'trophies' / 'partials' / 'home' / '_whats_new.html')
+
+    # The button, the entry link, the archive link, the scrim and the X.
+    assert partial.count('data-wn-close') >= 5, (
+        'a control can close this modal without marking it seen'
+    )
+    # And the links are real links, not buttons wearing a link class -- which is what would make the
+    # navigation branch above dead code.
+    assert partial.count('<a class="pp-howto__more"') == 2

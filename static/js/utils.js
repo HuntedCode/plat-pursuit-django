@@ -3465,15 +3465,18 @@ function DetailModal(el, opts) {
         return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || node.isContentEditable;
     }
 
+    // Returns a promise that settles once the dismissal has been RECORDED, or null when there was
+    // nothing to record. Callers that are about to navigate away wait on it; callers that are not
+    // ignore it.
     function dismiss() {
         // Only an ARMED dismissal records anything. A reopen-and-close (an edhint, a "read it again"
         // link) must stay silent, or the first reopen would re-write a flag that is already written and
         // a manual modal would start marking itself seen.
-        if (!armed) { return; }
+        if (!armed) { return null; }
         armed = false;
         var p = opts.onDismiss ? opts.onDismiss() : null;
-        if (!p || !p.catch) { return; }
-        p.catch(function () {
+        if (!p || !p.catch) { return null; }
+        return p.catch(function () {
             // The server did not hear us. Keep THIS device quiet and let the caller's self-heal retry.
             if (opts.seenKey) { try { localStorage.setItem(opts.seenKey, '1'); } catch (e) {} }
         });
@@ -3504,7 +3507,40 @@ function DetailModal(el, opts) {
 
     document.addEventListener('click', function (e) {
         if (!e.target.closest || el.hidden) { return; }
-        if (e.target.closest(closeSelector)) { e.preventDefault(); api.close(); }
+        var hit = e.target.closest(closeSelector);
+        if (!hit) { return; }
+        var link = hit.closest('a[href]');
+
+        // A DISMISSING LINK. It has to do two things that pull against each other: record the
+        // dismissal, and go where it points. Blanket-preventDefault (what this did when every
+        // consumer's only close control was a <button>) records the dismissal and navigates NOWHERE.
+        // Simply not preventing loses the record instead: an in-flight request is cancelled on unload,
+        // so the reader would meet the same notice again having already clicked through it.
+        //
+        // So: hold the navigation until the write has settled, and cap the wait -- a hung request must
+        // never strand somebody on a modal after they clicked a link.
+        if (link) {
+            // A modified or middle click belongs to the browser (new tab, new window, save). Record
+            // the dismissal, because they have read it, and then keep out of the way: intercepting
+            // here would replace their new tab with a navigation in this one.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) { dismiss(); return; }
+
+            e.preventDefault();
+            var href = link.href;
+            var gone = false;
+            var go = function () {
+                if (gone) { return; }
+                gone = true;
+                window.location.assign(href);
+            };
+            var recorded = dismiss();
+            if (recorded && recorded.then) { recorded.then(go, go); } else { go(); }
+            window.setTimeout(go, 600);
+            return;
+        }
+
+        e.preventDefault();
+        api.close();
     });
 
     document.addEventListener('keydown', function (e) {

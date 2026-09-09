@@ -126,6 +126,12 @@ was the lobby's only modal.
   it. Miss one and the lobby's numbers sit frozen at their server-rendered values. Those values are
   correct (they are what no-JS readers see), so it fails quietly rather than visibly. A 4-second backstop
   in the gate partial releases it regardless, for the case where the JS never runs at all.
+- **A dismissing LINK must still navigate.** Every close control marks the entry seen, and two of them
+  are `<a href>`. The controller's click handler cannot blanket-`preventDefault` (that dismisses the
+  modal and goes nowhere) and cannot simply let the click through either (an in-flight request is
+  cancelled on unload, so the dismissal is lost and the reader meets the same notice again having
+  already clicked it). It holds the navigation until the write settles, capped at 600ms so a hung
+  request never strands anybody. Modified and middle clicks are left to the browser and only recorded.
 - **The archive page must not mark anything seen.** Reading the record is not dismissing the notice; a
   hunter who arrives from a link should still meet the modal on Home.
 - **Entry links must stay on-site.** The modal opens itself, unasked, over the page — a link out of it is

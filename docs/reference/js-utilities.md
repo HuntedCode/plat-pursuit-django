@@ -409,6 +409,12 @@ the first reopen re-writes a flag that is already written. If `onDismiss` reject
 `DOMContentLoaded`, because an inline partial script runs *before* end-of-body `utils.js` defines
 `PlatPursuit.API`).
 
+**A dismissing control that is a link** is handled separately, and this is the part that bit us. Blanket
+`preventDefault` on every close control dismisses the modal and navigates nowhere; not preventing at all
+loses the dismissal, because an in-flight request is cancelled on unload. The handler holds the
+navigation until the write settles, capped at 600ms so a hung request never strands the reader. Modified
+and middle clicks are left to the browser and only recorded.
+
 **It does NOT own a choreography gate**, and this is the part worth reading twice. A page whose on-load
 motion waits for a modal must arm that gate *synchronously*, before its end-of-body scripts run — and
 `utils.js` is one of those scripts, so a gate armed here would arm after the code waiting on it had
