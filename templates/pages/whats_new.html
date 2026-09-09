@@ -57,7 +57,13 @@ card per entry, because each is a discrete section of prose rather than page-fil
                     <h2 class="wn-entry__title">{{ entry.title }}</h2>
                     {% comment %} A machine-readable date beside the human one: this is a dated record,
                     and the <time> is what makes it one to anything that reads the page. {% endcomment %}
-                    <time class="wn-entry__date" datetime="{{ entry.published|date:'Y-m-d' }}">{{ entry.published|date:'F j, Y' }}</time>
+                    <span class="wn-entry__meta">
+                        {% comment %} Beside the date, not beside the title: the pill is a fact ABOUT
+                        when this landed, and putting it next to the heading would make a two-word badge
+                        compete with the entry's name for the first thing read. {% endcomment %}
+                        {% if entry.id in unseen_ids %}<span class="wn-entry__new">New</span>{% endif %}
+                        <time class="wn-entry__date" datetime="{{ entry.published|date:'Y-m-d' }}">{{ entry.published|date:'F j, Y' }}</time>
+                    </span>
                 </div>
 
                 <div class="cxp__stack">

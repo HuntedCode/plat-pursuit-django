@@ -811,3 +811,78 @@ def test_the_dot_preview_door_does_not_leak_either(client):
     body = client.get(reverse('about') + '?preview=whats-new', **CF).content.decode()
 
     assert 'pp-av__new' not in body, 'a non-staff viewer forced the marker on'
+
+
+# ── "New" pills on the archive rows ───────────────────────────────────────────────────────────────────
+
+def test_the_archive_flags_entries_published_since_you_last_looked(client):
+    """The pill means "this arrived since you last looked", derived from the same single marker the
+    modal and the avatar read -- so the three can never disagree about what has been shown."""
+    client, profile = _synced_client(client)
+    oldest = whats_new.ENTRIES[-1]
+    profile.user.ui_flags = {'whats_new_seen': oldest.id}
+    profile.user.save(update_fields=['ui_flags'])
+
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+
+    # Everything above the marker is flagged; the marker's own row and below are not.
+    for entry in whats_new.ENTRIES[:-1]:
+        head = body.split(entry.title, 1)[1].split('</div>', 1)[0]
+        assert 'wn-entry__new' in head, f'{entry.id} is newer than the marker but not flagged'
+    tail = body.split(oldest.title, 1)[1].split('</div>', 1)[0]
+    assert 'wn-entry__new' not in tail, 'the entry they last dismissed is flagged as new'
+
+
+def test_a_reader_who_is_up_to_date_sees_no_pills(client):
+    client, profile = _synced_client(client)
+    profile.user.ui_flags = {'whats_new_seen': whats_new.latest().id}
+    profile.user.save(update_fields=['ui_flags'])
+
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+
+    assert 'wn-entry__new' not in body
+
+
+def test_a_reader_who_has_never_looked_gets_ONE_pill_not_all(client):
+    """Flagging every historical row for a fresh account is technically true and useless: a page where
+    every row is flagged has flagged nothing, and somebody who joined last week is not owed a New badge
+    on something from two months ago. The newest only -- which is also what the modal shows them."""
+    client, _ = _synced_client(client)
+
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+
+    assert body.count('wn-entry__new') == 1
+    newest_head = body.split(whats_new.latest().title, 1)[1].split('</div>', 1)[0]
+    assert 'wn-entry__new' in newest_head, 'the one pill is not on the newest entry'
+
+
+def test_an_unrecognised_marker_falls_back_to_the_newest(client):
+    """Their entry was pulled after they dismissed it, so we cannot place them. Flag the newest rather
+    than the whole page; it self-corrects on this very load, which posts the newest id back."""
+    client, profile = _synced_client(client)
+    profile.user.ui_flags = {'whats_new_seen': 'an-entry-that-was-deleted'}
+    profile.user.save(update_fields=['ui_flags'])
+
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+
+    assert body.count('wn-entry__new') == 1
+
+
+def test_anonymous_readers_get_no_pills(client):
+    """With no marker there is no "since", so every row would be flagged -- which flags nothing."""
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+    assert 'wn-entry__new' not in body
+
+
+def test_unseen_ids_is_a_pure_function_of_the_marker():
+    """Unit-level, because the view path can only reach a couple of these states."""
+    class U:
+        is_authenticated = True
+        def __init__(self, seen=None):
+            self.ui_flags = {'whats_new_seen': seen} if seen else {}
+
+    ids = [e.id for e in whats_new.ENTRIES]
+    assert whats_new.unseen_ids(U(ids[0])) == frozenset()
+    assert whats_new.unseen_ids(U(ids[-1])) == frozenset(ids[:-1])
+    assert whats_new.unseen_ids(U()) == frozenset({ids[0]})
+    assert whats_new.unseen_ids(None) == frozenset()

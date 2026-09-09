@@ -217,7 +217,18 @@
     padding-bottom: 12px; border-bottom: 1px solid var(--pp-border);
 }
 .wn-entry__title { font-family: var(--pp-font-display); font-size: 1.05rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); }
+.wn-entry__meta { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .wn-entry__date { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+/* "New" on the rows published since this reader last looked. Same pill as the avatar's marker so the
+   thing that drew them here and the thing they find are visibly one signal -- primary, not the error red
+   the moderation queue owns. It is deliberately quieter than the avatar's (no glow): that one competes
+   with a whole navbar for attention, this one only has to be noticed once the eye is already on the row. */
+.wn-entry__new {
+    flex: 0 0 auto; padding: 1px 6px; border-radius: 999px;
+    font-size: 0.58rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 38%, transparent);
+}
 .wn-entry__go { margin-top: 16px; }
 @media (min-width: 768px) {
     .wn-entry__head { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 16px; }

@@ -79,6 +79,9 @@ class WhatsNewView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['entries'] = whats_new.ENTRIES
+        # Which rows wear a "New" pill. Derived from the same single marker the modal and the avatar
+        # read, so the three can never disagree about what this reader has already been shown.
+        context['unseen_ids'] = whats_new.unseen_ids(getattr(self.request, 'user', None))
         return context
 
 

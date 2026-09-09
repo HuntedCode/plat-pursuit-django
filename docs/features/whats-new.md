@@ -131,6 +131,32 @@ is wrong" rather than "you owe someone something".
 *hub buttons*, not the avatar — so the dot already covers phones. A tab-bar version would have needed a
 fifth tab for something that is not a hub.
 
+### "New" pills on the archive rows
+
+Entries published since the reader last looked wear a **New** pill beside their date — the same pill as
+the avatar's marker, so the thing that drew them here and the thing they find are visibly one signal.
+
+`whats_new.unseen_ids(user)` derives them from the **same single marker** the modal and the avatar read.
+`ENTRIES` is newest-first, so everything above the entry they last dismissed is newer than it; no second
+piece of state, and nothing that can disagree about what has already been shown.
+
+| Reader | Flagged |
+|---|---|
+| Dismissed entry #3 of 5 | #1 and #2 |
+| Up to date | nothing |
+| Never looked | **the newest only**, not all of them |
+| Marker names a deleted entry | the newest only (self-corrects on this load) |
+| Signed out | nothing |
+
+**Never-looked deliberately flags one row, not every row.** Marking a whole page is technically true and
+useless — a page where every row is flagged has flagged nothing — and somebody who joined last week is
+not owed a "New" badge on something from two months ago. One pill also matches what the modal shows
+them, which is only ever the newest entry.
+
+**The pills are visible on the visit that earns them, then gone.** This page marks the newest entry seen
+as it loads, so a refresh clears them. That is the unread-mail model and it is the point: they mark what
+arrived *since last time*, not a permanent property of the entry.
+
 ### Reading the archive clears it
 
 Opening `/whats-new/` marks the newest entry seen, which clears the dot **and** retires the modal.

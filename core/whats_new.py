@@ -122,6 +122,35 @@ def by_id(entry_id: str) -> Entry | None:
     return next((e for e in ENTRIES if e.id == entry_id), None)
 
 
+def unseen_ids(user) -> frozenset[str]:
+    """The ids to mark "New" on the archive: everything published since this reader last looked.
+
+    ENTRIES is newest-first, so the single stored marker is enough -- everything ABOVE the entry they
+    last dismissed is newer than it. No second piece of state, and nothing that can disagree with the
+    modal about what counts as seen.
+
+    NEVER LOOKED = THE NEWEST ONE ONLY, not all of them. Marking every historical entry for a fresh
+    account is technically true and useless: a page where every row is flagged has flagged nothing, and
+    a hunter who joined last week is not owed a "New" badge on something from two months ago. This
+    matches what the modal shows them, which is also just the newest.
+
+    An unrecognised marker (its entry was pulled after they dismissed it) falls into the same branch and
+    flags the newest. It self-corrects on this very page load, which posts the newest id back.
+
+    Anonymous readers get nothing: with no marker there is no "since", and every row would be flagged.
+    """
+    if not ENTRIES:
+        return frozenset()
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return frozenset()
+
+    seen = (getattr(user, 'ui_flags', None) or {}).get('whats_new_seen')
+    ids = [e.id for e in ENTRIES]
+    if seen not in ids:
+        return frozenset({ids[0]})
+    return frozenset(ids[:ids.index(seen)])
+
+
 #: The querystring that forces the whole feature on for the team, dismissed or not.
 PREVIEW = 'whats-new'
 
