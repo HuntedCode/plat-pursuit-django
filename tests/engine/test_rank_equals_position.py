@@ -25,7 +25,7 @@ import pytest
 
 from trophies.models import (
     ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
-    ProfileTrophyStanding, SeriesBadgeStanding,
+    ProfilePPStanding, ProfileTrophyStanding, SeriesBadgeStanding,
 )
 from trophies.services import badge_leaderboards as lb
 from tests.factories import ProfileFactory
@@ -210,6 +210,7 @@ def test_series_EDITION_board_rank_equals_position_on_that_editions_own_date():
     (lb.JOB_KEYS, 'JOB_KEYS'),
     (lb.EARNERS_KEYS, 'EARNERS_KEYS'),
     (lb.CLEAN_KEYS, 'CLEAN_KEYS'),
+    (lb.PP_KEYS, 'PP_KEYS'),
 ])
 def test_every_board_order_ends_in_the_unique_key(keys, label):
     """The property the tests above depend on. Without a unique final key the order is not total, ties are
@@ -236,6 +237,7 @@ def test_every_module_level_keys_tuple_is_covered_by_the_test_above():
         (lb.SERIES_BOARD_KEYS, 'SERIES_BOARD_KEYS'),
         (lb.SERIES_EDITION_KEYS, 'SERIES_EDITION_KEYS'), (lb.JOB_KEYS, 'JOB_KEYS'),
         (lb.EARNERS_KEYS, 'EARNERS_KEYS'), (lb.CLEAN_KEYS, 'CLEAN_KEYS'),
+        (lb.PP_KEYS, 'PP_KEYS'),
     ]}
     assert declared == covered, (
         f'uncovered key tuples: {sorted(declared - covered)}. Add them to the parametrize list above.'
@@ -330,3 +332,61 @@ def test_an_unlinked_hunter_is_off_the_board_even_with_a_standing_row():
     assert lb.clean_rows(limit=100) == []
     assert lb.clean_rank(row.profile_id) is None
     assert lb.board_count('clean') == 0
+
+
+# ------------------------------------------------------------------ PP Score ----------------------------
+
+def _pp(score, country=''):
+    from trophies.services.pp_score import TOP_N
+    return ProfilePPStanding.objects.create(
+        profile=ProfileFactory(country_code=country), pp_score=score, avg_earn_rate=3.0,
+        scored_count=TOP_N, country_code=country, is_linked=True)
+
+
+def test_pp_score_rank_equals_position_across_a_large_tie():
+    """PP Score has ONE visible key, so the unique tail does more work here than on any other board -- and
+    ties are the normal case rather than an edge one. PSN reports rates to one decimal, so points come
+    from a vocabulary of ~1,000 values and integer scores collide constantly."""
+    for _ in range(11):
+        _pp(41210)
+    _pp(90000)
+    _pp(12)
+
+    _assert_agrees(lb.pp_rows(limit=100), lb.pp_rank, 'PP Score')
+
+
+def test_pp_score_rank_equals_position_under_a_country_slice():
+    """GB seeded FIRST so the foreign rows hold the lower ids: with every score tied the board orders
+    entirely on the tail, so seeding CA first would let a country-blind rank return the same 1..5 and the
+    test would pass with the slice deleted."""
+    for _ in range(3):
+        _pp(5000, country='GB')
+    for _ in range(5):
+        _pp(5000, country='CA')
+
+    _assert_agrees(lb.pp_rows(limit=100, country='CA'),
+                   lambda pid: lb.pp_rank(pid, country='CA'), 'PP Score (CA)')
+
+
+def test_a_hunter_short_of_the_scored_gate_is_not_on_the_pp_board():
+    """Membership is a FULL TOP_N. Below it the sum is short by construction, so they would rank low for
+    having played LESS rather than for having played easier -- and the rank must say None rather than
+    handing them `count(everyone) + 1`, which is the trap `career_xp_rank` records."""
+    from trophies.services.pp_score import TOP_N
+
+    short = _pp(90000)
+    ProfilePPStanding.objects.filter(pk=short.pk).update(scored_count=TOP_N - 1)
+    full = _pp(10)
+
+    assert [r[0] for r in lb.pp_rows(limit=100)] == [full.profile_id]
+    assert lb.pp_rank(short.profile_id) is None, 'a hunter short of the gate was given a rank'
+    assert lb.board_count('pp') == 1
+
+
+def test_an_unlinked_hunter_is_not_on_the_pp_board():
+    row = ProfilePPStanding.objects.create(
+        profile=ProfileFactory(), pp_score=99999, scored_count=1000, is_linked=False)
+
+    assert lb.pp_rows(limit=100) == []
+    assert lb.pp_rank(row.profile_id) is None
+    assert lb.board_count('pp') == 0

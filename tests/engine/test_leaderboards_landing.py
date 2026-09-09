@@ -12,7 +12,9 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from trophies.models import ProfileBadgeStanding, ProfileCareerStanding, ProfileTrophyStanding
+from trophies.models import (
+    ProfileBadgeStanding, ProfileCareerStanding, ProfilePPStanding, ProfileTrophyStanding,
+)
 from tests.factories import ProfileFactory
 from tests.engine.test_leaderboards_overall_cost import active_board
 
@@ -22,7 +24,7 @@ URL = reverse('overall_badge_leaderboards')
 
 
 def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0, career=0, level=0,
-            clean_plats=None, clean_trophies=None):
+            clean_plats=None, clean_trophies=None, pp=0, pp_rate=5.0):
     """A hunter placed on whichever boards the caller gives them figures for.
 
     `plats`/`trophies` land on PROFILE's own counters, because the Trophies board reads those directly --
@@ -34,6 +36,12 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     whose clean figures differ from their raw ones. Without this every fixture in this file would leave
     the DEFAULT board empty, which is what makes it worth stating: the board that leads the strip is the
     one a test forgets to populate.
+
+    `pp` is NOT mirrored from anything and defaults to absent, deliberately. PP Score is not a function of
+    plats or trophies -- it is a function of RARITY -- so there is no honest figure to derive, and a
+    fixture that invented one would make three trophy boards agree by construction. That identity is
+    precisely what let a wrong-board wiring survive 129 tests on the previous branch. Pass `pp` to put a
+    hunter on it.
     """
     p = ProfileFactory(
         display_psn_username=name, country_code=country, country=country_name,
@@ -44,6 +52,13 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     if ct:
         ProfileTrophyStanding.objects.create(
             profile=p, clean_plats=cp, clean_trophies=ct, country_code=country, is_linked=True)
+    if pp:
+        # A full TOP_N scorable trophies, because that is the board's membership rule -- a fixture short of
+        # it is simply not on the board, which reads as "the board is broken".
+        from trophies.services.pp_score import TOP_N
+        ProfilePPStanding.objects.create(
+            profile=p, pp_score=pp, avg_earn_rate=pp_rate, scored_count=TOP_N,
+            country_code=country, is_linked=True)
     if points:
         ProfileBadgeStanding.objects.create(profile=p, country_code=country, total_xp=points, is_linked=True)
     if career:
@@ -52,8 +67,8 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     return p
 
 
-def test_the_landing_offers_four_boards_and_defaults_to_shovelware_free(client):
-    """FOUR boards, and the landing opens on Shovelware Free (2026-09).
+def test_the_landing_offers_five_boards_and_defaults_to_shovelware_free(client):
+    """FIVE boards since PP Score joined, and the landing still opens on Shovelware Free.
 
     Trophies led before it, on the grounds that it has the most entrants -- still true, since this board
     drops anyone whose whole library is flagged. Entrant count stopped being the tie-breaker: the two rank
@@ -67,10 +82,11 @@ def test_the_landing_offers_four_boards_and_defaults_to_shovelware_free(client):
     _ranked('Somebody', plats=3, trophies=30)
     body = client.get(URL).content.decode()
 
-    for key in ('clean', 'trophies', 'points', 'career'):
+    for key in ('clean', 'pp', 'trophies', 'points', 'career'):
         assert f'data-board="{key}"' in body, f'the {key} board is missing from the tab strip'
     assert active_board(body) == 'clean', 'the landing does not default to Shovelware Free'
     assert '>Shovelware Free</span>' in body, 'the board is labelled something else in the strip'
+    assert '>PP Score</span>' in body, 'the PP Score board is labelled something else in the strip'
     assert '>Trophies</span>' in body, 'the Trophies board lost its tab'
 
 
@@ -171,6 +187,49 @@ def test_the_default_board_serves_ITS_OWN_rows_not_the_trophies_boards(client):
     # ...and the FIGURE each row shows comes from the same store it was ordered by, or the board would
     # sort on one number and display another.
     assert '999' not in clean.split('lb-wall')[1], 'the clean wall is showing raw trophy totals'
+
+
+def test_the_PP_Score_board_serves_ITS_OWN_rows(client):
+    """The same guard the Shovelware Free board needed, applied before it could go wrong rather than
+    after.
+
+    With THREE trophy boards, a fixture where a hunter's figures agree across all of them makes wrong-board
+    wiring undetectable -- which is exactly how serving `trophy_rows` from the `clean` tab survived 129
+    tests on the previous branch. So this hunter is enormous on Trophies and Shovelware Free while barely
+    registering on PP Score, and another is the reverse. The boards must then disagree about the order,
+    which is only possible if each reads its own store.
+    """
+    _ranked('GrinderHunter', plats=99, trophies=999, pp=50)
+    _ranked('RarityHunter', plats=1, trophies=10, pp=90000)
+
+    pp = client.get(URL, {'tab': 'pp'}).content.decode()
+    trophies = client.get(URL, {'tab': 'trophies'}).content.decode()
+    clean = client.get(URL, {'tab': 'clean'}).content.decode()
+
+    assert _order(pp, 'GrinderHunter', 'RarityHunter') == ['RarityHunter', 'GrinderHunter'], (
+        'the PP Score board is not ordering by its own store'
+    )
+    for label, body in (('trophies', trophies), ('clean', clean)):
+        assert _order(body, 'GrinderHunter', 'RarityHunter') == ['GrinderHunter', 'RarityHunter'], (
+            f'the {label} board did not invert, so the assertion above proves nothing'
+        )
+
+
+def test_a_hunter_below_the_scored_gate_is_not_on_the_PP_board(client):
+    """Membership is a FULL 1,000 scorable trophies, not "more than none". Below the cap the sum is short
+    by construction, so they would rank low for having played LESS rather than for having played easier --
+    the one thing this board is not meant to measure."""
+    from trophies.services.pp_score import TOP_N
+
+    short = _ranked('ShortHunter', plats=1, trophies=10, pp=90000)
+    ProfilePPStanding.objects.filter(profile=short).update(scored_count=TOP_N - 1)
+    _ranked('FullHunter', plats=1, trophies=10, pp=10)
+
+    body = client.get(URL, {'tab': 'pp'}).content.decode()
+    wall = body[body.index('<ol class="lb-wall'):]
+
+    assert 'FullHunter' in wall
+    assert 'ShortHunter' not in wall, 'a hunter short of the gate reached the board'
 
 
 def test_the_rows_endpoint_serves_the_default_board(client):

@@ -843,6 +843,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # is the question a first-time visitor is actually asking. Trophies keeps its tab and its bookmarks.
     BOARDS = (
         ('clean', 'Shovelware Free'),
+        ('pp', 'PP Score'),
         ('trophies', 'Trophies'),
         ('points', 'Badge Points'),
         ('career', 'Career XP'),
@@ -879,6 +880,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: inside its rows cannot drift -- which is the failure a separate rows endpoint invites.
     FIGURES = {
         'clean': ('platinums', 'trophies'),
+        # The supporting figure is a PERCENTAGE, and the shared row partial has no suffix slot -- it
+        # renders `{{ value }} {{ label }}`. So the label carries the unit rather than the number.
+        'pp': ('points', 'avg rarity %'),
         'trophies': ('platinums', 'trophies'),
         'points': ('points', 'badges'),
         'career': ('XP', 'level'),
@@ -893,6 +897,8 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: explains the board they are looking at.
     MEANINGS = {
         'clean': ('Platinums earned on games that are not shovelware. Total trophies settles a tie.'),
+        'pp': ('Your 1,000 rarest base-game trophies, scored by how few players hold them. '
+               'A 1% trophy is worth 100.'),
         'trophies': 'Every hunter on the site, ranked by platinums. Total trophies settles a tie.',
         'points': 'Badge points, earned a stage at a time. Every edition counts toward one total.',
         'career': 'Career XP banked from contracts, across all 25 jobs.',
@@ -1050,6 +1056,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
             ed = edition or None
             standing = {
                 'clean': lb.clean_rank(profile.id, country=cc),
+                'pp': lb.pp_rank(profile.id, country=cc),
                 'trophies': lb.trophy_rank(profile.id, country=cc),
                 'points': lb.xp_rank(profile.id, country=cc, edition=ed),
                 'career': lb.career_xp_rank(profile.id, country=cc),
@@ -1097,6 +1104,12 @@ class OverallBadgeLeaderboardsView(TemplateView):
             # board below, whose store IS Profile.
             return (lb._slice(lb.clean_store().filter(clean_trophies__gt=0), cc),
                     lb.CLEAN_KEYS, 'profile_id', 'profile__')
+        if tab == 'pp':
+            # The gate is a FULL TOP_N, not `> 0` -- and it must match `pp_rows` exactly, or the search
+            # would offer a hunter the wall does not contain.
+            from trophies.services.pp_score import TOP_N
+            return (lb._slice(lb.pp_store().filter(scored_count__gte=TOP_N), cc),
+                    lb.PP_KEYS, 'profile_id', 'profile__')
         if tab == 'trophies':
             # The Trophies board's store IS Profile, so its id column is `id` and its name columns are
             # unprefixed -- the other two point AT a profile.
@@ -1128,6 +1141,8 @@ class OverallBadgeLeaderboardsView(TemplateView):
 
         if tab == 'clean':
             rows = lb.clean_rows(limit=limit, offset=offset, country=cc)
+        elif tab == 'pp':
+            rows = lb.pp_rows(limit=limit, offset=offset, country=cc)
         elif tab == 'trophies':
             rows = lb.trophy_rows(limit=limit, offset=offset, country=cc)
         elif tab == 'points':

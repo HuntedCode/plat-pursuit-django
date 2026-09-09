@@ -26,9 +26,11 @@ page of ids into display rows in ONE query.
 
 from django.db.models import F, OuterRef, Q, Subquery
 
+from trophies.services import pp_score as pp_score_module
+
 from trophies.models import (
-    ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileTrophyStanding,
-    SeriesBadgeStanding, SeriesEditionStanding, UserGroupBadge, UserTitle,
+    ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfilePPStanding,
+    ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding, UserGroupBadge, UserTitle,
 )
 
 
@@ -107,6 +109,12 @@ CAREER_KEYS = (('total_xp', _DESC), ('profile_id', _ASC))
 #: than `id` because this board reads a standing store, where `id` is the standing row's own key and would
 #: make the order total over the wrong thing.
 CLEAN_KEYS = (('clean_plats', _DESC), ('clean_trophies', _DESC), ('profile_id', _ASC))
+#: The PP Score board. ONE visible key, unlike its two trophy siblings: the score already folds rarity and
+#: volume together, so there is nothing left for a second figure to break a tie with -- `avg_earn_rate`
+#: describes the same trophies the score was built from and would order them the same way. The unique tail
+#: therefore does more work here than elsewhere, and ties are common: PSN rates are one-decimal, so scores
+#: land on the same integer often.
+PP_KEYS = (('pp_score', _DESC), ('profile_id', _ASC))
 # Postgres orders ASC NULLS LAST by default, which is what `.order_by('advanced_at')` gets and what this
 # mirrors: a hunter who has not advanced sorts below one who has, within the same rung.
 #: The per-series board: BADGE POINTS for this series, first-to-arrive breaking the ties.
@@ -376,6 +384,10 @@ def board_count(tab, country=None, edition=None):
     # would promise a smaller board than the rows deliver and strand the tail behind a short spacer.
     if tab == 'clean':
         return _slice(clean_store().filter(clean_trophies__gt=0), country).count()
+    # A FULL TOP_N, not `> 0`: below the cap the sum is short by construction. Counting `> 0` here would
+    # promise a longer board than the rows deliver and strand the tail behind an over-long spacer.
+    if tab == 'pp':
+        return _slice(pp_store().filter(scored_count__gte=pp_score_module.TOP_N), country).count()
     return _slice(trophy_store(), country).count()
 
 
@@ -568,6 +580,55 @@ def clean_rank(profile_id, country=None):
         return None
     ahead = store.filter(clean_trophies__gt=0).filter(
         _ahead_q(CLEAN_KEYS, {**mine, 'profile_id': profile_id})).count()
+    return ahead + 1
+
+
+# ------------------------------------------------------------------ PP Score ----------------------------
+
+def pp_store():
+    """The PP Score board's population: linked hunters with a `ProfilePPStanding` row.
+
+    The `scored_count >= TOP_N` half of the membership rule is applied by the readers below, matching how
+    the badge, career and clean stores handle theirs -- a row exists for every linked hunter the sweep has
+    reached, including those who have not yet earned a full thousand scorable trophies.
+    """
+    return _linked(ProfilePPStanding.objects.all())
+
+
+def pp_rows(limit=50, offset=0, country=None):
+    """The PP Score board: [(profile_id, pp_score, avg_earn_rate), ...].
+
+    A FULL `TOP_N` scorable trophies is the membership rule, and it is not the usual `> 0`. Below the cap
+    a hunter's sum is short BY CONSTRUCTION -- they would rank low for having played less rather than for
+    having played easier, which is the one thing this board is not meant to measure. The literal has to
+    match the `pps_*` index conditions or the read stops using them; `pp_score.TOP_N` is asserted equal to
+    that literal by test.
+
+    `avg_earn_rate` is rounded here rather than in the template: the shared row partial renders the
+    supporting figure through `intcomma`, which would print 2.3456 verbatim.
+    """
+    rows = (
+        _slice(pp_store(), country).filter(scored_count__gte=pp_score_module.TOP_N)
+        .order_by('-pp_score', 'profile_id')
+        .values_list('profile_id', 'pp_score', 'avg_earn_rate')[offset:offset + limit]
+    )
+    return [(pid, score, round(rate, 1)) for pid, score, rate in rows]
+
+
+def pp_rank(profile_id, country=None):
+    """Position on the PP Score board, or None if they are not on it.
+
+    Three ways to be off it and they are different: no row at all (never swept, or not linked), a row
+    below the `TOP_N` gate, and the country slice. The gate is checked explicitly rather than left to a
+    None guard -- the trap `career_xp_rank` records is handing every excluded hunter `count(everyone) + 1`,
+    one shared rank pointing at a board none of them appear on.
+    """
+    store = _slice(pp_store(), country)
+    mine = store.filter(profile_id=profile_id).values('pp_score', 'scored_count').first()
+    if mine is None or mine['scored_count'] < pp_score_module.TOP_N:
+        return None
+    ahead = store.filter(scored_count__gte=pp_score_module.TOP_N).filter(
+        _ahead_q(PP_KEYS, {'pp_score': mine['pp_score'], 'profile_id': profile_id})).count()
     return ahead + 1
 
 
