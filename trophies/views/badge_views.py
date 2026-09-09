@@ -877,6 +877,19 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # Trophies board counts trophies across every game and Career XP is the jobs economy, so neither has
     # editions to slice. A control that renders but changes nothing is worse than one that is absent.
     EDITION_BOARDS = frozenset({'points'})
+
+    #: The boards whose store is written ONLY by `nightly`, and the line that says so.
+    #:
+    #: Every other board moves when a sync does: All Trophies reads the `total_trophies_raw` counter
+    #: sync maintains, Badge Points reads standings `recompute_standing` rewrites per sync, Career XP
+    #: moves on the claim itself. These two are materialized by a nightly sweep and by nothing else, so
+    #: a hunter who syncs, earns a platinum and finds their rank unmoved is looking at correct behaviour
+    #: with nothing to tell it apart from a broken board. The note is what makes that distinguishable.
+    #:
+    #: A set keyed on the board rather than a flag per board because it is one fact about one schedule,
+    #: and five copies of a sentence is how four of them come to disagree with `nightly.STEPS`.
+    NIGHTLY_BOARDS = frozenset({'clean', 'rarity'})
+    NIGHTLY_NOTE = "Updates once a night, so a sync today lands on tomorrow's board."
     # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter;
     # `progress` was this board's key while it was called Progress, a name that described the store rather
     # than what it ranks. Bookmarks carrying any of them still land where they meant to.
@@ -1095,6 +1108,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
             context['secondary_label'] = secondary_label
             context['board_meaning'] = self.MEANINGS[tab]
             context['board_label'] = dict(self.BOARDS)[tab]
+            # Empty for the three live boards, and the board card renders nothing for an empty value --
+            # so the note appears only where it is true rather than as a caption every board wears.
+            context['board_freshness'] = self.NIGHTLY_NOTE if tab in self.NIGHTLY_BOARDS else ''
             # "N hunters HERE" rather than "N hunters" when a filter is narrowing the board -- the figure
             # is a claim about a population, and under a slice it is a claim about a smaller one.
             context['slice_applied'] = bool(country or edition)

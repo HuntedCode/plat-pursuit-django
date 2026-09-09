@@ -452,6 +452,17 @@
 .lb-boardcard__what {
     margin-top: 3px; font-size: 12px; line-height: 1.45; color: var(--pp-text-dim); max-width: 60ch;
 }
+/* "Updates once a night" -- a caveat, not a feature, so it sits below the meaning at the quietest weight
+   the card has and never competes with the board's name. The clock is what carries it at a glance: the
+   sentence is long enough that a reader skimming for "why has my rank not moved" needs a shape to find,
+   and an icon reads before prose does.
+   `align-items: start` rather than center so the icon stays on the FIRST line when the sentence wraps to
+   two, which it does at 375px. Centred, it drifts into the gutter between the lines. */
+.lb-boardcard__fresh {
+    display: flex; align-items: start; gap: 5px; margin-top: 5px;
+    font-size: 11px; line-height: 1.4; color: var(--pp-text-mute); max-width: 60ch;
+}
+.lb-boardcard__fresh svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: 2px; }
 .lb-boardcard__meta { flex: 0 0 auto; }
 .lb-boardcard__tally { display: flex; align-items: baseline; gap: 6px; }
 .lb-boardcard__tally .pp-tally { font-size: 1.15rem; color: var(--pp-primary); }
@@ -468,6 +479,7 @@
 @media (min-width: 768px) {
     .lb-boardcard__name { font-size: 1.15rem; }
     .lb-boardcard__what { font-size: 13px; }
+    .lb-boardcard__fresh { font-size: 11.5px; }
     .lb-boardcard__tally .pp-tally { font-size: 1.4rem; }
 }
 

@@ -360,6 +360,24 @@ Three things that are easy to get wrong:
   That is why `active_countries()` needs this store as a fourth source; omitting it left a country
   unselectable on the very board its hunters appear on.
 
+### The two boards that say when they update
+
+Shovelware Free and Rarity Score are the only boards no sync touches. Every other board moves with the
+hunter: All Trophies reads the `total_trophies_raw` counter sync maintains, Badge Points reads standings
+`recompute_standing` rewrites per sync, Career XP moves on the claim itself.
+
+So on these two a hunter can sync, earn a platinum, reload, and find their rank unchanged. That is
+correct, and it is indistinguishable from a broken board. The board card carries a note saying so, driven
+by `OverallBadgeLeaderboardsView.NIGHTLY_BOARDS` rather than by the template, because the note is a claim
+about `nightly.STEPS` and a hardcoded caption would keep making it after a board moved to a live path.
+
+`board_freshness` is optional in `leaderboard_boardcard.html`. Badge, game and job detail pass nothing
+and render nothing: their panels rank a single badge or game live, so the note would be false there.
+
+**Adding a sixth board?** A test asserts the complement (`BOARD_KEYS - NIGHTLY_BOARDS`) exactly, so a new
+board fails until someone decides which side it is on. Silence would default it to "live", which is the
+wrong way for this to be wrong.
+
 ## The Rarity Score board (2026-09)
 
 The fifth Global Board, and the third of the three that group behind the **Trophies** chip. It ranks
