@@ -6,6 +6,7 @@ both. Doc: docs/features/whats-new.md.
 """
 import os
 import re
+from unittest import mock
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -109,8 +110,16 @@ def test_a_link_that_only_LOOKS_relative_is_dropped():
         return Entry(id='x', published=date(2026, 1, 1), title='t', beats=(('a', 'b'),),
                      link_label='go', link_url=url).safe_link_url
 
+    # chr(), not escapes: these payloads ARE control characters, and authoring them through a shell
+    # heredoc is how this project has put literal 0x08 and 0x00 bytes into source four times.
+    TAB, LF, CR, BSL = chr(9), chr(10), chr(13), chr(92)
     for hostile in (r'/\evil.com/login', '//evil.com', r'/\/evil.com', '/%2fevil.com', '/%5Cevil.com',
-                    'https://evil.com', 'javascript:alert(1)'):
+                    'https://evil.com', 'javascript:alert(1)',
+                    # The bypass that defeated the FIRST version of this guard: the URL parser removes
+                    # every tab/LF/CR before parsing, so these resolve to //evil.com in a browser while
+                    # passing any check that reads the second character literally.
+                    '/' + TAB + '/evil.com', '/' + LF + '/evil.com', '/' + CR + '/evil.com',
+                    '/' + TAB + BSL + 'evil.com', '/x/' + BSL + 'evil.com', '/a b'):
         assert probe(hostile) == '', f'{hostile!r} survived as a link'
     assert probe('/leaderboards/?tab=rarity') == '/leaderboards/?tab=rarity'
 
@@ -213,14 +222,32 @@ def test_a_hunter_who_dismissed_THIS_entry_does_not(client):
 
 def test_a_hunter_who_dismissed_an_OLDER_entry_is_due_again(client):
     """The whole point of storing an id rather than a boolean, and the thing that makes this feature
-    repeatable at all: yesterday's dismissal must not silence tomorrow's entry."""
+    repeatable at all: yesterday's dismissal must not silence tomorrow's entry.
+
+    A REAL older entry, not a fabricated id. The fixture used to pass `'some-older-entry-id'`, which
+    matches nothing in ENTRIES -- so it exercised the unrecognised-marker path and this test's actual
+    subject went unguarded. `is_due` could be rewritten as `seen not in ids` with the whole suite green,
+    and every hunter who had dismissed one entry would then never be shown another one, ever.
+    """
+    older = whats_new.ENTRIES[-1]
+    assert older is not whats_new.latest(), 'needs >1 entry to mean anything'
     client, profile = _synced_client(client)
-    profile.user.ui_flags = {'whats_new_seen': 'some-older-entry-id'}
+    profile.user.ui_flags = {'whats_new_seen': older.id}
     profile.user.save(update_fields=['ui_flags'])
 
     body = client.get('/', **CF).content.decode()
 
     assert 'id="whats-new"' in body
+
+
+def test_a_marker_naming_no_known_entry_still_shows_the_newest(client):
+    """Split out of the test above, which was doing this job under a name that promised the other one.
+    Their entry was pulled after they dismissed it; show the newest rather than nothing."""
+    client, profile = _synced_client(client)
+    profile.user.ui_flags = {'whats_new_seen': 'an-entry-that-no-longer-exists'}
+    profile.user.save(update_fields=['ui_flags'])
+
+    assert 'id="whats-new"' in client.get('/', **CF).content.decode()
 
 
 def test_a_BRAND_NEW_account_is_shown_the_newest_entry(client):
@@ -364,6 +391,10 @@ def test_reading_the_archive_clears_the_marker(client):
     body = client.get(reverse('whats_new'), **CF).content.decode()
 
     assert "setting: 'whats_new_seen'" in body, 'the archive never clears the dot'
+    # THE VALUE, not just the setting name. Posting any other id leaves `is_due` true, so the marker
+    # never clears by doing the obvious thing and the page re-POSTs on every load; posting '' 400s
+    # forever. Escaped, because escapejs renders hyphens as -.
+    assert f"value: '{escapejs(whats_new.latest().id)}'" in body, 'the archive posts the wrong entry id'
     profile.user.refresh_from_db()
     assert 'whats_new_seen' not in (profile.user.ui_flags or {}), (
         'the GET mutated; the clear must come from the POST the page fires'
@@ -402,7 +433,8 @@ def test_the_avatar_carries_a_dot_when_something_is_unread(client):
     # with content is a fact. Losing the text would silently return it to a dot.
     assert '>New</span>' in body.split('pp-av__new', 1)[1][:40], 'the marker is a bare dot again'
     assert 'something new to read' in body, 'the marker is invisible to a screen reader'
-    assert 'pp-avmenu__new' in body, 'the menu row does not say which item the marker was about'
+    menu_pill = body.split('pp-avmenu__new', 1)[1][:60]
+    assert '>New</span>' in menu_pill, 'the menu row marker is an empty pill'
 
 
 def test_the_dot_goes_once_the_entry_is_seen(client):
@@ -468,7 +500,9 @@ def test_the_modal_carries_its_ID_SCOPED_exit():
     # _code(), not read_text: a 15-line prose block sits directly above this rule explaining the trap,
     # so a raw read would be satisfied by the warning rather than by the rule it warns about.
     css = _code(Path(dj_settings.BASE_DIR) / 'static' / 'css' / 'components' / 'series-list.css')
-    assert '#whats-new.is-closing' in css
+    # Delimited: both passed on `#whats-new.is-closing-slow`, and the first was strictly implied by
+    # the second. Same prefix trap the keyframe pin below already fixed.
+    assert '#whats-new.is-closing,' in css or '#whats-new.is-closing {' in css
     assert '#whats-new.is-closing .pp-detail-modal__dialog' in css
 
 
@@ -527,12 +561,16 @@ def test_every_way_out_of_the_modal_dismisses_it():
     # EXACT, not a floor. `>= 5` was reached with only four controls, because `closeSelector:
     # '[data-wn-close]'` in the inline script is itself an occurrence -- the same shape as the
     # `count('is-active') >= 2` guard that shipped green with nothing lit. Five controls + the selector.
-    assert partial.count('data-wn-close') == 6, (
+    # Delimited: a bare count passed when one control was renamed to `data-wn-closed`, which still
+    # CONTAINS the token but no longer matches the selector -- so that control silently stopped closing
+    # the modal. Same prefix trap as wnTlNodeXX and ppHoldHomeModalXX.
+    attr = re.compile(r'data-wn-close(?=[\s>"\]])')
+    assert len(attr.findall(partial)) == 6, (
         'a control can close this modal without marking it seen (or one was added without a guard)'
     )
     for control in ('pp-detail-modal__scrim', 'pp-detail-modal__close', 'pp-howto__got'):
-        chunk = partial.split(control, 1)[1].split('>', 1)[0]
-        assert 'data-wn-close' in chunk, f'{control} closes the modal without marking it seen'
+        chunk = partial.split(control, 1)[1].split('>', 1)[0] + '>'
+        assert attr.search(chunk), f'{control} closes the modal without marking it seen'
     # And the links are real links, not buttons wearing a link class -- which is what would make the
     # navigation branch above dead code.
     assert partial.count('<a class="pp-howto__more"') == 2
@@ -673,13 +711,25 @@ def test_the_backstop_is_cancelled_once_a_modal_appears():
     # Delimited on both sides: a bare substring passes on any name this is a prefix of, which is how
     # `wnTlNodeXX` slipped past the keyframe pin. The publisher and the callers are matched exactly.
     assert 'window.ppHoldHomeModal = function' in gate, 'nothing publishes the backstop hold'
-    assert 'clearTimeout' in gate, (
-        'the backstop fires even when a modal is open, releasing the motion behind the scrim'
+    # The TIMER must exist and be cleared. `'clearTimeout' in gate` alone passed on a gate with no
+    # setTimeout at all and a `clearTimeout(0)` stub -- which silently deletes the whole failsafe.
+    assert 'setTimeout(window.ppSettleHomeModal, 4000)' in gate, (
+        'the backstop timer is gone or its duration changed; 4000 must stay well clear of the 450ms '
+        'auto-open, or the gate settles before the modal it is waiting for even opens'
     )
+    assert 'clearTimeout(backstop)' in gate, 'the hold clears something other than the backstop'
+    # Measured from DOMContentLoaded, not from parse: at parse it was really "4s minus however long the
+    # page took", and a slow load fired it before the modal opened.
+    assert 'DOMContentLoaded' in gate, 'the deadline is measured from parse again'
+
     for partial in ('_whats_new.html', '_launch_welcome.html'):
         src = _code(base / 'templates' / 'trophies' / 'partials' / 'home' / partial)
+        # TIED TOGETHER. Two independent whole-file substring checks passed on `onOpened: function () {}`
+        # with the hold moved to page load -- which cancels the failsafe on every visit whether a modal
+        # appears or not, inverting the bug instead of fixing it.
         assert 'onOpened:' in src, f'{partial} never tells the page it opened'
-        assert 'ppHoldHomeModal()' in src, f'{partial} never holds the backstop'
+        body = src.split('onOpened:', 1)[1].split('},', 1)[0]
+        assert 'ppHoldHomeModal()' in body, f'{partial} holds the backstop somewhere other than onOpened'
 
 
 def test_the_spine_nodes_carry_no_text(client):
@@ -742,7 +792,10 @@ def test_the_preview_door_cannot_put_BOTH_modals_on_the_page(client, settings):
 
     body = client.get('/?preview=whats-new', **CF).content.decode()
 
-    assert not ('id="launch-welcome"' in body and 'id="whats-new"' in body), (
+    # Which one WINS, not merely "not both" -- `not (A and B)` is also satisfied by neither rendering,
+    # so suppressing the greeting entirely (or breaking both includes) passed.
+    assert 'id="launch-welcome"' in body, 'the once-in-a-lifetime greeting lost to a preview URL'
+    assert 'id="whats-new"' not in body, (
         'both modals rendered on one visit; the gate will settle while one is still on screen'
     )
 
@@ -793,14 +846,38 @@ def test_the_preview_door_shows_the_DOT_too_after_dismissing(client):
     assert 'pp-avmenu__new' in preview
 
 
-def test_the_preview_door_writes_nothing(client):
-    """Previewing must never spend anything, or the retest door is single-use too."""
+def test_previewing_the_ARCHIVE_does_not_spend_the_marker(client):
+    """The path that could actually write, and the one the old version of this test missed.
+
+    It used to GET the lobby and assert `ui_flags` was unwritten -- but no GET writes `ui_flags` on any
+    branch, ever, so there was no mutation to production code that could turn it red. The real risk is
+    the archive: its mark-seen POST was gated on `whats_new_unread`, which is `is_due OR previewing`, so
+    a staff preview of that page spent the marker and contradicted previewing's own promise.
+    """
     client, profile = _synced_client(client, is_staff=True)
+    profile.user.ui_flags = {'whats_new_seen': whats_new.latest().id}
+    profile.user.save(update_fields=['ui_flags'])
 
-    client.get('/?preview=whats-new', **CF)
+    body = client.get(reverse('whats_new') + '?preview=whats-new', **CF).content.decode()
 
-    profile.user.refresh_from_db()
-    assert 'whats_new_seen' not in (profile.user.ui_flags or {})
+    assert 'wn-entry__new' in body, 'the preview does not reach the archive pills'
+    assert "setting: 'whats_new_seen'" not in body, 'previewing the archive spends the marker'
+
+
+def test_a_MODERATOR_gets_the_preview_door_too(client):
+    """Every other preview test uses is_staff. Narrowing the gate to `is_staff` alone passed the whole
+    suite while silently locking moderators out of the retest door the docstring promises them."""
+    client, profile = _synced_client(client)
+    profile.user.ui_flags = {'whats_new_seen': whats_new.latest().id}
+    profile.user.save(update_fields=['ui_flags'])
+
+    plain = client.get(reverse('about'), **CF).content.decode()
+    assert 'pp-av__new' not in plain, 'fixture wrong: the entry is not dismissed'
+
+    with mock.patch.object(type(profile.user), 'is_moderator', property(lambda self: True)):
+        body = client.get(reverse('about') + '?preview=whats-new', **CF).content.decode()
+
+    assert 'pp-av__new' in body, 'moderators cannot use the preview door'
 
 
 def test_the_dot_preview_door_does_not_leak_either(client):
@@ -874,15 +951,32 @@ def test_anonymous_readers_get_no_pills(client):
     assert 'wn-entry__new' not in body
 
 
-def test_unseen_ids_is_a_pure_function_of_the_marker():
-    """Unit-level, because the view path can only reach a couple of these states."""
+def test_unseen_ids_is_a_pure_function_of_the_marker(monkeypatch):
+    """Unit-level, and on a FOUR-entry catalogue rather than the two we ship.
+
+    At N=2 every branch collapses to the same answer: `ids[:index]`, `{ids[0]}` and the never-looked
+    fallback are all one element. The slice -- "everything ABOVE the entry they last dismissed", the
+    function's entire reason to exist -- could be deleted and replaced with "newest or nothing" with
+    every test green, and the regression would land silently the day a third entry shipped.
+    """
+    from datetime import date as _date
+
+    def entry(n, day):
+        return whats_new.Entry(id=f'e{n}', published=_date(2026, 9, day), title=f'T{n}',
+                               beats=(('a', 'b'),))
+
+    monkeypatch.setattr(whats_new, 'ENTRIES', (entry(1, 9), entry(2, 8), entry(3, 7), entry(4, 6)))
+
     class U:
         is_authenticated = True
         def __init__(self, seen=None):
             self.ui_flags = {'whats_new_seen': seen} if seen else {}
 
-    ids = [e.id for e in whats_new.ENTRIES]
-    assert whats_new.unseen_ids(U(ids[0])) == frozenset()
-    assert whats_new.unseen_ids(U(ids[-1])) == frozenset(ids[:-1])
-    assert whats_new.unseen_ids(U()) == frozenset({ids[0]})
+    assert whats_new.unseen_ids(U('e1')) == frozenset()
+    # THE MIDDLE CASE, which is the one N=2 could not express: two newer entries, not one.
+    assert whats_new.unseen_ids(U('e3')) == frozenset({'e1', 'e2'})
+    assert whats_new.unseen_ids(U('e4')) == frozenset({'e1', 'e2', 'e3'})
+    assert whats_new.unseen_ids(U()) == frozenset({'e1'})
+    assert whats_new.unseen_ids(U('gone')) == frozenset({'e1'})
     assert whats_new.unseen_ids(None) == frozenset()
+    assert whats_new.unseen_ids(U('e1'), previewing=True) == frozenset({'e1'})

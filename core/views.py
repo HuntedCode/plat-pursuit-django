@@ -70,18 +70,31 @@ class WhatsNewView(TemplateView):
     is what the site has been doing, which is a fair question for someone deciding whether to sign up.
     It reads a module-level tuple, so it costs no queries at all and needs no caching.
 
-    It does NOT mark anything seen. Reading the archive is not dismissing the notice: a hunter who lands
-    here from a link should still meet the modal on Home, or the entry they never opened would be
-    silently spent.
+    READING IS DISMISSING. Opening this page marks the newest entry seen, which clears the avatar
+    marker and retires the modal. That REVERSED an earlier rule ("reading is not dismissing", so a
+    shared link could not burn somebody's notice) and the reversal is deliberate: once the avatar
+    carried an unread marker driven by the same value, a reader who clicked it, read the page and came
+    back would still have the marker and no way to clear it by doing the obvious thing.
+
+    The write is a POST fired by the page, never a side effect of this GET -- the page is public and
+    crawlable, and a mutating GET is the wrong shape whoever can reach it. So this view still writes
+    nothing itself; what it does is decide whether the page should ask.
     """
     template_name = 'pages/whats_new.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        user = getattr(self.request, 'user', None)
         context['entries'] = whats_new.ENTRIES
         # Which rows wear a "New" pill. Derived from the same single marker the modal and the avatar
         # read, so the three can never disagree about what this reader has already been shown.
-        context['unseen_ids'] = whats_new.unseen_ids(getattr(self.request, 'user', None))
+        # `previewing` forces them on for the team: a door that opens the modal and the avatar marker
+        # but not this surface is the half-open door `whats_new.previewing` exists to prevent, and this
+        # is the surface that is hardest to retest any other way.
+        context['unseen_ids'] = whats_new.unseen_ids(user, previewing=whats_new.previewing(self.request))
+        # Whether the page should fire the mark-seen POST. Deliberately NOT `whats_new_unread` (which is
+        # `is_due OR previewing`): gating on that made a preview spend the marker.
+        context['mark_seen'] = whats_new.is_due(user)
         return context
 
 

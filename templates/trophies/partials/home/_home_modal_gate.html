@@ -50,8 +50,26 @@ pending, so a modal that settles twice (dismissed, then a stray path) costs noth
     //
     // So the deadline measures "did anything appear", and `ppHoldHomeModal` is how a modal says it did.
     // After that the only thing that settles the gate is the modal actually closing.
-    var backstop = window.setTimeout(window.ppSettleHomeModal, 4000);
+    // ARMED FROM DOMContentLoaded, not from here. This script parses at the top of the body, but the
+    // modal cannot open until 450ms after DCL -- so a deadline started here is really "4s minus however
+    // long the rest of the page took to parse". On a cold cache or a throttled phone, DCL past ~3.5s
+    // meant the backstop fired BEFORE the modal opened and released the motion anyway: the original bug,
+    // surviving in the tail. Measured from DCL, the modal always opens with ~3.5s of margin.
+    // DCL fires regardless of whether OUR bundle loads, so the failsafe still covers the case it exists
+    // for. `held` covers the race where a modal somehow opens before this handler runs.
+    var backstop = null;
+    var held = false;
+    function armBackstop() {
+        if (held) { return; }
+        backstop = window.setTimeout(window.ppSettleHomeModal, 4000);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', armBackstop, { once: true });
+    } else {
+        armBackstop();
+    }
     window.ppHoldHomeModal = function () {
+        held = true;
         window.clearTimeout(backstop);
     };
 })();

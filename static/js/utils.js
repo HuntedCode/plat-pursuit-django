@@ -3554,14 +3554,16 @@ function DetailModal(el, opts) {
             // two navigations: the second click found `armed` already false, went immediately, and the
             // first click's 600ms timer then fired against its own untouched flag -- restarting the
             // navigation and pushing a second history entry, so Back no longer returned to the lobby.
+            // Same-DOCUMENT means the browser will not unload: a fragment jump leaves the modal sitting
+            // open over the anchor it just scrolled to, with the gate never settling. Those need the
+            // manual hide. A normal cross-page link must NOT get it -- hiding and settling before
+            // `assign` released the lobby's whole motion pass for the few hundred ms before unload, so
+            // the reader saw the count-ups fire on a page they were already leaving.
+            var samePage = href.split('#')[0] === window.location.href.split('#')[0];
             var go = function () {
                 if (navigating) { return; }
                 navigating = true;
-                // Hide before leaving. Navigation normally unloads the page and makes this moot, but a
-                // same-page fragment target does NOT unload -- and then the modal would sit open
-                // forever over the anchor it just jumped to, with the gate never settling.
-                el.hidden = true;
-                settle();
+                if (samePage) { el.hidden = true; settle(); }
                 window.location.assign(href);
             };
             var recorded = dismiss();
@@ -3606,8 +3608,12 @@ function DetailModal(el, opts) {
         // unwritten, so the modal returned on every other device forever. It worked before this
         // controller existed only because that script ran at parse time. `onPageReady` is the form that
         // is correct from either.
-        onPageReady(function () {
-            if (!opts.onDismiss) { return; }
+        onPageReady(function (first) {
+            // FIRST LOAD ONLY. `onPageReady` also re-fires on `htmx:historyRestore`, and without this
+            // guard every history restore would re-POST the dismissal -- including after the success
+            // branch below removed the key. Latent today (nothing on the lobby is hx-boosted) and a
+            // repeated-write bug the moment anything is.
+            if (!first || !opts.onDismiss) { return; }
             var p;
             try {
                 p = opts.onDismiss();

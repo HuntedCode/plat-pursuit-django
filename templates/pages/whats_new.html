@@ -121,7 +121,10 @@ card per entry, because each is a discrete section of prose rather than page-fil
        mutates is the wrong shape regardless of who can reach it. Fire-and-forget, no toast; if it
        fails the dot simply survives to the next visit. Gated on `whats_new_unread` so an ordinary
        re-read costs no request at all. */
-    {% if whats_new_unread and entries %}
+    {# `mark_seen`, NOT `whats_new_unread`: that flag is `is_due OR previewing`, so gating on it made
+       a staff preview of this page spend the marker -- contradicting previewing's own promise to
+       write nothing. This one is `is_due` alone. #}
+    {% if mark_seen %}
     (function () {
         if (!(window.PlatPursuit && PlatPursuit.API)) { return; }
         PlatPursuit.API.post('/api/v1/user/quick-settings/', {

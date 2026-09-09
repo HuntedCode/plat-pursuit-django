@@ -161,7 +161,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                     itself fires, so a badge here would only ever appear next to a modal already on screen.
                     Same glyph as the modal and the page, so the three read as one thing.
                     {% endcomment %}
-                    <a href="{% url 'whats_new' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>What's New{% if whats_new_unread %} <span class="pp-avmenu__new">New</span>{% endif %}</a>
+                    <a href="{% url 'whats_new' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>What's New{% if whats_new_unread %} <span class="pp-avmenu__new" aria-hidden="true">New</span>{% endif %}</a>
                     {% comment %} The 2026-08 strip-down took staff links OUT of this menu: staff
                     pages are bookmark-reached (fundraiser admin cross-links its siblings), and the
                     menu reads the same for every signed-in hunter. The Mod Center is the one

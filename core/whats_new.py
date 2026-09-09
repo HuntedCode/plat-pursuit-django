@@ -16,8 +16,15 @@ tidied away.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
+
+
+#: Anything that has no business in a path we own: every C0 control (the URL parser silently REMOVES
+#: tab/LF/CR before parsing, which is how `/<TAB>/evil.com` became `https://evil.com`), DEL, the space,
+#: and the backslash in any position (the parser folds it to `/` for http(s)).
+_UNSAFE_IN_PATH = re.compile(r'[\x00-\x20\x7f\\]')
 
 
 @dataclass(frozen=True)
@@ -53,14 +60,21 @@ class Entry:
         back as the external URL, and the modal's dismissing-link handler calls `location.assign` on it.
         A green suite was asserting a guarantee it did not provide.
 
-        Rejecting the whole second character rather than enumerating escapes: `/%2f`, `/%5c` and any
-        future normalisation all reduce to "the authority section starts here", and an allowlist of
-        one shape is easier to be right about than a denylist of many.
+        The rule is a SHAPE ALLOWLIST, not a list of known tricks. The first cut denied the specific
+        characters it could think of and was bypassed by one it could not: see the comment below.
         """
         url = self.link_url
         if not url.startswith('/'):
             return ''
-        if url[1:2] in ('/', '\\'):
+        # ANY C0 control, DEL, space or backslash, ANYWHERE -- an allowlist of shapes rather than a
+        # denylist of tricks, because the denylist was already wrong once. The WHATWG URL parser REMOVES
+        # every ASCII tab, LF and CR from its input before parsing anything, so `/<TAB>/evil.com` passed
+        # a second-character check literally and then resolved to `https://evil.com`. Django does not
+        # escape tab either, so it survived all the way into the href. Rejecting the whole class means
+        # the next variant of that trick is covered before somebody finds it.
+        if _UNSAFE_IN_PATH.search(url):
+            return ''
+        if url[1:2] == '/':
             return ''
         if url[1:].lower().startswith(('%2f', '%5c')):
             return ''
@@ -122,7 +136,7 @@ def by_id(entry_id: str) -> Entry | None:
     return next((e for e in ENTRIES if e.id == entry_id), None)
 
 
-def unseen_ids(user) -> frozenset[str]:
+def unseen_ids(user, previewing: bool = False) -> frozenset[str]:
     """The ids to mark "New" on the archive: everything published since this reader last looked.
 
     ENTRIES is newest-first, so the single stored marker is enough -- everything ABOVE the entry they
@@ -143,8 +157,19 @@ def unseen_ids(user) -> frozenset[str]:
         return frozenset()
     if user is None or not getattr(user, 'is_authenticated', False):
         return frozenset()
+    # The team door reaches this surface too. Without it, previewing lit the modal and the avatar marker
+    # and then dropped a staff reader onto an archive with no pills -- the half-open door `previewing`
+    # was written to prevent, one surface later.
+    if previewing:
+        return frozenset({ENTRIES[0].id})
 
-    seen = (getattr(user, 'ui_flags', None) or {}).get('whats_new_seen')
+    flags = getattr(user, 'ui_flags', None)
+    if not isinstance(flags, dict):
+        # Defensive: `is_due`'s copy of this read is swallowed by the context processor's except, but
+        # this one is called straight from the view, so a hand-edited non-dict would 500 the archive
+        # for that account alone while every other page rendered.
+        return frozenset({ENTRIES[0].id})
+    seen = flags.get('whats_new_seen')
     ids = [e.id for e in ENTRIES]
     if seen not in ids:
         return frozenset({ids[0]})
