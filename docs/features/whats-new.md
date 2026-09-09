@@ -68,17 +68,23 @@ ever, permanently suppressing the modal for that account with nothing in the UI 
 
 ## Who is due one
 
-`whats_new.is_due(user)` — an entry exists, its id is not the stored one, and the hunter did not join
-after it was published.
+`whats_new.is_due(user)` — an entry exists, and its id is not the one stored on the user. That is the
+whole rule.
 
-That last rule: someone who signed up after an entry shipped never used the site without it, so calling
-it new is false and would greet every new account with a notice about something they have only ever seen
-one version of. They are skipped and left **unmarked**, so the next entry reaches them normally.
+**New accounts are included, deliberately.** An earlier cut skipped anyone who signed up after the entry
+was published, on the reasoning that a feature they have always had cannot be new to them. That is true
+about the *feature* and wrong about the *message*: what a new hunter takes from the notice is that the
+site is actively being built and worked on, which is worth more to them than the literal accuracy of the
+word "new". The date on the entry is what keeps it honest — they can see it landed before they arrived.
 
-**The comparison is strictly-after, so joining on the publication date still counts as due.** An entry is
-published on a date but deployed at an instant, and an account created that day may predate it. The two
-mistakes are not equal: showing the notice to somebody who joined an hour late reads as onboarding, while
-hiding it from somebody who joined an hour early loses a real announcement permanently.
+## Dates
+
+Every entry carries a `published` date, and it is rendered in **both** places: beside the eyebrow in the
+modal, and on each entry in the archive. Both use `<time datetime="YYYY-MM-DD">`, so the human-readable
+form can change without breaking anything that reads the page.
+
+It is not decoration. It is what makes "new" a claim a reader can check rather than one they take on
+trust, and it is what lets the rule above be as simple as it is.
 
 ## Precedence against the 1.0 greeting
 

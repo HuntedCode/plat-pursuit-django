@@ -145,8 +145,16 @@
    Its own class rather than .home-hi__eyebrow because that one belongs to the greeting header block and
    is muted to sit under a name; this leads a modal and takes the accent, like .ccx__eyebrow does. */
 .wn__eyebrow {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px;
     font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
     color: color-mix(in oklab, var(--pp-primary) 78%, var(--pp-text)); margin-bottom: 6px;
+}
+/* The date rides the eyebrow at the same size but muted: it qualifies the label rather than competing
+   with it, and a reader who does not care about the date should be able to skip straight past it.
+   Separated by a hairline rule instead of a bullet -- at this letter-spacing a middot floats. */
+.wn__date {
+    padding-left: 8px; border-left: 1px solid var(--pp-border);
+    letter-spacing: 0.1em; color: var(--pp-text-mute);
 }
 
 /* The /whats-new/ archive's entry heads. Title and date on one line at md+, stacked below it: the date

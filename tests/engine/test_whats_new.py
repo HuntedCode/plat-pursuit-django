@@ -4,6 +4,7 @@ Content is code (core/whats_new.py), the "seen" marker is the id of the newest e
 (ui_flags['whats_new_seen']), and precedence against the 1.0 greeting is decided in the view that can see
 both. Doc: docs/features/whats-new.md.
 """
+import os
 import re
 from datetime import date, timedelta
 from pathlib import Path
@@ -179,40 +180,45 @@ def test_a_hunter_who_dismissed_an_OLDER_entry_is_due_again(client):
     assert 'id="whats-new"' in body
 
 
-def test_a_hunter_who_joined_after_the_entry_is_not_told_it_is_new(client):
-    """They have only ever used the site with this feature in it. Calling it new is false, and it would
-    greet every brand-new account with a notice about something they have never seen the absence of."""
-    client, profile = _synced_client(client)
-    published = whats_new.latest().published
-    profile.user.date_joined = timezone.make_aware(
-        timezone.datetime.combine(published + timedelta(days=1), timezone.datetime.min.time()))
-    profile.user.save(update_fields=['date_joined'])
+def test_a_BRAND_NEW_account_is_shown_the_newest_entry(client):
+    """Signing up after the entry shipped does NOT skip you, and that is deliberate.
 
-    body = client.get('/', **CF).content.decode()
-
-    assert 'id="whats-new"' not in body
-    profile.user.refresh_from_db()
-    assert 'whats_new_seen' not in (profile.user.ui_flags or {}), (
-        'skipping them must leave them UNMARKED, or the next entry is silently spent too'
-    )
-
-
-def test_joining_on_the_publication_DAY_still_gets_the_entry(client):
-    """The tie goes to showing it, and that is a decision rather than an accident.
-
-    An entry is published on a date; an account created that same date may have existed for hours before
-    the deploy that shipped it. The two mistakes are not equal. Showing the notice to somebody who
-    joined an hour late is mildly odd and reads as onboarding; hiding it from somebody who joined an hour
-    early loses a real announcement permanently, because the entry is never due again once a newer one
-    ships. So the comparison is strictly-after, not same-day-or-after.
+    An earlier cut skipped anyone who joined after publication, reasoning that a feature they have
+    always had cannot be new to them. True about the feature, wrong about the message: what a new hunter
+    takes from the notice is that the site is actively being built, which is worth more than the literal
+    accuracy of "new". The date on the entry is what keeps it honest.
     """
     client, profile = _synced_client(client)
+    # STRICTLY after the entry, derived from the entry rather than from "now". `timezone.now()` is only
+    # after publication if the newest entry happens to be older than today -- so on the day an entry
+    # ships this test would pass whether the skip existed or not, which is no test at all. Caught by
+    # mutation: reinstating the skip left it green.
     published = whats_new.latest().published
     profile.user.date_joined = timezone.make_aware(
-        timezone.datetime.combine(published, timezone.datetime.min.time()))
+        timezone.datetime.combine(published + timedelta(days=30), timezone.datetime.min.time()))
     profile.user.save(update_fields=['date_joined'])
 
     assert 'id="whats-new"' in client.get('/', **CF).content.decode()
+
+
+def test_the_modal_says_WHEN_the_entry_landed(client):
+    """The date is what makes "new" checkable rather than something to take on trust -- and it is what
+    lets a hunter who joined last week see for themselves that this landed before they did."""
+    client, _ = _synced_client(client)
+    entry = whats_new.latest()
+
+    body = client.get('/', **CF).content.decode()
+    # Everything AFTER the modal's id, so a date rendered somewhere else on the lobby cannot satisfy
+    # this. The lobby carries dates (last sync, recent earns) and one of them landing in a body-wide
+    # substring check is exactly how this guard would pass while the modal showed nothing.
+    assert 'id="whats-new"' in body
+    modal = body.split('id="whats-new"', 1)[1]
+
+    assert 'wn__date' in modal, 'the modal renders no date element'
+    assert entry.published.strftime('%Y-%m-%d') in modal, 'no machine-readable date'
+    assert entry.published.strftime('%B %-d, %Y' if os.name != 'nt' else '%B %#d, %Y') in modal, (
+        'no human-readable date'
+    )
 
 
 def test_the_launch_greeting_wins_and_whats_new_waits(client, settings):

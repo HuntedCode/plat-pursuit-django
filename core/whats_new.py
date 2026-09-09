@@ -50,15 +50,13 @@ ENTRIES: tuple[Entry, ...] = (
         title='Two new trophy leaderboards',
         beats=(
             ('Rarity Score',
-             'A board that rewards what you hunted, not how much. Your 1,000 rarest base-game '
-             'trophies score by how few people have them, so one 0.5% bronze outweighs a pile of '
-             'easy platinums.'),
+             'Scores your 1,000 rarest base-game trophies. The rarer a trophy is, the more it is '
+             'worth, so a 1% trophy scores 100 and a 10% trophy scores 10.'),
             ('Shovelware Free',
-             'The same ranking with the asset flips taken out. Platinums earned on games that '
-             'are actually games.'),
-            ('Grouped under one tab',
-             'All three trophy boards now sit behind Trophies, a click apart. Both new boards '
-             'rebuild once a night rather than live.'),
+             'Ranks platinums with shovelware games left out.'),
+            ('Where to find them',
+             'Both sit under the Trophies tab on the leaderboards. They update once a night '
+             'rather than live.'),
         ),
         link_label='See the boards',
         link_url='/leaderboards/?tab=rarity',
@@ -78,16 +76,13 @@ def by_id(entry_id: str) -> Entry | None:
 def is_due(user) -> bool:
     """Whether `user` should be shown the newest entry.
 
-    Two ways to not be due, and the second is the one worth explaining. A hunter who signed up AFTER an
-    entry was published never used the site without it -- telling them it is new is simply false, and it
-    would greet every new account with a notice about something they have only ever seen one version of.
-    They are skipped and left unmarked, so the NEXT entry reaches them normally.
+    One rule: there is an entry, and you have not dismissed that entry.
 
-    STRICTLY after, so joining ON the publication date still counts as being due. An entry is published
-    on a date but deployed at an instant, and an account created that same day may well predate it. The
-    two mistakes are not equal: showing the notice to somebody who joined an hour late is mildly odd and
-    reads as onboarding, while hiding it from somebody who joined an hour early loses a real
-    announcement permanently, because nothing makes an entry due again once a newer one ships.
+    NEW ACCOUNTS ARE INCLUDED, on purpose. An earlier cut skipped anyone who signed up after the entry
+    was published, reasoning that a feature they have always had cannot be new to them. That is true
+    about the FEATURE and wrong about the MESSAGE. What a new hunter takes from the notice is that the
+    site is actively being built, which is worth more to them than the literal accuracy of the word
+    "new" -- and the date on the entry says when it landed, so nothing is being misrepresented.
 
     Deliberately does not consider the 1.0 greeting: precedence between the two lives in the view that
     can see both, not in either one's own rule.
@@ -95,9 +90,4 @@ def is_due(user) -> bool:
     entry = latest()
     if entry is None or not user.is_authenticated:
         return False
-    if (user.ui_flags or {}).get('whats_new_seen') == entry.id:
-        return False
-    joined = getattr(user, 'date_joined', None)
-    if joined is not None and joined.date() > entry.published:
-        return False
-    return True
+    return (user.ui_flags or {}).get('whats_new_seen') != entry.id
