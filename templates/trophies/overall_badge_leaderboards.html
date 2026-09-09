@@ -173,8 +173,16 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             </a>
             {% endfor %}
         </nav>
+    </div>
 
-        {% comment %} THE SUB-TOGGLE, rendered only for a grouped active board. Same `.pp-switch`
+    {% comment %} THE SUB-TOGGLE gets its OWN ROW, below the strip and aligned LEFT -- the main strip sits
+    right. Career's Contracts panel is the precedent: the scope toggle sits on its own line under the view
+    switcher, in the same `.pp-switch` treatment.
+
+    It must NOT share `.lb-bar`, which is a single flex row justified to the end at `md:` -- both navs
+    inside it rendered side by side on one line, reading as six peer tabs rather than three plus a scope.
+
+    Rendered only for a grouped active board. Same `.pp-switch`
         treatment as the strip above it, following Career's Contracts panel, which nests its Board|History
         scope toggle the same way rather than inventing a second visual language for the second level.
 
@@ -183,7 +191,8 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
 
         Each sub-chip shows only ITS rank -- the combined figure lives on the parent, for readers who are
         elsewhere in the strip. {% endcomment %}
-        {% for g in board_groups %}{% if g.is_active and g.grouped %}
+    {% for g in board_groups %}{% if g.is_active and g.grouped %}
+    <div class="lb-subbar">
         <nav class="pp-switch lb-subswitch" aria-label="{{ g.label }} boards">
             {% for m in g.members %}
             <a href="{{ m.href }}"
@@ -196,8 +205,8 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             </a>
             {% endfor %}
         </nav>
-        {% endif %}{% endfor %}
     </div>
+    {% endif %}{% endfor %}
 
     {% comment %} ONE control surface, not three bare bands. The site-wide rule is STACKED CHROME CARDS +
     FREE CONTENT: chrome is carded (page header, then toolbar / stat cards), and the content -- a grid or

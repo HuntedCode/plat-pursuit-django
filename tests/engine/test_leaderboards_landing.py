@@ -132,6 +132,12 @@ def test_the_sub_toggle_appears_only_for_the_grouped_board(client):
 
     grouped = client.get(URL, {'tab': 'pp'}).content.decode()
     assert 'lb-subswitch' in grouped, 'the grouped board has no sub-toggle'
+    # ...on its OWN ROW, not inside `.lb-bar`. Both navs in that single flex row rendered side by side as
+    # six peer tabs, which is the bug this pins: the sub-toggle must close `.lb-bar` before it starts.
+    bar = grouped[grouped.index('<div class="lb-bar">'):]
+    bar = bar[:bar.index('</div>')]
+    assert 'lb-subswitch' not in bar, 'the sub-toggle is inside .lb-bar, so it renders beside the strip'
+    assert 'lb-subbar' in grouped, 'the sub-toggle has no row of its own'
     sub = grouped[grouped.index('lb-subswitch'):]
     sub = sub[:sub.index('</nav>')]
     for key in ('clean', 'pp', 'trophies'):
@@ -167,8 +173,11 @@ def test_every_board_has_its_OWN_icon(client):
     """
     _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
     body = client.get(URL, {'tab': 'pp'}).content.decode()
+    # BOTH ROWS. The sub-toggle now sits outside `.lb-bar`, so slicing to that container's close would
+    # stop before the sub-chips and miss exactly the board this test was added for.
     start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
-    strip = body[start:body.index('</div>', start)]
+    strip = body[start:body.index('lb-boardcard', start)]
+    assert 'lb-subswitch' in strip, 'the slice does not reach the sub-toggle, so it proves nothing'
 
     # The briefcase is Career's. Exactly one chip may wear it: the Career chip.
     briefcase = 'M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'
