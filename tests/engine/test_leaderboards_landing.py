@@ -90,6 +90,95 @@ def test_the_landing_offers_five_boards_and_defaults_to_shovelware_free(client):
     assert '>Trophies</span>' in body, 'the Trophies board lost its tab'
 
 
+def test_the_strip_is_THREE_chips_with_the_trophy_boards_grouped(client):
+    """Five peers became three. The three trophy boards ask one question and differ only in what counts,
+    so they group; Badge Points and Career XP are separate economies and stay peers.
+
+    A group of ONE renders as a plain chip carrying `data-board` itself, while a grouped parent carries
+    `data-board-group` and its sub-chips carry `data-board`. That arrangement is load-bearing rather than
+    cosmetic: `activeTab()` reads `[data-board].is-active`, so exactly one such element must exist
+    whichever group is open.
+    """
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    body = client.get(URL).content.decode()
+    start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
+    strip = body[start:body.index('</nav>', start)]
+
+    assert strip.count('pp-switch__chip') == 3, 'the top strip is not three chips'
+    assert 'data-board-group="clean"' in strip, 'the trophy boards are not grouped'
+    for lone in ('points', 'career'):
+        assert f'data-board="{lone}"' in strip, f'{lone} should be a plain chip, not a group'
+
+    # ...and EXACTLY ONE lit board chip in the whole document, whichever group is open. This is what
+    # `activeTab()` reads, and two lit chips (or none) would leave it picking arbitrarily or nulling.
+    # Whole opening tags, so attribute ORDER does not matter -- `is-active` sits in the class attribute,
+    # which precedes `data-board`, so scanning forward from the data attribute finds nothing.
+    import re
+
+    # `<a ` with the space, deliberately: it needs no backslash, and the escape is where this went
+    # wrong once already -- a word-boundary escape written through a shell heredoc became a literal
+    # control byte, so the pattern matched nothing and this reported zero lit chips on correct markup.
+    anchors = re.findall(r'<a [^>]*>', body)
+    assert anchors, 'no anchor tags matched at all -- the pattern itself is broken'
+    lit = [t for t in anchors if 'data-board="' in t and 'is-active' in t]
+    assert len(lit) == 1, f'expected exactly one active [data-board] chip, found {len(lit)}'
+    assert body.count('is-active') >= 2, 'the parent and its active sub-chip should both be lit'
+
+
+def test_the_sub_toggle_appears_only_for_the_grouped_board(client):
+    """It is the Career Contracts pattern: a scope toggle inside the panel, in the same `.pp-switch`
+    treatment. It has nothing to show for a group of one, so it must not render an empty second strip."""
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+
+    grouped = client.get(URL, {'tab': 'pp'}).content.decode()
+    assert 'lb-subswitch' in grouped, 'the grouped board has no sub-toggle'
+    sub = grouped[grouped.index('lb-subswitch'):]
+    sub = sub[:sub.index('</nav>')]
+    for key in ('clean', 'pp', 'trophies'):
+        assert f'data-board="{key}"' in sub, f'{key} is missing from the sub-toggle'
+    assert '>All Trophies</span>' in sub, 'the unfiltered board is not relabelled inside the group'
+
+    lone = client.get(URL, {'tab': 'career'}).content.decode()
+    assert 'lb-subswitch' not in lone, 'a group of one rendered an empty sub-toggle'
+
+
+def test_a_grouped_chip_carries_every_member_rank(client):
+    """The sub-toggle is only visible while its group is open, so without this a reader on Badge Points
+    could no longer see their trophy standings at all -- which the flat five-chip strip did show."""
+    profile = _ranked('Me', plats=3, trophies=30, points=100, pp=500)
+    client.force_login(profile.user)
+
+    body = client.get(URL, {'tab': 'points'}).content.decode()
+    start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
+    strip = body[start:body.index('</nav>', start)]
+    chip = strip[strip.index('data-board-group'):]
+    chip = chip[:chip.index('</a>')]
+
+    # On all three trophy boards, so three ranks -- not one, and not a dash.
+    assert chip.count('#1') == 3, f'the grouped chip does not carry every member rank: {chip}'
+    assert 'lb-chiprank__sep' in chip, 'the ranks are not separated'
+
+
+def test_every_board_has_its_OWN_icon(client):
+    """The icon chain used to end in a bare `{% else %}`, so a board added without a branch silently
+    inherited Career's briefcase. That happened TWICE -- to `clean`, then to `pp`. The partial now has no
+    fallback at all: an unknown key renders nothing, which is visibly wrong on one chip rather than
+    quietly wrong on two.
+    """
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    body = client.get(URL, {'tab': 'pp'}).content.decode()
+    start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
+    strip = body[start:body.index('</div>', start)]
+
+    # The briefcase is Career's. Exactly one chip may wear it: the Career chip.
+    briefcase = 'M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'
+    assert strip.count(briefcase) == 1, (
+        'more than one chip wears the briefcase, so a board is falling through to the Career glyph'
+    )
+    # ...and PP Score has one of its own (the gem).
+    assert 'M6 3h12l4 6-10 13L2 9Z' in strip, 'the PP Score board has no icon of its own'
+
+
 def test_the_default_is_derived_from_the_strip_order_not_repeated(client):
     """Two places could name the default -- the first tab, and the fallback `?tab=` resolves to -- and
     they must not be able to disagree. `DEFAULT_BOARD` is derived from `BOARDS[0]`, so reordering the
@@ -607,7 +696,7 @@ def test_the_swap_region_wraps_everything_that_moves_with_the_slice(client):
     _ranked('Someone', plats=5, trophies=10, country='GB')
     body = client.get(URL).content.decode()
 
-    region = body[body.index('<div data-lb-page>'):body.index('<!-- /lb-page -->')]
+    region = body[body.index('<div data-lb-page'):body.index('<!-- /lb-page -->')]
     assert 'data-lb-board' in region, 'the board is outside the swap region'
     assert 'pp-switch' in region, 'the tab strip is outside the swap region'
     assert 'data-filter-form' in region, 'the filters are outside the swap region'
@@ -643,7 +732,7 @@ def test_the_virtual_wall_is_not_given_a_stagger_reveal(client):
     _ranked('Someone', plats=5, trophies=10)
     body = client.get(URL).content.decode()
 
-    boot = body[body.index('<div data-lb-page>'):]
+    boot = body[body.index('<div data-lb-page'):]
     assert 'PlatPursuit.staggerReveal' not in boot, (
         'the virtualized wall has a stagger reveal again -- rows mounted on scroll will be invisible'
     )
@@ -1018,7 +1107,7 @@ def test_the_minibar_lives_outside_the_swapped_wrapper(client):
     _ranked('Someone', plats=5, trophies=50)
     body = client.get(URL).content.decode()
 
-    page_start = body.index('<div data-lb-page>')
+    page_start = body.index('<div data-lb-page')
     page_end = body.index('</div><!-- /lb-page -->')
     assert not (page_start < body.index('data-lb-minibar') < page_end), (
         'the minibar is inside the swapped wrapper, so a tab change destroys it'
@@ -1043,7 +1132,7 @@ def test_the_minibar_sentinel_is_inside_the_swapped_wrapper(client):
 
     bar = body.index('data-lb-minibar')
     sentinel = body.index('id="lb-minibar-sentinel"')
-    page_start = body.index('<div data-lb-page>')
+    page_start = body.index('<div data-lb-page')
     page_end = body.index('</div><!-- /lb-page -->')
 
     assert bar < page_start, 'the bar is inside the swapped wrapper and will be destroyed by a swap'

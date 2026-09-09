@@ -88,7 +88,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         </div>
     </div>
 
-    <div data-lb-page>
+    <div data-lb-page data-board-order="{{ board_order }}">
 
     {# ── Page header ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
@@ -144,26 +144,59 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
     list, profile detail, job detail, sits on the page for exactly that reason. It is chrome already; a
     second surface beneath it is the part that would look wrong. The card starts BELOW it. {% endcomment %}
     <div class="lb-bar">
+        {% comment %} THREE CHIPS, not five. The three trophy boards ask one question -- who has hunted
+        the most -- and differ only in what counts, so they group behind one chip with a sub-toggle; Badge
+        Points and Career XP are separate economies and stay peers. A group of ONE renders as a plain
+        chip, so nothing about those two changed.
+
+        A GROUPED chip carries `data-board-group` and its sub-chips carry `data-board`; a lone chip
+        carries `data-board` itself. That keeps exactly one `[data-board].is-active` in the DOM whichever
+        group is open, which is what `activeTab()` reads. The slide direction no longer reads its order
+        from these chips -- only the ACTIVE group's sub-strip is rendered, so a DOM read would be
+        incomplete; it comes from `data-board-order` on the swap wrapper instead. {% endcomment %}
         <nav class="pp-switch" aria-label="Leaderboard">
-            {% for b in boards %}
-            <a href="{{ b.href }}"
-               class="pp-switch__chip{% if b.key == active_tab %} is-active{% endif %}"
-               {% if b.key == active_tab %}aria-current="page"{% endif %}
-               data-board="{{ b.key }}">
-                {% comment %} One branch PER BOARD. `clean` arrived without one and fell through to the
-                `{% else %}`, which exists for Career -- so the leading, default chip wore the briefcase
-                and two of the four chips carried the same glyph. A shield-check reads as "vetted", which
-                is what this board is: the same ranking over a population somebody has filtered.
-                {% endcomment %}
-                {% if b.key == 'clean' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.68 8.94a1 1 0 0 1-.63 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
-                {% elif b.key == 'trophies' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-                {% elif b.key == 'points' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-                {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>{% endif %}
-                <span class="pp-switch__lbl">{{ b.label }}</span>
-                {% if my_standing %}<span class="lb-chiprank pp-tally">{% if b.rank %}#{{ b.rank|intcomma }}{% else %}&mdash;{% endif %}</span>{% endif %}
+            {% for g in board_groups %}
+            <a href="{{ g.href }}"
+               class="pp-switch__chip{% if g.is_active %} is-active{% endif %}"
+               {% if g.is_active %}aria-current="page"{% endif %}
+               {% if g.grouped %}data-board-group="{{ g.key }}"{% else %}data-board="{{ g.key }}"{% endif %}>
+                {% include 'trophies/partials/leaderboard_board_icon.html' with key=g.key only %}
+                <span class="pp-switch__lbl">{{ g.label }}</span>
+                {% if my_standing %}
+                {% comment %} A grouped chip shows EVERY member's rank, because the sub-toggle below is
+                only visible while this group is open -- without it a reader on Badge Points could no
+                longer see their trophy standings at all, which the flat strip did show. {% endcomment %}
+                <span class="lb-chiprank pp-tally">
+                    {% for m in g.members %}{% if not forloop.first %}<span class="lb-chiprank__sep" aria-hidden="true">&middot;</span>{% endif %}{% if m.rank %}#{{ m.rank|intcomma }}{% else %}&mdash;{% endif %}{% endfor %}
+                </span>
+                {% endif %}
             </a>
             {% endfor %}
         </nav>
+
+        {% comment %} THE SUB-TOGGLE, rendered only for a grouped active board. Same `.pp-switch`
+        treatment as the strip above it, following Career's Contracts panel, which nests its Board|History
+        scope toggle the same way rather than inventing a second visual language for the second level.
+
+        These chips carry `data-board`, and the parent above carries `data-board-group`, so exactly one
+        `[data-board].is-active` exists whichever group is open.
+
+        Each sub-chip shows only ITS rank -- the combined figure lives on the parent, for readers who are
+        elsewhere in the strip. {% endcomment %}
+        {% for g in board_groups %}{% if g.is_active and g.grouped %}
+        <nav class="pp-switch lb-subswitch" aria-label="{{ g.label }} boards">
+            {% for m in g.members %}
+            <a href="{{ m.href }}"
+               class="pp-switch__chip{% if m.is_active %} is-active{% endif %}"
+               {% if m.is_active %}aria-current="page"{% endif %}
+               data-board="{{ m.key }}">
+                {% include 'trophies/partials/leaderboard_board_icon.html' with key=m.key only %}
+                <span class="pp-switch__lbl">{{ m.label }}</span>
+                {% if my_standing %}<span class="lb-chiprank pp-tally">{% if m.rank %}#{{ m.rank|intcomma }}{% else %}&mdash;{% endif %}</span>{% endif %}
+            </a>
+            {% endfor %}
+        </nav>
+        {% endif %}{% endfor %}
     </div>
 
     {% comment %} ONE control surface, not three bare bands. The site-wide rule is STACKED CHROME CARDS +
@@ -357,12 +390,13 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         return chip ? chip.dataset.board : null;
     }
 
-    // Read from the DOM each time rather than captured: a swap replaces the strip, and a captured order
-    // would fall out of step with the order the tabs actually render in.
+    // The canonical board order, for the slide's direction. Read from the swap wrapper's own attribute
+    // rather than from the rendered chips: since the boards group, only the ACTIVE group's sub-strip is in
+    // the DOM, so a DOM read returns an incomplete list and leaves the direction undefined for any board
+    // that happens not to be showing. Still read fresh each time -- a swap replaces the wrapper.
     function tabOrder() {
-        return Array.prototype.map.call(page.querySelectorAll('[data-board]'), function (t) {
-            return t.dataset.board;
-        });
+        var el = document.querySelector('[data-lb-page]');
+        return (el && el.dataset.boardOrder ? el.dataset.boardOrder.split(',') : []);
     }
 
     // The sticky chrome a jump must land below, measured live: the nav's height differs across

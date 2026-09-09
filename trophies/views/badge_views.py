@@ -844,7 +844,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
     BOARDS = (
         ('clean', 'Shovelware Free'),
         ('pp', 'PP Score'),
-        ('trophies', 'Trophies'),
+        ('trophies', 'All Trophies'),
         ('points', 'Badge Points'),
         ('career', 'Career XP'),
     )
@@ -853,6 +853,26 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: is no longer first -- which is two edits to keep in step, and the kind that gets made once.
     DEFAULT_BOARD = BOARDS[0][0]
     BOARD_KEYS = {k for k, _ in BOARDS}
+
+    #: THE TAB STRIP: (label, member board keys). Three chips, not five.
+    #:
+    #: The three trophy boards ask ONE question -- who has hunted the most -- and differ only in what
+    #: counts: everything, everything minus shovelware, or the rarest thousand weighted by rarity. Badge
+    #: Points and Career XP are separate economies. A flat strip of five implied all of them were peers
+    #: and, at 375px, ran out of room saying so.
+    #:
+    #: A group of ONE renders as a plain chip, so nothing about the other two boards changes. The pattern
+    #: is Career's Contracts panel, which nests a Board|History sub-toggle in the same `.pp-switch`
+    #: treatment rather than inventing a second visual language for the second level.
+    #:
+    #: `?tab=` VALUES ARE UNCHANGED. The sub-toggle is a second row of links to the same URLs, so every
+    #: bookmark, every `LEGACY_TABS` mapping and the rows endpoint keep working untouched. A nested
+    #: `?tab=trophies&view=pp` would have been a URL migration bought nothing.
+    BOARD_GROUPS = (
+        ('Trophies', ('clean', 'pp', 'trophies')),
+        ('Badge Points', ('points',)),
+        ('Career XP', ('career',)),
+    )
     # Only Badge Points slices by edition. An edition is a PlatformGroup, i.e. a BADGE concept; the
     # Trophies board counts trophies across every game and Career XP is the jobs economy, so neither has
     # editions to slice. A control that renders but changes nothing is worse than one that is absent.
@@ -965,6 +985,37 @@ class OverallBadgeLeaderboardsView(TemplateView):
             for key, label in self.BOARDS
         ]
 
+    def _board_groups(self, country, edition, standing=None):
+        """The strip as GROUPS, each carrying its members and their ranks.
+
+        A grouped chip shows every member's rank at once (`#12 · #45 · #7`), because the sub-toggle is
+        only visible while that group is open -- without it, a reader on Badge Points could no longer see
+        their trophy standings at all, which the flat five-chip strip did show. Members a hunter is not on
+        render a dash, the same courtesy `_with_ranks` already gave.
+        """
+        labels = dict(self.BOARDS)
+        active = self._active_tab()
+        groups = []
+        for label, members in self.BOARD_GROUPS:
+            subs = [{
+                'key': key,
+                'label': labels[key],
+                'href': self._href(key, country, edition),
+                'rank': (standing or {}).get(key),
+                'is_active': key == active,
+            } for key in members]
+            groups.append({
+                'label': label,
+                'members': subs,
+                # A group of one is a plain chip: it carries `data-board` itself and renders no sub-strip.
+                'grouped': len(subs) > 1,
+                # The parent opens on its FIRST member, which is also the board `DEFAULT_BOARD` names.
+                'key': subs[0]['key'],
+                'href': subs[0]['href'],
+                'is_active': any(s['is_active'] for s in subs),
+            })
+        return groups
+
     @staticmethod
     def _with_ranks(links, standing):
         """Fold the viewer's rank into each tab link, so the strip carries the standing.
@@ -993,6 +1044,12 @@ class OverallBadgeLeaderboardsView(TemplateView):
 
         context.update({
             'boards': self._board_links(country, edition),
+            'board_groups': self._board_groups(country, edition),
+            # The canonical board order, for the swap's slide direction. Read from HERE rather than from
+            # the rendered chips: with grouping, only the ACTIVE group's sub-strip is in the DOM, so a
+            # DOM-order read would return an incomplete list and leave the direction undefined for any
+            # board that happens not to be showing.
+            'board_order': ','.join(k for k, _ in self.BOARDS),
             'active_tab': tab,
             'selected_country': country,
             'countries': countries,
@@ -1072,6 +1129,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
             context['my_standing'] = standing if any(v is not None for v in standing.values()) else None
             # The tab strip carries the ranks now, so it needs them whether or not any exist.
             context['boards'] = self._with_ranks(context['boards'], standing)
+            context['board_groups'] = self._board_groups(country, edition, standing)
         return context
 
     def _build_board(self, tab, country, edition=''):
