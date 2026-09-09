@@ -225,8 +225,19 @@
 /* ── Status-aware avatar: the ring colour IS the sync state ───────────────── */
 .pp-av { position: relative; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; flex-shrink: 0; padding: 0; border: none; background: none; transition: transform 0.16s var(--pp-ease); }
 .pp-av:active { transform: scale(0.93); }   /* tactile press-down (springs back via the transition) */
-.pp-av__img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: grid; place-items: center;
+/* TWO THINGS ARE LOAD-BEARING HERE and both were missing, which is why a square PSN avatar rendered as
+   a square with its corners escaping the ring:
+   - `overflow: hidden`, or the rounded box clips nothing and `place-items: center` simply centres an
+     oversized child that spills past it.
+   - the child rule below. This carried `object-fit: cover` on the SPAN, where it does nothing at all:
+     object-fit only applies to replaced elements (img, video). It fails silently on anything else, so
+     the intent was written down, never executed, and read as correct in review for as long as every
+     test avatar happened to be square-ish already.
+   The canonical shape is `.lb-row__av`, `.pp-phero__avatar` and `.pp-minibar__ava` -- the last of which
+   is 280 lines below this in the same file and had it right the whole time. */
+.pp-av__img { width: 100%; height: 100%; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
     background: linear-gradient(135deg, var(--pp-bg-3), var(--pp-bg-2)); color: var(--pp-text-dim); }
+.pp-av__img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pp-av__img svg { width: 20px; height: 20px; }
 /* The ring is a status LIGHT, not just a border: colour eases between states (never snaps) and carries a
    soft state-coloured halo. On hover the WHOLE avatar lifts (scaling only the ::after left the corner dot
