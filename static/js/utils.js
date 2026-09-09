@@ -3405,6 +3405,154 @@ function wireSearchField(input, opts) {
 }
 window.PlatPursuit.wireSearchField = wireSearchField;
 
+
+/* ── DetailModal: the .pp-detail-modal behaviour, once ────────────────────────────────────────────────
+ *
+ * Eleven templates use the `.pp-detail-modal` mold and each hand-rolled its own open, close, Escape,
+ * focus trap and exit transition. Two of them -- the Career explainer and the 1.0 launch greeting -- are
+ * near-identical hundred-line copies, and every audit lesson below was learned on ONE of them and had to
+ * be carried to the other by hand. This is that behaviour in one place.
+ *
+ * It does NOT own the markup or the CSS. Consumers keep the mold's classes and, critically, keep their
+ * own ID-SCOPED `is-closing` rule: an unscoped `.pp-detail-modal.is-closing` fades the chrome around
+ * solid text, because badge-inspect already defines one globally. This controller only adds and removes
+ * the class; which element it styles is the template's business.
+ *
+ * STILL OPEN, and now a one-line fix instead of eleven: no body scroll lock. Left as it was rather than
+ * changed for every consumer at once inside a feature branch.
+ *
+ * opts:
+ *   closeSelector  selector for elements that dismiss (default '[data-modal-close]')
+ *   autoOpenDelay  ms after wiring to open itself; omit for a manual modal
+ *   armed          whether a dismissal should call `onDismiss` (default: the element has [data-auto])
+ *   onDismiss      () => Promise, called at most ONCE, on the first armed dismissal
+ *   seenKey        localStorage key holding "this device already dismissed it" when onDismiss failed
+ *   onSettled      called once the page's motion may proceed -- see the note below
+ *
+ * ON THE CHOREOGRAPHY GATE. The controller does NOT own it. A page whose on-load motion must wait for a
+ * modal has to ARM that gate synchronously, before its own end-of-body scripts run, and this file is one
+ * of those end-of-body scripts -- so a gate armed here would already be too late for the code waiting on
+ * it. The page arms and publishes; the controller only reports, through `onSettled`, that nothing is
+ * going to cover the screen any more.
+ *
+ * `onSettled` therefore fires on EVERY path that ends with no modal on screen: the dismissal, the
+ * auto-open skipped because the user was typing, and the auto-open skipped because this device already
+ * dismissed it. Miss any one of them and the page's motion waits forever on a modal that will never
+ * appear -- which is a frozen render, not a cosmetic bug.
+ */
+function DetailModal(el, opts) {
+    opts = opts || {};
+    var closeSelector = opts.closeSelector || '[data-modal-close]';
+    var dialog = el ? el.querySelector('.pp-detail-modal__dialog') : null;
+    var armed = opts.armed === undefined ? !!(el && el.hasAttribute('data-auto')) : !!opts.armed;
+    var lastFocus = null;
+    var api = {};
+
+    var settled = false;
+    function settle() {
+        if (settled) { return; }
+        settled = true;
+        if (opts.onSettled) { opts.onSettled(); }
+    }
+    api._settle = settle;
+
+    // No element and the page may proceed at once: there is no modal to wait for.
+    if (!el) { settle(); return api; }
+
+    function isEditable(node) {
+        if (!node) { return false; }
+        var t = node.tagName;
+        return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || node.isContentEditable;
+    }
+
+    function dismiss() {
+        // Only an ARMED dismissal records anything. A reopen-and-close (an edhint, a "read it again"
+        // link) must stay silent, or the first reopen would re-write a flag that is already written and
+        // a manual modal would start marking itself seen.
+        if (!armed) { return; }
+        armed = false;
+        var p = opts.onDismiss ? opts.onDismiss() : null;
+        if (!p || !p.catch) { return; }
+        p.catch(function () {
+            // The server did not hear us. Keep THIS device quiet and let the caller's self-heal retry.
+            if (opts.seenKey) { try { localStorage.setItem(opts.seenKey, '1'); } catch (e) {} }
+        });
+    }
+
+    api.isOpen = function () { return !!el && !el.hidden; };
+
+    api.open = function (trigger) {
+        if (!el.hidden) { return; }
+        lastFocus = trigger || document.activeElement;
+        el.hidden = false;
+        // Do not yank focus off something the user is typing in. A trigger click is explicit intent and
+        // always wins; an auto-open defers to the caret.
+        if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
+    };
+
+    api.close = function () {
+        if (el.hidden) { return; }
+        dismiss();
+        el.classList.add('is-closing');
+        window.setTimeout(function () {
+            el.hidden = true;
+            el.classList.remove('is-closing');
+            if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+            api._settle();
+        }, 200);
+    };
+
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest || el.hidden) { return; }
+        if (e.target.closest(closeSelector)) { e.preventDefault(); api.close(); }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (el.hidden) { return; }
+        if (e.key === 'Escape') { e.preventDefault(); api.close(); return; }
+        if (e.key !== 'Tab' || !dialog) { return; }
+        var all = dialog.querySelectorAll('a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])');
+        var list = Array.prototype.filter.call(all, function (n) { return n.offsetParent !== null; });
+        if (!list.length) { return; }
+        var first = list[0], last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+
+    // A manual modal covers nothing until something opens it, so the page never waits on one.
+    if (opts.autoOpenDelay === undefined) { settle(); return api; }
+
+    // A previous visit dismissed this and the write failed, so the modal is spent on this device even
+    // though the server does not know. Stay shut and retry the write -- deferred to DOMContentLoaded
+    // because an inline partial script runs BEFORE end-of-body utils.js defines PlatPursuit.API.
+    var seen = false;
+    if (opts.seenKey) { try { seen = localStorage.getItem(opts.seenKey) === '1'; } catch (e) {} }
+    if (seen) {
+        // Nothing will open, so release the page FIRST -- this is the path a server-armed gate cannot
+        // predict, because only this device knows the modal is already spent here.
+        settle();
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!opts.onDismiss) { return; }
+            var p = opts.onDismiss();
+            if (p && p.then) {
+                p.then(function () { try { localStorage.removeItem(opts.seenKey); } catch (e) {} })
+                 .catch(function () {});
+            }
+        });
+        return api;
+    }
+
+    window.setTimeout(function () {
+        // A skipped auto-open must settle the gate too. The page's motion cannot be left waiting on a
+        // modal that decided not to appear.
+        if (isEditable(document.activeElement)) { api._settle(); return; }
+        api.open(null);
+    }, opts.autoOpenDelay);
+
+    return api;
+}
+window.PlatPursuit.DetailModal = DetailModal;
+
 // Global `/` + Cmd/Ctrl+K -> focus the page's primary search field ([data-page-search]). Bound ONCE here so
 // every page (browse or bespoke) gets the shortcut just by marking its search input. `/` is skipped while
 // typing in another field; Cmd/Ctrl+K always fires (a deliberate override, like GitHub/Linear).

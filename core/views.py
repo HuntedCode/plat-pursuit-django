@@ -8,6 +8,7 @@ from django.views.generic import TemplateView, View
 
 from trophies.mixins import StaffRequiredMixin
 from trophies.util_modules.cache import redis_client
+from core import whats_new
 from core.services import home_service
 from core.services.site_heartbeat import get_cached_heartbeat
 
@@ -60,6 +61,25 @@ class AboutView(TemplateView):
 
 class ContactView(TemplateView):
     template_name = 'pages/contact.html'
+
+
+class WhatsNewView(TemplateView):
+    """Every What's New entry, newest first -- the archive the modal links out to.
+
+    PUBLIC, and signed out on purpose. The modal is a nudge for hunters who were already here; this page
+    is what the site has been doing, which is a fair question for someone deciding whether to sign up.
+    It reads a module-level tuple, so it costs no queries at all and needs no caching.
+
+    It does NOT mark anything seen. Reading the archive is not dismissing the notice: a hunter who lands
+    here from a link should still meet the modal on Home, or the entry they never opened would be
+    silently spent.
+    """
+    template_name = 'pages/whats_new.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['entries'] = whats_new.ENTRIES
+        return context
 
 
 # ── Design workshops (staff-only) ──────────────────────────────────────────
@@ -217,6 +237,25 @@ class HomeView(TemplateView):
                 self.request.GET.get('preview') == 'launch-welcome'
                 and (user.is_staff or getattr(user, 'is_moderator', False))
             )
+
+            # WHAT'S NEW, and the precedence rule between the two modals.
+            #
+            # Never both on one visit: that is two scrims back to back, and the second arrives while the
+            # reader is still deciding what the first was. The 1.0 greeting wins because it fires exactly
+            # once in an account's lifetime and cannot be deferred to a better moment, whereas this entry
+            # stays undismissed and is simply due again next visit. Nothing is lost by waiting.
+            #
+            # Decided HERE rather than inside either modal, because it is the one place that can see
+            # both. `whats_new.is_due` deliberately knows nothing about the greeting.
+            is_previewing = (
+                self.request.GET.get('preview') == 'whats-new'
+                and (user.is_staff or getattr(user, 'is_moderator', False))
+            )
+            context['show_whats_new'] = (
+                not context['show_launch_welcome'] and whats_new.is_due(user)
+            ) or is_previewing
+            # The entry itself, so the template renders from data and never restates the copy.
+            context['whats_new'] = whats_new.latest()
             return context
 
         # All pre-synced states share the cached site heartbeat for their

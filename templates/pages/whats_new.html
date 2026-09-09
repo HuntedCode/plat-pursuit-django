@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block title %}What's New{% endblock %}
+{% block meta_description %}Everything we have added to Platinum Pursuit, newest first.{% endblock %}
+
+{% comment %} THE ARCHIVE the What's New modal links out to. Public and signed-out on purpose: the modal
+is a nudge for hunters already here, and this is the record of what the site has been doing, which is a
+fair question for somebody deciding whether to sign up.
+
+ZERO QUERIES. `entries` is a module-level tuple in core/whats_new.py, so this page touches no database
+and needs no caching. Do not grow it a per-user branch: the moment it reads a profile it stops being the
+cheapest page on the site for no gain the reader can see.
+
+STRUCTURE: stacked chrome (the accented page-header card), then the entries flowing FREE below it. One
+card per entry, because each is a discrete section of prose rather than page-filling content -- the
+"free content" rule is about grids and walls, not about leaving paragraphs bare on the page background.
+{% endcomment %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-2 max-w-3xl">
+
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5">
+            <div class="flex items-center gap-2 flex-wrap">
+                <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3"/><path d="M18.5 5.5 16.4 7.6"/><path d="M21 12h-3"/><path d="M6 12H3"/><path d="M7.6 7.6 5.5 5.5"/><circle cx="12" cy="14" r="5"/></svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">What's New</h1>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                Everything we have added, newest first.
+            </p>
+        </div>
+    </div>
+
+    {% for entry in entries %}
+        <article class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+            <div class="card-body p-3 md:p-5">
+                <div class="wn-entry__head">
+                    <h2 class="wn-entry__title">{{ entry.title }}</h2>
+                    {% comment %} A machine-readable date beside the human one: this is a dated record,
+                    and the <time> is what makes it one to anything that reads the page. {% endcomment %}
+                    <time class="wn-entry__date" datetime="{{ entry.published|date:'Y-m-d' }}">{{ entry.published|date:'F j, Y' }}</time>
+                </div>
+
+                <div class="cxp__stack">
+                    {% for label, copy in entry.beats %}
+                        <div class="cxp__beat">
+                            <span class="cxp__num" aria-hidden="true">{{ forloop.counter }}</span>
+                            <div>
+                                <div class="cxp__label">{{ label }}</div>
+                                <p class="cxp__copy">{{ copy }}</p>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                {% if entry.link_url %}
+                    <div class="wn-entry__go">
+                        <a class="pp-howto__more" href="{{ entry.link_url }}">{{ entry.link_label }} &rarr;</a>
+                    </div>
+                {% endif %}
+            </div>
+        </article>
+    {% empty %}
+        {% comment %} Unreachable while ENTRIES has anything in it, and here because "nothing yet" is an
+        ANSWER. An empty page with a header and no explanation reads as a page that failed to load. {% endcomment %}
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-5 text-center">
+                <p class="text-sm text-base-content/60">Nothing announced yet. Check back after the next update.</p>
+            </div>
+        </div>
+    {% endfor %}
+
+</div>
+{% endblock %}

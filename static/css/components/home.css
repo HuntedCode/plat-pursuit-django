@@ -140,6 +140,31 @@
    Lives here, not with the badge-series styles it was first parked beside: this is
    lobby chrome. The exit animation stays in series-list.css beside its pp-howto
    siblings, which is the one part that IS shared with the other howto modals. */
+/* What's New's eyebrow. The modal's H2 is the ENTRY's title ("Two new trophy leaderboards"), so
+   something has to say which surface is talking -- otherwise a hunter meets a headline with no frame.
+   Its own class rather than .home-hi__eyebrow because that one belongs to the greeting header block and
+   is muted to sit under a name; this leads a modal and takes the accent, like .ccx__eyebrow does. */
+.wn__eyebrow {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--pp-primary) 78%, var(--pp-text)); margin-bottom: 6px;
+}
+
+/* The /whats-new/ archive's entry heads. Title and date on one line at md+, stacked below it: the date
+   is the second thing you want and the first thing that should give way, since a long title wrapping
+   under its own date reads as two entries. */
+.wn-entry__head {
+    display: flex; flex-direction: column; gap: 2px; margin-bottom: 14px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--pp-border);
+}
+.wn-entry__title { font-family: var(--pp-font-display); font-size: 1.05rem; font-weight: 800; line-height: 1.2; color: var(--pp-text); }
+.wn-entry__date { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+.wn-entry__go { margin-top: 16px; }
+@media (min-width: 768px) {
+    .wn-entry__head { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 16px; }
+    .wn-entry__title { font-size: 1.2rem; }
+    .wn-entry__date { flex: 0 0 auto; }
+}
+
 .lwm__standing {
     display: flex; align-items: center; justify-content: center; gap: 0.9rem;
     margin-top: 1.1rem; padding: 0.8rem 0.9rem; border-radius: 0.7rem;

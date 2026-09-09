@@ -1,0 +1,47 @@
+{% comment %} THE LOBBY'S CHOREOGRAPHY GATE, armed for whichever modal is about to cover the page.
+
+Home's on-load motion -- the count-ups, the Horizon fills, the ring pace -- is the payoff for arriving,
+and on a visit that opens a modal it would play out behind the scrim and be over before the reader saw
+it. `home-motion.js` waits on `window.ppAfterHomeModal`.
+
+WHY THIS IS ITS OWN PARTIAL AND NOT PART OF EITHER MODAL. The gate has to be armed SYNCHRONOUSLY, before
+end-of-body scripts run, because `home-motion.js` is one of those scripts and asks the question the
+moment it loads. The modals are wired through `PlatPursuit.DetailModal`, which lives in utils.js -- also
+end-of-body. A gate armed alongside the modal wiring would arm after the code waiting on it had already
+given up. So the page arms; the modal reports back.
+
+It was `ppAfterLaunchWelcome`, owned by the 1.0 greeting's inline script, which was correct while that
+was the only modal here. What's New made it two, and a gate named after one of them is a gate the other
+cannot use.
+
+FAIL-OPEN, both directions. Consumers call through `(window.ppAfterHomeModal || function (f) { f(); })`,
+so an unarmed gate runs the motion immediately. And `ppSettleHomeModal` is safe to call when nothing is
+pending, so a modal that settles twice (dismissed, then a stray path) costs nothing.
+{% endcomment %}
+<script>
+(function () {
+    'use strict';
+    // Armed only when the server is actually going to render a modal. Every other visit leaves the gate
+    // unarmed, and the passthrough above runs the motion with no wait at all.
+    var pending = {% if show_launch_welcome or show_whats_new %}true{% else %}false{% endif %};
+    var EVT = 'pp-home-modal:settled';
+
+    window.ppAfterHomeModal = function (fn) {
+        if (pending) { document.addEventListener(EVT, function () { fn(); }, { once: true }); }
+        else { fn(); }
+    };
+    window.ppSettleHomeModal = function () {
+        if (!pending) { return; }
+        pending = false;
+        document.dispatchEvent(new CustomEvent(EVT));
+    };
+
+    // THE BACKSTOP. The gate is armed by the server, but everything that can settle it lives in
+    // end-of-body JS -- so a script error, a blocked bundle or a browser that never fires our wiring
+    // would leave the lobby's numbers frozen at their server-rendered values with no way to recover.
+    // Those values are correct (they are what no-JS and reduced-motion readers see), so the failure is
+    // survivable rather than broken, but it is still a page that quietly stopped animating. Well past
+    // any real auto-open, release it.
+    window.setTimeout(window.ppSettleHomeModal, 4000);
+})();
+</script>
