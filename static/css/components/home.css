@@ -157,6 +157,52 @@
     letter-spacing: 0.1em; color: var(--pp-text-mute);
 }
 
+/* ── /whats-new/ : the spine ───────────────────────────────────────────────────────────────────────
+ * A connector down the left with a node per entry, drawn in the same idiom as game detail's journey
+ * timeline (.gd-mystats__tl): line from a ::before, node pop on a spring curve, staggered by --i.
+ *
+ * NOT extracted into a shared primitive. That one is the only other VERTICAL timeline on the site
+ * (badge detail's is a horizontal first/last strip), so this is the second consumer and the bar here is
+ * three. A third is the trigger; at that point the pair to generalise is this and .gd-mystats__tl.
+ *
+ * The nodes carry no text on purpose: each card prints its own date in full, and repeating it on the
+ * spine an inch to the left would be printing it twice. */
+.wn-tl { list-style: none; margin: 0; padding: 0; }
+.wn-tl__row { position: relative; display: flex; gap: 12px; }
+/* The connector stops at the last node rather than trailing past it -- a line running off the bottom of
+   the last entry promises another one below the fold. */
+.wn-tl__row:not(:last-child)::before {
+    content: ''; position: absolute; left: 5px; top: 14px; bottom: -2px; width: 2px;
+    background: var(--pp-divider);
+}
+.wn-tl__node {
+    position: relative; z-index: 1; flex: none; width: 12px; height: 12px; margin-top: 15px;
+    border-radius: 999px; background: var(--pp-bg-3);
+    border: 2px solid color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+}
+/* The newest entry is the one the page is FOR, so its node is the lit one. */
+.wn-tl__row:first-child .wn-tl__node {
+    background: var(--pp-primary); border-color: var(--pp-primary);
+    box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-primary) 70%, transparent);
+}
+.wn-tl__row > .card { flex: 1; min-width: 0; }
+@media (min-width: 768px) {
+    .wn-tl__row { gap: 16px; }
+    .wn-tl__node { margin-top: 21px; }
+    .wn-tl__row:not(:last-child)::before { top: 20px; }
+}
+/* The spine draws itself as each row arrives: the connector grows from the top and the node pops on a
+   spring, a beat after the card has risen in. Gated on .is-in (the shared .pp-arrive observer) and on
+   reduced-motion, like every other entrance on the site. */
+@media (prefers-reduced-motion: no-preference) {
+    html.pp-arm .wn-tl__row:not(.is-in)::before { transform: scaleY(0); }
+    html.pp-arm .wn-tl__row:not(.is-in) .wn-tl__node { opacity: 0; }
+    .wn-tl__row.is-in::before { transform-origin: top; animation: wnTlLine 0.3s var(--pp-ease) both; animation-delay: 0.12s; }
+    .wn-tl__row.is-in .wn-tl__node { animation: wnTlNode 0.34s cubic-bezier(0.34, 1.4, 0.64, 1) both; animation-delay: 0.08s; }
+}
+@keyframes wnTlLine { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes wnTlNode { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: none; } }
+
 /* The /whats-new/ archive's entry heads. Title and date on one line at md+, stacked below it: the date
    is the second thing you want and the first thing that should give way, since a long title wrapping
    under its own date reads as two entries. */

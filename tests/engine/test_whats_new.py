@@ -433,3 +433,54 @@ def test_the_footer_carries_it_when_signed_in_too(client):
 
     footer = body.split('<footer', 1)[1]
     assert reverse('whats_new') in footer
+
+
+# ── the archive's spine ───────────────────────────────────────────────────────────────────────────────
+
+def test_the_archive_draws_the_entries_as_a_timeline(client):
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+
+    assert 'wn-tl__node' in body, 'the spine has no nodes'
+    # One row per entry, and each carries its index so the spine can stagger.
+    assert body.count('wn-tl__row') == len(whats_new.ENTRIES)
+    assert '--i: 0;' in body
+
+
+def test_the_card_keeps_its_OWN_date_beside_the_spine(client):
+    """Jeffrey's explicit call: the spine is additive, and the date stays where it was. So the nodes
+    carry no text -- printing the date on the spine an inch from the card's own would be printing it
+    twice."""
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+
+    for entry in whats_new.ENTRIES:
+        assert entry.published.strftime('%Y-%m-%d') in body, f'{entry.id} lost its card date'
+    assert body.count('wn-entry__date') == len(whats_new.ENTRIES)
+
+
+def test_the_arrival_choreography_cannot_strand_the_page(client):
+    """The three-path degradation the .pp-arrive primitive requires, and the half that is easy to skip.
+
+    The hidden state is armed pre-paint from `extra_head`. If the JS bundle then fails to load, nothing
+    is left to reveal it and the page is a header above an empty column -- so the boot script removes the
+    arm when the helper is missing. Without that failsafe the page's failure mode is BLANK, not unstyled.
+    """
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+
+    assert "classList.add('pp-arm')" in body, 'the choreography is never armed'
+    assert "classList.remove('pp-arm')" in body, (
+        'no failsafe: a bundle that fails to load leaves every entry permanently hidden'
+    )
+    assert 'arriveOnScroll' in body
+
+
+def test_the_spine_animations_are_declared_where_they_are_used():
+    """A keyframe referenced but never declared is silently inert -- no console error, no visual clue
+    beyond "the entrance stopped happening". That has happened here before, which is why
+    test_css_animations.py exists; this pins the two the spine adds."""
+    css = (Path(dj_settings.BASE_DIR) / 'static' / 'css' / 'components' / 'home.css').read_text(encoding='utf-8')
+    for name in ('wnTlLine', 'wnTlNode'):
+        # The trailing delimiter is load-bearing, not tidiness. A bare `in` check passes on any name this
+        # one is a PREFIX of: renaming the declaration to `wnTlNodeXX` left the plain version green,
+        # caught by mutation. Matching the space and brace that must follow the name pins the whole name.
+        assert f'@keyframes {name} {{' in css, f'{name} is used but never declared'
+        assert f'animation: {name} ' in css, f'{name} is declared but nothing uses it'

@@ -101,6 +101,38 @@ back to what it said, and the archive is a page nothing links to.
 The avatar entry deliberately carries **no unread marker**. While an entry is unseen the modal fires on
 its own, so a badge there would only ever appear beside a modal already on screen.
 
+## The archive's spine
+
+The entries are drawn as a vertical timeline: a connector down the left with a node per entry, the
+newest one lit.
+
+**A calendar was the other candidate and would have lied.** Entries are sparse and irregular, so a month
+grid is thirty cells with two lit, and every empty cell reads as "nothing happens here" — the opposite of
+what an announcement page is for. A timeline with two nodes reads as the *start of a record*. Same data,
+opposite impression. It also self-scales: identical design at 2 entries or 50, and it works at 375px,
+which a right-hand rail does not.
+
+**The nodes carry no text.** Each card prints its own date in full; repeating it on the spine an inch to
+the left would be printing it twice.
+
+Drawn in the same idiom as game detail's journey timeline (`.gd-mystats__tl`) — connector from a
+`::before`, node pop on a spring curve. **Not extracted into a shared primitive:** that is the only other
+vertical timeline on the site (badge detail's is a horizontal first/last strip), so this is the second
+consumer and the bar is three. A third is the trigger, and the pair to generalise then is these two.
+
+Motion is the shared `.pp-arrive` section arrival. Its three-path degradation is load-bearing here: the
+hidden state is armed pre-paint in `extra_head`, so if the JS bundle fails to load, **nothing is left to
+reveal the entries** and the page is a header above an empty column. The boot script removes the arm when
+the helper is missing. Pinned by test, because the failure mode is a blank page rather than an unstyled
+one.
+
+### Deferred: jump-to navigation
+
+A sticky table of contents was considered and deferred. With a handful of entries it lists titles already
+fully on screen, and it is inherently desktop-only, so the page has to be good without it either way. It
+earns itself somewhere around 8-10 entries — at which point sticky year markers on the spine are the
+cheaper form, reusing the existing sticky-header pattern that already solves the offset under the chrome.
+
 ## Precedence against the 1.0 greeting
 
 **Never both on one visit.** The 1.0 launch greeting wins; What's New waits for the next visit.

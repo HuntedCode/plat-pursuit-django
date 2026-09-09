@@ -31,8 +31,27 @@ card per entry, because each is a discrete section of prose rather than page-fil
         </div>
     </div>
 
+    {% comment %} THE SPINE. The entries are a dated sequence, so the list is drawn as one: a connector
+    running down the left with a node per entry.
+
+    A calendar was the other candidate and would have lied. Entries are sparse and irregular -- a month
+    grid is thirty cells with two lit, and every empty cell reads as "nothing happens here", which is the
+    opposite of what an announcement page is for. A timeline with two nodes reads as the START of a
+    record. Same data, opposite impression.
+
+    The nodes carry NO text. Each card keeps its own date, in full, exactly where it was -- so putting
+    the date on the spine as well would be printing it twice, an inch apart.
+
+    Motion is the shared `.pp-arrive` section arrival (armed pre-paint in extra_head, revealed by
+    PlatPursuit.arriveOnScroll), plus the connector draw and node pop below. Both degrade three ways:
+    no JS never arms and hides nothing, no IntersectionObserver reveals everything at once, and reduced
+    motion never hides anything in the first place. {% endcomment %}
+    {% if entries %}
+    <ol class="wn-tl">
     {% for entry in entries %}
-        <article class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <li class="wn-tl__row pp-arrive" style="--i: {{ forloop.counter0 }};">
+        <span class="wn-tl__node" aria-hidden="true"></span>
+        <article class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 pp-arrive__it">
             <div class="card-body p-3 md:p-5">
                 <div class="wn-entry__head">
                     <h2 class="wn-entry__title">{{ entry.title }}</h2>
@@ -60,15 +79,42 @@ card per entry, because each is a discrete section of prose rather than page-fil
                 {% endif %}
             </div>
         </article>
-    {% empty %}
+        </li>
+    {% endfor %}
+    </ol>
+    {% else %}
         {% comment %} Unreachable while ENTRIES has anything in it, and here because "nothing yet" is an
-        ANSWER. An empty page with a header and no explanation reads as a page that failed to load. {% endcomment %}
+        ANSWER. An empty page with a header and no explanation reads as a page that failed to load. No
+        spine either: a timeline with no events on it is a line. {% endcomment %}
         <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
             <div class="card-body p-5 text-center">
                 <p class="text-sm text-base-content/60">Nothing announced yet. Check back after the next update.</p>
             </div>
         </div>
-    {% endfor %}
+    {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_head %}
+<script>
+    /* Arms the scroll choreography BEFORE first paint (the motion-patterns pattern): the hidden state
+       gates on html.pp-arm, so incremental painting can never flash a card visible before the
+       end-of-body observer hides it. Without JS this never runs and nothing is hidden. */
+    document.documentElement.classList.add('pp-arm');
+</script>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+    /* If the bundle failed to load, the arm comes OFF -- nothing may strand the hidden state, or the
+       page is a header above an empty column. Same failsafe every .pp-arrive consumer carries. */
+    (function () {
+        if (!window.PlatPursuit || !PlatPursuit.arriveOnScroll) {
+            document.documentElement.classList.remove('pp-arm');
+            return;
+        }
+        PlatPursuit.onPageReady(function (first) { if (first) PlatPursuit.arriveOnScroll(); });
+    })();
+</script>
 {% endblock %}
