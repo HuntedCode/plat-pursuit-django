@@ -210,6 +210,29 @@ def test_every_board_has_its_OWN_icon(client):
     assert 'M6 3h12l4 6-10 13L2 9Z' in strip, 'the PP Score board has no icon of its own'
 
 
+def test_every_board_explains_itself_and_no_two_alike(client):
+    """The per-board line is the only thing on the page that says what you are looking at, and it changes
+    with the tab. It matters most for the three trophy boards: they now sit behind one chip, a click
+    apart, ranking the same hunters -- so if two of them read the same the grouping has hidden the very
+    difference it was meant to organise.
+
+    Distinctness is asserted rather than the wording, so the copy can be revised freely; what cannot
+    happen is two boards quietly ending up with one explanation between them. Each is also checked to
+    reach the page, because a MEANINGS entry that nothing renders is copy nobody reads.
+    """
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
+    assert set(V.MEANINGS) == V.BOARD_KEYS, 'a board has no explanation, or one explains nothing'
+    assert len(set(V.MEANINGS.values())) == len(V.MEANINGS), (
+        f'two boards share an explanation: {V.MEANINGS}'
+    )
+
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    for key in ('clean', 'pp', 'trophies'):
+        body = client.get(URL, {'tab': key}).content.decode()
+        assert V.MEANINGS[key] in body, f'the {key} board does not render its own explanation'
+
+
 def test_the_default_is_derived_from_the_strip_order_not_repeated(client):
     """Two places could name the default -- the first tab, and the fallback `?tab=` resolves to -- and
     they must not be able to disagree. `DEFAULT_BOARD` is derived from `BOARDS[0]`, so reordering the

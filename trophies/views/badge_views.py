@@ -915,11 +915,19 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: name the population, name the ordering, and read like somebody wrote it. A reader who has never met
     #: "Badge Points" learns nothing from a lit chip, and this line is the only place on the page that
     #: explains the board they are looking at.
+    #: THE THREE TROPHY BOARDS MUST READ AS DIFFERENT. They sit behind one chip now, a click apart, and
+    #: they rank the same hunters -- so each line's job is to say what THIS board counts that its
+    #: siblings do not. A reader switching between them needs the difference every time, not once.
+    #:
+    #: Each stands alone. `clean` is the default, so it cannot lean on "the same ranking as..." for its
+    #: meaning; `trophies` names shovelware explicitly because being the one that INCLUDES it is the only
+    #: thing distinguishing it.
     MEANINGS = {
-        'clean': ('Platinums earned on games that are not shovelware. Total trophies settles a tie.'),
-        'pp': ('Your 1,000 rarest base-game trophies, scored by how few players hold them. '
-               'A 1% trophy is worth 100.'),
-        'trophies': 'Every hunter on the site, ranked by platinums. Total trophies settles a tie.',
+        'clean': 'Platinums earned on games that are not shovelware. Total trophies settles a tie.',
+        'pp': ('Your 1,000 rarest base-game trophies. Rarer scores higher: a 1% trophy is worth 100, '
+               'a 10% trophy 10.'),
+        'trophies': ('Every game counts, shovelware included. Ranked by platinums, with total trophies '
+                     'settling a tie.'),
         'points': 'Badge points, earned a stage at a time. Every edition counts toward one total.',
         'career': 'Career XP banked from contracts, across all 25 jobs.',
     }
