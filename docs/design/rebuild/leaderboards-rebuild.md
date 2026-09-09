@@ -63,7 +63,7 @@ second home for them.
 
 | Surface | URL | Role |
 |---|---|---|
-| **Global Boards** (hub landing) | `/leaderboards/` | The four global boards, `.pp-switch` tabs |
+| **Global Boards** (hub landing) | `/leaderboards/` | FIVE global boards behind THREE `.pp-switch` chips; the three trophy boards group with a sub-toggle |
 | **Game Boards** | `/leaderboards/games/` | Thin directory → links to game detail's Ranks panel |
 | **Badge Boards** | `/leaderboards/badges/` | Thin directory → links to badge detail's new Ranks panel |
 | **Job Boards** | `/leaderboards/jobs/` | Thin directory → links to job detail's Ranks tab |
@@ -691,6 +691,27 @@ so it would have produced a board that looks migrated and still tiebreaks wrong.
   DEFAULT tab that is a blank landing page rather than one stale figure — see the deploy checklist. And
   every retired `?tab=` still resolves to the board it MEANT rather than to "the default", or taking the
   first slot would have silently redirected every old Trophies bookmark onto different numbers.
+- **A FIFTH board, Rarity Score, and the strip regrouped around it (2026-09).** Five flat chips became
+  THREE: the three trophy boards ask one question and differ only in what counts, so they group behind one
+  chip with a sub-toggle on its own row (Career's Contracts panel is the pattern). `?tab=` values did not
+  change -- the sub-toggle is a second row of links to the same URLs, so bookmarks and `LEGACY_TABS` kept
+  working. Grouped parents carry `data-board-group`, sub-chips and lone chips carry `data-board`, which is
+  load-bearing: exactly one `[data-board].is-active` must exist whichever group is open, because that is
+  what `activeTab()` reads. A grouped chip carries NO rank -- one chip is one board is one number, and a
+  group is not a board.
+- **Rarity Score's four traps, in one place** (the long form is in
+  [leaderboard-system.md](../../architecture/leaderboard-system.md)): the two rate fields carry DIFFERENT
+  UNITS (`trophy_earn_rate` is a percentage, `earn_rate` a fraction -- mixing them scales scores by 100
+  silently); a rate of `0.0` means UNKNOWN and sorts FIRST under a rarest-first ordering, so leaving it in
+  fills the scoring set with 0-point rows while `scored_count` still passes the membership gate; DLC is
+  excluded outright because PSN divides its earners by base-game owners and no data of ours can correct
+  it; and the recompute AGGREGATES BY RATE rather than sorting, because a top-N sort is 250,000 rows per
+  whale and this codebase already dropped one query of that shape on cost.
+- **Ties are safe only while nothing row-identified is stored.** Rarity points are strictly decreasing in
+  rate only above PSN's 0.1% floor, so the top-N boundary lands inside a tie bucket for essentially every
+  qualifying hunter -- "the rarest 1,000" is not a well-defined set of ROWS. It does not matter because
+  every figure the store holds is a function of the rate alone. It stops not mattering the moment
+  something persists a row identity taken from that slice.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
   sums them — the architecture seals them apart on purpose.
 
