@@ -17,6 +17,9 @@ class StaticViewSitemap(Sitemap):
             'companies_list', 'franchises_list', 'genres_list',
             'jobs_browse', 'recently_added', 'trophy_lists', 'badge_how_it_works',
             'milestones_list', 'support_hub', 'support_roadmap',
+            # Public, indexable and linked from the footer sitewide -- exactly the shape of omission
+            # the closing audit above was about.
+            'whats_new',
         ]
 
     def location(self, item):

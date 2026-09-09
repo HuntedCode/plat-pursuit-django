@@ -1,7 +1,7 @@
 # What's New
 
 **Status:** shipped 2026-09
-**Code:** `core/whats_new.py`, `core/views.py` (`HomeView`, `WhatsNewView`), `api/user_settings_views.py`, `templates/trophies/partials/home/_whats_new.html`, `templates/trophies/partials/home/_home_modal_gate.html`, `templates/pages/whats_new.html`
+**Code:** `core/whats_new.py` (`Entry.safe_link_url` is the render-time link guard), `core/sitemaps.py`, `core/views.py` (`HomeView`, `WhatsNewView`), `api/user_settings_views.py`, `templates/trophies/partials/home/_whats_new.html`, `templates/trophies/partials/home/_home_modal_gate.html`, `templates/pages/whats_new.html`
 **Tests:** `tests/engine/test_whats_new.py`
 
 A one-shot modal on the Home lobby announcing the newest thing we shipped, plus a public archive at
@@ -68,8 +68,9 @@ ever, permanently suppressing the modal for that account with nothing in the UI 
 
 ## Who is due one
 
-`whats_new.is_due(user)` — an entry exists, and its id is not the one stored on the user. That is the
-whole rule.
+`whats_new.is_due(user)` — the user is authenticated, an entry exists, and its id is not the one stored
+on them. The view adds one more condition the function deliberately does not know about: the whole block
+lives inside `state == 'synced'`, so a signed-in hunter with no linked PSN never reaches it.
 
 **New accounts are included, deliberately.** An earlier cut skipped anyone who signed up after the entry
 was published, on the reasoning that a feature they have always had cannot be new to them. That is true
@@ -90,7 +91,7 @@ trust, and it is what lets the rule above be as simple as it is.
 
 | Route | Who sees it |
 |---|---|
-| The modal on Home | Signed-in hunters with an undismissed entry, once each |
+| The modal on Home | Hunters with a **linked, synced** profile and an undismissed entry, once each |
 | Avatar menu → What's New | Every signed-in hunter, always |
 | Footer → What's New | Everybody, signed in or not |
 
@@ -196,8 +197,11 @@ was the lobby's only modal.
   the shape of a phishing lure. Pinned by test.
 - **`ENTRIES` order IS the ordering.** `latest()` is `ENTRIES[0]`, not a `max()`, so an entry appended to
   the bottom ships as content nobody is ever due. Pinned by test.
-- **The archive page runs zero queries.** Do not grow it a per-user branch; the moment it reads a profile
-  it stops being the cheapest page on the site for no gain a reader can see.
+- **The archive VIEW runs zero queries.** The request is not query-free for a signed-in reader — session,
+  user, profile and the navbar all cost — and the page is linked from the avatar menu, so that is the
+  common case. Anonymous really is Postgres-free (every context processor short-circuits). Do not grow
+  the view a per-user branch: the moment it reads a profile it stops being the cheapest page on the site
+  for no gain a reader can see.
 
 ## Related
 

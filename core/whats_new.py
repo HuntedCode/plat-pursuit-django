@@ -31,8 +31,9 @@ class Entry:
     `beats` are (label, copy) pairs rendered as the numbered stack the Career explainer and the 1.0
     greeting both use. Two or three; this is a notice, not a changelog page.
 
-    `link_url` is a path we own, never an external URL: the modal is a trusted surface and a link out of
-    it is a phishing shape. Asserted by test.
+    `link_url` is a path we own, never an external URL: the modal is a trusted surface that opens itself
+    over the page, and a link out of it is a phishing shape. Enforced by `safe_link_url`, which the
+    templates render instead of the raw value -- see there for why a test was not enough.
     """
     id: str
     published: date
@@ -40,6 +41,30 @@ class Entry:
     beats: tuple[tuple[str, str], ...]
     link_label: str = ''
     link_url: str = ''
+
+    @property
+    def safe_link_url(self) -> str:
+        """`link_url` if it is genuinely a path on this site, else '' (the template drops the link).
+
+        THE TEST THAT GUARDED THIS WAS BYPASSABLE, which is why the check now runs at render time as
+        well. It asserted `startswith('/')` and `not startswith('//')` -- and `/\\evil.com/login`
+        satisfies both. For a special scheme the WHATWG URL parser treats a backslash exactly as a
+        forward slash, so the browser resolves that href to `https://evil.com/login`, `link.href` reads
+        back as the external URL, and the modal's dismissing-link handler calls `location.assign` on it.
+        A green suite was asserting a guarantee it did not provide.
+
+        Rejecting the whole second character rather than enumerating escapes: `/%2f`, `/%5c` and any
+        future normalisation all reduce to "the authority section starts here", and an allowlist of
+        one shape is easier to be right about than a denylist of many.
+        """
+        url = self.link_url
+        if not url.startswith('/'):
+            return ''
+        if url[1:2] in ('/', '\\'):
+            return ''
+        if url[1:].lower().startswith(('%2f', '%5c')):
+            return ''
+        return url
 
 
 #: NEWEST FIRST. See the module docstring before adding one.

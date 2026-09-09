@@ -140,7 +140,8 @@ def test_the_home_motion_gate_holds():
 
     motion = _code(base / 'static' / 'js' / 'home-motion.js')
     assert 'ppAfterHomeModal' in motion, 'home-motion waits on a gate nothing arms'
-    assert 'ppAfterLaunchWelcome ||' not in motion, 'still consuming the retired per-modal gate'
+    # By NAME, not by call site: `ppAfterLaunchWelcome ||` missed `var g = window.ppAfterLaunchWelcome;`
+    assert 'ppAfterLaunchWelcome' not in motion, 'still consuming the retired per-modal gate'
 
     css = (base / 'static' / 'css' / 'components' / 'series-list.css').read_text(encoding='utf-8')
     assert '#launch-welcome.is-closing' in css

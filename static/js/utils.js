@@ -3422,12 +3422,13 @@ window.PlatPursuit.wireSearchField = wireSearchField;
  * changed for every consumer at once inside a feature branch.
  *
  * opts:
- *   closeSelector  selector for elements that dismiss (default '[data-modal-close]')
+ *   closeSelector  REQUIRED. selector for the elements that dismiss, scoped to inside `el`
  *   autoOpenDelay  ms after wiring to open itself; omit for a manual modal
- *   armed          whether a dismissal should call `onDismiss` (default: the element has [data-auto])
- *   onDismiss      () => Promise, called at most ONCE, on the first armed dismissal
+ *   onDismiss      () => Promise, called at most ONCE, on the first armed dismissal. Armed is read from
+ *                  the element's [data-auto] attribute, so the markup decides, not the caller
  *   seenKey        localStorage key holding "this device already dismissed it" when onDismiss failed
- *   onSettled      called once the page's motion may proceed -- see the note below
+ *   onOpened       called when the modal actually appears -- see the gate note below
+ *   onSettled      called once the page's motion may proceed -- see the gate note below
  *
  * ON THE CHOREOGRAPHY GATE. The controller does NOT own it. A page whose on-load motion must wait for a
  * modal has to ARM that gate synchronously, before its own end-of-body scripts run, and this file is one
@@ -3439,13 +3440,24 @@ window.PlatPursuit.wireSearchField = wireSearchField;
  * auto-open skipped because the user was typing, and the auto-open skipped because this device already
  * dismissed it. Miss any one of them and the page's motion waits forever on a modal that will never
  * appear -- which is a frozen render, not a cosmetic bug.
+ *
+ * `onOpened` is the other half, and it exists because the obvious safety net was worse than no net. A
+ * page that arms a gate needs a deadline in case the JS never runs at all -- but a deadline measured
+ * from page load fires while the reader is still READING, releasing the motion behind the scrim: the
+ * exact failure the gate exists to prevent, now on every normal visit instead of none. So the page's
+ * deadline covers only "nothing ever appeared", and `onOpened` is how it learns that something did.
  */
 function DetailModal(el, opts) {
     opts = opts || {};
-    var closeSelector = opts.closeSelector || '[data-modal-close]';
+    // Required, not defaulted. The default used to be '[data-modal-close]', which matched no markup
+    // anywhere in the repo -- a documented option with no consumer, and worse, a selector that would
+    // silently match a FUTURE consumer's controls from a different modal (see the el.contains guard
+    // in the click handler for why that matters).
+    var closeSelector = opts.closeSelector;
     var dialog = el ? el.querySelector('.pp-detail-modal__dialog') : null;
-    var armed = opts.armed === undefined ? !!(el && el.hasAttribute('data-auto')) : !!opts.armed;
+    var armed = !!(el && el.hasAttribute('data-auto'));
     var lastFocus = null;
+    var navigating = false;
     var api = {};
 
     var settled = false;
@@ -3454,10 +3466,9 @@ function DetailModal(el, opts) {
         settled = true;
         if (opts.onSettled) { opts.onSettled(); }
     }
-    api._settle = settle;
 
     // No element and the page may proceed at once: there is no modal to wait for.
-    if (!el) { settle(); return api; }
+    if (!el || !closeSelector) { settle(); return api; }
 
     function isEditable(node) {
         if (!node) { return false; }
@@ -3474,15 +3485,22 @@ function DetailModal(el, opts) {
         // a manual modal would start marking itself seen.
         if (!armed) { return null; }
         armed = false;
-        var p = opts.onDismiss ? opts.onDismiss() : null;
+        // Wrapped: a synchronous throw here used to escape mid-close, BEFORE `is-closing` was added and
+        // before the exit timeout was scheduled -- so the modal simply never closed, and on the link
+        // path preventDefault had already run while the 600ms navigation cap had not yet been set, which
+        // left the reader on a modal whose link did nothing at all.
+        var p;
+        try {
+            p = opts.onDismiss ? opts.onDismiss() : null;
+        } catch (err) {
+            p = null;
+        }
         if (!p || !p.catch) { return null; }
         return p.catch(function () {
             // The server did not hear us. Keep THIS device quiet and let the caller's self-heal retry.
             if (opts.seenKey) { try { localStorage.setItem(opts.seenKey, '1'); } catch (e) {} }
         });
     }
-
-    api.isOpen = function () { return !!el && !el.hidden; };
 
     api.open = function (trigger) {
         if (!el.hidden) { return; }
@@ -3501,14 +3519,19 @@ function DetailModal(el, opts) {
             el.hidden = true;
             el.classList.remove('is-closing');
             if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
-            api._settle();
+            settle();
         }, 200);
     };
 
     document.addEventListener('click', function (e) {
         if (!e.target.closest || el.hidden) { return; }
         var hit = e.target.closest(closeSelector);
-        if (!hit) { return; }
+        // SCOPED TO THIS MODAL. The listener is on `document`, so without this any element anywhere in
+        // the page matching the selector would dismiss this modal -- and if it sat inside a link, the
+        // branch below would preventDefault the page's own click and navigate on its behalf. Safe today
+        // only because the two consumers happen to use unique selectors; the moment a page hosts two
+        // modals, or a matching control appears inside content rendered from user data, it is not.
+        if (!hit || !el.contains(hit)) { return; }
         var link = hit.closest('a[href]');
 
         // A DISMISSING LINK. It has to do two things that pull against each other: record the
@@ -3527,10 +3550,18 @@ function DetailModal(el, opts) {
 
             e.preventDefault();
             var href = link.href;
-            var gone = false;
+            // `navigating` is per-MODAL, not per-click. A per-click flag let a fast double click fire
+            // two navigations: the second click found `armed` already false, went immediately, and the
+            // first click's 600ms timer then fired against its own untouched flag -- restarting the
+            // navigation and pushing a second history entry, so Back no longer returned to the lobby.
             var go = function () {
-                if (gone) { return; }
-                gone = true;
+                if (navigating) { return; }
+                navigating = true;
+                // Hide before leaving. Navigation normally unloads the page and makes this moot, but a
+                // same-page fragment target does NOT unload -- and then the modal would sit open
+                // forever over the anchor it just jumped to, with the gate never settling.
+                el.hidden = true;
+                settle();
                 window.location.assign(href);
             };
             var recorded = dismiss();
@@ -3567,9 +3598,22 @@ function DetailModal(el, opts) {
         // Nothing will open, so release the page FIRST -- this is the path a server-armed gate cannot
         // predict, because only this device knows the modal is already spent here.
         settle();
-        document.addEventListener('DOMContentLoaded', function () {
+        // THE SELF-HEAL, and it must not re-register DOMContentLoaded. This function is now called FROM
+        // a DOMContentLoaded handler (consumers wait for utils.js, which is end-of-body), and a listener
+        // added to a target during that target's own dispatch is not invoked for it -- the list is
+        // copied before invocation -- while DOMContentLoaded never fires twice. The retry was therefore
+        // dead code, and a dismissal whose POST failed could never reconcile: the server flag stayed
+        // unwritten, so the modal returned on every other device forever. It worked before this
+        // controller existed only because that script ran at parse time. `onPageReady` is the form that
+        // is correct from either.
+        onPageReady(function () {
             if (!opts.onDismiss) { return; }
-            var p = opts.onDismiss();
+            var p;
+            try {
+                p = opts.onDismiss();
+            } catch (err) {
+                return;
+            }
             if (p && p.then) {
                 p.then(function () { try { localStorage.removeItem(opts.seenKey); } catch (e) {} })
                  .catch(function () {});
@@ -3581,8 +3625,11 @@ function DetailModal(el, opts) {
     window.setTimeout(function () {
         // A skipped auto-open must settle the gate too. The page's motion cannot be left waiting on a
         // modal that decided not to appear.
-        if (isEditable(document.activeElement)) { api._settle(); return; }
+        if (isEditable(document.activeElement)) { settle(); return; }
         api.open(null);
+        // The modal is now on screen, so whatever deadline the page set for "nothing ever appeared" is
+        // no longer measuring anything true. Tell it.
+        if (opts.onOpened) { opts.onOpened(); }
     }, opts.autoOpenDelay);
 
     return api;

@@ -21,8 +21,10 @@
 .pp-howto__body { padding: 4px 2px; }
 .pp-howto__title { display: flex; align-items: center; gap: 9px; font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; color: var(--pp-text); margin-bottom: 12px; }
 .pp-howto__title-icon { width: 20px; height: 20px; flex: 0 0 auto; color: var(--pp-primary); }
-/* Two children now: "Got it" leads and the page link trails it as the escape hatch. Wraps rather than
-   letting the link squeeze the button on a narrow phone. */
+/* Two or THREE children: "Got it" leads and the page link(s) trail it as the escape hatch. What's New
+   renders three (the entry's own link plus the archive), which wraps to two rows at 375px -- button and
+   first link, then the second link centred beneath. Wrapping rather than letting a link squeeze the
+   button on a narrow phone is the whole point of the flex-wrap here. */
 .pp-howto__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px; margin-top: 18px; }
 /* Quiet by design -- most readers are finished at "Got it"; this is for the ones who are not. */
 .pp-howto__more {

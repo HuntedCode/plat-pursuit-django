@@ -126,7 +126,10 @@ other cannot use.
             closeSelector: '[data-launch-close]',
             autoOpenDelay: 450,
             seenKey: 'pp-launch-welcome-seen',
-            onSettled: settle,      // the lobby's motion pass is the "look around" payoff
+            onSettled: settle,
+            // Cancels the gate's "nothing ever appeared" deadline. Without this the page
+            // releases its motion at 4s while the reader is still reading.
+            onOpened: function () { if (window.ppHoldHomeModal) { window.ppHoldHomeModal(); } },      // the lobby's motion pass is the "look around" payoff
             onDismiss: function () {
                 // Greeted, durably: the server flag ends the greeting on every device. No success
                 // toast; on failure the controller keeps this device quiet and retries next visit.

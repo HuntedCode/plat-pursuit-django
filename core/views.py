@@ -251,9 +251,15 @@ class HomeView(TemplateView):
                 self.request.GET.get('preview') == 'whats-new'
                 and (user.is_staff or getattr(user, 'is_moderator', False))
             )
-            context['show_whats_new'] = (
-                not context['show_launch_welcome'] and whats_new.is_due(user)
-            ) or is_previewing
+            # The preview sits INSIDE the precedence guard, not beside it. With `or is_previewing`
+            # hanging off the end, a staff member who was also due the 1.0 greeting got BOTH modals:
+            # two scrims, two focus traps fighting over the same document, one Escape closing both, and
+            # the gate settled by whichever closed first while the other was still covering the page.
+            # The launch-welcome door is naturally immune (forcing that flag suppresses this one), so
+            # only this side could break the invariant home.html states as impossible.
+            context['show_whats_new'] = not context['show_launch_welcome'] and (
+                whats_new.is_due(user) or is_previewing
+            ) and whats_new.latest() is not None
             # The entry itself, so the template renders from data and never restates the copy.
             context['whats_new'] = whats_new.latest()
             return context

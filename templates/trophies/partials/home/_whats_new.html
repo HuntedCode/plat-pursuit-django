@@ -1,8 +1,12 @@
 {% comment %} WHAT'S NEW -- the newest entry a hunter has not dismissed, on the Home lobby.
 
 Server-gated entirely (`show_whats_new` in core/views.py: an entry exists, its id is not the one stored
-in ui_flags, the hunter did not join after it shipped, and the 1.0 greeting is not also due). Render ==
-armed, like the launch greeting: a hunter who has dismissed this gets no markup at all.
+in ui_flags, and the 1.0 greeting is not also due). Render == armed, like the launch greeting: a hunter
+who has dismissed this gets no markup at all.
+
+NEW ACCOUNTS ARE INCLUDED. An earlier cut also skipped anyone who joined after the entry shipped, and
+that was reversed deliberately -- what a new hunter takes from the notice is that the site is being
+worked on, and the date on the entry is what keeps "new" honest. See core/whats_new.is_due.
 
 PRECEDENCE lives in the view, not here. Two modals on one visit is two scrims back to back, so the 1.0
 greeting -- which fires once in an account's life -- wins, and this waits for the next visit. Nothing is
@@ -53,8 +57,8 @@ synchronously by _home_modal_gate.html, so nothing is waiting on this script to 
             as the dismissal having failed. {% endcomment %}
             <div class="pp-howto__actions">
                 <button type="button" class="pp-howto__got" data-wn-close>Got it</button>
-                {% if whats_new.link_url %}
-                    <a class="pp-howto__more" href="{{ whats_new.link_url }}" data-wn-close>{{ whats_new.link_label }} &rarr;</a>
+                {% if whats_new.safe_link_url %}
+                    <a class="pp-howto__more" href="{{ whats_new.safe_link_url }}" data-wn-close>{{ whats_new.link_label }} &rarr;</a>
                 {% endif %}
                 <a class="pp-howto__more" href="{% url 'whats_new' %}" data-wn-close>Everything new &rarr;</a>
             </div>
@@ -79,14 +83,17 @@ series-list.css, which is also where the reason it must be ID-scoped is written 
         PlatPursuit.DetailModal(el, {
             closeSelector: '[data-wn-close]',
             autoOpenDelay: 450,
-            seenKey: 'pp-whats-new-seen-{{ whats_new.id }}',
+            seenKey: 'pp-whats-new-seen-{{ whats_new.id|escapejs }}',
             onSettled: settle,
+            // Cancels the gate's "nothing ever appeared" deadline. Without this the page
+            // releases its motion at 4s while the reader is still reading.
+            onOpened: function () { if (window.ppHoldHomeModal) { window.ppHoldHomeModal(); } },
             onDismiss: function () {
                 if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
                 // Stores the ENTRY ID, not a boolean: the next entry has a different id and is due
                 // again. No success toast -- being told about a feature is not a task you completed.
                 return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
-                    setting: 'whats_new_seen', value: '{{ whats_new.id }}'
+                    setting: 'whats_new_seen', value: '{{ whats_new.id|escapejs }}'
                 });
             }
         });
