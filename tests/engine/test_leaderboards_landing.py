@@ -1287,12 +1287,22 @@ def test_the_nightly_boards_say_they_update_overnight(client):
     and find their rank unchanged -- correct behaviour that looks exactly like a broken board. The note is
     the only thing on the page that tells the two apart.
     """
+    from django.utils.html import escape
+
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
     _ranked('NightHunter', plats=5, trophies=500, pp=5000)
+
+    # Read from the constant, not retyped. A copy edit should not fail this test, and a test that pins
+    # wording gets "fixed" by pasting the new wording in -- which is how it stops checking that the
+    # sentence reached the page at all. Escaped, because the note is rendered through the template and the
+    # first apostrophe anyone adds would otherwise fail this for a reason that has nothing to do with it.
+    note = escape(V.NIGHTLY_NOTE)
 
     for tab in ('clean', 'rarity'):
         body = client.get(URL, {'tab': tab}).content.decode()
         assert 'lb-boardcard__fresh' in body, f'the {tab} board does not say when it updates'
-        assert 'once a night' in body, f'the {tab} board renders the element but not the sentence'
+        assert note in body, f'the {tab} board renders the element but not the sentence'
 
 
 def test_the_LIVE_boards_do_not_claim_a_nightly_refresh(client):

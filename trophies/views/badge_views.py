@@ -889,7 +889,10 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: A set keyed on the board rather than a flag per board because it is one fact about one schedule,
     #: and five copies of a sentence is how four of them come to disagree with `nightly.STEPS`.
     NIGHTLY_BOARDS = frozenset({'clean', 'rarity'})
-    NIGHTLY_NOTE = "Updates once a night, so a sync today lands on tomorrow's board."
+    #: Says the two things and stops. An earlier draft spelled out the consequence ("a sync today lands on
+    #: tomorrow's board"), which is the reader's own conclusion to draw and reads like the page explaining
+    #: itself. Told it is not live and updated nightly, they get there without being walked.
+    NIGHTLY_NOTE = 'Not a live board. Updates once a night.'
     # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter;
     # `progress` was this board's key while it was called Progress, a name that described the store rather
     # than what it ranks. Bookmarks carrying any of them still land where they meant to.
