@@ -3,7 +3,7 @@
 
 {% block title %}Leaderboards{% endblock %}
 {% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
-{% block meta_description %}Global Platinum Pursuit leaderboards: platinums earned on games that are not shovelware, all trophies, Badge Points, and Career XP. Slice any board by country, and the badge boards by platform edition.{% endblock %}
+{% block meta_description %}Global Platinum Pursuit leaderboards: platinums earned on games that are not shovelware, Rarity Score for the rarest trophies, all trophies, Badge Points, and Career XP. Slice any board by country, and the badge boards by platform edition.{% endblock %}
 
 {% comment %} Global Boards -- the Leaderboards hub landing, rebuilt to the Career standard (2026-08).
 
@@ -12,10 +12,10 @@ it (no outer card around the switcher or the wall). Career's own layout is the r
 
 BOARDS ARE TABS; COUNTRY IS A FILTER that applies to whichever board is open -- the decision that keeps
 this section finite, since the alternative is a board per country. Platform edition is the second filter
-on that same principle, and it applies to the two BADGE boards only; the two trophy boards count trophies
+on that same principle, and it applies to the two BADGE boards only; the trophy boards count trophies
 across every game and Career XP is the jobs economy, so the control is absent there rather than inert.
 
-FOUR boards since 2026-09, and Shovelware Free LEADS. It ranks the same hunters as Trophies by the same
+FIVE boards since 2026-09, behind THREE chips -- the three trophy boards group; see the strip below. It ranks the same hunters as Trophies by the same
 rule (platinums, total trophies breaking the tie) over a narrower population: trophies earned on games
 the shovelware detector has not flagged. It reads its own materialized store rather than Profile's
 counters, because excluding shovelware is not a filter over a column -- it is a different number. Trophies
@@ -88,7 +88,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         </div>
     </div>
 
-    <div data-lb-page>
+    <div data-lb-page data-board-order="{{ board_order }}">
 
     {# ── Page header ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
@@ -144,27 +144,73 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
     list, profile detail, job detail, sits on the page for exactly that reason. It is chrome already; a
     second surface beneath it is the part that would look wrong. The card starts BELOW it. {% endcomment %}
     <div class="lb-bar">
+        {% comment %} THREE CHIPS, not five. The three trophy boards ask one question -- who has hunted
+        the most -- and differ only in what counts, so they group behind one chip with a sub-toggle; Badge
+        Points and Career XP are separate economies and stay peers. A group of ONE renders as a plain
+        chip, so nothing about those two changed.
+
+        A GROUPED chip carries `data-board-group` and its sub-chips carry `data-board`; a lone chip
+        carries `data-board` itself. That keeps exactly one `[data-board].is-active` in the DOM whichever
+        group is open, which is what `activeTab()` reads. The slide direction no longer reads its order
+        from these chips -- only the ACTIVE group's sub-strip is rendered, so a DOM read would be
+        incomplete; it comes from `data-board-order` on the swap wrapper instead. {% endcomment %}
         <nav class="pp-switch" aria-label="Leaderboard">
-            {% for b in boards %}
-            <a href="{{ b.href }}"
-               class="pp-switch__chip{% if b.key == active_tab %} is-active{% endif %}"
-               {% if b.key == active_tab %}aria-current="page"{% endif %}
-               data-board="{{ b.key }}">
-                {% comment %} One branch PER BOARD. `clean` arrived without one and fell through to the
-                `{% else %}`, which exists for Career -- so the leading, default chip wore the briefcase
-                and two of the four chips carried the same glyph. A shield-check reads as "vetted", which
-                is what this board is: the same ranking over a population somebody has filtered.
+            {% for g in board_groups %}
+            <a href="{{ g.href }}"
+               class="pp-switch__chip{% if g.is_active %} is-active{% endif %}"
+               {% comment %} Only on a chip that IS a board. A grouped parent is not a page -- it links
+               to its first member whichever member is open -- and two elements claiming `aria-current`
+               is ambiguous to a screen reader. The active SUB-chip carries it instead. {% endcomment %}
+               {% if g.is_active and not g.grouped %}aria-current="page"{% endif %}
+               {% if g.grouped %}data-board-group="{{ g.key }}"{% else %}data-board="{{ g.key }}"{% endif %}>
+                {% include 'trophies/partials/leaderboard_board_icon.html' with key=g.key only %}
+                <span class="pp-switch__lbl">{{ g.label }}</span>
+                {% comment %} A GROUPED chip carries NO rank, deliberately. The chip-rank works because
+                one chip is one board is one number; a group is not a board, so three numbers on it have
+                no reading -- you cannot tell which is which without opening the thing, and at real rank
+                lengths (`#12,345 · #67,890 · #1,234`) they are wider than the label they hang off.
+
+                Nothing is lost that was legible: one click opens the sub-toggle, which shows all three
+                WITH their labels. A lone chip below still carries its own rank, because it is a board.
                 {% endcomment %}
-                {% if b.key == 'clean' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.68 8.94a1 1 0 0 1-.63 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
-                {% elif b.key == 'trophies' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-                {% elif b.key == 'points' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-                {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>{% endif %}
-                <span class="pp-switch__lbl">{{ b.label }}</span>
-                {% if my_standing %}<span class="lb-chiprank pp-tally">{% if b.rank %}#{{ b.rank|intcomma }}{% else %}&mdash;{% endif %}</span>{% endif %}
+                {% if my_standing and not g.grouped %}<span class="lb-chiprank pp-tally">{% if g.members.0.rank %}#{{ g.members.0.rank|intcomma }}{% else %}&mdash;{% endif %}</span>{% endif %}
             </a>
             {% endfor %}
         </nav>
     </div>
+
+    {% comment %} THE SUB-TOGGLE gets its OWN ROW, below the strip and aligned LEFT -- the main strip sits
+    right. Career's Contracts panel is the precedent: the scope toggle sits on its own line under the view
+    switcher, in the same `.pp-switch` treatment.
+
+    It must NOT share `.lb-bar`, which is a single flex row justified to the end at `md:` -- both navs
+    inside it rendered side by side on one line, reading as six peer tabs rather than three plus a scope.
+
+    Rendered only for a grouped active board. Same `.pp-switch`
+        treatment as the strip above it, following Career's Contracts panel, which nests its Board|History
+        scope toggle the same way rather than inventing a second visual language for the second level.
+
+        These chips carry `data-board`, and the parent above carries `data-board-group`, so exactly one
+        `[data-board].is-active` exists whichever group is open.
+
+        Each sub-chip shows only ITS rank -- the combined figure lives on the parent, for readers who are
+        elsewhere in the strip. {% endcomment %}
+    {% for g in board_groups %}{% if g.is_active and g.grouped %}
+    <div class="lb-subbar">
+        <nav class="pp-switch lb-subswitch" aria-label="{{ g.label }} boards">
+            {% for m in g.members %}
+            <a href="{{ m.href }}"
+               class="pp-switch__chip{% if m.is_active %} is-active{% endif %}"
+               {% if m.is_active %}aria-current="page"{% endif %}
+               data-board="{{ m.key }}">
+                {% include 'trophies/partials/leaderboard_board_icon.html' with key=m.key only %}
+                <span class="pp-switch__lbl">{{ m.label }}</span>
+                {% if my_standing %}<span class="lb-chiprank pp-tally">{% if m.rank %}#{{ m.rank|intcomma }}{% else %}&mdash;{% endif %}</span>{% endif %}
+            </a>
+            {% endfor %}
+        </nav>
+    </div>
+    {% endif %}{% endfor %}
 
     {% comment %} ONE control surface, not three bare bands. The site-wide rule is STACKED CHROME CARDS +
     FREE CONTENT: chrome is carded (page header, then toolbar / stat cards), and the content -- a grid or
@@ -357,12 +403,13 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         return chip ? chip.dataset.board : null;
     }
 
-    // Read from the DOM each time rather than captured: a swap replaces the strip, and a captured order
-    // would fall out of step with the order the tabs actually render in.
+    // The canonical board order, for the slide's direction. Read from the swap wrapper's own attribute
+    // rather than from the rendered chips: since the boards group, only the ACTIVE group's sub-strip is in
+    // the DOM, so a DOM read returns an incomplete list and leaves the direction undefined for any board
+    // that happens not to be showing. Still read fresh each time -- a swap replaces the wrapper.
     function tabOrder() {
-        return Array.prototype.map.call(page.querySelectorAll('[data-board]'), function (t) {
-            return t.dataset.board;
-        });
+        var el = document.querySelector('[data-lb-page]');
+        return (el && el.dataset.boardOrder ? el.dataset.boardOrder.split(',') : []);
     }
 
     // The sticky chrome a jump must land below, measured live: the nav's height differs across
@@ -525,12 +572,23 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
     mount();
 
     // Tabs and filters swap in place. Delegated from the page, because a swap replaces both. The jump
-    // affordances are NOT wired here -- `wireBoard` owns those, so all three boards jump identically.
+    // affordances are NOT wired here -- `wireBoard` owns those, so every board jumps identically.
+    //
+    // BOTH ATTRIBUTES. The grouped parent carries `data-board-group`, not `data-board`, so a selector of
+    // `[data-board]` alone skipped it -- and from Badge Points or Career XP that chip is the ONLY route
+    // back to any trophy board, since the sub-strip is not in the DOM while another group is open. The
+    // single most common move on the page was full-reloading: no slide, no fade, and the virtualizer's
+    // row cache thrown away, which is exactly what this swap exists to prevent.
+    //
+    // Reading `dataset.board || dataset.boardGroup` rather than adding `data-board` to the parent is
+    // deliberate. With both, the parent and its active sub-chip would BOTH match `[data-board].is-active`
+    // and `activeTab()`'s querySelector takes the first -- so it would report `clean` while the reader
+    // sits on `pp`, corrupting the swap's `from` and the slide direction with it.
     page.addEventListener('click', function (ev) {
-        var tab = ev.target.closest && ev.target.closest('[data-board]');
+        var tab = ev.target.closest && ev.target.closest('[data-board],[data-board-group]');
         if (!tab || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) { return; }
         ev.preventDefault();
-        swap({ tab: tab.dataset.board, page: '' });
+        swap({ tab: tab.dataset.board || tab.dataset.boardGroup, page: '' });
     });
 
     page.addEventListener('change', function (ev) {

@@ -63,8 +63,30 @@
 @media (min-width: 768px) {
     .lb-bar { justify-content: flex-end; }
     .lb-bar .pp-switch { width: auto; }
-    .lb-bar .pp-switch__chip { flex: 0 0 auto; }
+    /* The sub-toggle gets the same compaction: it is ALSO three equal chips at 343px, and its longest
+       label ("Shovelware Free") is longer than the one that motivated this rule. */
+    .lb-bar .pp-switch__chip,
+    .lb-subbar .pp-switch__chip { flex: 0 0 auto; }
 }
+/* THE SUB-TOGGLE ROW: its own line UNDER the strip, aligned LEFT while the strip sits right. The two
+   levels read as a hierarchy that way -- side by side in one row they read as six peer tabs, which is
+   what happened when both navs shared `.lb-bar`. Career's Contracts panel puts its Board|History scope
+   toggle on its own line under the view switcher for the same reason.
+
+   Mobile mirrors `.lb-bar`: full width, chips sharing the row equally, because three chips at 375px need
+   the whole line whichever level they belong to. */
+.lb-subbar { display: flex; margin: 0 0 14px; }
+.lb-subbar .pp-switch { width: 100%; }
+.lb-subbar .pp-switch__chip { flex: 1 1 0; justify-content: center; }
+@media (min-width: 768px) {
+    .lb-subbar { justify-content: flex-start; }
+    .lb-subbar .pp-switch { width: auto; }
+    .lb-subbar .pp-switch__chip { flex: 0 0 auto; }
+}
+/* Tighten the gap when a sub-row follows: 14px between two rows of the same control reads as a gap
+   between unrelated things. */
+.lb-bar:has(+ .lb-subbar) { margin-bottom: 8px; }
+
 /* Mobile fit pass for THIS strip. `.pp-switch__chip`'s base padding (6px 14px) is a desktop value that
    `md:` only enlarges, so the mobile pass was never actually done. Three equal chips inside 343px leave
    ~56px of label box once border, padding, icon and gap are taken -- and "Badge Trophies" is ~93px at
@@ -73,7 +95,8 @@
    expendable, never what carries the meaning. Restored at md: by the base rule. */
 @media (max-width: 767px) {
     .lb-bar .pp-switch__chip { padding-inline: 7px; gap: 4px; font-size: 11.5px; letter-spacing: 0.01em; }
-    .lb-bar .pp-switch__chip svg { width: 13px; height: 13px; }
+    .lb-bar .pp-switch__chip svg,
+    .lb-subbar .pp-switch__chip svg { width: 13px; height: 13px; }
 }
 .lb-filters { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; }
 .lb-filters__f { display: flex; align-items: center; gap: 8px; min-width: 0; }

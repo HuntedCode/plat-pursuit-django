@@ -269,7 +269,7 @@ def _propagate_country_to_standings(sender, instance, created, **kwargs):
     if not changed:
         return
 
-    # All eight carry both mirrors today, but the payload is still filtered per store: `_mirrored_fields`
+    # All nine carry both mirrors today, but the payload is still filtered per store: `_mirrored_fields`
     # reads each one's columns off the model, so a store that carries only one cannot be handed the
     # other. Filtering here rather than keeping two handlers means one traversal on the (rare) save
     # where both moved at once.
@@ -287,9 +287,9 @@ def profile_mirrored_standings():
     country they left, or (worse, since it is a whole-population rule) keeping an unverified account on a
     board after they verify. Neither is something a reader would think to look for.
 
-    All eight carry BOTH mirrors -- six as of migration 0310, `SeriesEditionStanding` from birth in 0313
-    and `ProfileTrophyStanding` from birth in 0332, which is the point: a new standing store is expected
-    to arrive with them rather than be retrofitted. `UserGroupBadge` was the last to get `country_code`,
+    All nine carry BOTH mirrors -- six as of migration 0310, `SeriesEditionStanding` from birth in 0313,
+    `ProfileTrophyStanding` from birth in 0332 and `ProfileRarityStanding` from birth in 0335, which is the
+    point: a new standing store is expected to arrive with them rather than be retrofitted. `UserGroupBadge` was the last to get `country_code`,
     and its lateness was historical rather than principled -- it is the badge earn-lifecycle table and
     predates the Lane B standing stores that set the pattern. `_mirrored_fields` reads each store's
     columns off the model rather than hardcoding them, so a store that gains or loses one cannot fall out
@@ -297,9 +297,10 @@ def profile_mirrored_standings():
     """
     from trophies.models import (
         ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
-        ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding, UserGroupBadge,
+        ProfileRarityStanding, ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding,
+        UserGroupBadge,
     )
-    return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding,
+    return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileRarityStanding,
             ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding, ProfileJobXP,
             UserGroupBadge)
 

@@ -29,14 +29,18 @@ from django.core.management.base import BaseCommand
 #:   1. update_shovelware      re-evaluates which games are flagged. FIRST -- see below
 #:   2. recompute_clean_standings rebuilds the Shovelware Free board's store from those flags, so it MUST
 #:      follow step 1
-#:   3. evaluate_badges --all  writes SeriesBadgeStanding / ProfileBadgeStanding / ProfileEditionStanding
-#:   4. detect_dlc_and_refresh re-evaluates series whose games gained DLC (writes the same tables) AND
+#:   3. recompute_rarity_standings rebuilds the Rarity Score board. NO dependency on anything above it: it reads
+#:      `Trophy.trophy_earn_rate`, PSN's own figure written during SYNC, not our `Trophy.earn_rate`.
+#:      Placed beside the other board rebuild because they are the same kind of work, not because it
+#:      needs to follow one.
+#:   4. evaluate_badges --all  writes SeriesBadgeStanding / ProfileBadgeStanding / ProfileEditionStanding
+#:   5. detect_dlc_and_refresh re-evaluates series whose games gained DLC (writes the same tables) AND
 #:      rewrites ProfileGame.progress for the affected games, dropping owners back below 100%
-#:   5. process_contracts --all reads ProfileGame.progress, so it MUST follow the DLC sweep or it would
-#:      stamp contract reaches that step 4 is about to invalidate
-#:   6. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
+#:   6. process_contracts --all reads ProfileGame.progress, so it MUST follow the DLC sweep or it would
+#:      stamp contract reaches that step 5 is about to invalidate
+#:   7. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
 #:      among the writers
-#:   7. audit_badge_coverage   read-only report; last because it is the least urgent
+#:   8. audit_badge_coverage   read-only report; last because it is the least urgent
 #:
 #: STEPS 1 AND 2 MOVED HERE (2026-09) from `update_shovelware`'s own 04:00 Render entry -- the same slot
 #: this command runs in, so the two overlapped and the order between them was undefined. Folding them in
@@ -55,13 +59,13 @@ from django.core.management.base import BaseCommand
 #: it in too is the right end state and is left as the next bite of the standing FOLLOW-UP in
 #: docs/guides/cron-jobs.md, rather than widening a leaderboard branch into the contracts pipeline.
 #:
-#: Steps 5 and 6 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
+#: Steps 6 and 7 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
 #: Sync only evaluates what a sync TOUCHED, so anything authored after a hunter last touched the relevant
 #: game is invisible to them forever without a sweep. `evaluate_badges --all` has always been badges'
 #: net; contracts and milestones had none. A Contract published for a game 10,000 hunters already
 #: platinumed reached exactly zero of them until this ran.
 #:
-#: Step 5 runs INCREMENTAL. A full contract sweep is O(contracts x candidates) and, stacked on step 3's
+#: Step 6 runs INCREMENTAL. A full contract sweep is O(contracts x candidates) and, stacked on step 4's
 #: pass over every profile, put this chain past any plausible window. Incremental sweeps only Contracts
 #: whose `updated_at` moved since the last run -- usually none -- and still forces a full pass weekly,
 #: because a Contract's membership is derived from IGDB matches and can change without the row being
@@ -69,6 +73,7 @@ from django.core.management.base import BaseCommand
 STEPS = [
     ('shovelware detection', 'update_shovelware', {}),
     ('clean standings', 'recompute_clean_standings', {}),
+    ('pp standings', 'recompute_rarity_standings', {}),
     ('badge evaluation', 'evaluate_badges', {'all': True}),
     ('DLC detection', 'detect_dlc_and_refresh', {}),
     ('contract detection', 'process_contracts', {'all_profiles': True, 'incremental': True}),

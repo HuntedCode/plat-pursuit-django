@@ -12,7 +12,9 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from trophies.models import ProfileBadgeStanding, ProfileCareerStanding, ProfileTrophyStanding
+from trophies.models import (
+    ProfileBadgeStanding, ProfileCareerStanding, ProfileRarityStanding, ProfileTrophyStanding,
+)
 from tests.factories import ProfileFactory
 from tests.engine.test_leaderboards_overall_cost import active_board
 
@@ -22,7 +24,7 @@ URL = reverse('overall_badge_leaderboards')
 
 
 def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0, career=0, level=0,
-            clean_plats=None, clean_trophies=None):
+            clean_plats=None, clean_trophies=None, pp=0, pp_rate=5.0):
     """A hunter placed on whichever boards the caller gives them figures for.
 
     `plats`/`trophies` land on PROFILE's own counters, because the Trophies board reads those directly --
@@ -34,6 +36,12 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     whose clean figures differ from their raw ones. Without this every fixture in this file would leave
     the DEFAULT board empty, which is what makes it worth stating: the board that leads the strip is the
     one a test forgets to populate.
+
+    `pp` is NOT mirrored from anything and defaults to absent, deliberately. Rarity Score is not a function of
+    plats or trophies -- it is a function of RARITY -- so there is no honest figure to derive, and a
+    fixture that invented one would make three trophy boards agree by construction. That identity is
+    precisely what let a wrong-board wiring survive 129 tests on the previous branch. Pass `pp` to put a
+    hunter on it.
     """
     p = ProfileFactory(
         display_psn_username=name, country_code=country, country=country_name,
@@ -44,6 +52,13 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     if ct:
         ProfileTrophyStanding.objects.create(
             profile=p, clean_plats=cp, clean_trophies=ct, country_code=country, is_linked=True)
+    if pp:
+        # A full TOP_N scorable trophies, because that is the board's membership rule -- a fixture short of
+        # it is simply not on the board, which reads as "the board is broken".
+        from trophies.services.rarity_score import TOP_N
+        ProfileRarityStanding.objects.create(
+            profile=p, rarity_score=pp, avg_earn_rate=pp_rate, scored_count=TOP_N,
+            country_code=country, is_linked=True)
     if points:
         ProfileBadgeStanding.objects.create(profile=p, country_code=country, total_xp=points, is_linked=True)
     if career:
@@ -52,8 +67,8 @@ def _ranked(name, *, country='', country_name='', plats=0, trophies=0, points=0,
     return p
 
 
-def test_the_landing_offers_four_boards_and_defaults_to_shovelware_free(client):
-    """FOUR boards, and the landing opens on Shovelware Free (2026-09).
+def test_the_landing_offers_five_boards_and_defaults_to_shovelware_free(client):
+    """FIVE boards since Rarity Score joined, and the landing still opens on Shovelware Free.
 
     Trophies led before it, on the grounds that it has the most entrants -- still true, since this board
     drops anyone whose whole library is flagged. Entrant count stopped being the tie-breaker: the two rank
@@ -67,11 +82,218 @@ def test_the_landing_offers_four_boards_and_defaults_to_shovelware_free(client):
     _ranked('Somebody', plats=3, trophies=30)
     body = client.get(URL).content.decode()
 
-    for key in ('clean', 'trophies', 'points', 'career'):
+    for key in ('clean', 'rarity', 'trophies', 'points', 'career'):
         assert f'data-board="{key}"' in body, f'the {key} board is missing from the tab strip'
     assert active_board(body) == 'clean', 'the landing does not default to Shovelware Free'
     assert '>Shovelware Free</span>' in body, 'the board is labelled something else in the strip'
-    assert '>Trophies</span>' in body, 'the Trophies board lost its tab'
+    assert '>Rarity Score</span>' in body, 'the Rarity Score board is labelled something else in the strip'
+    # `>All Trophies<`, not `>Trophies<`: that shorter string now matches the GROUP's label, so it passed
+    # while the board itself was renamed to anything at all.
+    assert '>All Trophies</span>' in body, 'the All Trophies board lost its tab or its label'
+
+
+def test_the_strip_is_THREE_chips_with_the_trophy_boards_grouped(client):
+    """Five peers became three. The three trophy boards ask one question and differ only in what counts,
+    so they group; Badge Points and Career XP are separate economies and stay peers.
+
+    A group of ONE renders as a plain chip carrying `data-board` itself, while a grouped parent carries
+    `data-board-group` and its sub-chips carry `data-board`. That arrangement is load-bearing rather than
+    cosmetic: `activeTab()` reads `[data-board].is-active`, so exactly one such element must exist
+    whichever group is open.
+    """
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    body = client.get(URL).content.decode()
+    start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
+    strip = body[start:body.index('</nav>', start)]
+
+    assert strip.count('pp-switch__chip') == 3, 'the top strip is not three chips'
+    assert 'data-board-group="clean"' in strip, 'the trophy boards are not grouped'
+    for lone in ('points', 'career'):
+        assert f'data-board="{lone}"' in strip, f'{lone} should be a plain chip, not a group'
+
+    # ...and EXACTLY ONE lit board chip in the whole document, whichever group is open. This is what
+    # `activeTab()` reads, and two lit chips (or none) would leave it picking arbitrarily or nulling.
+    # Whole opening tags, so attribute ORDER does not matter -- `is-active` sits in the class attribute,
+    # which precedes `data-board`, so scanning forward from the data attribute finds nothing.
+    import re
+
+    # `<a ` with the space, deliberately: it needs no backslash, and the escape is where this went
+    # wrong once already -- a word-boundary escape written through a shell heredoc became a literal
+    # control byte, so the pattern matched nothing and this reported zero lit chips on correct markup.
+    anchors = re.findall(r'<a [^>]*>', body)
+    assert anchors, 'no anchor tags matched at all -- the pattern itself is broken'
+    lit = [t for t in anchors if 'data-board="' in t and 'is-active' in t]
+    assert len(lit) == 1, f'expected exactly one active [data-board] chip, found {len(lit)}'
+
+    # ...and the GROUPED PARENT is lit too, asserted on the anchor rather than by counting `is-active`
+    # in the document. That count had a floor of 2 from things that are not chips at all -- the navbar's
+    # own Leaderboards link, and this page's inline JS string `[data-board].is-active` -- so
+    # `count >= 2` passed with NO chip highlighted anywhere. Verified: unlighting every parent chip left
+    # all 68 tests green while `?tab=points` rendered a strip with nothing selected.
+    lit_parents = [t for t in anchors if 'data-board-group="' in t and 'is-active' in t]
+    assert len(lit_parents) == 1, (
+        f'the grouped parent is not lit while one of its members is open: {lit_parents}'
+    )
+
+
+def test_a_LONE_chip_is_lit_when_its_board_is_open(client):
+    """The other half of the lit-state coverage: a group of one carries `data-board` itself, so the chip
+    that lights is the chip that navigates. Without this, only the grouped case is pinned and half the
+    strip's selected state is unguarded."""
+    import re
+
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    body = client.get(URL, {'tab': 'points'}).content.decode()
+
+    anchors = re.findall(r'<a [^>]*>', body)
+    lit = [t for t in anchors if 'is-active' in t and ('data-board="' in t or 'data-board-group="' in t)]
+    assert len(lit) == 1, f'expected exactly one lit chip on a lone board, found {len(lit)}'
+    assert 'data-board="points"' in lit[0], f'the wrong chip is lit: {lit[0]}'
+
+
+def test_the_grouped_parent_navigates_by_SWAP_like_every_other_chip(client):
+    """The parent is the ONLY route to a trophy board from Badge Points or Career XP -- the sub-strip is
+    not in the DOM while another group is open. Delegating on `[data-board]` alone skipped it, because it
+    carries `data-board-group`, so the most common move on the page full-reloaded: no slide, no fade, and
+    the virtualizer's row cache discarded.
+
+    Pinned on the SCRIPT because the behaviour is a click handler: the delegation must match both
+    attributes, and the swap must read whichever one the clicked chip carries.
+    """
+    _ranked('Somebody', plats=3, trophies=30, points=100, pp=500)
+    body = client.get(URL, {'tab': 'points'}).content.decode()
+
+    assert "closest('[data-board],[data-board-group]')" in body, (
+        'the click delegation no longer catches the grouped parent, so it full-navigates'
+    )
+    assert 'tab.dataset.board || tab.dataset.boardGroup' in body, (
+        'the swap does not read the target board off the grouped parent'
+    )
+    # ...and the parent really is the only way back: no sub-chip is rendered while another group is open.
+    assert 'lb-subswitch' not in body, 'the premise changed -- a sub-strip renders for a non-active group'
+
+
+def test_only_a_chip_that_IS_a_board_claims_to_be_the_current_page(client):
+    """`aria-current="page"` on both the grouped parent and its active sub-chip left two elements claiming
+    to be the current page, which is ambiguous to a screen reader -- and the parent is not a page anyway:
+    it links to its first member whichever member is open."""
+    _ranked('Somebody', plats=3, trophies=30, points=100, pp=500)
+
+    for tab in ('clean', 'rarity', 'trophies', 'points', 'career'):
+        body = client.get(URL, {'tab': tab}).content.decode()
+        start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
+        strip = body[start:body.index('lb-boardcard', start)]
+        assert strip.count('aria-current="page"') == 1, (
+            f'?tab={tab} renders {strip.count(chr(97))} chips claiming to be the current page'
+        )
+
+
+def test_the_sub_toggle_appears_only_for_the_grouped_board(client):
+    """It is the Career Contracts pattern: a scope toggle inside the panel, in the same `.pp-switch`
+    treatment. It has nothing to show for a group of one, so it must not render an empty second strip."""
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+
+    grouped = client.get(URL, {'tab': 'rarity'}).content.decode()
+    assert 'lb-subswitch' in grouped, 'the grouped board has no sub-toggle'
+    # ...on its OWN ROW, not inside `.lb-bar`. Both navs in that single flex row rendered side by side as
+    # six peer tabs, which is the bug this pins: the sub-toggle must close `.lb-bar` before it starts.
+    bar = grouped[grouped.index('<div class="lb-bar">'):]
+    bar = bar[:bar.index('</div>')]
+    assert 'lb-subswitch' not in bar, 'the sub-toggle is inside .lb-bar, so it renders beside the strip'
+    assert 'lb-subbar' in grouped, 'the sub-toggle has no row of its own'
+    sub = grouped[grouped.index('lb-subswitch'):]
+    sub = sub[:sub.index('</nav>')]
+    for key in ('clean', 'rarity', 'trophies'):
+        assert f'data-board="{key}"' in sub, f'{key} is missing from the sub-toggle'
+    assert '>All Trophies</span>' in sub, 'the unfiltered board is not relabelled inside the group'
+
+    lone = client.get(URL, {'tab': 'career'}).content.decode()
+    assert 'lb-subswitch' not in lone, 'a group of one rendered an empty sub-toggle'
+
+
+def test_a_grouped_chip_carries_NO_rank_while_a_lone_chip_does(client):
+    """The chip-rank works because one chip is one board is one number. A GROUP is not a board, so a rank
+    on it has no reading: three numbers cannot be told apart without opening the thing, and at real rank
+    lengths (`#12,345 · #67,890 · #1,234`) they are wider than the label they hang off. This was built
+    that way first and removed on sight.
+
+    Nothing legible was lost -- one click opens the sub-toggle, which shows all three WITH labels. Pinned
+    in both directions so the cluster does not drift back: the grouped chip has no rank, and the lone
+    chips still do, because those ARE boards.
+    """
+    profile = _ranked('Me', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    client.force_login(profile.user)
+
+    body = client.get(URL, {'tab': 'points'}).content.decode()
+    start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
+    strip = body[start:body.index('</nav>', start)]
+
+    grouped = strip[strip.index('data-board-group'):]
+    grouped = grouped[:grouped.index('</a>')]
+    assert 'lb-chiprank' not in grouped, f'the grouped chip is carrying a rank: {grouped}'
+
+    lone = strip[strip.index('data-board="points"'):]
+    lone = lone[:lone.index('</a>')]
+    assert 'lb-chiprank' in lone, 'a lone chip lost its rank, which it should keep -- it IS a board'
+
+
+def test_the_sub_chips_carry_their_own_ranks(client):
+    """Where the trophy ranks live now: inside the group, one per chip, each beside its own label. That is
+    what makes dropping them from the parent a relocation rather than a loss."""
+    profile = _ranked('Me', plats=3, trophies=30, points=100, pp=500)
+    client.force_login(profile.user)
+
+    body = client.get(URL, {'tab': 'rarity'}).content.decode()
+    sub = body[body.index('lb-subswitch'):]
+    sub = sub[:sub.index('</nav>')]
+
+    assert sub.count('lb-chiprank') == 3, 'the sub-chips do not each carry a rank'
+
+
+def test_every_board_has_its_OWN_icon(client):
+    """The icon chain used to end in a bare `{% else %}`, so a board added without a branch silently
+    inherited Career's briefcase. That happened TWICE -- to `clean`, then to `pp`. The partial now has no
+    fallback at all: an unknown key renders nothing, which is visibly wrong on one chip rather than
+    quietly wrong on two.
+    """
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    body = client.get(URL, {'tab': 'rarity'}).content.decode()
+    # BOTH ROWS. The sub-toggle now sits outside `.lb-bar`, so slicing to that container's close would
+    # stop before the sub-chips and miss exactly the board this test was added for.
+    start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
+    strip = body[start:body.index('lb-boardcard', start)]
+    assert 'lb-subswitch' in strip, 'the slice does not reach the sub-toggle, so it proves nothing'
+
+    # The briefcase is Career's. Exactly one chip may wear it: the Career chip.
+    briefcase = 'M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'
+    assert strip.count(briefcase) == 1, (
+        'more than one chip wears the briefcase, so a board is falling through to the Career glyph'
+    )
+    # ...and Rarity Score has one of its own (the gem).
+    assert 'M6 3h12l4 6-10 13L2 9Z' in strip, 'the Rarity Score board has no icon of its own'
+
+
+def test_every_board_explains_itself_and_no_two_alike(client):
+    """The per-board line is the only thing on the page that says what you are looking at, and it changes
+    with the tab. It matters most for the three trophy boards: they now sit behind one chip, a click
+    apart, ranking the same hunters -- so if two of them read the same the grouping has hidden the very
+    difference it was meant to organise.
+
+    Distinctness is asserted rather than the wording, so the copy can be revised freely; what cannot
+    happen is two boards quietly ending up with one explanation between them. Each is also checked to
+    reach the page, because a MEANINGS entry that nothing renders is copy nobody reads.
+    """
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
+    assert set(V.MEANINGS) == V.BOARD_KEYS, 'a board has no explanation, or one explains nothing'
+    assert len(set(V.MEANINGS.values())) == len(V.MEANINGS), (
+        f'two boards share an explanation: {V.MEANINGS}'
+    )
+
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    for key in ('clean', 'rarity', 'trophies'):
+        body = client.get(URL, {'tab': key}).content.decode()
+        assert V.MEANINGS[key] in body, f'the {key} board does not render its own explanation'
 
 
 def test_the_default_is_derived_from_the_strip_order_not_repeated(client):
@@ -171,6 +393,49 @@ def test_the_default_board_serves_ITS_OWN_rows_not_the_trophies_boards(client):
     # ...and the FIGURE each row shows comes from the same store it was ordered by, or the board would
     # sort on one number and display another.
     assert '999' not in clean.split('lb-wall')[1], 'the clean wall is showing raw trophy totals'
+
+
+def test_the_PP_Score_board_serves_ITS_OWN_rows(client):
+    """The same guard the Shovelware Free board needed, applied before it could go wrong rather than
+    after.
+
+    With THREE trophy boards, a fixture where a hunter's figures agree across all of them makes wrong-board
+    wiring undetectable -- which is exactly how serving `trophy_rows` from the `clean` tab survived 129
+    tests on the previous branch. So this hunter is enormous on Trophies and Shovelware Free while barely
+    registering on Rarity Score, and another is the reverse. The boards must then disagree about the order,
+    which is only possible if each reads its own store.
+    """
+    _ranked('GrinderHunter', plats=99, trophies=999, pp=50)
+    _ranked('RarityHunter', plats=1, trophies=10, pp=90000)
+
+    pp = client.get(URL, {'tab': 'rarity'}).content.decode()
+    trophies = client.get(URL, {'tab': 'trophies'}).content.decode()
+    clean = client.get(URL, {'tab': 'clean'}).content.decode()
+
+    assert _order(pp, 'GrinderHunter', 'RarityHunter') == ['RarityHunter', 'GrinderHunter'], (
+        'the Rarity Score board is not ordering by its own store'
+    )
+    for label, body in (('trophies', trophies), ('clean', clean)):
+        assert _order(body, 'GrinderHunter', 'RarityHunter') == ['GrinderHunter', 'RarityHunter'], (
+            f'the {label} board did not invert, so the assertion above proves nothing'
+        )
+
+
+def test_a_hunter_below_the_scored_gate_is_not_on_the_PP_board(client):
+    """Membership is a FULL 1,000 scorable trophies, not "more than none". Below the cap the sum is short
+    by construction, so they would rank low for having played LESS rather than for having played easier --
+    the one thing this board is not meant to measure."""
+    from trophies.services.rarity_score import TOP_N
+
+    short = _ranked('ShortHunter', plats=1, trophies=10, pp=90000)
+    ProfileRarityStanding.objects.filter(profile=short).update(scored_count=TOP_N - 1)
+    _ranked('FullHunter', plats=1, trophies=10, pp=10)
+
+    body = client.get(URL, {'tab': 'rarity'}).content.decode()
+    wall = body[body.index('<ol class="lb-wall'):]
+
+    assert 'FullHunter' in wall
+    assert 'ShortHunter' not in wall, 'a hunter short of the gate reached the board'
 
 
 def test_the_rows_endpoint_serves_the_default_board(client):
@@ -548,7 +813,7 @@ def test_the_swap_region_wraps_everything_that_moves_with_the_slice(client):
     _ranked('Someone', plats=5, trophies=10, country='GB')
     body = client.get(URL).content.decode()
 
-    region = body[body.index('<div data-lb-page>'):body.index('<!-- /lb-page -->')]
+    region = body[body.index('<div data-lb-page'):body.index('<!-- /lb-page -->')]
     assert 'data-lb-board' in region, 'the board is outside the swap region'
     assert 'pp-switch' in region, 'the tab strip is outside the swap region'
     assert 'data-filter-form' in region, 'the filters are outside the swap region'
@@ -584,7 +849,7 @@ def test_the_virtual_wall_is_not_given_a_stagger_reveal(client):
     _ranked('Someone', plats=5, trophies=10)
     body = client.get(URL).content.decode()
 
-    boot = body[body.index('<div data-lb-page>'):]
+    boot = body[body.index('<div data-lb-page'):]
     assert 'PlatPursuit.staggerReveal' not in boot, (
         'the virtualized wall has a stagger reveal again -- rows mounted on scroll will be invisible'
     )
@@ -646,7 +911,11 @@ def test_a_board_the_viewer_is_not_on_shows_a_dash_not_a_gap(client):
     client.force_login(me.user)
 
     resp = client.get(URL)
-    ranks = {b['key']: b['rank'] for b in resp.context['boards']}
+    # Read from `board_groups`' members -- what the strip actually renders. This read `context['boards']`,
+    # a flat list the template stopped using when the chips grouped, so it pinned a value with no
+    # user-visible effect (and kept two dead view helpers alive).
+    ranks = {m['key']: m['rank']
+             for g in resp.context['board_groups'] for m in g['members']}
 
     assert ranks['trophies'] == 1
     assert ranks['career'] is None, 'the fixture no longer tests an unranked board'
@@ -959,7 +1228,7 @@ def test_the_minibar_lives_outside_the_swapped_wrapper(client):
     _ranked('Someone', plats=5, trophies=50)
     body = client.get(URL).content.decode()
 
-    page_start = body.index('<div data-lb-page>')
+    page_start = body.index('<div data-lb-page')
     page_end = body.index('</div><!-- /lb-page -->')
     assert not (page_start < body.index('data-lb-minibar') < page_end), (
         'the minibar is inside the swapped wrapper, so a tab change destroys it'
@@ -984,7 +1253,7 @@ def test_the_minibar_sentinel_is_inside_the_swapped_wrapper(client):
 
     bar = body.index('data-lb-minibar')
     sentinel = body.index('id="lb-minibar-sentinel"')
-    page_start = body.index('<div data-lb-page>')
+    page_start = body.index('<div data-lb-page')
     page_end = body.index('</div><!-- /lb-page -->')
 
     assert bar < page_start, 'the bar is inside the swapped wrapper and will be destroyed by a swap'

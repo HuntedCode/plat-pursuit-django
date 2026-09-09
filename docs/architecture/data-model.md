@@ -140,8 +140,9 @@ because holds are binary, so a revoke-then-re-earn is indistinguishable from a f
 re-ping a hunter about a badge they have held for a year.
 
 #### ProfileBadgeStanding / SeriesBadgeStanding / SeriesEditionStanding / ProfileEditionStanding
-The materialized read-models the leaderboards sort on, all recomputed from scratch by
-`badge_xp.recompute_standing` on every evaluation (so they cannot drift):
+The BADGE read-models the leaderboards sort on, all recomputed from scratch by
+`badge_xp.recompute_standing` on every evaluation (so they cannot drift). Two further standing stores
+land below and are NOT written by that seam -- see the note after the table:
 
 | model | grain | holds |
 |---|---|---|
@@ -149,6 +150,24 @@ The materialized read-models the leaderboards sort on, all recomputed from scrat
 | `SeriesBadgeStanding` | per (profile, series) | `xp`, `progress_bp`, `stages_cleared`/`total`, `advanced_at`, per-edition `group_progress` |
 | `SeriesEditionStanding` | per (profile, series, STARTED edition) | that edition's `xp`, `stages_cleared`/`gating_count`, and its OWN `advanced_at` |
 | `ProfileEditionStanding` | per (profile, edition) | the same totals pre-sliced, backing the boards' edition filter |
+
+#### ProfileTrophyStanding / ProfileRarityStanding
+The two TROPHY read-models, and the exception to everything above: nothing in the sync path writes them.
+
+| model | grain | holds | writer |
+|---|---|---|---|
+| `ProfileTrophyStanding` | per profile | `clean_plats`, `clean_trophies` -- trophies on non-shovelware games | `recompute_clean_standings`, nightly |
+| `ProfileRarityStanding` | per profile | `rarity_score`, `avg_earn_rate`, `scored_count` -- the 1,000 rarest base-game trophies scored by rarity | `recompute_rarity_standings`, nightly |
+
+They need their own writers because their inputs are properties of the CATALOGUE rather than of the
+hunter: a shovelware flag and a trophy's earn rate both change without the hunter touching anything, so
+no per-profile seam has cause to recompute them. Re-flagging one game invalidates every hunter who
+earned a trophy on it -- a fan-out no signal can see.
+
+**The single most confusable fact about `ProfileRarityStanding`:** it reads
+`Trophy.trophy_earn_rate` -- PSN's global figure, a PERCENTAGE -- and NOT `Trophy.earn_rate`, which is
+ours and a FRACTION, nor any counter on `Profile`. The two rate fields differ by a factor of 100 and
+neither errors when confused. See [leaderboard-system.md](leaderboard-system.md).
 
 `SeriesEditionStanding` is the one with a membership rule: a row exists only for an edition the hunter has
 STARTED, because it backs a board. `SeriesBadgeStanding.group_progress` deliberately keeps untouched
