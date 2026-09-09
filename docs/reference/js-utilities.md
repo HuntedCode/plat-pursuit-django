@@ -386,6 +386,59 @@ can't FLIP its disc back from a dragged-off position, so on swipe it instead **r
 the source medallion reappears in the grid with a subtle materialize settle -- while the tap/close button
 keeps the grow/shrink "put-down". Both routes send the object back to its slot.
 
+### PlatPursuit.DetailModal
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `DetailModal(el, opts)` | HTMLElement, `{closeSelector, autoOpenDelay?, onDismiss?, seenKey?, onOpened?, onSettled?}` | Open / close / Escape / focus trap / `is-closing` exit for a `.pp-detail-modal`, plus the one-shot "mark it seen" write |
+
+**The `.pp-detail-modal` behaviour, in one place.** Eleven templates use that mold and each hand-rolled
+the same hundred lines; the Career explainer and the 1.0 greeting were near-identical copies, and every
+lesson below was learned on one of them and carried to the other by hand. Returns `{open, close}`.
+
+It owns **behaviour only** — not the markup, and not the CSS. Consumers keep the mold's classes and,
+critically, keep their **ID-scoped `is-closing` rule** in `series-list.css`: `badge-inspect.css` defines
+`.pp-detail-modal.is-closing` unscoped, and a clone without its own id inherits it, dissolving the
+dialog's chrome while the text inside stays fully opaque (audit-caught twice, on two different modals).
+The controller only adds and removes the class.
+
+**`closeSelector` is REQUIRED**, and is matched only inside `el`. It used to default to `[data-modal-close]`,
+which matched no markup anywhere -- a documented option with no consumer, and a selector that would have
+silently matched a second modal's controls on any page hosting two. A missing one fails OPEN: the controller
+settles the gate and wires nothing, rather than leaving a page waiting on it forever.
+
+**Armed is read from `el`'s `data-auto` attribute** -- the markup decides, not the caller -- and `onDismiss`
+fires **at most once**, on the
+first armed dismissal. A reopen-and-close (an `.pp-edhint`, a "read it again" link) must stay silent, or
+the first reopen re-writes a flag that is already written. If `onDismiss` rejects, `seenKey` is written to
+`localStorage` so the modal stays shut on this device, and the next load retries the write (deferred to
+`DOMContentLoaded`, because an inline partial script runs *before* end-of-body `utils.js` defines
+`PlatPursuit.API`).
+
+**A dismissing control that is a link** is handled separately, and this is the part that bit us. Blanket
+`preventDefault` on every close control dismisses the modal and navigates nowhere; not preventing at all
+loses the dismissal, because an in-flight request is cancelled on unload. The handler holds the
+navigation until the write settles, capped at 600ms so a hung request never strands the reader. Modified
+and middle clicks are left to the browser and only recorded.
+
+**It does NOT own a choreography gate**, and this is the part worth reading twice. A page whose on-load
+motion waits for a modal must arm that gate *synchronously*, before its end-of-body scripts run — and
+`utils.js` is one of those scripts, so a gate armed here would arm after the code waiting on it had
+**`onOpened`** is the other half, and the reason it exists is worth keeping. A deadline the page sets for
+"our JS never ran" has to be cancelled when a modal actually appears -- otherwise it fires mid-read and
+releases the very motion the gate was holding, which is the failure inverted rather than fixed. The page half
+(`_home_modal_gate.html`) also arms that deadline from `DOMContentLoaded` rather than from parse, so its
+four seconds are not silently "four seconds minus however long the page took to parse".
+
+already given up. The page arms and publishes; the controller reports back through **`onSettled`**, which
+fires on every path that ends with no modal on screen: the dismissal, the auto-open skipped because the
+reader was typing, the auto-open skipped because this device already dismissed it, a missing element, and
+a manual (no `autoOpenDelay`) modal. Miss one and the page's motion waits forever. See
+`_home_modal_gate.html` for the page half.
+
+Live on the What's New modal and the 1.0 launch greeting. The other nine `.pp-detail-modal` consumers
+still hand-roll it; migrating them is a follow-up, not a prerequisite.
+
 ### PlatPursuit.CardDownload
 
 | Method | Parameters | Purpose |

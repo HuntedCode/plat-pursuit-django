@@ -360,6 +360,7 @@ TEMPLATES = [
                 "plat_pursuit.context_processors.hub_subnav",
                 "plat_pursuit.context_processors.navsync",
                 "plat_pursuit.context_processors.moderation_alert",
+                "plat_pursuit.context_processors.whats_new_unread",
             ],
         },
     },

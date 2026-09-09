@@ -25,9 +25,20 @@ community, recent, profile_url.
 {% endcomment %}
 
 {% block content %}
-{% comment %} The 1.0 launch greeting for existing users (server-gated; see the partial). Sits
-first so its inline script publishes the choreography gate before end-of-body home-motion.js. {% endcomment %}
+{% comment %} THE LOBBY'S MODALS, and the gate that holds the page's motion while one is up.
+
+The gate goes FIRST and unconditionally: it must be armed synchronously, before end-of-body
+home-motion.js asks whether to wait, and it is the partials below that report back when nothing is going
+to cover the screen. It reads the SAME two flags the includes below are gated on -- exactly, with no
+extra condition on either side -- so an armed gate with nothing to settle it is not expressible. The
+include used to carry an additional `and whats_new` the gate did not; the view now guarantees
+show_whats_new implies an entry, so both sides read one flag.
+
+Only ONE of these two ever renders (core/views.py: the 1.0 greeting wins, What's New waits for the next
+visit), so the gate is never settled twice by two different modals. {% endcomment %}
+{% include 'trophies/partials/home/_home_modal_gate.html' %}
 {% if show_launch_welcome %}{% include 'trophies/partials/home/_launch_welcome.html' %}{% endif %}
+{% if show_whats_new %}{% include 'trophies/partials/home/_whats_new.html' %}{% endif %}
 
 
 {% include 'partials/_messages.html' %}

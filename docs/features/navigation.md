@@ -62,7 +62,7 @@ The navbar is sticky at `top-0 z-50` so users can hub-jump at any scroll depth. 
 | **Leaderboards** | `hidden lg:flex`. Direct link to `/leaderboards/`. Active when `hub_section == 'leaderboards'`. |
 | **Support** | `hidden lg:flex`. Direct link to `/support/`. Active when `hub_section == 'support'`. |
 | **Notification bell** | Existing dropdown, unchanged. Visible at all breakpoints. |
-| **Avatar dropdown** | Profile *or* Link PSN · Membership (if member) · Settings · Mod Center (mods/admins) · Logout |
+| **Avatar dropdown** | Profile *or* Link PSN · Membership (if member) · Settings · What's New · Mod Center (mods/admins) · Logout |
 
 That's it — up to 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. The logo and the My Pursuit button both point at `/`, but the **My Pursuit button is hidden for logged-out visitors**: the logo already reaches `/` for them, and anon has no pursuit to show (the entry would be redundant and mislabeled, and wouldn't highlight anyway since the anon strip is gated off). So anon sees 4 buttons (logo + Browse/Leaderboards/Support). On `<lg:` viewports the hub buttons hide and the bottom tab bar takes over hub navigation.
 
@@ -77,6 +77,17 @@ The first row is a BRANCH, not a fixed item: a signed-in hunter who has not link
 yet. Everything below it is the same for both. The theme toggle went with light mode (2026-08), and the 2026-08 staff strip-down removed every staff link: staff pages are bookmark-reached and cross-link each other, so the menu reads the same for every signed-in hunter.
 
 **One exception, 2026-09**: the [Mod Center](moderation-center.md), shown only to moderators and admins, with an attention marker on the avatar itself when reports are waiting. Moderation is the only staff surface with a QUEUE, so it has something to say without being visited, and a bookmark cannot tell anyone three reports came in overnight. A future admin dashboard needs its own reason rather than this precedent.
+
+**[What's New](whats-new.md) joined the menu (2026-09)** and passes the same test from the other side: its
+modal is *render == armed*, so a dismissed notice leaves no markup on the page at all — without a door
+here, a hunter who closed it by reflex has no route back to what it said, and `/whats-new/` is a page
+nothing links to. It carries an **unread dot** on the avatar (primary, not the queue's red) plus a "New" pill on the
+menu row, from the zero-query `whats_new_unread` processor. That was left out at first on the
+reasoning that the modal already covers it -- true only on the lobby, for synced hunters, so it
+reached nobody landing deep, nobody without a linked PSN, and nobody who dismissed by reflex. The
+**moderation queue badge wins** when both apply: same corner, and a report backlog outranks a
+changelog. It is also in the footer's
+informational column, which is the route for signed-out readers, who have no avatar menu.
 
 ## Hub Sub-Navigation Strip
 

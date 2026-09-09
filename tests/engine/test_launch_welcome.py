@@ -115,15 +115,33 @@ def test_team_preview_forces_the_greeting(client, settings):
 
 
 def test_the_home_motion_gate_holds():
-    """Source pins: the partial publishes the gate + settled event, home-motion consumes it
-    fail-open, and the modal has its ID-scoped exit (the unscoped-close trap)."""
+    """Source pins for the lobby's choreography gate, across the three files that share it.
+
+    The gate moved when What's New made the lobby two modals (2026-09). It used to be
+    `ppAfterLaunchWelcome`, armed by this partial's own inline script, which was right while this was
+    the only modal here. Now `_home_modal_gate.html` arms `ppAfterHomeModal` for either of them and each
+    modal settles it -- the split exists because the gate must be armed SYNCHRONOUSLY, before
+    home-motion.js asks, whereas the modals are wired from end-of-body utils.js.
+
+    Still a source pin rather than a behavioural test: the failure is JS timing across three files that
+    a Django test client cannot execute. What it can do is prove the three still name the same thing,
+    which is the way this breaks -- one file renamed, the other two not.
+    """
     base = Path(dj_settings.BASE_DIR)
+    gate = _code(base / 'templates' / 'trophies' / 'partials' / 'home' / '_home_modal_gate.html')
+    assert 'ppAfterHomeModal' in gate, 'the gate partial no longer publishes the gate'
+    assert 'ppSettleHomeModal' in gate and 'pp-home-modal:settled' in gate
+
     partial = _code(base / 'templates' / 'trophies' / 'partials' / 'home' / '_launch_welcome.html')
-    assert 'ppAfterLaunchWelcome' in partial and 'launch-welcome:settled' in partial
+    assert 'ppSettleHomeModal' in partial, (
+        'the greeting never releases the gate, so the lobby motion waits behind a closed modal'
+    )
     assert 'ccx-dev' not in partial, 'the one-panel-per-page rule'
 
     motion = _code(base / 'static' / 'js' / 'home-motion.js')
-    assert 'ppAfterLaunchWelcome' in motion
+    assert 'ppAfterHomeModal' in motion, 'home-motion waits on a gate nothing arms'
+    # By NAME, not by call site: `ppAfterLaunchWelcome ||` missed `var g = window.ppAfterLaunchWelcome;`
+    assert 'ppAfterLaunchWelcome' not in motion, 'still consuming the retired per-modal gate'
 
     css = (base / 'static' / 'css' / 'components' / 'series-list.css').read_text(encoding='utf-8')
     assert '#launch-welcome.is-closing' in css

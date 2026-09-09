@@ -278,6 +278,27 @@
     border-radius: 999px; border: 2px solid var(--pp-bg-1); background: var(--pp-error); color: #fff;
     font-size: 0.6rem; font-weight: 800; line-height: 12px; text-align: center; letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums; box-shadow: 0 0 6px -1px var(--pp-error); pointer-events: none; }
+/* The What's New marker: a WORD, not a light, and that is the whole correction.
+   It shipped as a 10px primary dot and the owner could barely see it -- which the block above already
+   explained: "two lights of different colours on one 38px avatar is a puzzle; a number is a fact", and
+   "what keeps the two apart is SHAPE, not colour". A bare dot beside the sync LED is a second light,
+   so the eye has to decode it; the queue pill is legible instantly because it carries content. This
+   carries a word for the same reason. It also reads at a glance without being decoded, which a colour
+   alone never does for anyone who cannot separate cyan from the rest of the chrome.
+   NOT the queue's error red, deliberately, even though red is the owner's recorded choice there: red is
+   also the errored-sync ring AND the LED that ring colours, so a hunter with a failed sync would get
+   three reds at once -- the exact pile-up that block describes. Shape is doing the separating instead,
+   which is what it says to do.
+   Same corner and same suppression as the queue badge (the template drops this when that renders), the
+   same 2px --pp-bg-1 border punching it out of the ring it overlaps, and the same z-index for the
+   generated-content stacking fix. It does not animate, for the reason given above: it is present from
+   first paint, and an entrance would draw the eye on every page load until it is read. */
+.pp-av__new { position: absolute; right: -6px; top: -6px; z-index: 1; padding: 1px 5px;
+    border-radius: 999px; border: 2px solid var(--pp-bg-1);
+    background: var(--pp-primary); color: #06140d;
+    font-size: 0.56rem; font-weight: 900; line-height: 1.25; letter-spacing: 0.04em;
+    text-transform: uppercase; white-space: nowrap;
+    box-shadow: 0 0 7px -1px var(--pp-primary); pointer-events: none; }
 /* Sync-complete flourish: one satisfying green pulse when syncing -> synced (navsync.js adds the class,
    removes it after). Settles into the resting synced halo. */
 /* color-mix() is HOISTED to custom props (lightningcss silently drops color-mix used INSIDE @keyframes). */
@@ -382,6 +403,15 @@
 /* Right-aligned count on a menu row. Written for a feature that never shipped and sat unused until the
    Mod Center entry; kept rather than re-invented under a new name. */
 .pp-avmenu__count { margin-left: auto; font-size: 0.7rem; font-weight: 800; color: var(--pp-error); }
+/* The What's New row's marker. Primary, not the queue's error red: a report backlog is a problem to
+   clear, an announcement is not, and using the same colour for both would teach people to read red as
+   "some obligation" rather than "something is wrong". */
+.pp-avmenu__new {
+    margin-left: auto; padding: 1px 7px; border-radius: 999px;
+    font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 38%, transparent);
+}
 
 /* ── Sub-nav: the hub wayfinding rail (grouped, house style) ──────────────── */
 /* A quieter tier than the navbar (bg-1 at 82% vs 90%): reads as secondary chrome, not a card. Sticky

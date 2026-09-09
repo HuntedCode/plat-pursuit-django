@@ -66,10 +66,18 @@ See CLAUDE.md for the full responsive design standards and migration instruction
 
 All defined in `plat_pursuit/context_processors.py`:
 
+> **This table is partly stale** and was found so while adding the last row. `moderation` and
+> `premium_theme_background` no longer exist; the live set is `site_links`, `whats_new_unread`,
+> `active_fundraiser`, `high_sync_volume`, `psn_outage`, `hub_subnav`, `moderation_alert`, `navsync`
+> (plus `art_reveal.context_processors.art_reveal_banner`). Only the new row was corrected here rather
+> than rewriting the table in a feature branch; `grep '^def ' plat_pursuit/context_processors.py` is the
+> source of truth until someone does.
+
 | Processor | Provides | Purpose |
 |-----------|----------|---------|
-| `moderation` | `pending_reports_count`, `pending_proposals_count` | Staff dashboard badge counts (60s cache) |
-| `premium_theme_background` | `user_theme_style` | Premium gradient theme as CSS string |
+| `whats_new_unread` | `whats_new_unread` | Whether the viewer has an unread What's New entry -- the avatar's attention dot. **Zero queries** (reads `ui_flags` off the loaded user + a module constant); runs on every render of every page, so it must stay that way |
+| `moderation` | `pending_reports_count`, `pending_proposals_count` | **GONE** -- see the note above |
+| `premium_theme_background` | `user_theme_style` | **GONE** -- see the note above |
 | `active_fundraiser` | `active_fundraiser` | Live fundraiser for site banner (60s cache) |
 | `high_sync_volume` | `high_sync_volume`, `high_sync_volume_count`, `high_sync_volume_activated_at` | Redis flag for sync volume banner |
 

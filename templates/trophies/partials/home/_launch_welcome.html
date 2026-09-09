@@ -15,11 +15,16 @@ not earned would be the first thing the new site got wrong.
 No dev panel here (the guard convention from the Career modal holds: one panel per page, and
 this page has none). Retest via /?preview=launch-welcome (team-gated) or a shell flag clear.
 
-This inline script also publishes the on-load choreography gate (ppAfterLaunchWelcome): the
-lobby's count-ups, Horizon fills, and ring pace would otherwise play out behind the scrim on
-the one visit this modal exists for. It runs BEFORE end-of-body home-motion.js because the
-include sits at the top of content. Settled on close AND on the typing-guard skip, so the
-numbers never wait on a modal that never opened.
+Behaviour is PlatPursuit.DetailModal (utils.js) as of the What's New lane -- open, Escape, focus
+trap, the armed-once flag write, the device fallback. It used to be a hundred lines of that
+inline here, and What's New would have been a third copy of the same.
+
+The lobby's on-load motion (count-ups, Horizon fills, ring pace) must not play out behind this
+modal's scrim, and the gate that holds it is now _home_modal_gate.html: PAGE-owned and armed
+synchronously, because home-motion.js asks the question before end-of-body utils.js exists. It
+was `ppAfterLaunchWelcome`, published right here, which was correct while this was the only
+modal on the lobby. What's New made it two, and a gate named after one of them is a gate the
+other cannot use.
 {% endcomment %}
 {% load humanize job_icons %}
 <div class="pp-detail-modal pp-howto" id="launch-welcome" data-auto hidden>
@@ -103,103 +108,37 @@ numbers never wait on a modal that never opened.
         </div>
     </div>
 </div>
-
 <script>
 (function () {
-    var modal = document.getElementById('launch-welcome');
+    'use strict';
+    var el = document.getElementById('launch-welcome');
+    // The page's motion gate is armed by _home_modal_gate.html from the server's decision; only this
+    // side knows what actually happened, so every path that ends with nothing on screen releases it.
+    var settle = function () { if (window.ppSettleHomeModal) { window.ppSettleHomeModal(); } };
 
-    // The choreography gate publishes even if the modal element were missing: consumers use
-    // the fail-open passthrough, so an unpublished gate can never freeze the page.
-    window.ppLaunchWelcomePending = false;
-    function settleChoreography() {
-        if (!window.ppLaunchWelcomePending) { return; }
-        window.ppLaunchWelcomePending = false;
-        document.dispatchEvent(new CustomEvent('launch-welcome:settled'));
-    }
-    window.ppAfterLaunchWelcome = function (fn) {
-        if (window.ppLaunchWelcomePending) {
-            document.addEventListener('launch-welcome:settled', function () { fn(); }, { once: true });
-        } else { fn(); }
-    };
+    if (!el) { settle(); return; }
 
-    if (!modal) { return; }
-    var dialog = modal.querySelector('.pp-detail-modal__dialog');
-    var SEEN_KEY = 'pp-launch-welcome-seen';
-    var lastFocus = null;
-    // Render == armed on this modal (the include itself is server-gated); read the attribute
-    // anyway so the flag write is driven by markup, exactly as the Career modal does.
-    var armed = modal.hasAttribute('data-auto');
-
-    function flagPost() {
-        if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
-        return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
-            setting: 'ui_flag', value: 'launch_welcome'
+    // Waits for utils.js (end-of-body) because this partial sits at the top of content. Nothing is
+    // blocked by the wait: the gate is already armed, and the auto-open is on a timer either way.
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
+        PlatPursuit.DetailModal(el, {
+            closeSelector: '[data-launch-close]',
+            autoOpenDelay: 450,
+            seenKey: 'pp-launch-welcome-seen',
+            onSettled: settle,
+            // Cancels the gate's "nothing ever appeared" deadline. Without this the page
+            // releases its motion at 4s while the reader is still reading.
+            onOpened: function () { if (window.ppHoldHomeModal) { window.ppHoldHomeModal(); } },      // the lobby's motion pass is the "look around" payoff
+            onDismiss: function () {
+                // Greeted, durably: the server flag ends the greeting on every device. No success
+                // toast; on failure the controller keeps this device quiet and retries next visit.
+                if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
+                return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+                    setting: 'ui_flag', value: 'launch_welcome'
+                });
+            }
         });
-    }
-    function isEditable(el) {
-        if (!el) { return false; }
-        var t = el.tagName;
-        return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
-    }
-
-    function open(trigger) {
-        if (!modal.hidden) { return; }
-        lastFocus = trigger || document.activeElement;
-        modal.hidden = false;
-        if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
-    }
-    function close() {
-        if (modal.hidden) { return; }
-        // Greeted, durably: the server flag ends the greeting on every device. No success
-        // toast; on failure the localStorage fallback keeps this device quiet and the
-        // self-heal below retries once utils.js is up.
-        if (armed) {
-            armed = false;
-            flagPost().catch(function () {
-                try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
-            });
-        }
-        modal.classList.add('is-closing');
-        window.setTimeout(function () {
-            modal.hidden = true;
-            modal.classList.remove('is-closing');
-            if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
-            settleChoreography();   // the lobby's motion pass is the "look around" payoff
-        }, 200);
-    }
-
-    document.addEventListener('click', function (e) {
-        if (!e.target.closest) { return; }
-        if (!modal.hidden && e.target.closest('[data-launch-close]')) { e.preventDefault(); close(); }
     });
-    document.addEventListener('keydown', function (e) {
-        if (modal.hidden) { return; }
-        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
-        if (e.key !== 'Tab' || !dialog) { return; }
-        var f = dialog.querySelectorAll('a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])');
-        var list = Array.prototype.filter.call(f, function (el) { return el.offsetParent !== null; });
-        if (!list.length) { return; }
-        var first = list[0], last = list[list.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    });
-
-    // The device fallback: a prior visit whose flag POST failed hides the greeting here and
-    // quietly retries the write; otherwise auto-open once, after paint.
-    var seen = false;
-    try { seen = localStorage.getItem(SEEN_KEY) === '1'; } catch (e) {}
-    if (seen) {
-        document.addEventListener('DOMContentLoaded', function () {
-            flagPost().then(function () { try { localStorage.removeItem(SEEN_KEY); } catch (e) {} }).catch(function () {});
-        });
-    } else {
-        window.ppLaunchWelcomePending = true;
-        window.setTimeout(function () {
-            // The skipped auto-open settles the gate too: the lobby's numbers must never
-            // wait on a modal that never opened.
-            if (isEditable(document.activeElement)) { settleChoreography(); return; }
-            open(null);
-        }, 450);
-    }
 })();
 </script>
