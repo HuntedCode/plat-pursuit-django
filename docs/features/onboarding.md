@@ -95,9 +95,16 @@ achievement.
 - **No reopen affordance**, inverting the Career modal's rationale again: a one-time announcement
   needs no recall, so a flagged user gets a full non-render (the include itself is server-gated).
 - **The choreography gate.** The lobby's count-ups, Horizon fills and ring pace would otherwise
-  play out behind the modal's scrim on the one visit it exists for. The partial publishes
-  `ppAfterLaunchWelcome` synchronously; `home-motion.js` rides it and fires on close (the "look
-  around" payoff), or immediately when no modal renders. The typing-guard skip settles it too.
+  play out behind the modal's scrim on the one visit it exists for. **Moved in 2026-09** when What's
+  New made the lobby two modals: the greeting no longer publishes anything, and a gate named after
+  one modal is a gate the other cannot use. `_home_modal_gate.html` now arms `ppAfterHomeModal`
+  synchronously from the server's flags; `home-motion.js` rides it fail-open; each modal reports back
+  through `DetailModal`'s `onSettled` on close, on the typing-guard skip, and on the device-already-
+  dismissed path. A 4s backstop covers "nothing ever appeared" and is cancelled via `ppHoldHomeModal`
+  the moment a modal opens — an uncancelled deadline released the motion mid-read on every visit.
+  See [whats-new.md](whats-new.md#the-lobbys-choreography-gate).
+- **Behaviour is `PlatPursuit.DetailModal`** (utils.js) as of the same lane — open, Escape, focus
+  trap, the armed-once flag write, the localStorage fallback. It was ~100 inline lines here before.
 - **Team preview**: `/?preview=launch-welcome` (staff/moderators), mirroring the landing and
   syncing preview doors.
 
@@ -108,6 +115,13 @@ presence of a key means dismissed. Writes go through the quick-settings API's `u
 (`api/user_settings_views.py`, whitelist `UI_FLAGS`), a read-modify-write that preserves other
 keys (`career_explainer`, `launch_welcome`). Adding a new one = add its key to `UI_FLAGS`, gate its render server-side, POST on
 dismiss.
+
+**Not everything in that dict is a one-shot flag.** `whats_new_seen` also lives there and does not
+follow this contract: its value is the **id of the newest announcement dismissed**, it MOVES with every
+new entry, and it is written through a separate `whats_new_seen` branch that is *not* in `UI_FLAGS`.
+Presence means nothing there — equality does. See [whats-new.md](whats-new.md#the-seen-marker). If you
+add a third shape, document it here too; this section is where people come to learn what the field
+means, and it is the one place a separate API branch cannot keep honest on its own.
 
 Client discipline (from the badge howto + timezone modal prior art):
 

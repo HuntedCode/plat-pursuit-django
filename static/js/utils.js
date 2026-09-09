@@ -3405,6 +3405,243 @@ function wireSearchField(input, opts) {
 }
 window.PlatPursuit.wireSearchField = wireSearchField;
 
+
+/* ── DetailModal: the .pp-detail-modal behaviour, once ────────────────────────────────────────────────
+ *
+ * Eleven templates use the `.pp-detail-modal` mold and each hand-rolled its own open, close, Escape,
+ * focus trap and exit transition. Two of them -- the Career explainer and the 1.0 launch greeting -- are
+ * near-identical hundred-line copies, and every audit lesson below was learned on ONE of them and had to
+ * be carried to the other by hand. This is that behaviour in one place.
+ *
+ * It does NOT own the markup or the CSS. Consumers keep the mold's classes and, critically, keep their
+ * own ID-SCOPED `is-closing` rule: an unscoped `.pp-detail-modal.is-closing` fades the chrome around
+ * solid text, because badge-inspect already defines one globally. This controller only adds and removes
+ * the class; which element it styles is the template's business.
+ *
+ * STILL OPEN, and now a one-line fix instead of eleven: no body scroll lock. Left as it was rather than
+ * changed for every consumer at once inside a feature branch.
+ *
+ * opts:
+ *   closeSelector  REQUIRED. selector for the elements that dismiss, scoped to inside `el`
+ *   autoOpenDelay  ms after wiring to open itself; omit for a manual modal
+ *   onDismiss      () => Promise, called at most ONCE, on the first armed dismissal. Armed is read from
+ *                  the element's [data-auto] attribute, so the markup decides, not the caller
+ *   seenKey        localStorage key holding "this device already dismissed it" when onDismiss failed
+ *   onOpened       called when the modal actually appears -- see the gate note below
+ *   onSettled      called once the page's motion may proceed -- see the gate note below
+ *
+ * ON THE CHOREOGRAPHY GATE. The controller does NOT own it. A page whose on-load motion must wait for a
+ * modal has to ARM that gate synchronously, before its own end-of-body scripts run, and this file is one
+ * of those end-of-body scripts -- so a gate armed here would already be too late for the code waiting on
+ * it. The page arms and publishes; the controller only reports, through `onSettled`, that nothing is
+ * going to cover the screen any more.
+ *
+ * `onSettled` therefore fires on EVERY path that ends with no modal on screen: the dismissal, the
+ * auto-open skipped because the user was typing, and the auto-open skipped because this device already
+ * dismissed it. Miss any one of them and the page's motion waits forever on a modal that will never
+ * appear -- which is a frozen render, not a cosmetic bug.
+ *
+ * `onOpened` is the other half, and it exists because the obvious safety net was worse than no net. A
+ * page that arms a gate needs a deadline in case the JS never runs at all -- but a deadline measured
+ * from page load fires while the reader is still READING, releasing the motion behind the scrim: the
+ * exact failure the gate exists to prevent, now on every normal visit instead of none. So the page's
+ * deadline covers only "nothing ever appeared", and `onOpened` is how it learns that something did.
+ */
+function DetailModal(el, opts) {
+    opts = opts || {};
+    // Required, not defaulted. The default used to be '[data-modal-close]', which matched no markup
+    // anywhere in the repo -- a documented option with no consumer, and worse, a selector that would
+    // silently match a FUTURE consumer's controls from a different modal (see the el.contains guard
+    // in the click handler for why that matters).
+    var closeSelector = opts.closeSelector;
+    var dialog = el ? el.querySelector('.pp-detail-modal__dialog') : null;
+    var armed = !!(el && el.hasAttribute('data-auto'));
+    var lastFocus = null;
+    var navigating = false;
+    var api = {};
+
+    var settled = false;
+    function settle() {
+        if (settled) { return; }
+        settled = true;
+        if (opts.onSettled) { opts.onSettled(); }
+    }
+
+    // No element and the page may proceed at once: there is no modal to wait for.
+    if (!el || !closeSelector) { settle(); return api; }
+
+    function isEditable(node) {
+        if (!node) { return false; }
+        var t = node.tagName;
+        return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || node.isContentEditable;
+    }
+
+    // Returns a promise that settles once the dismissal has been RECORDED, or null when there was
+    // nothing to record. Callers that are about to navigate away wait on it; callers that are not
+    // ignore it.
+    function dismiss() {
+        // Only an ARMED dismissal records anything. A reopen-and-close (an edhint, a "read it again"
+        // link) must stay silent, or the first reopen would re-write a flag that is already written and
+        // a manual modal would start marking itself seen.
+        if (!armed) { return null; }
+        armed = false;
+        // Wrapped: a synchronous throw here used to escape mid-close, BEFORE `is-closing` was added and
+        // before the exit timeout was scheduled -- so the modal simply never closed, and on the link
+        // path preventDefault had already run while the 600ms navigation cap had not yet been set, which
+        // left the reader on a modal whose link did nothing at all.
+        var p;
+        try {
+            p = opts.onDismiss ? opts.onDismiss() : null;
+        } catch (err) {
+            p = null;
+        }
+        if (!p || !p.catch) { return null; }
+        return p.catch(function () {
+            // The server did not hear us. Keep THIS device quiet and let the caller's self-heal retry.
+            if (opts.seenKey) { try { localStorage.setItem(opts.seenKey, '1'); } catch (e) {} }
+        });
+    }
+
+    api.open = function (trigger) {
+        if (!el.hidden) { return; }
+        lastFocus = trigger || document.activeElement;
+        el.hidden = false;
+        // Do not yank focus off something the user is typing in. A trigger click is explicit intent and
+        // always wins; an auto-open defers to the caret.
+        if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
+    };
+
+    api.close = function () {
+        if (el.hidden) { return; }
+        dismiss();
+        el.classList.add('is-closing');
+        window.setTimeout(function () {
+            el.hidden = true;
+            el.classList.remove('is-closing');
+            if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+            settle();
+        }, 200);
+    };
+
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest || el.hidden) { return; }
+        var hit = e.target.closest(closeSelector);
+        // SCOPED TO THIS MODAL. The listener is on `document`, so without this any element anywhere in
+        // the page matching the selector would dismiss this modal -- and if it sat inside a link, the
+        // branch below would preventDefault the page's own click and navigate on its behalf. Safe today
+        // only because the two consumers happen to use unique selectors; the moment a page hosts two
+        // modals, or a matching control appears inside content rendered from user data, it is not.
+        if (!hit || !el.contains(hit)) { return; }
+        var link = hit.closest('a[href]');
+
+        // A DISMISSING LINK. It has to do two things that pull against each other: record the
+        // dismissal, and go where it points. Blanket-preventDefault (what this did when every
+        // consumer's only close control was a <button>) records the dismissal and navigates NOWHERE.
+        // Simply not preventing loses the record instead: an in-flight request is cancelled on unload,
+        // so the reader would meet the same notice again having already clicked through it.
+        //
+        // So: hold the navigation until the write has settled, and cap the wait -- a hung request must
+        // never strand somebody on a modal after they clicked a link.
+        if (link) {
+            // A modified or middle click belongs to the browser (new tab, new window, save). Record
+            // the dismissal, because they have read it, and then keep out of the way: intercepting
+            // here would replace their new tab with a navigation in this one.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) { dismiss(); return; }
+
+            e.preventDefault();
+            var href = link.href;
+            // `navigating` is per-MODAL, not per-click. A per-click flag let a fast double click fire
+            // two navigations: the second click found `armed` already false, went immediately, and the
+            // first click's 600ms timer then fired against its own untouched flag -- restarting the
+            // navigation and pushing a second history entry, so Back no longer returned to the lobby.
+            // Same-DOCUMENT means the browser will not unload: a fragment jump leaves the modal sitting
+            // open over the anchor it just scrolled to, with the gate never settling. Those need the
+            // manual hide. A normal cross-page link must NOT get it -- hiding and settling before
+            // `assign` released the lobby's whole motion pass for the few hundred ms before unload, so
+            // the reader saw the count-ups fire on a page they were already leaving.
+            var samePage = href.split('#')[0] === window.location.href.split('#')[0];
+            var go = function () {
+                if (navigating) { return; }
+                navigating = true;
+                if (samePage) { el.hidden = true; settle(); }
+                window.location.assign(href);
+            };
+            var recorded = dismiss();
+            if (recorded && recorded.then) { recorded.then(go, go); } else { go(); }
+            window.setTimeout(go, 600);
+            return;
+        }
+
+        e.preventDefault();
+        api.close();
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (el.hidden) { return; }
+        if (e.key === 'Escape') { e.preventDefault(); api.close(); return; }
+        if (e.key !== 'Tab' || !dialog) { return; }
+        var all = dialog.querySelectorAll('a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])');
+        var list = Array.prototype.filter.call(all, function (n) { return n.offsetParent !== null; });
+        if (!list.length) { return; }
+        var first = list[0], last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+
+    // A manual modal covers nothing until something opens it, so the page never waits on one.
+    if (opts.autoOpenDelay === undefined) { settle(); return api; }
+
+    // A previous visit dismissed this and the write failed, so the modal is spent on this device even
+    // though the server does not know. Stay shut and retry the write -- deferred to DOMContentLoaded
+    // because an inline partial script runs BEFORE end-of-body utils.js defines PlatPursuit.API.
+    var seen = false;
+    if (opts.seenKey) { try { seen = localStorage.getItem(opts.seenKey) === '1'; } catch (e) {} }
+    if (seen) {
+        // Nothing will open, so release the page FIRST -- this is the path a server-armed gate cannot
+        // predict, because only this device knows the modal is already spent here.
+        settle();
+        // THE SELF-HEAL, and it must not re-register DOMContentLoaded. This function is now called FROM
+        // a DOMContentLoaded handler (consumers wait for utils.js, which is end-of-body), and a listener
+        // added to a target during that target's own dispatch is not invoked for it -- the list is
+        // copied before invocation -- while DOMContentLoaded never fires twice. The retry was therefore
+        // dead code, and a dismissal whose POST failed could never reconcile: the server flag stayed
+        // unwritten, so the modal returned on every other device forever. It worked before this
+        // controller existed only because that script ran at parse time. `onPageReady` is the form that
+        // is correct from either.
+        onPageReady(function (first) {
+            // FIRST LOAD ONLY. `onPageReady` also re-fires on `htmx:historyRestore`, and without this
+            // guard every history restore would re-POST the dismissal -- including after the success
+            // branch below removed the key. Latent today (nothing on the lobby is hx-boosted) and a
+            // repeated-write bug the moment anything is.
+            if (!first || !opts.onDismiss) { return; }
+            var p;
+            try {
+                p = opts.onDismiss();
+            } catch (err) {
+                return;
+            }
+            if (p && p.then) {
+                p.then(function () { try { localStorage.removeItem(opts.seenKey); } catch (e) {} })
+                 .catch(function () {});
+            }
+        });
+        return api;
+    }
+
+    window.setTimeout(function () {
+        // A skipped auto-open must settle the gate too. The page's motion cannot be left waiting on a
+        // modal that decided not to appear.
+        if (isEditable(document.activeElement)) { settle(); return; }
+        api.open(null);
+        // The modal is now on screen, so whatever deadline the page set for "nothing ever appeared" is
+        // no longer measuring anything true. Tell it.
+        if (opts.onOpened) { opts.onOpened(); }
+    }, opts.autoOpenDelay);
+
+    return api;
+}
+window.PlatPursuit.DetailModal = DetailModal;
+
 // Global `/` + Cmd/Ctrl+K -> focus the page's primary search field ([data-page-search]). Bound ONCE here so
 // every page (browse or bespoke) gets the shortcut just by marking its search input. `/` is skipped while
 // typing in another field; Cmd/Ctrl+K always fires (a deliberate override, like GitHub/Linear).

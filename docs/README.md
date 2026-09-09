@@ -83,6 +83,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Roadmap Roles, Locks & Revisions](features/roadmap-roles-and-revisions.md) | Role-based authoring (writer/editor/publisher), guide-level edit lock, branch-and-merge save flow, permanent revision history |
 | [Share Images](features/share-images.md) | Playwright renderer, caching, card types |
 | [Subscription Lifecycle](features/subscription-lifecycle.md) | Activation, cancellation, renewal, admin dashboard |
+| [What's New](features/whats-new.md) | The lobby announcement modal + the public `/whats-new/` archive: code-defined entries, the per-entry seen marker, precedence against the 1.0 greeting |
 
 ## Guides
 

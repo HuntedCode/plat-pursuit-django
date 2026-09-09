@@ -10,6 +10,7 @@ from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
 
+from core import whats_new
 from trophies.services.profile_stats_service import update_profile_trophy_counts
 from users.services.timezone_service import set_user_timezone
 
@@ -133,6 +134,22 @@ class UpdateQuickSettingsAPIView(APIView):
                 return Response({'error': 'Unknown UI flag.'}, status=http_status.HTTP_400_BAD_REQUEST)
             flags = request.user.ui_flags or {}
             flags[value] = True
+            request.user.ui_flags = flags
+            request.user.save(update_fields=['ui_flags'])
+
+        # What's New: the id of the newest entry this user has dismissed. Its own branch rather than a
+        # value on `ui_flag` above, because that one is documented as sticky booleans and this is a
+        # MOVING marker -- every new entry overwrites it. Sharing the branch would have meant one of the
+        # two behaviours going undocumented in the place someone reads to learn what the flag means.
+        #
+        # Validated against the shipped entries, not stored as given: an arbitrary string here would let
+        # a caller park a value no entry will ever match, permanently suppressing the modal for that
+        # account with nothing in the UI to undo it.
+        elif setting == 'whats_new_seen':
+            if not isinstance(value, str) or whats_new.by_id(value) is None:
+                return Response({'error': 'Unknown entry.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            flags = request.user.ui_flags or {}
+            flags['whats_new_seen'] = value
             request.user.ui_flags = flags
             request.user.save(update_fields=['ui_flags'])
 
