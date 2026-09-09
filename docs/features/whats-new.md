@@ -92,6 +92,7 @@ trust, and it is what lets the rule above be as simple as it is.
 | Route | Who sees it |
 |---|---|
 | The modal on Home | Hunters with a **linked, synced** profile and an undismissed entry, once each |
+| Avatar dot + menu marker | Every signed-in hunter with an unread entry, on **every page** |
 | Avatar menu → What's New | Every signed-in hunter, always |
 | Footer → What's New | Everybody, signed in or not |
 
@@ -99,8 +100,42 @@ The chrome links are not optional garnish. The modal is **render == armed**: a d
 markup on the page at all, so without a door in the chrome a hunter who closed it by reflex has no route
 back to what it said, and the archive is a page nothing links to.
 
-The avatar entry deliberately carries **no unread marker**. While an entry is unseen the modal fires on
-its own, so a badge there would only ever appear beside a modal already on screen.
+### The attention dot
+
+A primary-coloured dot on the avatar, plus a "New" pill on the menu row, driven by
+`whats_new_unread` (`plat_pursuit/context_processors.py`).
+
+**It is not redundant with the modal**, which is the objection that kept it out of the first cut. The
+modal fires on the **lobby**, for **synced** hunters only. It reaches nobody who lands deep from a
+bookmark or a link, nobody signed in without a linked PSN (the whole block sits inside
+`state == 'synced'`), and nobody who closes it by reflex having read nothing. The dot is the signal for
+exactly those people.
+
+**Zero queries**, and it must stay that way: it runs on every render of every page, including the Django
+admin. `ui_flags` rides the user object authentication already loaded, and the entries are a module
+constant. Pinned by a `django_assert_num_queries(0)` test.
+
+**The moderation queue outranks it.** Both live in the avatar's top-right corner, and the template
+suppresses the dot whenever the queue badge is present — a report backlog is a problem to clear, this is
+not. It also uses the primary colour rather than the queue's error red, so red keeps meaning "something
+is wrong" rather than "you owe someone something".
+
+**No mobile tab-bar marker.** The avatar has no breakpoint rules — the tab bar replaces the navbar's
+*hub buttons*, not the avatar — so the dot already covers phones. A tab-bar version would have needed a
+fifth tab for something that is not a hub.
+
+### Reading the archive clears it
+
+Opening `/whats-new/` marks the newest entry seen, which clears the dot **and** retires the modal.
+
+This reverses the original rule ("reading is not dismissing", which existed so a shared link could not
+burn someone's notice). It became untenable the moment the dot shared that marker: a reader who clicks
+the dot, reads the page and returns would still have the dot, with no way to clear it by doing the
+obvious thing. One marker, and reading is dismissing.
+
+The clear is a **POST from the page**, not a side effect of the GET — this page is public and crawlable,
+and a mutating GET is the wrong shape whoever can reach it. It is gated on the unread flag, so an
+ordinary re-read costs no request, and it never fires for anonymous readers.
 
 ## The archive's spine
 

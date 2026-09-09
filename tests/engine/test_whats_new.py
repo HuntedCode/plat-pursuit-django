@@ -347,16 +347,103 @@ def test_the_archive_is_public(client):
     assert client.get(reverse('whats_new'), **CF).status_code == 200
 
 
-def test_reading_the_archive_does_not_mark_anything_seen(client):
-    """Reading the record is not dismissing the notice. A hunter who arrives here from a link should
-    still meet the modal on Home, or the entry they never opened is silently spent."""
+def test_reading_the_archive_clears_the_marker(client):
+    """REVERSED when the attention dot landed, and the reversal is the point.
+
+    This used to assert that reading the archive marked nothing, so a link could not burn somebody's
+    notice. That became untenable the moment the avatar carried an unread dot driven by the same
+    marker: a reader who clicks the dot, reads the page and comes back would still have the dot, with
+    no way to clear it by doing the obvious thing. One marker, and reading is dismissing.
+
+    The clear is a POST from the page, not a side effect of the GET -- this page is public and
+    crawlable, and a mutating GET is the wrong shape whoever can reach it. So the GET itself still
+    writes nothing; what this pins is that the page CARRIES the request.
+    """
     client, profile = _synced_client(client)
 
-    client.get(reverse('whats_new'), **CF)
+    body = client.get(reverse('whats_new'), **CF).content.decode()
 
+    assert "setting: 'whats_new_seen'" in body, 'the archive never clears the dot'
     profile.user.refresh_from_db()
-    assert 'whats_new_seen' not in (profile.user.ui_flags or {})
-    assert 'id="whats-new"' in client.get('/', **CF).content.decode()
+    assert 'whats_new_seen' not in (profile.user.ui_flags or {}), (
+        'the GET mutated; the clear must come from the POST the page fires'
+    )
+
+
+def test_the_archive_does_not_re_post_once_it_is_read(client):
+    """Gated on the unread flag, so an ordinary re-read costs no request."""
+    client, profile = _synced_client(client)
+    profile.user.ui_flags = {'whats_new_seen': whats_new.latest().id}
+    profile.user.save(update_fields=['ui_flags'])
+
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+
+    assert "setting: 'whats_new_seen'" not in body
+
+
+def test_the_archive_asks_nothing_of_anonymous_readers(client):
+    """No user, no marker, no request -- and no reason for one."""
+    body = client.get(reverse('whats_new'), **CF).content.decode()
+    assert "setting: 'whats_new_seen'" not in body
+
+
+# ── the attention dot ─────────────────────────────────────────────────────────────────────────────────
+
+def test_the_avatar_carries_a_dot_when_something_is_unread(client):
+    """The signal for everyone the modal cannot reach: deep landings that never touch Home, hunters
+    signed in without a linked PSN, and anyone who closed the modal by reflex having read nothing."""
+    client, _ = _synced_client(client)
+
+    body = client.get(reverse('about'), **CF).content.decode()
+
+    assert 'pp-av__new' in body, 'no unread marker anywhere off the lobby'
+    assert 'something new to read' in body, 'the dot is invisible to a screen reader'
+    assert 'pp-avmenu__new' in body, 'the menu row does not say which item the dot was about'
+
+
+def test_the_dot_goes_once_the_entry_is_seen(client):
+    client, profile = _synced_client(client)
+    profile.user.ui_flags = {'whats_new_seen': whats_new.latest().id}
+    profile.user.save(update_fields=['ui_flags'])
+
+    body = client.get(reverse('about'), **CF).content.decode()
+
+    assert 'pp-av__new' not in body
+    assert 'pp-avmenu__new' not in body
+
+
+def test_a_moderation_queue_outranks_the_dot(client):
+    """Same corner of the avatar. A report backlog is a problem to clear and this is not, so the queue
+    badge wins rather than the two stacking into clutter."""
+    from unittest import mock
+
+    client, profile = _synced_client(client, is_staff=True)
+
+    with mock.patch('trophies.services.moderation_service.open_report_count', return_value=3):
+        body = client.get(reverse('about'), **CF).content.decode()
+
+    assert 'pp-av__queue' in body, 'the fixture did not produce a queue badge'
+    assert 'pp-av__new' not in body, 'both markers rendered in the same corner'
+    # The menu row still carries its own marker -- different place, no collision.
+    assert 'pp-avmenu__new' in body
+
+
+def test_anonymous_visitors_get_no_dot(client):
+    body = client.get(reverse('about'), **CF).content.decode()
+    assert 'pp-av__new' not in body
+
+
+def test_the_unread_flag_costs_no_queries(client, django_assert_num_queries):
+    """It runs on EVERY render of every page, so it has to be free: ui_flags rides the already-loaded
+    user and the entries are a module constant. A future version that fetched anything would be a
+    site-wide per-request query."""
+    from plat_pursuit.context_processors import whats_new_unread
+
+    client, profile = _synced_client(client)
+    request = type('R', (), {'user': profile.user})()
+
+    with django_assert_num_queries(0):
+        assert whats_new_unread(request) == {'whats_new_unread': True}
 
 
 # ── source pins: the wiring a test client cannot execute ──────────────────────────────────────────────

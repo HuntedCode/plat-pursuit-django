@@ -10,6 +10,28 @@ def site_links(request):
     return {'discord_invite_url': settings.DISCORD_INVITE_URL}
 
 
+def whats_new_unread(request):
+    """Whether this viewer has an unread What's New entry -- the avatar's attention dot.
+
+    ZERO QUERIES, which is what makes a site-wide processor affordable here: `ui_flags` rides the user
+    object authentication already loaded, and the entries are a module-level tuple. Nothing is fetched.
+    Keep it that way -- this runs on every render of every page, including the Django admin.
+
+    IT IS NOT REDUNDANT WITH THE MODAL, which is the objection I raised when this was first left out.
+    The modal fires on the LOBBY, for SYNCED hunters only, so it reaches nobody who lands deep from a
+    bookmark or a link, nobody signed in without a linked PSN, and nobody who closes it by reflex having
+    read nothing. The dot is the signal for exactly those people.
+
+    Fails closed, like `moderation_alert` below: a viewer loses a dot for one render, nobody gains one.
+    """
+    try:
+        from core import whats_new
+        return {'whats_new_unread': whats_new.is_due(getattr(request, 'user', None))}
+    except Exception:
+        logger.debug("Failed to resolve the What's New unread state", exc_info=True)
+        return {}
+
+
 def active_fundraiser(request):
     """
     Inject the currently active fundraiser for the site-wide banner.

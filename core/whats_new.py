@@ -137,6 +137,9 @@ def is_due(user) -> bool:
     can see both, not in either one's own rule.
     """
     entry = latest()
-    if entry is None or not user.is_authenticated:
+    # `user` may be None: the site-wide context processor calls this on every render, including
+    # requests that never went through AuthenticationMiddleware. Answering False beats raising into
+    # a try/except that would then log a debug line on each of those renders.
+    if entry is None or user is None or not getattr(user, 'is_authenticated', False):
         return False
-    return (user.ui_flags or {}).get('whats_new_seen') != entry.id
+    return (getattr(user, 'ui_flags', None) or {}).get('whats_new_seen') != entry.id

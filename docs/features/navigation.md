@@ -81,8 +81,12 @@ yet. Everything below it is the same for both. The theme toggle went with light 
 **[What's New](whats-new.md) joined the menu (2026-09)** and passes the same test from the other side: its
 modal is *render == armed*, so a dismissed notice leaves no markup on the page at all — without a door
 here, a hunter who closed it by reflex has no route back to what it said, and `/whats-new/` is a page
-nothing links to. It carries **no** unread marker on purpose: while an entry is unseen the modal fires on
-its own, so a badge would only ever appear beside a modal already on screen. It is also in the footer's
+nothing links to. It carries an **unread dot** on the avatar (primary, not the queue's red) plus a "New" pill on the
+menu row, from the zero-query `whats_new_unread` processor. That was left out at first on the
+reasoning that the modal already covers it -- true only on the lobby, for synced hunters, so it
+reached nobody landing deep, nobody without a linked PSN, and nobody who dismissed by reflex. The
+**moderation queue badge wins** when both apply: same corner, and a report backlog outranks a
+changelog. It is also in the footer's
 informational column, which is the route for signed-out readers, who have no avatar menu.
 
 ## Hub Sub-Navigation Strip

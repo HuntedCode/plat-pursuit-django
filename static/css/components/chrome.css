@@ -278,6 +278,14 @@
     border-radius: 999px; border: 2px solid var(--pp-bg-1); background: var(--pp-error); color: #fff;
     font-size: 0.6rem; font-weight: 800; line-height: 12px; text-align: center; letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums; box-shadow: 0 0 6px -1px var(--pp-error); pointer-events: none; }
+/* The What's New dot. SAME CORNER as the queue badge, and the template suppresses it whenever that
+   badge is present -- a report backlog outranks a changelog, and two markers stacked in one corner is
+   how a careful indicator turns into clutter. Smaller than the queue badge and carrying no number: it
+   says "there is something", not "there are N things to deal with".
+   No z-index of its own; it inherits the queue badge's stacking fix by sitting in the same layer. */
+.pp-av__new { position: absolute; right: -2px; top: -2px; z-index: 1; width: 10px; height: 10px;
+    border-radius: 50%; border: 2px solid var(--pp-bg-1); background: var(--pp-primary);
+    box-shadow: 0 0 6px -1px var(--pp-primary); pointer-events: none; }
 /* Sync-complete flourish: one satisfying green pulse when syncing -> synced (navsync.js adds the class,
    removes it after). Settles into the resting synced halo. */
 /* color-mix() is HOISTED to custom props (lightningcss silently drops color-mix used INSIDE @keyframes). */
@@ -382,6 +390,15 @@
 /* Right-aligned count on a menu row. Written for a feature that never shipped and sat unused until the
    Mod Center entry; kept rather than re-invented under a new name. */
 .pp-avmenu__count { margin-left: auto; font-size: 0.7rem; font-weight: 800; color: var(--pp-error); }
+/* The What's New row's marker. Primary, not the queue's error red: a report backlog is a problem to
+   clear, an announcement is not, and using the same colour for both would teach people to read red as
+   "some obligation" rather than "something is wrong". */
+.pp-avmenu__new {
+    margin-left: auto; padding: 1px 7px; border-radius: 999px;
+    font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 38%, transparent);
+}
 
 /* ── Sub-nav: the hub wayfinding rail (grouped, house style) ──────────────── */
 /* A quieter tier than the navbar (bg-1 at 82% vs 90%): reads as secondary chrome, not a card. Sticky
