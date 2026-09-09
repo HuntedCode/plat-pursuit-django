@@ -281,7 +281,7 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
         The filters stay as SELECTS above rather than becoming chips in here. Chips read well as "what is
         applied" but need somewhere to set them FROM, which means a button that opens the selects anyway
         -- and the selects already say what is applied by showing their value. {% endcomment %}
-        {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning total=ranked_total ranked_label=ranked_label scoped=slice_applied only %}
+        {% include 'trophies/partials/leaderboard_boardcard.html' with board_label=board_label board_meaning=board_meaning board_freshness=board_freshness total=ranked_total ranked_label=ranked_label scoped=slice_applied only %}
 
         {% comment %} Guarded, like the other three. An emptied slice rendered a labelled "Go to rank"
         box with `max="0"` over a board with no rows -- a control offered for a thing that is not there.

@@ -16,6 +16,18 @@ reads as a missing feature rather than as the answer.
     <div class="lb-boardcard__id">
         <h2 class="lb-boardcard__name">{{ board_label }}</h2>
         <p class="lb-boardcard__what">{{ board_meaning }}</p>
+        {% comment %} WHEN, for the boards where when is not "now". Its own line rather than a clause on
+        the meaning above: that line says what the board RANKS, and a reader deciding whether their last
+        sync counted is asking a different question than a reader deciding what they are looking at.
+
+        Optional -- badge, game and job detail pass nothing and get nothing. Their panels rank a single
+        badge or game live, so a freshness caption there would be false. {% endcomment %}
+        {% if board_freshness %}
+            <p class="lb-boardcard__fresh">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                <span>{{ board_freshness }}</span>
+            </p>
+        {% endif %}
     </div>
     <div class="lb-boardcard__meta">
         <div class="lb-boardcard__tally">

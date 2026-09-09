@@ -452,6 +452,16 @@
 .lb-boardcard__what {
     margin-top: 3px; font-size: 12px; line-height: 1.45; color: var(--pp-text-dim); max-width: 60ch;
 }
+/* "Not a live board" -- a caveat, not a feature, so it sits below the meaning at the quietest weight the
+   card has and never competes with the board's name. The clock is what a reader scanning for "why has my
+   rank not moved" actually finds; an icon reads before prose does.
+   `align-items: start` rather than center so the icon stays on the FIRST line if the text ever wraps to
+   two. It fits on one at 375px today, but it is one copy edit away from not. */
+.lb-boardcard__fresh {
+    display: flex; align-items: start; gap: 5px; margin-top: 5px;
+    font-size: 11px; line-height: 1.4; color: var(--pp-text-mute); max-width: 60ch;
+}
+.lb-boardcard__fresh svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: 2px; }
 .lb-boardcard__meta { flex: 0 0 auto; }
 .lb-boardcard__tally { display: flex; align-items: baseline; gap: 6px; }
 .lb-boardcard__tally .pp-tally { font-size: 1.15rem; color: var(--pp-primary); }
@@ -468,6 +478,7 @@
 @media (min-width: 768px) {
     .lb-boardcard__name { font-size: 1.15rem; }
     .lb-boardcard__what { font-size: 13px; }
+    .lb-boardcard__fresh { font-size: 11.5px; }
     .lb-boardcard__tally .pp-tally { font-size: 1.4rem; }
 }
 

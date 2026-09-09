@@ -395,7 +395,7 @@ def test_the_default_board_serves_ITS_OWN_rows_not_the_trophies_boards(client):
     assert '999' not in clean.split('lb-wall')[1], 'the clean wall is showing raw trophy totals'
 
 
-def test_the_PP_Score_board_serves_ITS_OWN_rows(client):
+def test_the_Rarity_Score_board_serves_ITS_OWN_rows(client):
     """The same guard the Shovelware Free board needed, applied before it could go wrong rather than
     after.
 
@@ -421,7 +421,7 @@ def test_the_PP_Score_board_serves_ITS_OWN_rows(client):
         )
 
 
-def test_a_hunter_below_the_scored_gate_is_not_on_the_PP_board(client):
+def test_a_hunter_below_the_scored_gate_is_not_on_the_Rarity_board(client):
     """Membership is a FULL 1,000 scorable trophies, not "more than none". Below the cap the sum is short
     by construction, so they would rank low for having played LESS rather than for having played easier --
     the one thing this board is not meant to measure."""
@@ -1278,3 +1278,65 @@ def test_stickyreveal_rewires_when_only_the_sentinel_is_replaced(client):
     assert 'e.target._stickyReveal = false' in js, (
         'the wired flag is not cleared, so the dropped entry can never be re-wired'
     )
+
+
+def test_the_nightly_boards_say_they_update_overnight(client):
+    """Shovelware Free and Rarity Score are materialized by `nightly` and by nothing else.
+
+    Every other board moves when a sync does, so on those two a hunter can sync, earn a platinum, reload,
+    and find their rank unchanged -- correct behaviour that looks exactly like a broken board. The note is
+    the only thing on the page that tells the two apart.
+    """
+    from django.utils.html import escape
+
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
+    _ranked('NightHunter', plats=5, trophies=500, pp=5000)
+
+    # Read from the constant, not retyped. A copy edit should not fail this test, and a test that pins
+    # wording gets "fixed" by pasting the new wording in -- which is how it stops checking that the
+    # sentence reached the page at all. Escaped, because the note is rendered through the template and the
+    # first apostrophe anyone adds would otherwise fail this for a reason that has nothing to do with it.
+    note = escape(V.NIGHTLY_NOTE)
+
+    for tab in ('clean', 'rarity'):
+        body = client.get(URL, {'tab': tab}).content.decode()
+        assert 'lb-boardcard__fresh' in body, f'the {tab} board does not say when it updates'
+        assert note in body, f'the {tab} board renders the element but not the sentence'
+
+
+def test_the_LIVE_boards_do_not_claim_a_nightly_refresh(client):
+    """The inverse, and the half that makes the test above worth having.
+
+    A caption every board wears says nothing, and on these three it would be false: All Trophies reads the
+    counter sync maintains, Badge Points reads standings rewritten per sync, Career XP moves on the claim.
+    Telling a hunter their Career XP lands tomorrow is worse than telling them nothing -- they would wait a
+    day for a number that was already correct.
+    """
+    _ranked('LiveHunter', plats=5, trophies=500, points=50, career=500, level=3)
+
+    for tab in ('trophies', 'points', 'career'):
+        body = client.get(URL, {'tab': tab}).content.decode()
+        assert 'lb-boardcard__fresh' not in body, (
+            f'the {tab} board claims a nightly refresh; it updates on sync'
+        )
+
+
+def test_the_freshness_note_is_driven_by_the_board_set_not_by_the_template():
+    """One source of truth, and it is the set the view holds.
+
+    The note is a claim about `nightly.STEPS`: these two boards are the ones no sync touches. A template
+    that hardcoded the sentence per tab would keep saying it after a board moved onto a live path, and the
+    page would be confidently wrong with every test still green.
+    """
+    from core.management.commands.nightly import STEPS
+    from trophies.views.badge_views import OverallBadgeLeaderboardsView as V
+
+    commands = {cmd for _label, cmd, _kw in STEPS}
+    assert V.NIGHTLY_BOARDS == {'clean', 'rarity'}
+    # Each board named above must actually have a nightly writer, or the note is a promise nothing keeps.
+    assert 'recompute_clean_standings' in commands
+    assert 'recompute_rarity_standings' in commands
+    # And the boards NOT named must be the rest of the strip, so adding a sixth board forces a decision
+    # here rather than defaulting it to "live" by silence.
+    assert set(V.BOARD_KEYS) - V.NIGHTLY_BOARDS == {'trophies', 'points', 'career'}
