@@ -3,7 +3,7 @@
 
 {% block title %}Leaderboards{% endblock %}
 {% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
-{% block meta_description %}Global Platinum Pursuit leaderboards: platinums earned on games that are not shovelware, all trophies, Badge Points, and Career XP. Slice any board by country, and the badge boards by platform edition.{% endblock %}
+{% block meta_description %}Global Platinum Pursuit leaderboards: platinums earned on games that are not shovelware, PP Score for the rarest trophies, all trophies, Badge Points, and Career XP. Slice any board by country, and the badge boards by platform edition.{% endblock %}
 
 {% comment %} Global Boards -- the Leaderboards hub landing, rebuilt to the Career standard (2026-08).
 
@@ -12,10 +12,10 @@ it (no outer card around the switcher or the wall). Career's own layout is the r
 
 BOARDS ARE TABS; COUNTRY IS A FILTER that applies to whichever board is open -- the decision that keeps
 this section finite, since the alternative is a board per country. Platform edition is the second filter
-on that same principle, and it applies to the two BADGE boards only; the two trophy boards count trophies
+on that same principle, and it applies to the two BADGE boards only; the trophy boards count trophies
 across every game and Career XP is the jobs economy, so the control is absent there rather than inert.
 
-FOUR boards since 2026-09, and Shovelware Free LEADS. It ranks the same hunters as Trophies by the same
+FIVE boards since 2026-09, behind THREE chips -- the three trophy boards group; see the strip below. It ranks the same hunters as Trophies by the same
 rule (platinums, total trophies breaking the tie) over a narrower population: trophies earned on games
 the shovelware detector has not flagged. It reads its own materialized store rather than Profile's
 counters, because excluding shovelware is not a filter over a column -- it is a different number. Trophies
@@ -158,7 +158,10 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
             {% for g in board_groups %}
             <a href="{{ g.href }}"
                class="pp-switch__chip{% if g.is_active %} is-active{% endif %}"
-               {% if g.is_active %}aria-current="page"{% endif %}
+               {% comment %} Only on a chip that IS a board. A grouped parent is not a page -- it links
+               to its first member whichever member is open -- and two elements claiming `aria-current`
+               is ambiguous to a screen reader. The active SUB-chip carries it instead. {% endcomment %}
+               {% if g.is_active and not g.grouped %}aria-current="page"{% endif %}
                {% if g.grouped %}data-board-group="{{ g.key }}"{% else %}data-board="{{ g.key }}"{% endif %}>
                 {% include 'trophies/partials/leaderboard_board_icon.html' with key=g.key only %}
                 <span class="pp-switch__lbl">{{ g.label }}</span>
@@ -569,12 +572,23 @@ Reuse, not re-roll: `.pp-switch` (the one tab treatment), `.pp-tally`, `.pp-head
     mount();
 
     // Tabs and filters swap in place. Delegated from the page, because a swap replaces both. The jump
-    // affordances are NOT wired here -- `wireBoard` owns those, so all three boards jump identically.
+    // affordances are NOT wired here -- `wireBoard` owns those, so every board jumps identically.
+    //
+    // BOTH ATTRIBUTES. The grouped parent carries `data-board-group`, not `data-board`, so a selector of
+    // `[data-board]` alone skipped it -- and from Badge Points or Career XP that chip is the ONLY route
+    // back to any trophy board, since the sub-strip is not in the DOM while another group is open. The
+    // single most common move on the page was full-reloading: no slide, no fade, and the virtualizer's
+    // row cache thrown away, which is exactly what this swap exists to prevent.
+    //
+    // Reading `dataset.board || dataset.boardGroup` rather than adding `data-board` to the parent is
+    // deliberate. With both, the parent and its active sub-chip would BOTH match `[data-board].is-active`
+    // and `activeTab()`'s querySelector takes the first -- so it would report `clean` while the reader
+    // sits on `pp`, corrupting the swap's `from` and the slide direction with it.
     page.addEventListener('click', function (ev) {
-        var tab = ev.target.closest && ev.target.closest('[data-board]');
+        var tab = ev.target.closest && ev.target.closest('[data-board],[data-board-group]');
         if (!tab || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button !== 0) { return; }
         ev.preventDefault();
-        swap({ tab: tab.dataset.board, page: '' });
+        swap({ tab: tab.dataset.board || tab.dataset.boardGroup, page: '' });
     });
 
     page.addEventListener('change', function (ev) {

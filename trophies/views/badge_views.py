@@ -979,19 +979,625 @@ class OverallBadgeLeaderboardsView(TemplateView):
             params['edition'] = edition
         return f'?{urlencode(params)}'
 
-    def _board_links(self, country, edition):
-        """[{key, label, href}] for the tab strip and the standing chips.
+    def _board_groups(self, country, edition, standing=None):
+        """The strip as GROUPS, each carrying its members and their ranks.
 
-        Built here rather than assembled in the template because the rule for what each link carries is
-        PER TARGET, not per page: country follows you everywhere, edition follows you only to the other
-        badge board. A single shared querystring tail was the first attempt and it silently handed Career a
-        filter it ignores -- so the link went one place and the rank shown beside it was measured somewhere
-        else.
+        A grouped chip shows every member's rank at once (`#12 · #45 · #7`), because the sub-toggle is
+        only visible while that group is open -- without it, a reader on Badge Points could no longer see
+        their trophy standings at all, which the flat five-chip strip did show. Members a hunter is not on
+        render a dash, the same courtesy `_with_ranks` already gave.
         """
-        return [
-            {'key': key, 'label': label, 'href': self._href(key, country, edition)}
-            for key, label in self.BOARDS
+        labels = dict(self.BOARDS)
+        active = self._active_tab()
+        groups = []
+        for label, members in self.BOARD_GROUPS:
+            subs = [{
+                'key': key,
+                'label': labels[key],
+                'href': self._href(key, country, edition),
+                'rank': (standing or {}).get(key),
+                'is_active': key == active,
+            } for key in members]
+            groups.append({
+                'label': label,
+                'members': subs,
+                # A group of one is a plain chip: it carries `data-board` itself and renders no sub-strip.
+                'grouped': len(subs) > 1,
+                # The parent opens on its FIRST member, which is also the board `DEFAULT_BOARD` names.
+                'key': subs[0]['key'],
+                'href': subs[0]['href'],
+                'is_active': any(s['is_active'] for s in subs),
+            })
+        return groups
+
+    def get_context_data(self, **kwargs):
+        context = (self._gallery_context_data(**kwargs) if self._view_mode() == 'gallery'
+                   else self._series_context_data(**kwargs))
+        # Dev-only replay control for the first-run modal. It is one-shot by design, gated on a
+        # localStorage flag, so once dismissed there is no way back to it in a browser short of clearing
+        # site data by hand -- which makes iterating on the thing needlessly painful. Same shape as the
+        # Collection's `dev_mint` ceremony replay, and it never renders in prod.
+        context['dev_howto'] = settings.DEBUG
+        return context
+
+    def _series_context_data(self, **kwargs):
+        """Build the Series view context: paginate the per-SERIES queryset (self.object_list), then batch-build
+        the page's tiles via build_series_items. Whale-safe -- one group-badge fetch for the page plus the two
+        bulk maps (pursuer counts + the viewer's holds), independent of how many series render."""
+        context = super().get_context_data(**kwargs)
+        profile = self._profile()
+        g = self.request.GET
+
+        # Paginate the series rows. InfiniteScroller walks pages 2,3,... via XHR; get_page clamps an
+        # out-of-range page to the last (which would loop forever), so an XHR fetch past the end emits NO rows
+        # and the scroller stops.
+        paginator = Paginator(self.object_list, SERIES_PAGE_SIZE)
+        page_number = g.get('page')
+        page_obj = paginator.get_page(page_number)
+        try:
+            requested_page = int(page_number or 1)
+        except (TypeError, ValueError):
+            requested_page = 1
+        is_xhr = (
+            self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or (getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results')
+        )
+        page_series = [] if (is_xhr and requested_page > paginator.num_pages) else list(page_obj)
+        items = build_series_items(page_series, profile)
+
+        context.update({
+            'view': 'series',
+            'display_data': items,
+            'page_obj': page_obj,
+            'paginator': paginator,
+            'is_paginated': page_obj.has_other_pages(),
+            'series_page_size': SERIES_PAGE_SIZE,
+            'catalog_stats': badge_catalog_stats(),
+            'forge_meds': badge_forge_medallions(),   # sample edition medallions for the header explainer
+            'form': self.get_filter_form(),
+            'series_authed': profile is not None,
+            'series_states': [s for s in g.getlist('state') if s in _GALLERY_STATES],
+            'selected_badge_types': g.getlist('badge_type'),
+            'rarity_choices': RARITY_FILTER_CHOICES,           # shared rarity filter chips (both views)
+            'selected_rarities': g.getlist('rarity'),
+            'series_sort': g.get('sort') if g.get('sort') in SERIES_SORT_KEYS else SERIES_SORT_DEFAULT,
+            'series_sorts': SERIES_SORTS,
+            'series_q': g.get('series_slug', ''),
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Badges'},
+            ],
+            'seo_description': (
+                "Explore every badge series on Platinum Pursuit -- track your progress across game "
+                "collections and platform generations."
+            ),
+        })
+        return context
+
+
+class GroupBadgeInspectView(View):
+    """Medallion "pick it up" for the NEW grouping badges (Legacy HD / Ultra HD): the badge big + its facts,
+    fetched on tap into the badge detail page's #badge-peek dialog. One view, two entry points mirroring the
+    old tier peek:
+      - group_badge_quick_peek (anon / no profile): the GENERIC full-colour showcase -- a display piece, no
+        personal state or owner engraving.
+      - group_badge_progress_peek (auth + a profile on display): that Pursuer's REAL state (earned / in
+        progress / unearned) + live earners rank + owner engraving, correct on your own page AND another's.
+    Reuses badge_detail_service so the frame + facts match the page exactly (a rare on-tap fetch, not a hot
+    path)."""
+
+    def get(self, request, group_badge_id, psn_username=None):
+        gb = (
+            GroupBadge.objects
+            .select_related('series', 'series__artwork_source', 'series__franchise', 'series__collection', 'series__developer',
+                            'series__funded_by', 'funded_by_override', 'platform_group')
+            .filter(id=group_badge_id, is_live=True).first()
+        )
+        if gb is None:
+            return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
+
+        profile, viewing_other = None, None
+        if psn_username:
+            if not request.user.is_authenticated:
+                return HttpResponseNotFound()   # a specific Pursuer's progress is signed-in-only
+            profile = get_object_or_404(Profile, psn_username__iexact=psn_username)
+            if profile != getattr(request.user, 'profile', None):
+                viewing_other = profile.display_psn_username or profile.psn_username
+
+        detail = get_badge_detail(gb.series, profile)
+        gv = next((g for g in detail.groups if g.group_badge.id == gb.id), None)
+        if gv is None:
+            return HttpResponseNotFound()
+
+        showcase = profile is None
+        if showcase:
+            # Anon peek = full-colour display piece (the tier system's showcase), never the greyed unearned art.
+            gv.frame['state'] = 'earned'
+            gv.frame['owner_name'] = None
+
+        return render(request, 'components/group_badge_modal.html', {
+            'gv': gv, 'series': gb.series, 'detail': detail,
+            'viewing_other': viewing_other, 'showcase': showcase,
+        })
+
+
+class BadgeDetailView(DetailView):
+    """Badge series detail: a series' parallel platform-group badges (Legacy HD / Ultra HD), the viewer's
+    per-group state + live progress, live earners rank, per-group rarity, and series XP. Reads the NEW
+    grouping-badge models via badge_detail_service -- no tiers. See docs/design/rebuild/badge-backend-rebuild.md."""
+    model = BadgeSeries
+    template_name = 'trophies/badge_detail.html'
+    slug_field = 'series_slug'
+    slug_url_kwarg = 'series_slug'
+    context_object_name = 'series'
+
+    def dispatch(self, request, *args, **kwargs):
+        # Profile-scoped variant (/badges/<slug>/<username>/) requires auth; anon -> canonical page with a
+        # from_profile hint that drives the sign-up banner. (Mirrors GameDetailView.dispatch.)
+        psn_username = kwargs.get('psn_username')
+        if psn_username and not request.user.is_authenticated:
+            canonical = reverse('badge_detail', kwargs={'series_slug': kwargs['series_slug']})
+            params = {'from_profile': psn_username}
+            existing_qs = request.META.get('QUERY_STRING', '')
+            suffix = f'&{existing_qs}' if existing_qs else ''
+            return HttpResponseRedirect(f'{canonical}?{urlencode(params)}{suffix}')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self, queryset=None):
+        series = get_object_or_404(
+            BadgeSeries.objects.select_related(
+                'franchise', 'collection', 'developer', 'submitted_by', 'funded_by', 'title',
+            ),
+            series_slug=self.kwargs[self.slug_url_kwarg],
+        )
+        # Staff preview gate: a series with no LIVE group badge is dormant (pre-cutover) -> staff-only.
+        user = self.request.user
+        can_preview = user.is_authenticated and (user.is_staff or user.is_moderator)
+        if not can_preview and not series.group_badges.filter(is_live=True).exists():
+            raise Http404("Series not found")
+        return series
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        series = context['series']
+
+        psn_username = self.kwargs.get('psn_username')
+        if psn_username:
+            target_profile = get_object_or_404(Profile, psn_username__iexact=psn_username)
+        elif self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
+            target_profile = self.request.user.profile
+        else:
+            target_profile = None
+
+        viewer_profile = (
+            self.request.user.profile
+            if (self.request.user.is_authenticated and hasattr(self.request.user, 'profile')) else None
+        )
+        context['target_profile'] = target_profile
+        # When showing SOMEONE ELSE'S progress (the /<slug>/<username>/ variant), surface whose.
+        context['viewing_other_profile'] = target_profile if (target_profile and target_profile != viewer_profile) else None
+
+        detail = context['detail'] = get_badge_detail(series, target_profile)
+
+        # Deep-link the platform-group tab: the list page's medallions/cells link to ?group=<key> so a click
+        # lands on that edition directly. Validate against the series' live groups; default to the first.
+        group_keys = [gv.platform_group.key for gv in detail.groups]
+        requested = self.request.GET.get('group')
+        context['active_group_key'] = requested if requested in group_keys else (group_keys[0] if group_keys else None)
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
+            {'text': series.name},
         ]
+        context['seo_description'] = (
+            f"{series.name} badge series on Platinum Pursuit. Earn the badge on each platform, "
+            f"track your progress, and climb the leaderboards."
+        )
+        return context
+
+
+
+class BadgeRanksPanelView(View):
+    """`/badges/<series_slug>/ranks/` -- the series board, fetched into badge detail's Ranks tab.
+
+    Lazily fetched rather than server-rendered, copying game detail's Ranks panel: the cost scales with a
+    series' popularity, and most visitors come for the badge itself. The page pays for it only when
+    someone opens the tab.
+
+    The ROWS are identical for every viewer -- "this one is you" is applied in the browser from
+    `data-lb-viewer-rank`, never rendered in, because a row that knows who is reading it cannot be shared
+    between readers.
+
+    The FRAGMENT is per-viewer, though: it carries the standing line and the jump-to-me chip, both of
+    which need `my_rank`. So it must not be given a shared cache key, and it costs one rank count per tab
+    open. Job detail's panel makes the same trade for the same reason.
+
+    This REPLACES `/leaderboards/badges/<slug>/`, which was a whole page for what is a section of the page
+    about the badge. Boards live on the thing they rank.
+
+    TWO RESPONSES, one endpoint:
+
+      no `?range=`   the full panel -- meta line, jump bar, the board shell, the first window
+      `?range=N`     bare `.lb-row`s for display positions [N, N+count), for the virtualizer
+
+    The `?offset=` "show more" this used to serve is gone with the button. Appending 25 rows at a time
+    could not reach row 3,000 of a popular series in any reasonable number of clicks, which is the same
+    dead end the prev/next pager had -- see `leaderboard_board.html`.
+    """
+    #: Fetch granularity, shared with every other board -- see `board_helpers.PAGE_SIZE`.
+    PAGE_SIZE = board_helpers.PAGE_SIZE
+
+    def get(self, request, series_slug):
+        # The SAME dormant gate BadgeDetailView.get_object applies, and it runs BEFORE the window branch
+        # below -- without it this fragment answered for an unreleased series that its own page 404s, so
+        # `/badges/<unreleased>/ranks/` confirmed the series exists and handed over its board to anyone
+        # who guessed the slug.
+        #
+        # ONE query for the public path. It was a fetch plus an `.exists()`, which is two round trips
+        # before every window a reader scrolls past; the row itself is only needed for the full panel.
+        if request.user.is_authenticated and (request.user.is_staff or request.user.is_moderator):
+            series = BadgeSeries.objects.filter(series_slug=series_slug).first()
+            if series is None:
+                raise Http404("Series not found")
+        else:
+            series = BadgeSeries.objects.filter(
+                series_slug=series_slug, group_badges__is_live=True).first()
+            if series is None:
+                raise Http404("Series not found")
+
+        # THE SLICE, resolved once and applied to the rows, the count and the viewer's rank alike. A
+        # window that ignored a filter the first window applied would return different hunters halfway
+        # down the same board, and the rows keep numbering up -- so it reads as the board, not as a bug.
+        #
+        # EDITION FIRST, because it decides which STORE is being read, and country then scopes itself to
+        # whichever board that is. Resolved in the other order, a country valid for the series board
+        # could be applied to an edition board that has nobody from it.
+        editions = self._editions(series)
+        edition = self._edition(request, editions)
+
+        codes = (lb.series_edition_countries(series_slug, edition) if edition
+                 else lb.series_board_countries(series_slug))
+        country = self._country(request, codes)
+
+        if request.GET.get('suggest') is not None:
+            qs = (lb._series_edition_qs(series_slug, edition, country or None) if edition
+                  else lb._series_board_qs(series_slug, country or None))
+            keys = lb.SERIES_EDITION_KEYS if edition else lb.SERIES_BOARD_KEYS
+            return JsonResponse(suggest_json(
+                lb.board_suggest(qs, keys, request.GET.get('suggest', ''))))
+
+        if 'range' in request.GET:
+            start, count = window_params(request, self.PAGE_SIZE)
+            return render(request, 'trophies/partials/leaderboard_rows.html', {
+                'entries': self._window(series_slug, start - 1, count, country, edition),
+            })
+
+        profile = getattr(request.user, 'profile', None) if request.user.is_authenticated else None
+        if edition:
+            total = lb.series_edition_count(series_slug, edition, country=country or None)
+            my_rank = (lb.series_edition_rank(series_slug, edition, profile.id, country=country or None)
+                       if profile else None)
+            meaning = (f"Everyone chasing the {editions[edition]['name']} edition, "
+                       f"by the points they have earned on it.")
+        else:
+            total = lb.series_board_count(series_slug, country=country or None)
+            my_rank = (lb.series_board_rank(series_slug, profile.id, country=country or None)
+                       if profile else None)
+            # ALL editions, and it means it now. This used to rank on the furthest-along EDITION, so
+            # "All editions" showed a board that ignored every edition but your best one -- which is what
+            # made it read as broken rather than merely odd. Points are already summed across editions
+            # before they reach the standing, so the board answers the question its label asks.
+            meaning = ('Everyone chasing this badge, by the points they have earned '
+                       'across all its editions.')
+
+        return render(request, 'trophies/partials/badge_detail/bd2_ranks.html', {
+            'rows': self._window(series_slug, 0, self.PAGE_SIZE, country, edition),
+            'total': total,
+            'page_size': self.PAGE_SIZE,
+            # The endpoint the virtualizer fetches later windows from -- this same view, reversed rather
+            # than read off `request.path`, so the panel does not silently depend on having been reached
+            # by its canonical URL.
+            'rows_url': reverse('badge_ranks_panel', args=[series_slug]),
+            # Carried on every later window, so the rest of a filtered board stays filtered -- and for
+            # `edition` that is not a filter but the identity of the store being read, so dropping it
+            # would fetch the SERIES board's rows into an edition board's spacer.
+            'rows_params': urlencode(
+                {k: v for k, v in (('edition', edition), ('country', country)) if v}),
+            'countries': lb.country_options(codes),
+            'selected_country': country,
+            'editions': [{'key': k, 'name': v['name']} for k, v in editions.items()],
+            'selected_edition': edition,
+            'my_rank': my_rank,
+            'series': series,
+            # The shared board card. `board_label` is the series, because on this page the board IS the
+            # series -- and the meaning line moved here off the section subtitle, where it sat above a
+            # panel that had not loaded yet.
+            'board_label': series.name,
+            'board_meaning': meaning,
+            # "N hunters HERE" under a slice -- the figure is a claim about a population, and under a
+            # filter it is a claim about a smaller one. Edition counts: it names a different, smaller
+            # board rather than narrowing this one, which is the same thing from the reader's side.
+            'slice_applied': bool(country or edition),
+            'standing': self._standing(profile, my_rank),
+        })
+
+    @staticmethod
+    def _standing(profile, my_rank):
+        """What the board card tells a signed-in viewer about themselves.
+
+        `is_linked`, not merely "has a profile": every board population is gated on it
+        (`badge_leaderboards._linked`), so an unverified account told "not on this board yet" is being
+        promised a board it cannot enter. Ranked viewers get nothing here -- the jump chip beneath
+        already says "You're #N", and saying it twice on one card is the kind of duplication the shared
+        partial exists to stop."""
+        if not (profile and profile.is_linked) or my_rank:
+            return ''
+        return 'Not on this board yet'
+
+    @staticmethod
+    def _editions(series):
+        """The editions THIS series is offered in, as {key: {name}}, in the series' own display order.
+
+        Scoped to the series' LIVE group badges, not to `active_editions()` -- that is every edition on
+        the site, and offering one this badge was never released in is a board that could only be empty.
+        Same scoping rule the country picker follows.
+
+        A single-edition series gets an EMPTY map rather than one option: a picker with one choice plus
+        "all editions" is two ways to see the same hunters, which is a control that cannot do anything.
+        """
+        groups = list(
+            series.group_badges.filter(is_live=True)
+            .select_related('platform_group')
+            .order_by('platform_group__sort_order', 'platform_group__name')
+        )
+        if len(groups) < 2:
+            return {}
+        return {g.platform_group.key: {'name': g.platform_group.name} for g in groups}
+
+    @staticmethod
+    def _edition(request, editions):
+        """Validated against the editions this series HAS. An unknown key would otherwise resolve to no
+        group badge and silently fall back to the series board, which is a filter that appears to be
+        applied and is not."""
+        raw = (request.GET.get('edition') or '').strip()
+        return raw if raw in editions else ''
+
+    @staticmethod
+    def _country(request, codes):
+        """Validated against the countries that actually have hunters on THIS board.
+
+        An unknown code would return an empty window, which reads as a gap in the board rather than as a
+        bad parameter -- and this is a public fragment, so it takes whatever a URL hands it. Mirrors
+        `LeaderboardRowsView._country`, which makes the same call for the same reason."""
+        raw = (request.GET.get('country') or '').strip().upper()
+        return raw if raw in set(codes) else ''
+
+    @classmethod
+    def _window(cls, series_slug, offset, limit, country='', edition=''):
+        """One window of the board, hydrated. Shared by both responses above, which is the point: a rows
+        endpoint that built its own `extra` mapping would be a second definition of what this board's
+        columns MEAN, and the first thing to drift would be the labels -- so the rest of a board would
+        read a different figure from the screenful the reader arrived on."""
+        if edition:
+            return cls._edition_window(series_slug, edition, offset, limit, country)
+        rows = lb.series_board_rows(series_slug, limit=limit, offset=offset, country=country or None)
+        # `offset`, not 0: `page()` numbers rows by SLOT, so a window starting at 50 must number from 51.
+        # r = (profile_id, xp, advanced_at).
+        return lb.page(rows, offset, extra=lambda r: {
+            # POINTS, not a stage tally. Points already count what was cleared and weigh what it was
+            # worth, so a stages column beside them says the same thing less precisely -- and the stage
+            # figure was the FURTHEST-ALONG EDITION's, which made it wrong on a board that sums editions.
+            # `points` is the word the Global Boards landing uses for the same quantity.
+            'primary': r[1], 'primary_label': 'points',
+            'secondary': None, 'secondary_label': '',
+            # `advanced_at` is the hunter's most recent advance -- their completion date if they finished,
+            # the latest gating stage they cleared if they are still chasing. One column, and the label
+            # stays neutral rather than claiming which, because the row does not know.
+            'when': r[2], 'when_label': 'since',
+        })
+
+    @staticmethod
+    def _edition_window(series_slug, edition, offset, limit, country=''):
+        """One window of the EDITION board -- the same columns as the series board, scoped.
+
+        That sameness is the point. The reader picked a filter, not a different page: the rank, the
+        hunter, the points and the date all mean what they meant a moment ago, with the points now
+        counting THIS edition rather than every edition summed. r = (profile_id, xp, advanced_at), read from
+        `SeriesEditionStanding` -- so the DATE is this edition's own, not the series-wide one it used to
+        inherit (migration 0313)."""
+        rows = lb.series_edition_rows(series_slug, edition, limit=limit, offset=offset,
+                                      country=country or None)
+        return lb.page(rows, offset, extra=lambda r: {
+            'primary': r[1], 'primary_label': 'points',
+            'secondary': None, 'secondary_label': '',
+            'when': r[2], 'when_label': 'since',
+        })
+
+
+class OverallBadgeLeaderboardsView(TemplateView):
+    """`/leaderboards/` -- Global Boards, the hub landing.
+
+    THREE boards, one per thing worth ranking, as `.pp-switch` tabs:
+
+      Trophies     -> every game, platinums first, total as the tiebreak (Profile's own counters)
+      Badge Points -> ProfileBadgeStanding.total_xp
+      Career XP    -> the jobs economy (ProfileCareerStanding)
+
+    One board per DOMAIN: overall trophy hunting, badges, career. Badge Points and Career XP are
+    deliberately separate rather than one "XP" board -- they are two sealed economies (the badge subsystem
+    never reads or writes the jobs one), a hunter can hold very different ranks in each, and a merged total
+    would be the one figure on the site that means nothing.
+
+    Trophies replaced a "Badge Trophies" board that counted trophies in badge-covered games. That needed a
+    full-library aggregate per profile inside the badge write seam, and once that seam ran on every sync it
+    was the only expensive query in the subsystem -- for a figure that mostly measured how many
+    badge-covered games somebody had played. See badge_leaderboards.trophy_rows.
+
+    TWO filters, both of which swap what the board reads rather than post-filtering it:
+
+      Country -> a WHERE served by the (country_code, ...board order) composites, on all three boards.
+      Edition -> a different STORE (ProfileEditionStanding), on the two BADGE boards only.
+
+    Neither is a board of its own. The old design's answer was a Redis sorted set per country, and an
+    edition-per-board would multiply that again; keeping both as filters is what holds this section's
+    surface area finite. They compose, and the edition indexes carry country to serve the combination.
+
+    Edition is absent from Career XP because there is nothing to slice: the jobs economy has no platform
+    editions, and a control that renders but changes nothing is worse than one that is not there.
+
+    Every board is public, and its ROWS are identical for every viewer -- which is what would let the wall
+    be cached, and why a personal marker never goes in one. The response as a whole is NOT cacheable: the
+    header carries `my_standing`, which is per-viewer. Do not add `cache_page` on the strength of the first
+    sentence; it would serve one logged-in hunter's ranks to every subsequent visitor.
+    """
+    template_name = 'trophies/overall_badge_leaderboards.html'
+    paginate_by = board_helpers.PAGE_SIZE
+
+    # (key, label). Order is the tab order, and the FIRST is the default a bare `/leaderboards/` lands on.
+    #
+    # Shovelware Free leads (2026-09). Trophies led before it, on the grounds that it has the most
+    # entrants -- which is still true, since this board excludes anyone whose whole library is flagged.
+    # Entrant count stopped being the tie-breaker: the two boards rank the same hunters by the same rule
+    # over different populations, and this one is the more honest answer to "who has done the most", which
+    # is the question a first-time visitor is actually asking. Trophies keeps its tab and its bookmarks.
+    BOARDS = (
+        ('clean', 'Shovelware Free'),
+        ('pp', 'PP Score'),
+        ('trophies', 'All Trophies'),
+        ('points', 'Badge Points'),
+        ('career', 'Career XP'),
+    )
+    #: The board a bare `/leaderboards/`, an unknown `?tab=`, or a retired one resolves to. Derived from
+    #: BOARDS rather than repeated, so reordering the strip cannot leave the default naming a board that
+    #: is no longer first -- which is two edits to keep in step, and the kind that gets made once.
+    DEFAULT_BOARD = BOARDS[0][0]
+    BOARD_KEYS = {k for k, _ in BOARDS}
+
+    #: THE TAB STRIP: (label, member board keys). Three chips, not five.
+    #:
+    #: The three trophy boards ask ONE question -- who has hunted the most -- and differ only in what
+    #: counts: everything, everything minus shovelware, or the rarest thousand weighted by rarity. Badge
+    #: Points and Career XP are separate economies. A flat strip of five implied all of them were peers
+    #: and, at 375px, ran out of room saying so.
+    #:
+    #: A group of ONE renders as a plain chip, so nothing about the other two boards changes. The pattern
+    #: is Career's Contracts panel, which nests a Board|History sub-toggle in the same `.pp-switch`
+    #: treatment rather than inventing a second visual language for the second level.
+    #:
+    #: `?tab=` VALUES ARE UNCHANGED. The sub-toggle is a second row of links to the same URLs, so every
+    #: bookmark, every `LEGACY_TABS` mapping and the rows endpoint keep working untouched. A nested
+    #: `?tab=trophies&view=pp` would have been a URL migration bought nothing.
+    BOARD_GROUPS = (
+        ('Trophies', ('clean', 'pp', 'trophies')),
+        ('Badge Points', ('points',)),
+        ('Career XP', ('career',)),
+    )
+    # Only Badge Points slices by edition. An edition is a PlatformGroup, i.e. a BADGE concept; the
+    # Trophies board counts trophies across every game and Career XP is the jobs economy, so neither has
+    # editions to slice. A control that renders but changes nothing is worse than one that is absent.
+    EDITION_BOARDS = frozenset({'points'})
+    # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter;
+    # `progress` was this board's key while it was called Progress, a name that described the store rather
+    # than what it ranks. Bookmarks carrying any of them still land where they meant to.
+    #
+    # `series` joins them: it was a DIRECTORY reachable at `?tab=series`, deliberately out of the tab
+    # strip, held open as a placeholder for `/leaderboards/badges/`. That page was built and then removed
+    # in 2026-08, and the placeholder read the RETIRED tier-era `Badge` model, which has had no writer
+    # since cutover 5b -- so it rendered a frozen catalogue beside live standing counts. It maps to the
+    # default board rather than 404ing: a stale bookmark should land on a board, not on an error.
+    #
+    # They resolve to `trophies` EXPLICITLY, not to the default. Every one of them named the board now
+    # called Trophies, and a bookmark should land where it meant rather than follow whichever board
+    # happens to lead the strip today -- which is what would have happened when Shovelware Free took the
+    # first slot in 2026-09. `series` is the exception and is deliberately left on `trophies` too: it was
+    # a directory placeholder rather than a board, so it has no board it meant, and moving it silently
+    # would be the only way anyone noticed it still existed.
+    LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies', 'series': 'trophies'}
+
+    #: (primary_label, secondary_label) per board. ONE definition: the column header, the first window and
+    #: every window the rows endpoint serves all read it, so the labels above a column and the labels
+    #: inside its rows cannot drift -- which is the failure a separate rows endpoint invites.
+    FIGURES = {
+        'clean': ('platinums', 'trophies'),
+        # The supporting figure is a PERCENTAGE, and the shared row partial has no suffix slot -- it
+        # renders `{{ value }} {{ label }}`. So the label carries the unit rather than the number.
+        'pp': ('points', 'avg rarity %'),
+        'trophies': ('platinums', 'trophies'),
+        'points': ('points', 'badges'),
+        'career': ('XP', 'level'),
+    }
+
+    #: What each board actually RANKS, in one line. Beside FIGURES because they answer the same question
+    #: at different lengths, and a reader who has never met "Badge Points" learns nothing from a lit chip.
+    #: The board card is the only place on the page that says what they are looking at.
+    #: What each board RANKS, in one line, in the site's own words. Each has to do three things at once:
+    #: name the population, name the ordering, and read like somebody wrote it. A reader who has never met
+    #: "Badge Points" learns nothing from a lit chip, and this line is the only place on the page that
+    #: explains the board they are looking at.
+    #: THE THREE TROPHY BOARDS MUST READ AS DIFFERENT. They sit behind one chip now, a click apart, and
+    #: they rank the same hunters -- so each line's job is to say what THIS board counts that its
+    #: siblings do not. A reader switching between them needs the difference every time, not once.
+    #:
+    #: Each stands alone. `clean` is the default, so it cannot lean on "the same ranking as..." for its
+    #: meaning; `trophies` names shovelware explicitly because being the one that INCLUDES it is the only
+    #: thing distinguishing it.
+    MEANINGS = {
+        'clean': 'Platinums earned on games that are not shovelware. Total trophies settles a tie.',
+        'pp': ('Your 1,000 rarest base-game trophies. Rarer scores higher: a 1% trophy is worth 100, '
+               'a 10% trophy 10.'),
+        'trophies': ('Every game counts, shovelware included. Ranked by platinums, with total trophies '
+                     'settling a tie.'),
+        'points': 'Badge points, earned a stage at a time. Every edition counts toward one total.',
+        'career': 'Career XP banked from contracts, across all 25 jobs.',
+    }
+
+    @classmethod
+    def active_tab(cls, request):
+        raw = request.GET.get('tab', cls.DEFAULT_BOARD)
+        raw = cls.LEGACY_TABS.get(raw, raw)
+        return raw if raw in cls.BOARD_KEYS else cls.DEFAULT_BOARD
+
+    def _active_tab(self):
+        return self.active_tab(self.request)
+
+    def _country(self, codes):
+        """The country slice, validated against `codes` -- countries that actually have ranked hunters.
+
+        Validated rather than trusted: an unknown code would silently return an empty board, which reads
+        as "nobody from there plays" rather than "that is not a country we rank".
+
+        Takes the codes rather than resolving them, because the picker needs the same set: this used to
+        call `active_countries()` here and `country_options()` called it again, so every request ran four
+        table-wide DISTINCT aggregates where two would do.
+        """
+        cc = (self.request.GET.get('country') or '').upper()
+        return cc if cc and cc in set(codes) else ''
+
+    def _edition(self, tab, editions):
+        """The edition slice, validated against LIVE editions and dropped on boards that have none.
+
+        Validated for the same reason country is: an unrecognised key would render an empty board, which
+        reads as "nobody plays that edition" rather than "that is not an edition". Cleared on Career so a
+        reader who picked one and then switched boards does not carry an invisible filter with them.
+        """
+        if tab not in self.EDITION_BOARDS:
+            return ''
+        key = (self.request.GET.get('edition') or '').strip()
+        return key if key in {e.key for e in editions} else ''
+
+    def _href(self, tab, country='', edition=''):
+        """A link to one board under one set of filters. The ONE place a leaderboard URL is assembled.
+
+        Note what is never carried: `page`. Landing on page 7 of a board you just opened, or of a filter
+        you just cleared, is not where anyone meant to go.
+        """
+        params = {'tab': tab}
+        if country:
+            params['country'] = country
+        if edition and tab in self.EDITION_BOARDS:
+            params['edition'] = edition
+        return f'?{urlencode(params)}'
 
     def _board_groups(self, country, edition, standing=None):
         """The strip as GROUPS, each carrying its members and their ranks.
@@ -1051,7 +1657,7 @@ class OverallBadgeLeaderboardsView(TemplateView):
         edition = self._edition(tab, editions)
 
         context.update({
-            'boards': self._board_links(country, edition),
+            # Rankless by default; the authenticated branch below rebuilds it with the viewer's standing.
             'board_groups': self._board_groups(country, edition),
             # The canonical board order, for the swap's slide direction. Read from HERE rather than from
             # the rendered chips: with grouping, only the ACTIVE group's sub-strip is in the DOM, so a
@@ -1135,8 +1741,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
             # what the block's own comment says it is avoiding. That is the default state until the
             # standings are backfilled.
             context['my_standing'] = standing if any(v is not None for v in standing.values()) else None
-            # The tab strip carries the ranks now, so it needs them whether or not any exist.
-            context['boards'] = self._with_ranks(context['boards'], standing)
+            # The strip carries the ranks, so it is rebuilt once the standing is known. Built ONCE, here:
+            # an earlier version also built a rankless copy above and threw it away on every logged-in
+            # render.
             context['board_groups'] = self._board_groups(country, edition, standing)
         return context
 

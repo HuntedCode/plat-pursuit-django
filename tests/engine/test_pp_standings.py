@@ -48,13 +48,23 @@ def test_the_score_is_the_summed_points_of_what_was_scored():
 
 def test_the_average_rate_is_across_the_SCORED_set_only():
     """The supporting figure has to explain the number beside it. Averaging the whole library instead
-    would describe a different set of trophies from the one that produced the score."""
+    would describe a different set of trophies from the one that produced the score.
+
+    THE LIBRARY MUST EXCEED THE CAP for this to mean anything. With two trophies both inside the scored
+    set, "the scored set" and "the whole library" are the SAME set and the assertion cannot tell the two
+    behaviours apart -- verified: averaging over the whole bucket left the old fixture green.
+
+    Here 990 at 1% and 100 at 2% overflow the cap, so only 10 of the second bucket score. The scored mean
+    is (990*1.0 + 10*2.0)/1000 = 1.01; averaging the whole library would give 1.09.
+    """
     profile = ProfileFactory(is_linked=True)
-    _earn(profile, 1.0)
-    _earn(profile, 3.0)
+    game = GameFactory()
+    _earn(profile, 1.0, n=pp_score.TOP_N - 10, game=game)
+    _earn(profile, 2.0, n=100, game=game)
 
     row = _standing(profile)
-    assert row.avg_earn_rate == pytest.approx(2.0)
+    assert row.scored_count == pp_score.TOP_N
+    assert row.avg_earn_rate == pytest.approx(1.01), 'the average is not over the scored set'
 
 
 def test_the_score_is_ROUNDED_not_truncated():
@@ -117,6 +127,9 @@ def test_a_TIED_bucket_is_split_at_the_boundary_not_taken_whole():
     row = _standing(profile)
     assert row.scored_count == pp_score.TOP_N
     assert row.pp_score == (pp_score.TOP_N - 10) * 100 + 10 * 50
+    # The average follows the same split, or the supporting figure describes a different set from the
+    # score beside it: (990*1.0 + 10*2.0)/1000, not the whole library's 1.09.
+    assert row.avg_earn_rate == pytest.approx(1.01)
 
 
 # ---------------------------------------------------------------- what is excluded ----------------------

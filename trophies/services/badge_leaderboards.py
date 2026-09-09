@@ -322,7 +322,7 @@ def active_countries():
     Replaces the Redis `lb:xp:country:index` set, which had to be maintained alongside every per-country
     sorted set. Here it is a DISTINCT over indexed columns that already exist.
 
-    THREE sources, because a hunter can be on one board and not the others and the picker must offer every
+    FIVE sources, because a hunter can be on one board and not the others and the picker must offer every
     country the reader could actually select. The two economies are sealed apart, so Career XP with no
     badge standing is normal -- reading only ProfileBadgeStanding left those countries unselectable on the
     very board those hunters appear on. The Trophies board widened it again: it ranks every linked hunter
@@ -358,6 +358,15 @@ def active_countries():
             # the two figures. Neither honours `hide_hiddens` now -- both boards rank on every synced
             # trophy -- so staleness is the argument that survives.)
             clean_store().filter(clean_trophies__gt=0).exclude(country_code='')
+            .values_list('country_code', flat=True).distinct()
+        )
+        codes |= set(
+            # FIVE now, and PP Score qualifies for the same reason the clean board does: it is a NIGHTLY
+            # SNAPSHOT while `trophy_store()` reads Profile live, so it goes stale HIGH. A hunter whose
+            # earned rows are removed drops off the live board immediately but keeps `scored_count >=
+            # TOP_N` until the next sweep -- and their country would be unselectable on a board they are
+            # still shown on.
+            pp_store().filter(scored_count__gte=pp_score_module.TOP_N).exclude(country_code='')
             .values_list('country_code', flat=True).distinct()
         )
         return sorted(codes)

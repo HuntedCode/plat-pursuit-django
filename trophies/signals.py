@@ -269,7 +269,7 @@ def _propagate_country_to_standings(sender, instance, created, **kwargs):
     if not changed:
         return
 
-    # All eight carry both mirrors today, but the payload is still filtered per store: `_mirrored_fields`
+    # All nine carry both mirrors today, but the payload is still filtered per store: `_mirrored_fields`
     # reads each one's columns off the model, so a store that carries only one cannot be handed the
     # other. Filtering here rather than keeping two handlers means one traversal on the (rare) save
     # where both moved at once.

@@ -87,7 +87,9 @@ def test_the_landing_offers_five_boards_and_defaults_to_shovelware_free(client):
     assert active_board(body) == 'clean', 'the landing does not default to Shovelware Free'
     assert '>Shovelware Free</span>' in body, 'the board is labelled something else in the strip'
     assert '>PP Score</span>' in body, 'the PP Score board is labelled something else in the strip'
-    assert '>Trophies</span>' in body, 'the Trophies board lost its tab'
+    # `>All Trophies<`, not `>Trophies<`: that shorter string now matches the GROUP's label, so it passed
+    # while the board itself was renamed to anything at all.
+    assert '>All Trophies</span>' in body, 'the All Trophies board lost its tab or its label'
 
 
 def test_the_strip_is_THREE_chips_with_the_trophy_boards_grouped(client):
@@ -122,7 +124,68 @@ def test_the_strip_is_THREE_chips_with_the_trophy_boards_grouped(client):
     assert anchors, 'no anchor tags matched at all -- the pattern itself is broken'
     lit = [t for t in anchors if 'data-board="' in t and 'is-active' in t]
     assert len(lit) == 1, f'expected exactly one active [data-board] chip, found {len(lit)}'
-    assert body.count('is-active') >= 2, 'the parent and its active sub-chip should both be lit'
+
+    # ...and the GROUPED PARENT is lit too, asserted on the anchor rather than by counting `is-active`
+    # in the document. That count had a floor of 2 from things that are not chips at all -- the navbar's
+    # own Leaderboards link, and this page's inline JS string `[data-board].is-active` -- so
+    # `count >= 2` passed with NO chip highlighted anywhere. Verified: unlighting every parent chip left
+    # all 68 tests green while `?tab=points` rendered a strip with nothing selected.
+    lit_parents = [t for t in anchors if 'data-board-group="' in t and 'is-active' in t]
+    assert len(lit_parents) == 1, (
+        f'the grouped parent is not lit while one of its members is open: {lit_parents}'
+    )
+
+
+def test_a_LONE_chip_is_lit_when_its_board_is_open(client):
+    """The other half of the lit-state coverage: a group of one carries `data-board` itself, so the chip
+    that lights is the chip that navigates. Without this, only the grouped case is pinned and half the
+    strip's selected state is unguarded."""
+    import re
+
+    _ranked('Somebody', plats=3, trophies=30, points=100, career=50, level=2, pp=500)
+    body = client.get(URL, {'tab': 'points'}).content.decode()
+
+    anchors = re.findall(r'<a [^>]*>', body)
+    lit = [t for t in anchors if 'is-active' in t and ('data-board="' in t or 'data-board-group="' in t)]
+    assert len(lit) == 1, f'expected exactly one lit chip on a lone board, found {len(lit)}'
+    assert 'data-board="points"' in lit[0], f'the wrong chip is lit: {lit[0]}'
+
+
+def test_the_grouped_parent_navigates_by_SWAP_like_every_other_chip(client):
+    """The parent is the ONLY route to a trophy board from Badge Points or Career XP -- the sub-strip is
+    not in the DOM while another group is open. Delegating on `[data-board]` alone skipped it, because it
+    carries `data-board-group`, so the most common move on the page full-reloaded: no slide, no fade, and
+    the virtualizer's row cache discarded.
+
+    Pinned on the SCRIPT because the behaviour is a click handler: the delegation must match both
+    attributes, and the swap must read whichever one the clicked chip carries.
+    """
+    _ranked('Somebody', plats=3, trophies=30, points=100, pp=500)
+    body = client.get(URL, {'tab': 'points'}).content.decode()
+
+    assert "closest('[data-board],[data-board-group]')" in body, (
+        'the click delegation no longer catches the grouped parent, so it full-navigates'
+    )
+    assert 'tab.dataset.board || tab.dataset.boardGroup' in body, (
+        'the swap does not read the target board off the grouped parent'
+    )
+    # ...and the parent really is the only way back: no sub-chip is rendered while another group is open.
+    assert 'lb-subswitch' not in body, 'the premise changed -- a sub-strip renders for a non-active group'
+
+
+def test_only_a_chip_that_IS_a_board_claims_to_be_the_current_page(client):
+    """`aria-current="page"` on both the grouped parent and its active sub-chip left two elements claiming
+    to be the current page, which is ambiguous to a screen reader -- and the parent is not a page anyway:
+    it links to its first member whichever member is open."""
+    _ranked('Somebody', plats=3, trophies=30, points=100, pp=500)
+
+    for tab in ('clean', 'pp', 'trophies', 'points', 'career'):
+        body = client.get(URL, {'tab': tab}).content.decode()
+        start = body.index('<nav class="pp-switch" aria-label="Leaderboard">')
+        strip = body[start:body.index('lb-boardcard', start)]
+        assert strip.count('aria-current="page"') == 1, (
+            f'?tab={tab} renders {strip.count(chr(97))} chips claiming to be the current page'
+        )
 
 
 def test_the_sub_toggle_appears_only_for_the_grouped_board(client):
@@ -848,7 +911,11 @@ def test_a_board_the_viewer_is_not_on_shows_a_dash_not_a_gap(client):
     client.force_login(me.user)
 
     resp = client.get(URL)
-    ranks = {b['key']: b['rank'] for b in resp.context['boards']}
+    # Read from `board_groups`' members -- what the strip actually renders. This read `context['boards']`,
+    # a flat list the template stopped using when the chips grouped, so it pinned a value with no
+    # user-visible effect (and kept two dead view helpers alive).
+    ranks = {m['key']: m['rank']
+             for g in resp.context['board_groups'] for m in g['members']}
 
     assert ranks['trophies'] == 1
     assert ranks['career'] is None, 'the fixture no longer tests an unranked board'

@@ -63,7 +63,10 @@
 @media (min-width: 768px) {
     .lb-bar { justify-content: flex-end; }
     .lb-bar .pp-switch { width: auto; }
-    .lb-bar .pp-switch__chip { flex: 0 0 auto; }
+    /* The sub-toggle gets the same compaction: it is ALSO three equal chips at 343px, and its longest
+       label ("Shovelware Free") is longer than the one that motivated this rule. */
+    .lb-bar .pp-switch__chip,
+    .lb-subbar .pp-switch__chip { flex: 0 0 auto; }
 }
 /* THE SUB-TOGGLE ROW: its own line UNDER the strip, aligned LEFT while the strip sits right. The two
    levels read as a hierarchy that way -- side by side in one row they read as six peer tabs, which is
@@ -92,7 +95,8 @@
    expendable, never what carries the meaning. Restored at md: by the base rule. */
 @media (max-width: 767px) {
     .lb-bar .pp-switch__chip { padding-inline: 7px; gap: 4px; font-size: 11.5px; letter-spacing: 0.01em; }
-    .lb-bar .pp-switch__chip svg { width: 13px; height: 13px; }
+    .lb-bar .pp-switch__chip svg,
+    .lb-subbar .pp-switch__chip svg { width: 13px; height: 13px; }
 }
 .lb-filters { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; }
 .lb-filters__f { display: flex; align-items: center; gap: 8px; min-width: 0; }

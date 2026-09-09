@@ -53,8 +53,15 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--dry-run', action='store_true',
                             help='Compute and report deltas without writing.')
-        parser.add_argument('--chunk-size', type=int, default=200,
-                            help='Profiles aggregated per query.')
+        # SMALLER THAN ITS SIBLING'S 200, and not by accident. `recompute_clean_standings` emits ONE row
+        # per profile (it groups by profile alone), so 200 profiles is 200 rows. This groups by
+        # (profile, RATE), and a large library spans ~1,000 distinct rates -- so 200 profiles is up to
+        # 200,000 rows held in Python at once, roughly 120 MB for a single chunk. Bounded, which is the
+        # design's whole point, but the two commands' chunk sizes do not mean the same thing and the
+        # value was inherited as though they did.
+        parser.add_argument('--chunk-size', type=int, default=50,
+                            help='Profiles aggregated per query. Rows returned scale with profiles x '
+                                 'distinct earn rates, so this is smaller than its siblings.')
         parser.add_argument('--max-minutes', type=int, default=30,
                             help='Wall-clock budget. Always completes at least one chunk.')
         parser.add_argument('--profile-ids', nargs='*', type=int, default=None,
@@ -145,7 +152,10 @@ class Command(BaseCommand):
             .annotate(n=Count('id'))
             .order_by('profile_id', RATE)          # rarest first within each hunter
         )
-        for r in rows:
+        # STREAMED. The aggregate is bounded by the rate vocabulary rather than by library size, which is
+        # what makes this affordable at all -- but materializing the full result AND `buckets` beside it
+        # holds both at peak. `.iterator()` keeps only `buckets`, which is the structure actually needed.
+        for r in rows.iterator(chunk_size=2000):
             buckets.setdefault(r['profile_id'], []).append((r[RATE], r['n']))
 
         owners = dict(Profile.objects.filter(id__in=profile_ids).values_list('id', 'country_code'))
