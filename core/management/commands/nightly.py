@@ -73,7 +73,7 @@ from django.core.management.base import BaseCommand
 STEPS = [
     ('shovelware detection', 'update_shovelware', {}),
     ('clean standings', 'recompute_clean_standings', {}),
-    ('pp standings', 'recompute_rarity_standings', {}),
+    ('rarity standings', 'recompute_rarity_standings', {}),
     ('badge evaluation', 'evaluate_badges', {'all': True}),
     ('DLC detection', 'detect_dlc_and_refresh', {}),
     ('contract detection', 'process_contracts', {'all_profiles': True, 'incremental': True}),

@@ -395,7 +395,7 @@ def test_the_default_board_serves_ITS_OWN_rows_not_the_trophies_boards(client):
     assert '999' not in clean.split('lb-wall')[1], 'the clean wall is showing raw trophy totals'
 
 
-def test_the_PP_Score_board_serves_ITS_OWN_rows(client):
+def test_the_Rarity_Score_board_serves_ITS_OWN_rows(client):
     """The same guard the Shovelware Free board needed, applied before it could go wrong rather than
     after.
 

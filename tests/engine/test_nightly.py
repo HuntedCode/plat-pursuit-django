@@ -278,3 +278,40 @@ def test_reconcile_contracts_is_NOT_scheduled():
     assert 'reconcile_contracts' not in commands, (
         'reconcile_contracts deletes banked XP and must never run unattended'
     )
+
+
+def test_both_materialized_boards_are_rebuilt_nightly():
+    """The two trophy boards that are NOT computed live. Shovelware Free and Rarity Score each read a
+    materialized store, and this chain is the only thing that refreshes either one.
+
+    Dropping a step here does not break a page or fail a run. The board keeps rendering, ranked, from
+    whatever the last successful recompute wrote -- so it degrades into a snapshot of a past day and says
+    nothing about it. That is the whole reason this is pinned: the other steps announce their absence,
+    and these two do not.
+
+    Rarity Score is asserted by COMMAND rather than by label. The label was 'pp standings' until the
+    board was renamed off its collision with `CommunityTrophyDay.pp_score`, and a guard keyed on a name
+    that has already changed once is a guard that will be edited to match the next rename instead of
+    catching it."""
+    from core.management.commands.nightly import STEPS
+
+    commands = [cmd for _label, cmd, _kw in STEPS]
+    assert 'recompute_clean_standings' in commands, 'the Shovelware Free board would freeze'
+    assert 'recompute_rarity_standings' in commands, 'the Rarity Score board would freeze'
+
+
+def test_the_rarity_recompute_does_not_declare_a_dependency():
+    """The inverse pin. `recompute_rarity_standings` reads `Trophy.trophy_earn_rate` -- PSN's own figure,
+    written at SYNC -- and nothing earlier in this chain writes it. It sits beside `clean standings`
+    because they are the same kind of work, which is exactly the resemblance that would invite someone to
+    give it the same dependency for symmetry.
+
+    That would be a real cost, not a harmless one: a DEPENDS_ON entry makes this step SKIP whenever
+    `update_shovelware` fails, so a shovelware failure would take the Rarity Score board's freshness with
+    it for no reason at all."""
+    from core.management.commands.nightly import DEPENDS_ON, STEPS
+
+    label = next(lbl for lbl, cmd, _kw in STEPS if cmd == 'recompute_rarity_standings')
+    assert label not in DEPENDS_ON, (
+        f'{label!r} reads PSN earn rates written at sync; nothing in this chain produces them'
+    )

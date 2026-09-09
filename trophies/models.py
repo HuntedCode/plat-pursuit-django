@@ -4068,7 +4068,7 @@ class ProfileTrophyStanding(models.Model):
 
 
 class ProfileRarityStanding(models.Model):
-    """Per-profile PP SCORE -- the third trophy board's store.
+    """Per-profile RARITY SCORE -- the third trophy board's store.
 
     Rarity Score sums `100 / earn_rate` over a hunter's rarest 1,000 BASE-GAME trophies. The rule itself lives
     in `services/rarity_score.py`; this is only where the answer is kept.

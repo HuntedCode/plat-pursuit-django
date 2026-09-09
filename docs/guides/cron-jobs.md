@@ -127,7 +127,7 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   failed, so the run goes red rather than green-with-an-error-in-the-logs.
 - **Operator flags**: `--dry-run` lists the order, `--only '<label>'` re-runs one step after a failure
   without repeating the expensive evaluation, `--skip '<label>'` is repeatable.
-- **The two drift nets (steps 3 and 4)**: sync only evaluates what a sync TOUCHED, so anything authored
+- **The two drift nets (steps 6 and 7)**: sync only evaluates what a sync TOUCHED, so anything authored
   after a hunter last touched the relevant game is invisible to them forever without a sweep.
   `evaluate_badges --all` has always been that net for badges; contracts and milestones had none. A
   Contract published for a game 10,000 hunters had already platinumed reached exactly zero of them until
