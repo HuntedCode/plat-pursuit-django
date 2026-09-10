@@ -259,6 +259,26 @@ one.
 
 **Files**: `plat_pursuit/context_processors.py`, `trophies/services/moderation_service.py`
 
+### My Pursuit nav markers (Context Processor)
+
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `career:claimable:<profile_id>` | 300s | How many contracts this hunter can claim -- the nav's count badge. |
+| `contracts:latest_announced` | 900s | The newest `announced_at` on the board, SITE-WIDE. One value for every visitor. |
+
+Both render on every page of the site, which is why they are cached at all -- and why the second one
+is deliberately not per-user: "is anything new to you" is a comparison between a marker already on
+`request.user` and that global maximum, so the per-hunter half costs nothing.
+
+Unlike the moderation count above, these ARE cached, and the difference is the audience: every
+signed-in hunter on every page, against about ten moderator accounts. Both have explicit
+invalidation at their only writers -- `contract_service.claim` for the count,
+`contract_announcer.mark_announced` for the announcement -- so the TTLs only bound how long a MISSED
+invalidation can lie. An empty board is cached as an empty string, because `cache.get` cannot tell a
+stored `None` from a miss and would re-query on every render.
+
+**Files**: `plat_pursuit/context_processors.py`, `trophies/services/career_attention.py`
+
 ### Fundraiser
 
 | Key Pattern | TTL | Purpose |

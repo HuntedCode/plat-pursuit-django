@@ -657,6 +657,15 @@ def claim(profile, *, contract=None, all_claimable=False):
     if not accepted:
         return _empty_claim()
 
+    # The nav's claim badge is cached per hunter, and this is the only thing that can spend one. A
+    # badge still standing after the claim would look broken in the one moment they are looking
+    # straight at it. Best-effort: a cache that is down must not fail a claim that already committed.
+    try:
+        from trophies.services.career_attention import forget_claimable
+        forget_claimable(profile)
+    except Exception:
+        logger.debug("Could not clear the cached claim count", exc_info=True)
+
     post = _levels_snapshot(profile, job_by_id.keys())
     post_pursuer = _pursuer_level(profile)
     pre_rank = pursuer_rank_for_level(pre_pursuer)

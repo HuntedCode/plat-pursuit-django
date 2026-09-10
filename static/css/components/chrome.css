@@ -49,6 +49,57 @@
     text-decoration: none; transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
 }
 .pp-navhub svg { width: 16px; height: 16px; }
+
+/* ── My Pursuit's two attention markers ──────────────────────────────────────────────────────────
+ * A COUNT for work that is theirs and waiting, a DOT for news, and both can show at once.
+ *
+ * The avatar's What's New marker learned this the hard way and the block below it records the rule:
+ * "what keeps the two apart is SHAPE, not colour", and a bare 10px dot there was invisible because
+ * it was a second LIGHT among lights. That is a statement about the AVATAR -- 38px, a sync ring, an
+ * LED -- and not about this nav item, which is a word with room beside it. Here the shapes are a
+ * numeral and a dot, which are separable at a glance, and neither is competing with a status light.
+ *
+ * INLINE, not a corner badge. `.pp-navhub` already carries an absolutely-positioned `::after` for
+ * the active underline across its full width; a corner pill would sit on it. Inline also means the
+ * item simply gets wider, which is honest -- the row has the space and the eye follows the label.
+ *
+ * The count is PRIMARY, not the queue badge's error red: red on this nav would read as something
+ * wrong, and a claim waiting is the opposite of that. It is the best news the site has for them. */
+.pp-navhub__n {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 17px; height: 17px; padding: 0 5px; margin-left: 1px;
+    border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0, #05070a);
+    font-size: 0.62rem; font-weight: 800; line-height: 1; letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 0 8px -2px var(--pp-primary);
+}
+/* Bigger than the avatar's 10px dot was, and ringed rather than flat: the ring is what makes a small
+   mark read as deliberate instead of as a rendering artefact. It sits AFTER the count when both
+   show, so the order is always "what is yours, then what is new". */
+.pp-navhub__dot {
+    display: inline-block; width: 7px; height: 7px; margin-left: 1px; border-radius: 999px;
+    background: var(--pp-primary);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 22%, transparent),
+                0 0 7px -1px var(--pp-primary);
+}
+/* On the active item both markers would sit in primary on a primary label, so the dot loses its
+   glow ring and the count inverts -- the item is already the loud thing on the row. */
+.pp-navhub.is-active .pp-navhub__dot { box-shadow: 0 0 0 2px var(--pp-bg-1); }
+
+/* THE TAB BAR carries the same pair on the ICON rather than the label: four items across a 375px
+   phone, so anything beside the word pushes the row. `.mobile-tabbar-ico` is the positioning
+   context; the icon itself keeps its own size. */
+.mobile-tabbar-ico { position: relative; display: inline-flex; }
+.pp-navhub__n--tab {
+    position: absolute; top: -5px; left: 12px; margin: 0;
+    min-width: 15px; height: 15px; padding: 0 4px; font-size: 0.58rem;
+    border: 2px solid var(--pp-bg-1);   /* punched out of the bar, like the avatar's queue badge */
+}
+.pp-navhub__dot--tab { position: absolute; top: -1px; left: 15px; margin: 0; }
+.mobile-tabbar-item.active .pp-navhub__dot--tab { box-shadow: 0 0 0 2px var(--pp-bg-1); }
+/* Both at once on an icon this small would overlap, so the dot steps aside for the count -- the
+   count already says there is something waiting, which is the more urgent half. */
+.pp-navhub__n--tab ~ .pp-navhub__dot--tab { display: none; }
 @media (hover: hover) { .pp-navhub:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.04); } }
 .pp-navhub:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-navhub.is-active { color: var(--pp-primary); }

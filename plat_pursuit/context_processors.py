@@ -212,6 +212,35 @@ def moderation_alert(request):
         return {}
 
 
+def career_attention(request):
+    """The two markers on the My Pursuit nav item: a claim COUNT and a new-contracts DOT.
+
+    A number for work that is theirs and waiting; a dot for news. Two counts side by side would
+    compete, and only one of them is a reason to go somewhere.
+
+    Anonymous and profile-less viewers return an empty dict before anything happens, which is the
+    whole cost for them. For everyone else it is one cached per-user count plus one cached
+    SITE-WIDE value compared against a marker already on the user object -- see
+    `trophies.services.career_attention` for why that second half is free.
+
+    Fails closed, like `whats_new_unread` and `moderation_alert` above: a hunter loses a marker for
+    one render, nobody gains one. A nav that 500s because a badge could not be counted would be a
+    poor trade for a dot.
+    """
+    user = getattr(request, 'user', None)
+    if not (user and user.is_authenticated and hasattr(user, 'profile')):
+        return {}
+    try:
+        from trophies.services import career_attention as svc
+        return {
+            'career_claimable': svc.claimable_count(user.profile),
+            'career_new_contracts': svc.has_new_contracts(user),
+        }
+    except Exception:
+        logger.debug("Failed to resolve the My Pursuit attention markers", exc_info=True)
+        return {}
+
+
 def navsync(request):
     """Global profile sync state for the navbar's status-aware avatar + panel.
 

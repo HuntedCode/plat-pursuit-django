@@ -365,5 +365,11 @@ def mark_announced(contracts, when=None):
     ids = [c.pk for c in contracts]
     if not ids:
         return 0
-    return Contract.objects.filter(pk__in=ids).update(
+    stamped = Contract.objects.filter(pk__in=ids).update(
         announced_at=when or timezone.now(), announcement_posted=True)
+    # The nav's new-contracts dot reads a cached site-wide "newest announcement". Without this it
+    # would take up to that cache's TTL to appear -- a strange way to treat the one event the whole
+    # feature is built around.
+    from trophies.services.career_attention import forget_latest_announced
+    forget_latest_announced()
+    return stamped

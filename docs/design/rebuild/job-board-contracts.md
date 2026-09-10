@@ -356,6 +356,39 @@ The post's link only filters the board to Latest when the WHOLE wave is still in
 long webhook outage or a `--limit` trickle produces a legitimate post about contracts that have
 aged out — and a filtered link would land the reader on an empty board.
 
+### The nav markers (`trophies/services/career_attention.py`)
+
+Two markers on the **My Pursuit** nav item, in the navbar and the mobile tab bar. That item goes
+straight to `/career/`, so it is the only place either signal needs to be.
+
+| Marker | Means | Shape |
+|---|---|---|
+| Count | rewards this hunter has earned and not taken | a NUMBER — "how many" is answerable without a click, and is the whole reason to go |
+| Dot | contracts announced since they last looked | a DOT — a count of things that are merely new would compete with the count of things that are theirs |
+
+Both can show at once. The count comes first, so the order is always "what is yours, then what is
+new". On the tab bar they ride the icon and the dot yields to the count: four items across a 375px
+phone has no room for both.
+
+**This renders on every page of the site**, including the Django admin, so cost is the design:
+
+- **The count** is answered from the hunter's own `EarnedContract` rows, not the catalogue. All four
+  stamps that decide "claimable" live there, so it is one indexed query over a handful of rows
+  rather than `annotated_contracts`' four correlated subqueries across every live contract. Cached
+  per hunter (5 min) and cleared by `contract_service.claim`.
+- **The dot** costs nothing per hunter. "Is anything new to you" is a comparison between a marker
+  already on `request.user` (loaded by authentication) and a SITE-WIDE maximum — so the only fetch
+  is one value shared by every visitor, cached 15 minutes and cleared by `mark_announced`.
+
+**Gotchas**
+
+- **The count is a second definition of "claimable" and must not drift.** The badge and the board
+  have to agree or the badge is lying; a test pins them together.
+- **The dot reads the same gate as the modal** (`announcement_posted`, the marker, the 14-day
+  first-visit floor). A dot that leads to no modal trains the reader to ignore dots.
+- Both fail closed: a hunter loses a marker for one render, nobody gains one. A nav that 500s
+  because a badge could not be counted would be a poor trade for a dot.
+
 ### The Career modal (`trophies/services/new_contracts_modal.py`)
 
 Opens on `/career/` when contracts have been ANNOUNCED since this hunter last saw it.

@@ -367,6 +367,7 @@ TEMPLATES = [
                 "plat_pursuit.context_processors.navsync",
                 "plat_pursuit.context_processors.moderation_alert",
                 "plat_pursuit.context_processors.whats_new_unread",
+                "plat_pursuit.context_processors.career_attention",
             ],
         },
     },
