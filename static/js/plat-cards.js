@@ -279,7 +279,14 @@
             .then(function (data) {
                 if (token !== reqToken) { return; }
                 var scaler = dlg.querySelector('[data-share-preview]');
-                if (scaler) { scaler.innerHTML = data.html; scaler.classList.add('is-in'); }
+                if (scaler) {
+                    scaler.innerHTML = data.html;
+                    // innerHTML parses scripts but does not RUN them, so the card's title-fitting
+                    // script was dead here while working fine in the PNG -- two renders of one
+                    // template disagreeing, silently. See PlatPursuit.runScripts.
+                    if (window.PlatPursuit && PlatPursuit.runScripts) { PlatPursuit.runScripts(scaler); }
+                    scaler.classList.add('is-in');
+                }
                 current.hasRating = !!data.has_rating;
                 current.conceptId = data.concept_id;
                 current.playtime = data.playtime || '';

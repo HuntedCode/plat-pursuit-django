@@ -1183,14 +1183,24 @@
    of which paint a fully opaque background, so there was no backdrop to blur -- while promoting six
    elements to their own compositor layers INSIDE a dialog that runs an entrance transform on every
    open. motion-patterns.md forbids exactly that pairing. */
+/* SHORTER LABEL RATHER THAN SMALLER TYPE. It read "Ready to claim" at 0.75rem and wrapped to
+   two lines across the bottom of a 110px cover -- a badge competing with the art it sits on.
+   Dropping the type would have fixed the size by going under the readable floor, which is the
+   trade the design system says not to make; dropping the WORDS fixes it without that. "Ready"
+   is the status, and the row below still spells it out in full where there is width for it.
+   `nowrap` is what holds it to one line at every breakpoint, including 6-across at desktop. */
 .nc__hero-chip {
     position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px;
-    /* 0.75rem for the same reason `.nc__chip` is: identical strings, from the same template
-       branch, and here they sit over cover art rather than a flat background. */
-    font-size: 0.75rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    white-space: nowrap; max-width: calc(100% - 12px); overflow: hidden;
 }
+/* TWO LINES OF SPACE, ALWAYS. The caption clamps at two lines, so a long title takes two and a
+   short one takes one -- which left every hero's job icons at a different height and the row
+   looking ragged. Reserving the second line costs ~16px once and lines every icon strip up.
+   `min-height` rather than a fixed height, so a later line-height change cannot clip the clamp. */
 .nc__hero-name {
     margin-top: 7px; font-size: 0.82rem; font-weight: 700; color: var(--pp-text); line-height: 1.25;
+    min-height: 2.5em;   /* two lines at line-height 1.25 */
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding-right: 1px;
 }
 

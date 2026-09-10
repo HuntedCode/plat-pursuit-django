@@ -2684,6 +2684,39 @@ window.PlatPursuit.TimeFormatter = TimeFormatter;
 window.PlatPursuit.API = API;
 window.PlatPursuit.UnsavedChangesManager = UnsavedChangesManager;
 window.PlatPursuit.HTMLUtils = HTMLUtils;
+
+/**
+ * runScripts -- execute the <script> tags inside a fragment that was just written with innerHTML.
+ *
+ * `innerHTML` PARSES script tags but never runs them, by spec. That is a security default worth
+ * having, and it is also a trap the moment server-rendered HTML carries behaviour: the markup looks
+ * right, the script silently does not exist, and nothing anywhere errors.
+ *
+ * The live case is the plat card. Its title measures itself and shrinks to fit one line, which works
+ * in the PNG (Playwright's `set_content` parses a real document and runs scripts) and did not work in
+ * the in-page preview of the very same HTML. Two renders of one template disagreeing, with no signal.
+ *
+ * Re-creating the node is the only way to arm it -- setting `.text` on the parsed one does nothing.
+ * Same-origin, server-rendered markup only; do not point this at anything a user can author.
+ *
+ * @param {HTMLElement} root - the container whose scripts should run
+ */
+function runScripts(root) {
+    if (!root) { return; }
+    root.querySelectorAll('script').forEach(function (old) {
+        // NO `src`. The contract above is inline, server-rendered markup; arming an EXTERNAL script
+        // is a different and much larger promise, and copying the attribute would also silently
+        // change the semantics (an external src wins and the inline body is ignored). Nothing that
+        // flows through here has one -- refusing keeps it that way rather than trusting that it
+        // stays true.
+        if (old.src || old.getAttribute('src')) { return; }
+        var fresh = document.createElement('script');
+        if (old.type) { fresh.type = old.type; }
+        fresh.textContent = old.textContent;
+        old.parentNode.replaceChild(fresh, old);
+    });
+}
+window.PlatPursuit.runScripts = runScripts;
 window.PlatPursuit.debounce = debounce;
 window.PlatPursuit.countUp = countUp;
 window.PlatPursuit.takeover = takeover;

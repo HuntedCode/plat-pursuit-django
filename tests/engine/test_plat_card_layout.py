@@ -120,7 +120,13 @@ def _measure(tmp_path, monkeypatch, context):
             const el = [...document.querySelectorAll('div,span')]
                 .find(e => e.textContent.trim() === name);
             if (!el) return null;
-            return {clientH: el.clientHeight, scrollH: el.scrollHeight};
+            const cs = getComputedStyle(el);
+            const size = parseFloat(cs.fontSize);
+            // Lines from the rendered height, not from the text: the fit script may have switched
+            // the box between `block` + nowrap and `-webkit-box` + clamp.
+            const lines = Math.max(1, Math.round(el.scrollHeight / (size * 1.04)));
+            return {clientH: el.clientHeight, scrollH: el.scrollHeight, size: size,
+                    lines: lines, clamp: cs.webkitLineClamp, display: cs.display};
         }""", context['game_name'])
         browser.close()
     assert box, 'the title element was not found in the rendered card'
@@ -153,3 +159,242 @@ def test_the_title_survives_a_two_line_game_name(tmp_path, monkeypatch):
     box = _measure(tmp_path, monkeypatch, ctx)
 
     assert box['scrollH'] - box['clientH'] <= 6, 'a two-line title clips on a fully loaded card'
+
+
+# -- the title fits itself to one line ------------------------------------------------------------
+
+def test_a_long_title_shrinks_to_stay_on_one_line(tmp_path, monkeypatch):
+    """Two lines is what crowds this card: at 50px a wrapped name takes 108px, and on a card that
+    also carries a badge band, a jobs row and a full quick take that is the difference between
+    composed and cramped. The title shrinks instead, only as far as it takes."""
+    ctx = dict(FULL_CARD, game_name='LEGO Harry Potter Collection: Years 1-4')
+
+    box = _measure(tmp_path, monkeypatch, ctx)
+
+    assert box['lines'] == 1, 'the long title still wrapped to two lines'
+    assert box['size'] < 50, 'the title did not shrink at all, so it cannot have measured itself'
+    assert box['size'] >= 32, 'the title shrank past the floor'
+
+
+def test_a_short_title_is_left_alone(tmp_path, monkeypatch):
+    """Shrinking is the cost of fitting, not a default. A name that already fits keeps the full 50px
+    -- the card's single dominant statement stays dominant."""
+    box = _measure(tmp_path, monkeypatch, dict(FULL_CARD, game_name='Toy Story 3'))
+
+    assert box['size'] == 50
+    assert box['lines'] == 1
+    # AND IT GAVE BACK WHAT IT BORROWED. Measuring sets `block; nowrap; clamp:none; max-height:none`
+    # on the element; the fitting branch used to keep them. With the card's `overflow: hidden` still
+    # on, a title that measured as fitting and then painted even slightly wider -- the sync pass runs
+    # before the real face is live -- was clipped mid-word with no ellipsis, instead of falling back
+    # to the two-line clamp the CSS exists to give it. Measuring must not destroy the degradation
+    # path, and the fits branch is the one where nothing else would ever reveal it.
+    assert box['clamp'] == '2', 'the clamp was borrowed for measuring and never restored'
+
+
+def test_a_name_too_long_for_one_line_wraps_at_the_floor(tmp_path, monkeypatch):
+    """Below the floor it stops shrinking and wraps: a very long name should be two readable lines,
+    not one illegible one. Two lines AT THE FLOOR is still far shorter than two lines at 50px, so
+    even the give-up case leaves the card better off."""
+    ctx = dict(FULL_CARD,
+               game_name='The Legend of the Extraordinarily Long Subtitle That Cannot Possibly Fit')
+
+    box = _measure(tmp_path, monkeypatch, ctx)
+
+    assert box['lines'] == 2, 'an unfittable name was squeezed onto one line'
+    assert box['size'] == 32, 'the wrap happened somewhere other than the floor'
+    # THE CLAMP HAS TO BE RESTORED. The measuring pass sets it to `unset`; leaving it there means a
+    # three-line name renders three lines and blows the column, which this string is too short to
+    # reveal on its own.
+    assert box['clamp'] == '2', 'the two-line clamp was not restored after measuring'
+    assert box['scrollH'] < 108, (
+        'two lines still cost what they cost at 50px, which is the layout problem this fixes'
+    )
+    # ...and it is still not clipped, which is what this file exists for.
+    assert box['scrollH'] - box['clientH'] <= 6
+
+
+def test_the_fit_is_measured_after_the_fonts_are_live():
+    """`load` does not wait for web fonts, and the faces here are base64 data: URIs. Measuring
+    against a fallback typeface and rendering in Bricolage is the wrong answer with no error
+    anywhere -- so the fit runs again on `document.fonts.ready`, and the renderer awaits it before
+    screenshotting."""
+    import pathlib
+
+    from django.conf import settings
+
+    root = pathlib.Path(settings.BASE_DIR)
+    card = (root / 'templates' / 'shareables' / 'plat_card.html').read_text(encoding='utf-8')
+    renderer = (root / 'core' / 'services' / 'playwright_renderer.py').read_text(encoding='utf-8')
+
+    assert 'document.fonts.ready.then(fit)' in card, 'the fit never re-runs in the real typeface'
+    assert 'document.fonts.ready' in renderer, (
+        'the screenshot can be taken before the second measurement has happened'
+    )
+    # AND THE WAIT IS BOUNDED. `Frame.evaluate` takes no timeout and `set_default_timeout` does not
+    # reach it, while every other blocking call in that function is self-limiting. The executor is
+    # max_workers=1 and the thread outlives the request, so one unbounded wait would queue every
+    # later card behind it -- plat, profile, recap, grid -- with no self-healing short of a restart.
+    wait = renderer.split('page.evaluate(', 1)[1].split(')', 1)[0] + renderer.split(
+        'page.evaluate(', 1)[1][:400]
+    assert 'Promise.race' in wait and 'setTimeout' in wait, (
+        'the font wait is unbounded on a single-threaded renderer shared by four card types'
+    )
+
+
+def test_the_in_page_preview_fits_its_title_too(tmp_path, monkeypatch):
+    """THE PNG AND THE PREVIEW ARE THE SAME HTML, and they disagreed.
+
+    Playwright renders the card with `set_content`, which parses a real document and runs its
+    scripts. The share modal writes the identical markup with `innerHTML`, which parses script tags
+    and never runs them -- so the title fitted in the downloaded image and wrapped in the preview the
+    hunter was looking at while deciding whether to download it. Nothing errored.
+
+    This walks the preview's actual path: inject with innerHTML, then arm it the way plat-cards.js
+    does, and measure what the hunter would see.
+    """
+    import pathlib
+
+    from django.conf import settings
+    from django.template.loader import render_to_string
+    from playwright.sync_api import sync_playwright
+
+    faces = _font_faces(monkeypatch)
+    ctx = dict(FULL_CARD, game_name='LEGO Harry Potter Collection: Years 1-4')
+    card_html = render_to_string('shareables/plat_card.html', ctx)
+    utils = (pathlib.Path(settings.BASE_DIR) / 'static' / 'js' / 'utils.js').read_text(
+        encoding='utf-8')
+
+    page_html = (
+        '<style>' + faces + '</style>'
+        '<div id="scaler"></div>'
+        '<script>' + utils + '</script>'
+    )
+    path = tmp_path / 'preview.html'
+    path.write_text(page_html, encoding='utf-8')
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={'width': 1400, 'height': 800})
+        page.goto(path.as_uri())
+        armed = page.evaluate("""(html) => {
+            const scaler = document.getElementById('scaler');
+            scaler.innerHTML = html;                       // exactly what the share modal does
+            if (!(window.PlatPursuit && window.PlatPursuit.runScripts)) { return 'missing'; }
+            window.PlatPursuit.runScripts(scaler);
+            return 'ran';
+        }""", card_html)
+        page.wait_for_timeout(400)
+        box = page.evaluate("""(name) => {
+            const el = [...document.querySelectorAll('div,span')]
+                .find(e => e.textContent.trim() === name);
+            if (!el) return null;
+            const size = parseFloat(getComputedStyle(el).fontSize);
+            return {size: size, lines: Math.max(1, Math.round(el.scrollHeight / (size * 1.04)))};
+        }""", ctx['game_name'])
+        browser.close()
+
+    assert armed == 'ran', 'PlatPursuit.runScripts is missing, so the preview cannot arm the card'
+    assert box, 'the title element was not found in the injected preview'
+    assert box['lines'] == 1, (
+        'the preview still wraps: innerHTML parsed the fitting script without running it, so the '
+        'hunter sees a different card from the one they download'
+    )
+    assert box['size'] < 50
+
+
+def test_the_fit_only_touches_its_own_card(tmp_path, monkeypatch):
+    """A GLOBAL lookup fits whichever `[data-fit-title]` comes first in the page. With two cards in
+    the DOM -- a stale preview, a second modal, anything -- that means shrinking one nobody is
+    looking at and leaving the visible one wrapped, which is indistinguishable from the fit never
+    running at all."""
+    import pathlib
+
+    from django.conf import settings
+    from django.template.loader import render_to_string
+    from playwright.sync_api import sync_playwright
+
+    faces = _font_faces(monkeypatch)
+    long_name = 'LEGO Harry Potter Collection: Years 1-4'
+    card_html = render_to_string('shareables/plat_card.html', dict(FULL_CARD, game_name=long_name))
+    utils = (pathlib.Path(settings.BASE_DIR) / 'static' / 'js' / 'utils.js').read_text(
+        encoding='utf-8')
+
+    path = tmp_path / 'two_cards.html'
+    path.write_text('<style>' + faces + '</style>'
+                    '<div id="first"></div><div id="second"></div>'
+                    '<script>' + utils + '</script>', encoding='utf-8')
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={'width': 1400, 'height': 900})
+        page.goto(path.as_uri())
+        sizes = page.evaluate("""(html) => {
+            // A card already sitting in the page, never armed -- the stale-preview shape.
+            document.getElementById('first').innerHTML = html;
+            // ...and the one the hunter is actually looking at.
+            const second = document.getElementById('second');
+            second.innerHTML = html;
+            window.PlatPursuit.runScripts(second);
+            const size = (root) => parseFloat(
+                getComputedStyle(root.querySelector('[data-fit-title]')).fontSize);
+            return {first: size(document.getElementById('first')), second: size(second)};
+        }""", card_html)
+        browser.close()
+
+    assert sizes['second'] < 50, 'the armed card did not fit itself'
+    assert sizes['first'] == 50, (
+        'arming the second card resized the FIRST one -- the lookup is not scoped to its own card, '
+        'so on a page with two cards the visible one stays wrapped'
+    )
+
+
+def test_run_scripts_refuses_an_external_script(tmp_path):
+    """`runScripts` deliberately switches off a security default -- innerHTML does not run scripts,
+    and this makes it. The contract is INLINE, server-rendered markup; arming an external `src` is a
+    different and much larger promise, and copying the attribute would also change the semantics
+    (external wins, the inline body is ignored). Nothing that flows through it has one today, and
+    this is what keeps that true."""
+    import pathlib
+
+    from django.conf import settings
+    from playwright.sync_api import sync_playwright
+
+    utils = (pathlib.Path(settings.BASE_DIR) / 'static' / 'js' / 'utils.js').read_text(
+        encoding='utf-8')
+    path = tmp_path / 'src_guard.html'
+    path.write_text('<div id="box"></div><script>' + utils + '</script>', encoding='utf-8')
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto(path.as_uri())
+        out = page.evaluate("""() => {
+            const box = document.getElementById('box');
+            window.__inlineRan = false;
+            box.innerHTML =
+                '<script src="data:text/javascript,window.__externalRan = true"><\/script>' +
+                '<script>window.__inlineRan = true;<\/script>';
+            window.PlatPursuit.runScripts(box);
+            return {inline: !!window.__inlineRan, external: !!window.__externalRan,
+                    srcLeftAlone: !!box.querySelector('script[src]')};
+        }""")
+        browser.close()
+
+    assert out['inline'] is True, 'the inline script was not armed, so the helper does nothing'
+    assert out['external'] is False, 'runScripts armed an EXTERNAL script'
+    assert out['srcLeftAlone'] is True, 'the src-bearing node was replaced rather than skipped'
+
+
+def test_the_preview_arms_the_html_it_injects():
+    """The call has to come AFTER the assignment -- arming an empty container does nothing, and the
+    failure is invisible either way."""
+    import pathlib
+
+    from django.conf import settings
+
+    src = (pathlib.Path(settings.BASE_DIR) / 'static' / 'js' / 'plat-cards.js').read_text(
+        encoding='utf-8')
+    body = src.split('scaler.innerHTML = data.html;', 1)[1].split('}', 1)[0]
+
+    assert 'runScripts(scaler)' in body, 'the injected card is never armed'

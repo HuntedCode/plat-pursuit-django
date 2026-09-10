@@ -1089,6 +1089,40 @@ def test_the_heroes_are_two_four_six_by_breakpoint(hunter):
     assert 'justify-content: center' in css.split('.nc__heroes {', 1)[1].split('}', 1)[0]
 
 
+def test_every_hero_caption_reserves_two_lines(hunter):
+    """The caption clamps at two lines, so a long title takes two and a short one takes one -- which
+    left every hero's job icons at a different height and the row looking ragged. Reserving the
+    second line is what lines the icon strips up."""
+    css = _elements_css()
+    name = _rule(css, '.nc__hero-name')
+
+    assert 'min-height: 2.5em' in name, 'a one-line title collapses its caption and drops the icons'
+    assert '-webkit-line-clamp: 2' in name, 'the reserved height no longer matches the clamp'
+
+
+def test_the_hero_status_badge_stays_on_one_line(hunter):
+    """It read "Ready to claim" and wrapped across the bottom of a 110px cover, competing with the
+    art. Fixed by shortening the WORDS rather than the type -- going under the readable floor is the
+    trade the design system says not to make. The row below still says it in full."""
+    from trophies.models import EarnedContract
+
+    contract = _live('Claimable Hero')
+    # CLAIMABLE, not merely finished: the board's status is reached-but-not-accepted on the
+    # EarnedContract, so progress alone renders "pursuing" and this would test the wrong badge.
+    EarnedContract.objects.create(profile=hunter.profile, contract=contract,
+                                  full_reached_at=timezone.now())
+
+    body = hunter.get('/career/', **CF).content.decode()
+    modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
+    hero = modal.split('nc__heroes', 1)[1].split('nc__toolbar', 1)[0]
+
+    assert '>Ready<' in hero, 'the hero badge is back to the phrase that wrapped'
+    chip = _rule(_elements_css(), '.nc__hero-chip')
+    assert 'white-space: nowrap' in chip, 'the badge can wrap again'
+    # ...and the LIST keeps the full phrase, which is where the width is.
+    assert 'Ready to claim' in modal.split('nc__list', 1)[1]
+
+
 def test_a_cover_can_never_grow_taller_than_the_screen_allows():
     """The grid column sets the width and `aspect-ratio` sets the height from it, so on a short
     viewport six covers were still tall enough to push the list off the bottom."""

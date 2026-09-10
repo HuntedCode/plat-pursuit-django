@@ -386,6 +386,24 @@ can't FLIP its disc back from a dragged-off position, so on swipe it instead **r
 the source medallion reappears in the grid with a subtle materialize settle -- while the tap/close button
 keeps the grow/shrink "put-down". Both routes send the object back to its slot.
 
+### PlatPursuit.runScripts
+
+| Method | Parameters | Purpose |
+|--------|-----------|---------|
+| `runScripts(root)` | HTMLElement | Execute the `<script>` tags inside a fragment just written with `innerHTML` |
+
+`innerHTML` PARSES script tags and never runs them, by spec. That is a security default worth having,
+and a trap the moment server-rendered HTML carries behaviour: the markup looks right, the script
+silently does not exist, and nothing errors.
+
+The live case is the plat card, whose title measures itself and shrinks to fit one line. It worked in
+the downloaded PNG (Playwright's `set_content` parses a real document) and did nothing in the in-page
+preview of the identical HTML -- so the hunter saw a different card from the one they were about to
+download. Re-creating the node is the only way to arm it; setting `.text` on the parsed one does
+nothing.
+
+**Server-rendered, same-origin markup only.** Do not point it at anything a user can author.
+
 ### PlatPursuit.DetailModal
 
 | Method | Parameters | Purpose |

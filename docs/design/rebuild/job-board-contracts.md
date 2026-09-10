@@ -146,6 +146,42 @@ by (profile, job) — **DB aggregation, never Python iteration**. Mirrors the ex
 - Each (profile, Contract, tier) granted **at most once**.
 - Every Contract is worth the same total `T` (split among its ≤6 jobs) unless overridden.
 
+## The nightly sweep's cost
+
+`process_contracts --all` evaluates, per live Contract, every profile that has completed a member
+game **and still has a tier left to stamp**. That second condition is what keeps a full sweep
+affordable as the catalogue grows.
+
+A Contract can only ever write two fields on an `EarnedContract` — `platinum_reached_at` and
+`full_reached_at` — and only when they are `None`. So a hunter whose applicable stamps are already
+set cannot produce a mark tonight or any night. Without the exclusion the sweep re-ran full tier
+detection on them anyway, every night, to re-confirm what it had already written: in production,
+461 of every 462 candidates. The cost now tracks UNSTAMPED pairs, which shrinks as the catalogue
+matures rather than growing with users × contracts.
+
+**Ask the platinum question fresh.** `EarnedContract.has_platinum` is frozen when the row is created
+and never updated, while membership is IGDB-derived and can gain a platinum-bearing game later. A
+row written before that keeps saying `False` forever, so excluding on it would strand that hunter's
+platinum tier permanently and silently. The sweep asks `_has_platinum(contract, member_ids)` once per
+Contract instead — one catalogue-bounded `.exists()` against thousands of skipped detections.
+
+**The fresh question fixes the STAMP, not the PAYOUT.** `_pending_tiers` still gates on the frozen
+`has_platinum`, so a hunter whose row was created before the contract had a platinum ends up with
+`platinum_reached_at` correctly stamped and the tier never offered, never paid, no error. Entirely
+pre-existing and orthogonal to the sweep -- but the sentence above should not be read as resolving
+it.
+
+**Read `N candidate(s), M settled` as the alarm.** For a mature Contract the healthy steady state is
+`0 candidate(s)` -- which is byte-identical to what a broken candidate query or a mis-passed
+`has_plat` would print. The settled count is what distinguishes a quiet sweep from a blind one:
+0 candidates with a large settled count is correct; 0 and 0 on a Contract people have completed is
+not.
+
+**`has_plat` is fresh per SWEEP OF THAT CONTRACT, not per instant.** Under `--incremental` a
+Contract that gains its first platinum may not be revisited for up to `FULL_SWEEP_INTERVAL`, so the
+weak exclusion applies until then. Bounded, self-healing, and the same window membership gains
+already had -- but "asked fresh" does not mean instantaneous.
+
 ## Reconciliation — when membership changes under a hunter
 
 Everything above is **forward-only**: detection stamps, acceptance grants, and nothing subtracts.
