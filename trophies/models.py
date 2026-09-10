@@ -2885,6 +2885,16 @@ class Contract(models.Model):
                    'a fresh environment) re-announces everything behind it, and one that is ahead '
                    'silently swallows a wave. Per-row, the answer is exact and survives both.'),
     )
+    announcement_posted = models.BooleanField(
+        default=False, db_index=True,
+        help_text=('Whether the announcement was actually POSTED, as opposed to recorded. '
+                   '`announced_at` means "the announcer has settled this row" and is what makes it '
+                   'idempotent -- but `--baseline` settles a row by deciding NOT to post it, which '
+                   'is the opposite outcome wearing the same stamp. Only a confirmed 2xx sets this. '
+                   'The Career new-contracts modal reads it, so a backlog recorded as known (the '
+                   '~1,000 launch contracts, which do carry `went_live_at` despite what the deploy '
+                   'notes long claimed) is never announced to a reader who was never told.'),
+    )
     jobs = models.ManyToManyField(
         Job, related_name='contracts', blank=True,
         help_text='The job profile -- job XP splits evenly across these jobs.',

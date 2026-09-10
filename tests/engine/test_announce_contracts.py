@@ -23,8 +23,18 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def posted(monkeypatch):
-    """Capture the webhook POST instead of making one. Returns the list of (url, payload)."""
+def posted(monkeypatch, settings):
+    """Capture the webhook POST instead of making one. Returns the list of (url, payload).
+
+    CONFIGURES A WEBHOOK TOO, and that is not incidental. These tests are about the PAYLOAD, and they
+    faked the transport while letting the destination come from whatever `.env` the machine happened
+    to have. On a developer machine that is a real value and everything passes; in CI there is no
+    `.env`, so `webhook_url()` found nothing and the command refused before building anything --
+    nineteen failures that no local run could produce. A fixture that fakes the sending should supply
+    the address it sends to.
+    """
+    settings.DISCORD_PLATINUM_WEBHOOK_URL = 'https://example.test/platinum'
+    settings.DISCORD_CONTRACTS_WEBHOOK_URL = None
     calls = []
 
     class _Resp:
@@ -416,6 +426,85 @@ def test_limit_trickles_the_oldest_first(posted):
     desc = posted[0][1]['embeds'][0]['description']
     assert 'Published First' in desc and 'Published Second' not in desc
     assert contract_announcer.pending_contracts().count() == 1, 'the rest stay pending'
+
+
+def test_a_wave_goes_to_the_contracts_channel_when_one_is_configured(posted, settings):
+    """A wave is a different KIND of post to everything else on the platinum channel -- a catalogue
+    notice rather than somebody's achievement -- and it lands daily, so it gets its own room."""
+    settings.DISCORD_CONTRACTS_WEBHOOK_URL = 'https://example.test/contracts'
+    settings.DISCORD_PLATINUM_WEBHOOK_URL = 'https://example.test/platinum'
+    _contract('Announce Me')
+
+    _run()
+
+    assert [url for url, _ in posted] == ['https://example.test/contracts']
+
+
+def test_an_unset_contracts_channel_falls_back_rather_than_failing(posted, settings):
+    """This runs from a daily cron. A deploy that has not configured the new channel yet should keep
+    announcing, not start erroring every morning at 06:00."""
+    settings.DISCORD_CONTRACTS_WEBHOOK_URL = None
+    settings.DISCORD_PLATINUM_WEBHOOK_URL = 'https://example.test/platinum'
+    _contract('Announce Me')
+
+    out = _run()
+
+    assert [url for url, _ in posted] == ['https://example.test/platinum']
+    # AND IT SAYS SO. "we made a contracts channel" and "the posts still go to the platinum channel"
+    # look identical from here, so a silent fallback is the wrong kind of safe.
+    assert 'DISCORD_CONTRACTS_WEBHOOK_URL is unset' in out
+
+
+def test_the_channel_it_used_is_named_on_success(posted, settings):
+    """The operator's only confirmation that the new env var took effect."""
+    settings.DISCORD_CONTRACTS_WEBHOOK_URL = 'https://example.test/contracts'
+    _contract('Announce Me')
+
+    out = _run()
+
+    assert 'the contracts channel' in out
+
+
+def test_no_webhook_at_all_is_refused_before_posting(posted, settings):
+    """`requests.post(None, ...)` raises a MissingSchema that post_webhook_sync redacts to "URL
+    redacted" -- a true statement about a url that does not exist, and useless to debug from. It also
+    must not stamp: a wave recorded as announced but posted nowhere is gone for good."""
+    from django.core.management.base import CommandError
+
+    settings.DISCORD_CONTRACTS_WEBHOOK_URL = None
+    settings.DISCORD_PLATINUM_WEBHOOK_URL = None
+    _contract('Announce Me')
+
+    with pytest.raises(CommandError) as err:
+        _run()
+
+    assert 'DISCORD_CONTRACTS_WEBHOOK_URL' in str(err.value)
+    assert not posted
+    assert Contract.objects.filter(announced_at__isnull=False).count() == 0
+
+
+def test_the_setting_actually_reads_the_environment(settings):
+    """The `settings` fixture overrides the module value, so every test above passes even if
+    settings.py never read the env var at all -- and a setting that is not wired is exactly the
+    failure mode that left DISCORD_INVITE_URL dead in production. Pinned at the source."""
+    from pathlib import Path
+
+    from django.conf import settings as real
+
+    src = (Path(real.BASE_DIR) / 'plat_pursuit' / 'settings.py').read_text(encoding='utf-8')
+    assert "DISCORD_CONTRACTS_WEBHOOK_URL = os.getenv('DISCORD_CONTRACTS_WEBHOOK_URL')" in src
+
+
+def test_the_test_webhook_still_wins_over_the_contracts_channel(posted, settings):
+    """--test-webhook means "not the live channel", and gaining a second live channel must not turn
+    it into "not the OLD live channel"."""
+    settings.DISCORD_CONTRACTS_WEBHOOK_URL = 'https://example.test/contracts'
+    settings.DISCORD_TEST_WEBHOOK_URL = 'https://example.test/preview'
+    _contract('Announce Me')
+
+    _run(test_webhook=True)
+
+    assert [url for url, _ in posted] == ['https://example.test/preview']
 
 
 def test_the_test_webhook_does_not_consume_the_wave(posted, settings):

@@ -337,10 +337,39 @@ def _capped(description, fallback=None):
     return description[:DISCORD_DESCRIPTION_LIMIT - 1].rstrip() + '…'
 
 
+def webhook_url():
+    """(url, label) for the channel a wave belongs in.
+
+    `DISCORD_CONTRACTS_WEBHOOK_URL` when it is set, and the platinum channel when it is not. The
+    fallback is deliberate: this runs from a daily cron, and a deploy that has not configured the new
+    channel yet should keep announcing rather than start failing every morning at 06:00.
+
+    A silent fallback would be the wrong kind of safe, though -- "we made a contracts channel" and
+    "the posts are still going to the platinum channel" look identical from here. So the label comes
+    back with the url and the command prints which room it used.
+    """
+    url = getattr(settings, 'DISCORD_CONTRACTS_WEBHOOK_URL', None)
+    if url:
+        return url, 'the contracts channel'
+    return settings.DISCORD_PLATINUM_WEBHOOK_URL, ('the platinum channel '
+                                                  '(DISCORD_CONTRACTS_WEBHOOK_URL is unset)')
+
+
 def mark_announced(contracts, when=None):
-    """Stamp a wave as announced. Called ONLY after a confirmed 2xx, so a failed post leaves the
-    whole wave pending for the next run rather than silently swallowing it."""
+    """Stamp a wave as POSTED. Called ONLY after a confirmed 2xx, so a failed post leaves the whole
+    wave pending for the next run rather than silently swallowing it.
+
+    Sets `announcement_posted` as well as the timestamp, and that distinction is the whole point of
+    the flag: `--baseline` also stamps `announced_at`, because it also settles the row for
+    idempotency -- but it settles it by deciding NOT to post. Only this path told anybody."""
     ids = [c.pk for c in contracts]
     if not ids:
         return 0
-    return Contract.objects.filter(pk__in=ids).update(announced_at=when or timezone.now())
+    stamped = Contract.objects.filter(pk__in=ids).update(
+        announced_at=when or timezone.now(), announcement_posted=True)
+    # The nav's new-contracts dot reads a cached site-wide "newest announcement". Without this it
+    # would take up to that cache's TTL to appear -- a strange way to treat the one event the whole
+    # feature is built around.
+    from trophies.services.career_attention import forget_latest_announced
+    forget_latest_announced()
+    return stamped

@@ -129,6 +129,7 @@
 #badge-howto.is-closing,
 #career-howto.is-closing,
 #launch-welcome.is-closing,
+#new-contracts.is-closing,
 #whats-new.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }   /* opacity crossfade -- always on */
 
 /* The dialog's settle is transform MOTION, so it is reduced-motion-gated. */
@@ -136,6 +137,7 @@
     #badge-howto.is-closing .pp-detail-modal__dialog,
     #career-howto.is-closing .pp-detail-modal__dialog,
     #launch-welcome.is-closing .pp-detail-modal__dialog,
+    #new-contracts.is-closing .pp-detail-modal__dialog,
     #whats-new.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 

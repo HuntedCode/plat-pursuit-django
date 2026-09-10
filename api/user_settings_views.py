@@ -2,6 +2,7 @@
 REST API views for user settings updates.
 """
 import logging
+from datetime import timedelta, timezone as dt_timezone
 
 import pytz
 from rest_framework.views import APIView
@@ -10,7 +11,11 @@ from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
 
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+
 from core import whats_new
+from trophies.services import new_contracts_modal
 from trophies.services.profile_stats_service import update_profile_trophy_counts
 from users.services.timezone_service import set_user_timezone
 
@@ -152,6 +157,56 @@ class UpdateQuickSettingsAPIView(APIView):
             flags['whats_new_seen'] = value
             request.user.ui_flags = flags
             request.user.save(update_fields=['ui_flags'])
+
+        # The Career new-contracts marker: the newest `announced_at` this hunter has been SHOWN.
+        # Its own branch for the same reason `whats_new_seen` has one -- `ui_flag` is documented as
+        # sticky booleans and this is a moving stamp.
+        #
+        # BOUNDED IN BOTH DIRECTIONS AND MONOTONIC, because every way this value can be wrong is a
+        # way to break the account permanently, and nothing in the UI can undo any of them:
+        #   future  -- suppresses the modal forever
+        #   ancient -- defeats the no-marker 14-day floor, so every /career/ render for that account
+        #              sorts and materialises the entire announced catalogue. One POST, permanent
+        #              per-account load amplifier. Floored a year back: nothing legitimate predates
+        #              the feature, and a hunter away that long is served by the board, not a modal
+        #   backwards -- a stale tab dismissed after a newer visit rewinds the marker and re-shows a
+        #              wave already read, so the stored value only ever moves forward
+        elif setting == 'contracts_seen':
+            if not isinstance(value, str):
+                return Response({'error': 'Expected an ISO timestamp.'},
+                                status=http_status.HTTP_400_BAD_REQUEST)
+            # `parse_datetime` returns None when the REGEX misses, but RAISES on a well-formed
+            # string with impossible values -- '2026-02-31T00:00:00', hour 25, a +99:00 offset.
+            # Only the None half was handled, so those went out as a 500 rather than this 400.
+            try:
+                stamp = parse_datetime(value)
+            except ValueError:
+                stamp = None
+            if stamp is None:
+                return Response({'error': 'Expected an ISO timestamp.'},
+                                status=http_status.HTTP_400_BAD_REQUEST)
+            if timezone.is_naive(stamp):
+                # UTC explicitly, not the request's activated zone. Django 5's make_aware is a bare
+                # `replace(tzinfo=...)`, and the timezone middleware activates a pytz object -- whose
+                # bare offset is LMT, so a naive value would land minutes off (56 for New York).
+                stamp = stamp.replace(tzinfo=dt_timezone.utc)
+            now = timezone.now()
+            flags = request.user.ui_flags or {}
+            previous = new_contracts_modal.seen_marker(request.user)
+            if previous is not None:
+                stamp = max(stamp, previous)
+            # CLAMPED LAST, so the bounds apply to what is actually stored. Clamping the caller's
+            # value and THEN merging an unbounded `previous` re-introduced exactly what the bounds
+            # exist to prevent: a future marker written by any other hand -- a shell, a fixture, a
+            # data migration -- survived every later dismissal, and the one endpoint that could have
+            # healed it was the one carrying it forward.
+            stamp = min(max(stamp, now - timedelta(days=365)), now)
+            flags['contracts_seen'] = stamp.isoformat()
+            request.user.ui_flags = flags
+            request.user.save(update_fields=['ui_flags'])
+            # The STORED value, not the caller's. A client that sent a future or rewound stamp was
+            # being told it was saved as sent while something else was written.
+            return Response({'success': True, 'setting': setting, 'value': flags['contracts_seen']})
 
         else:
             return Response({'error': f'Unknown setting: {setting}'}, status=http_status.HTTP_400_BAD_REQUEST)
