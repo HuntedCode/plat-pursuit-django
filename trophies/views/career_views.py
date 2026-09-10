@@ -143,6 +143,27 @@ class CareerView(LoginRequiredMixin, TemplateView):
         # First-visit explainer: server-side render gate so returning users never see a flash.
         # The flag is written by the quick-settings API's ui_flag branch when dismissed.
         context['show_career_explainer'] = 'career_explainer' not in (self.request.user.ui_flags or {})
+
+        # NEW CONTRACTS since this hunter last looked. Precedence: the explainer WINS -- showing
+        # somebody new contracts before they know what a contract is is backwards, and the explainer
+        # fires once in an account's life where this waits harmlessly for the next visit. Never both
+        # on one visit: two scrims back to back, and the gate would be settled by whichever closed
+        # first while the other still covered the page.
+        from trophies.services import new_contracts_modal
+        previewing = (self.request.GET.get('preview') == 'new-contracts'
+                      and (self.request.user.is_staff
+                           or getattr(self.request.user, 'is_moderator', False)))
+        new_contracts, new_total, newest_stamp = new_contracts_modal.new_for(
+            getattr(self.request.user, 'profile', None), self.request.user)
+        context['new_contracts'] = new_contracts
+        context['new_contracts_total'] = new_total
+        # Computed here, not as `total|add:"-6"` in the template: that literal is MAX_SHOWN,
+        # and a template cannot see it change.
+        context['new_contracts_extra'] = max(new_total - len(new_contracts), 0)
+        context['new_contracts_stamp'] = newest_stamp.isoformat() if newest_stamp else ''
+        context['show_new_contracts'] = (
+            not context['show_career_explainer'] and bool(new_contracts)
+        ) or (previewing and bool(new_contracts))
         context['explainer_debug'] = settings.DEBUG
         return context
 

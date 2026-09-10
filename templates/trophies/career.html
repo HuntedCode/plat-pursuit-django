@@ -130,6 +130,7 @@
     career_views.py) -- so the gate is never settled by two different modals. {% endcomment %}
     {% include 'trophies/partials/career/_career_modal_gate.html' %}
     {% include 'trophies/partials/career/_career_explainer.html' %}
+    {% if show_new_contracts %}{% include 'trophies/partials/career/_new_contracts.html' %}{% endif %}
 
     {% comment %} Career summary card (the "Career" heading + aggregate stats) -- the accented header for
     this section. Stacked chrome per the site-wide rule; the tabs + panels below flow FREE (not carded). {% endcomment %}

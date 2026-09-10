@@ -10,6 +10,9 @@ from rest_framework import status as http_status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
 
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+
 from core import whats_new
 from trophies.services.profile_stats_service import update_profile_trophy_counts
 from users.services.timezone_service import set_user_timezone
@@ -150,6 +153,29 @@ class UpdateQuickSettingsAPIView(APIView):
                 return Response({'error': 'Unknown entry.'}, status=http_status.HTTP_400_BAD_REQUEST)
             flags = request.user.ui_flags or {}
             flags['whats_new_seen'] = value
+            request.user.ui_flags = flags
+            request.user.save(update_fields=['ui_flags'])
+
+        # The Career new-contracts marker: the newest `went_live_at` this hunter has been SHOWN.
+        # Its own branch for the same reason `whats_new_seen` has one -- `ui_flag` is documented as
+        # sticky booleans and this is a moving stamp.
+        #
+        # Validated as a real datetime and CLAMPED to now: an arbitrary string, or a stamp far in the
+        # future, would suppress the modal for that account permanently with nothing in the UI able
+        # to undo it. Same failure the What's New branch rejects unknown entry ids to avoid.
+        elif setting == 'contracts_seen':
+            if not isinstance(value, str):
+                return Response({'error': 'Expected an ISO timestamp.'},
+                                status=http_status.HTTP_400_BAD_REQUEST)
+            stamp = parse_datetime(value)
+            if stamp is None:
+                return Response({'error': 'Expected an ISO timestamp.'},
+                                status=http_status.HTTP_400_BAD_REQUEST)
+            if timezone.is_naive(stamp):
+                stamp = timezone.make_aware(stamp)
+            stamp = min(stamp, timezone.now())
+            flags = request.user.ui_flags or {}
+            flags['contracts_seen'] = stamp.isoformat()
             request.user.ui_flags = flags
             request.user.save(update_fields=['ui_flags'])
 

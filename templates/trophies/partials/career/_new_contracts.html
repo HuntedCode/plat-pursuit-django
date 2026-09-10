@@ -1,0 +1,89 @@
+{% comment %} NEW CONTRACTS since this hunter last looked, on the Career page.
+
+Server-gated entirely (`show_new_contracts` in career_views.py): there is something newer than their
+`contracts_seen` marker, and the first-visit explainer is not also due. Render == armed, so a hunter
+with nothing new gets no markup at all.
+
+WHAT IT LEADS WITH is the point. The board's own `status_order` puts contracts they can already claim
+first, then ones in progress, then the rest -- so the modal opens on "you have already done the work
+on this" rather than on a catalogue of things to start. That ranking is free: `annotated_contracts`
+computes it in SQL for the board anyway.
+
+PRECEDENCE lives in the view, which is the one place that can see both modals. The explainer wins.
+
+Behaviour is PlatPursuit.DetailModal; the page's motion gate is armed separately and synchronously by
+_career_modal_gate.html, so nothing waits on this script to run.
+{% endcomment %}
+{% load humanize %}
+<div class="pp-detail-modal pp-howto" id="new-contracts" data-auto hidden>
+    <div class="pp-detail-modal__scrim" data-nc-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog" role="dialog" aria-modal="true" aria-labelledby="new-contracts-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-nc-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+            <p class="nc__eyebrow">New on the Job Board</p>
+            <h2 class="pp-howto__title" id="new-contracts-title">
+                <svg class="pp-howto__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
+                {{ new_contracts_total }} new contract{{ new_contracts_total|pluralize }}
+            </h2>
+            <p class="pp-forge__lede">Published since you last looked. The ones you can act on are first.</p>
+
+            <ul class="nc__list">
+                {% for c in new_contracts %}
+                    <li class="nc__row nc__row--{{ c.status }}">
+                        <span class="nc__name">{{ c.name }}</span>
+                        {% comment %} The status chip is the reason this modal is worth opening rather
+                        than being a link to the board. `status` is annotated per viewer, so "Ready to
+                        Claim" here means THIS hunter can claim it right now. {% endcomment %}
+                        {% if c.status == 'claimable' %}
+                            <span class="nc__chip nc__chip--claim">Ready to claim</span>
+                        {% elif c.status == 'pursuing' %}
+                            <span class="nc__chip nc__chip--going">{{ c.max_progress }}% done</span>
+                        {% else %}
+                            <span class="nc__chip">New</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+
+            {% if new_contracts_extra %}
+                <p class="nc__more">and {{ new_contracts_extra }} more on the board</p>
+            {% endif %}
+
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-nc-close>Got it</button>
+                <a class="pp-howto__more" href="{% url 'career' %}?view=contracts&amp;new=1" data-nc-close>See them all &rarr;</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% comment %} The is-closing exit lives with the other pp-howto clones in series-list.css, which is
+also where the reason it must be ID-scoped is written down. {% endcomment %}
+
+<script>
+(function () {
+    'use strict';
+    var el = document.getElementById('new-contracts');
+    var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal(); } };
+    if (!el) { settle(); return; }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
+        PlatPursuit.DetailModal(el, {
+            closeSelector: '[data-nc-close]',
+            autoOpenDelay: 450,
+            seenKey: 'pp-new-contracts-seen',
+            onSettled: settle,
+            onOpened: function () { if (window.ppHoldCareerModal) { window.ppHoldCareerModal(); } },
+            onDismiss: function () {
+                if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
+                // The stamp comes from the WAVE, not from the clock: a contract published between
+                // this render and this click went live before the click but after the query, and a
+                // now-stamp would skip it silently. Storing what was shown cannot skip anything.
+                return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+                    setting: 'contracts_seen', value: '{{ new_contracts_stamp|escapejs }}'
+                });
+            }
+        });
+    });
+})();
+</script>
