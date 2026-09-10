@@ -54,7 +54,8 @@ been shown, and the server's monotonic clamp makes that unrecoverable. {% endcom
                                 </span>
                             {% endif %}
                             {% if c.status == 'claimable' %}
-                                <span class="nc__hero-chip nc__chip--claim">Ready to claim</span>
+                                {% comment %} "Ready", not "Ready to claim": the full phrase wrapped to two lines across the
+                            bottom of the cover. The row below says it in full. {% endcomment %}<span class="nc__hero-chip nc__chip--claim">Ready</span>
                             {% elif c.status == 'pursuing' %}
                                 <span class="nc__hero-chip nc__chip--going">{{ c.max_progress }}%</span>
                             {% endif %}
