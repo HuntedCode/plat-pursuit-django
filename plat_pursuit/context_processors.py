@@ -232,10 +232,15 @@ def career_attention(request):
         return {}
     try:
         from trophies.services import career_attention as svc
-        return {
-            'career_claimable': svc.claimable_count(user.profile),
-            'career_new_contracts': svc.has_new_contracts(user),
-        }
+        count = svc.claimable_count(user.profile)
+        new = svc.has_new_contracts(user)
+        # `?preview=career-markers` (staff): the markers only show when there is something to say,
+        # which makes them the hardest thing here to look at on purpose. See `svc.preview_counts`.
+        forced = svc.preview_counts(request)
+        if forced is not None:
+            count = forced[0] if forced[0] is not None else (count or 3)
+            new = forced[1]
+        return {'career_claimable': count, 'career_new_contracts': new}
     except Exception:
         logger.debug("Failed to resolve the My Pursuit attention markers", exc_info=True)
         return {}

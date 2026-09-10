@@ -150,9 +150,8 @@ class CareerView(LoginRequiredMixin, TemplateView):
         # on one visit: two scrims back to back, and the gate would be settled by whichever closed
         # first while the other still covered the page.
         from trophies.services import new_contracts_modal
-        previewing = (self.request.GET.get('preview') == 'new-contracts'
-                      and (self.request.user.is_staff
-                           or getattr(self.request.user, 'is_moderator', False)))
+        from core.previews import previewing as _door
+        previewing = _door(self.request, 'new-contracts')
         # ASKED ONLY WHEN THE ANSWER CAN BE USED. On a first visit the explainer wins and this modal
         # cannot render, so computing it meant paying for the count, 200 rows, the jobs prefetch and
         # the hero covers to build a dict the template discards -- on the one visit in an account's

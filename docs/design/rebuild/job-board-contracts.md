@@ -380,6 +380,13 @@ phone has no room for both.
   already on `request.user` (loaded by authentication) and a SITE-WIDE maximum — so the only fetch
   is one value shared by every visitor, cached 15 minutes and cleared by `mark_announced`.
 
+**Previewing them.** They only appear when there is something to say, which makes them the hardest
+thing here to look at deliberately -- you need an unclaimed reward and an unseen announcement at the
+same moment. `?preview=career-markers` (staff/moderator, any page) lights both; `&n=12` forces the
+count to see the `9+` cap, `&n=0` leaves the dot on its own. Writes nothing, like every other preview
+door -- they all go through `core/previews.py` now, because this was the third copy of the same four
+lines and the first two had already drifted once.
+
 **Gotchas**
 
 - **The count is a second definition of "claimable" and must not drift.** The badge and the board

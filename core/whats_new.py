@@ -191,14 +191,9 @@ def previewing(request) -> bool:
     Mirrors the launch-welcome / syncing / landing doors: staff or moderator, on the live page, with no
     state written -- so previewing never spends anything and never has to be undone.
     """
-    if request is None or getattr(request, 'GET', None) is None:
-        return False
-    if request.GET.get('preview') != PREVIEW:
-        return False
-    user = getattr(request, 'user', None)
-    if user is None or not getattr(user, 'is_authenticated', False):
-        return False
-    return bool(getattr(user, 'is_staff', False) or getattr(user, 'is_moderator', False))
+    from core.previews import previewing as _door
+
+    return _door(request, PREVIEW)
 
 
 def is_due(user) -> bool:

@@ -243,6 +243,88 @@ def test_the_nav_carries_both_markers(hunter):
     assert 'ready to claim' in nav and 'new contracts on the board' in nav
 
 
+def test_a_staff_preview_lights_both_markers(hunter):
+    """The markers only show when there is something to say, which makes them the hardest thing on
+    the site to look at deliberately -- you need an unclaimed reward and an unseen announcement at
+    the same moment. The preview door is how you look at them anyway."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+
+    body = hunter.get('/career/?preview=career-markers', **CF).content.decode()
+
+    assert 'pp-navhub__n' in body and 'pp-navhub__dot' in body
+
+
+def test_the_preview_can_force_a_count(hunter):
+    """`&n=` is how you look at the 9+ cap without earning twelve rewards, and `&n=0` is how you look
+    at the dot on its own."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+
+    body = hunter.get('/career/?preview=career-markers&n=12', **CF).content.decode()
+    assert '9+' in body.split('class="pp-navhub__n"', 1)[1].split('</span>', 1)[0]
+
+    body = hunter.get('/career/?preview=career-markers&n=0', **CF).content.decode()
+    assert 'pp-navhub__n' not in body and 'pp-navhub__dot' in body
+
+
+def test_the_preview_writes_nothing(hunter):
+    """Every preview door on the site shares this: looking never spends anything, so it never has to
+    be undone. This one bypasses the claim state AND the seen marker, so it is the one that would
+    hurt most if it left a trace."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+    before = dict(user.ui_flags)
+
+    hunter.get('/career/?preview=career-markers&n=5', **CF)
+
+    user.refresh_from_db()
+    assert user.ui_flags == before
+    assert career_attention.claimable_count(hunter.profile) == 0
+
+
+def test_the_preview_is_team_only(hunter):
+    """It shows markers for state the viewer does not have, so the querystring cannot be something
+    anybody can type."""
+    body = hunter.get('/career/?preview=career-markers', **CF).content.decode()
+
+    assert 'pp-navhub__n' not in body and 'pp-navhub__dot' not in body
+
+
+def test_a_staff_account_sees_nothing_without_the_querystring(hunter):
+    """The half that is easy to miss: every other preview test asks whether the door OPENS. Drop the
+    slug check and it is not a door at all -- every page a staff member loads would wear markers for
+    state they do not have, which is worse than no preview."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+
+    body = hunter.get('/career/', **CF).content.decode()
+    assert 'pp-navhub__n' not in body and 'pp-navhub__dot' not in body
+
+    # ...and somebody else's door does not open this one either.
+    body = hunter.get('/career/?preview=whats-new', **CF).content.decode()
+    assert 'pp-navhub__n' not in body and 'pp-navhub__dot' not in body
+
+
+def test_every_preview_door_is_the_same_door():
+    """Three surfaces need this now, and copies drift -- the What's New door had to be pulled out of
+    its modal precisely because the avatar dot's half had been left behind, and half a preview is not
+    a preview. Nobody should be hand-rolling the fourth."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    for rel in ('core/whats_new.py', 'trophies/views/career_views.py',
+                'trophies/services/career_attention.py'):
+        src = (Path(settings.BASE_DIR) / rel).read_text(encoding='utf-8')
+        assert 'core.previews import previewing' in src, '%s hand-rolls the preview gate' % rel
+        assert "GET.get('preview')" not in src, '%s still reads the querystring itself' % rel
+
+
 def test_a_quiet_account_gets_no_markers(hunter):
     body = hunter.get('/career/', **CF).content.decode()
 

@@ -130,6 +130,36 @@ def has_new_contracts(user):
     return newest > marker
 
 
+#: `?preview=career-markers` -- see `preview_counts`.
+PREVIEW = 'career-markers'
+
+
+def preview_counts(request):
+    """(count, dot) forced on for a team preview, or None when this is an ordinary request.
+
+    THE MARKERS ONLY APPEAR WHEN THERE IS SOMETHING TO SAY, which makes them the hardest thing on the
+    site to look at deliberately: you need an unclaimed reward and an unseen announcement at the same
+    moment. This is the door for looking at them anyway.
+
+        ?preview=career-markers          both markers, using the real claim count (3 if there is none)
+        ?preview=career-markers&n=12     force the count, e.g. to see the 9+ cap
+        ?preview=career-markers&n=0      the dot alone
+
+    Staff-gated and writes nothing, like every other preview door -- see `core.previews`.
+    """
+    from core.previews import previewing
+
+    if not previewing(request, PREVIEW):
+        return None
+    raw = request.GET.get('n')
+    if raw is None:
+        return None, True     # the caller substitutes the real count
+    try:
+        return max(0, min(int(raw), 999)), True
+    except (TypeError, ValueError):
+        return None, True
+
+
 def _parse(raw):
     from django.utils.dateparse import parse_datetime
 
