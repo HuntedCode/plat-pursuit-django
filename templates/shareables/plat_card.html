@@ -439,18 +439,23 @@ give-up case leaves the card better off than it was. {% endcomment %}
         var size = MAX;
         el.style.fontSize = size + 'px';
         while (size > MIN && el.scrollWidth > el.clientWidth) {
-            size -= STEP;
+            size = Math.max(MIN, size - STEP);   // never overshoot the floor on an odd STEP
             el.style.fontSize = size + 'px';
         }
 
-        if (el.scrollWidth > el.clientWidth) {
-            // Even the floor does not fit: wrap, at the floor. Two lines at 32px is ~67px against
-            // the 108px this card was losing at 50px.
-            el.style.display = '-webkit-box';
-            el.style.whiteSpace = 'normal';
-            el.style.webkitLineClamp = '2';
-            el.style.maxHeight = '108px';
-        }
+        // RESTORED UNCONDITIONALLY, on both branches. The fitting branch used to leave the box as
+        // `block; nowrap; clamp:none; max-height:none` -- borrowed for measuring and never given
+        // back. With the template's `overflow: hidden` still in force, a title that measured as
+        // fitting and then painted even slightly wider (the sync pass runs before the real face is
+        // live) was clipped mid-word with no ellipsis, instead of falling back to the two-line
+        // clamp the CSS exists to provide. Measuring must not destroy the degradation path.
+        //
+        // `white-space: normal` on the fits branch too: it still renders one line at the size just
+        // chosen, and if the painted metrics ever disagree it wraps rather than clipping.
+        el.style.display = '-webkit-box';
+        el.style.whiteSpace = 'normal';
+        el.style.webkitLineClamp = '2';
+        el.style.maxHeight = '108px';
     }
 
     fit();

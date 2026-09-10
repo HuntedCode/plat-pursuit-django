@@ -194,12 +194,11 @@ class Command(BaseCommand):
         for contract in contracts:
             member_ids = contract.member_concept_ids()
             marks = candidates = 0
-            settled = 0
             # ASKED FRESH, ONCE PER CONTRACT, and deliberately not read off `EarnedContract`.
             # `has_platinum` is frozen on the row when it is created and never updated, while
             # membership is IGDB-derived and can gain a platinum-bearing game later -- so a row
             # written before that would keep saying False forever, and skipping on it would strand
-            # that hunter's platinum tier permanently. This is one catalogue-bounded `.exists()`
+            # that hunter's platinum tier permanently. That costs two catalogue-bounded reads
             # against the thousands of per-candidate detections it lets us skip.
             has_plat = _has_platinum(contract, member_ids)
             settled = self._settled_profiles(contract, has_plat=has_plat).count()

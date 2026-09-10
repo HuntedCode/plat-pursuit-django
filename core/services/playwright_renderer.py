@@ -161,7 +161,25 @@ def _render_in_thread(full_html, width, height):
         # renders in fallback metrics with no error anywhere. It also has to be true before a
         # card can MEASURE its own text: plat_card fits its title to one line, and measuring
         # against Arial and rendering in Bricolage is exactly the wrong answer, silently.
-        page.evaluate('document.fonts.ready')
+        #
+        # RACED AGAINST A DEADLINE, IN-PAGE, and that is not belt-and-braces. `Frame.evaluate` takes
+        # no timeout and `set_default_timeout` does not reach it -- unlike `set_content` above, which
+        # is bounded. Every other blocking call in this function is self-limiting, so a wedged render
+        # could not previously outlive its own request. This executor is `max_workers=1` and the
+        # thread is reused for the process's life, so one unbounded wait here would queue every
+        # later card behind it -- plat, profile, recap, grid -- each 500ing at the caller's 30s cap,
+        # with no self-healing short of a restart. A wait added for one card's benefit must not be
+        # able to take the other three down.
+        #
+        # 3s is far past any real settling (the faces are data: URIs and `load` has already fired);
+        # it exists to bound the impossible case, and rendering in fallback metrics is a far better
+        # failure than a permanently wedged renderer.
+        page.evaluate(
+            'Promise.race(['
+            '  document.fonts.ready,'
+            '  new Promise(function (r) { setTimeout(r, 3000); })'
+            '])'
+        )
 
         # Screenshot the card element (or full page if element not found)
         card = page.query_selector('.share-image-content')

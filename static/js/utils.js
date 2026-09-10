@@ -2704,11 +2704,14 @@ window.PlatPursuit.HTMLUtils = HTMLUtils;
 function runScripts(root) {
     if (!root) { return; }
     root.querySelectorAll('script').forEach(function (old) {
+        // NO `src`. The contract above is inline, server-rendered markup; arming an EXTERNAL script
+        // is a different and much larger promise, and copying the attribute would also silently
+        // change the semantics (an external src wins and the inline body is ignored). Nothing that
+        // flows through here has one -- refusing keeps it that way rather than trusting that it
+        // stays true.
+        if (old.src || old.getAttribute('src')) { return; }
         var fresh = document.createElement('script');
-        // Attributes first, so a `type` or `src` survives; then the body.
-        for (var i = 0; i < old.attributes.length; i++) {
-            fresh.setAttribute(old.attributes[i].name, old.attributes[i].value);
-        }
+        if (old.type) { fresh.type = old.type; }
         fresh.textContent = old.textContent;
         old.parentNode.replaceChild(fresh, old);
     });

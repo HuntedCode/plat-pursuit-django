@@ -183,6 +183,13 @@ def test_a_short_title_is_left_alone(tmp_path, monkeypatch):
 
     assert box['size'] == 50
     assert box['lines'] == 1
+    # AND IT GAVE BACK WHAT IT BORROWED. Measuring sets `block; nowrap; clamp:none; max-height:none`
+    # on the element; the fitting branch used to keep them. With the card's `overflow: hidden` still
+    # on, a title that measured as fitting and then painted even slightly wider -- the sync pass runs
+    # before the real face is live -- was clipped mid-word with no ellipsis, instead of falling back
+    # to the two-line clamp the CSS exists to give it. Measuring must not destroy the degradation
+    # path, and the fits branch is the one where nothing else would ever reveal it.
+    assert box['clamp'] == '2', 'the clamp was borrowed for measuring and never restored'
 
 
 def test_a_name_too_long_for_one_line_wraps_at_the_floor(tmp_path, monkeypatch):
@@ -221,8 +228,17 @@ def test_the_fit_is_measured_after_the_fonts_are_live():
     renderer = (root / 'core' / 'services' / 'playwright_renderer.py').read_text(encoding='utf-8')
 
     assert 'document.fonts.ready.then(fit)' in card, 'the fit never re-runs in the real typeface'
-    assert "page.evaluate('document.fonts.ready')" in renderer, (
+    assert 'document.fonts.ready' in renderer, (
         'the screenshot can be taken before the second measurement has happened'
+    )
+    # AND THE WAIT IS BOUNDED. `Frame.evaluate` takes no timeout and `set_default_timeout` does not
+    # reach it, while every other blocking call in that function is self-limiting. The executor is
+    # max_workers=1 and the thread outlives the request, so one unbounded wait would queue every
+    # later card behind it -- plat, profile, recap, grid -- with no self-healing short of a restart.
+    wait = renderer.split('page.evaluate(', 1)[1].split(')', 1)[0] + renderer.split(
+        'page.evaluate(', 1)[1][:400]
+    assert 'Promise.race' in wait and 'setTimeout' in wait, (
+        'the font wait is unbounded on a single-threaded renderer shared by four card types'
     )
 
 
@@ -331,6 +347,43 @@ def test_the_fit_only_touches_its_own_card(tmp_path, monkeypatch):
         'arming the second card resized the FIRST one -- the lookup is not scoped to its own card, '
         'so on a page with two cards the visible one stays wrapped'
     )
+
+
+def test_run_scripts_refuses_an_external_script(tmp_path):
+    """`runScripts` deliberately switches off a security default -- innerHTML does not run scripts,
+    and this makes it. The contract is INLINE, server-rendered markup; arming an external `src` is a
+    different and much larger promise, and copying the attribute would also change the semantics
+    (external wins, the inline body is ignored). Nothing that flows through it has one today, and
+    this is what keeps that true."""
+    import pathlib
+
+    from django.conf import settings
+    from playwright.sync_api import sync_playwright
+
+    utils = (pathlib.Path(settings.BASE_DIR) / 'static' / 'js' / 'utils.js').read_text(
+        encoding='utf-8')
+    path = tmp_path / 'src_guard.html'
+    path.write_text('<div id="box"></div><script>' + utils + '</script>', encoding='utf-8')
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto(path.as_uri())
+        out = page.evaluate("""() => {
+            const box = document.getElementById('box');
+            window.__inlineRan = false;
+            box.innerHTML =
+                '<script src="data:text/javascript,window.__externalRan = true"><\/script>' +
+                '<script>window.__inlineRan = true;<\/script>';
+            window.PlatPursuit.runScripts(box);
+            return {inline: !!window.__inlineRan, external: !!window.__externalRan,
+                    srcLeftAlone: !!box.querySelector('script[src]')};
+        }""")
+        browser.close()
+
+    assert out['inline'] is True, 'the inline script was not armed, so the helper does nothing'
+    assert out['external'] is False, 'runScripts armed an EXTERNAL script'
+    assert out['srcLeftAlone'] is True, 'the src-bearing node was replaced rather than skipped'
 
 
 def test_the_preview_arms_the_html_it_injects():
