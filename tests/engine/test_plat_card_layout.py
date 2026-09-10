@@ -120,7 +120,13 @@ def _measure(tmp_path, monkeypatch, context):
             const el = [...document.querySelectorAll('div,span')]
                 .find(e => e.textContent.trim() === name);
             if (!el) return null;
-            return {clientH: el.clientHeight, scrollH: el.scrollHeight};
+            const cs = getComputedStyle(el);
+            const size = parseFloat(cs.fontSize);
+            // Lines from the rendered height, not from the text: the fit script may have switched
+            // the box between `block` + nowrap and `-webkit-box` + clamp.
+            const lines = Math.max(1, Math.round(el.scrollHeight / (size * 1.04)));
+            return {clientH: el.clientHeight, scrollH: el.scrollHeight, size: size,
+                    lines: lines, clamp: cs.webkitLineClamp, display: cs.display};
         }""", context['game_name'])
         browser.close()
     assert box, 'the title element was not found in the rendered card'
@@ -153,3 +159,68 @@ def test_the_title_survives_a_two_line_game_name(tmp_path, monkeypatch):
     box = _measure(tmp_path, monkeypatch, ctx)
 
     assert box['scrollH'] - box['clientH'] <= 6, 'a two-line title clips on a fully loaded card'
+
+
+# -- the title fits itself to one line ------------------------------------------------------------
+
+def test_a_long_title_shrinks_to_stay_on_one_line(tmp_path, monkeypatch):
+    """Two lines is what crowds this card: at 50px a wrapped name takes 108px, and on a card that
+    also carries a badge band, a jobs row and a full quick take that is the difference between
+    composed and cramped. The title shrinks instead, only as far as it takes."""
+    ctx = dict(FULL_CARD, game_name='LEGO Harry Potter Collection: Years 1-4')
+
+    box = _measure(tmp_path, monkeypatch, ctx)
+
+    assert box['lines'] == 1, 'the long title still wrapped to two lines'
+    assert box['size'] < 50, 'the title did not shrink at all, so it cannot have measured itself'
+    assert box['size'] >= 32, 'the title shrank past the floor'
+
+
+def test_a_short_title_is_left_alone(tmp_path, monkeypatch):
+    """Shrinking is the cost of fitting, not a default. A name that already fits keeps the full 50px
+    -- the card's single dominant statement stays dominant."""
+    box = _measure(tmp_path, monkeypatch, dict(FULL_CARD, game_name='Toy Story 3'))
+
+    assert box['size'] == 50
+    assert box['lines'] == 1
+
+
+def test_a_name_too_long_for_one_line_wraps_at_the_floor(tmp_path, monkeypatch):
+    """Below the floor it stops shrinking and wraps: a very long name should be two readable lines,
+    not one illegible one. Two lines AT THE FLOOR is still far shorter than two lines at 50px, so
+    even the give-up case leaves the card better off."""
+    ctx = dict(FULL_CARD,
+               game_name='The Legend of the Extraordinarily Long Subtitle That Cannot Possibly Fit')
+
+    box = _measure(tmp_path, monkeypatch, ctx)
+
+    assert box['lines'] == 2, 'an unfittable name was squeezed onto one line'
+    assert box['size'] == 32, 'the wrap happened somewhere other than the floor'
+    # THE CLAMP HAS TO BE RESTORED. The measuring pass sets it to `unset`; leaving it there means a
+    # three-line name renders three lines and blows the column, which this string is too short to
+    # reveal on its own.
+    assert box['clamp'] == '2', 'the two-line clamp was not restored after measuring'
+    assert box['scrollH'] < 108, (
+        'two lines still cost what they cost at 50px, which is the layout problem this fixes'
+    )
+    # ...and it is still not clipped, which is what this file exists for.
+    assert box['scrollH'] - box['clientH'] <= 6
+
+
+def test_the_fit_is_measured_after_the_fonts_are_live():
+    """`load` does not wait for web fonts, and the faces here are base64 data: URIs. Measuring
+    against a fallback typeface and rendering in Bricolage is the wrong answer with no error
+    anywhere -- so the fit runs again on `document.fonts.ready`, and the renderer awaits it before
+    screenshotting."""
+    import pathlib
+
+    from django.conf import settings
+
+    root = pathlib.Path(settings.BASE_DIR)
+    card = (root / 'templates' / 'shareables' / 'plat_card.html').read_text(encoding='utf-8')
+    renderer = (root / 'core' / 'services' / 'playwright_renderer.py').read_text(encoding='utf-8')
+
+    assert 'document.fonts.ready.then(fit)' in card, 'the fit never re-runs in the real typeface'
+    assert "page.evaluate('document.fonts.ready')" in renderer, (
+        'the screenshot can be taken before the second measurement has happened'
+    )

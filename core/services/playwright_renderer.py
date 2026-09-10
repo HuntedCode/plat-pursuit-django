@@ -155,6 +155,13 @@ def _render_in_thread(full_html, width, height):
 
     try:
         page.set_content(full_html, wait_until='load')
+        # `load` does NOT wait for web fonts. The faces are base64 data: URIs so they decode
+        # without a network round trip and have always been ready in practice -- but 'in
+        # practice' is doing the work in that sentence, and a card screenshotted mid-swap
+        # renders in fallback metrics with no error anywhere. It also has to be true before a
+        # card can MEASURE its own text: plat_card fits its title to one line, and measuring
+        # against Arial and rendering in Bricolage is exactly the wrong answer, silently.
+        page.evaluate('document.fonts.ready')
 
         # Screenshot the card element (or full page if element not found)
         card = page.query_selector('.share-image-content')
