@@ -304,6 +304,14 @@ modal claiming it was announced.
 
 `core/services/contract_announcer.py`. **Silent when nothing is new**, which is most days.
 
+**Its own channel.** `DISCORD_CONTRACTS_WEBHOOK_URL` — a wave is a catalogue notice, not
+somebody's achievement, and it lands daily, so it gets its own room rather than pushing
+hunters' platinums up the scroll. UNSET falls back to the platinum channel, because this runs
+from a cron and a deploy that has not configured it yet should keep announcing rather than
+start failing every morning. The success line names the channel it used, so the fallback is
+never silent. Both unset is refused before posting: `requests.post(None, ...)` raises an error
+the webhook helper redacts to "URL redacted", which is useless to debug from.
+
 Announceable = `is_live=True` + `went_live_at` stamped + `announced_at` null. That answers "what
 about games awaiting admin review?" structurally: a staged candidate is `is_live=False`, so it has
 no `went_live_at` and cannot reach the announcer. **Publishing is the only act that makes a

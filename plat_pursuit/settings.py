@@ -62,6 +62,12 @@ BOT_API_KEY = os.getenv('BOT_API_KEY')
 
 DISCORD_PLATINUM_WEBHOOK_URL = os.getenv('DISCORD_PLATINUM_WEBHOOK_URL')
 DISCORD_TEST_WEBHOOK_URL = os.getenv('DISCORD_TEST_WEBHOOK_URL')
+# The Job Board's own channel, for `announce_contracts`. A wave is a different KIND of post to
+# everything else that goes to the platinum channel -- it is a catalogue notice, not somebody's
+# achievement -- and it lands daily, so it earns its own room rather than pushing hunters'
+# platinums up the scroll. UNSET falls back to the platinum channel, so the cron keeps working
+# through a deploy that has not configured it yet; `announce_contracts` names which one it used.
+DISCORD_CONTRACTS_WEBHOOK_URL = os.getenv('DISCORD_CONTRACTS_WEBHOOK_URL')
 # The public invite. Defaulted to the real one so prod works with no env change -- this was
 # never configured anywhere, which left the welcome email's Discord CTA dead in production.
 DISCORD_INVITE_URL = os.getenv('DISCORD_INVITE_URL', 'https://discord.gg/platpursuit')

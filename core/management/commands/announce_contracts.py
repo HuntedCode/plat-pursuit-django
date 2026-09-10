@@ -26,6 +26,7 @@ from django.utils import timezone
 from core.services.contract_announcer import (
     build_announcement,
     mark_announced,
+    webhook_url,
     pending_contracts,
 )
 from trophies.discord_utils.discord_notifications import WebhookError, post_webhook_sync
@@ -149,9 +150,18 @@ class Command(BaseCommand):
                 f"Nothing was stamped -- they will still announce for real."))
             return
 
-        self._post(payload, settings.DISCORD_PLATINUM_WEBHOOK_URL, label="Contract announcement")
+        url, channel = webhook_url()
+        if not url:
+            # Refused rather than posted to None: `requests.post(None, ...)` raises a MissingSchema
+            # that `post_webhook_sync` redacts into "URL redacted", which is a true statement about a
+            # url that does not exist and a completely useless one to debug from.
+            raise CommandError(
+                "No webhook configured. Set DISCORD_CONTRACTS_WEBHOOK_URL (or "
+                "DISCORD_PLATINUM_WEBHOOK_URL) in your .env.")
+        self._post(payload, url, label="Contract announcement")
         stamped = mark_announced(contracts)
-        self.stdout.write(self.style.SUCCESS(f"Announced and stamped {stamped} contract(s)."))
+        self.stdout.write(self.style.SUCCESS(
+            f"Announced and stamped {stamped} contract(s) in {channel}."))
 
     def _post(self, payload, webhook_url, *, label="Webhook"):
         """Thin wrapper: the POST itself is shared (see `post_webhook_sync`), this only translates

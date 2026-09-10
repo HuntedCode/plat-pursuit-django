@@ -221,6 +221,8 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   optional insurance the deploy notes called it. What keeps the set quiet afterwards is
   `Contract.save()` stamping only on the TRANSITION to live -- under the older "live and unstamped"
   rule, a curator editing a launch-era contract republished it.
+- **Channel**: `DISCORD_CONTRACTS_WEBHOOK_URL`, falling back to `DISCORD_PLATINUM_WEBHOOK_URL`
+  when unset (the success line says which it used). `--test-webhook` still overrides both.
 - **Idempotency**: a COLUMN (`Contract.announced_at`), stamped by a confirmed 2xx **and by
   `--baseline`** -- it records that the row was settled, not that anyone was told. A failed
   post leaves the whole wave pending for the next run; a second run in the same window is silent. A

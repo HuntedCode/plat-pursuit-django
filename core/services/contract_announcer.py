@@ -337,6 +337,24 @@ def _capped(description, fallback=None):
     return description[:DISCORD_DESCRIPTION_LIMIT - 1].rstrip() + '…'
 
 
+def webhook_url():
+    """(url, label) for the channel a wave belongs in.
+
+    `DISCORD_CONTRACTS_WEBHOOK_URL` when it is set, and the platinum channel when it is not. The
+    fallback is deliberate: this runs from a daily cron, and a deploy that has not configured the new
+    channel yet should keep announcing rather than start failing every morning at 06:00.
+
+    A silent fallback would be the wrong kind of safe, though -- "we made a contracts channel" and
+    "the posts are still going to the platinum channel" look identical from here. So the label comes
+    back with the url and the command prints which room it used.
+    """
+    url = getattr(settings, 'DISCORD_CONTRACTS_WEBHOOK_URL', None)
+    if url:
+        return url, 'the contracts channel'
+    return settings.DISCORD_PLATINUM_WEBHOOK_URL, ('the platinum channel '
+                                                  '(DISCORD_CONTRACTS_WEBHOOK_URL is unset)')
+
+
 def mark_announced(contracts, when=None):
     """Stamp a wave as POSTED. Called ONLY after a confirmed 2xx, so a failed post leaves the whole
     wave pending for the next run rather than silently swallowing it.
