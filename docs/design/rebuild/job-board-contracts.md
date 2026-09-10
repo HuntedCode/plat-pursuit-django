@@ -165,8 +165,22 @@ row written before that keeps saying `False` forever, so excluding on it would s
 platinum tier permanently and silently. The sweep asks `_has_platinum(contract, member_ids)` once per
 Contract instead — one catalogue-bounded `.exists()` against thousands of skipped detections.
 
-(The frozen value still matters elsewhere: the accept gate only banks the platinum tier when
-`has_platinum` is True. That is separate from the sweep and unfixed.)
+**The fresh question fixes the STAMP, not the PAYOUT.** `_pending_tiers` still gates on the frozen
+`has_platinum`, so a hunter whose row was created before the contract had a platinum ends up with
+`platinum_reached_at` correctly stamped and the tier never offered, never paid, no error. Entirely
+pre-existing and orthogonal to the sweep -- but the sentence above should not be read as resolving
+it.
+
+**Read `N candidate(s), M settled` as the alarm.** For a mature Contract the healthy steady state is
+`0 candidate(s)` -- which is byte-identical to what a broken candidate query or a mis-passed
+`has_plat` would print. The settled count is what distinguishes a quiet sweep from a blind one:
+0 candidates with a large settled count is correct; 0 and 0 on a Contract people have completed is
+not.
+
+**`has_plat` is fresh per SWEEP OF THAT CONTRACT, not per instant.** Under `--incremental` a
+Contract that gains its first platinum may not be revisited for up to `FULL_SWEEP_INTERVAL`, so the
+weak exclusion applies until then. Bounded, self-healing, and the same window membership gains
+already had -- but "asked fresh" does not mean instantaneous.
 
 ## Reconciliation — when membership changes under a hunter
 

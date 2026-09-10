@@ -242,7 +242,11 @@ def test_a_fully_stamped_hunter_is_not_a_candidate():
     assert '1 candidate(s) -> 2 new tier mark(s)' in out or '1 candidate(s)' in out
 
     out = _run('--all')
-    assert '0 candidate(s)' in out, 'a fully stamped hunter is still being re-evaluated nightly'
+    # AND THE SETTLED COUNT SAYS SO. `0 candidate(s)` alone is what a broken candidate query
+    # prints too, which is why the line reports the skipped total.
+    assert '0 candidate(s), 1 settled' in out, (
+        'a fully stamped hunter is still being re-evaluated nightly'
+    )
 
 
 def test_a_half_stamped_hunter_is_still_a_candidate():
@@ -257,7 +261,7 @@ def test_a_half_stamped_hunter_is_still_a_candidate():
     EarnedContract.objects.filter(profile=profile, contract=contract).update(platinum_reached_at=None)
 
     out = _run('--all')
-    assert '1 candidate(s) -> 1 new tier mark(s)' in out, (
+    assert '1 candidate(s), 0 settled -> 1 new tier mark(s)' in out, (
         'a hunter with an unstamped tier was excluded'
     )
 
@@ -274,7 +278,7 @@ def test_a_hunter_who_has_only_the_platinum_is_still_a_candidate():
     EarnedContract.objects.filter(profile=profile, contract=contract).update(full_reached_at=None)
 
     out = _run('--all')
-    assert '1 candidate(s) -> 1 new tier mark(s)' in out, (
+    assert '1 candidate(s), 0 settled -> 1 new tier mark(s)' in out, (
         'a hunter with an unstamped 100% tier was treated as settled'
     )
 
@@ -290,7 +294,7 @@ def test_a_contract_with_no_platinum_settles_on_the_full_tier_alone():
     _run('--all')
     out = _run('--all')
 
-    assert '0 candidate(s)' in out
+    assert '0 candidate(s), 1 settled' in out
 
 
 def test_the_platinum_question_is_asked_fresh_not_read_off_the_row():
@@ -309,6 +313,20 @@ def test_the_platinum_question_is_asked_fresh_not_read_off_the_row():
 
     out = _run('--all')
     assert '1 candidate(s)' in out, 'the sweep trusted the frozen flag and skipped a reachable tier'
+
+
+def test_the_platinum_answer_cannot_be_forgotten_at_a_call_site():
+    """A falsy `has_plat` degrades the exclusion to its WEAK form -- skipping everyone with the 100%
+    tier stamped whether or not their platinum is reachable and unstamped, which is the exact silent
+    miss the fresh question exists to prevent. It carried a `None` default, so one forgetful caller
+    selected that failure with no error and no sign beyond a smaller candidate count."""
+    import inspect
+
+    sig = inspect.signature(Command._candidate_profiles)
+    param = sig.parameters['has_plat']
+
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY, 'has_plat can be passed positionally again'
+    assert param.default is inspect.Parameter.empty, 'has_plat has a default that can only be wrong'
 
 
 def test_a_hunter_with_no_row_yet_is_always_a_candidate():

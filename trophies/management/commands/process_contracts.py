@@ -194,6 +194,7 @@ class Command(BaseCommand):
         for contract in contracts:
             member_ids = contract.member_concept_ids()
             marks = candidates = 0
+            settled = 0
             # ASKED FRESH, ONCE PER CONTRACT, and deliberately not read off `EarnedContract`.
             # `has_platinum` is frozen on the row when it is created and never updated, while
             # membership is IGDB-derived and can gain a platinum-bearing game later -- so a row
@@ -201,15 +202,22 @@ class Command(BaseCommand):
             # that hunter's platinum tier permanently. This is one catalogue-bounded `.exists()`
             # against the thousands of per-candidate detections it lets us skip.
             has_plat = _has_platinum(contract, member_ids)
-            for profile in self._candidate_profiles(contract, member_ids, has_plat):
+            settled = self._settled_profiles(contract, has_plat=has_plat).count()
+            for profile in self._candidate_profiles(contract, member_ids, has_plat=has_plat):
                 candidates += 1
                 newly = self._apply(profile, contract, member_ids, dry_run)
                 if newly:
                     marks += len(newly)
                     profiles_touched.add(profile.id)
             total_tier_marks += marks
+            # THE SETTLED COUNT IS THE ALARM. For a mature Contract the healthy steady state is now
+            # "0 candidate(s)", which is byte-identical to what a broken candidate query, a bad
+            # `member_concept_ids()` or a mis-passed `has_plat` would print -- and this whole failure
+            # class is invisible by construction. Before the exclusion, "462 -> 1" collapsing to
+            # "0 -> 0" was a visible cliff; saying how many were skipped puts that cliff back.
             self.stdout.write(
-                f"  {contract.name}: {candidates} candidate(s) -> {marks} new tier mark(s)."
+                f"  {contract.name}: {candidates} candidate(s), {settled} settled "
+                f"-> {marks} new tier mark(s)."
             )
         verb = "would mark" if dry_run else "marked"
         self.stdout.write(self.style.SUCCESS(
@@ -217,7 +225,20 @@ class Command(BaseCommand):
         ))
 
     @staticmethod
-    def _candidate_profiles(contract, member_ids, has_plat=None):
+    def _settled_profiles(contract, *, has_plat):
+        """Rows on this Contract with nothing left to stamp -- the exclusion set, and the number the
+        sweep reports so a quiet run is distinguishable from a broken one.
+
+        `full_reached_at` is required in BOTH shapes. Dropping it would call a hunter settled on the
+        strength of a platinum alone and never stamp their 100% tier.
+        """
+        settled = EarnedContract.objects.filter(contract=contract, full_reached_at__isnull=False)
+        if has_plat:
+            settled = settled.filter(platinum_reached_at__isnull=False)
+        return settled
+
+    @staticmethod
+    def _candidate_profiles(contract, member_ids, *, has_plat):
         """Profiles with completion relevant to this Contract AND something left to stamp -- the
         only ones worth running detection on. The candidate ids never enter Python.
 
@@ -236,6 +257,13 @@ class Command(BaseCommand):
         platinum-bearing member later would leave old rows saying False, and excluding on that would
         skip a reachable platinum tier for good. Profiles with no EarnedContract row at all are not
         in the exclusion set, so a first-time candidate is always evaluated.
+
+        KEYWORD-ONLY AND UNDEFAULTED, deliberately. It carried `has_plat=None`, and a falsy value
+        degrades this to its WEAK form -- excluding everyone with `full_reached_at` set whether or
+        not their platinum is reachable and unstamped, which is the exact silent miss the fresh
+        question exists to prevent. One caller that forgot the argument would have selected that
+        failure with no error and no sign in the output beyond a smaller candidate count. A default
+        that can only ever be wrong should not be available.
 
         (`.iterator()` here bounds PYTHON memory, not the server's: a management command runs in
         autocommit, so Django's server-side cursor is `DECLARE ... WITH HOLD`, and Postgres
@@ -282,11 +310,7 @@ class Command(BaseCommand):
 
         ids = subs[0] if len(subs) == 1 else subs[0].union(*subs[1:])
 
-        # Everyone with nothing left to gain on this Contract. `.exclude(pk__in=...)` on the primary
-        # key, so it stays an anti-join against the same id set rather than another scan.
-        settled = EarnedContract.objects.filter(contract=contract, full_reached_at__isnull=False)
-        if has_plat:
-            settled = settled.filter(platinum_reached_at__isnull=False)
+        settled = Command._settled_profiles(contract, has_plat=has_plat)
         # `.only('id')` is for psycopg row width and Django hydration, not the plan: nothing in
         # `_apply` / `_detect_tiers` / `mark_contract_reached` reads another field, so there is no
         # deferred-field reload per row.
