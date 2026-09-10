@@ -224,3 +224,78 @@ def test_the_fit_is_measured_after_the_fonts_are_live():
     assert "page.evaluate('document.fonts.ready')" in renderer, (
         'the screenshot can be taken before the second measurement has happened'
     )
+
+
+def test_the_in_page_preview_fits_its_title_too(tmp_path, monkeypatch):
+    """THE PNG AND THE PREVIEW ARE THE SAME HTML, and they disagreed.
+
+    Playwright renders the card with `set_content`, which parses a real document and runs its
+    scripts. The share modal writes the identical markup with `innerHTML`, which parses script tags
+    and never runs them -- so the title fitted in the downloaded image and wrapped in the preview the
+    hunter was looking at while deciding whether to download it. Nothing errored.
+
+    This walks the preview's actual path: inject with innerHTML, then arm it the way plat-cards.js
+    does, and measure what the hunter would see.
+    """
+    import pathlib
+
+    from django.conf import settings
+    from django.template.loader import render_to_string
+    from playwright.sync_api import sync_playwright
+
+    faces = _font_faces(monkeypatch)
+    ctx = dict(FULL_CARD, game_name='LEGO Harry Potter Collection: Years 1-4')
+    card_html = render_to_string('shareables/plat_card.html', ctx)
+    utils = (pathlib.Path(settings.BASE_DIR) / 'static' / 'js' / 'utils.js').read_text(
+        encoding='utf-8')
+
+    page_html = (
+        '<style>' + faces + '</style>'
+        '<div id="scaler"></div>'
+        '<script>' + utils + '</script>'
+    )
+    path = tmp_path / 'preview.html'
+    path.write_text(page_html, encoding='utf-8')
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={'width': 1400, 'height': 800})
+        page.goto(path.as_uri())
+        armed = page.evaluate("""(html) => {
+            const scaler = document.getElementById('scaler');
+            scaler.innerHTML = html;                       // exactly what the share modal does
+            if (!(window.PlatPursuit && window.PlatPursuit.runScripts)) { return 'missing'; }
+            window.PlatPursuit.runScripts(scaler);
+            return 'ran';
+        }""", card_html)
+        page.wait_for_timeout(400)
+        box = page.evaluate("""(name) => {
+            const el = [...document.querySelectorAll('div,span')]
+                .find(e => e.textContent.trim() === name);
+            if (!el) return null;
+            const size = parseFloat(getComputedStyle(el).fontSize);
+            return {size: size, lines: Math.max(1, Math.round(el.scrollHeight / (size * 1.04)))};
+        }""", ctx['game_name'])
+        browser.close()
+
+    assert armed == 'ran', 'PlatPursuit.runScripts is missing, so the preview cannot arm the card'
+    assert box, 'the title element was not found in the injected preview'
+    assert box['lines'] == 1, (
+        'the preview still wraps: innerHTML parsed the fitting script without running it, so the '
+        'hunter sees a different card from the one they download'
+    )
+    assert box['size'] < 50
+
+
+def test_the_preview_arms_the_html_it_injects():
+    """The call has to come AFTER the assignment -- arming an empty container does nothing, and the
+    failure is invisible either way."""
+    import pathlib
+
+    from django.conf import settings
+
+    src = (pathlib.Path(settings.BASE_DIR) / 'static' / 'js' / 'plat-cards.js').read_text(
+        encoding='utf-8')
+    body = src.split('scaler.innerHTML = data.html;', 1)[1].split('}', 1)[0]
+
+    assert 'runScripts(scaler)' in body, 'the injected card is never armed'
