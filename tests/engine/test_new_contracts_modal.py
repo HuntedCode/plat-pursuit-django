@@ -117,6 +117,45 @@ def test_a_hunter_away_for_a_month_is_still_told(hunter):
     assert 'Published While You Were Out' in body
 
 
+def test_a_first_visit_sees_the_last_fortnight_not_the_archive(hunter):
+    """A hunter with no marker has no personal answer to "what is new to you", and the literal one --
+    everything ever posted -- is useless: someone signing up in a year would be met with every wave
+    since launch. A first visit falls back to the board's own 14-day window, so it shows exactly what
+    the board is calling new."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _live('Ancient History', days_ago=NEW_CONTRACT_WINDOW_DAYS + 10)
+    _live('This Week')
+    assert hunter.profile.user.ui_flags.get('contracts_seen') is None, 'fixture wrong: has a marker'
+
+    body = hunter.get('/career/', **CF).content.decode()
+
+    assert 'This Week' in body
+    assert 'Ancient History' not in body, 'a first visit was handed the whole archive'
+
+
+def test_the_first_visit_floor_never_applies_to_someone_who_has_a_marker(hunter):
+    """The floor is for the reader with no history, not the one with a long absence. Applying it to
+    both would silently undo the reason the marker exists -- and it is the same 14-day number, so a
+    floor left switched on for everyone looks exactly like it is working."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _live('Missed While Away', days_ago=NEW_CONTRACT_WINDOW_DAYS + 10)
+    _mark(hunter.profile.user, timezone.now() - timezone.timedelta(days=NEW_CONTRACT_WINDOW_DAYS + 30))
+
+    assert 'Missed While Away' in hunter.get('/career/', **CF).content.decode()
+
+
+def test_nothing_recent_means_no_first_visit_modal(hunter):
+    """The floor has to be able to empty the wave, not merely trim it. If everything posted is older
+    than the window, a first visit gets no modal at all rather than an empty one."""
+    from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
+
+    _live('Long Ago', days_ago=NEW_CONTRACT_WINDOW_DAYS + 1)
+
+    assert 'id="new-contracts"' not in hunter.get('/career/', **CF).content.decode()
+
+
 def test_a_contract_that_is_not_live_is_never_announced(hunter):
     """Un-publishing has to pull a contract back even after it was announced.
     `announced_at` is stamped once and never cleared (that is what stops a re-publish from

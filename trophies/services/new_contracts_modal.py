@@ -30,6 +30,11 @@ the card markers use. That window answers "is this contract new?"; this answers 
 A hunter away for three weeks would be told nothing by the window and everything by the marker, and
 they are the person the modal exists for.
 
+WITH ONE EXCEPTION: a hunter who has NO marker yet. "New to you" is then everything ever posted,
+which is true and useless -- so a first visit falls back to that same 14-day window. It is the only
+case where the two questions have to agree, because it is the only case where the personal one has
+no answer of its own.
+
 ORDERED BY WHAT THEY CAN ACT ON. `annotated_contracts` already decorates every contract with this
 viewer's status in SQL, so leading with the ones already claimable or in progress costs nothing and
 turns a catalogue notice into "you have already done the work on two of these".
@@ -135,7 +140,7 @@ def new_for(profile, user, limit=MAX_LIST):
     `newest` is what to store on dismissal -- taken from the wave itself, never from the clock, so a
     wave announced between this query and the click is not silently marked seen.
     """
-    from trophies.services.contracts_service import annotated_contracts
+    from trophies.services.contracts_service import annotated_contracts, new_contract_cutoff
 
     empty = {'heroes': [], 'rows': [], 'disciplines': [], 'total': 0, 'extra': 0, 'newest': None}
     if profile is None or user is None or not getattr(user, 'is_authenticated', False):
@@ -153,6 +158,20 @@ def new_for(profile, user, limit=MAX_LIST):
     marker = seen_marker(user)
     if marker is not None:
         qs = qs.filter(announced_at__gt=marker)
+    else:
+        # NO MARKER MEANS NO FLOOR, and without one that reads as "everything ever posted is new to
+        # you" -- literally true and useless: a hunter who signs up in a year would be met with every
+        # wave since launch on their first Career visit.
+        #
+        # Only two people have no marker: a brand-new account, and everyone at rollout. Both want the
+        # same thing, which is the recent past rather than the archive. `new_contract_cutoff` is the
+        # site's existing 14-day answer to "is this contract new?" -- the board's Latest chip and the
+        # card markers read it too -- so a first visit sees exactly what the board is calling new.
+        #
+        # This does NOT touch the hunter away for three weeks. They have a marker, so the floor never
+        # applies to them and they are still told everything they missed, which is the whole reason
+        # the marker exists.
+        qs = qs.filter(announced_at__gte=new_contract_cutoff())
 
     total = qs.count()
     if not total:
