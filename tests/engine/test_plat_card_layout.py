@@ -287,6 +287,52 @@ def test_the_in_page_preview_fits_its_title_too(tmp_path, monkeypatch):
     assert box['size'] < 50
 
 
+def test_the_fit_only_touches_its_own_card(tmp_path, monkeypatch):
+    """A GLOBAL lookup fits whichever `[data-fit-title]` comes first in the page. With two cards in
+    the DOM -- a stale preview, a second modal, anything -- that means shrinking one nobody is
+    looking at and leaving the visible one wrapped, which is indistinguishable from the fit never
+    running at all."""
+    import pathlib
+
+    from django.conf import settings
+    from django.template.loader import render_to_string
+    from playwright.sync_api import sync_playwright
+
+    faces = _font_faces(monkeypatch)
+    long_name = 'LEGO Harry Potter Collection: Years 1-4'
+    card_html = render_to_string('shareables/plat_card.html', dict(FULL_CARD, game_name=long_name))
+    utils = (pathlib.Path(settings.BASE_DIR) / 'static' / 'js' / 'utils.js').read_text(
+        encoding='utf-8')
+
+    path = tmp_path / 'two_cards.html'
+    path.write_text('<style>' + faces + '</style>'
+                    '<div id="first"></div><div id="second"></div>'
+                    '<script>' + utils + '</script>', encoding='utf-8')
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={'width': 1400, 'height': 900})
+        page.goto(path.as_uri())
+        sizes = page.evaluate("""(html) => {
+            // A card already sitting in the page, never armed -- the stale-preview shape.
+            document.getElementById('first').innerHTML = html;
+            // ...and the one the hunter is actually looking at.
+            const second = document.getElementById('second');
+            second.innerHTML = html;
+            window.PlatPursuit.runScripts(second);
+            const size = (root) => parseFloat(
+                getComputedStyle(root.querySelector('[data-fit-title]')).fontSize);
+            return {first: size(document.getElementById('first')), second: size(second)};
+        }""", card_html)
+        browser.close()
+
+    assert sizes['second'] < 50, 'the armed card did not fit itself'
+    assert sizes['first'] == 50, (
+        'arming the second card resized the FIRST one -- the lookup is not scoped to its own card, '
+        'so on a page with two cards the visible one stays wrapped'
+    )
+
+
 def test_the_preview_arms_the_html_it_injects():
     """The call has to come AFTER the assignment -- arming an empty container does nothing, and the
     failure is invisible either way."""

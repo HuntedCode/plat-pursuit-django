@@ -415,7 +415,15 @@ give-up case leaves the card better off than it was. {% endcomment %}
 <script>
 (function () {
     'use strict';
-    var el = document.querySelector('[data-fit-title]');
+    // SCOPED TO THIS CARD, not the document. `document.currentScript` is the node executing right
+    // now -- including when PlatPursuit.runScripts re-creates it to arm an innerHTML'd fragment --
+    // so its parent is the container this card was injected into. A global lookup would fit
+    // whichever `[data-fit-title]` came first in the page, which on a page holding more than one
+    // card means shrinking one nobody is looking at and leaving the visible one wrapped.
+    //
+    // Captured HERE, synchronously: `currentScript` is null by the time the fonts promise resolves.
+    var root = (document.currentScript && document.currentScript.parentElement) || document;
+    var el = root.querySelector('[data-fit-title]');
     if (!el) { return; }
 
     var MAX = 50, MIN = 32, STEP = 2;
