@@ -1,39 +1,90 @@
 {% comment %} NEW CONTRACTS since this hunter last looked, on the Career page.
 
-Server-gated entirely (`show_new_contracts` in career_views.py): there is something newer than their
-`contracts_seen` marker, and the first-visit explainer is not also due. Render == armed, so a hunter
-with nothing new gets no markup at all.
+Server-gated entirely (`show_new_contracts` in career_views.py): something is newer than their
+`contracts_seen` marker, and the first-visit explainer is not also due. Render == armed.
 
-WHAT IT LEADS WITH is the point. The board's own `status_order` puts contracts they can already claim
-first, then ones in progress, then the rest -- so the modal opens on "you have already done the work
-on this" rather than on a catalogue of things to start. That ranking is free: `annotated_contracts`
-computes it in SQL for the board anyway.
+BUILT TO BE STAYED IN, not dismissed. Three parts, in the order somebody actually reads them:
 
-PRECEDENCE lives in the view, which is the one place that can see both modals. The explainer wins.
+  HEROES   -- three contracts with real cover art, their job icons and this viewer's status. Three
+              at desktop width keeps the art large enough to be the draw; CSS drops it to one on a
+              phone rather than shrinking three covers into thumbnails.
+  CHIPS    -- one per job that gained work, with its icon and count. Filtering, not navigation: the
+              owner follows Mastermind specifically, and "what landed for MY job" is the question
+              this modal exists to answer.
+  THE LIST -- every new contract, scrolling. Capped at MAX_LIST, because this renders on every
+              Career load and a bulk publish must not become 300 rows nobody asked for.
+
+Filtering is CLIENT-side. Every row already carries its job slugs, so a chip is a class toggle, not
+a round trip -- and the counts cannot disagree with the list because both come from the same rows.
 
 Behaviour is PlatPursuit.DetailModal; the page's motion gate is armed separately and synchronously by
 _career_modal_gate.html, so nothing waits on this script to run.
 {% endcomment %}
-{% load humanize %}
+{% load job_icons %}
 <div class="pp-detail-modal pp-howto" id="new-contracts" data-auto hidden>
     <div class="pp-detail-modal__scrim" data-nc-close></div>
-    <div class="pp-detail-modal__dialog pp-howto__dialog" role="dialog" aria-modal="true" aria-labelledby="new-contracts-title" tabindex="-1">
+    <div class="pp-detail-modal__dialog pp-howto__dialog nc__dialog" role="dialog" aria-modal="true" aria-labelledby="new-contracts-title" tabindex="-1">
         <button type="button" class="pp-detail-modal__close" data-nc-close aria-label="Close">&times;</button>
         <div class="pp-detail-modal__body pp-howto__body">
             <p class="nc__eyebrow">New on the Job Board</p>
             <h2 class="pp-howto__title" id="new-contracts-title">
                 <svg class="pp-howto__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
-                {{ new_contracts_total }} new contract{{ new_contracts_total|pluralize }}
+                {{ nc.total }} new contract{{ nc.total|pluralize }}
             </h2>
-            <p class="pp-forge__lede">Published since you last looked. The ones you can act on are first.</p>
 
-            <ul class="nc__list">
-                {% for c in new_contracts %}
-                    <li class="nc__row nc__row--{{ c.status }}">
+            {% comment %} HEROES. `aspect-[3/4]` + object-cover object-top is the house rule for game
+            art: PSN fallbacks are square or 4:3 and centre-crop badly, and object-top keeps the logo
+            at the top of the cover. {% endcomment %}
+            <div class="nc__heroes">
+                {% for c in nc.heroes %}
+                    <figure class="nc__hero">
+                        <div class="nc__hero-art">
+                            {% if c.cover_url %}
+                                <img src="{{ c.cover_url }}" alt="" loading="lazy" decoding="async" />
+                            {% else %}
+                                <span class="nc__hero-noart" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 14 2 2 4-4"/></svg>
+                                </span>
+                            {% endif %}
+                            {% if c.status == 'claimable' %}
+                                <span class="nc__hero-chip nc__chip--claim">Ready to claim</span>
+                            {% elif c.status == 'pursuing' %}
+                                <span class="nc__hero-chip nc__chip--going">{{ c.max_progress }}%</span>
+                            {% endif %}
+                        </div>
+                        <figcaption class="nc__hero-name">{{ c.name }}</figcaption>
+                        <span class="nc__jobs" aria-label="Jobs this levels">
+                            {% for job in c.jobs.all %}
+                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon job.icon 'nc__job-ic' %}</span>
+                            {% endfor %}
+                        </span>
+                    </figure>
+                {% endfor %}
+            </div>
+
+            {% comment %} FILTER CHIPS. `data-nc-job` is the slug the rows carry; "all" resets. Counts
+            come from the same rows the list renders, so a chip can never promise contracts the list
+            cannot show. {% endcomment %}
+            {% if nc.jobs %}
+                <div class="nc__chips" role="group" aria-label="Filter by job">
+                    <button type="button" class="nc__chip-btn is-active" data-nc-job="all">All <span class="nc__chip-n">{{ nc.rows|length }}</span></button>
+                    {% for job in nc.jobs %}
+                        <button type="button" class="nc__chip-btn" data-nc-job="{{ job.slug }}" style="--disc: var(--disc-{{ job.discipline }});">
+                            {% job_icon job.icon 'nc__chip-ic' %}{{ job.name }} <span class="nc__chip-n">{{ job.count }}</span>
+                        </button>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <ul class="nc__list" data-nc-list>
+                {% for c in nc.rows %}
+                    <li class="nc__row nc__row--{{ c.status }}" data-nc-jobs="{% for job in c.jobs.all %}{{ job.slug }} {% endfor %}">
                         <span class="nc__name">{{ c.name }}</span>
-                        {% comment %} The status chip is the reason this modal is worth opening rather
-                        than being a link to the board. `status` is annotated per viewer, so "Ready to
-                        Claim" here means THIS hunter can claim it right now. {% endcomment %}
+                        <span class="nc__jobs" aria-hidden="true">
+                            {% for job in c.jobs.all %}
+                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon job.icon 'nc__job-ic' %}</span>
+                            {% endfor %}
+                        </span>
                         {% if c.status == 'claimable' %}
                             <span class="nc__chip nc__chip--claim">Ready to claim</span>
                         {% elif c.status == 'pursuing' %}
@@ -44,14 +95,15 @@ _career_modal_gate.html, so nothing waits on this script to run.
                     </li>
                 {% endfor %}
             </ul>
+            <p class="nc__empty" data-nc-empty hidden>Nothing new for that job.</p>
 
-            {% if new_contracts_extra %}
-                <p class="nc__more">and {{ new_contracts_extra }} more on the board</p>
+            {% if nc.extra %}
+                <p class="nc__more">and {{ nc.extra }} more on the board</p>
             {% endif %}
 
             <div class="pp-howto__actions">
                 <button type="button" class="pp-howto__got" data-nc-close>Got it</button>
-                <a class="pp-howto__more" href="{% url 'career' %}?view=contracts&amp;new=1" data-nc-close>See them all &rarr;</a>
+                <a class="pp-howto__more" href="{% url 'career' %}?view=contracts&amp;new=1" data-nc-close>Open the board &rarr;</a>
             </div>
         </div>
     </div>
@@ -66,6 +118,34 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
     var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal(); } };
     if (!el) { settle(); return; }
 
+    // THE JOB FILTER. Client-side because every row already carries its slugs: a chip is a class
+    // toggle, so there is no round trip, no loading state, and no way for the counts to disagree
+    // with what the list shows. Delegated from the modal root, so it survives any re-render.
+    var list = el.querySelector('[data-nc-list]');
+    var empty = el.querySelector('[data-nc-empty]');
+    el.addEventListener('click', function (e) {
+        if (!e.target.closest) { return; }
+        var chip = e.target.closest('[data-nc-job]');
+        if (!chip || !list) { return; }
+        var want = chip.getAttribute('data-nc-job');
+
+        el.querySelectorAll('[data-nc-job]').forEach(function (b) {
+            b.classList.toggle('is-active', b === chip);
+            b.setAttribute('aria-pressed', b === chip ? 'true' : 'false');
+        });
+
+        var shown = 0;
+        list.querySelectorAll('.nc__row').forEach(function (row) {
+            // Padded on both sides so `mage` cannot match `mastermind`: the slugs live in one
+            // space-separated attribute, and a bare indexOf is a prefix trap.
+            var slugs = ' ' + (row.getAttribute('data-nc-jobs') || '') + ' ';
+            var hit = want === 'all' || slugs.indexOf(' ' + want + ' ') !== -1;
+            row.hidden = !hit;
+            if (hit) { shown++; }
+        });
+        if (empty) { empty.hidden = shown > 0; }
+    });
+
     document.addEventListener('DOMContentLoaded', function () {
         if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
         PlatPursuit.DetailModal(el, {
@@ -76,9 +156,9 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
             onOpened: function () { if (window.ppHoldCareerModal) { window.ppHoldCareerModal(); } },
             onDismiss: function () {
                 if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
-                // The stamp comes from the WAVE, not from the clock: a contract published between
-                // this render and this click went live before the click but after the query, and a
-                // now-stamp would skip it silently. Storing what was shown cannot skip anything.
+                // The stamp comes from the WAVE, not the clock: a contract published between this
+                // render and this click went live before the click but after the query, and a
+                // now-stamp would mark it seen without ever showing it.
                 return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
                     setting: 'contracts_seen', value: '{{ new_contracts_stamp|escapejs }}'
                 });

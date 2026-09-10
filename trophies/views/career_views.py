@@ -153,17 +153,13 @@ class CareerView(LoginRequiredMixin, TemplateView):
         previewing = (self.request.GET.get('preview') == 'new-contracts'
                       and (self.request.user.is_staff
                            or getattr(self.request.user, 'is_moderator', False)))
-        new_contracts, new_total, newest_stamp = new_contracts_modal.new_for(
+        nc = new_contracts_modal.new_for(
             getattr(self.request.user, 'profile', None), self.request.user)
-        context['new_contracts'] = new_contracts
-        context['new_contracts_total'] = new_total
-        # Computed here, not as `total|add:"-6"` in the template: that literal is MAX_SHOWN,
-        # and a template cannot see it change.
-        context['new_contracts_extra'] = max(new_total - len(new_contracts), 0)
-        context['new_contracts_stamp'] = newest_stamp.isoformat() if newest_stamp else ''
+        context['nc'] = nc
+        context['new_contracts_stamp'] = nc['newest'].isoformat() if nc['newest'] else ''
         context['show_new_contracts'] = (
-            not context['show_career_explainer'] and bool(new_contracts)
-        ) or (previewing and bool(new_contracts))
+            not context['show_career_explainer'] and bool(nc['rows'])
+        ) or (previewing and bool(nc['rows']))
         context['explainer_debug'] = settings.DEBUG
         return context
 

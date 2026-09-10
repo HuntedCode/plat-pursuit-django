@@ -150,28 +150,70 @@ def test_actionable_contracts_come_first(hunter):
     game = GameFactory(concept=concept)
     ProfileGame.objects.create(profile=hunter.profile, game=game, progress=100)
 
-    contracts, total, _newest = new_contracts_modal.new_for(hunter.profile, hunter.profile.user)
+    nc = new_contracts_modal.new_for(hunter.profile, hunter.profile.user)
 
-    assert total == 2
-    assert contracts[0].name == 'Already Finished', (
-        'the contract they can act on is not first: %s' % [c.name for c in contracts]
+    assert nc['total'] == 2
+    assert nc['rows'][0].name == 'Already Finished', (
+        'the contract they can act on is not first: %s' % [c.name for c in nc['rows']]
     )
-    assert contracts[0].status in ('claimable', 'pursuing')
-    assert plain.name in [c.name for c in contracts]
+    assert nc['rows'][0].status in ('claimable', 'pursuing')
+    assert plain.name in [c.name for c in nc['rows']]
+    # The heroes are the head of that same ordering, so the actionable one leads the art too.
+    assert nc['heroes'][0].name == 'Already Finished'
 
 
-def test_the_modal_names_a_few_and_counts_the_rest(hunter):
-    """A notice, not the board."""
-    for i in range(new_contracts_modal.MAX_SHOWN + 3):
+def test_the_list_is_capped_and_counts_the_overflow(hunter):
+    """The cap is a real ceiling, not a tidy number: this renders on EVERY Career load, so a bulk
+    publish must not become hundreds of rows plus their job icons in a modal nobody asked for."""
+    for i in range(new_contracts_modal.MAX_LIST + 3):
         _live('Contract %02d' % i)
 
     body = hunter.get('/career/', **CF).content.decode()
     modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
 
-    # The `<li` prefix matters: `nc__row` alone appears TWICE per row (the base class and the
-    # status modifier), so counting the bare token counted every row twice.
-    assert modal.count('<li class="nc__row') == new_contracts_modal.MAX_SHOWN
+    # The `<li` prefix matters: `nc__row` alone appears TWICE per row (base class plus status
+    # modifier), so counting the bare token counted every row twice.
+    assert modal.count('<li class="nc__row') == new_contracts_modal.MAX_LIST
     assert 'and 3 more on the board' in modal
+
+
+def test_only_the_heroes_carry_cover_art(hunter):
+    """Art is fetched per hero, so the count is the query count. Every row getting one would be a
+    per-row lookup on every Career render."""
+    for i in range(new_contracts_modal.MAX_HEROES + 4):
+        _live('Contract %02d' % i)
+
+    nc = new_contracts_modal.new_for(hunter.profile, hunter.profile.user)
+
+    assert len(nc['heroes']) == new_contracts_modal.MAX_HEROES
+    assert all(hasattr(h, 'cover_url') for h in nc['heroes'])
+    assert not any(hasattr(r, 'cover_url') for r in nc['rows'][new_contracts_modal.MAX_HEROES:])
+
+
+def test_the_job_chips_can_never_promise_more_than_the_list_shows(hunter):
+    """Facets are built from the rendered rows, not a separate aggregate. Counted independently they
+    would include contracts past the cap -- a chip leading to an emptier list than it advertised."""
+    job = Job.objects.exclude(is_fallback=True).first()
+    for i in range(4):
+        _live('For One Job %02d' % i, jobs=[job])
+
+    nc = new_contracts_modal.new_for(hunter.profile, hunter.profile.user)
+
+    chip = next(j for j in nc['jobs'] if j['slug'] == job.slug)
+    listed = sum(1 for r in nc['rows'] if job in r.jobs.all())
+    assert chip['count'] == listed
+
+
+def test_a_row_carries_its_job_slugs_for_the_filter(hunter):
+    """The filter is client-side off this attribute; without it every chip shows an empty list."""
+    job = Job.objects.exclude(is_fallback=True).first()
+    _live('Filterable', jobs=[job])
+
+    body = hunter.get('/career/', **CF).content.decode()
+    modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
+
+    assert 'data-nc-jobs="' in modal
+    assert job.slug in modal.split('data-nc-jobs="', 1)[1].split('"', 1)[0]
 
 
 # ── the marker ───────────────────────────────────────────────────────────────────────────────────

@@ -17,8 +17,12 @@ turns a catalogue notice into "you have already done the work on two of these".
 """
 import logging
 
+from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+
+from core.services.contract_announcer import cover_url_for
+from trophies.models import Job
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +30,18 @@ logger = logging.getLogger(__name__)
 #: `whats_new_seen` is: this is a MOVING marker, and that branch is documented as sticky booleans.
 FLAG = 'contracts_seen'
 
-#: How many contracts the modal names before it counts the rest. The modal is a notice, not the board.
-MAX_SHOWN = 6
+#: HEROES: the contracts that get cover art. Three fits the dialog at desktop width without shrinking
+#: the art to a thumbnail; CSS drops it to one on a phone, where a big cover is the whole draw.
+MAX_HEROES = 3
+
+#: The scroll list's hard ceiling, and it is a real one rather than a tidy number. This renders on
+#: EVERY Career load for every hunter, so a bulk publish dropping three hundred contracts must not
+#: become three hundred rows plus their job icons in a modal nobody asked for. Past this the board
+#: is the right surface, and the footer link says so.
+MAX_LIST = 60
+
+#: Kept for the callers/tests that still speak in "how many does it name".
+MAX_SHOWN = MAX_LIST
 
 
 
@@ -44,17 +58,20 @@ def seen_marker(user):
     return parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
 
 
-def new_for(profile, user, limit=MAX_SHOWN):
-    """(contracts, total_new, newest_stamp) for this hunter, or ([], 0, None) when nothing is new.
+def new_for(profile, user, limit=MAX_LIST):
+    """Everything the modal needs, in a bounded number of queries.
 
-    `total_new` counts everything published since their marker; `contracts` is the slice the modal
-    names. `newest_stamp` is what to store on dismissal -- taken from the wave itself, never from the
-    clock, so nothing published mid-visit is skipped.
+    Returns a dict: `heroes`, `rows`, `jobs`, `total`, `extra`, `newest`. Empty `rows` means nothing
+    is new and the modal should not render at all.
+
+    `newest` is what to store on dismissal -- taken from the wave itself, never from the clock, so a
+    contract published between this query and the click is not silently marked seen.
     """
     from trophies.services.contracts_service import annotated_contracts
 
+    empty = {'heroes': [], 'rows': [], 'jobs': [], 'total': 0, 'extra': 0, 'newest': None}
     if profile is None or user is None or not getattr(user, 'is_authenticated', False):
-        return [], 0, None
+        return empty
 
     qs = annotated_contracts(profile, with_ranking=False).filter(went_live_at__isnull=False)
     marker = seen_marker(user)
@@ -63,15 +80,55 @@ def new_for(profile, user, limit=MAX_SHOWN):
 
     total = qs.count()
     if not total:
-        return [], 0, None
+        return empty
 
-    # `status_order` is the board's own SQL ranking -- claimable 0, in progress 1, everything else 2 --
-    # already annotated by `annotated_contracts`. Ordering by it is exact and free. Sorting the slice
-    # in Python instead was an approximation: a claimable contract outside the first page would never
-    # have been promoted into it, which is precisely the one the reader most wants to see.
-    ordered = qs.order_by('status_order', '-went_live_at', 'name')
+    # `status_order` is the board's own SQL ranking -- claimable 0, in progress 1, everything else 2,
+    # annotated by `annotated_contracts` for the board anyway. Ordering by it is exact and free.
+    # Sorting the slice in Python instead was an approximation: a claimable contract outside the
+    # first page could never be promoted into it, which is the one the reader most wants to see.
+    #
+    # ONE query for the rows plus ONE prefetch for their jobs. The jobs are needed twice -- for each
+    # row's icons and for the filter chips -- and computing the chips from the prefetched rows rather
+    # than from a second aggregate keeps the two consistent by construction: a chip can never count a
+    # contract the list does not show.
+    rows = list(
+        qs.order_by('status_order', '-went_live_at', 'name')
+          .prefetch_related(Prefetch('jobs', queryset=Job.objects.order_by('name')))[:limit]
+    )
     newest = qs.order_by('-went_live_at').values_list('went_live_at', flat=True).first()
-    return list(ordered[:limit]), total, newest
+
+    heroes = rows[:MAX_HEROES]
+    for hero in heroes:
+        # Reuses the announcer's definition of "this contract's cover" rather than a second one --
+        # it already walks the member-game gate and `display_image_url`'s fallback chain, and two
+        # answers to "which picture represents this contract" is exactly one too many.
+        hero.cover_url = cover_url_for(hero)
+
+    return {
+        'heroes': heroes,
+        'rows': rows,
+        'jobs': _job_facets(rows),
+        'total': total,
+        'extra': max(total - len(rows), 0),
+        'newest': newest,
+    }
+
+
+def _job_facets(rows):
+    """[{slug, name, icon, discipline, count}] for the filter chips, biggest first then alphabetical.
+
+    Built from the rows the modal actually shows, not from a separate aggregate: a chip that counts
+    contracts the list cannot display is a filter that leads to an empty list.
+    """
+    seen = {}
+    for contract in rows:
+        for job in contract.jobs.all():
+            entry = seen.setdefault(job.slug, {
+                'slug': job.slug, 'name': job.name, 'icon': job.icon,
+                'discipline': job.discipline, 'count': 0,
+            })
+            entry['count'] += 1
+    return sorted(seen.values(), key=lambda j: (-j['count'], j['name']))
 
 
 # NO `is_due` helper here, deliberately. The view needs the contracts, the total AND the stamp, so a
