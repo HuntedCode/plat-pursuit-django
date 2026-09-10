@@ -361,6 +361,35 @@ def test_the_mobile_tab_bar_carries_them_too(hunter):
     assert 'ready to claim' in tab and 'new contracts on the board' in tab
 
 
+def test_the_tab_bar_shows_NEW_alone_when_nothing_is_claimable(hunter):
+    """The common case, and the one the suppression rule could easily have broken: new contracts and
+    nothing to claim. `.pp-navhub__n--tab ~ .pp-navhub__new--tab` is a SIBLING selector, so with no
+    count rendered there is nothing to match and the pill stands on its own -- but a rule written one
+    character differently (`.pp-navhub__new--tab { display: none }`) would hide it always, and the
+    markup test above would still pass because the span is rendered either way."""
+    _contract('Fresh', announced_days_ago=0)
+
+    body = hunter.get('/career/', **CF).content.decode()
+    tab = body.split('class="mobile-tabbar-item', 1)[1].split('</a>', 1)[0]
+
+    assert 'pp-navhub__new--tab' in tab, 'no New marker on the phone nav'
+    assert 'pp-navhub__n--tab' not in tab, 'fixture wrong: something is claimable'
+    # The suppression must be the SIBLING form, or the pill is hidden with nothing to hide it for.
+    css_rule = '.pp-navhub__n--tab ~ .pp-navhub__new--tab { display: none; }'
+    from pathlib import Path
+
+    from django.conf import settings
+    css = (Path(settings.BASE_DIR) / 'static' / 'css' / 'components' / 'chrome.css').read_text(
+        encoding='utf-8')
+    assert css_rule in css
+    # ANCHORED TO THE START OF A RULE. The sibling rule above CONTAINS this exact substring, so the
+    # unanchored form asserted that the correct CSS was absent -- a guard that fails when the code is
+    # right, which is the same bug as one that passes when it is wrong.
+    assert (chr(10) + '.pp-navhub__new--tab { display: none') not in css, (
+        'the New pill is hidden unconditionally, not only behind a count'
+    )
+
+
 def test_the_tab_bar_shows_one_marker_at_a_time():
     """Both at once would overlap on a 20px icon, so the New pill steps aside for the count -- the
     count already says there is something waiting, which is the more urgent half. CSS-only, because
