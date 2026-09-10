@@ -21,7 +21,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from core.services.contract_announcer import DISCIPLINE_ORDER, cover_url_for
+from core.services.contract_announcer import DISCIPLINE_ORDER
 from trophies.models import Job
 
 logger = logging.getLogger(__name__)
@@ -30,9 +30,13 @@ logger = logging.getLogger(__name__)
 #: `whats_new_seen` is: this is a MOVING marker, and that branch is documented as sticky booleans.
 FLAG = 'contracts_seen'
 
-#: HEROES: the contracts that get cover art. Three fits the dialog at desktop width without shrinking
-#: the art to a thumbnail; CSS drops it to one on a phone, where a big cover is the whole draw.
-MAX_HEROES = 3
+#: HEROES: the contracts that get cover art, and the TOP of the same progress order the list uses --
+#: so the covers are the ones this hunter is furthest along on, not an arbitrary six.
+#:
+#: Six rather than three because three covers at dialog width were tall enough to push the list below
+#: the fold. The dialog renders all six and CSS shows 2 / 4 / 6 by breakpoint: a phone gets two big
+#: covers, a desktop gets six smaller ones, and the modal fits on screen at every size.
+MAX_HEROES = 6
 
 #: The scroll list's ceiling. Raised from 60 after the owner asked what the meaningful difference
 #: was -- and the honest answer was that 60 defended against a cost I had created: the rows were
@@ -57,6 +61,50 @@ def seen_marker(user):
         logger.debug("Unparseable %s marker: %r", FLAG, raw)
         return None
     return parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
+
+
+#: ORDERED BY WHAT THEY CAN ACT ON, THEN BY HOW FAR ALONG THEY ARE. `annotated_contracts` decorates
+#: every contract with this viewer's `status_order` (claimable 0, pursuing 1, available 2) and
+#: `sort_progress` (percent, but only while pursuing) in SQL for the board anyway, so this is the
+#: board's own default ordering rather than a second definition of "most relevant to you".
+#:
+#: Sorting the SLICE in Python instead was an approximation with a real failure: a claimable contract
+#: outside the first page could never be promoted into it, and that is the row the reader most wants.
+_ORDER = ('status_order', '-sort_progress', '-went_live_at', 'name')
+
+
+def _hero_covers(heroes):
+    """{igdb_id: cover url} for the hero contracts, in ONE query.
+
+    The announcer's `cover_url_for` answers this per contract, which is right for a post naming three
+    games and wrong here: six heroes on every Career load would be six round trips. Same gate
+    (`_member_gate`), same `display_image_url` fallback chain, same most-played tie-break -- DISTINCT
+    ON just resolves them together.
+
+    `.defer(...raw_response)` is not decoration: that column is the ~30 KB IGDB blob behind the May
+    2026 web-server OOM, and nothing in a cover URL reads it.
+    """
+    from trophies.models import Game
+    from trophies.services.contracts_service import _member_gate
+
+    ids = [c.igdb_id for c in heroes if c.igdb_id]
+    if not ids:
+        return {}
+
+    games = (Game.objects
+             .filter(**_member_gate('concept__'), concept__igdb_match__igdb_id__in=ids)
+             .select_related('concept', 'concept__igdb_match')
+             .defer('concept__igdb_match__raw_response')
+             .order_by('concept__igdb_match__igdb_id', '-played_count')
+             .distinct('concept__igdb_match__igdb_id'))
+
+    covers = {}
+    for game in games:
+        url = game.display_image_url or ''
+        # Absolute or nothing. Every source in the chain is a URLField holding a PSN or IGDB CDN
+        # address, so a relative value cannot arise -- and if one ever did, no art beats broken art.
+        covers[game.concept.igdb_match.igdb_id] = url if url.startswith('http') else ''
+    return covers
 
 
 def new_for(profile, user, limit=MAX_LIST):
@@ -93,17 +141,15 @@ def new_for(profile, user, limit=MAX_LIST):
     # than from a second aggregate keeps the two consistent by construction: a chip can never count a
     # contract the list does not show.
     rows = list(
-        qs.order_by('status_order', '-went_live_at', 'name')
+        qs.order_by(*_ORDER)
           .prefetch_related(Prefetch('jobs', queryset=Job.objects.order_by('name')))[:limit]
     )
     newest = qs.order_by('-went_live_at').values_list('went_live_at', flat=True).first()
 
     heroes = rows[:MAX_HEROES]
+    covers = _hero_covers(heroes)
     for hero in heroes:
-        # Reuses the announcer's definition of "this contract's cover" rather than a second one --
-        # it already walks the member-game gate and `display_image_url`'s fallback chain, and two
-        # answers to "which picture represents this contract" is exactly one too many.
-        hero.cover_url = cover_url_for(hero)
+        hero.cover_url = covers.get(hero.igdb_id, '')
 
     return {
         'heroes': heroes,

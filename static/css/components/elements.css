@@ -1121,19 +1121,58 @@
  * Built to be stayed in: heroes with real cover art, job filter chips, then every new contract in a
  * scrolling list. The dialog is widened past the pp-howto default because three portrait covers side
  * by side is the layout, and a narrower shell would shrink them into thumbnails. */
-.nc__dialog { width: min(760px, 100%); }
+/* THE DIALOG IS A FRAME, NOT A DOCUMENT. `.pp-howto__dialog` scrolls its whole self, which put the
+   close button off screen and let the reader scroll the modal instead of the list. Here the dialog is
+   a flex column pinned to 88vh: the header, heroes and toolbar hold still, and only `.nc__list`
+   scrolls. `.pp-howto` raises the specificity over that base rule (series-list.css imports later).
+
+   `overflow: visible` is load-bearing, not a leftover. The discipline popovers are absolutely
+   positioned inside this box, and ANY clipping on the dialog cuts them off at its edge -- which is
+   what made them look like they were not opening at all. */
+.pp-howto .nc__dialog {
+    width: min(880px, 100%); max-height: 88vh; overflow: visible;
+    display: flex; flex-direction: column;
+}
+.pp-howto .nc__dialog > .pp-detail-modal__body {
+    display: flex; flex-direction: column; flex: 1 1 auto;
+    min-height: 0;   /* a flex item's default min-height:auto refuses to shrink, so the list could not scroll */
+}
+/* Opening UPWARD when the room below runs out (the modal's own JS measures and adds this). The
+   shared `.rp-pop--left` handles the horizontal edge; nothing handled the vertical one, because on
+   a page you can always scroll to a popover and inside a dialog you cannot. */
+.nc__toolbar .rp-pop--up { top: auto; bottom: calc(100% + 6px); }
+
+/* THE TOOLBAR: filter left, sort right -- the house arrangement. Wraps to two rows on a phone. */
+.nc__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 0 10px; }
+.nc__sort { margin-left: auto; }
 .nc__eyebrow {
     font-size: 10.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
     color: color-mix(in oklab, var(--pp-primary) 78%, var(--pp-text)); margin-bottom: 6px;
 }
 
-/* HEROES. ONE on a phone, not three shrunk down: the cover is the whole draw, and a third of a
-   375px dialog is a thumbnail. The extra two are still in the list below, so nothing is lost. */
-.nc__heroes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 16px 0 4px; }
-@media (min-width: 640px) { .nc__heroes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* HEROES: 2 / 4 / 6 by breakpoint. The server renders all six and CSS hides the ones that do not
+   fit, so the count follows the screen without a second render path -- and every hidden hero is
+   still in the list below, so nothing is lost at any size.
+   Twice as many as before at each size, which is what makes each cover half as tall: three covers at
+   dialog width pushed the list off the bottom of the screen. */
+.nc__heroes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0 2px; }
+.nc__hero:nth-child(n + 3) { display: none; }
+@media (min-width: 640px) {
+    .nc__heroes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .nc__hero:nth-child(n + 3) { display: block; }
+    .nc__hero:nth-child(n + 5) { display: none; }
+}
+@media (min-width: 1024px) {
+    .nc__heroes { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .nc__hero:nth-child(n + 5) { display: block; }
+}
 .nc__hero { margin: 0; min-width: 0; }
+/* The cap is what keeps the modal on screen on a short viewport: the grid column decides the width,
+   so without it a 3:4 cover grows as tall as the dialog is wide. object-cover crops the excess, and
+   object-position: top means what it crops is the bottom -- never the logo. */
 .nc__hero-art {
-    position: relative; aspect-ratio: 3 / 4; border-radius: var(--pp-radius-md); overflow: hidden;
+    position: relative; aspect-ratio: 3 / 4; max-height: 24vh;
+    border-radius: var(--pp-radius-md); overflow: hidden;
     background: var(--pp-bg-2); border: 1px solid var(--pp-border);
 }
 /* object-top, not centre: PSN fallback art is square or 4:3 and crops badly in a portrait box, and
@@ -1165,7 +1204,7 @@
    the Career contracts board and Browse Games), so only the spacing and two dialog-specific
    corrections belong here. Five wrapping triggers instead of a horizontal scroll of up to 25 job
    chips: two lines at its tallest, so it never grows past the list it filters. */
-.nc__filter { padding: 14px 0 10px; }
+.nc__filter { flex: 1 1 auto; }   /* the toolbar owns the spacing now */
 /* The trigger's hover lift reads as a wobble against a fixed dialog panel rather than a page that
    scrolls (Browse Games turns it off in its own panel for the same reason). */
 .nc__filter .rp-disc__trigger:hover { transform: none; }
@@ -1174,12 +1213,14 @@
    text on no background at all. */
 .nc__filter [data-nc-all] { --disc: var(--pp-primary); display: inline-flex; align-items: center; gap: 5px; }
 
-/* THE LIST. A bounded scroll box, so the dialog height does not track the size of the wave. */
+/* THE LIST. A bounded scroll box so the dialog height does not track the size of the wave.
+   FLEX-SIZED now rather than capped at a vh: it takes whatever the dialog has left after the header,
+   heroes and toolbar, so the modal is always exactly one screen and the scrolling happens in here. */
 .nc__list {
-    list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px;
-    max-height: 34vh; overflow-y: auto; scrollbar-width: thin;
+    display: flex; flex-direction: column; gap: 6px;
+    flex: 1 1 auto; min-height: 96px; overflow-y: auto; scrollbar-width: thin;
+    margin: 0; padding: 2px 4px 2px 0; list-style: none;
 }
-@media (min-width: 768px) { .nc__list { max-height: 38vh; } }
 .nc__row {
     display: flex; align-items: center; gap: 10px; padding: 8px 11px;
     border-radius: var(--pp-radius-md); background: var(--pp-bg-2); border: 1px solid var(--pp-border);

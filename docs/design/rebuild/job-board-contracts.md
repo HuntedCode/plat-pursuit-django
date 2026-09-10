@@ -340,10 +340,12 @@ person the modal exists for.
 
 | Piece | Rule |
 |---|---|
-| Heroes | first `MAX_HEROES` (3) rows get cover art, via the announcer's own `cover_url_for` — two answers to "which picture represents this contract" is one too many |
-| Order | `status_order` from `annotated_contracts` (claimable → pursuing → the rest), in SQL. Sorting the slice in Python could never promote a claimable contract from outside the first page into it |
-| The list | every contract in the wave up to `MAX_LIST` (200), in a bounded scroll box, with `and N more on the board` past it |
+| Order | `_ORDER` = `status_order`, `-sort_progress`, `-went_live_at`, `name` — the board's own default, annotated in SQL by `annotated_contracts`. Sorting the slice in Python could never promote a claimable or nearly-finished contract from outside the first page into it |
+| Heroes | the first `MAX_HEROES` (6) of that order, so the covers are what this hunter is furthest along on. The server renders all six; CSS shows **2 / 4 / 6** by breakpoint, so the count follows the screen with no second render path |
+| Hero art | `_hero_covers()` — ONE query for all six (DISTINCT ON over the member-game gate), not the announcer's per-contract `cover_url_for`. Same gate, same `display_image_url` chain, same most-played tie-break |
+| The list | every contract in the wave up to `MAX_LIST` (200), in a scroll box that flexes to whatever the dialog has left |
 | The filter | the site's shared `.rp-discs` discipline dropdowns (`PlatPursuit.discPopovers`) — five triggers, each opening its jobs, so "what did Mastermind gain?" is two clicks |
+| Sort | the shared `.pp-switch`: **Progress** (restores the server's order, which is what the heroes were picked from) or **A-Z**. Client-side re-append — both keys ride on every row, so there is no round trip |
 | Facets | computed from the RENDERED ROWS, never a separate aggregate |
 
 **Gotchas**
@@ -355,6 +357,19 @@ person the modal exists for.
   feeding two jobs in the same discipline is one contract to that discipline.
 - **Icons must use `job_icon_use` (the sprite), not `job_icon`.** 186 bytes against 674. The list
   cap sat at 60 purely because the inline form was being used; the sprite is what pays for 200.
+- **A bare `.rp-discs` lookup is whichever group comes FIRST in the page.** This modal is included
+  at the top of `career.html`, so when it gained a discipline group the board's
+  `document.querySelector('.rp-discs')` started returning the MODAL's: the board's popovers lost
+  their controller and the modal's got two. Two controllers on one root means a click opens the
+  popover and the second handler, finding it open, closes it inside the same click — nothing
+  appears and nothing errors. The board's lookups are scoped to `#rp-advanced` now.
+- **The dialog must not clip.** The popovers are absolutely positioned inside it, so any `overflow`
+  other than `visible` cuts them off at its edge. That is why `.nc__dialog` is a height-capped flex
+  column with the scrolling pushed down into `.nc__list`, rather than the scrolling dialog the
+  `.pp-howto` base gives it — which also keeps the close button on screen.
+- **A popover with no room below it opens upward** (`.rp-pop--up`, measured after `discPopovers`
+  opens it). The shared controller flips at the horizontal viewport edge only: on a page you can
+  always scroll to a popover, and inside a dialog you cannot.
 - **Escape belongs to the innermost open thing.** `discPopovers` and `DetailModal` both close on
   Escape from `document` in the bubble phase, so one press did both and dismissing a dropdown took
   the modal with it. The partial claims the key in the CAPTURE phase, and only while a popover is

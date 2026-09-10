@@ -74,8 +74,9 @@ _career_modal_gate.html, so nothing waits on this script to run.
             click-outside; SELECTION is ours, below. A discipline's count is DISTINCT contracts, so it
             is never the sum of its jobs' counts -- one contract feeding two of its jobs is one
             contract to the discipline. {% endcomment %}
+            <div class="nc__toolbar">
             {% if nc.disciplines %}
-                <div class="nc__filter rp-discs" role="group" aria-label="Filter by discipline or job" data-nc-discs>
+                <div class="nc__filter rp-discs" role="group" aria-label="Filter by discipline or job">
                     <button type="button" class="rp-chip is-active" data-nc-all>All <span class="rp-disc__count">{{ nc.rows|length }}</span></button>
                     {% for d in nc.disciplines %}
                         <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
@@ -94,9 +95,31 @@ _career_modal_gate.html, so nothing waits on this script to run.
                 </div>
             {% endif %}
 
+                {% comment %} SORT. Progress first because it is the answer to "which of these am I
+                already most of the way through" -- the thing that turns a catalogue notice into a
+                short list of finishable games. A-Z is for the reader looking for one title they
+                heard about. The shared segmented switcher (`.pp-switch`), which is the site's ONE
+                treatment for a toggle like this.
+
+                The list is re-ordered CLIENT-side: every row is already here and carries both keys,
+                so a sort is a re-append, not a round trip. `data-nc-i` is the server's order, which
+                is what "Progress" restores -- recomputing it here would be a second, drifting
+                definition of the ordering the heroes were picked by. {% endcomment %}
+                <div class="pp-switch nc__sort" role="group" aria-label="Sort the list" data-nc-sort>
+                    <button type="button" class="pp-switch__chip is-active" data-nc-order="progress" aria-pressed="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                        <span class="pp-switch__lbl">Progress</span>
+                    </button>
+                    <button type="button" class="pp-switch__chip" data-nc-order="name" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"/><path d="m3 16 4 4 4-4"/><path d="M14 6h6"/><path d="M14 18h6"/><path d="M14 12h6"/></svg>
+                        <span class="pp-switch__lbl">A-Z</span>
+                    </button>
+                </div>
+            </div>
+
             <ul class="nc__list" data-nc-list>
                 {% for c in nc.rows %}
-                    <li class="nc__row nc__row--{{ c.status }}" data-nc-jobs="{% for job in c.jobs.all %}{{ job.slug }} {% endfor %}" data-nc-discs="{% for job in c.jobs.all %}{{ job.discipline }} {% endfor %}">
+                    <li class="nc__row nc__row--{{ c.status }}" data-nc-i="{{ forloop.counter0 }}" data-nc-name="{{ c.name|lower }}" data-nc-jobs="{% for job in c.jobs.all %}{{ job.slug }} {% endfor %}" data-nc-discs="{% for job in c.jobs.all %}{{ job.discipline }} {% endfor %}">
                         <span class="nc__name">{{ c.name }}</span>
                         <span class="nc__jobs" aria-hidden="true">
                             {% for job in c.jobs.all %}
@@ -144,9 +167,11 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
     // flip, aria-expanded, click-outside and Escape. That is the shared contract the Career board and
     // Browse Games already use, and reimplementing it here is how the three come to behave
     // differently. Selection is ours, because it is the part that differs.
-    var filterRoot = el.querySelector('[data-nc-discs]');
+    var filterRoot = el.querySelector('.nc__filter');
+    var sortRoot = el.querySelector('[data-nc-sort]');
     var list = el.querySelector('[data-nc-list]');
     var empty = el.querySelector('[data-nc-empty]');
+    var rows = list ? Array.prototype.slice.call(list.querySelectorAll('.nc__row')) : [];
     var pops = { closeAll: function () {} };
 
     // ESCAPE BELONGS TO THE INNERMOST THING THAT IS OPEN. discPopovers closes popovers on Escape and
@@ -172,6 +197,25 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
             if (hit) { shown++; }
         });
         if (empty) { empty.hidden = shown > 0; }
+    }
+
+    // SORT. Both keys are already on every row, so this is a re-append rather than a fetch. One
+    // fragment, one reflow -- appending 200 rows one at a time is 200 of them.
+    function applySort(mode) {
+        if (!list) { return; }
+        var byName = mode === 'name';
+        var frag = document.createDocumentFragment();
+        rows.slice().sort(function (a, b) {
+            if (byName) {
+                // localeCompare, not `<`: the catalogue has accented and punctuated titles, and
+                // codepoint order files them somewhere nobody would look.
+                return a.getAttribute('data-nc-name').localeCompare(b.getAttribute('data-nc-name'));
+            }
+            // The SERVER's order, restored -- not recomputed. It is the order the heroes were
+            // chosen by, and a second definition of it here would drift from that one.
+            return (+a.getAttribute('data-nc-i')) - (+b.getAttribute('data-nc-i'));
+        }).forEach(function (row) { frag.appendChild(row); });
+        list.appendChild(frag);
     }
 
     function markActive(button) {
@@ -213,9 +257,45 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
         });
     }
 
+    if (sortRoot) {
+        // The click handler is OURS, and wireTablist is asked for keyboard only (`manual`). The
+        // switcher then still works if utils.js failed to load -- a <button> fires click from Enter
+        // and Space natively -- and only the arrow-key roving is lost.
+        sortRoot.addEventListener('click', function (e) {
+            var chip = e.target.closest && e.target.closest('[data-nc-order]');
+            if (!chip || !sortRoot.contains(chip)) { return; }
+            sortRoot.querySelectorAll('[data-nc-order]').forEach(function (c) {
+                c.classList.toggle('is-active', c === chip);
+                c.setAttribute('aria-pressed', c === chip ? 'true' : 'false');
+            });
+            applySort(chip.getAttribute('data-nc-order'));
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
         if (PlatPursuit.discPopovers) { pops = PlatPursuit.discPopovers(filterRoot); }
+        if (sortRoot && PlatPursuit.wireTablist) {
+            PlatPursuit.wireTablist(sortRoot.querySelectorAll('[data-nc-order]'), { manual: true });
+        }
+
+        // THE POPOVER HAS TO FIT ON SCREEN. discPopovers flips it horizontally at the viewport edge
+        // but always opens it downward, which is right on a page that scrolls and wrong inside a
+        // dialog: the trigger sits mid-modal, so a popover that is taller than the room beneath it
+        // runs off the bottom of the screen with no way to scroll to it. Registered AFTER
+        // discPopovers so the popover is already open and measurable.
+        if (filterRoot) {
+            filterRoot.addEventListener('click', function (e) {
+                var trig = e.target.closest && e.target.closest('.rp-disc__trigger');
+                if (!trig) { return; }
+                var pop = trig.parentElement.querySelector('.rp-pop');
+                if (!pop || pop.hidden) { return; }
+                pop.classList.remove('rp-pop--up');
+                if (pop.getBoundingClientRect().bottom > window.innerHeight - 8) {
+                    pop.classList.add('rp-pop--up');
+                }
+            });
+        }
         PlatPursuit.DetailModal(el, {
             closeSelector: '[data-nc-close]',
             autoOpenDelay: 450,

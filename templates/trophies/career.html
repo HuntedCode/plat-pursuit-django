@@ -1221,8 +1221,14 @@ function ppCountUp(el, dur) {
     var advToggle = document.getElementById('rp-adv-toggle');
     var advPanel = document.getElementById('rp-advanced');
     var advBadge = document.getElementById('rp-adv-count');
-    var discs = document.querySelector('.rp-discs');
-    var plats = document.querySelector('.rp-plats');
+    // SCOPED TO THE ADVANCED PANEL, and it has to be. A bare `.rp-discs` is whichever one comes
+    // FIRST in the document, and the new-contracts modal (included at the top of this page, long
+    // before the board) now renders one too. That made `discs` point at the MODAL: the board's
+    // selection handler bound to the wrong element, the board's own popovers got no controller at
+    // all, and the modal's popovers got two -- so a click opened one and the second controller,
+    // seeing it already open, closed it again inside the same click. They looked dead.
+    var discs = advPanel ? advPanel.querySelector('.rp-discs') : null;
+    var plats = advPanel ? advPanel.querySelector('.rp-plats') : null;
     var tokensRow = document.getElementById('rp-tokens-row');
     var tokensBox = document.getElementById('rp-tokens');
     var relaxBtn = document.getElementById('rp-relax');
