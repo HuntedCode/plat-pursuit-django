@@ -31,12 +31,16 @@ def hunter(client):
     return client
 
 
-def _live(name, *, days_ago=0, jobs=None):
+def _live(name, *, days_ago=0, jobs=None, announced=True):
+    """A published contract. ANNOUNCED by default, because that is what the modal reads -- publishing
+    alone puts a contract on the board and nowhere near a reader. `announced=False` is the one-off:
+    live, visible on the board, waiting for the next wave to carry it."""
     c = Contract.objects.create(name=name, slug=name.lower().replace(' ', '-'),
                                 igdb_id=abs(hash(name)) % 9_000_000 + 1_000_000, is_live=True)
     c.jobs.set(jobs or list(Job.objects.exclude(is_fallback=True)[:1]))
+    when = timezone.now() - timezone.timedelta(days=days_ago)
     Contract.objects.filter(pk=c.pk).update(
-        went_live_at=timezone.now() - timezone.timedelta(days=days_ago))
+        went_live_at=when, announced_at=when if announced else None)
     c.refresh_from_db()
     return c
 
@@ -113,12 +117,68 @@ def test_a_hunter_away_for_a_month_is_still_told(hunter):
 
 
 def test_a_contract_that_is_not_live_is_never_announced(hunter):
-    """Same structural gate the Discord announcer relies on: an unpublished contract has no
-    went_live_at, so it cannot reach a reader."""
+    """Un-publishing has to pull a contract back even after it was announced.
+    `announced_at` is stamped once and never cleared (that is what stops a re-publish from
+    re-announcing), so with the stamp left in place `is_live` is the only thing between a
+    withdrawn contract and every reader."""
     c = _live('Staged')
     Contract.objects.filter(pk=c.pk).update(is_live=False, went_live_at=None)
+    assert Contract.objects.get(pk=c.pk).announced_at is not None, 'fixture wrong: no stamp'
+    assert 'id="new-contracts"' not in hunter.get('/career/', **CF).content.decode()
+
+
+# -- announced, not merely published ---------------------------------------------------------------
+
+def test_a_published_contract_is_not_shown_until_it_has_been_announced(hunter):
+    """THE ONE-OFF. Publishing is a staff action that happens whenever staff happen to do it -- a
+    fix, a single game re-added, a correction. Gating on it popped a modal at every hunter to
+    announce one game. It is on the board immediately; the modal waits for the wave."""
+    _live('Quietly Fixed', announced=False)
 
     assert 'id="new-contracts"' not in hunter.get('/career/', **CF).content.decode()
+
+
+def test_the_announcer_is_what_releases_it(hunter):
+    """And the real writer, not a fixture: `mark_announced` is called only after a confirmed 2xx, so
+    a wave that never reached Discord shows nobody a modal claiming it was announced."""
+    from core.services.contract_announcer import mark_announced
+
+    contract = _live('Waiting For The Wave', announced=False)
+    assert 'id="new-contracts"' not in hunter.get('/career/', **CF).content.decode()
+
+    mark_announced([contract])
+
+    body = hunter.get('/career/', **CF).content.decode()
+    assert 'id="new-contracts"' in body and 'Waiting For The Wave' in body
+
+
+def test_a_one_off_held_back_for_days_is_still_shown_when_its_wave_lands(hunter):
+    """The skip this gate would otherwise create, and the reason the MARKER had to move to
+    `announced_at` with the filter. A game fixed last week and carried by today's wave went live
+    BEFORE the stamp this hunter is holding -- so a `went_live_at` filter drops it silently, and the
+    contract the batching exists to deliver is the exact one nobody ever sees."""
+    from core.services.contract_announcer import mark_announced
+
+    held = _live('Fixed Last Week', days_ago=5, announced=False)
+    _mark(hunter.profile.user, timezone.now() - timezone.timedelta(days=2))
+
+    mark_announced([held])
+
+    body = hunter.get('/career/', **CF).content.decode()
+    assert 'Fixed Last Week' in body, 'the batched one-off was filtered out by its publish date'
+
+
+def test_the_stamp_the_modal_offers_is_the_announcement_not_the_publish(hunter):
+    """Both halves have to read the same column. A marker holding a publish time against a filter on
+    the announcement time re-shows waves the reader has already dismissed."""
+    contract = _live('Old But Newly Announced', days_ago=9)
+    Contract.objects.filter(pk=contract.pk).update(announced_at=timezone.now())
+    contract.refresh_from_db()
+
+    modal = hunter.get('/career/', **CF).content.decode().split('id="new-contracts"', 1)[1]
+
+    assert contract.announced_at.isoformat() in modal.replace(chr(92) + 'u002D', '-')
+    assert contract.went_live_at.isoformat() not in modal.replace(chr(92) + 'u002D', '-')
 
 
 # ── precedence ───────────────────────────────────────────────────────────────────────────────────
@@ -421,7 +481,7 @@ def test_the_stamp_offered_is_the_waves_newest_not_now(hunter):
     modal = body.split('id="new-contracts"', 1)[1]
 
     newest.refresh_from_db()
-    assert newest.went_live_at.isoformat() in modal.replace('\\u002D', '-'), (
+    assert newest.announced_at.isoformat() in modal.replace('\\u002D', '-'), (
         'the modal offers a stamp that is not the newest contract it showed'
     )
 

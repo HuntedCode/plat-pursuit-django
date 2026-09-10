@@ -1,10 +1,26 @@
 """Who is due the "new contracts" modal on Career, and what it should show them.
 
-THE MARKER is the newest `went_live_at` this hunter has already been shown, stored as an ISO string
-in `ui_flags['contracts_seen']`. Not a timestamp of "now": a contract published between the render
-and the dismissal would be silently skipped by a now-stamp, because it went live before the click but
+ANNOUNCED, NOT MERELY PUBLISHED. A contract reaches this modal only once `announce_contracts` has
+posted it -- `announced_at` is the gate, not `went_live_at`. Publishing is a staff action that
+happens whenever staff happen to do it: a one-off fix, a single game re-added, a correction. Gating
+on it meant any of those popped a modal at every hunter announcing one game, which is not an
+announcement, it is a notification about housekeeping.
+
+The announcer already batches: it runs daily, is silent when nothing is new, and refuses a wave
+bigger than MAX_WAVE. Deferring to it gives the modal the same rhythm for free -- a game fixed on
+Tuesday travels with Wednesday's wave -- and makes the two halves of an announcement say the SAME
+thing, which is what an announcement is. It also means a wave that failed to post to Discord shows
+nobody a modal claiming it was announced.
+
+THE MARKER is the newest `announced_at` this hunter has already been shown, stored as an ISO string
+in `ui_flags['contracts_seen']`. Not a timestamp of "now": a wave announced between the render and
+the dismissal would be silently skipped by a now-stamp, because it was announced before the click but
 after the query. Storing what was actually SHOWN cannot skip anything -- the same reasoning as What's
 New storing the newest entry id rather than a boolean.
+
+It has to be the SAME column the filter uses. A marker holding a `went_live_at` against a filter on
+`announced_at` would skip every contract published before the marker and announced after it -- which
+is precisely the batched one-off this gate exists to carry.
 
 Deliberately NOT the global 14-day `NEW_CONTRACT_WINDOW_DAYS` window that the board's Latest chip and
 the card markers use. That window answers "is this contract new?"; this answers "is this new TO YOU?".
@@ -70,7 +86,7 @@ def seen_marker(user):
 #:
 #: Sorting the SLICE in Python instead was an approximation with a real failure: a claimable contract
 #: outside the first page could never be promoted into it, and that is the row the reader most wants.
-_ORDER = ('status_order', '-sort_progress', '-went_live_at', 'name')
+_ORDER = ('status_order', '-sort_progress', '-announced_at', '-went_live_at', 'name')
 
 
 def _hero_covers(heroes):
@@ -114,7 +130,7 @@ def new_for(profile, user, limit=MAX_LIST):
     is new and the modal should not render at all.
 
     `newest` is what to store on dismissal -- taken from the wave itself, never from the clock, so a
-    contract published between this query and the click is not silently marked seen.
+    wave announced between this query and the click is not silently marked seen.
     """
     from trophies.services.contracts_service import annotated_contracts
 
@@ -122,10 +138,13 @@ def new_for(profile, user, limit=MAX_LIST):
     if profile is None or user is None or not getattr(user, 'is_authenticated', False):
         return empty
 
-    qs = annotated_contracts(profile, with_ranking=False).filter(went_live_at__isnull=False)
+    # `announced_at` is the gate AND the clock (see the module docstring). `went_live_at` needs no
+    # filter of its own: the announcer only ever sees contracts that have one, so a stamp here
+    # implies it.
+    qs = annotated_contracts(profile, with_ranking=False).filter(announced_at__isnull=False)
     marker = seen_marker(user)
     if marker is not None:
-        qs = qs.filter(went_live_at__gt=marker)
+        qs = qs.filter(announced_at__gt=marker)
 
     total = qs.count()
     if not total:
@@ -144,7 +163,7 @@ def new_for(profile, user, limit=MAX_LIST):
         qs.order_by(*_ORDER)
           .prefetch_related(Prefetch('jobs', queryset=Job.objects.order_by('name')))[:limit]
     )
-    newest = qs.order_by('-went_live_at').values_list('went_live_at', flat=True).first()
+    newest = qs.order_by('-announced_at').values_list('announced_at', flat=True).first()
 
     heroes = rows[:MAX_HEROES]
     covers = _hero_covers(heroes)

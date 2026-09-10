@@ -290,6 +290,12 @@ what is new. The Discord post goes out to the channel; the Career modal meets th
 page where the work is claimed. Neither is a summary of the other: the post is a broadcast that has
 to survive being scrolled past, the modal is a browsable index of the same wave for one reader.
 
+**`announced_at` is that source of truth, and the announcer is the only writer.** Publishing puts a
+contract on the board; being ANNOUNCED is what puts it in front of a reader. The modal reads the
+same column the post stamps, so a game fixed on a Tuesday travels with Wednesday's wave instead of
+popping a modal at every hunter by itself, and a wave that failed to reach Discord shows nobody a
+modal claiming it was announced.
+
 ### The Discord post (`announce_contracts`, daily 06:00 UTC)
 
 `core/services/contract_announcer.py`. **Silent when nothing is new**, which is most days.
@@ -326,12 +332,16 @@ aged out — and a filtered link would land the reader on an empty board.
 
 ### The Career modal (`trophies/services/new_contracts_modal.py`)
 
-Opens on `/career/` when contracts have gone live since this hunter last saw it.
+Opens on `/career/` when contracts have been ANNOUNCED since this hunter last saw it.
 
 **The marker is what was SHOWN, not the clock.** `ui_flags['contracts_seen']` stores the newest
-`went_live_at` in the wave the reader was actually shown. A now-stamp would silently skip a
-contract published between the query and the dismissal — it went live before the click but after
-the query. Same reasoning as What's New storing the newest entry id rather than a boolean.
+`announced_at` in the wave the reader was actually shown. A now-stamp would silently skip a wave
+announced between the query and the dismissal — it was announced before the click but after the
+query. Same reasoning as What's New storing the newest entry id rather than a boolean.
+
+**The marker and the filter must read the SAME column.** A marker holding a `went_live_at` against
+a filter on `announced_at` drops every contract published before the marker and announced after it
+— which is exactly the batched one-off the gate exists to deliver.
 
 **Deliberately NOT `NEW_CONTRACT_WINDOW_DAYS`.** That 14-day window (the board's Latest chip, the
 card markers) answers "is this contract new?"; the marker answers "is this new TO YOU?". A hunter
@@ -340,6 +350,7 @@ person the modal exists for.
 
 | Piece | Rule |
 |---|---|
+| Who reaches it | `announced_at` stamped (and `is_live` still true — the stamp is never cleared, so un-publishing is the only thing that withdraws an announced contract). `went_live_at` needs no filter of its own: the announcer only ever sees contracts that have one |
 | Order | `_ORDER` = `status_order`, `-sort_progress`, `-went_live_at`, `name` — the board's own default, annotated in SQL by `annotated_contracts`. Sorting the slice in Python could never promote a claimable or nearly-finished contract from outside the first page into it |
 | Heroes | the first `MAX_HEROES` (6) of that order, so the covers are what this hunter is furthest along on. The server renders all six; CSS shows **2 / 4 / 6** by breakpoint, so the count follows the screen with no second render path |
 | Hero art | `_hero_covers()` — ONE query for all six (DISTINCT ON over the member-game gate), not the announcer's per-contract `cover_url_for`. Same gate, same `display_image_url` chain, same most-played tie-break |
@@ -350,6 +361,10 @@ person the modal exists for.
 
 **Gotchas**
 
+- **Publishing is not announcing.** A contract published outside a wave — a one-off fix, a single
+  game re-added, a correction — is on the board the moment it goes live and reaches nobody's modal
+  until `announce_contracts` carries it. That also means **the modal never fires if the cron is not
+  registered**: no announcement, no stamp, no modal.
 - **A facet counted independently can promise more than the list shows.** Past the cap, an
   aggregate over the full queryset advertises contracts the list cannot display, and the filter
   leads somewhere emptier than the number said. Build facets from `rows`.
