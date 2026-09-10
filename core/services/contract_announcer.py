@@ -75,7 +75,9 @@ MAX_HIGHLIGHTS = 3
 #: identical wave fails identically every night until someone runs --limit by hand. A fail-closed
 #: retry is what makes a transient error safe and a deterministic one permanent.
 DISCORD_TOTAL_LIMIT = 6000
-#: Headroom under that, so the lead embed and its link always fit whatever the discipline blocks do.
+#: Slack under the hard cap. NOT a reservation for the lead -- the lead is added to the running
+#: total before any block is weighed, so it can never be squeezed out. This is margin against
+#: Discord counting something we do not, which is why _embed_len counts more than we emit.
 _TOTAL_BUDGET = DISCORD_TOTAL_LIMIT - 512
 #: Career deep-links on `?view=`, NOT `?tab=` (that is job detail's param). Getting it wrong does
 #: not 404 or look broken -- the contracts panel renders correctly filtered but stays `hidden`, so
@@ -98,15 +100,13 @@ BOARD_URL_LATEST = BOARD_URL + '&new=1'
 MAX_JOB_LINES = 5
 
 #: Discord's hard cap on an embed description. This is ENFORCED against the assembled string, not
-#: approximated by the line caps above -- those bound the line COUNT, and PlayStation titles are
-#: long enough that twelve jobs of six titles can clear 4096 well inside MAX_WAVE. Overrunning it
+#: approximated by the line caps above -- those bound the line COUNT, and a curator-authored name can
+#: be 255 characters before escaping doubles it. Overrunning it
 #: is not a cosmetic failure: Discord answers 400, the command raises, the wave is never stamped,
 #: and the identical wave fails identically every night until someone runs --limit by hand. The
 #: fail-closed retry that makes transient errors safe is exactly what makes a deterministic one
 #: permanent, so the deterministic one must not be reachable.
 DISCORD_DESCRIPTION_LIMIT = 4096
-#: Headroom under the cap, so the closing link and tail always fit.
-_BUDGET = DISCORD_DESCRIPTION_LIMIT - 256
 
 #: Contract and job names are curator-authored free text going into a markdown description, so a
 #: game legitimately titled "Sam & Max: *Beyond* Time and Space" should render as its own title and
@@ -150,12 +150,18 @@ def highlights(contracts, limit=MAX_HIGHLIGHTS):
         Game.objects.filter(**_member_at_igdb('concept__'))
         .order_by('-played_count').values('played_count')[:1]
     )
-    ranked = (Contract.objects.filter(pk__in=[c.pk for c in contracts])
-              .annotate(reach=Coalesce(reach, Value(0)))
-              .order_by('-reach', 'went_live_at', 'name')
-              .select_related())
-
-    return [(contract, cover_url_for(contract)) for contract in ranked[:limit]]
+    # Fetch only the SCORES and sort the caller's own objects, rather than re-fetching rows we were
+    # handed. Two reasons, and the second is the one that bites later: the caller's contracts arrive
+    # with `jobs` prefetched, and returning fresh instances would silently drop that -- so the day a
+    # headliner line wants to name the jobs it levels ("Hollow Knight — Combat, Mind"), it becomes a
+    # per-headliner query with nothing in the code to warn you. Ranking still happens in the database.
+    reach_by_pk = dict(
+        Contract.objects.filter(pk__in=[c.pk for c in contracts])
+        .annotate(reach=Coalesce(reach, Value(0)))
+        .values_list('pk', 'reach')
+    )
+    ordered = sorted(contracts, key=lambda c: (-reach_by_pk.get(c.pk, 0), c.went_live_at, c.name))
+    return [(contract, cover_url_for(contract)) for contract in ordered[:limit]]
 
 
 def cover_url_for(contract):
@@ -181,10 +187,11 @@ def cover_url_for(contract):
     if game is None:
         return ''
     url = game.display_image_url or ''
-    # Discord fetches this itself, anonymously, so it has to be absolute and public. A relative
-    # /media/ path renders as a broken embed rather than as no embed, which is worse.
-    if url.startswith('/'):
-        url = f"{settings.SITE_URL}{url}"
+    # Discord fetches this itself, anonymously, so anything it cannot resolve must become NO image
+    # rather than a broken one. There was a `/`-prefixed branch here rewriting relative paths onto
+    # SITE_URL; it was dead. Every source in the fallback chain is a URLField holding an absolute PSN
+    # or IGDB CDN url, so a relative value cannot arise -- and if one ever did, dropping it is the
+    # better failure than posting an embed with an unfetchable image.
     return url if url.startswith('http') else ''
 
 
@@ -202,6 +209,15 @@ def _by_discipline(contracts):
         for job in contract.jobs.all():
             disc = groups.setdefault(job.discipline, {})
             disc[job.name] = disc.get(job.name, 0) + 1
+    # An unrecognised discipline is DROPPED -- and says so. Without the log this is the quietest
+    # possible failure: every contract touching that job vanishes from every future post while the
+    # header count stays truthful, so the post looks correct and nobody ever notices. The budget path
+    # below warns before it drops content; dropping here is the same event and gets the same volume.
+    unknown = set(groups) - set(DISCIPLINE_ORDER)
+    if unknown:
+        logger.warning("Contract announcement: unknown discipline(s) %s on live jobs; their work is "
+                       "not in the post. Add them to DISCIPLINE_ORDER/DISCIPLINE_COLORS.",
+                       sorted(unknown))
     return {d: dict(sorted(groups[d].items(), key=lambda kv: (-kv[1], kv[0])))
             for d in DISCIPLINE_ORDER if d in groups}
 
@@ -256,7 +272,13 @@ def build_announcement(contracts):
     # one job sees THAT it gained work, not which game did it. The board link answers that.
     labels = dict(Job.DISCIPLINES)
     for disc, jobs in _by_discipline(contracts).items():
-        colour, _oklch = DISCIPLINE_COLORS[disc]
+        # .get, not a subscript. `Job.discipline` is a CharField(choices=...) and Django choices
+        # are NOT a database constraint, so a value written by a data migration, a fixture or raw
+        # SQL is perfectly storable. A KeyError here propagates out of build_announcement, the
+        # wave is never stamped, and the identical wave fails identically every night forever --
+        # which is the one outcome every budget comment in this module exists to prevent. An
+        # unknown discipline gets the brand colour and still gets its work announced.
+        colour, _oklch = DISCIPLINE_COLORS.get(disc, (EMBED_COLOR, ''))
         shown = list(jobs.items())[:MAX_JOB_LINES]
         job_lines = [
             f"**{escape_markdown(name)}** — {count} new contract{'' if count == 1 else 's'}"
@@ -285,10 +307,20 @@ def build_announcement(contracts):
 
 
 def _embed_len(embed):
-    """What Discord counts toward the 6000-per-message total: title + description + footer text."""
+    """What Discord counts toward the 6000-per-message total.
+
+    Title + description + footer text + author name + every field's name and value. The embeds built
+    here carry no author and no fields, so the last two are always zero -- they are counted anyway
+    because the alternative is a function that is correct only for today's shapes. Adding one `fields`
+    entry to a discipline block is the obvious next iteration, and it would otherwise silently
+    under-count and reopen the breach this whole module is arranged around.
+    """
+    fields = embed.get('fields') or []
     return (len(embed.get('title', ''))
             + len(embed.get('description', ''))
-            + len(embed.get('footer', {}).get('text', '')))
+            + len(embed.get('footer', {}).get('text', ''))
+            + len(embed.get('author', {}).get('name', ''))
+            + sum(len(f.get('name', '')) + len(f.get('value', '')) for f in fields))
 
 
 def _capped(description, fallback=None):
