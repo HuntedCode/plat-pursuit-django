@@ -36,9 +36,12 @@ logger = logging.getLogger(__name__)
 #: case. Being un-postable is the only way this command can protest before the wall is already in
 #: the channel. The operator's answer is --baseline (record the backlog as known) or --force.
 #:
-#: NOT the launch set, despite what the deploy notes first said. Those ~1,000 contracts went live
-#: before `went_live_at` existed, so they carry NULL and `pending_contracts()` never sees them --
-#: and the transition rule in `Contract.save()` keeps it that way when one is edited.
+#: THE LAUNCH SET IS THE FIRST THING THIS WILL MEET, and the deploy notes were wrong about it twice
+#: over. Those ~1,000 contracts DO carry `went_live_at` -- checked against prod -- so
+#: `pending_contracts()` sees every one of them and the first real run refuses the wave. That is the
+#: guard working: the operator's answer is `--baseline`, which records them as known without posting.
+#: Because baselining leaves `announcement_posted` False, they also stay out of the Career modal,
+#: which is the other half of not announcing something.
 MAX_WAVE = 40
 
 
@@ -91,7 +94,11 @@ class Command(BaseCommand):
             # Through a pk subquery: Django refuses .update() on a sliced queryset, and refuses to
             # nest a sliced subquery on some backends, so the ids are resolved first.
             ids = list((qs[:limit] if limit else qs).values_list('pk', flat=True))
-            stamped = Contract.objects.filter(pk__in=ids).update(announced_at=timezone.now())
+            # `announcement_posted` stays False, and is written explicitly rather than left to the
+            # default: this row IS being settled, and "settled without being posted" is the fact the
+            # Career modal reads. Nothing was told to anybody, so nothing is announced to anybody.
+            stamped = Contract.objects.filter(pk__in=ids).update(
+                announced_at=timezone.now(), announcement_posted=False)
             self.stdout.write(self.style.SUCCESS(
                 f"Baselined {stamped} contract(s) as already announced. Nothing was posted."))
             return
@@ -108,8 +115,9 @@ class Command(BaseCommand):
         if len(contracts) > MAX_WAVE and not opts['force'] and not read_only:
             raise CommandError(
                 f"{len(contracts)} contracts are pending, over the {MAX_WAVE} safety limit. That "
-                f"usually means a bulk operation published a backlog (the launch seed is the "
-                f"known case), and announcing it would post a wall. Run with --baseline to record "
+                f"usually means a bulk operation published a backlog (the ~1,000 launch contracts "
+                f"being the known case), and announcing it would post a wall. Run with --baseline "
+                f"to record "
                 f"them as already known, --limit N to trickle, or --force if the wave is real.")
 
         payload = build_announcement(contracts)

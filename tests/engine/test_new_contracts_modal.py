@@ -32,7 +32,7 @@ def hunter(client):
 
 
 def _live(name, *, days_ago=0, jobs=None, announced=True):
-    """A published contract. ANNOUNCED by default, because that is what the modal reads -- publishing
+    """A published contract, POSTED by default, because that is what the modal reads -- publishing
     alone puts a contract on the board and nowhere near a reader. `announced=False` is the one-off:
     live, visible on the board, waiting for the next wave to carry it."""
     c = Contract.objects.create(name=name, slug=name.lower().replace(' ', '-'),
@@ -40,7 +40,8 @@ def _live(name, *, days_ago=0, jobs=None, announced=True):
     c.jobs.set(jobs or list(Job.objects.exclude(is_fallback=True)[:1]))
     when = timezone.now() - timezone.timedelta(days=days_ago)
     Contract.objects.filter(pk=c.pk).update(
-        went_live_at=when, announced_at=when if announced else None)
+        went_live_at=when, announced_at=when if announced else None,
+        announcement_posted=bool(announced))
     c.refresh_from_db()
     return c
 
@@ -150,6 +151,60 @@ def test_the_announcer_is_what_releases_it(hunter):
 
     body = hunter.get('/career/', **CF).content.decode()
     assert 'id="new-contracts"' in body and 'Waiting For The Wave' in body
+
+
+def test_a_baselined_backlog_is_never_announced_to_a_reader(hunter):
+    """THE LAUNCH SET. Those ~1,000 contracts DO carry `went_live_at` -- the deploy notes said
+    otherwise and prod says they do -- so the first run meets a wave far past MAX_WAVE and the
+    operator answers with `--baseline`, which records them as known without posting.
+
+    `--baseline` stamps `announced_at` too, because it also settles the row for idempotency. If the
+    modal read only that stamp, the operator's way of NOT announcing a backlog would announce the
+    whole backlog to every hunter on their next Career load."""
+    from django.core.management import call_command
+
+    for i in range(5):
+        _live('Seeded %02d' % i, announced=False)
+
+    call_command('announce_contracts', '--baseline')
+
+    assert Contract.objects.filter(announced_at__isnull=True).count() == 0, 'nothing was baselined'
+    assert 'id="new-contracts"' not in hunter.get('/career/', **CF).content.decode()
+
+
+def test_an_oversized_wave_is_refused_before_anything_is_stamped(hunter):
+    """The guard that sends the operator to --baseline in the first place. It must refuse WITHOUT
+    stamping, or a wave too big to post becomes a wave silently marked as posted."""
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    from core.management.commands.announce_contracts import MAX_WAVE
+
+    for i in range(MAX_WAVE + 1):
+        _live('Bulk %03d' % i, announced=False)
+
+    with pytest.raises(CommandError) as err:
+        call_command('announce_contracts')
+
+    # The MESSAGE, not merely the type. Without a webhook configured this command raises
+    # CommandError on the posting path too, so `raises(CommandError)` alone passed with the size
+    # guard deleted -- the right exception for entirely the wrong reason.
+    assert 'safety limit' in str(err.value) and '--baseline' in str(err.value)
+    assert Contract.objects.filter(announced_at__isnull=False).count() == 0
+
+
+def test_only_a_confirmed_post_sets_the_posted_flag():
+    """`mark_announced` runs after a 2xx and nowhere else, so it is the only thing that may say a
+    contract was told to anybody."""
+    from core.services.contract_announcer import mark_announced
+
+    contract = _live('Told', announced=False)
+    assert contract.announcement_posted is False
+
+    mark_announced([contract])
+
+    contract.refresh_from_db()
+    assert contract.announcement_posted is True and contract.announced_at is not None
 
 
 def test_a_one_off_held_back_for_days_is_still_shown_when_its_wave_lands(hunter):

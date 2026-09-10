@@ -338,9 +338,14 @@ def _capped(description, fallback=None):
 
 
 def mark_announced(contracts, when=None):
-    """Stamp a wave as announced. Called ONLY after a confirmed 2xx, so a failed post leaves the
-    whole wave pending for the next run rather than silently swallowing it."""
+    """Stamp a wave as POSTED. Called ONLY after a confirmed 2xx, so a failed post leaves the whole
+    wave pending for the next run rather than silently swallowing it.
+
+    Sets `announcement_posted` as well as the timestamp, and that distinction is the whole point of
+    the flag: `--baseline` also stamps `announced_at`, because it also settles the row for
+    idempotency -- but it settles it by deciding NOT to post. Only this path told anybody."""
     ids = [c.pk for c in contracts]
     if not ids:
         return 0
-    return Contract.objects.filter(pk__in=ids).update(announced_at=when or timezone.now())
+    return Contract.objects.filter(pk__in=ids).update(
+        announced_at=when or timezone.now(), announcement_posted=True)

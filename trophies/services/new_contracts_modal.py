@@ -1,7 +1,10 @@
 """Who is due the "new contracts" modal on Career, and what it should show them.
 
 ANNOUNCED, NOT MERELY PUBLISHED. A contract reaches this modal only once `announce_contracts` has
-posted it -- `announced_at` is the gate, not `went_live_at`. Publishing is a staff action that
+POSTED it -- `announced_at` plus `announcement_posted`, not `went_live_at`. Both halves are needed:
+`--baseline` stamps `announced_at` too, because it also settles the row, but it settles it by
+deciding not to post. The launch catalogue is settled that way, and a reader who was never told
+about a thousand contracts must not be handed a modal listing them. Publishing is a staff action that
 happens whenever staff happen to do it: a one-off fix, a single game re-added, a correction. Gating
 on it meant any of those popped a modal at every hunter announcing one game, which is not an
 announcement, it is a notification about housekeeping.
@@ -138,10 +141,15 @@ def new_for(profile, user, limit=MAX_LIST):
     if profile is None or user is None or not getattr(user, 'is_authenticated', False):
         return empty
 
-    # `announced_at` is the gate AND the clock (see the module docstring). `went_live_at` needs no
-    # filter of its own: the announcer only ever sees contracts that have one, so a stamp here
-    # implies it.
-    qs = annotated_contracts(profile, with_ranking=False).filter(announced_at__isnull=False)
+    # POSTED, not merely settled. `announced_at` is the clock, but on its own it also covers the
+    # rows `--baseline` recorded as known WITHOUT posting -- the ~1,000 launch contracts among them,
+    # which do carry `went_live_at`. Announcing to a reader something nobody was ever told is the
+    # one outcome this whole gate exists to prevent, so the flag is part of the filter.
+    #
+    # `went_live_at` needs no filter of its own: the announcer only ever sees contracts that have
+    # one, so a stamp here implies it.
+    qs = (annotated_contracts(profile, with_ranking=False)
+          .filter(announced_at__isnull=False, announcement_posted=True))
     marker = seen_marker(user)
     if marker is not None:
         qs = qs.filter(announced_at__gt=marker)

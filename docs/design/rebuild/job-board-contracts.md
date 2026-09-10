@@ -260,10 +260,13 @@ merely nearly true. **The Discord announcer is NOT a fourth reader** — see bel
 `is_live=False` possibly weeks before staff publish it, so `created_at` answers "when was this
 drafted", not "what is new".
 
-**The launch set reads as not-new by design.** Those ~1,000 badge-derived contracts carry
-`went_live_at = NULL` (they went live before the column existed), so the chip starts empty and
-fills as waves land, rather than calling the whole catalogue new on day one. The transition rule
-in the Gotchas is what keeps that true once curators start editing them.
+**The launch set carries real `went_live_at` stamps** — checked against prod, 2026-09-10. This
+doc said for months that they were NULL because they predate the column; they are not. The Latest
+chip is unaffected because those stamps sit at launch and fall outside the 14-day window, but the
+**announcer has no window**, so `pending_contracts()` sees all ~1,000 of them and the first real
+run refuses the wave. `--baseline` is therefore REQUIRED at cutover, not the cheap insurance the
+deploy notes called it. The transition rule in the Gotchas is what stops a curator's typo fix
+re-publishing one.
 
 Two traps this cost us, both recorded as tests:
 
@@ -321,9 +324,13 @@ embeds**, 10 embeds) by `_capped()`, which drops from the bottom.
 Idempotency is the `announced_at` COLUMN rather than a Redis watermark: a lost watermark
 re-announces everything behind it, one that runs ahead silently swallows a wave. `MAX_WAVE` (40)
 refuses a bulk publish — a staff sweep publishing hundreds of staged candidates in one changelist
-action — with `--baseline` (record as known, post nothing) as the operator's answer. NOT the
-launch set: those contracts predate the column and carry NULL, so `pending_contracts()` never
-sees them.
+action, **and the ~1,000 launch contracts, which do carry `went_live_at`** — with `--baseline`
+(record as known, post nothing) as the operator's answer.
+
+**`announced_at` alone does not mean "posted".** `--baseline` stamps it too, because it also settles
+the row for idempotency — it just settles it by deciding not to post. `announcement_posted` is the
+half that only a confirmed 2xx sets, and it is what the Career modal reads: the operator's way of
+NOT announcing a backlog must not announce that backlog to every hunter instead.
 
 The post's link only filters the board to Latest when the WHOLE wave is still inside that window.
 `announced_at` and `NEW_CONTRACT_WINDOW_DAYS` answer different questions and share no floor, so a
@@ -350,7 +357,7 @@ person the modal exists for.
 
 | Piece | Rule |
 |---|---|
-| Who reaches it | `announced_at` stamped (and `is_live` still true — the stamp is never cleared, so un-publishing is the only thing that withdraws an announced contract). `went_live_at` needs no filter of its own: the announcer only ever sees contracts that have one |
+| Who reaches it | `announcement_posted` **and** `announced_at` (and `is_live` still true — the stamp is never cleared, so un-publishing is the only thing that withdraws an announced contract). The flag is what excludes a `--baseline`d backlog; `went_live_at` needs no filter of its own, since the announcer only ever sees contracts that have one |
 | Order | `_ORDER` = `status_order`, `-sort_progress`, `-went_live_at`, `name` — the board's own default, annotated in SQL by `annotated_contracts`. Sorting the slice in Python could never promote a claimable or nearly-finished contract from outside the first page into it |
 | Heroes | the first `MAX_HEROES` (6) of that order, so the covers are what this hunter is furthest along on. The server renders all six; CSS shows **2 / 4 / 6** by breakpoint, so the count follows the screen with no second render path |
 | Hero art | `_hero_covers()` — ONE query for all six (DISTINCT ON over the member-game gate), not the announcer's per-contract `cover_url_for`. Same gate, same `display_image_url` chain, same most-played tie-break |
@@ -361,9 +368,10 @@ person the modal exists for.
 
 **Gotchas**
 
-- **Publishing is not announcing.** A contract published outside a wave — a one-off fix, a single
-  game re-added, a correction — is on the board the moment it goes live and reaches nobody's modal
-  until `announce_contracts` carries it. That also means **the modal never fires if the cron is not
+- **Publishing is not announcing, and neither is `--baseline`.** A contract published outside a
+  wave — a one-off fix, a single game re-added, a correction — is on the board the moment it goes
+  live and reaches nobody's modal until `announce_contracts` POSTS it. A baselined row is settled,
+  not posted, so it never reaches a modal at all. That also means **the modal never fires if the cron is not
   registered**: no announcement, no stamp, no modal.
 - **A facet counted independently can promise more than the list shows.** Past the cap, an
   aggregate over the full queryset advertises contracts the list cannot display, and the filter
@@ -477,9 +485,10 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   change form to fix a typo posts back whatever the page rendered with, clearing the stamp and
   re-announcing a contract the community already heard about. Any NEW machine-stamped lifecycle
   column needs adding to `readonly_fields` for the same reason.
-- **"Live and unstamped" is NOT the same as "being published."** Every contract that went live
-  before `went_live_at` existed is live with a NULL stamp — on prod that is the whole ~1,000
-  launch set — and NULL is honest there: their first publish predates the record. Stamping on any
+- **"Live and unstamped" is NOT the same as "being published."** A contract that went live before
+  `went_live_at` existed is live with a NULL stamp, and NULL is honest there: its first publish
+  predates the record. (This bullet used to name the ~1,000 launch set as that case. It is not —
+  those rows do carry stamps. The rule below is still right; the example was wrong.) Stamping on any
   save of such a row meant a curator opening one to fix a typo silently republished it (a New badge
   for 14 days, and a Discord post about a game that had been on the board since launch), leaking
   the launch set into "new" one edit at a time. Both writers now key on the **transition**.
