@@ -18,8 +18,11 @@ nobody a modal claiming it was announced.
 THE MARKER is the newest `announced_at` this hunter has already been shown, stored as an ISO string
 in `ui_flags['contracts_seen']`. Not a timestamp of "now": a wave announced between the render and
 the dismissal would be silently skipped by a now-stamp, because it was announced before the click but
-after the query. Storing what was actually SHOWN cannot skip anything -- the same reasoning as What's
-New storing the newest entry id rather than a boolean.
+after the query. Storing what was actually SHOWN cannot skip that -- the same reasoning as What's New
+storing the newest entry id rather than a boolean.
+
+It is a marker, not a receipt: above MAX_LIST the un-rendered remainder IS passed over, deliberately.
+See the note on `newest` in `new_for`.
 
 It has to be the SAME column the filter uses. A marker holding a `went_live_at` against a filter on
 `announced_at` would skip every contract published before the marker and announced after it -- which
@@ -219,11 +222,17 @@ def new_for(profile, user, limit=MAX_LIST, preview=False):
           .defer('notes')   # a TextField no caller here reads, fetched 200 times over
           .prefetch_related(Prefetch('jobs', queryset=Job.objects.order_by('name')))[:limit]
     )
-    # FROM THE ROWS THAT WERE SHOWN, not the whole filtered set. `_ORDER` leads with actionability,
-    # so the slice past MAX_LIST is arbitrary with respect to time -- taking the global max meant
-    # dismissing marked those un-rendered contracts seen, and `announced_at__gt=marker` then hid
-    # them forever. The docstring's "cannot skip anything" was false above the cap; now it holds,
-    # and an overflowing wave simply continues on the next visit.
+    # FROM THE ROWS THAT WERE SHOWN, not the whole filtered set -- one query fewer, and it can only
+    # ever be older than the global max, never newer.
+    #
+    # IT IS NOT A GUARANTEE THAT NOTHING IS SKIPPED, which is what this comment used to claim.
+    # `mark_announced` stamps a whole wave with ONE timestamp and `_ORDER` leads with actionability,
+    # so whenever any row of the newest wave lands in the slice this EQUALS the global max, and the
+    # un-rendered remainder -- all of it from older waves -- is filtered out on the next visit.
+    #
+    # That is the intended trade above MAX_LIST rather than an accident: a hunter with 200+ new
+    # contracts is served by the board, and `extra` plus the board link say so. Below the cap, where
+    # the two values differ, this is strictly the safer one.
     newest = max((r.announced_at for r in rows), default=None)
 
     heroes = rows[:MAX_HEROES]

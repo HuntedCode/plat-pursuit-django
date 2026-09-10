@@ -170,6 +170,7 @@ class CareerView(LoginRequiredMixin, TemplateView):
         if previewing and nc['rows']:
             context['show_career_explainer'] = False
         context['nc'] = nc
+        context['nc_preview'] = previewing
         context['new_contracts_stamp'] = nc['newest'].isoformat() if nc['newest'] else ''
         # No `previewing or ...` here: a preview has already set the explainer flag False above, so
         # the precedence rule alone gives the right answer and a second clause is a second thing to

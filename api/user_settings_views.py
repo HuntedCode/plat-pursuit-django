@@ -191,11 +191,16 @@ class UpdateQuickSettingsAPIView(APIView):
                 # bare offset is LMT, so a naive value would land minutes off (56 for New York).
                 stamp = stamp.replace(tzinfo=dt_timezone.utc)
             now = timezone.now()
-            stamp = min(max(stamp, now - timedelta(days=365)), now)
             flags = request.user.ui_flags or {}
             previous = new_contracts_modal.seen_marker(request.user)
             if previous is not None:
                 stamp = max(stamp, previous)
+            # CLAMPED LAST, so the bounds apply to what is actually stored. Clamping the caller's
+            # value and THEN merging an unbounded `previous` re-introduced exactly what the bounds
+            # exist to prevent: a future marker written by any other hand -- a shell, a fixture, a
+            # data migration -- survived every later dismissal, and the one endpoint that could have
+            # healed it was the one carrying it forward.
+            stamp = min(max(stamp, now - timedelta(days=365)), now)
             flags['contracts_seen'] = stamp.isoformat()
             request.user.ui_flags = flags
             request.user.save(update_fields=['ui_flags'])

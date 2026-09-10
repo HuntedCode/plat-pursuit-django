@@ -119,7 +119,7 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
             // Cancels the gate's "nothing ever appeared" deadline. Without it the page releases its
             // count-ups at 4s while the reader is still reading.
             onOpened: function () {
-                if (window.ppHoldCareerModal) { window.ppHoldCareerModal(); }
+                if (window.ppHoldCareerModal) { window.ppHoldCareerModal('explainer'); }
                 restartCollage();
             },
             onDismiss: function () {

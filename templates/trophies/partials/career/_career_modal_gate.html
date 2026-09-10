@@ -82,9 +82,29 @@ is pending.
     } else {
         armBackstop();
     }
-    window.ppHoldCareerModal = function () {
+    {% comment %} PER ARM. `held` was one latch, so the FIRST modal to open cancelled the deadline
+    for every arm still pending -- and on a new-contracts visit the explainer is openable at any time
+    from the summary card's edhint. Opening it disarmed the safety net for a modal it has nothing to
+    do with, and the refcount had already removed the accidental net the old single boolean gave.
+
+    A hold from a modal the gate is not waiting on is ignored. {% endcomment %}
+    window.ppHoldCareerModal = function (name) {
+        if (name && !pending[name]) { return; }
         held = true;
         window.clearTimeout(backstop);
     };
+    {% comment %} HOUSEKEEPING FOR THE NEW-CONTRACTS KEYS, and it lives here because this partial
+    renders on EVERY Career visit while the modal's own partial renders only while a wave is due.
+
+    Those two keys mean "this device dismissed a wave and the server never heard". If the server now
+    says nothing is due, it did hear -- from this device or another -- and they are stale. Left
+    behind, DetailModal's seen-branch reads the stale key on the NEXT wave, never opens the modal,
+    and replays a stamp the server already has: that device silently loses a whole wave. {% endcomment %}
+    {% if not show_new_contracts %}
+    try {
+        localStorage.removeItem('pp-new-contracts-seen');
+        localStorage.removeItem('pp-new-contracts-stamp');
+    } catch (e) {}
+    {% endif %}
 })();
 </script>

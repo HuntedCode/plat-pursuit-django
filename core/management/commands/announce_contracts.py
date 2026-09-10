@@ -124,6 +124,7 @@ class Command(BaseCommand):
                 f"to record "
                 f"them as already known, --limit N to trickle, or --force if the wave is real.")
 
+        url, channel = webhook_url()
         payload = build_announcement(contracts)
         if payload is None:
             self.stdout.write("No new contracts to announce.")
@@ -131,7 +132,7 @@ class Command(BaseCommand):
 
         if opts['dry_run']:
             self.stdout.write(self.style.WARNING(
-                f"DRY RUN: would announce {len(contracts)} contract(s), stamping announced_at + "
+                f"DRY RUN: would post {len(contracts)} contract(s) to {channel}, stamping announced_at + "
                 f"announcement_posted (which is what puts them in every hunter's Career modal)."))
             self.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
             return
@@ -150,7 +151,6 @@ class Command(BaseCommand):
                 f"Nothing was stamped -- they will still announce for real."))
             return
 
-        url, channel = webhook_url()
         if not url:
             # Refused rather than posted to None: `requests.post(None, ...)` raises a MissingSchema
             # that `post_webhook_sync` redacts into "URL redacted", which is a true statement about a
@@ -163,10 +163,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Announced and stamped {stamped} contract(s) in {channel}."))
 
-    def _post(self, payload, webhook_url, *, label="Webhook"):
+    def _post(self, payload, url, *, label="Webhook"):
         """Thin wrapper: the POST itself is shared (see `post_webhook_sync`), this only translates
         its error into the CommandError a cron run needs to fail visibly."""
         try:
-            return post_webhook_sync(payload, webhook_url, label=label)
+            return post_webhook_sync(payload, url, label=label)
         except WebhookError as e:
             raise CommandError(str(e))

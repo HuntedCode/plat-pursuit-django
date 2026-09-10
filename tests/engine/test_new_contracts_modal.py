@@ -924,8 +924,32 @@ def test_a_scrim_click_with_a_popover_open_closes_only_the_popover(hunter):
 
     click = partial.split("document.addEventListener('click'", 1)[1].split('}, true);', 1)[0]
     assert 'popoverOpen()' in click, 'the guard fires when no popover is open'
-    assert "closest('.rp-disc')" in click, 'a click INSIDE the popover is swallowed too'
     assert 'stopPropagation' in click, 'the modal still closes underneath the popover'
+    # SCOPED TO THE SCRIM. The first cut guarded on "not inside `.rp-disc`" -- which is everything
+    # else in the dialog -- and stopPropagation from a document CAPTURE listener kills the event
+    # before any handler below it. So with a dropdown open, the first click on the close button, the
+    # sort chips and the All chip all did nothing, and the board LINK navigated anyway (stopping
+    # propagation is not preventing the default) with the dismissal never recorded.
+    assert "closest('.pp-detail-modal__scrim')" in click, (
+        'the guard swallows the first click on every other control in the dialog'
+    )
+
+
+def test_the_other_controls_still_work_on_the_first_click(hunter):
+    """The regression the scoped guard exists to avoid, pinned at the markup level: the controls the
+    capture listener must not stand in front of are all OUTSIDE `.pp-detail-modal__scrim`."""
+    _live('Anything')
+
+    body = hunter.get('/career/', **CF).content.decode()
+    modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
+
+    # The scrim is EMPTY, and has to stay that way: the capture guard stops the event dead for
+    # anything inside it, so a control nested there would need two clicks -- or, if it were a link,
+    # would navigate with the dismissal unrecorded.
+    scrim = modal.split('class="pp-detail-modal__scrim"', 1)[1].split('</div>', 1)[0]
+    assert scrim.strip() in ('data-nc-close>', 'data-nc-close >'), (
+        'the scrim gained a child, which the click guard will swallow'
+    )
 
 
 def test_a_selected_job_stays_visible_after_its_popover_closes():
@@ -1018,7 +1042,7 @@ def test_a_popover_with_no_room_below_it_opens_upward_and_is_clamped():
 
     assert "classList.add('rp-pop--up')" in body, 'the shared control still only opens downward'
     assert 'window.innerHeight' in body, 'the flip is not measured against the viewport'
-    assert 'Math.min(300, room)' in body, (
+    assert 'Math.min(300, Math.max(64, room))' in body, (
         'a flipped popover can still be taller than the room it flipped into'
     )
     assert "p.style.maxHeight = ''" in body, 'the clamp is never cleared, so it leaks to the next open'
@@ -1074,7 +1098,9 @@ def test_a_cover_can_never_grow_taller_than_the_screen_allows():
     assert 'max-height: 24vh' in art
     # And tighter again where the viewport is short, which is where it actually mattered: a
     # 1366x768 laptop and a 667px phone both overflowed the dialog at 24vh.
-    assert '@media (max-height: 800px) { .nc__hero-art { max-height: 18vh; } }' in css
+    # Qualified to phones and tablets: unqualified it fired on every laptop and cost the desktop
+    # 30% of its cover height for no fit benefit -- on the design system's primary target.
+    assert ('@media (max-height: 800px) and (max-width: 1023px) { .nc__hero-art { max-height: 18vh; } }') in css
     assert 'object-position: top' in _rule(css, '.nc__hero-art img'), (
         'cropping without object-top eats the logo at the top of the cover'
     )
@@ -1152,3 +1178,108 @@ def test_the_board_binds_its_own_dropdowns_and_not_this_modals(hunter):
         'the board is back to taking whichever discipline group comes first in the page'
     )
     assert "advPanel.querySelector('.rp-discs')" in career
+
+
+# -- what the second audit round found -------------------------------------------------------------
+
+def test_the_filter_is_never_a_scroll_container():
+    """IT CLIPPED ITS OWN POPOVERS. `overflow-x: auto` with an unset y-axis computes BOTH axes to
+    auto (CSS Overflow 3), which made `.nc__filter` a scroll container -- and the popovers are
+    absolutely positioned inside it, so on every phone they were clipped to the height of the chip
+    row and never appeared. The same failure the dialog's `overflow: visible` prevents, one level
+    down, introduced by the fix for the toolbar's height."""
+    css = _elements_css()
+    rule = _rule(css, '.nc__filter')
+
+    assert 'overflow' not in rule, 'the filter clips the popovers positioned inside it'
+    assert 'flex-wrap: nowrap' not in rule
+
+
+def test_a_small_phone_drops_the_covers_rather_than_the_buttons():
+    """That height has to come from somewhere. With `overflow: visible` on the dialog there is no
+    scrollbar, so chrome that exceeds 88vh puts the footer buttons off screen unreachable -- and at
+    375x667 the wrapped filter plus a hero row does exceed it."""
+    css = _elements_css()
+
+    assert '@media (max-width: 767px) and (max-height: 740px) { .nc__heroes { display: none; } }' in css
+
+
+def test_a_preview_never_records_the_previewer_as_having_seen_a_wave(hunter):
+    """A preview ignores the marker AND the 14-day floor, which makes its stamp the newest
+    announcement on the site. The partial was otherwise byte-identical to the real one, so a staff
+    member who opened the preview and closed it advanced their own marker to ~now -- losing every
+    wave they had not been shown, unrecoverably, because the server refuses to rewind."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+    _live('Preview Me')
+
+    body = hunter.get('/career/?preview=new-contracts', **CF).content.decode()
+    modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
+
+    tag = body.split('id="new-contracts"')[1].split('>')[0]
+    assert 'data-auto' not in tag, 'the preview arms the dismissal'
+    # The CODE, not the comments that name both options a few lines above them.
+    assert 'onDismiss: function' not in modal, 'the preview still posts a marker'
+    assert "seenKey: 'pp-new-contracts-seen'" not in modal, (
+        'the preview can still re-post through the seen-key retry'
+    )
+
+    # ...and the real render still does both.
+    real = hunter.get('/career/', **CF).content.decode()
+    assert 'data-auto' in real.split('id="new-contracts"')[1].split('>')[0]
+    assert 'onDismiss: function' in real
+
+
+def test_a_real_dismissal_records_this_pages_stamp_not_a_parked_one():
+    """The parked stamp is for the RETRY. Preferring it unconditionally meant a second tab's genuine
+    dismissal was recorded as the first tab's older stamp, then cleared the key so nothing retried --
+    and the reader met a wave they had already read."""
+    dismiss = _partial().split('onDismiss: function', 1)[1].split('var stamp', 1)[1]
+
+    assert 'opened ? PAGE_STAMP : (stored() || PAGE_STAMP)' in dismiss
+
+
+def test_the_fast_reject_path_parks_its_stamp_before_rejecting():
+    """DetailModal arms its retry on ANY rejection. Rejecting before the .then() that parks the stamp
+    left nothing to replay, so the retry posted a later page's stamp -- the fortnight-wide skip this
+    whole path exists to prevent."""
+    partial = _partial()
+
+    guard = partial.split('if (!(window.PlatPursuit && PlatPursuit.API))', 1)[1].split('}', 1)[0]
+    assert 'STAMP_KEY' in guard, 'the retry is armed with nothing parked to replay'
+
+
+def test_the_stale_device_keys_are_cleared_when_nothing_is_due(hunter):
+    """Both keys are only ever cleared from the modal's own partial, which renders while a wave is
+    DUE. Dismiss on a phone with a failed POST, dismiss successfully on a laptop, and the phone kept
+    both keys forever -- then silently swallowed the NEXT wave's modal through the seen-key branch."""
+    body = hunter.get('/career/', **CF).content.decode()
+
+    assert 'id="new-contracts"' not in body, 'fixture wrong: a wave is due'
+    assert "removeItem('pp-new-contracts-seen')" in body
+    assert "removeItem('pp-new-contracts-stamp')" in body
+
+
+def test_the_backstop_is_held_per_arm(hunter):
+    """`held` was one latch, so the first modal to open cancelled the deadline for every arm still
+    pending. On a new-contracts visit the explainer is openable at any moment from the summary card's
+    edhint -- opening it disarmed the safety net for a modal it has nothing to do with."""
+    _live('Anything')
+
+    body = hunter.get('/career/', **CF).content.decode()
+
+    hold = body.split('window.ppHoldCareerModal = function (name) {', 1)[1].split('};', 1)[0]
+    assert 'if (name && !pending[name]) { return; }' in hold
+    assert "ppHoldCareerModal('contracts')" in body, 'this modal holds anonymously again'
+
+
+def test_the_empty_state_stays_in_the_accessibility_tree():
+    """A live region that is `hidden` when its content changes is not reliably announced -- so
+    toggling the element said nothing, which is the silence it was added to fix. Only its text
+    changes now."""
+    partial = _partial()
+
+    assert 'empty.textContent' in partial, 'the live region is toggled rather than filled'
+    assert 'empty.hidden' not in partial
+    assert ':empty { margin: 0; }' in _elements_css(), 'an empty live region still takes up space'

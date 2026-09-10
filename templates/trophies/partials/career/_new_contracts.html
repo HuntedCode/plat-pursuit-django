@@ -23,7 +23,12 @@ Behaviour is PlatPursuit.DetailModal; the page's motion gate is armed separately
 _career_modal_gate.html, so nothing waits on this script to run.
 {% endcomment %}
 {% load job_icons %}
-<div class="pp-detail-modal pp-howto" id="new-contracts" data-auto hidden>
+{% comment %} `data-auto` is the DISMISSAL arm, not the open (that is `autoOpenDelay` below), so
+a preview renders without it: looking at the modal must not record the looker as having seen a
+wave. A preview also ignores the marker and the 14-day floor, which makes its stamp the newest
+announcement on the site -- so recording it would cost the previewer every wave they had not yet
+been shown, and the server's monotonic clamp makes that unrecoverable. {% endcomment %}
+<div class="pp-detail-modal pp-howto" id="new-contracts"{% if not nc_preview %} data-auto{% endif %} hidden>
     <div class="pp-detail-modal__scrim" data-nc-close></div>
     <div class="pp-detail-modal__dialog pp-howto__dialog nc__dialog" role="dialog" aria-modal="true" aria-labelledby="new-contracts-title" tabindex="-1">
         <button type="button" class="pp-detail-modal__close" data-nc-close aria-label="Close">&times;</button>
@@ -142,7 +147,7 @@ _career_modal_gate.html, so nothing waits on this script to run.
             {% comment %} aria-live, because a filter that empties the list is otherwise silent: the
             rows just stop existing with nothing said. Also not "for that job" -- the same message
             shows when the filter was a whole discipline. {% endcomment %}
-            <p class="nc__empty" data-nc-empty role="status" aria-live="polite" hidden>Nothing new there.</p>
+            <p class="nc__empty" data-nc-empty role="status" aria-live="polite"></p>
 
             {% if nc.extra %}
                 <p class="nc__more">and {{ nc.extra }} more on the board</p>
@@ -183,6 +188,7 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
     // The stamp this render is offering, and where an unrecorded dismissal parks the one it was
     // actually shown. See onDismiss at the bottom.
     var PAGE_STAMP = '{{ new_contracts_stamp|escapejs }}';
+    var opened = false;   // did the reader actually SEE this page's wave? (see onDismiss)
     var STAMP_KEY = 'pp-new-contracts-stamp';
     function stored() {
         try { return localStorage.getItem(STAMP_KEY) || ''; } catch (e) { return ''; }
@@ -200,13 +206,20 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
         pops.closeAll();
     }, true);
 
-    // THE CLICK TWIN OF THE SAME COLLISION. discPopovers closes a popover on any click outside
-    // `.rp-disc`; DetailModal closes the modal on any click matching its close selector, and the
-    // scrim is one. So clicking the dimmed area to dismiss just the dropdown closed the whole modal
-    // AND recorded the wave as read. Capture phase again, and only while a popover is open, so an
-    // ordinary scrim click still dismisses normally.
+    // THE CLICK TWIN OF THE SAME COLLISION, and SCOPED TO THE SCRIM. discPopovers treats a scrim
+    // click as click-outside while DetailModal treats it as dismiss, so closing a dropdown that way
+    // closed the whole modal and recorded the wave as read.
+    //
+    // The first cut guarded on "not inside `.rp-disc`", which is everything else in the dialog --
+    // and stopPropagation from a document CAPTURE listener kills the event before any handler
+    // below. So while a dropdown was open, the first click on the close button, the sort chips, the
+    // All chip and the board link all did nothing. The board link was the bad one: stopPropagation
+    // is not preventDefault, so it navigated anyway while the handler that records the dismissal
+    // never ran -- the reader left for the board and met the same modal forever.
     document.addEventListener('click', function (e) {
-        if (!popoverOpen() || (e.target.closest && e.target.closest('.rp-disc'))) { return; }
+        if (!popoverOpen() || !e.target.closest) { return; }
+        var scrim = e.target.closest('.pp-detail-modal__scrim');
+        if (!scrim || !el.contains(scrim)) { return; }
         e.stopPropagation();
         pops.closeAll();
     }, true);
@@ -222,7 +235,10 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
             row.hidden = !hit;
             if (hit) { shown++; }
         });
-        if (empty) { empty.hidden = shown > 0; }
+        // TEXT, not `hidden`. A live region that is hidden at the moment its content changes is not
+        // reliably announced, so toggling the element itself said nothing to a screen reader -- the
+        // silence this was added to fix.
+        if (empty) { empty.textContent = shown ? '' : 'Nothing new there.'; }
     }
 
     // SORT. Both keys are already on every row, so this is a re-append rather than a fetch. One
@@ -315,11 +331,25 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
         PlatPursuit.DetailModal(el, {
             closeSelector: '[data-nc-close]',
             autoOpenDelay: 450,
+            {% comment %} Both omitted in a preview. Without `onDismiss` the retry path is a no-op
+            (DetailModal checks for it), and without `seenKey` the "already dismissed on this device"
+            branch cannot fire either -- which would otherwise re-POST the preview's stamp without
+            ever opening anything. {% endcomment %}
+            {% if not nc_preview %}
             seenKey: 'pp-new-contracts-seen',
             onSettled: settle,
-            onOpened: function () { if (window.ppHoldCareerModal) { window.ppHoldCareerModal(); } },
+            onOpened: function () {
+                opened = true;
+                if (window.ppHoldCareerModal) { window.ppHoldCareerModal('contracts'); }
+            },
             onDismiss: function () {
-                if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
+                if (!(window.PlatPursuit && PlatPursuit.API)) {
+                    // PARK FIRST. DetailModal arms its retry on any rejection, so rejecting before
+                    // the .then() below left nothing to replay -- and the retry then posted a LATER
+                    // page's stamp, which is the fortnight-wide skip this whole path exists to stop.
+                    try { localStorage.setItem(STAMP_KEY, PAGE_STAMP); } catch (e) {}
+                    return Promise.reject();
+                }
                 // The stamp comes from the WAVE, not the clock: a wave announced between this
                 // render and this click was announced before the click but after the query, and a
                 // now-stamp would mark it seen without ever showing it.
@@ -329,7 +359,11 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
                 // function again -- on a page that may carry a newer stamp. Replaying that one
                 // would mark a wave seen that this reader has never been shown, which is the same
                 // skip the paragraph above rejects, only a fortnight wide instead of seconds.
-                var stamp = stored() || PAGE_STAMP;
+                // A REAL DISMISSAL RECORDS THIS PAGE'S STAMP; only the retry replays a parked
+                // one. Preferring the parked stamp unconditionally meant a second tab's genuine
+                // dismissal was recorded as the first tab's older stamp -- and then cleared the key,
+                // so nothing retried and the reader met a wave they had already read.
+                var stamp = opened ? PAGE_STAMP : (stored() || PAGE_STAMP);
                 return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
                     setting: 'contracts_seen', value: stamp
                 }).then(function (res) {
@@ -341,7 +375,8 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
                     try { localStorage.setItem(STAMP_KEY, stamp); } catch (e) {}
                     throw err;
                 });
-            }
+            },
+            {% endif %}
         });
     });
 })();

@@ -3375,15 +3375,36 @@ function discPopovers(root) {
             // room below runs out, then CLAMP to whatever room the chosen direction actually has:
             // on a landscape phone neither direction fits a 300px popover, so flipping alone just
             // moves the problem to the other edge.
-            var below = window.innerHeight - box.top - 14;
-            var above = trig.getBoundingClientRect().top - 14;
+            // MEASURED FROM THE TRIGGER, which is not animating. `.rp-pop` runs `rp-pop-in`
+            // (translateY(-5px) scale(0.98)) on the frame this reads, and getBoundingClientRect is
+            // transform-aware, so the popover's own box is ~5px high and 2% short right here.
+            var anchor = trig.getBoundingClientRect();
+            // TOP_INSET is the sticky chrome. `.pp-nav` is sticky at 58px and `.pp-minibar` is fixed
+            // under it at 52px more, both above `.rp-pop`'s z-index, so an upward flip that used the
+            // whole viewport put the popover's first ~110px behind the navbar on the board and on
+            // Browse Games -- neither of which had an up-flip before this became shared.
+            var TOP_INSET = 118;
+            var below = window.innerHeight - anchor.bottom - 14;
+            var above = anchor.top - TOP_INSET;
             if (below < Math.min(160, box.height) && above > below) { pop.classList.add('rp-pop--up'); }
+            // CLAMPED TO THE ROOM THE CHOSEN SIDE ACTUALLY HAS. A floor of 120 re-created the
+            // overflow this exists to remove: with 70px below and 60px above, neither side flips and
+            // a 120px popover still runs 50px past the fold, inside a dialog with no scrollbar.
             var room = pop.classList.contains('rp-pop--up') ? above : below;
-            pop.style.maxHeight = Math.max(120, Math.min(300, room)) + 'px';
+            pop.style.maxHeight = Math.min(300, Math.max(64, room)) + 'px';
         }
     });
     document.addEventListener('click', function (e) { if (!e.target.closest || !e.target.closest('.rp-disc')) { closeAll(); } });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeAll(); } });
+    // The max-height above is measured once, at open. A rotate or resize invalidates it and there is
+    // no cheap way to re-measure a popover whose anchor may also have moved -- so close instead,
+    // which is what a native <select> does and what the reader expects after a rotation anyway.
+    window.addEventListener('resize', closeAll);
+    // ...and on SCROLL, for the two page consumers. The flip and the clamp are decided once, at
+    // open, so a popover opened near the fold stays flipped and stays clamped as the reader scrolls
+    // it to the middle of the screen. A scroll event on the popover's own list does not reach
+    // `window`, so this closes on page scroll only -- which is what a native select does anyway.
+    window.addEventListener('scroll', closeAll, { passive: true });
     return { closeAll: closeAll };
 }
 window.PlatPursuit.discPopovers = discPopovers;
