@@ -271,10 +271,19 @@ is deliberately not per-user: "is anything new to you" is a comparison between a
 `request.user` and that global maximum, so the per-hunter half costs nothing.
 
 Unlike the moderation count above, these ARE cached, and the difference is the audience: every
-signed-in hunter on every page, against about ten moderator accounts. Both have explicit
-invalidation at their only writers -- `contract_service.claim` for the count,
-`contract_announcer.mark_announced` for the announcement -- so the TTLs only bound how long a MISSED
-invalidation can lie. An empty board is cached as an empty string, because `cache.get` cannot tell a
+signed-in hunter on every page, against about ten moderator accounts.
+
+**Invalidated at every writer**, so the TTLs only bound a MISSED invalidation:
+
+| Key | Cleared by |
+|---|---|
+| `career:claimable:<id>` | `contract_service.claim` (spends a reward, **on commit** -- clearing inside the transaction lets a concurrent render re-cache the pre-claim count) and `mark_contract_reached` (creates one) |
+| `contracts:latest_announced` | `contract_announcer.mark_announced` |
+
+The second of those was missing at first, and it is the worse half to lose: the hunter is on the site
+WHILE the sync runs, so every page render re-arms the key with a fresh 300s at a zero count moments
+before the reward lands. The badge would then be empty for close to the full TTL at exactly the
+moment it had something to say -- while `/career/`'s own rail, uncached, already showed the reward. An empty board is cached as an empty string, because `cache.get` cannot tell a
 stored `None` from a miss and would re-query on every render.
 
 **Files**: `plat_pursuit/context_processors.py`, `trophies/services/career_attention.py`

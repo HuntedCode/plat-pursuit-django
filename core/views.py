@@ -192,11 +192,9 @@ class HomeView(TemplateView):
         the beta requires logging in, so reviewers need a door. Team-gated: the param is
         harmless (the landing is cached community data), but the front door should not grow an
         undocumented public mode."""
-        return (
-            self.request.GET.get('preview') == 'landing'
-            and self.request.user.is_authenticated
-            and (self.request.user.is_staff or getattr(self.request.user, 'is_moderator', False))
-        )
+        from core.previews import previewing
+
+        return previewing(self.request, 'landing')
 
     def _team_previewing_syncing(self):
         """True when a team member asks to SEE the first-sync waiting room
@@ -204,11 +202,9 @@ class HomeView(TemplateView):
         syncing hero is an onboarding surface worth reviewing. Note: a synced
         previewer has trophies, so `is_initial_sync` renders False -- the DEBUG dev panel on
         the page covers the initial-sync copy path."""
-        return (
-            self.request.GET.get('preview') == 'syncing'
-            and self.request.user.is_authenticated
-            and (self.request.user.is_staff or getattr(self.request.user, 'is_moderator', False))
-        )
+        from core.previews import previewing
+
+        return previewing(self.request, 'syncing')
 
     def _resolve_state(self):
         """Compute the home-page state for the current request user."""
@@ -244,15 +240,14 @@ class HomeView(TemplateView):
             # not yet greeted (ui_flags), fully dormant while PP_LAUNCH_DATE is unset.
             # ?preview=launch-welcome (team-gated, mirroring the other preview doors) forces
             # it so the modal can be reviewed on prod without shell surgery.
+            from core.previews import previewing
+
             user = self.request.user
             context['show_launch_welcome'] = bool(
                 settings.PP_LAUNCH_DATE
                 and user.date_joined < settings.PP_LAUNCH_DATE
                 and 'launch_welcome' not in (user.ui_flags or {})
-            ) or (
-                self.request.GET.get('preview') == 'launch-welcome'
-                and (user.is_staff or getattr(user, 'is_moderator', False))
-            )
+            ) or previewing(self.request, 'launch-welcome')
 
             # WHAT'S NEW, and the precedence rule between the two modals.
             #

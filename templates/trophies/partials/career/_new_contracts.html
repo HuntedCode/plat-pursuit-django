@@ -335,13 +335,21 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
             (DetailModal checks for it), and without `seenKey` the "already dismissed on this device"
             branch cannot fire either -- which would otherwise re-POST the preview's stamp without
             ever opening anything. {% endcomment %}
-            {% if not nc_preview %}
-            seenKey: 'pp-new-contracts-seen',
-            onSettled: settle,
+            {% comment %} onOpened stays in a preview -- it only cancels the page's 4s motion
+            backstop, which writes nothing. Dropping it meant the preview released Career's count-ups
+            behind its own scrim at 4 seconds, which is the exact failure the gate exists to prevent:
+            a preview that does not reproduce it is not showing you the real render. {% endcomment %}
             onOpened: function () {
                 opened = true;
                 if (window.ppHoldCareerModal) { window.ppHoldCareerModal('contracts'); }
             },
+            onSettled: settle,
+            {% comment %} ONLY THE STATE WRITERS are dropped in a preview. `onSettled` belongs on
+            both paths for the same reason `onOpened` does -- and more sharply: it is what releases
+            the page's motion when the modal closes, so omitting it while cancelling the backstop
+            left a preview whose count-ups never ran at all. {% endcomment %}
+            {% if not nc_preview %}
+            seenKey: 'pp-new-contracts-seen',
             onDismiss: function () {
                 if (!(window.PlatPursuit && PlatPursuit.API)) {
                     // PARK FIRST. DetailModal arms its retry on any rejection, so rejecting before

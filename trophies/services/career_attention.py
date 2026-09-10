@@ -26,8 +26,14 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-#: Per-hunter claim count. Short, because the source of truth changes on a sync or a claim and both
-#: of those invalidate explicitly -- this TTL only bounds how long a MISSED invalidation can lie.
+#: Per-hunter claim count. Both writers invalidate explicitly -- `contract_service.claim` spends a
+#: reward, `mark_contract_reached` creates one -- so this TTL only bounds a MISSED invalidation.
+#:
+#: The second of those was missing at first and the comment here claimed it anyway. That is the worse
+#: half to lose: the hunter is on the site WHILE the sync runs, so every page render re-arms this key
+#: with a fresh 300s at a zero count, moments before the reward lands. The badge would then be absent
+#: for close to the full TTL at exactly the moment it had something to say, while /career/'s own rail
+#: -- uncached -- already showed the reward. Two surfaces on one page disagreeing.
 CLAIMABLE_TTL = 300
 
 #: The newest announcement site-wide. One value for everybody, so a long TTL costs one query per
@@ -97,8 +103,16 @@ def latest_announced_at():
 
     from trophies.models import Contract
 
+    # `has_jobs` IS PART OF THE GATE, and leaving it out was unbounded rather than merely stale.
+    # The modal filters `is_live` AND `has_jobs` (`annotated_contracts`); this filtered only the
+    # first. So a newest announced contract with no jobs -- a curator stripping the M2M, or a jobless
+    # row reaching `mark_announced` -- lit the pill for everyone whose marker was older, rendered no
+    # modal, and therefore never advanced anyone's marker. Permanent, for every hunter, with nothing
+    # able to clear it. `is_live` alone is TTL-bounded because both queries filter it; this was not.
+    has_jobs = Exists(Contract.jobs.through.objects.filter(contract_id=OuterRef('pk')))
     newest = (Contract.objects
               .filter(is_live=True, announcement_posted=True, announced_at__isnull=False)
+              .annotate(has_jobs=has_jobs).filter(has_jobs=True)
               .order_by('-announced_at')
               .values_list('announced_at', flat=True)
               .first())
@@ -146,6 +160,10 @@ def preview_counts(request):
         ?preview=career-markers&n=12     force the count, e.g. to see the 9+ cap
         ?preview=career-markers&n=0      the New pill alone
 
+    An `n` that is not a number is ignored rather than refused, and you get the real count -- which
+    can read as a forced one. Deliberate: this is a viewing tool on a live page, and a 400 from a
+    context processor would take the whole page down over a typo in a querystring.
+
     Staff-gated and writes nothing, like every other preview door -- see `core.previews`.
     """
     from core.previews import previewing
@@ -162,8 +180,18 @@ def preview_counts(request):
 
 
 def _parse(raw):
+    """An ISO string from the cache, or None.
+
+    Guards the TYPE as well as the value. `parse_datetime` raises ValueError on a well-formed
+    impossible date and TypeError on a non-string, and this caught only the first -- so anything that
+    decoded to a non-string non-empty (a hand-SET key, a value from an older code version) raised
+    straight through the service. `new_contracts_modal.seen_marker` already guards both; two
+    functions written for the same hazard should not handle it two different ways.
+    """
     from django.utils.dateparse import parse_datetime
 
+    if not isinstance(raw, str):
+        return None
     try:
         return parse_datetime(raw)
     except ValueError:

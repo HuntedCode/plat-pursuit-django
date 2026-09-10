@@ -42,8 +42,16 @@
 /* No `display` here: the template toggles the hub nav with `hidden lg:flex` (desktop-only; the bottom
    tab bar owns hub nav on mobile). An unlayered `display:flex` would beat the .hidden utility and show
    the hubs on every size -- overflowing the mobile navbar. */
-.pp-nav__hubs { align-items: center; gap: 4px; margin-left: 6px; }
+/* `min-width: 0` so shrink pressure lands on the search field (which has it too, and degrades
+   gracefully) rather than being refused here and forced into an overflow. */
+/* NO `display` here: the row is `hidden lg:flex` from the template, so declaring it in CSS would
+   show the desktop hub row on phones, where the tab bar takes over. */
+.pp-nav__hubs { align-items: center; gap: 4px; margin-left: 6px; min-width: 0; }
 .pp-navhub {
+    /* NEVER WRAPS. Nothing in this row is shrink-protected except the brand and the end cap, so
+       under pressure the hub row is what gives -- and the way it gave was by breaking "My Pursuit"
+       across two lines inside a 58px bar, dragging the active underline down with it. */
+    white-space: nowrap;
     position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px;
     border-radius: var(--pp-radius-md); font-size: 0.82rem; font-weight: 600; color: var(--pp-text-dim);
     text-decoration: none; transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
@@ -51,24 +59,30 @@
 .pp-navhub svg { width: 16px; height: 16px; }
 
 /* ── My Pursuit's two attention markers ──────────────────────────────────────────────────────────
- * A COUNT for work that is theirs and waiting, a DOT for news, and both can show at once.
+ * A COUNT for work that is theirs and waiting, a WORD ("NEW") for news. Both can show at once above
+ * 1280px; below that only one does -- see the xl gate further down, which is not a style choice.
  *
- * The avatar's What's New marker learned this the hard way and the block below it records the rule:
- * "what keeps the two apart is SHAPE, not colour", and a bare 10px dot there was invisible because
- * it was a second LIGHT among lights. That is a statement about the AVATAR -- 38px, a sync ring, an
- * LED -- and not about this nav item, which is a word with room beside it. Here the shapes are a
- * numeral and a dot, which are separable at a glance, and neither is competing with a status light.
+ * The avatar's What's New marker learned the shape rule the hard way and the block below it records
+ * it: "what keeps the two apart is SHAPE, not colour". These are separated by CONTENT -- a numeral
+ * and a word -- which is the same axis and a stronger one, since neither has to be decoded.
  *
  * INLINE, not a corner badge. `.pp-navhub` already carries an absolutely-positioned `::after` for
- * the active underline across its full width; a corner pill would sit on it. Inline also means the
- * item simply gets wider, which is honest -- the row has the space and the eye follows the label.
+ * the active underline across its full width; a corner pill would sit on it.
+ *
+ * THEY ARE NOT CHEAP IN WIDTH. `.pp-navhub` is `display: inline-flex; gap: 6px`, so each span costs
+ * its own box PLUS a 6px flex gap -- ~29px for the count and ~42px for NEW, 71px for the pair. The
+ * hub row has ~604px to share with the search field at the `lg` container step, so that 71px is the
+ * difference between a comfortable search bar and a three-character one.
  *
  * The count is PRIMARY, not the queue badge's error red: red on this nav would read as something
  * wrong, and a claim waiting is the opposite of that. It is the best news the site has for them. */
 .pp-navhub__n {
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 17px; height: 17px; padding: 0 5px; margin-left: 1px;
-    border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0, #05070a);
+    /* No fallback on the token: `--pp-bg-0` is defined in `:root` (input.css), and the `#05070a`
+       this was copied with is two stops darker than it -- a guard that would ship the WRONG colour
+       if the token were ever renamed, which is worse than the error it pretends to catch. */
+    border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0);
     font-size: 0.62rem; font-weight: 800; line-height: 1; letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
     box-shadow: 0 0 8px -2px var(--pp-primary);
@@ -82,10 +96,26 @@
    and now the two are separable by CONTENT rather than by size, which is stronger. */
 .pp-navhub__new {
     display: inline-flex; align-items: center; padding: 1px 6px; margin-left: 1px;
-    border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0, #05070a);
+    border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0);
     font-size: 0.56rem; font-weight: 900; line-height: 1.4; letter-spacing: 0.04em;
     text-transform: uppercase; white-space: nowrap;
     box-shadow: 0 0 7px -1px var(--pp-primary);
+}
+/* ON THE ACTIVE ITEM the glows come off. The label is already `--pp-primary` there, the active
+   underline is `--pp-primary` with its own 8px glow, and each pill adds another -- four glowing
+   primaries inside ~40px, which is the "second light among lights" pile-up the block below records,
+   in monochrome instead of in reds. Without the glow the pills read as objects sitting on a lit
+   item, which is what they are. */
+.pp-navhub.is-active .pp-navhub__n,
+.pp-navhub.is-active .pp-navhub__new { box-shadow: none; }
+
+/* ONE AT A TIME BELOW 1280px, which is the same exclusivity the tab bar has and for the same
+   reason: no room. The `lg` container step is 1024px wide from 1024 all the way to 1279, so the
+   whole band shares one layout, and at that width the hub row plus both pills leaves the search
+   field about 80px -- roughly three characters of typing. The count wins because it is the half
+   that is about the reader's own work. Above 1280 the row has the space and both show. */
+@media (max-width: 1279px) {
+    .pp-navhub__n ~ .pp-navhub__new { display: none; }
 }
 
 /* THE TAB BAR carries the same pair on the ICON rather than the label: four items across a 375px
@@ -100,9 +130,13 @@
 /* The word rides the icon here too. A tab item is a quarter of a 375px phone -- ~93px -- and the pill
    is ~28px against a 20px icon, so it fits with room either side. Anchored LEFT of centre so it
    grows outward rather than under the neighbouring tab. */
+/* 0.56rem, matching the desktop pill and the avatar's. It shipped at 0.5rem (8px) -- below the
+   design system's 12px floor for readable content, below even the 0.55rem it reserves for
+   DECORATIVE marks, and on the one screen CLAUDE.md says must stay readable at 375px. A word that
+   has to be read at 8px is being decoded, which is the argument the dot lost. */
 .pp-navhub__new--tab {
     position: absolute; top: -6px; left: 10px; margin: 0;
-    padding: 1px 4px; font-size: 0.5rem;
+    padding: 1px 4px; font-size: 0.56rem;
     border: 2px solid var(--pp-bg-1);
 }
 /* Both at once on an icon this small would overlap, so the word steps aside for the count -- the

@@ -31,7 +31,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         <!-- login-gated, so for logged-out visitors it's just the hero the logo already reaches. -->
         <a href="{% url 'career' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %} aria-label="My Pursuit{% if career_claimable %}, {{ career_claimable }} contract{{ career_claimable|pluralize }} ready to claim{% endif %}{% if career_new_contracts %}, new contracts on the board{% endif %}">
             {% comment %} The markers ride the ICON, not the label: the bar is 4 items across a
-            375px phone, so a badge beside the word would push the row. Same count-plus-dot pair as
+            375px phone, so a badge beside the word would push the row. Same count-plus-NEW pair as
             the desktop nav, and aria-hidden for the same reason -- the link's label says it in
             words. {% endcomment %}
             <span class="mobile-tabbar-ico">

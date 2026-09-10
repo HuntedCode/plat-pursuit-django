@@ -18,11 +18,26 @@ WHAT EVERY DOOR SHARES, and what a new one must not vary:
 
 
 def is_team(user) -> bool:
-    """Staff or moderator. Bare attribute access on purpose -- `is_moderator` is a property, so a
-    missing one should be visible rather than silently falsey."""
-    if user is None or not getattr(user, 'is_authenticated', False):
-        return False
-    return bool(getattr(user, 'is_staff', False) or getattr(user, 'is_moderator', False))
+    """Staff or moderator -- `trophies.mixins.is_mod_or_admin`, which is the codebase's one answer.
+
+    This started as a fourth hand-written copy of `is_staff or is_moderator`, complete with a
+    docstring claiming bare attribute access while the code used `getattr(..., False)` -- the exact
+    silently-falsey path it said it was avoiding, sitting in the module that had just been declared
+    canonical. Deduplicating the preview doors while quietly forking the gate underneath them is not
+    deduplicating anything, and `is_mod_or_admin`'s own docstring says why: "three hand-written
+    copies of `is_staff or is_moderator` is how one of them ends up subtly different".
+
+    Delegating also gains an `is_active` check the copies did not have. On a real request the auth
+    backend already turns a deactivated user into AnonymousUser, so this is unreachable rather than a
+    fix -- but revoking access is the moment a stale user object must not still say yes, and a
+    preview door is exactly the sort of thing left open in a tab.
+
+    Imported inside the function: `core` is imported early and `trophies.mixins` pulls in the rest of
+    that app, so a module-level import here would be a load-order hazard for no gain.
+    """
+    from trophies.mixins import is_mod_or_admin
+
+    return is_mod_or_admin(user)
 
 
 def previewing(request, slug) -> bool:

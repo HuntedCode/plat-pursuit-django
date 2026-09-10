@@ -391,6 +391,9 @@ lines and the first two had already drifted once.
 
 - **The count is a second definition of "claimable" and must not drift.** The badge and the board
   have to agree or the badge is lying; a test pins them together.
+- **The pill's query must match the modal's, `has_jobs` included.** It filtered only `is_live` at
+  first, which was UNBOUNDED rather than stale: a jobless newest announcement lit the pill for
+  everyone whose marker was older, rendered no modal, and so never advanced anyone's marker.
 - **The pill reads the same gate as the modal** (`announcement_posted`, the marker, the 14-day
   first-visit floor). A marker that leads to no modal trains the reader to ignore markers.
 - Both fail closed: a hunter loses a marker for one render, nobody gains one. A nav that 500s

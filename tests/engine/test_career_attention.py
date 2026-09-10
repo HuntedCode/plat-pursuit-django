@@ -141,6 +141,66 @@ def test_the_count_reads_the_hunters_own_rows_not_the_catalogue(hunter):
     assert len(ctx.captured_queries) == 1
 
 
+def test_a_newly_reached_reward_clears_the_badge(hunter):
+    """The other half, and the one that was missing. `claim` spends a reward; `mark_contract_reached`
+    CREATES one -- during a sync the hunter is usually watching, so every page render was re-arming
+    the cached zero with a fresh TTL moments before the reward landed. The badge stayed empty for up
+    to five minutes while /career/'s own rail, uncached, already showed it."""
+    from trophies.services import contract_service
+
+    contract = _contract('Nearly There')
+    assert career_attention.claimable_count(hunter.profile) == 0     # caches the zero
+
+    # AT THE SEAM. Reaching a tier for real needs member games at the right progress, and building
+    # that here would test `_detect_tiers` rather than the invalidation. Forcing the detection is
+    # what isolates the thing that was missing.
+    cleared = []
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(contract_service, '_detect_tiers', lambda *a, **kw: (False, True))
+    monkeypatch.setattr(contract_service, '_forget_nav_badge', lambda p: cleared.append(p))
+    try:
+        contract_service.mark_contract_reached(hunter.profile, contract)
+    finally:
+        monkeypatch.undo()
+
+    assert cleared == [hunter.profile], 'reaching a reward left the nav badge cached'
+
+    # ...and NOT on a pass that changed nothing, or every sync tick would drop the key.
+    cleared.clear()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(contract_service, '_detect_tiers', lambda *a, **kw: (False, True))
+    monkeypatch.setattr(contract_service, '_forget_nav_badge', lambda p: cleared.append(p))
+    try:
+        contract_service.mark_contract_reached(hunter.profile, contract)   # already stamped
+    finally:
+        monkeypatch.undo()
+
+    assert cleared == [], 'an unchanged detection pass still dropped the cache'
+
+
+def test_the_marker_needs_a_contract_the_modal_would_actually_show(hunter):
+    """UNBOUNDED, not merely stale. The modal filters `is_live` AND `has_jobs`; this filtered only
+    the first. A jobless newest announcement lit the pill for everyone whose marker was older,
+    rendered no modal, and so never advanced anyone's marker -- permanent, for every hunter, with
+    nothing able to clear it."""
+    from trophies.services import new_contracts_modal
+
+    _contract('Jobless', jobs=[], announced_days_ago=0)
+
+    assert career_attention.has_new_contracts(hunter.profile.user) is False
+    assert new_contracts_modal.new_for(hunter.profile, hunter.profile.user)['rows'] == []
+
+
+def test_junk_in_the_shared_cache_does_not_take_the_page_down(hunter):
+    """`parse_datetime` raises TypeError on a non-string and ValueError on an impossible date; this
+    caught only the second. Anything decoding to a non-string -- a hand-SET key, an older code
+    version -- raised straight out of a context processor that runs on every page."""
+    cache.set('contracts:latest_announced', 12345, 60)
+
+    assert career_attention.latest_announced_at() is None
+    assert career_attention.has_new_contracts(hunter.profile.user) is False
+
+
 # -- the new-contracts marker --------------------------------------------------------------------
 
 def test_the_marker_lights_for_an_announcement_newer_than_the_marker(hunter):
@@ -233,17 +293,24 @@ def _mark_seen(hunter):
     user.save(update_fields=['ui_flags'])
 
 
-def test_claiming_clears_the_badge_for_real(hunter):
+def test_claiming_clears_the_badge_for_real(hunter, django_capture_on_commit_callbacks):
     """Through the real claim path, not the helper. The badge is cached, so nothing about the claim
-    itself would drop it -- the hunter would take their reward and watch the count stay put."""
+    itself would drop it -- the hunter would take their reward and watch the count stay put.
+
+    ON COMMIT, and captured deliberately rather than worked around. `claim` is atomic, and clearing
+    the cache INSIDE the transaction leaves a window where a second render reads the un-committed
+    rows and writes the pre-claim count back with a fresh TTL. Needing this fixture at all is the
+    test observing that the callback really is deferred."""
     from trophies.services import contract_service
 
     contract = _contract('Claim Me')
     _claimable(hunter.profile, contract)
     assert career_attention.claimable_count(hunter.profile) == 1
 
-    contract_service.claim(hunter.profile, contract=contract)
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        contract_service.claim(hunter.profile, contract=contract)
 
+    assert callbacks, 'the invalidation is not deferred to commit'
     assert career_attention.claimable_count(hunter.profile) == 0
 
 
@@ -263,6 +330,75 @@ def test_the_nav_carries_both_markers(hunter):
     assert '>New</span>' in nav, 'the new-contracts marker is a bare dot again'
     # The markers are aria-hidden, so the LABEL has to carry the same thing in words.
     assert 'ready to claim' in nav and 'new contracts on the board' in nav
+
+
+def _chrome_css():
+    from pathlib import Path
+
+    from django.conf import settings
+
+    return (Path(settings.BASE_DIR) / 'static' / 'css' / 'components' / 'chrome.css').read_text(
+        encoding='utf-8')
+
+
+def test_the_nav_item_never_wraps_and_the_row_can_shrink(hunter):
+    """Nothing in the nav row is shrink-protected except the brand and the end cap, so under pressure
+    the hub row is what gives -- and the way it gave was breaking "My Pursuit" over two lines inside a
+    58px bar, dragging the active underline down with it. The two pills add ~71px, which is what
+    turned "tight" into "wrapped"."""
+    css = _chrome_css()
+    item = css.split('.pp-navhub {', 1)[1].split('}', 1)[0]
+    row = css.split('.pp-nav__hubs {', 1)[1].split('}', 1)[0]
+
+    assert 'white-space: nowrap' in item, 'the nav label can wrap to two lines'
+    assert 'min-width: 0' in row, 'shrink pressure cannot land on the search field'
+    # And the row's `display` still belongs to the template (`hidden lg:flex`) -- declaring it here
+    # would show the desktop hub row on a phone, where the tab bar has taken over.
+    assert 'display' not in row, 'the hub row now declares display and will show on mobile'
+
+
+def test_only_one_marker_shows_in_the_narrow_desktop_band():
+    """The `lg` container step is 1024px wide from 1024 all the way to 1279, so that whole band
+    shares one layout -- and there the hub row plus both pills leaves the search field about 80px,
+    roughly three characters. The count wins: it is the half about the reader's own work."""
+    css = _chrome_css()
+
+    band = css.split('@media (max-width: 1279px) {', 1)[1].split('}', 1)[0]
+    assert '.pp-navhub__n ~ .pp-navhub__new { display: none' in band
+
+
+def test_the_active_item_does_not_stack_four_glows():
+    """On the active item the label is already primary, the underline is primary with an 8px glow,
+    and each pill added another -- the "second light among lights" pile-up the avatar block records,
+    in monochrome instead of in reds."""
+    css = _chrome_css()
+
+    rule = ('.pp-navhub.is-active .pp-navhub__n,' + chr(10)
+            + '.pp-navhub.is-active .pp-navhub__new { box-shadow: none; }')
+    assert rule in css
+
+
+def test_no_marker_text_is_below_the_readable_floor():
+    """A word that has to be read at 8px is being decoded, which is the argument the dot lost. The
+    tab-bar pill shipped at 0.5rem -- under the design system's 12px floor, under even the 0.55rem it
+    reserves for DECORATIVE marks, and on the one screen CLAUDE.md says must stay readable."""
+    css = _chrome_css()
+
+    for rule in ('.pp-navhub__new {', '.pp-navhub__new--tab {', '.pp-navhub__n {', '.pp-navhub__n--tab {'):
+        body = css.split(rule, 1)[1].split('}', 1)[0]
+        for line in body.splitlines():
+            if 'font-size:' in line:
+                size = float(line.split('font-size:', 1)[1].split('rem', 1)[0].strip())
+                assert size >= 0.56, '%s is %grem, below the floor' % (rule, size)
+
+
+def test_the_pills_use_the_token_without_a_wrong_fallback():
+    """`--pp-bg-0` is defined in `:root`, so the `#05070a` fallback never fired -- and it is two
+    stops darker than the token, so it would have shipped the WRONG colour on a rename. A guard that
+    is wrong when it fires is worse than the error it catches."""
+    css = _chrome_css()
+
+    assert 'var(--pp-bg-0, #05070a)' not in css.split('My Pursuit', 1)[1].split('THE TAB BAR', 1)[0]
 
 
 def test_a_staff_preview_lights_both_markers(hunter):
@@ -332,19 +468,82 @@ def test_a_staff_account_sees_nothing_without_the_querystring(hunter):
     assert _count_marker(body) is None and 'pp-navhub__new' not in body
 
 
-def test_every_preview_door_is_the_same_door():
-    """Three surfaces need this now, and copies drift -- the What's New door had to be pulled out of
-    its modal precisely because the avatar dot's half had been left behind, and half a preview is not
-    a preview. Nobody should be hand-rolling the fourth."""
+def test_every_team_preview_door_is_the_same_door():
+    """Four surfaces gate a `?preview=` on "staff or moderator", and copies drift -- What's New only
+    got its own door because the modal had one inline while the avatar dot had nothing, so dismissing
+    left you able to reopen the modal and never see the marker again.
+
+    DISCOVERED, NOT LISTED. The first version of this test iterated a hardcoded tuple of three files
+    and passed while THREE more hand-written copies sat in `core/views.py` -- an anti-drift guard
+    blind to the drift, which is worse than no guard because it reads as coverage. This walks the
+    tree instead, so a fifth door has to be either routed through `core.previews` or argued for by
+    name below.
+    """
     from pathlib import Path
 
     from django.conf import settings
 
-    for rel in ('core/whats_new.py', 'trophies/views/career_views.py',
-                'trophies/services/career_attention.py'):
-        src = (Path(settings.BASE_DIR) / rel).read_text(encoding='utf-8')
-        assert 'core.previews import previewing' in src, '%s hand-rolls the preview gate' % rel
-        assert "GET.get('preview')" not in src, '%s still reads the querystring itself' % rel
+    root = Path(settings.BASE_DIR)
+
+    # These read the same querystring and are NOT team doors -- a different gate on purpose, so
+    # folding them in would change behaviour. Named here so the exception is a decision, not a hole.
+    allowed = {
+        'milestones/views.py',        # DEBUG or staff, no moderator
+        'users/views.py',             # IS_BETA store preview + DEBUG-or-staff state previews
+        'trophies/views/roadmap_views.py',   # ?preview=true, gated on the roadmap writer role
+        'core/previews.py',           # the door itself
+    }
+
+    offenders = []
+    for path in root.glob('**/*.py'):
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith(('venv/', 'staticfiles/', 'tests/')) or rel in allowed:
+            continue
+        src = path.read_text(encoding='utf-8', errors='ignore')
+        if "GET.get('preview')" in src or 'GET.get("preview")' in src:
+            offenders.append(rel)
+
+    assert not offenders, 'hand-rolled preview gate(s) outside core/previews.py: %s' % offenders
+
+
+def test_the_team_gate_is_not_a_fifth_copy():
+    """`core.previews.is_team` delegates to `trophies.mixins.is_mod_or_admin`, which is the
+    codebase's one answer to "is this person on the team" -- and whose own docstring says why: three
+    hand-written copies is how one of them ends up subtly different. Deduplicating the doors while
+    forking the gate underneath them would have deduplicated nothing."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    src = (Path(settings.BASE_DIR) / 'core' / 'previews.py').read_text(encoding='utf-8')
+
+    assert 'from trophies.mixins import is_mod_or_admin' in src
+    # THE CODE FORMS, not the bare word: the docstring quotes `is_staff or is_moderator` while
+    # explaining why it must not be written out again here, so the loose check fails on correct code.
+    for spelled in ('user.is_staff', "getattr(user, 'is_staff'"):
+        assert spelled not in src, 'the team gate is spelled out again in core/previews.py'
+
+
+def test_a_deactivated_team_member_cannot_preview(rf):
+    """The check the copies did not have, inherited by delegating. Unreachable through a real request
+    -- the auth backend turns a deactivated user into AnonymousUser -- but a preview door is exactly
+    the sort of thing left open in a tab, and revoking access is the moment a stale user object must
+    not still say yes."""
+    from core.previews import previewing
+
+    user = ProfileFactory().user
+    user.is_staff = True
+    user.is_active = False
+    user.save(update_fields=['is_staff', 'is_active'])
+
+    request = rf.get('/?preview=career-markers')
+    request.user = user
+
+    assert previewing(request, 'career-markers') is False
+
+    user.is_active = True
+    user.save(update_fields=['is_active'])
+    assert previewing(request, 'career-markers') is True
 
 
 def test_the_mobile_tab_bar_carries_them_too(hunter):

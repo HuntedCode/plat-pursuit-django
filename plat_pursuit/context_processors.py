@@ -225,7 +225,7 @@ def career_attention(request):
 
     Fails closed, like `whats_new_unread` and `moderation_alert` above: a hunter loses a marker for
     one render, nobody gains one. A nav that 500s because a badge could not be counted would be a
-    poor trade for a dot.
+    poor trade for a marker.
     """
     user = getattr(request, 'user', None)
     if not (user and user.is_authenticated and hasattr(user, 'profile')):

@@ -365,6 +365,16 @@ def _detect_tiers(profile, contract, member_ids):
 
 # --- gate 1: detection (sync) ---------------------------------------------
 
+def _forget_nav_badge(profile):
+    """Drop the cached nav claim count. Best-effort: a cache that is down must never fail the write
+    that called this -- the badge is an ornament on somebody else's transaction."""
+    try:
+        from trophies.services.career_attention import forget_claimable
+        forget_claimable(profile)
+    except Exception:
+        logger.debug("Could not clear the cached claim count", exc_info=True)
+
+
 def mark_contract_reached(profile, contract):
     """Detection only: stamp newly-reached tiers so the reward becomes claimable.
     Grants NO XP. Returns the EarnedContract if anything changed, else None."""
@@ -387,6 +397,12 @@ def mark_contract_reached(profile, contract):
         changed.append('full_reached_at')
     if changed:
         ec.save(update_fields=changed)
+        # THE OTHER HALF OF THE NAV BADGE'S INVALIDATION. `claim` spends a reward; this is what
+        # creates one, and it ran during a sync the hunter is usually watching -- so every page
+        # render was re-arming the cached zero with a fresh TTL moments before the reward landed,
+        # and the badge stayed absent for close to the full 300s while /career/'s own rail already
+        # showed it. Gated on `changed`, so an unchanged detection pass costs nothing.
+        _forget_nav_badge(profile)
     return ec
 
 
@@ -657,14 +673,16 @@ def claim(profile, *, contract=None, all_claimable=False):
     if not accepted:
         return _empty_claim()
 
-    # The nav's claim badge is cached per hunter, and this is the only thing that can spend one. A
-    # badge still standing after the claim would look broken in the one moment they are looking
-    # straight at it. Best-effort: a cache that is down must not fail a claim that already committed.
-    try:
-        from trophies.services.career_attention import forget_claimable
-        forget_claimable(profile)
-    except Exception:
-        logger.debug("Could not clear the cached claim count", exc_info=True)
+    # The nav's claim badge is cached per hunter and this is what spends one, so it has to go: a
+    # badge still standing after the claim looks broken in the one moment they are looking straight
+    # at it.
+    #
+    # ON COMMIT, not here. `claim` is atomic, and deleting inside the transaction opens a window
+    # where another render -- a second tab, the same reader -- reads the not-yet-committed rows,
+    # counts them, and writes the PRE-claim count back with a fresh 300s TTL. The window is not
+    # instantaneous either: the whole payload build below runs first. A rollback is harmless in the
+    # other direction, so on_commit costs nothing.
+    transaction.on_commit(lambda: _forget_nav_badge(profile))
 
     post = _levels_snapshot(profile, job_by_id.keys())
     post_pursuer = _pursuer_level(profile)
