@@ -106,13 +106,42 @@ def test_the_collage_motion_contract_holds():
 
     partial = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'partials' / 'career' /
                '_career_explainer.html').read_text(encoding='utf-8')
-    assert 'restartCollage' in partial and 'is-armed' in partial
-    assert 'ppAfterCareerHowto' in partial and 'career-howto:settled' in partial
+    assert 'restartCollage' in partial and 'is-armed' in partial and 'is-live' in partial, (
+        'the arm-then-light restart is two classes; one of them alone does not replay anything'
+    )
+    # The collage is re-armed from DetailModal's onOpened hook now, not from an inline open().
+    assert 'onOpened' in partial, 'nothing replays the collage when the modal opens'
+    opened = partial.split('onOpened:', 1)[1].split('},', 1)[0]
+    assert 'restartCollage()' in opened, 'the collage restart is wired somewhere other than onOpened'
+
+    # AND onOpened has to fire on EVERY open. It fired only from the auto-open timer at first, so the
+    # first visit animated and a reopen from the edhint did not -- which is the only path a returning
+    # reader ever takes, so in practice the collage never replayed for anyone who had dismissed it.
+    js = (Path(settings.BASE_DIR) / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    controller = js.split('function DetailModal', 1)[1].split('window.PlatPursuit.DetailModal', 1)[0]
+    api_open = controller.split('api.open = function', 1)[1].split('};', 1)[0]
+    assert 'opts.onOpened' in api_open, (
+        'onOpened does not fire from api.open, so a manually reopened modal never gets it'
+    )
+
+    # THE GATE MOVED. It was `ppAfterCareerHowto`, published by this partial, which was right while
+    # the explainer was Career's only modal. The new-contracts modal made it two, and a gate named
+    # after one of them is a gate the other cannot use -- the same rename the lobby went through.
+    # The partial now SETTLES a gate the page arms.
+    assert 'ppSettleCareerModal' in partial, 'the explainer never releases the page motion'
+    assert 'ppAfterCareerHowto' not in partial, 'the retired per-modal gate is still published'
+
+    gate = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'partials' / 'career' /
+            '_career_modal_gate.html').read_text(encoding='utf-8')
+    assert 'window.ppAfterCareerModal = function' in gate, 'the gate partial publishes nothing'
+    assert 'window.ppHoldCareerModal = function' in gate, 'the backstop cannot be cancelled'
+    assert 'DOMContentLoaded' in gate, 'the deadline is measured from parse again'
 
     career = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
-    assert career.count('ppAfterCareerHowto') == 3, (
+    assert career.count('ppAfterCareerModal') == 3, (
         'the three on-load choreography kick-offs must all ride the modal gate'
     )
+    assert 'ppAfterCareerHowto' not in career, 'a kick-off still waits on the retired gate name'
 
 
 def test_career_never_auto_opens_once_flagged(linked_client):

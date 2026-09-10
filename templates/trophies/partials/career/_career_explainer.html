@@ -94,25 +94,61 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
         </div>
     </div>
 </div>
-
 <script>
 (function () {
-    var modal = document.getElementById('career-howto');
-    if (!modal) { return; }
-    var dialog = modal.querySelector('.pp-detail-modal__dialog');
-    var collage = modal.querySelector('[data-collage]');
-    var SEEN_KEY = 'pp-explainer-career-seen';
-    var lastFocus = null;
-    // Armed = this render carried the auto-open (the server flag was unset). Only an armed
-    // dismissal writes the flag; an edhint reopen on a flagged account closes silently.
-    var armed = modal.hasAttribute('data-auto');
+    'use strict';
+    var el = document.getElementById('career-howto');
+    // The page's gate was armed from the server's decision; only this side knows what happened.
+    var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal(); } };
+    if (!el) { settle(); return; }
+
+    // Waits for utils.js (end-of-body) because this partial sits at the top of content. Nothing is
+    // blocked by the wait: the gate is armed already, and the auto-open is on a timer either way.
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
+
+        var api = PlatPursuit.DetailModal(el, {
+            closeSelector: '[data-career-close]',
+            // ONLY on the first visit. `armed` comes from data-auto (which the server also gates), but
+            // the auto-OPEN is driven by this option alone -- passing it unconditionally would reopen
+            // the teaching on every single visit. This was one of the two reasons the explainer was
+            // not migrated with the launch greeting; the other was restartCollage, below.
+            {% if show_career_explainer %}autoOpenDelay: 450,{% endif %}
+            seenKey: 'pp-explainer-career-seen',
+            onSettled: settle,
+            // Cancels the gate's "nothing ever appeared" deadline. Without it the page releases its
+            // count-ups at 4s while the reader is still reading.
+            onOpened: function () {
+                if (window.ppHoldCareerModal) { window.ppHoldCareerModal(); }
+                restartCollage();
+            },
+            onDismiss: function () {
+                if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
+                return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+                    setting: 'ui_flag', value: 'career_explainer'
+                });
+            }
+        });
+
+        // THE REOPEN AFFORDANCE, and the reason this modal is not render-once like the greeting:
+        // Career has no long-form page, so this modal IS the teaching and the summary card's
+        // .pp-edhint must reach it forever. A reopen closes SILENTLY -- `armed` is read from
+        // data-auto, which the server drops once the flag is written, so onDismiss cannot re-fire.
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var trigger = e.target.closest('[data-career-open]');
+            if (trigger) { e.preventDefault(); api.open(trigger); }
+        });
+    });
+
+    // The badge forge's ARM-THEN-LIGHT restart, ported verbatim rather than reimagined. Two classes,
+    // not one: the classless markup IS the final state, so `is-armed` puts it back to the start and
+    // `is-live` plays it, with a forced reflow between so the browser cannot coalesce them.
+    // Reduced motion arms nothing and returns -- the collage simply sits in its final state.
+    var collage = el.querySelector('[data-collage]');
     var reduce = false;
     try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
 
-    // The badge forge's arm-then-light restart: default (classless) markup IS the final
-    // state, so no-JS and reduced-motion always see the finished collage. Arming holds the
-    // hidden start states; re-adding is-live after a forced reflow restarts the run on
-    // every open.
     function restartCollage() {
         if (!collage) { return; }
         collage.classList.remove('is-live', 'is-armed');
@@ -120,120 +156,6 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
         collage.classList.add('is-armed');
         void collage.offsetWidth;
         collage.classList.add('is-live');
-    }
-
-    function flagPost() {
-        if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
-        return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
-            setting: 'ui_flag', value: 'career_explainer'
-        });
-    }
-    function isEditable(el) {
-        if (!el) { return false; }
-        var t = el.tagName;
-        return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable;
-    }
-
-    function open(trigger) {
-        if (!modal.hidden) { return; }
-        lastFocus = trigger || document.activeElement;
-        modal.hidden = false;
-        // Take focus EXCEPT on a silent auto-open while the visitor is typing.
-        if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
-        restartCollage();
-    }
-    function close() {
-        if (modal.hidden) { return; }
-        // Dismissed = greeted, durably: the server flag ends the auto-open on every device.
-        // No success toast; on failure the localStorage fallback keeps this device quiet and
-        // the self-heal below retries the write on the next visit. Armed dismissals only:
-        // an edhint reopen on an already-flagged account closes without a write.
-        if (armed) {
-            armed = false;
-            flagPost().catch(function () {
-                try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {}
-            });
-        }
-        modal.classList.add('is-closing');
-        window.setTimeout(function () {
-            modal.hidden = true;
-            modal.classList.remove('is-closing');
-            if (collage) { collage.classList.remove('is-live', 'is-armed'); }
-            if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
-        }, 200);
-    }
-
-    document.addEventListener('click', function (e) {
-        if (!e.target.closest) { return; }
-        if (e.target.closest('[data-career-open]')) { e.preventDefault(); open(e.target.closest('[data-career-open]')); return; }
-        {% if explainer_debug %}
-        // Dev-only replay (button lives in the shared ceremony panel), render-gated so the
-        // handler never ships to prod. Replays the OPEN (choreography included); the genuine
-        // auto-open path only runs while the server flag is unset, and a real dismissal
-        // burns that flag durably -- clear `career_explainer` from ui_flags in a shell to
-        // retest the true first visit. The localStorage clear below keeps the device
-        // fallback from muddying that retest.
-        if (e.target.closest('[data-explainer-replay]')) {
-            e.preventDefault();
-            try { localStorage.removeItem(SEEN_KEY); } catch (err) {}
-            open(null);
-            return;
-        }
-        {% endif %}
-        if (!modal.hidden && e.target.closest('[data-career-close]')) { e.preventDefault(); close(); }
-    });
-    document.addEventListener('keydown', function (e) {
-        if (modal.hidden) { return; }
-        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
-        if (e.key !== 'Tab' || !dialog) { return; }
-        // Minimal focus trap, the badge howto's shape.
-        var f = dialog.querySelectorAll('a[href],button:not([disabled]),[tabindex]:not([tabindex="-1"])');
-        var list = Array.prototype.filter.call(f, function (el) { return el.offsetParent !== null; });
-        if (!list.length) { return; }
-        var first = list[0], last = list[list.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    });
-
-    // The on-load choreography gate (audit-caught): the Career page's count-ups, rank
-    // count-down and dossier reveals fire from IntersectionObservers the moment the page
-    // loads -- on the ONE visit the modal auto-opens, they'd all play out behind the scrim.
-    // This script runs before the page's scripts (the include sits at the top of content),
-    // so it publishes the gate synchronously; the page wraps its kick-offs in it. Settled
-    // on close, or immediately when no auto-open will happen.
-    window.ppCareerHowtoPending = false;
-    function settleChoreography() {
-        if (!window.ppCareerHowtoPending) { return; }
-        window.ppCareerHowtoPending = false;
-        document.dispatchEvent(new CustomEvent('career-howto:settled'));
-    }
-    window.ppAfterCareerHowto = function (fn) {
-        if (window.ppCareerHowtoPending) {
-            document.addEventListener('career-howto:settled', function () { fn(); }, { once: true });
-        } else { fn(); }
-    };
-    var _origClose = close;
-    close = function () { _origClose(); settleChoreography(); };
-
-    // First visit (server-gated via data-auto): open once, after paint. The localStorage
-    // fallback suppresses a device whose flag POST failed, and self-heals by retrying the
-    // write once utils.js is up (this inline script runs before end-of-body scripts).
-    if (modal.hasAttribute('data-auto')) {
-        var seen = false;
-        try { seen = localStorage.getItem(SEEN_KEY) === '1'; } catch (e) {}
-        if (seen) {
-            document.addEventListener('DOMContentLoaded', function () {
-                flagPost().then(function () { try { localStorage.removeItem(SEEN_KEY); } catch (e) {} }).catch(function () {});
-            });
-        } else {
-            window.ppCareerHowtoPending = true;
-            window.setTimeout(function () {
-                // Typing guard: the skipped auto-open must settle the gate too, or the
-                // page's numbers would wait forever on a modal that never opened.
-                if (isEditable(document.activeElement)) { settleChoreography(); return; }
-                open(null);
-            }, 450);
-        }
     }
 })();
 </script>

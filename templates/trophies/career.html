@@ -123,6 +123,12 @@
     reopenable from the edhint below). Inside the career gate ON PURPOSE: the degraded
     no-career fallback renders no edhint, so an auto-open there would burn the one-shot
     flag on a broken page with no way back in. {% endcomment %}
+    {% comment %} The gate goes FIRST and unconditionally: it must be armed synchronously,
+    before this page's own scripts ask whether to wait, and it is the modals below that report
+    back. It reads the same two flags they are gated on, so an armed gate with nothing to
+    settle it is not expressible. Only ONE of the two ever renders -- the explainer wins (see
+    career_views.py) -- so the gate is never settled by two different modals. {% endcomment %}
+    {% include 'trophies/partials/career/_career_modal_gate.html' %}
     {% include 'trophies/partials/career/_career_explainer.html' %}
 
     {% comment %} Career summary card (the "Career" heading + aggregate stats) -- the accented header for
@@ -941,7 +947,7 @@ function ppCountUp(el, dur) {
         entries.forEach(function (e) { if (e.isIntersecting) { run(e.target); io.unobserve(e.target); } });
     }, { threshold: 0.4 });
     // Gated on the first-visit modal: numbers hold at 0 behind its scrim and tick on close.
-    (window.ppAfterCareerHowto || function (f) { f(); })(function () {
+    (window.ppAfterCareerModal || function (f) { f(); })(function () {
         els.forEach(function (el) { io.observe(el); });
     });
 })();
@@ -971,7 +977,7 @@ function ppCountUp(el, dur) {
     var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) { if (e.isIntersecting) { run(); io.unobserve(e.target); } });
     }, { threshold: 0.4 });
-    (window.ppAfterCareerHowto || function (f) { f(); })(function () { io.observe(el); });
+    (window.ppAfterCareerModal || function (f) { f(); })(function () { io.observe(el); });
 })();
 
 // Premium: hover a legend row (or arc) -> spotlight its discipline arc, dim the rest, pause the spin.
@@ -1031,7 +1037,7 @@ function ppCountUp(el, dur) {
             }, i * 90);
         });
     }, { threshold: 0.2 });
-    (window.ppAfterCareerHowto || function (f) { f(); })(function () {
+    (window.ppAfterCareerModal || function (f) { f(); })(function () {
         bands.forEach(function (b) { io.observe(b); });
     });
 })();

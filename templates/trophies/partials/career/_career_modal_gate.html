@@ -1,0 +1,65 @@
+{% comment %} CAREER'S CHOREOGRAPHY GATE, armed for whichever modal is about to cover the page.
+
+Career's numbers count up as they scroll into view, and the ones above the fold are in view at load --
+so on a visit that opens a modal they tick to their final values behind the scrim and are finished
+before the reader has closed it. Three blocks in career.html wrap their kick-offs in this gate.
+
+WHY THE PAGE OWNS IT AND NOT A MODAL. It was `ppAfterCareerHowto`, published by the explainer's own
+inline script, which was correct while the explainer was the only modal here. The new-contracts modal
+makes it two, and a gate named after one of them is a gate the other cannot use -- exactly the
+situation the lobby was in before What's New, and fixed the same way. It must also be armed
+SYNCHRONOUSLY, before career.html's own scripts run, while the modals are wired from end-of-body
+utils.js: a gate armed alongside the modal wiring would arm after the code waiting on it gave up.
+
+So: the page arms, and each modal reports back when nothing is going to cover the screen.
+
+FAIL-OPEN both directions. Consumers call through `(window.ppAfterCareerModal || function (f) { f(); })`,
+so an unarmed gate runs the motion immediately, and `ppSettleCareerModal` is safe to call when nothing
+is pending.
+{% endcomment %}
+<script>
+(function () {
+    'use strict';
+    var pending = {% if show_career_explainer or show_new_contracts %}true{% else %}false{% endif %};
+    var EVT = 'pp-career-modal:settled';
+
+    window.ppAfterCareerModal = function (fn) {
+        if (pending) { document.addEventListener(EVT, function () { fn(); }, { once: true }); }
+        else { fn(); }
+    };
+    window.ppSettleCareerModal = function () {
+        if (!pending) { return; }
+        pending = false;
+        document.dispatchEvent(new CustomEvent(EVT));
+    };
+
+    {% comment %} THE BACKSTOP covers exactly one failure: nothing ever appeared. The gate is armed
+    from the server, but everything able to settle it lives in end-of-body JS, so a script error or a
+    blocked bundle would otherwise leave the page's numbers frozen at 0 -- worse here than on the
+    lobby, where the server-rendered values at least stand.
+
+    MEASURED FROM DOMContentLoaded, not from parse. At parse it is really "4 seconds minus however
+    long the page took", and Career is a heavy page: past ~3.5s the deadline fires BEFORE the modal
+    opens and releases the motion anyway, which is the original bug surviving in the tail. The lobby's
+    first cut had exactly this and it was caught by audit. DCL fires whether or not our bundle loads,
+    so the failsafe still covers the case it exists for.
+
+    Cancelled the moment a modal actually opens (ppHoldCareerModal), or a normal visit releases the
+    motion at 4s while the reader is still reading. {% endcomment %}
+    var backstop = null;
+    var held = false;
+    function armBackstop() {
+        if (held) { return; }
+        backstop = window.setTimeout(window.ppSettleCareerModal, 4000);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', armBackstop, { once: true });
+    } else {
+        armBackstop();
+    }
+    window.ppHoldCareerModal = function () {
+        held = true;
+        window.clearTimeout(backstop);
+    };
+})();
+</script>

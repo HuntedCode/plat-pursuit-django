@@ -3427,7 +3427,7 @@ window.PlatPursuit.wireSearchField = wireSearchField;
  *   onDismiss      () => Promise, called at most ONCE, on the first armed dismissal. Armed is read from
  *                  the element's [data-auto] attribute, so the markup decides, not the caller
  *   seenKey        localStorage key holding "this device already dismissed it" when onDismiss failed
- *   onOpened       called when the modal actually appears -- see the gate note below
+ *   onOpened       called EVERY time the modal opens (auto or manual) -- see the gate note below
  *   onSettled      called once the page's motion may proceed -- see the gate note below
  *
  * ON THE CHOREOGRAPHY GATE. The controller does NOT own it. A page whose on-load motion must wait for a
@@ -3509,6 +3509,11 @@ function DetailModal(el, opts) {
         // Do not yank focus off something the user is typing in. A trigger click is explicit intent and
         // always wins; an auto-open defers to the caret.
         if (dialog && (trigger || !isEditable(document.activeElement))) { dialog.focus(); }
+        // EVERY open, not just the auto-open. This used to fire from the auto-open timer alone, so a
+        // modal reopened from an affordance (the Career explainer's edhint) never got the callback --
+        // and its collage, which is re-armed here, simply did not replay. "onOpened" has to mean the
+        // modal opened, or every consumer has to know which opens count.
+        if (opts.onOpened) { opts.onOpened(); }
     };
 
     api.close = function () {
@@ -3632,10 +3637,9 @@ function DetailModal(el, opts) {
         // A skipped auto-open must settle the gate too. The page's motion cannot be left waiting on a
         // modal that decided not to appear.
         if (isEditable(document.activeElement)) { settle(); return; }
+        // api.open fires onOpened itself, which is what tells the page its "nothing ever appeared"
+        // deadline is no longer measuring anything true.
         api.open(null);
-        // The modal is now on screen, so whatever deadline the page set for "nothing ever appeared" is
-        // no longer measuring anything true. Tell it.
-        if (opts.onOpened) { opts.onOpened(); }
     }, opts.autoOpenDelay);
 
     return api;
