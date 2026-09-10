@@ -146,6 +146,28 @@ by (profile, job) — **DB aggregation, never Python iteration**. Mirrors the ex
 - Each (profile, Contract, tier) granted **at most once**.
 - Every Contract is worth the same total `T` (split among its ≤6 jobs) unless overridden.
 
+## The nightly sweep's cost
+
+`process_contracts --all` evaluates, per live Contract, every profile that has completed a member
+game **and still has a tier left to stamp**. That second condition is what keeps a full sweep
+affordable as the catalogue grows.
+
+A Contract can only ever write two fields on an `EarnedContract` — `platinum_reached_at` and
+`full_reached_at` — and only when they are `None`. So a hunter whose applicable stamps are already
+set cannot produce a mark tonight or any night. Without the exclusion the sweep re-ran full tier
+detection on them anyway, every night, to re-confirm what it had already written: in production,
+461 of every 462 candidates. The cost now tracks UNSTAMPED pairs, which shrinks as the catalogue
+matures rather than growing with users × contracts.
+
+**Ask the platinum question fresh.** `EarnedContract.has_platinum` is frozen when the row is created
+and never updated, while membership is IGDB-derived and can gain a platinum-bearing game later. A
+row written before that keeps saying `False` forever, so excluding on it would strand that hunter's
+platinum tier permanently and silently. The sweep asks `_has_platinum(contract, member_ids)` once per
+Contract instead — one catalogue-bounded `.exists()` against thousands of skipped detections.
+
+(The frozen value still matters elsewhere: the accept gate only banks the platinum tier when
+`has_platinum` is True. That is separate from the sweep and unfixed.)
+
 ## Reconciliation — when membership changes under a hunter
 
 Everything above is **forward-only**: detection stamps, acceptance grants, and nothing subtracts.

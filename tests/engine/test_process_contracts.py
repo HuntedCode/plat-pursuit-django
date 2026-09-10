@@ -41,21 +41,26 @@ def _live_contract_with_member():
     return contract
 
 
-def _completable_contract(slug=None, *, is_live=True):
-    """A Contract whose single member game HAS a platinum, so a hunter can actually reach it."""
+def _completable_contract(slug=None, *, is_live=True, with_platinum=True):
+    """A Contract whose single member game has a platinum, so a hunter can actually reach it.
+
+    `with_platinum=False` builds one whose member game has NO platinum trophy -- the shape where
+    `platinum_reached_at` can never be stamped, which is its own case for the candidate exclusion.
+    """
     igdb_id = next(_igdb_seq)
     contract = Contract.objects.create(name=slug or f'C{igdb_id}', slug=slug or f'c-{igdb_id}',
                                        is_live=is_live, igdb_id=igdb_id)
     concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
     IGDBMatchFactory(concept=concept, igdb_id=igdb_id)
     game = GameFactory(concept=concept)
-    plat = TrophyFactory(game=game, trophy_type='platinum')
+    plat = TrophyFactory(game=game, trophy_type='platinum') if with_platinum else None
     return contract, game, plat
 
 
 def _complete(profile, game, plat):
-    EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
-    ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
+    if plat is not None:
+        EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
+    ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=plat is not None)
 
 
 def _run(*args):
@@ -220,3 +225,100 @@ def test_no_scope_flag_is_an_error_that_names_all_three_modes():
     _completable_contract('c-nomode')   # else the "no live Contracts" branch answers first
     out = _run()
     assert '--contract' in out and '--all' in out and '--user' in out
+
+
+# -- the sweep only looks at what it can still change -----------------------------------------------
+
+def test_a_fully_stamped_hunter_is_not_a_candidate():
+    """WHERE THE COST WAS. A Contract can only ever write `platinum_reached_at` and
+    `full_reached_at`, and only when they are None -- so a hunter with both already set cannot
+    produce a mark tonight or any night, yet every sweep re-ran full tier detection on them. In
+    production that was 461 of every 462 candidates."""
+    contract, game, plat = _completable_contract('c-settled')
+    profile = ProfileFactory(psn_username='settled-hunter')
+    _complete(profile, game, plat)
+
+    out = _run('--all')
+    assert '1 candidate(s) -> 2 new tier mark(s)' in out or '1 candidate(s)' in out
+
+    out = _run('--all')
+    assert '0 candidate(s)' in out, 'a fully stamped hunter is still being re-evaluated nightly'
+
+
+def test_a_half_stamped_hunter_is_still_a_candidate():
+    """Only BOTH applicable stamps settle a hunter. Excluding on the 100% tier alone would strand
+    every platinum that had not been reached yet."""
+    contract, game, plat = _completable_contract('c-half')
+    profile = ProfileFactory(psn_username='half-hunter')
+    _complete(profile, game, plat)
+    _run('--all')
+
+    # Give the platinum tier back: there is something left to stamp again.
+    EarnedContract.objects.filter(profile=profile, contract=contract).update(platinum_reached_at=None)
+
+    out = _run('--all')
+    assert '1 candidate(s) -> 1 new tier mark(s)' in out, (
+        'a hunter with an unstamped tier was excluded'
+    )
+
+
+def test_a_hunter_who_has_only_the_platinum_is_still_a_candidate():
+    """The mirror of the case above, and the one that catches a `settled` set built without the 100%
+    condition: platinum reached, 100% not. Filtering on the platinum stamp alone would call that
+    hunter settled and never stamp their full tier."""
+    contract, game, plat = _completable_contract('c-plat-only')
+    profile = ProfileFactory(psn_username='plat-only-hunter')
+    _complete(profile, game, plat)
+    _run('--all')
+
+    EarnedContract.objects.filter(profile=profile, contract=contract).update(full_reached_at=None)
+
+    out = _run('--all')
+    assert '1 candidate(s) -> 1 new tier mark(s)' in out, (
+        'a hunter with an unstamped 100% tier was treated as settled'
+    )
+
+
+def test_a_contract_with_no_platinum_settles_on_the_full_tier_alone():
+    """`platinum_reached_at` can never be stamped where no member game HAS a platinum, so requiring
+    it would make those hunters permanent candidates -- the exact re-confirmation this removes, on
+    the contracts least able to escape it."""
+    contract, game, _plat = _completable_contract('c-no-plat', with_platinum=False)
+    profile = ProfileFactory(psn_username='no-plat-hunter')
+    _complete(profile, game, None)
+
+    _run('--all')
+    out = _run('--all')
+
+    assert '0 candidate(s)' in out
+
+
+def test_the_platinum_question_is_asked_fresh_not_read_off_the_row():
+    """`EarnedContract.has_platinum` is frozen when the row is created and never updated, while
+    membership is IGDB-derived and can gain a platinum-bearing game later. Excluding on the frozen
+    value would strand that hunter's platinum tier for good, silently."""
+    contract, game, plat = _completable_contract('c-frozen')
+    profile = ProfileFactory(psn_username='frozen-hunter')
+    _complete(profile, game, plat)
+    _run('--all')
+
+    # The row says "no platinum here" while the contract now has one, and the platinum tier is
+    # unstamped. Reading the row would exclude this hunter; asking the contract does not.
+    EarnedContract.objects.filter(profile=profile, contract=contract).update(
+        has_platinum=False, platinum_reached_at=None)
+
+    out = _run('--all')
+    assert '1 candidate(s)' in out, 'the sweep trusted the frozen flag and skipped a reachable tier'
+
+
+def test_a_hunter_with_no_row_yet_is_always_a_candidate():
+    """The exclusion is over rows that exist, so a first-time completion is never filtered out."""
+    contract, game, plat = _completable_contract('c-first-time')
+    profile = ProfileFactory(psn_username='first-timer')
+    _complete(profile, game, plat)
+
+    assert not EarnedContract.objects.filter(profile=profile).exists()
+    out = _run('--all')
+
+    assert '1 candidate(s)' in out
+    assert EarnedContract.objects.filter(profile=profile, contract=contract).exists()
