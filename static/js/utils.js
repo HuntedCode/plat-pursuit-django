@@ -3339,8 +3339,9 @@ window.PlatPursuit.wireGuidelinesSheet = wireGuidelinesSheet;
 /**
  * discPopovers -- the OPEN/CLOSE mechanics for a `.rp-disc` discipline-dropdown group (the shared look
  * from elements.css, used by the Career contracts board + Browse Games). Owns ONLY the popover behavior:
- * a `.rp-disc__trigger` click toggles its sibling `.rp-pop` (one open at a time), viewport-edge flip
- * (`.rp-pop--left`), `aria-expanded`, and click-outside / Escape to close. SELECTION is the caller's --
+ * a `.rp-disc__trigger` click toggles its sibling `.rp-pop` (one open at a time), viewport-edge flips
+ * (`.rp-pop--left` horizontally, `.rp-pop--up` vertically, plus a max-height clamp to the room the
+ * chosen direction actually has), `aria-expanded`, and click-outside / Escape to close. SELECTION is the caller's --
  * wire your own handlers on the `.rp-pop__item`s. Delegates one click listener on `root`.
  * @param {HTMLElement} root  the `.rp-discs` container
  * @returns {{closeAll: function}}  call closeAll() after your own actions (e.g. a "clear" button)
@@ -3348,7 +3349,10 @@ window.PlatPursuit.wireGuidelinesSheet = wireGuidelinesSheet;
 function discPopovers(root) {
     if (!root) { return { closeAll: function () {} }; }
     function closeAll() {
-        root.querySelectorAll('.rp-pop').forEach(function (p) { p.hidden = true; });
+        root.querySelectorAll('.rp-pop').forEach(function (p) {
+            p.hidden = true;
+            p.style.maxHeight = '';   // cleared with the popover; re-measured on the next open
+        });
         root.querySelectorAll('.rp-disc__trigger').forEach(function (t) { t.setAttribute('aria-expanded', 'false'); });
     }
     root.addEventListener('click', function (e) {
@@ -3359,11 +3363,23 @@ function discPopovers(root) {
         var isOpen = !pop.hidden;
         closeAll();
         if (!isOpen) {
-            pop.classList.remove('rp-pop--left');
+            pop.classList.remove('rp-pop--left', 'rp-pop--up');
             pop.hidden = false;
             trig.setAttribute('aria-expanded', 'true');
             // Flip to the chip's right edge if a left-anchored popover would overflow the viewport (mobile).
-            if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 8) { pop.classList.add('rp-pop--left'); }
+            var box = pop.getBoundingClientRect();
+            if (box.right > document.documentElement.clientWidth - 8) { pop.classList.add('rp-pop--left'); }
+            // AND THE VERTICAL EDGE, which used to be nobody's job. On a scrolling page a popover
+            // running past the fold is merely awkward -- you can scroll to it. Inside a dialog you
+            // cannot, and it reads as a dropdown that does not open. Flip above the trigger when the
+            // room below runs out, then CLAMP to whatever room the chosen direction actually has:
+            // on a landscape phone neither direction fits a 300px popover, so flipping alone just
+            // moves the problem to the other edge.
+            var below = window.innerHeight - box.top - 14;
+            var above = trig.getBoundingClientRect().top - 14;
+            if (below < Math.min(160, box.height) && above > below) { pop.classList.add('rp-pop--up'); }
+            var room = pop.classList.contains('rp-pop--up') ? above : below;
+            pop.style.maxHeight = Math.max(120, Math.min(300, room)) + 'px';
         }
     });
     document.addEventListener('click', function (e) { if (!e.target.closest || !e.target.closest('.rp-disc')) { closeAll(); } });

@@ -5,9 +5,9 @@ Server-gated entirely (`show_new_contracts` in career_views.py): something is ne
 
 BUILT TO BE STAYED IN, not dismissed. Three parts, in the order somebody actually reads them:
 
-  HEROES   -- three contracts with real cover art, their job icons and this viewer's status. Three
-              at desktop width keeps the art large enough to be the draw; CSS drops it to one on a
-              phone rather than shrinking three covers into thumbnails.
+  HEROES   -- the top MAX_HEROES (6) of the same order the list uses, with real cover art, their job
+              icons and this viewer's status. All six render and CSS shows 2 / 4 / 6 by breakpoint,
+              so the count follows the screen without a second render path.
   FILTER   -- the site's own discipline dropdowns (`.rp-discs`, shared with the contracts board and
               Browse Games): five triggers in discipline colours, each opening its jobs. The owner
               follows Mastermind specifically, and "what landed for MY job" is the question this
@@ -55,9 +55,12 @@ _career_modal_gate.html, so nothing waits on this script to run.
                             {% endif %}
                         </div>
                         <figcaption class="nc__hero-name">{{ c.name }}</figcaption>
-                        <span class="nc__jobs" aria-label="Jobs this levels">
+                        <span class="nc__jobs">
                             {% for job in c.jobs.all %}
-                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'nc__job-ic' %}</span>
+                                {% comment %} role="img" + aria-label per icon: an aria-label on the
+                                bare wrapper span (generic role) is dropped by assistive tech, and
+                                `title` alone does not name an element reliably. {% endcomment %}
+                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" role="img" aria-label="{{ job.name }}" title="{{ job.name }}">{% job_icon_use job.icon 'nc__job-ic' %}</span>
                             {% endfor %}
                         </span>
                     </figure>
@@ -77,10 +80,10 @@ _career_modal_gate.html, so nothing waits on this script to run.
             <div class="nc__toolbar">
             {% if nc.disciplines %}
                 <div class="nc__filter rp-discs" role="group" aria-label="Filter by discipline or job">
-                    <button type="button" class="rp-chip is-active" data-nc-all>All <span class="rp-disc__count">{{ nc.rows|length }}</span></button>
+                    <button type="button" class="rp-chip is-active" data-nc-all aria-pressed="true">All <span class="rp-disc__count">{{ nc.rows|length }}</span></button>
                     {% for d in nc.disciplines %}
                         <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
-                            <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-nc-disc="{{ d.slug }}" aria-haspopup="true" aria-expanded="false">
+                            <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-nc-disc="{{ d.slug }}" aria-haspopup="true" aria-expanded="false" aria-pressed="false">
                                 <span class="rp-disc__name">{{ d.label }}</span><span class="rp-disc__count">{{ d.count }}</span>
                                 <svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                             </button>
@@ -136,7 +139,10 @@ _career_modal_gate.html, so nothing waits on this script to run.
                     </li>
                 {% endfor %}
             </ul>
-            <p class="nc__empty" data-nc-empty hidden>Nothing new for that job.</p>
+            {% comment %} aria-live, because a filter that empties the list is otherwise silent: the
+            rows just stop existing with nothing said. Also not "for that job" -- the same message
+            shows when the filter was a whole discipline. {% endcomment %}
+            <p class="nc__empty" data-nc-empty role="status" aria-live="polite" hidden>Nothing new there.</p>
 
             {% if nc.extra %}
                 <p class="nc__more">and {{ nc.extra }} more on the board</p>
@@ -156,7 +162,7 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
 (function () {
     'use strict';
     var el = document.getElementById('new-contracts');
-    var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal(); } };
+    var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal('contracts'); } };
     if (!el) { settle(); return; }
 
     // THE FILTER. Client-side because every row already carries its slugs: selecting is a hidden
@@ -174,13 +180,33 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
     var rows = list ? Array.prototype.slice.call(list.querySelectorAll('.nc__row')) : [];
     var pops = { closeAll: function () {} };
 
+    // The stamp this render is offering, and where an unrecorded dismissal parks the one it was
+    // actually shown. See onDismiss at the bottom.
+    var PAGE_STAMP = '{{ new_contracts_stamp|escapejs }}';
+    var STAMP_KEY = 'pp-new-contracts-stamp';
+    function stored() {
+        try { return localStorage.getItem(STAMP_KEY) || ''; } catch (e) { return ''; }
+    }
+
     // ESCAPE BELONGS TO THE INNERMOST THING THAT IS OPEN. discPopovers closes popovers on Escape and
     // DetailModal closes the modal on Escape, both listening on document in the bubble phase -- so one
     // press did both, and a reader dismissing a dropdown lost the whole modal with it. A capture-phase
     // listener runs before either, and claims the key only while a popover is actually open.
+    function popoverOpen() { return !el.hidden && !!el.querySelector('.rp-pop:not([hidden])'); }
+
     document.addEventListener('keydown', function (e) {
-        if (e.key !== 'Escape' || el.hidden) { return; }
-        if (!el.querySelector('.rp-pop:not([hidden])')) { return; }
+        if (e.key !== 'Escape' || !popoverOpen()) { return; }
+        e.stopPropagation();
+        pops.closeAll();
+    }, true);
+
+    // THE CLICK TWIN OF THE SAME COLLISION. discPopovers closes a popover on any click outside
+    // `.rp-disc`; DetailModal closes the modal on any click matching its close selector, and the
+    // scrim is one. So clicking the dimmed area to dismiss just the dropdown closed the whole modal
+    // AND recorded the wave as read. Capture phase again, and only while a popover is open, so an
+    // ordinary scrim click still dismisses normally.
+    document.addEventListener('click', function (e) {
+        if (!popoverOpen() || (e.target.closest && e.target.closest('.rp-disc'))) { return; }
         e.stopPropagation();
         pops.closeAll();
     }, true);
@@ -188,7 +214,7 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
     function applyFilter(attr, want) {
         if (!list) { return; }
         var shown = 0;
-        list.querySelectorAll('.nc__row').forEach(function (row) {
+        rows.forEach(function (row) {
             // Padded both sides so `mage` cannot match `mastermind`: the slugs share one
             // space-separated attribute, and a bare indexOf is a prefix trap.
             var hay = ' ' + (row.getAttribute(attr) || '') + ' ';
@@ -226,7 +252,11 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
         var owner = button && button.closest('.rp-disc');
         filterRoot.querySelectorAll('.rp-chip').forEach(function (c) {
             var ownerTrigger = !!owner && c.classList.contains('rp-disc__trigger') && c.closest('.rp-disc') === owner;
-            c.classList.toggle('is-active', c === button || ownerTrigger);
+            var on = c === button || ownerTrigger;
+            c.classList.toggle('is-active', on);
+            // The class was the ONLY indicator, so a screen reader could not tell which discipline
+            // was filtering -- and the trigger is where the selection lives once the popover shuts.
+            c.setAttribute('aria-pressed', on ? 'true' : 'false');
         });
         filterRoot.querySelectorAll('.rp-pop__item').forEach(function (i) {
             // `is-selected` is the shared popover's own selected state (the tick in elements.css); the
@@ -261,6 +291,12 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
         // The click handler is OURS, and wireTablist is asked for keyboard only (`manual`). The
         // switcher then still works if utils.js failed to load -- a <button> fires click from Enter
         // and Space natively -- and only the arrow-key roving is lost.
+        // NO `wireTablist` HERE, deliberately. It installs a roving tabindex (active 0, the rest
+        // -1) for a `role="tablist"` of tabs; this is a `role="group"` of two aria-pressed toggle
+        // buttons, where every button should stay in the tab order and nothing announces that arrows
+        // move between them. Wiring it and not calling the returned `syncTabindex` after each toggle
+        // left the ACTIVE chip at tabindex -1 -- unreachable by keyboard, which is worse than the
+        // arrow keys it was added for.
         sortRoot.addEventListener('click', function (e) {
             var chip = e.target.closest && e.target.closest('[data-nc-order]');
             if (!chip || !sortRoot.contains(chip)) { return; }
@@ -275,27 +311,7 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
     document.addEventListener('DOMContentLoaded', function () {
         if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
         if (PlatPursuit.discPopovers) { pops = PlatPursuit.discPopovers(filterRoot); }
-        if (sortRoot && PlatPursuit.wireTablist) {
-            PlatPursuit.wireTablist(sortRoot.querySelectorAll('[data-nc-order]'), { manual: true });
-        }
 
-        // THE POPOVER HAS TO FIT ON SCREEN. discPopovers flips it horizontally at the viewport edge
-        // but always opens it downward, which is right on a page that scrolls and wrong inside a
-        // dialog: the trigger sits mid-modal, so a popover that is taller than the room beneath it
-        // runs off the bottom of the screen with no way to scroll to it. Registered AFTER
-        // discPopovers so the popover is already open and measurable.
-        if (filterRoot) {
-            filterRoot.addEventListener('click', function (e) {
-                var trig = e.target.closest && e.target.closest('.rp-disc__trigger');
-                if (!trig) { return; }
-                var pop = trig.parentElement.querySelector('.rp-pop');
-                if (!pop || pop.hidden) { return; }
-                pop.classList.remove('rp-pop--up');
-                if (pop.getBoundingClientRect().bottom > window.innerHeight - 8) {
-                    pop.classList.add('rp-pop--up');
-                }
-            });
-        }
         PlatPursuit.DetailModal(el, {
             closeSelector: '[data-nc-close]',
             autoOpenDelay: 450,
@@ -304,11 +320,26 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
             onOpened: function () { if (window.ppHoldCareerModal) { window.ppHoldCareerModal(); } },
             onDismiss: function () {
                 if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
-                // The stamp comes from the WAVE, not the clock: a contract published between this
-                // render and this click went live before the click but after the query, and a
+                // The stamp comes from the WAVE, not the clock: a wave announced between this
+                // render and this click was announced before the click but after the query, and a
                 // now-stamp would mark it seen without ever showing it.
+                //
+                // AND NOT THIS PAGE'S STAMP EITHER, when an earlier dismissal is still unrecorded.
+                // DetailModal retries a failed dismissal on the NEXT page load by calling this
+                // function again -- on a page that may carry a newer stamp. Replaying that one
+                // would mark a wave seen that this reader has never been shown, which is the same
+                // skip the paragraph above rejects, only a fortnight wide instead of seconds.
+                var stamp = stored() || PAGE_STAMP;
                 return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
-                    setting: 'contracts_seen', value: '{{ new_contracts_stamp|escapejs }}'
+                    setting: 'contracts_seen', value: stamp
+                }).then(function (res) {
+                    try { localStorage.removeItem(STAMP_KEY); } catch (e) {}
+                    return res;
+                }, function (err) {
+                    // Kept so the retry above has something to replay. DetailModal's own seenKey
+                    // records THAT a dismissal failed; this records WHICH one.
+                    try { localStorage.setItem(STAMP_KEY, stamp); } catch (e) {}
+                    throw err;
                 });
             }
         });

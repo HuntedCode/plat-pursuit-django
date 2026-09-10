@@ -392,6 +392,8 @@ keeps the grow/shrink "put-down". Both routes send the object back to its slot.
 |--------|-----------|---------|
 | `DetailModal(el, opts)` | HTMLElement, `{closeSelector, autoOpenDelay?, onDismiss?, seenKey?, onOpened?, onSettled?}` | Open / close / Escape / focus trap / `is-closing` exit for a `.pp-detail-modal`, plus the one-shot "mark it seen" write |
 
+**`onOpened` fires on EVERY open**, not only the auto-open — a modal reopened from an affordance (the Career explainer's edhint) got nothing before, so anything re-armed there simply never replayed. Keep side effects in it idempotent: both shipped consumers call an idempotent `ppHold*` gate function.
+
 **The `.pp-detail-modal` behaviour, in one place.** Eleven templates use that mold and each hand-rolled
 the same hundred lines; the Career explainer and the 1.0 greeting were near-identical copies, and every
 lesson below was learned on one of them and carried to the other by hand. Returns `{open, close}`.

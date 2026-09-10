@@ -19,7 +19,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
 | 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs, in dependency order: `update_shovelware` -> `recompute_clean_standings` -> `recompute_rarity_standings` -> `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `process_contracts --all --incremental` -> `recompute_milestones` -> `audit_badge_coverage`. The middle two are DRIFT NETS: sync only evaluates what a sync touched, so anything authored after a hunter last touched the game needs a sweep to reach them. |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
-| 06:00 UTC daily | `announce_contracts` | Daily | After `nightly` (04:00) finishes, so a wave published by a curator during the day and one made claimable overnight land in ONE post. Silent when nothing is new, which is most days. **Run `announce_contracts --baseline` by hand once before registering this**, or the first run tries to announce everything already live. |
+| 06:00 UTC daily | `announce_contracts` | Daily | After `nightly` (04:00) finishes, so a wave published by a curator during the day and one made claimable overnight land in ONE post. Silent when nothing is new, which is most days. **Run `announce_contracts --baseline` by hand once before registering this** -- REQUIRED, not optional: the ~1,000 launch contracts carry real `went_live_at` stamps, so the first run refuses the wave over `MAX_WAVE` and posts nothing. It also gates the Career new-contracts modal, which cannot fire until something is posted. |
 | Tue 14:00 UTC | `djstripe_sync_models Subscription && audit_subscription_status --fix` (ONE entry, `&&`) | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no USER emails. Also sweeps for ORPHANED subscriptions (live sub, no user -- the account-deletion race; report-only, cancel by hand) and mails the full run report to `AUDIT_REPORT_EMAIL` (operator email, topline counts in the subject; empty setting = no email, `--no-email` skips) |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | ~~04:00 UTC daily~~ | ~~`update_shovelware`~~ | **Folded into `nightly` (step 1)** | Do NOT create a separate entry. It shares the 04:00 slot with `nightly`, so the order between them was undefined -- which became a real fault when `recompute_clean_standings` (step 2) started reading the flags it writes. It leads the chain so its START time is unchanged, which is what `evaluate_contract_candidates` at 04:45 still depends on. |
@@ -221,7 +221,8 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   optional insurance the deploy notes called it. What keeps the set quiet afterwards is
   `Contract.save()` stamping only on the TRANSITION to live -- under the older "live and unstamped"
   rule, a curator editing a launch-era contract republished it.
-- **Idempotency**: a COLUMN (`Contract.announced_at`), stamped only after a confirmed 2xx. A failed
+- **Idempotency**: a COLUMN (`Contract.announced_at`), stamped by a confirmed 2xx **and by
+  `--baseline`** -- it records that the row was settled, not that anyone was told. A failed
   post leaves the whole wave pending for the next run; a second run in the same window is silent. A
   column rather than a Redis watermark deliberately: a lost watermark re-announces everything behind
   it, and one that runs ahead silently swallows a wave.
@@ -243,8 +244,10 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   identically every night until someone runs `--limit` by hand.
 - **Ad hoc**: `--dry-run` prints the payload and writes nothing; `--test-webhook` posts to
   `DISCORD_TEST_WEBHOOK_URL` and deliberately does NOT stamp, so a preview cannot consume a wave.
-- **Failure impact**: the community is not told about a wave. Nothing else depends on it: the
-  Latest chip and the New marker read `went_live_at`, not `announced_at`.
+- **Failure impact**: the community is not told about a wave, **and no hunter sees the Career
+  new-contracts modal** -- it is gated on a POSTED announcement, so a red or unregistered cron
+  means that modal never fires for anybody. The board is unaffected: its Latest chip and New
+  marker read `went_live_at`.
 
 ### process_art_reveals
 

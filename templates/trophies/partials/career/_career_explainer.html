@@ -99,7 +99,7 @@ cut). This partial must stay panel-free; a guard test scans it for the panel's c
     'use strict';
     var el = document.getElementById('career-howto');
     // The page's gate was armed from the server's decision; only this side knows what happened.
-    var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal(); } };
+    var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal('explainer'); } };
     if (!el) { settle(); return; }
 
     // Waits for utils.js (end-of-body) because this partial sits at the top of content. Nothing is

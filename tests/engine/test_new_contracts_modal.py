@@ -15,6 +15,9 @@ from trophies.services import new_contracts_modal
 pytestmark = pytest.mark.django_db
 
 CF = {'HTTP_CF_RAY': '8f0000000000abcd-LHR'}
+
+#: Contract.igdb_id is UNIQUE; see _live().
+_NEXT_IGDB = 5_000_000
 QUICK = 'api:user-quick-settings'
 
 
@@ -35,12 +38,21 @@ def _live(name, *, days_ago=0, jobs=None, announced=True):
     """A published contract, POSTED by default, because that is what the modal reads -- publishing
     alone puts a contract on the board and nowhere near a reader. `announced=False` is the one-off:
     live, visible on the board, waiting for the next wave to carry it."""
+    # A COUNTER, not `hash(name)`. `igdb_id` is UNIQUE and str hashing is salted per interpreter, so
+    # the old expression drew a fresh random id every run: a collision was an IntegrityError that
+    # could not be reproduced by re-running, in a file that creates 200+ contracts in one test.
+    global _NEXT_IGDB
+    _NEXT_IGDB += 1
     c = Contract.objects.create(name=name, slug=name.lower().replace(' ', '-'),
-                                igdb_id=abs(hash(name)) % 9_000_000 + 1_000_000, is_live=True)
+                                igdb_id=_NEXT_IGDB, is_live=True)
     c.jobs.set(jobs or list(Job.objects.exclude(is_fallback=True)[:1]))
     when = timezone.now() - timezone.timedelta(days=days_ago)
+    # ANNOUNCED SIX HOURS AFTER PUBLISHING, because production never stamps them equal -- the
+    # announcer runs on a daily schedule. Equal stamps made every test that reads one of the two
+    # columns pass while reading the other, which is precisely the confusion this feature turns on.
     Contract.objects.filter(pk=c.pk).update(
-        went_live_at=when, announced_at=when if announced else None,
+        went_live_at=when - timezone.timedelta(hours=6),
+        announced_at=when if announced else None,
         announcement_posted=bool(announced))
     c.refresh_from_db()
     return c
@@ -165,6 +177,49 @@ def test_a_contract_that_is_not_live_is_never_announced(hunter):
     Contract.objects.filter(pk=c.pk).update(is_live=False, went_live_at=None)
     assert Contract.objects.get(pk=c.pk).announced_at is not None, 'fixture wrong: no stamp'
     assert 'id="new-contracts"' not in hunter.get('/career/', **CF).content.decode()
+
+
+# -- the staff preview ------------------------------------------------------------------------------
+
+def test_the_preview_never_stacks_two_modals(hunter):
+    """`?preview=new-contracts` was ORed onto the precedence rule rather than replacing it, so a
+    staff account that had not dismissed the explainer got BOTH -- two scrims, two focus traps, and
+    the gate released by whichever closed first while the other still covered the page. The view's
+    own comment and the gate partial's both declare that impossible."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.ui_flags = {}           # explainer NOT dismissed
+    user.save(update_fields=['is_staff', 'ui_flags'])
+    _live('Preview Me')
+
+    body = hunter.get('/career/?preview=new-contracts', **CF).content.decode()
+
+    assert 'id="new-contracts"' in body, 'the preview showed nothing'
+    tag = body.split('id="career-howto"')[1].split('>')[0]
+    assert 'data-auto' not in tag, 'the explainer auto-opens on top of the preview'
+
+
+def test_the_preview_works_for_staff_who_have_already_dismissed(hunter):
+    """The reader who wants to look at this modal is usually the one who has already seen it. While
+    the preview honoured their marker it showed them nothing, which is the one thing a preview must
+    not do."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+    _live('Old News', days_ago=40)
+    _mark(user, timezone.now())
+
+    assert 'id="new-contracts"' not in hunter.get('/career/', **CF).content.decode()
+    assert 'id="new-contracts"' in hunter.get('/career/?preview=new-contracts', **CF).content.decode()
+
+
+def test_the_preview_is_staff_only(hunter):
+    """It bypasses the marker AND the 14-day floor, so it must not be a querystring anybody can add."""
+    _live('Old News', days_ago=40)
+    _mark(hunter.profile.user, timezone.now())
+
+    assert 'id="new-contracts"' not in hunter.get(
+        '/career/?preview=new-contracts', **CF).content.decode()
 
 
 # -- announced, not merely published ---------------------------------------------------------------
@@ -415,6 +470,11 @@ def test_the_modals_cost_does_not_grow_with_the_number_of_heroes(hunter):
         _member_game(_live('Wave %02d' % i))
 
     assert cost() == two, 'the modal got more expensive purely by having more heroes'
+    # AND AN ABSOLUTE CEILING. The comparison above is relative, so a mutation adding one CONSTANT
+    # query per render -- dropping `with_ranking=False`, reading Job.DISCIPLINES from the DB --
+    # moves both sides equally and is invisible to it. Four: the count, the rows, the jobs
+    # prefetch, the hero covers. `newest` comes from the rows in memory and costs nothing.
+    assert two == 4, 'the modal costs %d queries per render, not 4' % two
 
 
 def test_hero_covers_are_one_query_however_many_heroes_there_are(hunter, django_assert_num_queries):
@@ -569,6 +629,11 @@ def test_the_stamp_offered_is_the_waves_newest_not_now(hunter):
     """A contract published between this render and the dismissal went live BEFORE the click but
     AFTER the query. A now-stamp would mark it seen without ever showing it; storing what was shown
     cannot skip anything."""
+    # A WAVE, not one contract. With a single row newest == oldest, so `order_by('-announced_at')`
+    # losing its minus sign was invisible -- and that offers the OLDEST stamp of the wave, leaving
+    # the marker below the rest of it and re-showing the identical modal on every later visit.
+    _live('Oldest', days_ago=9)
+    _live('Middle', days_ago=5)
     newest = _live('Newest', days_ago=1)
 
     body = hunter.get('/career/', **CF).content.decode()
@@ -590,6 +655,113 @@ def test_the_endpoint_stores_the_marker(hunter):
     assert resp.status_code == 200
     hunter.profile.user.refresh_from_db()
     assert new_contracts_modal.seen_marker(hunter.profile.user) is not None
+
+
+def test_the_stamp_offered_covers_only_what_was_shown(hunter):
+    """Above `MAX_LIST` the newest announcement in the wave and the newest one RENDERED are different
+    contracts, because `_ORDER` leads with actionability rather than time. Offering the global max
+    marks the un-rendered remainder seen, and `announced_at__gt=marker` then hides it forever.
+
+    Below the cap the two are identical, which is why every other stamp test passes either way."""
+    old_but_actionable = _live('Started It', days_ago=9)
+    _progress(old_but_actionable, hunter.profile, 40)
+    newest_overall = _live('Announced Today', days_ago=0)
+
+    nc = new_contracts_modal.new_for(hunter.profile, hunter.profile.user, limit=1)
+
+    assert [c.name for c in nc['rows']] == ['Started It'], 'fixture wrong: the cap cut the wrong row'
+    newest_overall.refresh_from_db()
+    old_but_actionable.refresh_from_db()
+    assert nc['newest'] == old_but_actionable.announced_at
+    assert nc['newest'] != newest_overall.announced_at, (
+        'dismissing would mark a contract seen that was never rendered'
+    )
+
+
+def test_the_endpoint_stores_THE_STAMP_IT_WAS_SENT(hunter):
+    """`is not None` was the whole assertion, so writing `timezone.now()` instead of the posted value
+    passed -- the exact now-stamp this design exists to prevent, pinned on the client and unpinned on
+    the server."""
+    stamp = timezone.now() - timezone.timedelta(days=3)
+
+    hunter.post(reverse('api:user-quick-settings'),
+                data={'setting': 'contracts_seen', 'value': stamp.isoformat()},
+                content_type='application/json')
+
+    hunter.profile.user.refresh_from_db()
+    stored = new_contracts_modal.seen_marker(hunter.profile.user)
+    assert abs((stored - stamp).total_seconds()) < 1
+
+
+def test_dismissing_the_modal_actually_silences_it(hunter):
+    """The whole loop, end to end: render, post the stamp the page offered, render again. Every part
+    was covered in isolation and the seam between them was not -- `_mark` writes the flag directly,
+    so nothing proved the offered stamp and the stored marker were the same thing."""
+    _live('Read It')
+
+    body = hunter.get('/career/', **CF).content.decode()
+    assert 'id="new-contracts"' in body
+    offered = body.split('PAGE_STAMP = ' + chr(39), 1)[1].split(chr(39), 1)[0]
+    offered = offered.replace(chr(92) + 'u002D', '-')
+
+    resp = hunter.post(reverse('api:user-quick-settings'),
+                       data={'setting': 'contracts_seen', 'value': offered},
+                       content_type='application/json')
+    assert resp.status_code == 200
+
+    assert 'id="new-contracts"' not in hunter.get('/career/', **CF).content.decode()
+
+
+def test_a_wellformed_but_impossible_stamp_is_a_400_not_a_500(hunter):
+    """`parse_datetime` returns None when the REGEX misses but RAISES on February 31st, hour 25 or a
+    +99:00 offset. Only the None half was handled, so those went out as a 500."""
+    for value in ('2026-02-31T00:00:00', '2026-09-10T25:00:00', '2026-09-10T12:00:00+99:00'):
+        resp = hunter.post(reverse('api:user-quick-settings'),
+                           data={'setting': 'contracts_seen', 'value': value},
+                           content_type='application/json')
+        assert resp.status_code == 400, '%r came back %s' % (value, resp.status_code)
+
+
+def test_an_impossible_stored_marker_shows_the_modal_rather_than_500ing_career(hunter):
+    """The same crash on the read side, where it is worse: an unparseable marker in ui_flags took
+    /career/ down for that account on every render, permanently, with nothing in the UI able to clear
+    it -- the exact failure `seen_marker` is written to avoid."""
+    user = hunter.profile.user
+    user.ui_flags = dict(user.ui_flags, contracts_seen='2026-02-31T00:00:00')
+    user.save(update_fields=['ui_flags'])
+    _live('Still Visible')
+
+    assert new_contracts_modal.seen_marker(user) is None
+    assert 'id="new-contracts"' in hunter.get('/career/', **CF).content.decode()
+
+
+def test_the_marker_never_moves_backwards(hunter):
+    """A stale tab dismissed after a newer visit would rewind the marker and re-show a wave already
+    read. The stored value only ever moves forward."""
+    recent = timezone.now() - timezone.timedelta(days=1)
+    _mark(hunter.profile.user, recent)
+    hunter.profile.user.refresh_from_db()
+
+    hunter.post(reverse('api:user-quick-settings'),
+                data={'setting': 'contracts_seen',
+                      'value': (timezone.now() - timezone.timedelta(days=30)).isoformat()},
+                content_type='application/json')
+
+    hunter.profile.user.refresh_from_db()
+    stored = new_contracts_modal.seen_marker(hunter.profile.user)
+    assert abs((stored - recent).total_seconds()) < 1
+
+
+def test_an_ancient_marker_cannot_turn_every_render_into_a_full_catalogue_scan(hunter):
+    """One POST of `0001-01-01` defeated the no-marker 14-day floor and made every later /career/
+    render sort and materialise every contract ever announced, for that account, forever."""
+    hunter.post(reverse('api:user-quick-settings'),
+                data={'setting': 'contracts_seen', 'value': '0001-01-01T00:00:00+00:00'},
+                content_type='application/json')
+
+    hunter.profile.user.refresh_from_db()
+    stored = new_contracts_modal.seen_marker(hunter.profile.user)
+    assert stored > timezone.now() - timezone.timedelta(days=366)
 
 
 def test_the_endpoint_refuses_junk(hunter):
@@ -636,8 +808,13 @@ def test_the_modal_settles_the_career_gate(hunter):
     body = hunter.get('/career/', **CF).content.decode()
     modal = body.split('id="new-contracts"', 1)[1]
 
-    assert 'ppSettleCareerModal' in modal
-    assert 'ppHoldCareerModal' in modal, 'the backstop is not cancelled when this modal opens'
+    # SCOPED TO THE OPTIONS. A bare `'ppSettleCareerModal' in modal` is satisfied by the local
+    # `settle` helper's own definition, so deleting `onSettled: settle` from the DetailModal options
+    # left this green -- and with `onOpened` cancelling the backstop, nothing would ever release the
+    # gate: Career's count-ups frozen at 0 for the life of the page, worse than the original bug.
+    opts = modal.split('PlatPursuit.DetailModal(el, {', 1)[1].split('});', 1)[0]
+    assert 'onSettled: settle' in opts, 'nothing releases the page motion when this modal closes'
+    assert 'ppHoldCareerModal' in opts, 'the backstop is not cancelled when this modal opens'
 
 
 def test_the_gate_arms_when_this_modal_is_due(hunter):
@@ -649,7 +826,47 @@ def test_the_gate_arms_when_this_modal_is_due(hunter):
 
     assert 'id="new-contracts"' in body, 'fixture wrong: no modal is due'
     gate = body.split('ppAfterCareerModal', 1)[0]
-    assert 'var pending = true' in gate, 'a modal is on the page but the gate is not holding'
+    assert 'pending.contracts = true' in gate, 'a modal is on the page but the gate is not holding'
+
+
+def test_the_gate_is_armed_PER_MODAL_so_an_unarmed_one_cannot_release_it(hunter):
+    """THE BUG THIS REPLACED. The explainer's markup renders on every visit -- the edhint has to be
+    able to reopen it -- and a DetailModal with no autoOpenDelay settles immediately. With one shared
+    boolean, the explainer settled the gate at DOMContentLoaded, about 450ms before THIS modal opened,
+    so Career's count-ups ran behind the scrim on every visit the gate exists for.
+
+    Named arms make an unarmed modal's settle a no-op: it can only remove itself, and it is not in
+    the set."""
+    _live('Anything')
+
+    body = hunter.get('/career/', **CF).content.decode()
+    gate = body.split('ppAfterCareerModal', 1)[0]
+
+    assert 'pending.explainer = true' not in gate, 'the dismissed explainer is still arming the gate'
+    # And the name has to be CHECKED. A settle that ignores it releases the page for whichever modal
+    # reports first, which is the bug with an extra argument.
+    # The whole settle function, because each half of it is separately defeatable: a name that is
+    # never checked releases for whichever modal reports first (the original bug with an extra
+    # argument), and a counter that never decrements never releases at all.
+    settle = body.split('window.ppSettleCareerModal = function (name) {', 1)[1].split('};', 1)[0]
+    assert 'if (name) {' in settle, 'the name is ignored, so any modal releases the gate'
+    assert 'if (!pending[name]) { return; }' in settle, 'the gate settles for a modal it never armed'
+    assert 'waiting -= 1' in settle, 'nothing counts down, so the gate never releases'
+    assert "ppSettleCareerModal('explainer')" in body, 'the explainer settles anonymously again'
+    assert "ppSettleCareerModal('contracts')" in body, 'this modal settles anonymously again'
+
+
+def test_a_visit_due_neither_modal_ships_an_unarmed_gate(hunter):
+    """The half no test covered, despite a docstring claiming otherwise. An always-armed gate holds
+    every Career visit's motion until the 4-second backstop -- a site-wide regression that no
+    assertion in this file could see."""
+    body = hunter.get('/career/', **CF).content.decode()
+
+    assert 'id="new-contracts"' not in body, 'fixture wrong: something is due'
+    gate = body.split('ppAfterCareerModal', 1)[0]
+    assert 'pending.contracts = true' not in gate and 'pending.explainer = true' not in gate, (
+        'nothing is due but the gate is holding the page'
+    )
 
 
 # -- the filter reuses the site's dropdown, whole --------------------------------------------------
@@ -672,9 +889,12 @@ def test_the_filter_is_the_shared_dropdown_and_not_a_private_copy(hunter):
 
     body = hunter.get('/career/', **CF).content.decode()
     modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
+    # THE MARKUP ONLY. The inline script mentions both class names as selectors, so renaming them in
+    # the HTML -- the private copy this test forbids -- left both assertions true.
+    markup = modal.split('<script>', 1)[0]
 
-    assert 'rp-disc__trigger' in modal and 'rp-pop__item' in modal
-    assert 'var(--disc-%s)' % job.discipline in modal, 'the trigger is not tinted in its discipline'
+    assert 'rp-disc__trigger' in markup and 'rp-pop__item' in markup
+    assert 'var(--disc-%s)' % job.discipline in markup, 'the trigger is not tinted in its discipline'
     assert 'PlatPursuit.discPopovers' in modal, 'the modal opens its own popovers instead'
 
 
@@ -685,10 +905,27 @@ def test_escape_closes_an_open_popover_without_closing_the_modal():
     Escape stops closing the modal at all."""
     partial = _partial()
 
+    # `}, true);` was the SEPARATOR of this split and never asserted -- and `split` returns the whole
+    # string when the separator is missing, so dropping capture phase silently widened the window to
+    # the rest of the file, where all three tokens still appear. The one property the test named was
+    # the one it could not see.
+    assert partial.count('}, true);') == 2, 'a capture-phase listener stopped capturing'
     guard = partial.split("if (e.key !== 'Escape'", 1)[1].split('}, true);', 1)[0]
-    assert 'rp-pop:not([hidden])' in guard, 'the guard swallows Escape when no popover is open'
+    assert 'popoverOpen()' in guard, 'the guard swallows Escape when no popover is open'
     assert 'stopPropagation' in guard, 'the modal still closes underneath the popover'
     assert 'pops.closeAll' in guard, 'nothing closes the popover the press was meant for'
+
+
+def test_a_scrim_click_with_a_popover_open_closes_only_the_popover(hunter):
+    """The click twin of the same collision, and the more costly one: discPopovers treats a scrim
+    click as click-outside while DetailModal treats it as dismiss, so closing a dropdown that way
+    closed the whole modal AND recorded the wave as read."""
+    partial = _partial()
+
+    click = partial.split("document.addEventListener('click'", 1)[1].split('}, true);', 1)[0]
+    assert 'popoverOpen()' in click, 'the guard fires when no popover is open'
+    assert "closest('.rp-disc')" in click, 'a click INSIDE the popover is swallowed too'
+    assert 'stopPropagation' in click, 'the modal still closes underneath the popover'
 
 
 def test_a_selected_job_stays_visible_after_its_popover_closes():
@@ -702,6 +939,11 @@ def test_a_selected_job_stays_visible_after_its_popover_closes():
     # `button.closest`, not a bare `closest('.rp-disc')`: the comparison one line below mentions the
     # same selector, so the loose form stayed true with the lookup itself replaced by null.
     assert "button.closest('.rp-disc')" in mark, 'the trigger above a pressed job item is never lit'
+    # And CONSUMED. Pinning only the lookup left `toggle('is-active', c === button)` -- owner
+    # computed, never read, and the trigger dark again.
+    # `|| ownerTrigger`, the USE. The declaration one line above is inside the same forEach, so
+    # asserting the bare name passed with the toggle reduced to `c === button`.
+    assert '|| ownerTrigger' in mark, 'owner is computed but never applied'
     # The CODE, not the comment above it that names the class: reading the prose passed while the
     # toggle itself was deleted.
     assert "toggle('is-selected'" in mark, "the shared popover's own selected state is not applied"
@@ -739,6 +981,15 @@ def test_the_dialog_holds_still_and_only_the_list_scrolls():
     lst = _rule(css, '.nc__list')
     assert 'overflow-y: auto' in lst and 'flex: 1 1 auto' in lst
 
+    # AND THE CHROME AROUND IT HAS TO BE ABLE TO GET OUT OF THE WAY. Every other child is a default
+    # flex item, so none of them can shrink below their content -- the dialog's minimum is the sum of
+    # its chrome, and where that exceeds 88vh the footer buttons render below the viewport with no
+    # scrollbar to reach them (overflow is visible, deliberately, for the popovers). At 375x667 the
+    # heroes alone were ~240px of that sum. Height queries are what give it back.
+    assert '@media (max-height: 620px)' in css, 'nothing responds to a SHORT viewport'
+    short = css.split('@media (max-height: 620px)', 1)[1].split('}\n', 1)[0]
+    assert '.nc__heroes' in short, 'the covers still hold their height on a landscape phone'
+
 
 def test_the_dialog_never_clips_because_the_popovers_live_inside_it():
     """The discipline popovers are absolutely positioned inside the dialog, so ANY clipping on it
@@ -749,26 +1000,44 @@ def test_the_dialog_never_clips_because_the_popovers_live_inside_it():
     assert 'overflow: visible' in dialog
 
 
-def test_a_popover_with_no_room_below_it_opens_upward():
-    """discPopovers flips at the horizontal viewport edge but always opens downward -- right on a
+def test_a_popover_with_no_room_below_it_opens_upward_and_is_clamped():
+    """discPopovers flipped at the horizontal viewport edge but always opened downward -- right on a
     page you can scroll, wrong in a dialog, where a popover taller than the room beneath it runs off
-    the screen with no way to reach it. The measurement must happen AFTER the shared controller has
-    opened it, or the popover is still hidden and has no box to measure."""
-    partial = _partial()
-    css = _elements_css()
+    the screen with no way to reach it.
 
-    up = _rule(css, '.nc__toolbar .rp-pop--up')
+    It lives in the SHARED control, not this modal: the Career board and Browse Games have the same
+    edge, and a fix kept in one consumer is a fix the other two never get. And a flip alone is not
+    enough -- on a landscape phone neither direction fits a 300px popover, so the height is clamped
+    to whatever room the chosen direction actually has."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    js = (Path(settings.BASE_DIR) / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
+    body = js.split('function discPopovers', 1)[1].split('window.PlatPursuit.discPopovers', 1)[0]
+
+    assert "classList.add('rp-pop--up')" in body, 'the shared control still only opens downward'
+    assert 'window.innerHeight' in body, 'the flip is not measured against the viewport'
+    assert 'Math.min(300, room)' in body, (
+        'a flipped popover can still be taller than the room it flipped into'
+    )
+    assert "p.style.maxHeight = ''" in body, 'the clamp is never cleared, so it leaks to the next open'
+
+    up = _rule(_elements_css(), '.rp-pop--up')
     assert 'bottom: calc(100% + 6px)' in up and 'top: auto' in up
 
-    wire = partial.split('discPopovers(filterRoot)', 1)[1]
-    assert 'rp-pop--up' in wire, 'the flip is wired before the popover exists to measure'
-    assert 'window.innerHeight' in wire, 'the flip is not measured against the viewport'
+    # And it must NOT be scoped to this modal, or the two other consumers keep the bug.
+    assert '.nc__toolbar .rp-pop--up' not in _elements_css()
 
 
 def test_the_heroes_are_two_four_six_by_breakpoint(hunter):
     """The server renders all six and CSS hides what does not fit, so the count follows the screen
-    without a second render path. Both hide rules must exist: with only the mobile one a tablet
-    shows all six in four columns, which is the overflow this replaced."""
+    without a second render path.
+
+    ASSERTED PER MEDIA BLOCK, because the counts are made of FOUR rules whose nesting is the whole
+    behaviour. Searching one flat chunk for substrings could not tell a re-show rule inside its
+    media query from one hoisted to the top -- which is 4 heroes at every size, including desktop's
+    six-wide row -- and did not check the re-show rules existed at all."""
     for i in range(new_contracts_modal.MAX_HEROES + 2):
         _live('Hero %02d' % i)
 
@@ -776,20 +1045,37 @@ def test_the_heroes_are_two_four_six_by_breakpoint(hunter):
     modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
     assert modal.count('class="nc__hero"') == 6, 'the server is not rendering six heroes'
 
+    # Scoped to the modal's own region first: both breakpoints appear elsewhere in this file,
+    # and a bare split lands in whichever component happens to come first.
     css = _elements_css()
-    heroes = css.split('.nc__heroes {', 1)[1].split('.nc__hero-art', 1)[0]
-    assert 'repeat(2, minmax(0, 1fr))' in heroes and 'nth-child(n + 3) { display: none' in heroes
-    assert 'repeat(4, minmax(0, 1fr))' in heroes and 'nth-child(n + 5) { display: none' in heroes
-    assert 'repeat(6, minmax(0, 1fr))' in heroes
+    region = css.split('.nc__heroes {', 1)[1].split('.nc__hero-art {', 1)[0]
+    close = '}' + chr(10) + '}'
+    base = region.split('@media', 1)[0]
+    tablet = region.split('@media (min-width: 640px) {', 1)[1].split(close, 1)[0]
+    desktop = region.split('@media (min-width: 1024px) {', 1)[1].split(close, 1)[0]
+
+    assert 'calc((100% - 12px) / 2)' in base and 'nth-child(n + 3) { display: none' in base
+    assert 'calc((100% - 36px) / 4)' in tablet
+    assert 'nth-child(n + 3) { display: block' in tablet, 'a tablet shows 2 heroes in a 4-wide row'
+    assert 'nth-child(n + 5) { display: none' in tablet
+    assert 'calc((100% - 60px) / 6)' in desktop
+    assert 'nth-child(n + 5) { display: block' in desktop, 'a desktop shows 4 heroes in a 6-wide row'
+
+    # Centred, so a two-contract wave is not three covers hard-left against half a row of nothing.
+    assert 'justify-content: center' in css.split('.nc__heroes {', 1)[1].split('}', 1)[0]
 
 
 def test_a_cover_can_never_grow_taller_than_the_screen_allows():
     """The grid column sets the width and `aspect-ratio` sets the height from it, so on a short
     viewport six covers were still tall enough to push the list off the bottom."""
-    art = _rule(_elements_css(), '.nc__hero-art')
+    css = _elements_css()
+    art = _rule(css, '.nc__hero-art')
 
     assert 'max-height: 24vh' in art
-    assert 'object-position: top' in _rule(_elements_css(), '.nc__hero-art img'), (
+    # And tighter again where the viewport is short, which is where it actually mattered: a
+    # 1366x768 laptop and a 667px phone both overflowed the dialog at 24vh.
+    assert '@media (max-height: 800px) { .nc__hero-art { max-height: 18vh; } }' in css
+    assert 'object-position: top' in _rule(css, '.nc__hero-art img'), (
         'cropping without object-top eats the logo at the top of the cover'
     )
 

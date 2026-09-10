@@ -9,7 +9,10 @@ reasons `post_community_trophy_tracker` gives: a one-shot command's daemon worke
 when the process exits, which can drop a message mid-flight, and a direct POST surfaces HTTP
 errors as CommandError so a cron failure is visible in Render's UI instead of buried in a logger.
 
-Idempotency is a COLUMN (`Contract.announced_at`), stamped only after a confirmed 2xx. So a
+Idempotency is a COLUMN (`Contract.announced_at`), stamped by a confirmed 2xx AND by
+`--baseline` -- it records that the announcer has SETTLED the row, not that anybody was told.
+`announcement_posted` is the half that only a real post sets, and the Career new-contracts
+modal reads that one. So a
 failed post leaves the whole wave pending for the next run, and a second run inside the same
 window says nothing rather than re-posting.
 """
@@ -127,7 +130,8 @@ class Command(BaseCommand):
 
         if opts['dry_run']:
             self.stdout.write(self.style.WARNING(
-                f"DRY RUN: would announce {len(contracts)} contract(s) and stamp announced_at."))
+                f"DRY RUN: would announce {len(contracts)} contract(s), stamping announced_at + "
+                f"announcement_posted (which is what puts them in every hunter's Career modal)."))
             self.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
             return
 

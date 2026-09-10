@@ -120,9 +120,25 @@ dismiss.
 follow this contract: its value is the **id of the newest announcement dismissed**, it MOVES with every
 new entry, and it is written through a separate `whats_new_seen` branch that is *not* in `UI_FLAGS`.
 Presence means nothing there — equality does. See [whats-new.md](whats-new.md#the-seen-marker). If you
-add a third shape, document it here too; this section is where people come to learn what the field
+add a FOURTH shape, document it here too; this section is where people come to learn what the field
 means, and it is the one place a separate API branch cannot keep honest on its own.
 
+**The third shape: `contracts_seen`** (Career's new-contracts modal). An ISO-8601 timestamp string,
+not a boolean and not an id — the newest `Contract.announced_at` this hunter has been SHOWN. It
+moves forward on every dismissal rather than sticking, and like `whats_new_seen` it has its own API
+branch and is *not* in `UI_FLAGS`.
+
+It is also the only one of the three with **validation on the stored value**, because every way it
+can be wrong breaks the account permanently and nothing in the UI can undo it:
+
+| Rule | Why |
+|---|---|
+| must parse as a datetime | junk is a 400; an unparseable value already stored reads as "no marker", so the modal returns rather than hiding forever |
+| clamped to `now` | a future stamp suppresses the modal for good |
+| floored at one year back | an ancient stamp defeats the 14-day first-visit floor, so every `/career/` render sorts the entire announced catalogue for that account |
+| never moves backwards | a stale tab dismissed after a newer visit would rewind it and re-show a wave already read |
+
+Doc: [job-board-contracts.md](../design/rebuild/job-board-contracts.md).
 Client discipline (from the badge howto + timezone modal prior art):
 
 - Fire-and-forget `PlatPursuit.API.post('/api/v1/user/quick-settings/', {setting: 'ui_flag',

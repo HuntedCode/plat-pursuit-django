@@ -20,16 +20,41 @@ is pending.
 <script>
 (function () {
     'use strict';
-    var pending = {% if show_career_explainer or show_new_contracts %}true{% else %}false{% endif %};
+    {% comment %} A SET OF NAMED ARMS, not one boolean, and that is a bug fix rather than a
+    flourish. The explainer's markup renders on EVERY visit (the edhint has to be able to reopen it);
+    only its auto-open is gated. So on a new-contracts visit the explainer wired itself as a MANUAL
+    modal, and DetailModal settles a manual modal immediately -- at DOMContentLoaded, from a partial
+    that sits earlier in the document, about 450ms before the new-contracts modal opened.
+
+    One boolean with two owners means the owner with nothing to show always wins the race, and the
+    gate released the page's count-ups just before the scrim landed on top of them. That is the exact
+    failure this file exists to prevent, on every visit of the only kind it was built for.
+
+    Naming the arms makes an unarmed modal's settle a no-op: it can only ever remove ITSELF, and it
+    was never in the set. {% endcomment %}
+    var pending = {};
+    {% if show_career_explainer %}pending.explainer = true;{% endif %}
+    {% if show_new_contracts %}pending.contracts = true;{% endif %}
+    var waiting = Object.keys(pending).length;
     var EVT = 'pp-career-modal:settled';
 
     window.ppAfterCareerModal = function (fn) {
-        if (pending) { document.addEventListener(EVT, function () { fn(); }, { once: true }); }
+        if (waiting) { document.addEventListener(EVT, function () { fn(); }, { once: true }); }
         else { fn(); }
     };
-    window.ppSettleCareerModal = function () {
-        if (!pending) { return; }
-        pending = false;
+    {% comment %} `name` identifies the caller. Omitted means "release everything", which is the
+    backstop's business and nobody else's. {% endcomment %}
+    window.ppSettleCareerModal = function (name) {
+        if (!waiting) { return; }
+        if (name) {
+            if (!pending[name]) { return; }
+            delete pending[name];
+            waiting -= 1;
+            if (waiting) { return; }
+        } else {
+            pending = {};
+            waiting = 0;
+        }
         document.dispatchEvent(new CustomEvent(EVT));
     };
 

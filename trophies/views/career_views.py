@@ -153,13 +153,28 @@ class CareerView(LoginRequiredMixin, TemplateView):
         previewing = (self.request.GET.get('preview') == 'new-contracts'
                       and (self.request.user.is_staff
                            or getattr(self.request.user, 'is_moderator', False)))
-        nc = new_contracts_modal.new_for(
-            getattr(self.request.user, 'profile', None), self.request.user)
+        # ASKED ONLY WHEN THE ANSWER CAN BE USED. On a first visit the explainer wins and this modal
+        # cannot render, so computing it meant paying for the count, 200 rows, the jobs prefetch and
+        # the hero covers to build a dict the template discards -- on the one visit in an account's
+        # life that is already the heaviest.
+        if context['show_career_explainer'] and not previewing:
+            nc = new_contracts_modal.empty()
+        else:
+            nc = new_contracts_modal.new_for(
+                getattr(self.request.user, 'profile', None), self.request.user, preview=previewing)
+        # PREVIEW SUPPRESSES THE EXPLAINER rather than sitting alongside it. The first cut ORed
+        # preview onto the precedence rule, which quietly made "never both on one visit" false for
+        # the one account type that can reach it: a staff member who has not dismissed the explainer
+        # got two auto-opening modals stacked, two scrims, and two focus traps fighting over Tab.
+        # Asking to preview this modal is asking to see THIS modal.
+        if previewing and nc['rows']:
+            context['show_career_explainer'] = False
         context['nc'] = nc
         context['new_contracts_stamp'] = nc['newest'].isoformat() if nc['newest'] else ''
-        context['show_new_contracts'] = (
-            not context['show_career_explainer'] and bool(nc['rows'])
-        ) or (previewing and bool(nc['rows']))
+        # No `previewing or ...` here: a preview has already set the explainer flag False above, so
+        # the precedence rule alone gives the right answer and a second clause is a second thing to
+        # keep in step with the first.
+        context['show_new_contracts'] = bool(nc['rows']) and not context['show_career_explainer']
         context['explainer_debug'] = settings.DEBUG
         return context
 

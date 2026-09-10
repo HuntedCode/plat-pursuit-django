@@ -617,6 +617,9 @@
 .rp-disc__trigger[aria-expanded="true"] .rp-disc__caret { transform: rotate(180deg); }
 .rp-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 190px; max-width: calc(100vw - 24px); max-height: 300px; overflow-y: auto; padding: 6px; border: 1px solid var(--pp-border); border-radius: 12px; background: var(--pp-bg-1); box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.6); animation: rp-pop-in 0.16s cubic-bezier(0.22, 1, 0.36, 1); }
 .rp-pop--left { left: auto; right: 0; }   /* flipped when a left-anchored popover would overflow the viewport (JS) */
+/* ...and the vertical one. Set by discPopovers when the room below the trigger runs out; it also
+   clamps max-height inline, because inside a height-capped dialog neither direction may fit. */
+.rp-pop--up { top: auto; bottom: calc(100% + 6px); }
 @keyframes rp-pop-in { from { opacity: 0; transform: translateY(-5px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .rp-pop { animation: none; } }
 .rp-pop__item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 38px; font: inherit; font-size: 13px; font-weight: 600; text-align: left; color: var(--pp-text-dim); background: transparent; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: background 0.12s ease, color 0.12s ease; }
@@ -1137,11 +1140,6 @@
     display: flex; flex-direction: column; flex: 1 1 auto;
     min-height: 0;   /* a flex item's default min-height:auto refuses to shrink, so the list could not scroll */
 }
-/* Opening UPWARD when the room below runs out (the modal's own JS measures and adds this). The
-   shared `.rp-pop--left` handles the horizontal edge; nothing handled the vertical one, because on
-   a page you can always scroll to a popover and inside a dialog you cannot. */
-.nc__toolbar .rp-pop--up { top: auto; bottom: calc(100% + 6px); }
-
 /* THE TOOLBAR: filter left, sort right -- the house arrangement. Wraps to two rows on a phone. */
 .nc__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 0 10px; }
 .nc__sort { margin-left: auto; }
@@ -1154,22 +1152,23 @@
    fit, so the count follows the screen without a second render path -- and every hidden hero is
    still in the list below, so nothing is lost at any size.
    Twice as many as before at each size, which is what makes each cover half as tall: three covers at
-   dialog width pushed the list off the bottom of the screen. */
-.nc__heroes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0 2px; }
+   dialog width pushed the list off the bottom of the screen.
+
+   FLEX RATHER THAN A FIXED GRID because MAX_HEROES is a cap, not a promise. The common wave is two
+   to four contracts, and three covers in a rigid six-column grid sat hard-left against 50% dead
+   space. Centred, a short wave still reads as composed. */
+.nc__heroes { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin: 14px 0 2px; }
+.nc__hero { flex: 0 1 calc((100% - 12px) / 2); min-width: 0; margin: 0; }
 .nc__hero:nth-child(n + 3) { display: none; }
 @media (min-width: 640px) {
-    .nc__heroes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .nc__hero { flex-basis: calc((100% - 36px) / 4); }
     .nc__hero:nth-child(n + 3) { display: block; }
     .nc__hero:nth-child(n + 5) { display: none; }
 }
 @media (min-width: 1024px) {
-    .nc__heroes { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .nc__hero { flex-basis: calc((100% - 60px) / 6); }
     .nc__hero:nth-child(n + 5) { display: block; }
 }
-.nc__hero { margin: 0; min-width: 0; }
-/* The cap is what keeps the modal on screen on a short viewport: the grid column decides the width,
-   so without it a 3:4 cover grows as tall as the dialog is wide. object-cover crops the excess, and
-   object-position: top means what it crops is the bottom -- never the logo. */
 .nc__hero-art {
     position: relative; aspect-ratio: 3 / 4; max-height: 24vh;
     border-radius: var(--pp-radius-md); overflow: hidden;
@@ -1180,10 +1179,13 @@
 .nc__hero-art img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
 .nc__hero-noart { position: absolute; inset: 0; display: grid; place-items: center; color: var(--pp-text-mute); opacity: 0.45; }
 .nc__hero-noart svg { width: 34px; height: 34px; }
+/* NO backdrop-filter. It was doing nothing -- this chip always carries `--claim` or `--going`, both
+   of which paint a fully opaque background, so there was no backdrop to blur -- while promoting six
+   elements to their own compositor layers INSIDE a dialog that runs an entrance transform on every
+   open. motion-patterns.md forbids exactly that pairing. */
 .nc__hero-chip {
     position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px;
-    font-size: 0.58rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
-    backdrop-filter: blur(6px);
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
 }
 .nc__hero-name {
     margin-top: 7px; font-size: 0.82rem; font-weight: 700; color: var(--pp-text); line-height: 1.25;
@@ -1204,7 +1206,10 @@
    the Career contracts board and Browse Games), so only the spacing and two dialog-specific
    corrections belong here. Five wrapping triggers instead of a horizontal scroll of up to 25 job
    chips: two lines at its tallest, so it never grows past the list it filters. */
-.nc__filter { flex: 1 1 auto; }   /* the toolbar owns the spacing now */
+/* ONE SCROLLING ROW ON A PHONE. Six triggers wrapped to three rows at 375px, ~110px of vertical
+   budget in the tightest place there is. Wrapping is restored where there is width for it. */
+.nc__filter { flex: 1 1 auto; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+@media (min-width: 768px) { .nc__filter { flex-wrap: wrap; overflow-x: visible; } }
 /* The trigger's hover lift reads as a wobble against a fixed dialog panel rather than a page that
    scrolls (Browse Games turns it off in its own panel for the same reason). */
 .nc__filter .rp-disc__trigger:hover { transform: none; }
@@ -1218,7 +1223,7 @@
    heroes and toolbar, so the modal is always exactly one screen and the scrolling happens in here. */
 .nc__list {
     display: flex; flex-direction: column; gap: 6px;
-    flex: 1 1 auto; min-height: 96px; overflow-y: auto; scrollbar-width: thin;
+    flex: 1 1 auto; min-height: 72px; overflow-y: auto; scrollbar-width: thin;
     margin: 0; padding: 2px 4px 2px 0; list-style: none;
 }
 .nc__row {
@@ -1230,12 +1235,27 @@
 .nc__row--claimable { border-left: 3px solid var(--pp-primary); }
 .nc__row--pursuing { border-left: 3px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
 .nc__name { flex: 1 1 auto; min-width: 0; font-size: 0.84rem; font-weight: 600; color: var(--pp-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 0.75rem, not the 0.6rem it was. "Ready to claim" / "63% done" is the word that tells the reader
+   whether to act -- the design system's floor for readable content is 12px, and this is not
+   decoration. */
 .nc__chip {
     flex: 0 0 auto; padding: 2px 8px; border-radius: 999px;
-    font-size: 0.6rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    font-size: 0.75rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
     color: var(--pp-text-mute); background: var(--pp-bg-3); border: 1px solid var(--pp-border);
 }
 .nc__chip--claim { color: #06140d; background: var(--pp-primary); border-color: transparent; }
 .nc__chip--going { color: var(--pp-text-dim); background: var(--pp-bg-3); }
 .nc__empty { margin-top: 12px; font-size: 12.5px; color: var(--pp-text-mute); text-align: center; }
 .nc__more { margin-top: 10px; font-size: 12px; color: var(--pp-text-mute); text-align: center; }
+
+/* SHORT VIEWPORTS ARE THE REAL CONSTRAINT, not narrow ones. The dialog is capped at 88vh but its
+   non-scrolling chrome is not, so on a 667px-tall phone -- or a 1366x768 laptop -- the heroes pushed
+   the footer buttons past the bottom of the screen, and `overflow: visible` means there is no
+   scrollbar to reach them with. Height queries are what the sibling peek modal uses for the same
+   reason (badge-inspect.css). Below 620px the covers go entirely: on a landscape phone the list is
+   the content and the art is what has to give. */
+@media (max-height: 800px) { .nc__hero-art { max-height: 18vh; } }
+@media (max-height: 620px) {
+    .nc__heroes, .nc__more { display: none; }
+    .nc__list { min-height: 56px; }
+}

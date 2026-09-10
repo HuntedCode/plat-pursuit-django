@@ -80,7 +80,8 @@ override their base genre job. Freelancer is the no-specialization fallback, hou
 | `igdb_id` | **the raw IGDB game id this Contract keys on.** `IntegerField(null=True, unique=True)` — nullable+unique so episodic (bundle-only) contracts can exist with no id |
 | `is_live` | curation gate (mirrors `Badge.is_live`); hidden until released |
 | `went_live_at` | when it FIRST went live. Stamped **only on the TRANSITION** to live — by `save()` (which compares against the value `from_db()` recorded) and by the admin's `make_live`, which uses `queryset.update()`, so it stamps `is_live=False` rows itself *before* flipping them. **Never reset**, so un-publishing and re-publishing does not re-announce. Drives everything below |
-| `announced_at` | when `announce_contracts` posted it to Discord. Stamped only after a confirmed 2xx |
+| `announced_at` | when the announcer SETTLED this row. Set by a confirmed 2xx **and** by `--baseline`. Idempotency only — it does not mean anybody was told |
+| `announcement_posted` | whether it was actually POSTED. Only a confirmed 2xx sets it, and it is what the Career new-contracts modal filters on. Readonly in the admin: it is a checkbox, and ticking it on a baselined contract puts that contract in every hunter's modal |
 | `jobs` | **M2M → Job** — the job profile (≤ 6); XP splits **evenly** across these |
 | `xp_total_override` | nullable; default uses the global base `T`, override for specials |
 
@@ -322,7 +323,17 @@ pins the pair. Embeds are capped against Discord's limits (4096 per description,
 embeds**, 10 embeds) by `_capped()`, which drops from the bottom.
 
 Idempotency is the `announced_at` COLUMN rather than a Redis watermark: a lost watermark
-re-announces everything behind it, one that runs ahead silently swallows a wave. `MAX_WAVE` (40)
+re-announces everything behind it, one that runs ahead silently swallows a wave. **`--limit` and `--force` are NOT peers of `--baseline` for the launch set.** Both call
+`mark_announced`, so both set `announcement_posted` — `--limit 40` puts 40 launch-era games in
+every hunter's modal, `--force` puts all ~1,000 there. Before the modal existed, choosing wrong
+cost a Discord post; now it costs a site-wide modal too.
+
+**Never `--baseline` over a wave you meant to announce.** It stamps EVERY pending contract when
+`--limit` is absent, and `announced_at` is never cleared — a real wave published between the
+deploy and the baseline run is then posted nowhere and shown to nobody, permanently. Baseline
+first, publish second.
+
+`MAX_WAVE` (40)
 refuses a bulk publish — a staff sweep publishing hundreds of staged candidates in one changelist
 action, **and the ~1,000 launch contracts, which do carry `went_live_at`** — with `--baseline`
 (record as known, post nothing) as the operator's answer.
@@ -364,8 +375,9 @@ person the modal exists for.
 | Piece | Rule |
 |---|---|
 | First visit | no marker → the last `NEW_CONTRACT_WINDOW_DAYS` of announcements, not the archive |
+| The stamp stored | the newest `announced_at` **among the rows actually rendered**, not over the whole filtered set. Above `MAX_LIST` the two differ, and the global max would mark contracts seen that were never shown |
 | Who reaches it | `announcement_posted` **and** `announced_at` (and `is_live` still true — the stamp is never cleared, so un-publishing is the only thing that withdraws an announced contract). The flag is what excludes a `--baseline`d backlog; `went_live_at` needs no filter of its own, since the announcer only ever sees contracts that have one |
-| Order | `_ORDER` = `status_order`, `-sort_progress`, `-went_live_at`, `name` — the board's own default, annotated in SQL by `annotated_contracts`. Sorting the slice in Python could never promote a claimable or nearly-finished contract from outside the first page into it |
+| Order | `_ORDER` = `status_order`, `-sort_progress`, `-announced_at`, `-went_live_at`, `name` — the board's own default, annotated in SQL by `annotated_contracts`. Sorting the slice in Python could never promote a claimable or nearly-finished contract from outside the first page into it |
 | Heroes | the first `MAX_HEROES` (6) of that order, so the covers are what this hunter is furthest along on. The server renders all six; CSS shows **2 / 4 / 6** by breakpoint, so the count follows the screen with no second render path |
 | Hero art | `_hero_covers()` — ONE query for all six (DISTINCT ON over the member-game gate), not the announcer's per-contract `cover_url_for`. Same gate, same `display_image_url` chain, same most-played tie-break |
 | The list | every contract in the wave up to `MAX_LIST` (200), in a scroll box that flexes to whatever the dialog has left |

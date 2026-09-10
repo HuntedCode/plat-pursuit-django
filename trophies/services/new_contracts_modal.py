@@ -40,6 +40,7 @@ viewer's status in SQL, so leading with the ones already claimable or in progres
 turns a catalogue notice into "you have already done the work on two of these".
 """
 import logging
+from datetime import timezone as dt_timezone
 
 from django.db.models import Prefetch
 from django.utils import timezone
@@ -80,11 +81,22 @@ def seen_marker(user):
     raw = (getattr(user, 'ui_flags', None) or {}).get(FLAG)
     if not isinstance(raw, str):
         return None
-    parsed = parse_datetime(raw)
+    # `parse_datetime` returns None when the REGEX misses but RAISES on a well-formed string with
+    # impossible values ('2026-02-31T00:00:00', hour 25, a +99:00 offset). Only the None half was
+    # handled, so such a value in ui_flags did not "show them the modal again" as promised one line
+    # up -- it 500'd EVERY /career/ render for that account, permanently, with nothing in the UI
+    # able to clear it. The exact failure this function is written to avoid.
+    try:
+        parsed = parse_datetime(raw)
+    except ValueError:
+        parsed = None
     if parsed is None:
         logger.debug("Unparseable %s marker: %r", FLAG, raw)
         return None
-    return parsed if timezone.is_aware(parsed) else timezone.make_aware(parsed)
+    # UTC explicitly rather than `make_aware`, which in Django 5 is a bare `replace(tzinfo=...)` and
+    # would inherit the pytz object the timezone middleware activated -- whose bare offset is LMT,
+    # putting a naive value up to 56 minutes out.
+    return parsed if timezone.is_aware(parsed) else parsed.replace(tzinfo=dt_timezone.utc)
 
 
 #: ORDERED BY WHAT THEY CAN ACT ON, THEN BY HOW FAR ALONG THEY ARE. `annotated_contracts` decorates
@@ -131,20 +143,30 @@ def _hero_covers(heroes):
     return covers
 
 
-def new_for(profile, user, limit=MAX_LIST):
+def empty():
+    """The "nothing to show" shape, built in one place.
+
+    Public because a caller can KNOW the modal will not render before asking what is in it -- Career
+    skips this entirely when the first-visit explainer wins, which is the one visit where the whole
+    query set (count, 200 rows, the jobs prefetch, the hero covers) was being paid for a dict the
+    template then threw away.
+    """
+    return {'heroes': [], 'rows': [], 'disciplines': [], 'total': 0, 'extra': 0, 'newest': None}
+
+
+def new_for(profile, user, limit=MAX_LIST, preview=False):
     """Everything the modal needs, in a bounded number of queries.
 
     Returns a dict: `heroes`, `rows`, `disciplines`, `total`, `extra`, `newest`. Empty `rows` means
-    is new and the modal should not render at all.
+    nothing is new and the modal should not render at all.
 
     `newest` is what to store on dismissal -- taken from the wave itself, never from the clock, so a
     wave announced between this query and the click is not silently marked seen.
     """
     from trophies.services.contracts_service import annotated_contracts, new_contract_cutoff
 
-    empty = {'heroes': [], 'rows': [], 'disciplines': [], 'total': 0, 'extra': 0, 'newest': None}
     if profile is None or user is None or not getattr(user, 'is_authenticated', False):
-        return empty
+        return empty()
 
     # POSTED, not merely settled. `announced_at` is the clock, but on its own it also covers the
     # rows `--baseline` recorded as known WITHOUT posting -- the ~1,000 launch contracts among them,
@@ -155,8 +177,14 @@ def new_for(profile, user, limit=MAX_LIST):
     # one, so a stamp here implies it.
     qs = (annotated_contracts(profile, with_ranking=False)
           .filter(announced_at__isnull=False, announcement_posted=True))
-    marker = seen_marker(user)
-    if marker is not None:
+    marker = None if preview else seen_marker(user)
+    if preview:
+        # A PREVIEW IGNORES BOTH GATES. Staff reach this with `?preview=new-contracts` to look at the
+        # modal, and the reader most likely to want that is the one who has already dismissed it --
+        # for whom the marker means there is nothing left to show. Honouring their marker made the
+        # preview blank for exactly the person using it.
+        pass
+    elif marker is not None:
         qs = qs.filter(announced_at__gt=marker)
     else:
         # NO MARKER MEANS NO FLOOR, and without one that reads as "everything ever posted is new to
@@ -175,7 +203,7 @@ def new_for(profile, user, limit=MAX_LIST):
 
     total = qs.count()
     if not total:
-        return empty
+        return empty()
 
     # `status_order` is the board's own SQL ranking -- claimable 0, in progress 1, everything else 2,
     # annotated by `annotated_contracts` for the board anyway. Ordering by it is exact and free.
@@ -188,9 +216,15 @@ def new_for(profile, user, limit=MAX_LIST):
     # contract the list does not show.
     rows = list(
         qs.order_by(*_ORDER)
+          .defer('notes')   # a TextField no caller here reads, fetched 200 times over
           .prefetch_related(Prefetch('jobs', queryset=Job.objects.order_by('name')))[:limit]
     )
-    newest = qs.order_by('-announced_at').values_list('announced_at', flat=True).first()
+    # FROM THE ROWS THAT WERE SHOWN, not the whole filtered set. `_ORDER` leads with actionability,
+    # so the slice past MAX_LIST is arbitrary with respect to time -- taking the global max meant
+    # dismissing marked those un-rendered contracts seen, and `announced_at__gt=marker` then hid
+    # them forever. The docstring's "cannot skip anything" was false above the cap; now it holds,
+    # and an overflowing wave simply continues on the next visit.
+    newest = max((r.announced_at for r in rows), default=None)
 
     heroes = rows[:MAX_HEROES]
     covers = _hero_covers(heroes)
@@ -221,8 +255,6 @@ def _job_facets(rows):
     feeding two jobs in the same discipline is one contract to that discipline, and adding the job
     counts would say two.
     """
-    from trophies.models import Job
-
     labels = dict(Job.DISCIPLINES)
     discs = {}
     for contract in rows:
