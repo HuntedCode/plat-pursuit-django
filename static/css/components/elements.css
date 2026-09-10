@@ -1161,23 +1161,18 @@
 }
 .nc__job-ic { width: 13px; height: 13px; }
 
-/* FILTER CHIPS. Horizontally scrollable rather than wrapping: with 25 possible jobs a wrapping row
-   can grow taller than the list it filters, which puts the content it is for below the fold. */
-.nc__chips { display: flex; gap: 6px; overflow-x: auto; padding: 14px 0 10px; scrollbar-width: thin; }
-.nc__chip-btn {
-    display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding: 5px 10px;
-    border-radius: 999px; font-size: 0.72rem; font-weight: 700; cursor: pointer; white-space: nowrap;
-    color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
-    transition: color var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
-}
-.nc__chip-btn.is-active {
-    color: var(--disc, var(--pp-primary));
-    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 50%, transparent);
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, transparent);
-}
-.nc__chip-btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.nc__chip-ic { width: 13px; height: 13px; }
-.nc__chip-n { font-variant-numeric: tabular-nums; opacity: 0.7; }
+/* THE FILTER is the site's shared discipline dropdown group (`.rp-discs`, defined above and used by
+   the Career contracts board and Browse Games), so only the spacing and two dialog-specific
+   corrections belong here. Five wrapping triggers instead of a horizontal scroll of up to 25 job
+   chips: two lines at its tallest, so it never grows past the list it filters. */
+.nc__filter { padding: 14px 0 10px; }
+/* The trigger's hover lift reads as a wobble against a fixed dialog panel rather than a page that
+   scrolls (Browse Games turns it off in its own panel for the same reason). */
+.nc__filter .rp-disc__trigger:hover { transform: none; }
+/* The All chip carries a count badge, and `.rp-disc__count` paints itself in `--disc` -- which only
+   the per-discipline wrappers set. Without this the one chip that is not a discipline renders dark
+   text on no background at all. */
+.nc__filter [data-nc-all] { --disc: var(--pp-primary); display: inline-flex; align-items: center; gap: 5px; }
 
 /* THE LIST. A bounded scroll box, so the dialog height does not track the size of the wave. */
 .nc__list {

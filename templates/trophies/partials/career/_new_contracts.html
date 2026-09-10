@@ -8,14 +8,16 @@ BUILT TO BE STAYED IN, not dismissed. Three parts, in the order somebody actuall
   HEROES   -- three contracts with real cover art, their job icons and this viewer's status. Three
               at desktop width keeps the art large enough to be the draw; CSS drops it to one on a
               phone rather than shrinking three covers into thumbnails.
-  CHIPS    -- one per job that gained work, with its icon and count. Filtering, not navigation: the
-              owner follows Mastermind specifically, and "what landed for MY job" is the question
-              this modal exists to answer.
+  FILTER   -- the site's own discipline dropdowns (`.rp-discs`, shared with the contracts board and
+              Browse Games): five triggers in discipline colours, each opening its jobs. The owner
+              follows Mastermind specifically, and "what landed for MY job" is the question this
+              modal exists to answer.
   THE LIST -- every new contract, scrolling. Capped at MAX_LIST, because this renders on every
               Career load and a bulk publish must not become 300 rows nobody asked for.
 
-Filtering is CLIENT-side. Every row already carries its job slugs, so a chip is a class toggle, not
-a round trip -- and the counts cannot disagree with the list because both come from the same rows.
+Filtering is CLIENT-side. Every row already carries its job and discipline slugs, so selecting is a
+hidden toggle, not a round trip -- and the counts cannot disagree with the list, because the facets
+are built from the rows the list renders.
 
 Behaviour is PlatPursuit.DetailModal; the page's motion gate is armed separately and synchronously by
 _career_modal_gate.html, so nothing waits on this script to run.
@@ -55,34 +57,50 @@ _career_modal_gate.html, so nothing waits on this script to run.
                         <figcaption class="nc__hero-name">{{ c.name }}</figcaption>
                         <span class="nc__jobs" aria-label="Jobs this levels">
                             {% for job in c.jobs.all %}
-                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon job.icon 'nc__job-ic' %}</span>
+                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'nc__job-ic' %}</span>
                             {% endfor %}
                         </span>
                     </figure>
                 {% endfor %}
             </div>
 
-            {% comment %} FILTER CHIPS. `data-nc-job` is the slug the rows carry; "all" resets. Counts
-            come from the same rows the list renders, so a chip can never promise contracts the list
-            cannot show. {% endcomment %}
-            {% if nc.jobs %}
-                <div class="nc__chips" role="group" aria-label="Filter by job">
-                    <button type="button" class="nc__chip-btn is-active" data-nc-job="all">All <span class="nc__chip-n">{{ nc.rows|length }}</span></button>
-                    {% for job in nc.jobs %}
-                        <button type="button" class="nc__chip-btn" data-nc-job="{{ job.slug }}" style="--disc: var(--disc-{{ job.discipline }});">
-                            {% job_icon job.icon 'nc__chip-ic' %}{{ job.name }} <span class="nc__chip-n">{{ job.count }}</span>
-                        </button>
+            {% comment %} THE FILTER, in the site's existing discipline-dropdown idiom (`.rp-discs`,
+            shared by the Career contracts board and Browse Games): a trigger per discipline in its own
+            colour, opening a popover of that discipline's jobs. Five triggers rather than a horizontal
+            scroll of up to 25 chips, and a reader who follows one job finds it under its discipline
+            exactly where the board already taught them to look.
+
+            `PlatPursuit.discPopovers` owns open/close, the viewport-edge flip, aria-expanded and
+            click-outside; SELECTION is ours, below. A discipline's count is DISTINCT contracts, so it
+            is never the sum of its jobs' counts -- one contract feeding two of its jobs is one
+            contract to the discipline. {% endcomment %}
+            {% if nc.disciplines %}
+                <div class="nc__filter rp-discs" role="group" aria-label="Filter by discipline or job" data-nc-discs>
+                    <button type="button" class="rp-chip is-active" data-nc-all>All <span class="rp-disc__count">{{ nc.rows|length }}</span></button>
+                    {% for d in nc.disciplines %}
+                        <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
+                            <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-nc-disc="{{ d.slug }}" aria-haspopup="true" aria-expanded="false">
+                                <span class="rp-disc__name">{{ d.label }}</span><span class="rp-disc__count">{{ d.count }}</span>
+                                <svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <div class="rp-pop" role="group" aria-label="{{ d.label }} jobs" hidden>
+                                <button type="button" class="rp-pop__item rp-pop__item--head" data-nc-disc="{{ d.slug }}" aria-pressed="false"><span>All {{ d.label }}</span><span class="rp-pop__n">{{ d.count }}</span></button>
+                                {% for j in d.jobs %}
+                                    <button type="button" class="rp-pop__item" data-nc-job="{{ j.slug }}" aria-pressed="false">{% job_icon_use j.icon 'rp-pop__ico' %}<span>{{ j.name }}</span><span class="rp-pop__n">{{ j.count }}</span></button>
+                                {% endfor %}
+                            </div>
+                        </div>
                     {% endfor %}
                 </div>
             {% endif %}
 
             <ul class="nc__list" data-nc-list>
                 {% for c in nc.rows %}
-                    <li class="nc__row nc__row--{{ c.status }}" data-nc-jobs="{% for job in c.jobs.all %}{{ job.slug }} {% endfor %}">
+                    <li class="nc__row nc__row--{{ c.status }}" data-nc-jobs="{% for job in c.jobs.all %}{{ job.slug }} {% endfor %}" data-nc-discs="{% for job in c.jobs.all %}{{ job.discipline }} {% endfor %}">
                         <span class="nc__name">{{ c.name }}</span>
                         <span class="nc__jobs" aria-hidden="true">
                             {% for job in c.jobs.all %}
-                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon job.icon 'nc__job-ic' %}</span>
+                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'nc__job-ic' %}</span>
                             {% endfor %}
                         </span>
                         {% if c.status == 'claimable' %}
@@ -118,36 +136,86 @@ also where the reason it must be ID-scoped is written down. {% endcomment %}
     var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal(); } };
     if (!el) { settle(); return; }
 
-    // THE JOB FILTER. Client-side because every row already carries its slugs: a chip is a class
-    // toggle, so there is no round trip, no loading state, and no way for the counts to disagree
-    // with what the list shows. Delegated from the modal root, so it survives any re-render.
+    // THE FILTER. Client-side because every row already carries its slugs: selecting is a hidden
+    // toggle, so there is no round trip, no loading state, and no way for the counts to disagree with
+    // what the list shows.
+    //
+    // discPopovers owns the OPEN/CLOSE mechanics only -- one popover at a time, the viewport-edge
+    // flip, aria-expanded, click-outside and Escape. That is the shared contract the Career board and
+    // Browse Games already use, and reimplementing it here is how the three come to behave
+    // differently. Selection is ours, because it is the part that differs.
+    var filterRoot = el.querySelector('[data-nc-discs]');
     var list = el.querySelector('[data-nc-list]');
     var empty = el.querySelector('[data-nc-empty]');
-    el.addEventListener('click', function (e) {
-        if (!e.target.closest) { return; }
-        var chip = e.target.closest('[data-nc-job]');
-        if (!chip || !list) { return; }
-        var want = chip.getAttribute('data-nc-job');
+    var pops = { closeAll: function () {} };
 
-        el.querySelectorAll('[data-nc-job]').forEach(function (b) {
-            b.classList.toggle('is-active', b === chip);
-            b.setAttribute('aria-pressed', b === chip ? 'true' : 'false');
-        });
+    // ESCAPE BELONGS TO THE INNERMOST THING THAT IS OPEN. discPopovers closes popovers on Escape and
+    // DetailModal closes the modal on Escape, both listening on document in the bubble phase -- so one
+    // press did both, and a reader dismissing a dropdown lost the whole modal with it. A capture-phase
+    // listener runs before either, and claims the key only while a popover is actually open.
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || el.hidden) { return; }
+        if (!el.querySelector('.rp-pop:not([hidden])')) { return; }
+        e.stopPropagation();
+        pops.closeAll();
+    }, true);
 
+    function applyFilter(attr, want) {
+        if (!list) { return; }
         var shown = 0;
         list.querySelectorAll('.nc__row').forEach(function (row) {
-            // Padded on both sides so `mage` cannot match `mastermind`: the slugs live in one
+            // Padded both sides so `mage` cannot match `mastermind`: the slugs share one
             // space-separated attribute, and a bare indexOf is a prefix trap.
-            var slugs = ' ' + (row.getAttribute('data-nc-jobs') || '') + ' ';
-            var hit = want === 'all' || slugs.indexOf(' ' + want + ' ') !== -1;
+            var hay = ' ' + (row.getAttribute(attr) || '') + ' ';
+            var hit = !want || hay.indexOf(' ' + want + ' ') !== -1;
             row.hidden = !hit;
             if (hit) { shown++; }
         });
         if (empty) { empty.hidden = shown > 0; }
-    });
+    }
+
+    function markActive(button) {
+        if (!filterRoot) { return; }
+        // The pressed control lights up -- and so does the discipline TRIGGER above a pressed popover
+        // item, because the item itself is back inside a closed popover a moment later and the trigger
+        // is then the only place the selection is still visible.
+        var owner = button && button.closest('.rp-disc');
+        filterRoot.querySelectorAll('.rp-chip').forEach(function (c) {
+            var ownerTrigger = !!owner && c.classList.contains('rp-disc__trigger') && c.closest('.rp-disc') === owner;
+            c.classList.toggle('is-active', c === button || ownerTrigger);
+        });
+        filterRoot.querySelectorAll('.rp-pop__item').forEach(function (i) {
+            // `is-selected` is the shared popover's own selected state (the tick in elements.css); the
+            // board sets it too. Reusing half a pattern is how two copies come to look different.
+            i.classList.toggle('is-selected', i === button);
+            i.setAttribute('aria-pressed', i === button ? 'true' : 'false');
+        });
+    }
+
+    if (filterRoot) {
+        filterRoot.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var all = e.target.closest('[data-nc-all]');
+            var disc = e.target.closest('[data-nc-disc]');
+            var job = e.target.closest('[data-nc-job]');
+
+            if (all) { applyFilter('data-nc-jobs', ''); markActive(all); pops.closeAll(); return; }
+            // A JOB wins over its discipline: the job item lives inside the discipline's popover, so
+            // both selectors match the same click and the more specific one is what was pressed.
+            if (job) { applyFilter('data-nc-jobs', job.getAttribute('data-nc-job')); markActive(job); pops.closeAll(); return; }
+            // The trigger itself only opens the popover -- discPopovers handles that. Only the
+            // popover's "All <discipline>" head filters, or a click to open would also filter.
+            if (disc && disc.classList.contains('rp-pop__item')) {
+                applyFilter('data-nc-discs', disc.getAttribute('data-nc-disc'));
+                markActive(disc);
+                pops.closeAll();
+            }
+        });
+    }
 
     document.addEventListener('DOMContentLoaded', function () {
         if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
+        if (PlatPursuit.discPopovers) { pops = PlatPursuit.discPopovers(filterRoot); }
         PlatPursuit.DetailModal(el, {
             closeSelector: '[data-nc-close]',
             autoOpenDelay: 450,

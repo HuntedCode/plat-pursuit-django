@@ -21,7 +21,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from core.services.contract_announcer import cover_url_for
+from core.services.contract_announcer import DISCIPLINE_ORDER, cover_url_for
 from trophies.models import Job
 
 logger = logging.getLogger(__name__)
@@ -34,15 +34,16 @@ FLAG = 'contracts_seen'
 #: the art to a thumbnail; CSS drops it to one on a phone, where a big cover is the whole draw.
 MAX_HEROES = 3
 
-#: The scroll list's hard ceiling, and it is a real one rather than a tidy number. This renders on
-#: EVERY Career load for every hunter, so a bulk publish dropping three hundred contracts must not
-#: become three hundred rows plus their job icons in a modal nobody asked for. Past this the board
-#: is the right surface, and the footer link says so.
-MAX_LIST = 60
-
-#: Kept for the callers/tests that still speak in "how many does it name".
-MAX_SHOWN = MAX_LIST
-
+#: The scroll list's ceiling. Raised from 60 after the owner asked what the meaningful difference
+#: was -- and the honest answer was that 60 defended against a cost I had created: the rows were
+#: rendering icons with `job_icon` (a full inline SVG, 674 bytes) instead of `job_icon_use` (a sprite
+#: reference, 186). At 3.6x smaller, 200 rows of icons weigh less than 60 did.
+#:
+#: A ceiling still exists because this renders on EVERY Career load, and DOM nodes are the cost that
+#: does not shrink -- but 200 clears every realistic wave. The announcer's own MAX_WAVE guard trips
+#: at 40, and the only way past 200 is a hunter who has been away for months, who is exactly the
+#: person the board link below the list is for.
+MAX_LIST = 200
 
 
 def seen_marker(user):
@@ -61,7 +62,7 @@ def seen_marker(user):
 def new_for(profile, user, limit=MAX_LIST):
     """Everything the modal needs, in a bounded number of queries.
 
-    Returns a dict: `heroes`, `rows`, `jobs`, `total`, `extra`, `newest`. Empty `rows` means nothing
+    Returns a dict: `heroes`, `rows`, `disciplines`, `total`, `extra`, `newest`. Empty `rows` means
     is new and the modal should not render at all.
 
     `newest` is what to store on dismissal -- taken from the wave itself, never from the clock, so a
@@ -69,7 +70,7 @@ def new_for(profile, user, limit=MAX_LIST):
     """
     from trophies.services.contracts_service import annotated_contracts
 
-    empty = {'heroes': [], 'rows': [], 'jobs': [], 'total': 0, 'extra': 0, 'newest': None}
+    empty = {'heroes': [], 'rows': [], 'disciplines': [], 'total': 0, 'extra': 0, 'newest': None}
     if profile is None or user is None or not getattr(user, 'is_authenticated', False):
         return empty
 
@@ -107,7 +108,7 @@ def new_for(profile, user, limit=MAX_LIST):
     return {
         'heroes': heroes,
         'rows': rows,
-        'jobs': _job_facets(rows),
+        'disciplines': _job_facets(rows),
         'total': total,
         'extra': max(total - len(rows), 0),
         'newest': newest,
@@ -115,20 +116,49 @@ def new_for(profile, user, limit=MAX_LIST):
 
 
 def _job_facets(rows):
-    """[{slug, name, icon, discipline, count}] for the filter chips, biggest first then alphabetical.
+    """The filter, GROUPED BY DISCIPLINE: [{slug, label, count, jobs: [{slug, name, icon, count}]}].
 
-    Built from the rows the modal actually shows, not from a separate aggregate: a chip that counts
-    contracts the list cannot display is a filter that leads to an empty list.
+    Shaped for the `.rp-discs` dropdown the Career board and Browse Games already use -- a discipline
+    trigger in its own colour opening a popover of its jobs -- rather than a flat row of chips. With
+    25 jobs a flat row is a horizontal scroll nobody reads; grouped, it is five triggers.
+
+    Built from the rows the modal actually shows, never a separate aggregate: a facet that counts
+    contracts the list cannot display is a filter that leads to an emptier list than it advertised.
+
+    A discipline's count is DISTINCT CONTRACTS, not the sum of its jobs' counts -- one contract
+    feeding two jobs in the same discipline is one contract to that discipline, and adding the job
+    counts would say two.
     """
-    seen = {}
+    from trophies.models import Job
+
+    labels = dict(Job.DISCIPLINES)
+    discs = {}
     for contract in rows:
         for job in contract.jobs.all():
-            entry = seen.setdefault(job.slug, {
-                'slug': job.slug, 'name': job.name, 'icon': job.icon,
-                'discipline': job.discipline, 'count': 0,
+            disc = discs.setdefault(job.discipline, {
+                'slug': job.discipline,
+                'label': labels.get(job.discipline, job.discipline.title()),
+                'jobs': {},
+                'contracts': set(),
+            })
+            disc['contracts'].add(contract.pk)
+            entry = disc['jobs'].setdefault(job.slug, {
+                'slug': job.slug, 'name': job.name, 'icon': job.icon, 'count': 0,
             })
             entry['count'] += 1
-    return sorted(seen.values(), key=lambda j: (-j['count'], j['name']))
+
+    out = []
+    for slug in DISCIPLINE_ORDER:
+        if slug not in discs:
+            continue
+        d = discs[slug]
+        out.append({
+            'slug': slug,
+            'label': d['label'],
+            'count': len(d['contracts']),
+            'jobs': sorted(d['jobs'].values(), key=lambda j: (-j['count'], j['name'])),
+        })
+    return out
 
 
 # NO `is_due` helper here, deliberately. The view needs the contracts, the total AND the stamp, so a

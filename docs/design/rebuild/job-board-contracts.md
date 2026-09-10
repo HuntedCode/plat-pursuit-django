@@ -285,13 +285,32 @@ Two traps this cost us, both recorded as tests:
 
 ## Announcing a wave
 
-`announce_contracts` (daily, 06:00 UTC) posts newly published contracts to Discord grouped by JOB,
-linking to the board with Latest applied. **Silent when nothing is new**, which is most days.
+A published wave is announced TWICE, to two different audiences, from one source of truth about
+what is new. The Discord post goes out to the channel; the Career modal meets the hunter on the
+page where the work is claimed. Neither is a summary of the other: the post is a broadcast that has
+to survive being scrolled past, the modal is a browsable index of the same wave for one reader.
+
+### The Discord post (`announce_contracts`, daily 06:00 UTC)
+
+`core/services/contract_announcer.py`. **Silent when nothing is new**, which is most days.
 
 Announceable = `is_live=True` + `went_live_at` stamped + `announced_at` null. That answers "what
 about games awaiting admin review?" structurally: a staged candidate is `is_live=False`, so it has
 no `went_live_at` and cannot reach the announcer. **Publishing is the only act that makes a
 contract announceable.**
+
+| Piece | What it is | Why |
+|---|---|---|
+| Lead embed | the count, up to `MAX_HEROES` (3) headliners with cover art, the board link | the games worth acting on, with the art that sells them |
+| Per-discipline embeds | one embed per discipline that gained work, tinted in that discipline's colour, listing its jobs with counts | an embed carries exactly ONE colour and cannot tint lines, so the colour IS the label: no emoji to upload, no icon to survive markdown |
+| Headliner order | reach-ranked (`highlights()`), the same signal the candidate pipeline gates on | the wave's own definition of "most people will care", not a second one |
+| Below the fold | counts, not titles | twenty title lines is a wall nobody reads; the titles worth acting on are already at the top. The trade: a hunter following one job learns THAT it gained work, and the board link answers which game |
+
+`DISCIPLINE_COLORS` holds each colour as an **integer plus its oklch source**, because the
+stylesheet declares oklch and Discord cannot parse it. Keeping the source beside the value makes a
+stylesheet change DETECTABLE rather than silently leaving the channel a shade off the site; a test
+pins the pair. Embeds are capped against Discord's limits (4096 per description, **6000 across all
+embeds**, 10 embeds) by `_capped()`, which drops from the bottom.
 
 Idempotency is the `announced_at` COLUMN rather than a Redis watermark: a lost watermark
 re-announces everything behind it, one that runs ahead silently swallows a wave. `MAX_WAVE` (40)
@@ -304,6 +323,47 @@ The post's link only filters the board to Latest when the WHOLE wave is still in
 `announced_at` and `NEW_CONTRACT_WINDOW_DAYS` answer different questions and share no floor, so a
 long webhook outage or a `--limit` trickle produces a legitimate post about contracts that have
 aged out — and a filtered link would land the reader on an empty board.
+
+### The Career modal (`trophies/services/new_contracts_modal.py`)
+
+Opens on `/career/` when contracts have gone live since this hunter last saw it.
+
+**The marker is what was SHOWN, not the clock.** `ui_flags['contracts_seen']` stores the newest
+`went_live_at` in the wave the reader was actually shown. A now-stamp would silently skip a
+contract published between the query and the dismissal — it went live before the click but after
+the query. Same reasoning as What's New storing the newest entry id rather than a boolean.
+
+**Deliberately NOT `NEW_CONTRACT_WINDOW_DAYS`.** That 14-day window (the board's Latest chip, the
+card markers) answers "is this contract new?"; the marker answers "is this new TO YOU?". A hunter
+away for three weeks is told nothing by the window and everything by the marker, and they are the
+person the modal exists for.
+
+| Piece | Rule |
+|---|---|
+| Heroes | first `MAX_HEROES` (3) rows get cover art, via the announcer's own `cover_url_for` — two answers to "which picture represents this contract" is one too many |
+| Order | `status_order` from `annotated_contracts` (claimable → pursuing → the rest), in SQL. Sorting the slice in Python could never promote a claimable contract from outside the first page into it |
+| The list | every contract in the wave up to `MAX_LIST` (200), in a bounded scroll box, with `and N more on the board` past it |
+| The filter | the site's shared `.rp-discs` discipline dropdowns (`PlatPursuit.discPopovers`) — five triggers, each opening its jobs, so "what did Mastermind gain?" is two clicks |
+| Facets | computed from the RENDERED ROWS, never a separate aggregate |
+
+**Gotchas**
+
+- **A facet counted independently can promise more than the list shows.** Past the cap, an
+  aggregate over the full queryset advertises contracts the list cannot display, and the filter
+  leads somewhere emptier than the number said. Build facets from `rows`.
+- **A discipline's count is DISTINCT CONTRACTS**, not the sum of its jobs' counts: one contract
+  feeding two jobs in the same discipline is one contract to that discipline.
+- **Icons must use `job_icon_use` (the sprite), not `job_icon`.** 186 bytes against 674. The list
+  cap sat at 60 purely because the inline form was being used; the sprite is what pays for 200.
+- **Escape belongs to the innermost open thing.** `discPopovers` and `DetailModal` both close on
+  Escape from `document` in the bubble phase, so one press did both and dismissing a dropdown took
+  the modal with it. The partial claims the key in the CAPTURE phase, and only while a popover is
+  actually open.
+- **The page owns the choreography gate, not the modal.** `_career_modal_gate.html` arms
+  `ppAfterCareerModal` synchronously (Career's count-ups are in view at load and would finish
+  behind the scrim). Its backstop is measured from `DOMContentLoaded`, not parse — on a heavy page
+  a parse-relative deadline fires BEFORE the modal opens — and is cancelled by `ppHoldCareerModal`
+  the moment something opens.
 
 ## Creating Contracts (admin)
 

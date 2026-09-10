@@ -190,30 +190,116 @@ def test_only_the_heroes_carry_cover_art(hunter):
     assert not any(hasattr(r, 'cover_url') for r in nc['rows'][new_contracts_modal.MAX_HEROES:])
 
 
-def test_the_job_chips_can_never_promise_more_than_the_list_shows(hunter):
+def test_the_nothing_new_shape_matches_the_populated_one(hunter):
+    """The early return builds its dict by hand, so a renamed key survives there untouched -- as
+    `jobs` did when the facets became discipline-grouped. Django templates resolve a missing key to
+    empty rather than raising, so the mismatch is invisible until something iterates it."""
+    _live('Anything')
+    populated = new_contracts_modal.new_for(hunter.profile, hunter.profile.user)
+    assert populated['rows'], 'fixture wrong: nothing is new'
+
+    hunter.profile.user.ui_flags = {}
+    empty = new_contracts_modal.new_for(hunter.profile, None)
+
+    assert set(empty) == set(populated)
+
+
+def test_the_facet_counts_can_never_promise_more_than_the_list_shows(hunter):
     """Facets are built from the rendered rows, not a separate aggregate. Counted independently they
-    would include contracts past the cap -- a chip leading to an emptier list than it advertised."""
+    would include contracts past the cap -- a filter leading to an emptier list than it advertised."""
     job = Job.objects.exclude(is_fallback=True).first()
     for i in range(4):
         _live('For One Job %02d' % i, jobs=[job])
 
+    # A LIMIT SMALL ENOUGH TO BITE. With the default cap of 200 and four contracts nothing overflows,
+    # so a facet counted from the whole queryset and one counted from the shown rows agree -- and the
+    # assertion below holds no matter which the code does. The cap has to be exercised to be pinned.
+    nc = new_contracts_modal.new_for(hunter.profile, hunter.profile.user, limit=2)
+    assert len(nc['rows']) == 2, 'fixture wrong: the cap did not bite'
+
+    disc = next(d for d in nc['disciplines'] if d['slug'] == job.discipline)
+    entry = next(j for j in disc['jobs'] if j['slug'] == job.slug)
+    listed = sum(1 for r in nc['rows'] if job in r.jobs.all())
+    assert entry['count'] == listed
+
+
+def test_the_filter_is_grouped_by_discipline_in_canonical_order(hunter):
+    """The site's own dropdown idiom rather than a flat row of up to 25 chips -- and in the same order
+    the Career bands use, so a job is where the board already taught you to look.
+
+    EVERY discipline gets a contract, and the assertion is exact equality with the whole canonical
+    list. With a three-discipline fixture and a subset comparison, a reversed dict order happened to
+    read as canonical and the mutation went uncaught."""
+    from core.services.contract_announcer import DISCIPLINE_ORDER
+
+    by_disc = {}
+    for job in Job.objects.exclude(is_fallback=True):
+        by_disc.setdefault(job.discipline, job)
+    assert set(by_disc) == set(DISCIPLINE_ORDER), 'fixture wrong: not every discipline has a job'
+    for disc, job in by_disc.items():
+        _live('Work For ' + disc, jobs=[job])
+
     nc = new_contracts_modal.new_for(hunter.profile, hunter.profile.user)
 
-    chip = next(j for j in nc['jobs'] if j['slug'] == job.slug)
-    listed = sum(1 for r in nc['rows'] if job in r.jobs.all())
-    assert chip['count'] == listed
+    assert [d['slug'] for d in nc['disciplines']] == list(DISCIPLINE_ORDER)
+    for d in nc['disciplines']:
+        assert d['jobs'], '%s has no jobs under it' % d['slug']
 
 
-def test_a_row_carries_its_job_slugs_for_the_filter(hunter):
-    """The filter is client-side off this attribute; without it every chip shows an empty list."""
+def test_a_disciplines_count_is_distinct_contracts_not_a_sum_of_its_jobs(hunter):
+    """One contract feeding two jobs in the SAME discipline is one contract to that discipline.
+    Summing the job counts would say two, and the filter would promise more than it shows."""
+    jobs = list(Job.objects.exclude(is_fallback=True).filter(
+        discipline=Job.objects.exclude(is_fallback=True).first().discipline)[:2])
+    assert len(jobs) == 2
+    _live('Feeds Both', jobs=jobs)
+
+    nc = new_contracts_modal.new_for(hunter.profile, hunter.profile.user)
+
+    disc = next(d for d in nc['disciplines'] if d['slug'] == jobs[0].discipline)
+    assert disc['count'] == 1, 'the discipline counted one contract twice'
+    assert sum(j['count'] for j in disc['jobs']) == 2, 'each job should still count it'
+
+
+def test_rows_carry_both_job_and_discipline_slugs(hunter):
+    """The filter is client-side off these attributes: without them every selection empties the
+    list, and the modal looks broken rather than filtered."""
     job = Job.objects.exclude(is_fallback=True).first()
     _live('Filterable', jobs=[job])
 
     body = hunter.get('/career/', **CF).content.decode()
+    row = body.split('<li class="nc__row', 1)[1].split('>', 1)[0]
+
+    assert job.slug in row.split('data-nc-jobs="', 1)[1].split('"', 1)[0]
+    assert job.discipline in row.split('data-nc-discs="', 1)[1].split('"', 1)[0]
+
+
+def test_every_job_icon_in_the_modal_uses_the_sprite(hunter):
+    """A full inline glyph is 674 bytes; a sprite reference is 186. At up to MAX_LIST rows with
+    several jobs each, that 3.6x is the whole reason the list can be this long -- and it was the
+    reason the cap sat at 60 before the icons were fixed.
+
+    EVERY occurrence, because the modal draws job icons in three places (heroes, rows, the job
+    popovers) and asserting that the sprite appears somewhere passes while two of the three are
+    inline."""
+    job = Job.objects.exclude(is_fallback=True).first()
+    _live('Iconed', jobs=[job])
+
+    body = hunter.get('/career/', **CF).content.decode()
     modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
 
-    assert 'data-nc-jobs="' in modal
-    assert job.slug in modal.split('data-nc-jobs="', 1)[1].split('"', 1)[0]
+    seen = 0
+    for css in ('nc__job-ic', 'rp-pop__ico'):
+        chunks = modal.split('class="%s"' % css)[1:]
+        assert chunks, 'no %s icon rendered at all' % css
+        for chunk in chunks:
+            svg = chunk.split('</svg>', 1)[0]
+            assert '<use href="#jobicon-' in svg, '%s renders an inline glyph' % css
+            seen += 1
+    assert seen >= 2
+
+
+
 
 
 # ── the marker ───────────────────────────────────────────────────────────────────────────────────
@@ -303,3 +389,58 @@ def test_the_gate_arms_when_this_modal_is_due(hunter):
     assert 'id="new-contracts"' in body, 'fixture wrong: no modal is due'
     gate = body.split('ppAfterCareerModal', 1)[0]
     assert 'var pending = true' in gate, 'a modal is on the page but the gate is not holding'
+
+
+# -- the filter reuses the site's dropdown, whole --------------------------------------------------
+
+def _partial():
+    from pathlib import Path
+
+    from django.conf import settings
+
+    return (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'partials' / 'career' /
+            '_new_contracts.html').read_text(encoding='utf-8')
+
+
+def test_the_filter_is_the_shared_dropdown_and_not_a_private_copy(hunter):
+    """The first cut was a bespoke row of chips. This is the shared `.rp-discs` group the contracts
+    board and Browse Games use -- markup AND the controller that owns opening it. Hand-rolling the
+    open/close here is how the three surfaces come to behave differently from each other."""
+    job = Job.objects.exclude(is_fallback=True).first()
+    _live('Grouped', jobs=[job])
+
+    body = hunter.get('/career/', **CF).content.decode()
+    modal = body.split('id="new-contracts"', 1)[1].split('</script>', 1)[0]
+
+    assert 'rp-disc__trigger' in modal and 'rp-pop__item' in modal
+    assert 'var(--disc-%s)' % job.discipline in modal, 'the trigger is not tinted in its discipline'
+    assert 'PlatPursuit.discPopovers' in modal, 'the modal opens its own popovers instead'
+
+
+def test_escape_closes_an_open_popover_without_closing_the_modal():
+    """Both discPopovers and DetailModal close on Escape from document in the bubble phase, so one
+    press did both: dismissing a dropdown took the whole modal with it. The fix has to be CAPTURE
+    phase (it runs before either) and has to be conditional on a popover actually being open, or
+    Escape stops closing the modal at all."""
+    partial = _partial()
+
+    guard = partial.split("if (e.key !== 'Escape'", 1)[1].split('}, true);', 1)[0]
+    assert 'rp-pop:not([hidden])' in guard, 'the guard swallows Escape when no popover is open'
+    assert 'stopPropagation' in guard, 'the modal still closes underneath the popover'
+    assert 'pops.closeAll' in guard, 'nothing closes the popover the press was meant for'
+
+
+def test_a_selected_job_stays_visible_after_its_popover_closes():
+    """The popover shuts on selection, so the only lasting sign of what is filtering the list is the
+    discipline trigger. Marking the pressed item alone leaves the reader with a filtered list and
+    nothing on screen saying why."""
+    partial = _partial()
+
+    end = chr(10) + '    }'
+    mark = partial.split('function markActive', 1)[1].split(end, 1)[0]
+    # `button.closest`, not a bare `closest('.rp-disc')`: the comparison one line below mentions the
+    # same selector, so the loose form stayed true with the lookup itself replaced by null.
+    assert "button.closest('.rp-disc')" in mark, 'the trigger above a pressed job item is never lit'
+    # The CODE, not the comment above it that names the class: reading the prose passed while the
+    # toggle itself was deleted.
+    assert "toggle('is-selected'" in mark, "the shared popover's own selected state is not applied"
