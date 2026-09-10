@@ -23,8 +23,18 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def posted(monkeypatch):
-    """Capture the webhook POST instead of making one. Returns the list of (url, payload)."""
+def posted(monkeypatch, settings):
+    """Capture the webhook POST instead of making one. Returns the list of (url, payload).
+
+    CONFIGURES A WEBHOOK TOO, and that is not incidental. These tests are about the PAYLOAD, and they
+    faked the transport while letting the destination come from whatever `.env` the machine happened
+    to have. On a developer machine that is a real value and everything passes; in CI there is no
+    `.env`, so `webhook_url()` found nothing and the command refused before building anything --
+    nineteen failures that no local run could produce. A fixture that fakes the sending should supply
+    the address it sends to.
+    """
+    settings.DISCORD_PLATINUM_WEBHOOK_URL = 'https://example.test/platinum'
+    settings.DISCORD_CONTRACTS_WEBHOOK_URL = None
     calls = []
 
     class _Resp:
