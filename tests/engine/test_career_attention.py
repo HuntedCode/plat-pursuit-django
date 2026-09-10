@@ -1,4 +1,4 @@
-"""The two attention markers on the My Pursuit nav item: a claim COUNT and a new-contracts DOT.
+"""The two attention markers on the My Pursuit nav item: a claim COUNT and a NEW pill.
 
 They render in the site-wide navbar and mobile tab bar, so the cost rules matter as much as the
 behaviour: this runs on every page of the site for every signed-in hunter.
@@ -51,6 +51,26 @@ def _contract(name, *, live=True, jobs=None, announced_days_ago=None):
             went_live_at=when - timezone.timedelta(hours=6),
             announced_at=when, announcement_posted=True)
     return c
+
+
+def _count_marker(body):
+    """The claim count's text, or None if it did not render.
+
+    A HELPER RATHER THAN A SUBSTRING, because `pp-navhub__n` is a PREFIX of `pp-navhub__new`. The
+    moment the new-contracts marker became a word, every `'pp-navhub__n' not in body` in this file
+    quietly started meaning "and no New pill either". Two of them failed immediately, which is the
+    lucky version; the unlucky version is an assertion that stops testing anything and says nothing.
+    """
+    marker = 'class="pp-navhub__n"'
+    if marker not in body:
+        return None
+    return body.split(marker, 1)[1].split('</span>', 1)[0].split('>', 1)[1]
+
+
+def _nav_link(body):
+    """The My Pursuit anchor, whole. Splitting on the words is not enough: they appear in the
+    aria-label first, several hundred characters before the markup they describe."""
+    return body.split('class="pp-navhub', 1)[1].split('</a>', 1)[0]
 
 
 def _claimable(profile, contract):
@@ -121,16 +141,16 @@ def test_the_count_reads_the_hunters_own_rows_not_the_catalogue(hunter):
     assert len(ctx.captured_queries) == 1
 
 
-# -- the new-contracts dot --------------------------------------------------------------------
+# -- the new-contracts marker --------------------------------------------------------------------
 
-def test_the_dot_lights_for_an_announcement_newer_than_the_marker(hunter):
+def test_the_marker_lights_for_an_announcement_newer_than_the_marker(hunter):
     _contract('Fresh', announced_days_ago=0)
 
     assert career_attention.has_new_contracts(hunter.profile.user) is True
 
 
-def test_the_dot_agrees_with_the_modal(hunter):
-    """A dot that leads to no modal is a dot that trained the reader to ignore dots. Both read the
+def test_the_marker_agrees_with_the_modal(hunter):
+    """A marker that leads to no modal teaches the reader to ignore markers. Both read the
     same marker and the same 14-day first-visit floor."""
     from trophies.util_modules.constants import NEW_CONTRACT_WINDOW_DAYS
     from trophies.services import new_contracts_modal
@@ -147,7 +167,7 @@ def test_the_dot_agrees_with_the_modal(hunter):
     assert new_contracts_modal.new_for(hunter.profile, user)['rows'] != []
 
 
-def test_dismissing_the_modal_puts_the_dot_out(hunter):
+def test_dismissing_the_modal_puts_the_marker_out(hunter):
     contract = _contract('Read It', announced_days_ago=0)
     user = hunter.profile.user
     assert career_attention.has_new_contracts(user) is True
@@ -163,7 +183,7 @@ def test_dismissing_the_modal_puts_the_dot_out(hunter):
 
 def test_a_contract_that_was_never_posted_lights_nothing(hunter):
     """Same gate as the modal: `--baseline` records a backlog as known WITHOUT posting it, and the
-    ~1,000 launch contracts are settled that way. A dot for them would be the whole catalogue
+    ~1,000 launch contracts are settled that way. A marker for them would be the whole catalogue
     announcing itself on the first render after deploy."""
     c = _contract('Baselined')
     Contract.objects.filter(pk=c.pk).update(announced_at=timezone.now(), announcement_posted=False)
@@ -171,7 +191,7 @@ def test_a_contract_that_was_never_posted_lights_nothing(hunter):
     assert career_attention.has_new_contracts(hunter.profile.user) is False
 
 
-def test_the_dot_costs_no_per_user_query(hunter):
+def test_the_marker_costs_no_per_user_query(hunter):
     """THE TRICK THAT MAKES IT FREE. "Is anything new to this hunter" is a comparison between a
     per-user marker -- already on the user object, loaded by authentication -- and a global maximum.
     So the only fetch is one value shared by every visitor on the site."""
@@ -193,7 +213,7 @@ def test_the_empty_board_is_cached_too(hunter):
     assert len(ctx.captured_queries) == 0
 
 
-def test_announcing_relights_the_dot_immediately(hunter):
+def test_announcing_relights_the_marker_immediately(hunter):
     """The shared value is cached for fifteen minutes. Without an explicit clear, the one event the
     whole feature is built around would take up to that long to show."""
     from core.services.contract_announcer import mark_announced
@@ -235,10 +255,12 @@ def test_the_nav_carries_both_markers(hunter):
     _contract('Fresh', announced_days_ago=0)
 
     body = hunter.get('/career/', **CF).content.decode()
-    nav = body.split('My Pursuit', 1)[0].rsplit('<a href', 1)[1] + body.split('My Pursuit', 1)[1][:400]
+    nav = _nav_link(body)
 
-    assert 'pp-navhub__n' in nav and '>2<' in nav, 'the claim count is missing'
-    assert 'pp-navhub__dot' in nav, 'the new-contracts dot is missing'
+    assert _count_marker(body) == '2', 'the claim count is missing or wrong'
+    # A WORD, not a light -- the correction the avatar's What's New marker already made. Asserted on
+    # the CONTENT, because a class name alone cannot tell a word from a dot.
+    assert '>New</span>' in nav, 'the new-contracts marker is a bare dot again'
     # The markers are aria-hidden, so the LABEL has to carry the same thing in words.
     assert 'ready to claim' in nav and 'new contracts on the board' in nav
 
@@ -253,21 +275,21 @@ def test_a_staff_preview_lights_both_markers(hunter):
 
     body = hunter.get('/career/?preview=career-markers', **CF).content.decode()
 
-    assert 'pp-navhub__n' in body and 'pp-navhub__dot' in body
+    assert _count_marker(body) is not None and 'pp-navhub__new' in body
 
 
 def test_the_preview_can_force_a_count(hunter):
     """`&n=` is how you look at the 9+ cap without earning twelve rewards, and `&n=0` is how you look
-    at the dot on its own."""
+    at the pill on its own."""
     user = hunter.profile.user
     user.is_staff = True
     user.save(update_fields=['is_staff'])
 
     body = hunter.get('/career/?preview=career-markers&n=12', **CF).content.decode()
-    assert '9+' in body.split('class="pp-navhub__n"', 1)[1].split('</span>', 1)[0]
+    assert _count_marker(body) == '9+'
 
     body = hunter.get('/career/?preview=career-markers&n=0', **CF).content.decode()
-    assert 'pp-navhub__n' not in body and 'pp-navhub__dot' in body
+    assert _count_marker(body) is None and 'pp-navhub__new' in body
 
 
 def test_the_preview_writes_nothing(hunter):
@@ -291,7 +313,7 @@ def test_the_preview_is_team_only(hunter):
     anybody can type."""
     body = hunter.get('/career/?preview=career-markers', **CF).content.decode()
 
-    assert 'pp-navhub__n' not in body and 'pp-navhub__dot' not in body
+    assert _count_marker(body) is None and 'pp-navhub__new' not in body
 
 
 def test_a_staff_account_sees_nothing_without_the_querystring(hunter):
@@ -303,11 +325,11 @@ def test_a_staff_account_sees_nothing_without_the_querystring(hunter):
     user.save(update_fields=['is_staff'])
 
     body = hunter.get('/career/', **CF).content.decode()
-    assert 'pp-navhub__n' not in body and 'pp-navhub__dot' not in body
+    assert _count_marker(body) is None and 'pp-navhub__new' not in body
 
     # ...and somebody else's door does not open this one either.
     body = hunter.get('/career/?preview=whats-new', **CF).content.decode()
-    assert 'pp-navhub__n' not in body and 'pp-navhub__dot' not in body
+    assert _count_marker(body) is None and 'pp-navhub__new' not in body
 
 
 def test_every_preview_door_is_the_same_door():
@@ -325,11 +347,39 @@ def test_every_preview_door_is_the_same_door():
         assert "GET.get('preview')" not in src, '%s still reads the querystring itself' % rel
 
 
+def test_the_mobile_tab_bar_carries_them_too(hunter):
+    """The bar is the only nav a phone sees, so markers that live only in the desktop navbar reach
+    nobody on mobile -- and mobile is where a nav marker matters most."""
+    _claimable(hunter.profile, _contract('Claim Me'))
+    _contract('Fresh', announced_days_ago=0)
+
+    body = hunter.get('/career/', **CF).content.decode()
+    tab = body.split('class="mobile-tabbar-item', 1)[1].split('</a>', 1)[0]
+
+    assert 'pp-navhub__n--tab' in tab, 'the tab bar has no claim count'
+    assert 'pp-navhub__new--tab' in tab, 'the tab bar has no New marker'
+    assert 'ready to claim' in tab and 'new contracts on the board' in tab
+
+
+def test_the_tab_bar_shows_one_marker_at_a_time():
+    """Both at once would overlap on a 20px icon, so the New pill steps aside for the count -- the
+    count already says there is something waiting, which is the more urgent half. CSS-only, because
+    both are rendered and the suppression is a sibling rule."""
+    from pathlib import Path
+
+    from django.conf import settings
+
+    css = (Path(settings.BASE_DIR) / 'static' / 'css' / 'components' / 'chrome.css').read_text(
+        encoding='utf-8')
+
+    assert '.pp-navhub__n--tab ~ .pp-navhub__new--tab { display: none; }' in css
+
+
 def test_a_quiet_account_gets_no_markers(hunter):
     body = hunter.get('/career/', **CF).content.decode()
 
-    assert 'pp-navhub__n' not in body
-    assert 'pp-navhub__dot' not in body
+    assert _count_marker(body) is None
+    assert 'pp-navhub__new' not in body
 
 
 def test_the_count_is_capped_in_the_markup(hunter):
@@ -339,8 +389,7 @@ def test_the_count_is_capped_in_the_markup(hunter):
 
     body = hunter.get('/career/', **CF).content.decode()
 
-    badge = body.split('class="pp-navhub__n"', 1)[1].split('</span>', 1)[0]
-    assert '9+' in badge and '12' not in badge
+    assert _count_marker(body) == '9+'
 
 
 def test_an_anonymous_visitor_pays_nothing(monkeypatch):
@@ -366,7 +415,7 @@ def test_an_anonymous_visitor_pays_nothing(monkeypatch):
 def test_the_markers_never_break_a_page(hunter, monkeypatch):
     """Fails closed, like the What's New and moderation processors: a hunter loses a marker for one
     render and nobody gains one. A nav that 500s because a badge could not be counted would be a
-    poor trade for a dot."""
+    poor trade for a marker."""
     def _boom(*a, **kw):
         raise RuntimeError('cache is down')
 

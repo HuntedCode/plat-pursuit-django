@@ -39,7 +39,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                     <path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
                 {% if career_claimable %}<span class="pp-navhub__n pp-navhub__n--tab" aria-hidden="true">{% if career_claimable > 9 %}9+{% else %}{{ career_claimable }}{% endif %}</span>{% endif %}
-                {% if career_new_contracts %}<span class="pp-navhub__dot pp-navhub__dot--tab" aria-hidden="true"></span>{% endif %}
+                {% if career_new_contracts %}<span class="pp-navhub__new pp-navhub__new--tab" aria-hidden="true">New</span>{% endif %}
             </span>
             <span>My Pursuit</span>
         </a>

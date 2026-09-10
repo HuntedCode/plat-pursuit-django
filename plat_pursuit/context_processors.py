@@ -213,9 +213,9 @@ def moderation_alert(request):
 
 
 def career_attention(request):
-    """The two markers on the My Pursuit nav item: a claim COUNT and a new-contracts DOT.
+    """The two markers on the My Pursuit nav item: a claim COUNT and a NEW pill.
 
-    A number for work that is theirs and waiting; a dot for news. Two counts side by side would
+    A number for work that is theirs and waiting; a word for news. Two counts side by side would
     compete, and only one of them is a reason to go somewhere.
 
     Anonymous and profile-less viewers return an empty dict before anything happens, which is the

@@ -364,10 +364,10 @@ straight to `/career/`, so it is the only place either signal needs to be.
 | Marker | Means | Shape |
 |---|---|---|
 | Count | rewards this hunter has earned and not taken | a NUMBER — "how many" is answerable without a click, and is the whole reason to go |
-| Dot | contracts announced since they last looked | a DOT — a count of things that are merely new would compete with the count of things that are theirs |
+| New pill | contracts announced since they last looked | a WORD — the correction the avatar's own New marker already made: a dot has to be decoded, a word is read |
 
 Both can show at once. The count comes first, so the order is always "what is yours, then what is
-new". On the tab bar they ride the icon and the dot yields to the count: four items across a 375px
+new". On the tab bar they ride the icon and the pill yields to the count: four items across a 375px
 phone has no room for both.
 
 **This renders on every page of the site**, including the Django admin, so cost is the design:
@@ -376,14 +376,14 @@ phone has no room for both.
   stamps that decide "claimable" live there, so it is one indexed query over a handful of rows
   rather than `annotated_contracts`' four correlated subqueries across every live contract. Cached
   per hunter (5 min) and cleared by `contract_service.claim`.
-- **The dot** costs nothing per hunter. "Is anything new to you" is a comparison between a marker
+- **The pill** costs nothing per hunter. "Is anything new to you" is a comparison between a marker
   already on `request.user` (loaded by authentication) and a SITE-WIDE maximum — so the only fetch
   is one value shared by every visitor, cached 15 minutes and cleared by `mark_announced`.
 
 **Previewing them.** They only appear when there is something to say, which makes them the hardest
 thing here to look at deliberately -- you need an unclaimed reward and an unseen announcement at the
 same moment. `?preview=career-markers` (staff/moderator, any page) lights both; `&n=12` forces the
-count to see the `9+` cap, `&n=0` leaves the dot on its own. Writes nothing, like every other preview
+count to see the `9+` cap, `&n=0` leaves the New pill on its own. Writes nothing, like every other preview
 door -- they all go through `core/previews.py` now, because this was the third copy of the same four
 lines and the first two had already drifted once.
 
@@ -391,10 +391,10 @@ lines and the first two had already drifted once.
 
 - **The count is a second definition of "claimable" and must not drift.** The badge and the board
   have to agree or the badge is lying; a test pins them together.
-- **The dot reads the same gate as the modal** (`announcement_posted`, the marker, the 14-day
-  first-visit floor). A dot that leads to no modal trains the reader to ignore dots.
+- **The pill reads the same gate as the modal** (`announcement_posted`, the marker, the 14-day
+  first-visit floor). A marker that leads to no modal trains the reader to ignore markers.
 - Both fail closed: a hunter loses a marker for one render, nobody gains one. A nav that 500s
-  because a badge could not be counted would be a poor trade for a dot.
+  because a badge could not be counted would be a poor trade for a marker.
 
 ### The Career modal (`trophies/services/new_contracts_modal.py`)
 

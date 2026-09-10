@@ -73,18 +73,20 @@
     font-variant-numeric: tabular-nums;
     box-shadow: 0 0 8px -2px var(--pp-primary);
 }
-/* Bigger than the avatar's 10px dot was, and ringed rather than flat: the ring is what makes a small
-   mark read as deliberate instead of as a rendering artefact. It sits AFTER the count when both
-   show, so the order is always "what is yours, then what is new". */
-.pp-navhub__dot {
-    display: inline-block; width: 7px; height: 7px; margin-left: 1px; border-radius: 999px;
-    background: var(--pp-primary);
-    box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 22%, transparent),
-                0 0 7px -1px var(--pp-primary);
+/* A WORD, NOT A LIGHT -- the same correction the avatar's What's New marker made, and for the same
+   reason it records four hundred lines down: a dot has to be decoded, a word is read. It shipped
+   here as a 7px dot on the argument that this nav item is roomier than a 38px avatar carrying a sync
+   ring; the room was real and the argument still wrong. Small marks read as rendering artefacts.
+
+   It sits AFTER the count when both show, so the order is always "what is yours, then what is new" --
+   and now the two are separable by CONTENT rather than by size, which is stronger. */
+.pp-navhub__new {
+    display: inline-flex; align-items: center; padding: 1px 6px; margin-left: 1px;
+    border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0, #05070a);
+    font-size: 0.56rem; font-weight: 900; line-height: 1.4; letter-spacing: 0.04em;
+    text-transform: uppercase; white-space: nowrap;
+    box-shadow: 0 0 7px -1px var(--pp-primary);
 }
-/* On the active item both markers would sit in primary on a primary label, so the dot loses its
-   glow ring and the count inverts -- the item is already the loud thing on the row. */
-.pp-navhub.is-active .pp-navhub__dot { box-shadow: 0 0 0 2px var(--pp-bg-1); }
 
 /* THE TAB BAR carries the same pair on the ICON rather than the label: four items across a 375px
    phone, so anything beside the word pushes the row. `.mobile-tabbar-ico` is the positioning
@@ -95,11 +97,17 @@
     min-width: 15px; height: 15px; padding: 0 4px; font-size: 0.58rem;
     border: 2px solid var(--pp-bg-1);   /* punched out of the bar, like the avatar's queue badge */
 }
-.pp-navhub__dot--tab { position: absolute; top: -1px; left: 15px; margin: 0; }
-.mobile-tabbar-item.active .pp-navhub__dot--tab { box-shadow: 0 0 0 2px var(--pp-bg-1); }
-/* Both at once on an icon this small would overlap, so the dot steps aside for the count -- the
+/* The word rides the icon here too. A tab item is a quarter of a 375px phone -- ~93px -- and the pill
+   is ~28px against a 20px icon, so it fits with room either side. Anchored LEFT of centre so it
+   grows outward rather than under the neighbouring tab. */
+.pp-navhub__new--tab {
+    position: absolute; top: -6px; left: 10px; margin: 0;
+    padding: 1px 4px; font-size: 0.5rem;
+    border: 2px solid var(--pp-bg-1);
+}
+/* Both at once on an icon this small would overlap, so the word steps aside for the count -- the
    count already says there is something waiting, which is the more urgent half. */
-.pp-navhub__n--tab ~ .pp-navhub__dot--tab { display: none; }
+.pp-navhub__n--tab ~ .pp-navhub__new--tab { display: none; }
 @media (hover: hover) { .pp-navhub:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.04); } }
 .pp-navhub:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-navhub.is-active { color: var(--pp-primary); }

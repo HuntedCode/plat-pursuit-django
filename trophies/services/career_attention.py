@@ -14,8 +14,9 @@ WHAT EACH MARKER MEANS, because they are deliberately different kinds of thing:
 
   CLAIM COUNT   work waiting: rewards this hunter has earned and not taken. A NUMBER, because "how
                 many" is answerable without a click and is the whole reason to go.
-  NEW DOT       news: contracts announced since they last looked. A DOT, because a count of things
-                that are merely new would compete with the count of things that are theirs.
+  NEW PILL      news: contracts announced since they last looked. A WORD, not a light -- the
+                correction the avatar's own New marker already made, and the same reason a count of
+                things that are merely new would compete with the count of things that are theirs.
 """
 import logging
 
@@ -143,7 +144,7 @@ def preview_counts(request):
 
         ?preview=career-markers          both markers, using the real claim count (3 if there is none)
         ?preview=career-markers&n=12     force the count, e.g. to see the 9+ cap
-        ?preview=career-markers&n=0      the dot alone
+        ?preview=career-markers&n=0      the New pill alone
 
     Staff-gated and writes nothing, like every other preview door -- see `core.previews`.
     """
