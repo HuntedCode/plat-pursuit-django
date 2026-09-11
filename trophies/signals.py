@@ -1,7 +1,8 @@
 import logging
 from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save, pre_delete
 from django.dispatch import receiver
-from django.db.models import F
+from django.db.models import F, Value
+from django.db.models.functions import Greatest
 from trophies.models import (
     Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame,
     GroupBadge, UserGroupBadge,
@@ -133,6 +134,31 @@ _TROPHY_TYPE_TO_PROFILE_FIELD = {
 }
 
 
+def _bump(type_field, delta):
+    """The UPDATE payload for one trophy moving in or out of a profile's counters.
+
+    Moves the tier counter AND `total_trophies_raw` together, in one statement. They are the same fact
+    counted at two grains, so splitting them into two writes is how they drift -- and `total_trophies_raw`
+    is the leaderboard's tiebreak, so drift there reorders a public board.
+
+    THE DECREMENT IS FLOORED AT ZERO rather than trusting the caller's `{type_field}__gt: 0` filter. That
+    filter guards the TIER, and the two columns can disagree -- staff can edit the tier counters in the
+    admin, and migration 0333 leaves a window where the column exists at 0 while the tiers are already
+    populated. With a tier at 1 and the raw total at 0, the filter passes and the raw total goes to -1,
+    which is a CHECK violation on a `PositiveIntegerField`: a routine unearn or trophy delete raises
+    IntegrityError inside `post_delete`, i.e. inside whatever transaction sync is running.
+
+    `Greatest(... - 1, 0)` cannot raise. A floored decrement can leave the total drifted HIGH, which is
+    the direction that merely misplaces somebody on a board until `recalc_profile_counters` rebuilds both
+    from ground truth that night. A crash on the sync path is not recoverable in the same cheap way.
+    """
+    if delta > 0:
+        return {type_field: F(type_field) + 1,
+                'total_trophies_raw': F('total_trophies_raw') + 1}
+    return {type_field: Greatest(F(type_field) - 1, Value(0)),
+            'total_trophies_raw': Greatest(F('total_trophies_raw') - 1, Value(0))}
+
+
 def _resolve_trophy_type(instance):
     """Read trophy type from the instance, preferring a sync-stamped attribute
     over the FK lookup. Sync paths set `_trophy_type` on the EarnedTrophy
@@ -156,9 +182,7 @@ def update_profile_type_counts_on_save(sender, instance, created, **kwargs):
             return
         type_field = _TROPHY_TYPE_TO_PROFILE_FIELD.get(_resolve_trophy_type(instance))
         if type_field:
-            Profile.objects.filter(pk=instance.profile_id).update(
-                **{type_field: F(type_field) + 1}
-            )
+            Profile.objects.filter(pk=instance.profile_id).update(**_bump(type_field, +1))
         return
 
     prev = _resolve_previous_earned(instance)
@@ -170,13 +194,10 @@ def update_profile_type_counts_on_save(sender, instance, created, **kwargs):
         return
 
     if prev is False and instance.earned is True:
-        Profile.objects.filter(pk=instance.profile_id).update(
-            **{type_field: F(type_field) + 1}
-        )
+        Profile.objects.filter(pk=instance.profile_id).update(**_bump(type_field, +1))
     elif prev is True and instance.earned is False:
         Profile.objects.filter(pk=instance.profile_id, **{f'{type_field}__gt': 0}).update(
-            **{type_field: F(type_field) - 1}
-        )
+            **_bump(type_field, -1))
 
 
 @receiver(post_delete, sender=EarnedTrophy, dispatch_uid="update_profile_type_counts_on_delete")
@@ -188,8 +209,7 @@ def update_profile_type_counts_on_delete(sender, instance, **kwargs):
     if not type_field:
         return
     Profile.objects.filter(pk=instance.profile_id, **{f'{type_field}__gt': 0}).update(
-        **{type_field: F(type_field) - 1}
-    )
+        **_bump(type_field, -1))
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -249,8 +269,10 @@ def _propagate_country_to_standings(sender, instance, created, **kwargs):
     if not changed:
         return
 
-    # `country_code` lives on five of the six; `is_linked` on all six. Filtering the payload per store
-    # rather than keeping two handlers means one traversal on the (rare) save where both moved at once.
+    # All nine carry both mirrors today, but the payload is still filtered per store: `_mirrored_fields`
+    # reads each one's columns off the model, so a store that carries only one cannot be handed the
+    # other. Filtering here rather than keeping two handlers means one traversal on the (rare) save
+    # where both moved at once.
     for model in profile_mirrored_standings():
         fields = {k: v for k, v in changed.items() if k in _mirrored_fields(model)}
         if fields:
@@ -265,9 +287,9 @@ def profile_mirrored_standings():
     country they left, or (worse, since it is a whole-population rule) keeping an unverified account on a
     board after they verify. Neither is something a reader would think to look for.
 
-    All seven carry BOTH mirrors -- six as of migration 0310, and `SeriesEditionStanding` from birth in
-    0313, which is the point: a new standing store is expected to arrive with them rather than be
-    retrofitted. `UserGroupBadge` was the last to get `country_code`,
+    All nine carry BOTH mirrors -- six as of migration 0310, `SeriesEditionStanding` from birth in 0313,
+    `ProfileTrophyStanding` from birth in 0332 and `ProfileRarityStanding` from birth in 0335, which is the
+    point: a new standing store is expected to arrive with them rather than be retrofitted. `UserGroupBadge` was the last to get `country_code`,
     and its lateness was historical rather than principled -- it is the badge earn-lifecycle table and
     predates the Lane B standing stores that set the pattern. `_mirrored_fields` reads each store's
     columns off the model rather than hardcoding them, so a store that gains or loses one cannot fall out
@@ -275,10 +297,12 @@ def profile_mirrored_standings():
     """
     from trophies.models import (
         ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileJobXP,
-        SeriesBadgeStanding, SeriesEditionStanding, UserGroupBadge,
+        ProfileRarityStanding, ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding,
+        UserGroupBadge,
     )
-    return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding,
-            SeriesBadgeStanding, SeriesEditionStanding, ProfileJobXP, UserGroupBadge)
+    return (ProfileBadgeStanding, ProfileCareerStanding, ProfileEditionStanding, ProfileRarityStanding,
+            ProfileTrophyStanding, SeriesBadgeStanding, SeriesEditionStanding, ProfileJobXP,
+            UserGroupBadge)
 
 
 def _mirrored_fields(model):

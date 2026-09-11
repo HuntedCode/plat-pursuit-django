@@ -30,7 +30,7 @@ from gamelists.views import (AddConceptView, BrowseListsView, CreateListView,
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap,
@@ -65,6 +65,8 @@ from fundraiser.views import FundraiserView, DonationSuccessView, FundraiserAdmi
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", HomeView.as_view(), name="home"),
+    # The What's New archive. Public: the modal is the nudge, this is the record.
+    path("whats-new/", WhatsNewView.as_view(), name="whats_new"),
     # Legacy alias - keep old /dashboard/ links working
     path('dashboard/', RedirectView.as_view(pattern_name='home', permanent=True), name='dashboard'),
 

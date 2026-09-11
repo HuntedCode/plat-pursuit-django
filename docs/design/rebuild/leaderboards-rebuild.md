@@ -63,7 +63,7 @@ second home for them.
 
 | Surface | URL | Role |
 |---|---|---|
-| **Global Boards** (hub landing) | `/leaderboards/` | The three global boards, `.pp-switch` tabs |
+| **Global Boards** (hub landing) | `/leaderboards/` | FIVE global boards behind THREE `.pp-switch` chips; the three trophy boards group with a sub-toggle |
 | **Game Boards** | `/leaderboards/games/` | Thin directory → links to game detail's Ranks panel |
 | **Badge Boards** | `/leaderboards/badges/` | Thin directory → links to badge detail's new Ranks panel |
 | **Job Boards** | `/leaderboards/jobs/` | Thin directory → links to job detail's Ranks tab |
@@ -667,6 +667,51 @@ so it would have produced a board that looks migrated and still tiebreaks wrong.
   ends, so it lives inside `[data-lb-page]` and every swap hands the observer a detached node --
   `StickyReveal.init()` is idempotent and re-runnable for exactly this, and is called per mount. Putting
   the BAR inside too would tear it out from under a reader mid-scroll and kill its wired-once listeners.
+- **Never copy a figure off an element that is mid-animation.** The minibar's count proxied the board
+  card's Tally by reading that element's `textContent`, and `mount()` calls `boardEntrance` (which starts
+  the count-up) immediately BEFORE `syncMinibar`. `countUp`'s first write is the FROM value, so the text
+  at that instant is `0` — and the bar keeps it, because it is synced per mount and never again. Every
+  board's bar read "0 hunters" while the card beside it ticked to the real figure, which reads as an
+  unwired proxy rather than a mis-timed one. A proxy reads the SOURCE (`data-countup`, what the server
+  sent); rendered text is a frame, not a value. Applies to anything proxying a `.pp-tally`.
+- **The bar does NOT count up, and that is deliberate.** Making the proxy tick in sympathy with the card
+  was tried and reverted: `.pp-minibar` is `visibility: hidden` until StickyReveal pins it, and it is only
+  ever pinned once the board card has scrolled AWAY — the bar exists *because* the card is gone. The two
+  are never on screen together, so the animation ran behind a hidden element on the load path and on every
+  swap (`swap()` scrolls to top before re-mounting). It also put the only surviving-across-swaps animated
+  node on the page into `countUp`, which has no re-entrancy guard, so two quick swaps left two rAF loops
+  writing to one element. A proxy that is only ever read AFTER its source is gone should settle, not
+  perform. The other browse minibars all snap their counts for the same reason.
+- **A fourth board arrived in 2026-09: Shovelware Free, and it LEADS.** It ranks the same hunters as
+  Trophies by the same rule over a narrower population — platinums on games the detector has not flagged.
+  It is a board rather than a toggle on Trophies because that board ranks `Profile.total_plats` /
+  `total_trophies`, denormalized INT COLUMNS: excluding shovelware cannot be a filter over a column, only
+  a different number, so it needs its own materialized store (`ProfileTrophyStanding`, one nightly writer).
+  Two consequences worth keeping in mind. Its store is **empty until backfilled**, and since it is the
+  DEFAULT tab that is a blank landing page rather than one stale figure — see the deploy checklist. And
+  every retired `?tab=` still resolves to the board it MEANT rather than to "the default", or taking the
+  first slot would have silently redirected every old Trophies bookmark onto different numbers.
+- **A FIFTH board, Rarity Score, and the strip regrouped around it (2026-09).** Five flat chips became
+  THREE: the three trophy boards ask one question and differ only in what counts, so they group behind one
+  chip with a sub-toggle on its own row (Career's Contracts panel is the pattern). `?tab=` values did not
+  change -- the sub-toggle is a second row of links to the same URLs, so bookmarks and `LEGACY_TABS` kept
+  working. Grouped parents carry `data-board-group`, sub-chips and lone chips carry `data-board`, which is
+  load-bearing: exactly one `[data-board].is-active` must exist whichever group is open, because that is
+  what `activeTab()` reads. A grouped chip carries NO rank -- one chip is one board is one number, and a
+  group is not a board.
+- **Rarity Score's four traps, in one place** (the long form is in
+  [leaderboard-system.md](../../architecture/leaderboard-system.md)): the two rate fields carry DIFFERENT
+  UNITS (`trophy_earn_rate` is a percentage, `earn_rate` a fraction -- mixing them scales scores by 100
+  silently); a rate of `0.0` means UNKNOWN and sorts FIRST under a rarest-first ordering, so leaving it in
+  fills the scoring set with 0-point rows while `scored_count` still passes the membership gate; DLC is
+  excluded outright because PSN divides its earners by base-game owners and no data of ours can correct
+  it; and the recompute AGGREGATES BY RATE rather than sorting, because a top-N sort is 250,000 rows per
+  whale and this codebase already dropped one query of that shape on cost.
+- **Ties are safe only while nothing row-identified is stored.** Rarity points are strictly decreasing in
+  rate only above PSN's 0.1% floor, so the top-N boundary lands inside a tie bucket for essentially every
+  qualifying hunter -- "the rarest 1,000" is not a well-defined set of ROWS. It does not matter because
+  every figure the store holds is a function of the rate alone. It stops not mattering the moment
+  something persists a row identity taken from that slice.
 - **Two XP economies, one word** was the original sin here. After the rename, resist any "total XP" that
   sums them — the architecture seals them apart on purpose.
 

@@ -189,7 +189,12 @@ def post_webhook_sync(payload, webhook_url, *, label="Webhook", timeout=10):
     try:
         response = requests.post(webhook_url, json=payload, proxies=PROXIES, timeout=timeout)
     except requests.RequestException as e:
-        logger.exception("%s direct POST raised", label)
+        # NOT `logger.exception`. The raised message below is redacted, but a requests exception's own
+        # message embeds the full URL ("Max retries exceeded with url: /api/webhooks/<id>/<token>"),
+        # so attaching the traceback put the webhook token in the log stream on every transport
+        # failure -- the same secret the line below is careful not to print. The type is the part
+        # that helps; the URL is the part that must not travel.
+        logger.error("%s direct POST raised: %s (URL redacted)", label, type(e).__name__)
         raise WebhookError(f"{label} POST failed: {type(e).__name__} (see logs; URL redacted)")
     if response.status_code >= 400:
         raise WebhookError(f"{label} returned HTTP {response.status_code}: {response.text[:500]}")

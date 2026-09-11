@@ -834,17 +834,65 @@ class OverallBadgeLeaderboardsView(TemplateView):
     template_name = 'trophies/overall_badge_leaderboards.html'
     paginate_by = board_helpers.PAGE_SIZE
 
-    # (key, label). Order is the tab order; Badge Trophies leads because it has the most entrants.
+    # (key, label). Order is the tab order, and the FIRST is the default a bare `/leaderboards/` lands on.
+    #
+    # Shovelware Free leads (2026-09). Trophies led before it, on the grounds that it has the most
+    # entrants -- which is still true, since this board excludes anyone whose whole library is flagged.
+    # Entrant count stopped being the tie-breaker: the two boards rank the same hunters by the same rule
+    # over different populations, and this one is the more honest answer to "who has done the most", which
+    # is the question a first-time visitor is actually asking. Trophies keeps its tab and its bookmarks.
     BOARDS = (
-        ('trophies', 'Trophies'),
+        ('clean', 'Shovelware Free'),
+        ('rarity', 'Rarity Score'),
+        ('trophies', 'All Trophies'),
         ('points', 'Badge Points'),
         ('career', 'Career XP'),
     )
+    #: The board a bare `/leaderboards/`, an unknown `?tab=`, or a retired one resolves to. Derived from
+    #: BOARDS rather than repeated, so reordering the strip cannot leave the default naming a board that
+    #: is no longer first -- which is two edits to keep in step, and the kind that gets made once.
+    DEFAULT_BOARD = BOARDS[0][0]
     BOARD_KEYS = {k for k, _ in BOARDS}
+
+    #: THE TAB STRIP: (label, member board keys). Three chips, not five.
+    #:
+    #: The three trophy boards ask ONE question -- who has hunted the most -- and differ only in what
+    #: counts: everything, everything minus shovelware, or the rarest thousand weighted by rarity. Badge
+    #: Points and Career XP are separate economies. A flat strip of five implied all of them were peers
+    #: and, at 375px, ran out of room saying so.
+    #:
+    #: A group of ONE renders as a plain chip, so nothing about the other two boards changes. The pattern
+    #: is Career's Contracts panel, which nests a Board|History sub-toggle in the same `.pp-switch`
+    #: treatment rather than inventing a second visual language for the second level.
+    #:
+    #: `?tab=` VALUES ARE UNCHANGED. The sub-toggle is a second row of links to the same URLs, so every
+    #: bookmark, every `LEGACY_TABS` mapping and the rows endpoint keep working untouched. A nested
+    #: `?tab=trophies&view=pp` would have been a URL migration bought nothing.
+    BOARD_GROUPS = (
+        ('Trophies', ('clean', 'rarity', 'trophies')),
+        ('Badge Points', ('points',)),
+        ('Career XP', ('career',)),
+    )
     # Only Badge Points slices by edition. An edition is a PlatformGroup, i.e. a BADGE concept; the
     # Trophies board counts trophies across every game and Career XP is the jobs economy, so neither has
     # editions to slice. A control that renders but changes nothing is worse than one that is absent.
     EDITION_BOARDS = frozenset({'points'})
+
+    #: The boards whose store is written ONLY by `nightly`, and the line that says so.
+    #:
+    #: Every other board moves when a sync does: All Trophies reads the `total_trophies_raw` counter
+    #: sync maintains, Badge Points reads standings `recompute_standing` rewrites per sync, Career XP
+    #: moves on the claim itself. These two are materialized by a nightly sweep and by nothing else, so
+    #: a hunter who syncs, earns a platinum and finds their rank unmoved is looking at correct behaviour
+    #: with nothing to tell it apart from a broken board. The note is what makes that distinguishable.
+    #:
+    #: A set keyed on the board rather than a flag per board because it is one fact about one schedule,
+    #: and five copies of a sentence is how four of them come to disagree with `nightly.STEPS`.
+    NIGHTLY_BOARDS = frozenset({'clean', 'rarity'})
+    #: Says the two things and stops. An earlier draft spelled out the consequence ("a sync today lands on
+    #: tomorrow's board"), which is the reader's own conclusion to draw and reads like the page explaining
+    #: itself. Told it is not live and updated nightly, they get there without being walked.
+    NIGHTLY_NOTE = 'Not a live board. Updates once a night.'
     # `xp` was the old key for the Badge Points board; `country` was a TAB before country became a filter;
     # `progress` was this board's key while it was called Progress, a name that described the store rather
     # than what it ranks. Bookmarks carrying any of them still land where they meant to.
@@ -854,12 +902,23 @@ class OverallBadgeLeaderboardsView(TemplateView):
     # in 2026-08, and the placeholder read the RETIRED tier-era `Badge` model, which has had no writer
     # since cutover 5b -- so it rendered a frozen catalogue beside live standing counts. It maps to the
     # default board rather than 404ing: a stale bookmark should land on a board, not on an error.
+    #
+    # They resolve to `trophies` EXPLICITLY, not to the default. Every one of them named the board now
+    # called Trophies, and a bookmark should land where it meant rather than follow whichever board
+    # happens to lead the strip today -- which is what would have happened when Shovelware Free took the
+    # first slot in 2026-09. `series` is the exception and is deliberately left on `trophies` too: it was
+    # a directory placeholder rather than a board, so it has no board it meant, and moving it silently
+    # would be the only way anyone noticed it still existed.
     LEGACY_TABS = {'xp': 'points', 'country': 'points', 'progress': 'trophies', 'series': 'trophies'}
 
     #: (primary_label, secondary_label) per board. ONE definition: the column header, the first window and
     #: every window the rows endpoint serves all read it, so the labels above a column and the labels
     #: inside its rows cannot drift -- which is the failure a separate rows endpoint invites.
     FIGURES = {
+        'clean': ('platinums', 'trophies'),
+        # The supporting figure is a PERCENTAGE, and the shared row partial has no suffix slot -- it
+        # renders `{{ value }} {{ label }}`. So the label carries the unit rather than the number.
+        'rarity': ('points', 'avg rarity %'),
         'trophies': ('platinums', 'trophies'),
         'points': ('points', 'badges'),
         'career': ('XP', 'level'),
@@ -872,17 +931,28 @@ class OverallBadgeLeaderboardsView(TemplateView):
     #: name the population, name the ordering, and read like somebody wrote it. A reader who has never met
     #: "Badge Points" learns nothing from a lit chip, and this line is the only place on the page that
     #: explains the board they are looking at.
+    #: THE THREE TROPHY BOARDS MUST READ AS DIFFERENT. They sit behind one chip now, a click apart, and
+    #: they rank the same hunters -- so each line's job is to say what THIS board counts that its
+    #: siblings do not. A reader switching between them needs the difference every time, not once.
+    #:
+    #: Each stands alone. `clean` is the default, so it cannot lean on "the same ranking as..." for its
+    #: meaning; `trophies` names shovelware explicitly because being the one that INCLUDES it is the only
+    #: thing distinguishing it.
     MEANINGS = {
-        'trophies': 'Every hunter on the site, ranked by platinums. Total trophies settles a tie.',
+        'clean': 'Platinums earned on games that are not shovelware. Total trophies settles a tie.',
+        'rarity': ('Your 1,000 rarest base-game trophies. Rarer scores higher: a 1% trophy is worth 100, '
+               'a 10% trophy 10.'),
+        'trophies': ('Every game counts, shovelware included. Ranked by platinums, with total trophies '
+                     'settling a tie.'),
         'points': 'Badge points, earned a stage at a time. Every edition counts toward one total.',
         'career': 'Career XP banked from contracts, across all 25 jobs.',
     }
 
     @classmethod
     def active_tab(cls, request):
-        raw = request.GET.get('tab', 'trophies')
+        raw = request.GET.get('tab', cls.DEFAULT_BOARD)
         raw = cls.LEGACY_TABS.get(raw, raw)
-        return raw if raw in cls.BOARD_KEYS else 'trophies'
+        return raw if raw in cls.BOARD_KEYS else cls.DEFAULT_BOARD
 
     def _active_tab(self):
         return self.active_tab(self.request)
@@ -925,19 +995,36 @@ class OverallBadgeLeaderboardsView(TemplateView):
             params['edition'] = edition
         return f'?{urlencode(params)}'
 
-    def _board_links(self, country, edition):
-        """[{key, label, href}] for the tab strip and the standing chips.
+    def _board_groups(self, country, edition, standing=None):
+        """The strip as GROUPS, each carrying its members and their ranks.
 
-        Built here rather than assembled in the template because the rule for what each link carries is
-        PER TARGET, not per page: country follows you everywhere, edition follows you only to the other
-        badge board. A single shared querystring tail was the first attempt and it silently handed Career a
-        filter it ignores -- so the link went one place and the rank shown beside it was measured somewhere
-        else.
+        A grouped chip shows every member's rank at once (`#12 · #45 · #7`), because the sub-toggle is
+        only visible while that group is open -- without it, a reader on Badge Points could no longer see
+        their trophy standings at all, which the flat five-chip strip did show. Members a hunter is not on
+        render a dash, the same courtesy `_with_ranks` already gave.
         """
-        return [
-            {'key': key, 'label': label, 'href': self._href(key, country, edition)}
-            for key, label in self.BOARDS
-        ]
+        labels = dict(self.BOARDS)
+        active = self._active_tab()
+        groups = []
+        for label, members in self.BOARD_GROUPS:
+            subs = [{
+                'key': key,
+                'label': labels[key],
+                'href': self._href(key, country, edition),
+                'rank': (standing or {}).get(key),
+                'is_active': key == active,
+            } for key in members]
+            groups.append({
+                'label': label,
+                'members': subs,
+                # A group of one is a plain chip: it carries `data-board` itself and renders no sub-strip.
+                'grouped': len(subs) > 1,
+                # The parent opens on its FIRST member, which is also the board `DEFAULT_BOARD` names.
+                'key': subs[0]['key'],
+                'href': subs[0]['href'],
+                'is_active': any(s['is_active'] for s in subs),
+            })
+        return groups
 
     @staticmethod
     def _with_ranks(links, standing):
@@ -966,7 +1053,13 @@ class OverallBadgeLeaderboardsView(TemplateView):
         edition = self._edition(tab, editions)
 
         context.update({
-            'boards': self._board_links(country, edition),
+            # Rankless by default; the authenticated branch below rebuilds it with the viewer's standing.
+            'board_groups': self._board_groups(country, edition),
+            # The canonical board order, for the swap's slide direction. Read from HERE rather than from
+            # the rendered chips: with grouping, only the ACTIVE group's sub-strip is in the DOM, so a
+            # DOM-order read would return an incomplete list and leave the direction undefined for any
+            # board that happens not to be showing.
+            'board_order': ','.join(k for k, _ in self.BOARDS),
             'active_tab': tab,
             'selected_country': country,
             'countries': countries,
@@ -1018,6 +1111,9 @@ class OverallBadgeLeaderboardsView(TemplateView):
             context['secondary_label'] = secondary_label
             context['board_meaning'] = self.MEANINGS[tab]
             context['board_label'] = dict(self.BOARDS)[tab]
+            # Empty for the three live boards, and the board card renders nothing for an empty value --
+            # so the note appears only where it is true rather than as a caption every board wears.
+            context['board_freshness'] = self.NIGHTLY_NOTE if tab in self.NIGHTLY_BOARDS else ''
             # "N hunters HERE" rather than "N hunters" when a filter is narrowing the board -- the figure
             # is a claim about a population, and under a slice it is a claim about a smaller one.
             context['slice_applied'] = bool(country or edition)
@@ -1029,6 +1125,8 @@ class OverallBadgeLeaderboardsView(TemplateView):
             cc = country or None
             ed = edition or None
             standing = {
+                'clean': lb.clean_rank(profile.id, country=cc),
+                'rarity': lb.rarity_rank(profile.id, country=cc),
                 'trophies': lb.trophy_rank(profile.id, country=cc),
                 'points': lb.xp_rank(profile.id, country=cc, edition=ed),
                 'career': lb.career_xp_rank(profile.id, country=cc),
@@ -1042,8 +1140,10 @@ class OverallBadgeLeaderboardsView(TemplateView):
             # what the block's own comment says it is avoiding. That is the default state until the
             # standings are backfilled.
             context['my_standing'] = standing if any(v is not None for v in standing.values()) else None
-            # The tab strip carries the ranks now, so it needs them whether or not any exist.
-            context['boards'] = self._with_ranks(context['boards'], standing)
+            # The strip carries the ranks, so it is rebuilt once the standing is known. Built ONCE, here:
+            # an earlier version also built a rankless copy above and threw it away on every logged-in
+            # render.
+            context['board_groups'] = self._board_groups(country, edition, standing)
         return context
 
     def _build_board(self, tab, country, edition=''):
@@ -1071,6 +1171,17 @@ class OverallBadgeLeaderboardsView(TemplateView):
     @staticmethod
     def _store_for(tab, country, edition):
         cc = country or None
+        if tab == 'clean':
+            # Reads a standing store like career/points, so it points AT a profile -- unlike the Trophies
+            # board below, whose store IS Profile.
+            return (lb._slice(lb.clean_store().filter(clean_trophies__gt=0), cc),
+                    lb.CLEAN_KEYS, 'profile_id', 'profile__')
+        if tab == 'rarity':
+            # The gate is a FULL TOP_N, not `> 0` -- and it must match `rarity_rows` exactly, or the search
+            # would offer a hunter the wall does not contain.
+            from trophies.services.rarity_score import TOP_N
+            return (lb._slice(lb.rarity_store().filter(scored_count__gte=TOP_N), cc),
+                    lb.RARITY_KEYS, 'profile_id', 'profile__')
         if tab == 'trophies':
             # The Trophies board's store IS Profile, so its id column is `id` and its name columns are
             # unprefixed -- the other two point AT a profile.
@@ -1100,7 +1211,11 @@ class OverallBadgeLeaderboardsView(TemplateView):
         # is a different hunter from 9 out of 900, and 4,200 points across 30 badges from 4,200 across 6.
         primary_label, secondary_label = OverallBadgeLeaderboardsView.FIGURES[tab]
 
-        if tab == 'trophies':
+        if tab == 'clean':
+            rows = lb.clean_rows(limit=limit, offset=offset, country=cc)
+        elif tab == 'rarity':
+            rows = lb.rarity_rows(limit=limit, offset=offset, country=cc)
+        elif tab == 'trophies':
             rows = lb.trophy_rows(limit=limit, offset=offset, country=cc)
         elif tab == 'points':
             rows = lb.xp_rows(limit=limit, offset=offset, country=cc, edition=ed)

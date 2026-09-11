@@ -259,6 +259,35 @@ one.
 
 **Files**: `plat_pursuit/context_processors.py`, `trophies/services/moderation_service.py`
 
+### My Pursuit nav markers (Context Processor)
+
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `career:claimable:<profile_id>` | 300s | How many contracts this hunter can claim -- the nav's count badge. |
+| `contracts:latest_announced` | 900s | The newest `announced_at` on the board, SITE-WIDE. One value for every visitor. |
+
+Both render on every page of the site, which is why they are cached at all -- and why the second one
+is deliberately not per-user: "is anything new to you" is a comparison between a marker already on
+`request.user` and that global maximum, so the per-hunter half costs nothing.
+
+Unlike the moderation count above, these ARE cached, and the difference is the audience: every
+signed-in hunter on every page, against about ten moderator accounts.
+
+**Invalidated at every writer**, so the TTLs only bound a MISSED invalidation:
+
+| Key | Cleared by |
+|---|---|
+| `career:claimable:<id>` | `contract_service.claim` (spends a reward, **on commit** -- clearing inside the transaction lets a concurrent render re-cache the pre-claim count) and `mark_contract_reached` (creates one) |
+| `contracts:latest_announced` | `contract_announcer.mark_announced` |
+
+The second of those was missing at first, and it is the worse half to lose: the hunter is on the site
+WHILE the sync runs, so every page render re-arms the key with a fresh 300s at a zero count moments
+before the reward lands. The badge would then be empty for close to the full TTL at exactly the
+moment it had something to say -- while `/career/`'s own rail, uncached, already showed the reward. An empty board is cached as an empty string, because `cache.get` cannot tell a
+stored `None` from a miss and would re-query on every render.
+
+**Files**: `plat_pursuit/context_processors.py`, `trophies/services/career_attention.py`
+
 ### Fundraiser
 
 | Key Pattern | TTL | Purpose |

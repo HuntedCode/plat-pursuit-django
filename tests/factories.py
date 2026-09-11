@@ -79,6 +79,17 @@ class ProfileFactory(factory.django.DjangoModelFactory):
     user = factory.SubFactory(UserFactory)
     psn_username = factory.Sequence(lambda n: f"hunter{n:04d}")
     is_linked = True
+    #: Declared so the mirror below can READ it. `LazyAttribute` only sees declared attributes, so
+    #: without this the factory raised whenever a caller did NOT pass `total_trophies`.
+    total_trophies = 0
+    #: MIRRORS whatever the caller passed for `total_trophies`, unless they set it themselves.
+    #:
+    #: The two differ on a real profile only for a hunter who hides games -- `total_trophies` honours
+    #: `hide_hiddens`, this does not -- so equal is the right default for a fixture that is not about
+    #: hiding. It matters because the Trophies board RANKS on this one: without the mirror, every
+    #: `ProfileFactory(total_trophies=N)` in the suite produced a hunter no board would show, and the
+    #: failure reads as "the board is broken" rather than "the fixture seeded the wrong column".
+    total_trophies_raw = factory.LazyAttribute(lambda o: o.total_trophies)
 
 
 class ConceptFactory(factory.django.DjangoModelFactory):

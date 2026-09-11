@@ -19,8 +19,12 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
     hub_subnav context processor; marked by a single primary underline. {% endcomment %}
     <div class="pp-nav__hubs hidden lg:flex">
         {% if user.is_authenticated %}
-        <a href="{% url 'career' %}" class="pp-navhub{% if hub_section == 'my_pursuit' %} is-active{% endif %}"{% if hub_section == 'my_pursuit' %} aria-current="page"{% endif %}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>My Pursuit</a>
+        <a href="{% url 'career' %}" class="pp-navhub{% if hub_section == 'my_pursuit' %} is-active{% endif %}"{% if hub_section == 'my_pursuit' %} aria-current="page"{% endif %}{% if career_claimable or career_new_contracts %} aria-label="My Pursuit{% if career_claimable %}, {{ career_claimable }} contract{{ career_claimable|pluralize }} ready to claim{% endif %}{% if career_new_contracts %}, new contracts on the board{% endif %}"{% endif %}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>My Pursuit{% comment %}
+            A COUNT for work that is theirs and waiting, a WORD for news. Both show at once above
+            1280px; below that CSS keeps only the count, because the row has no width to spare.
+            The label carries the same thing in words: the markers are aria-hidden, so a screen
+            reader hears one sentence rather than a number read out of context.{% endcomment %}{% if career_claimable %}<span class="pp-navhub__n" aria-hidden="true">{% if career_claimable > 9 %}9+{% else %}{{ career_claimable }}{% endif %}</span>{% endif %}{% if career_new_contracts %}<span class="pp-navhub__new" aria-hidden="true">New</span>{% endif %}</a>
         {% endif %}
         <a href="{% url 'games_list' %}" class="pp-navhub{% if hub_section == 'browse' %} is-active{% endif %}"{% if hub_section == 'browse' %} aria-current="page"{% endif %}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Browse</a>
@@ -97,9 +101,9 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
         {# ── Status-aware avatar + unified panel (absorbs the hotbar) ── #}
         {% if user.is_authenticated %}
         <div class="dropdown dropdown-end" id="nav-account">
-            <div tabindex="0" role="button" class="pp-av"{% if navsync %} data-nav-avatar data-sync="{{ navsync.sync_status }}"{% endif %} aria-label="Account{% if navsync %} and sync status{% endif %}{% if mod_open_count %}, {{ mod_open_count }} report{{ mod_open_count|pluralize }} waiting to be moderated{% endif %}" aria-haspopup="true" aria-expanded="false">
+            <div tabindex="0" role="button" class="pp-av"{% if navsync %} data-nav-avatar data-sync="{{ navsync.sync_status }}"{% endif %} aria-label="Account{% if navsync %} and sync status{% endif %}{% if mod_open_count %}, {{ mod_open_count }} report{{ mod_open_count|pluralize }} waiting to be moderated{% endif %}{% if whats_new_unread %}, something new to read{% endif %}" aria-haspopup="true" aria-expanded="false">
                 <span class="pp-av__img">
-                    {% if user.profile %}<img alt="" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
+                    {% if user.profile.avatar_url %}<img alt="" src="{{ user.profile.avatar_url }}" loading="lazy" decoding="async" />
                     {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{% endif %}
                 </span>
                 {% if navsync %}<span class="pp-av__dot"></span>{% endif %}
@@ -109,6 +113,7 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                 question, and it is aria-hidden because the avatar's own label already says it in
                 words.{% endcomment %}
                 {% if mod_open_count %}<span class="pp-av__queue" aria-hidden="true">{% if mod_open_count > 9 %}9+{% else %}{{ mod_open_count }}{% endif %}</span>{% endif %}
+                {% if whats_new_unread and not mod_open_count %}<span class="pp-av__new" aria-hidden="true">New</span>{% endif %}
             </div>
             <div tabindex="0" class="dropdown-content pp-avpanel mt-2 z-[100] max-md:fixed max-md:top-16 max-md:right-2" id="nav-sync"
                  {% if navsync %}data-url-sync="{% url 'profile_sync_status' %}" data-url-trigger="{% url 'trigger_sync' %}" data-status="{{ navsync.sync_status }}" data-seconds="{{ navsync.seconds_to_next_sync|default:0 }}"{% endif %}>
@@ -152,6 +157,15 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                         <a href="{% url 'link_psn' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Link PSN</a>
                     {% endif %}
                     <a href="{% url 'settings' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17 2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V15z"/></svg>Settings</a>
+                    {% comment %} What's New earns its place by the same test the Mod Center passes and the
+                    admin dashboard does not: it has something to say without being visited. It is also the
+                    only recall this modal has -- render == armed, so a dismissed notice leaves NO markup on
+                    the page, and without a door here a hunter who closed it by reflex has no way back to
+                    what it said. Deliberately carries no unread marker: while an entry is unseen the modal
+                    itself fires, so a badge here would only ever appear next to a modal already on screen.
+                    Same glyph as the modal and the page, so the three read as one thing.
+                    {% endcomment %}
+                    <a href="{% url 'whats_new' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>What's New{% if whats_new_unread %} <span class="pp-avmenu__new" aria-hidden="true">New</span>{% endif %}</a>
                     {% comment %} The 2026-08 strip-down took staff links OUT of this menu: staff
                     pages are bookmark-reached (fundraiser admin cross-links its siblings), and the
                     menu reads the same for every signed-in hunter. The Mod Center is the one

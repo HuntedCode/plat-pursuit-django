@@ -123,7 +123,14 @@
     reopenable from the edhint below). Inside the career gate ON PURPOSE: the degraded
     no-career fallback renders no edhint, so an auto-open there would burn the one-shot
     flag on a broken page with no way back in. {% endcomment %}
+    {% comment %} The gate goes FIRST and unconditionally: it must be armed synchronously,
+    before this page's own scripts ask whether to wait, and it is the modals below that report
+    back. It reads the same two flags they are gated on, so an armed gate with nothing to
+    settle it is not expressible. Only ONE of the two ever renders -- the explainer wins (see
+    career_views.py) -- so the gate is never settled by two different modals. {% endcomment %}
+    {% include 'trophies/partials/career/_career_modal_gate.html' %}
     {% include 'trophies/partials/career/_career_explainer.html' %}
+    {% if show_new_contracts %}{% include 'trophies/partials/career/_new_contracts.html' %}{% endif %}
 
     {% comment %} Career summary card (the "Career" heading + aggregate stats) -- the accented header for
     this section. Stacked chrome per the site-wide rule; the tabs + panels below flow FREE (not carded). {% endcomment %}
@@ -941,7 +948,7 @@ function ppCountUp(el, dur) {
         entries.forEach(function (e) { if (e.isIntersecting) { run(e.target); io.unobserve(e.target); } });
     }, { threshold: 0.4 });
     // Gated on the first-visit modal: numbers hold at 0 behind its scrim and tick on close.
-    (window.ppAfterCareerHowto || function (f) { f(); })(function () {
+    (window.ppAfterCareerModal || function (f) { f(); })(function () {
         els.forEach(function (el) { io.observe(el); });
     });
 })();
@@ -971,7 +978,7 @@ function ppCountUp(el, dur) {
     var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (e) { if (e.isIntersecting) { run(); io.unobserve(e.target); } });
     }, { threshold: 0.4 });
-    (window.ppAfterCareerHowto || function (f) { f(); })(function () { io.observe(el); });
+    (window.ppAfterCareerModal || function (f) { f(); })(function () { io.observe(el); });
 })();
 
 // Premium: hover a legend row (or arc) -> spotlight its discipline arc, dim the rest, pause the spin.
@@ -1031,7 +1038,7 @@ function ppCountUp(el, dur) {
             }, i * 90);
         });
     }, { threshold: 0.2 });
-    (window.ppAfterCareerHowto || function (f) { f(); })(function () {
+    (window.ppAfterCareerModal || function (f) { f(); })(function () {
         bands.forEach(function (b) { io.observe(b); });
     });
 })();
@@ -1214,8 +1221,14 @@ function ppCountUp(el, dur) {
     var advToggle = document.getElementById('rp-adv-toggle');
     var advPanel = document.getElementById('rp-advanced');
     var advBadge = document.getElementById('rp-adv-count');
-    var discs = document.querySelector('.rp-discs');
-    var plats = document.querySelector('.rp-plats');
+    // SCOPED TO THE ADVANCED PANEL, and it has to be. A bare `.rp-discs` is whichever one comes
+    // FIRST in the document, and the new-contracts modal (included at the top of this page, long
+    // before the board) now renders one too. That made `discs` point at the MODAL: the board's
+    // selection handler bound to the wrong element, the board's own popovers got no controller at
+    // all, and the modal's popovers got two -- so a click opened one and the second controller,
+    // seeing it already open, closed it again inside the same click. They looked dead.
+    var discs = advPanel ? advPanel.querySelector('.rp-discs') : null;
+    var plats = advPanel ? advPanel.querySelector('.rp-plats') : null;
     var tokensRow = document.getElementById('rp-tokens-row');
     var tokensBox = document.getElementById('rp-tokens');
     var relaxBtn = document.getElementById('rp-relax');

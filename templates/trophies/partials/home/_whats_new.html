@@ -1,0 +1,102 @@
+{% comment %} WHAT'S NEW -- the newest entry a hunter has not dismissed, on the Home lobby.
+
+Server-gated entirely (`show_whats_new` in core/views.py: an entry exists, its id is not the one stored
+in ui_flags, and the 1.0 greeting is not also due). Render == armed, like the launch greeting: a hunter
+who has dismissed this gets no markup at all.
+
+NEW ACCOUNTS ARE INCLUDED. An earlier cut also skipped anyone who joined after the entry shipped, and
+that was reversed deliberately -- what a new hunter takes from the notice is that the site is being
+worked on, and the date on the entry is what keeps "new" honest. See core/whats_new.is_due.
+
+PRECEDENCE lives in the view, not here. Two modals on one visit is two scrims back to back, so the 1.0
+greeting -- which fires once in an account's life -- wins, and this waits for the next visit. Nothing is
+lost: the entry stays undismissed, so it is still due.
+
+It does not repeat the entry's whole history. The modal is the newest thing only; /whats-new/ is where
+every entry lives, and the footer link is what makes this a notice rather than the only copy.
+
+Behaviour comes from PlatPursuit.DetailModal (utils.js) -- open, Escape, focus trap, the armed-once flag
+write, the device fallback. What stays here is what is genuinely this modal's: the markup, the
+ID-SCOPED is-closing rule, and the dismissal call. Wiring waits for DOMContentLoaded because this script
+runs at the top of content and utils.js is end-of-body; the page's motion gate is armed separately and
+synchronously by _home_modal_gate.html, so nothing is waiting on this script to run.
+{% endcomment %}
+<div class="pp-detail-modal pp-howto" id="whats-new" data-auto hidden>
+    <div class="pp-detail-modal__scrim" data-wn-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog" role="dialog" aria-modal="true" aria-labelledby="whats-new-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-wn-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+            {% comment %} The date sits with the eyebrow, not under the title, so the first line reads
+            "What's new / September 9" as one statement. It is what makes "new" a claim a reader can
+            check rather than one they have to take on trust -- and it is the reason a hunter who joined
+            last week is shown this at all: they can see for themselves when it landed. {% endcomment %}
+            <p class="wn__eyebrow">
+                What's new
+                <time class="wn__date" datetime="{{ whats_new.published|date:'Y-m-d' }}">{{ whats_new.published|date:'F j, Y' }}</time>
+            </p>
+            <h2 class="pp-howto__title" id="whats-new-title">
+                <svg class="pp-howto__title-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                {{ whats_new.title }}
+            </h2>
+
+            <div class="cxp__stack">
+                {% for label, copy in whats_new.beats %}
+                    <div class="cxp__beat">
+                        <span class="cxp__num" aria-hidden="true">{{ forloop.counter }}</span>
+                        <div>
+                            <div class="cxp__label">{{ label }}</div>
+                            <p class="cxp__copy">{{ copy }}</p>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% comment %} The howto footer, unchanged from the other three: "Got it" is the button and
+            the rest are quiet links. Every one of them dismisses -- a reader who clicked through to the
+            feature has been told about it, and finding the same notice waiting on their next visit reads
+            as the dismissal having failed. {% endcomment %}
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-wn-close>Got it</button>
+                {% if whats_new.safe_link_url %}
+                    <a class="pp-howto__more" href="{{ whats_new.safe_link_url }}" data-wn-close>{{ whats_new.link_label }} &rarr;</a>
+                {% endif %}
+                <a class="pp-howto__more" href="{% url 'whats_new' %}" data-wn-close>Everything new &rarr;</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% comment %} The is-closing exit is NOT here: it lives with the other three pp-howto clones in
+series-list.css, which is also where the reason it must be ID-scoped is written down. {% endcomment %}
+
+<script>
+(function () {
+    'use strict';
+    var el = document.getElementById('whats-new');
+    // The gate must be released even if this modal is missing or never opens; _home_modal_gate.html
+    // armed it from the server's decision and only this side knows what actually happened.
+    var settle = function () { if (window.ppSettleHomeModal) { window.ppSettleHomeModal(); } };
+
+    if (!el) { settle(); return; }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
+        PlatPursuit.DetailModal(el, {
+            closeSelector: '[data-wn-close]',
+            autoOpenDelay: 450,
+            seenKey: 'pp-whats-new-seen-{{ whats_new.id|escapejs }}',
+            onSettled: settle,
+            // Cancels the gate's "nothing ever appeared" deadline. Without this the page
+            // releases its motion at 4s while the reader is still reading.
+            onOpened: function () { if (window.ppHoldHomeModal) { window.ppHoldHomeModal(); } },
+            onDismiss: function () {
+                if (!(window.PlatPursuit && PlatPursuit.API)) { return Promise.reject(); }
+                // Stores the ENTRY ID, not a boolean: the next entry has a different id and is due
+                // again. No success toast -- being told about a feature is not a task you completed.
+                return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+                    setting: 'whats_new_seen', value: '{{ whats_new.id|escapejs }}'
+                });
+            }
+        });
+    });
+})();
+</script>

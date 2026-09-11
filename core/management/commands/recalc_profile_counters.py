@@ -1,4 +1,4 @@
-"""Site-wide reconcile of Profile.total_<type> counters.
+"""Site-wide reconcile of Profile.total_<type> counters, and the unfiltered grand total.
 
 Runs daily (see docs/guides/cron-jobs.md) as a drift-correction safety net for
 the incremental signals that maintain Profile.total_bronzes / total_silvers /
@@ -6,6 +6,10 @@ total_golds / total_plats. Signals catch the common case (sync-time and admin
 EarnedTrophy save / delete events). This command recomputes from scratch in
 case any updates slipped past signals (bulk_update / queryset.update / signal
 handler exceptions), so users never see drifted-up or drifted-down values.
+
+`total_trophies_raw` is reconciled here too, as the sum of the four. It is the Trophies board's TIEBREAK,
+so drift in it silently reorders a public board -- which makes this the safety net under a leaderboard,
+not only under a profile figure.
 
 Note: profile.total_trophies / total_unearned / avg_progress are intentionally
 NOT recomputed here. Those are filter-respecting (hide_hiddens / hide_zeros)
@@ -114,7 +118,8 @@ class Command(BaseCommand):
         # Pull current stored values to detect changes.
         profiles = list(
             Profile.objects.filter(id__in=profile_ids).only(
-                'id', 'total_bronzes', 'total_silvers', 'total_golds', 'total_plats'
+                'id', 'total_bronzes', 'total_silvers', 'total_golds', 'total_plats',
+                'total_trophies_raw',
             )
         )
 
@@ -126,22 +131,29 @@ class Command(BaseCommand):
             new_gold = row.get('gold', 0)
             new_plat = row.get('platinum', 0)
 
+            # The unfiltered grand total is the SUM of the four, by definition -- every earned trophy is
+            # exactly one type. Derived here rather than counted separately so the five figures cannot
+            # disagree after a reconcile, which is the one moment they are all rewritten at once.
+            new_raw = new_bronze + new_silver + new_gold + new_plat
+
             if (
                 profile.total_bronzes != new_bronze
                 or profile.total_silvers != new_silver
                 or profile.total_golds != new_gold
                 or profile.total_plats != new_plat
+                or profile.total_trophies_raw != new_raw
             ):
                 profile.total_bronzes = new_bronze
                 profile.total_silvers = new_silver
                 profile.total_golds = new_gold
                 profile.total_plats = new_plat
+                profile.total_trophies_raw = new_raw
                 to_update.append(profile)
 
         if to_update and not dry_run:
             Profile.objects.bulk_update(
                 to_update,
-                ['total_bronzes', 'total_silvers', 'total_golds', 'total_plats'],
+                ['total_bronzes', 'total_silvers', 'total_golds', 'total_plats', 'total_trophies_raw'],
             )
 
         return len(to_update)

@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+
+{% block title %}What's New{% endblock %}
+{% block meta_description %}Everything we have added to Platinum Pursuit, newest first.{% endblock %}
+
+{% comment %} THE ARCHIVE the What's New modal links out to. Public and signed-out on purpose: the modal
+is a nudge for hunters already here, and this is the record of what the site has been doing, which is a
+fair question for somebody deciding whether to sign up.
+
+ZERO QUERIES. `entries` is a module-level tuple in core/whats_new.py, so this page touches no database
+and needs no caching. Do not grow it a per-user branch: the moment it reads a profile it stops being the
+cheapest page on the site for no gain the reader can see.
+
+STRUCTURE: stacked chrome (the accented page-header card), then the entries flowing FREE below it. One
+card per entry, because each is a discrete section of prose rather than page-filling content -- the
+"free content" rule is about grids and walls, not about leaving paragraphs bare on the page background.
+{% endcomment %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5 pp-head-cascade">
+            <div class="flex items-center gap-2 flex-wrap">
+                <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">What's New</h1>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                Everything we have added, newest first.
+            </p>
+        </div>
+    </div>
+
+    {% comment %} THE SPINE. The entries are a dated sequence, so the list is drawn as one: a connector
+    running down the left with a node per entry.
+
+    A calendar was the other candidate and would have lied. Entries are sparse and irregular -- a month
+    grid is thirty cells with two lit, and every empty cell reads as "nothing happens here", which is the
+    opposite of what an announcement page is for. A timeline with two nodes reads as the START of a
+    record. Same data, opposite impression.
+
+    The nodes carry NO text. Each card keeps its own date, in full, exactly where it was -- so putting
+    the date on the spine as well would be printing it twice, an inch apart.
+
+    Motion is the shared `.pp-arrive` section arrival (armed pre-paint in extra_head, revealed by
+    PlatPursuit.arriveOnScroll), plus the connector draw and node pop below. Both degrade three ways:
+    no JS never arms and hides nothing, no IntersectionObserver reveals everything at once, and reduced
+    motion never hides anything in the first place. {% endcomment %}
+    {% if entries %}
+    <ol class="wn-tl" role="list" aria-label="Updates, newest first">
+    {% for entry in entries %}
+        <li class="wn-tl__row pp-arrive" style="--i: {{ forloop.counter0 }};">
+        <span class="wn-tl__node" aria-hidden="true"></span>
+        <article class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 pp-arrive__it">
+            <div class="card-body p-3 md:p-5">
+                <div class="wn-entry__head">
+                    <h2 class="wn-entry__title">{{ entry.title }}</h2>
+                    {% comment %} A machine-readable date beside the human one: this is a dated record,
+                    and the <time> is what makes it one to anything that reads the page. {% endcomment %}
+                    <span class="wn-entry__meta">
+                        {% comment %} Beside the date, not beside the title: the pill is a fact ABOUT
+                        when this landed, and putting it next to the heading would make a two-word badge
+                        compete with the entry's name for the first thing read. {% endcomment %}
+                        {% if entry.id in unseen_ids %}<span class="wn-entry__new">New</span>{% endif %}
+                        <time class="wn-entry__date" datetime="{{ entry.published|date:'Y-m-d' }}">{{ entry.published|date:'F j, Y' }}</time>
+                    </span>
+                </div>
+
+                <div class="cxp__stack">
+                    {% for label, copy in entry.beats %}
+                        <div class="cxp__beat">
+                            <span class="cxp__num" aria-hidden="true">{{ forloop.counter }}</span>
+                            <div>
+                                <div class="cxp__label">{{ label }}</div>
+                                <p class="cxp__copy">{{ copy }}</p>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                {% if entry.safe_link_url %}
+                    <div class="wn-entry__go">
+                        <a class="pp-howto__more" href="{{ entry.safe_link_url }}">{{ entry.link_label }} &rarr;</a>
+                    </div>
+                {% endif %}
+            </div>
+        </article>
+        </li>
+    {% endfor %}
+    </ol>
+    {% else %}
+        {% comment %} Unreachable while ENTRIES has anything in it, and here because "nothing yet" is an
+        ANSWER. An empty page with a header and no explanation reads as a page that failed to load. No
+        spine either: a timeline with no events on it is a line. {% endcomment %}
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-5 text-center">
+                <p class="text-sm text-base-content/60">Nothing announced yet. Check back after the next update.</p>
+            </div>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<script>
+    /* Arms the scroll choreography BEFORE first paint (the motion-patterns pattern): the hidden state
+       gates on html.pp-arm, so incremental painting can never flash a card visible before the
+       end-of-body observer hides it. Without JS this never runs and nothing is hidden. */
+    document.documentElement.classList.add('pp-arm');
+</script>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+    /* READING IS DISMISSING, as of the attention-dot lane. Opening this page marks the newest entry
+       seen, which clears the avatar dot and retires the modal -- the reader has now been told the thing
+       the modal exists to tell them, and a dot you cannot clear by doing the obvious thing is worse
+       than no dot.
+       Through a POST, not a side effect of the GET: this page is public and crawlable, and a GET that
+       mutates is the wrong shape regardless of who can reach it. Fire-and-forget, no toast; if it
+       fails the dot simply survives to the next visit. Gated on `whats_new_unread` so an ordinary
+       re-read costs no request at all. */
+    {% comment %} `mark_seen`, NOT `whats_new_unread`: that flag is `is_due OR previewing`, so gating
+    on it made a staff preview of this page spend the marker -- contradicting previewing's own promise
+    to write nothing. This one is `is_due` alone. {% endcomment %}
+    {% if mark_seen %}
+    (function () {
+        if (!(window.PlatPursuit && PlatPursuit.API)) { return; }
+        PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+            setting: 'whats_new_seen', value: '{{ entries.0.id|escapejs }}'
+        }).catch(function () {});
+    })();
+    {% endif %}
+</script>
+<script>
+    /* If the bundle failed to load, the arm comes OFF -- nothing may strand the hidden state, or the
+       page is a header above an empty column. Same failsafe every .pp-arrive consumer carries. */
+    (function () {
+        if (!window.PlatPursuit || !PlatPursuit.arriveOnScroll) {
+            document.documentElement.classList.remove('pp-arm');
+            return;
+        }
+        PlatPursuit.onPageReady(function (first) { if (first) PlatPursuit.arriveOnScroll(); });
+    })();
+</script>
+{% endblock %}

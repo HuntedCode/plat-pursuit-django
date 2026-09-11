@@ -96,15 +96,31 @@ class Command(BaseCommand):
             platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
         )
         pairs = [
-            ('total_bronzes', profile.total_bronzes, truth['bronze']),
-            ('total_silvers', profile.total_silvers, truth['silver']),
-            ('total_golds', profile.total_golds, truth['gold']),
-            ('total_plats', profile.total_plats, truth['platinum']),
+            ('total_bronzes', profile.total_bronzes, truth['bronze'],
+             'The navbar, profile header and every trophy tally read this.'),
+            ('total_silvers', profile.total_silvers, truth['silver'],
+             'The navbar, profile header and every trophy tally read this.'),
+            ('total_golds', profile.total_golds, truth['gold'],
+             'The navbar, profile header and every trophy tally read this.'),
+            ('total_plats', profile.total_plats, truth['platinum'],
+             'The navbar, profile header and every trophy tally read this.'),
+            # The UNFILTERED grand total, maintained by the same signals as the four above and equal to
+            # their sum by definition. It belongs in THIS group rather than with the filter-mirrored
+            # library totals below: nothing about it honours `hide_hiddens`, so it reconciles against raw
+            # ground truth like its siblings.
+            #
+            # Its consequence is the sharpest here. The other four are display figures; this one is the
+            # Trophies board's MEMBERSHIP RULE and its TIEBREAK, so drift reorders a public board, and a
+            # value stuck at zero removes the hunter from it entirely. Without this pair the command
+            # reported "all checks agree with ground truth" for a profile whose leaderboard position was
+            # wrong -- which is the exact failure mode its own docstring says it exists to prevent.
+            ('total_trophies_raw', profile.total_trophies_raw,
+             truth['bronze'] + truth['silver'] + truth['gold'] + truth['platinum'],
+             'The Trophies board ranks on this AND gates membership on it.'),
         ]
         return [
-            Check(f'Profile.{name}', stored, real,
-                  'The navbar, profile header and every trophy tally read this.')
-            for name, stored, real in pairs
+            Check(f'Profile.{name}', stored, real, consequence)
+            for name, stored, real, consequence in pairs
         ]
 
     def _library_totals(self, profile):

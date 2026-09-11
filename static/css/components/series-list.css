@@ -21,8 +21,10 @@
 .pp-howto__body { padding: 4px 2px; }
 .pp-howto__title { display: flex; align-items: center; gap: 9px; font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; color: var(--pp-text); margin-bottom: 12px; }
 .pp-howto__title-icon { width: 20px; height: 20px; flex: 0 0 auto; color: var(--pp-primary); }
-/* Two children now: "Got it" leads and the page link trails it as the escape hatch. Wraps rather than
-   letting the link squeeze the button on a narrow phone. */
+/* Two or THREE children: "Got it" leads and the page link(s) trail it as the escape hatch. What's New
+   renders three (the entry's own link plus the archive), which wraps to two rows at 375px -- button and
+   first link, then the second link centred beneath. Wrapping rather than letting a link squeeze the
+   button on a narrow phone is the whole point of the flex-wrap here. */
 .pp-howto__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 16px; margin-top: 18px; }
 /* Quiet by design -- most readers are finished at "Got it"; this is for the ones who are not. */
 .pp-howto__more {
@@ -110,26 +112,33 @@
  * lingers or "pops" out after the rest; the dialog adds a subtle settle on top. The id selector beats the shared
  * .pp-detail-modal entrance rule -- equal-specificity class selectors tie and lose by source order (the same
  * gotcha the badge-detail modals solve with #id). */
-#badge-howto.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }   /* opacity crossfade -- always on */
-/* The dialog's settle is transform MOTION, so it's reduced-motion-gated (the id also overrides badge-inspect.css's
-   reduced-motion `animation: none`, which would otherwise leak the motion back in for those users). */
-@media (prefers-reduced-motion: no-preference) {
-    #badge-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
-}
+/* ►► ADDING A pp-howto MODAL? PUT ITS ID IN BOTH LISTS BELOW. ◄◄
+ *
+ * Not optional styling. `badge-inspect.css` defines `.pp-detail-modal.is-closing` UNSCOPED, and a clone
+ * without its own ID here inherits it -- which dissolves the dialog's chrome (background, border,
+ * shadow) while the text inside stays fully opaque. It was found by audit on the Career howto and again
+ * on the launch greeting, each time as a separate discovery, because each modal carried its own copy of
+ * these two rules and there was nowhere for the warning to live where the next author would meet it.
+ *
+ * The ID is doing specificity work, not identification: it is what beats the unscoped rule, and in the
+ * reduced-motion block it is what overrides badge-inspect's `animation: none` (which would otherwise
+ * leak the motion back in for exactly the readers who asked for none).
+ *
+ * One rule for all of them rather than a block each. Four identical copies is four chances to fix one
+ * and not the others. */
+#badge-howto.is-closing,
+#career-howto.is-closing,
+#launch-welcome.is-closing,
+#new-contracts.is-closing,
+#whats-new.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }   /* opacity crossfade -- always on */
 
-/* The Career howto exits the same way (audit-caught: without these ID-scoped rules it inherited
-   badge-inspect's unscoped is-closing treatment, which dissolves the dialog chrome around
-   still-opaque text instead of fading the whole modal). */
-#career-howto.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }
+/* The dialog's settle is transform MOTION, so it is reduced-motion-gated. */
 @media (prefers-reduced-motion: no-preference) {
-    #career-howto.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
-}
-
-/* The 1.0 launch greeting exits the same way (every pp-howto clone needs its ID here or it
-   inherits badge-inspect's unscoped close -- chrome dissolving around still-solid text). */
-#launch-welcome.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }
-@media (prefers-reduced-motion: no-preference) {
-    #launch-welcome.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+    #badge-howto.is-closing .pp-detail-modal__dialog,
+    #career-howto.is-closing .pp-detail-modal__dialog,
+    #launch-welcome.is-closing .pp-detail-modal__dialog,
+    #new-contracts.is-closing .pp-detail-modal__dialog,
+    #whats-new.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 
 @keyframes ppHowtoFadeOut { to { opacity: 0; } }

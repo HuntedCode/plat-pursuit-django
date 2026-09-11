@@ -81,7 +81,7 @@ class ProfileAdmin(admin.ModelAdmin):
         ),
         (
             "Trophy Summary",
-            {"fields": ("trophy_level", "progress", "tier", "earned_trophy_summary", 'total_trophies', 'total_unearned', 'total_bronzes', 'total_silvers', 'total_golds', 'total_plats', 'total_hiddens', 'total_games', 'total_completes', 'avg_progress')},
+            {"fields": ("trophy_level", "progress", "tier", "earned_trophy_summary", 'total_trophies', 'total_unearned', 'total_bronzes', 'total_silvers', 'total_golds', 'total_plats', 'total_trophies_raw', 'total_hiddens', 'total_games', 'total_completes', 'avg_progress')},
         ),
         ("Sync Info", {"fields": ("extra_data", "last_synced", "sync_status", "sync_progress_value", "sync_progress_target", "sync_tier")}),
     )
@@ -4670,13 +4670,19 @@ class ContractAdmin(admin.ModelAdmin):
     search_fields = ('name', 'slug', 'igdb_id')
     prepopulated_fields = {'slug': ('name',)}
     filter_horizontal = ('jobs',)
-    # `went_live_at` and `announced_at` are READONLY, not merely uneditable by convention. Both are
-    # machine-stamped lifecycle columns whose whole contract is "set once, never reset", and the form
-    # is `fields = '__all__'` -- so leaving them writable meant a curator opening a change form to fix
-    # a typo would post back whatever the page rendered with, clearing the stamp and re-announcing a
-    # contract the community already heard about. Shown, because knowing when something published and
-    # when it was announced is useful; just not typed into.
-    readonly_fields = ('created_at', 'updated_at', 'went_live_at', 'announced_at')
+    # `went_live_at`, `announced_at` and `announcement_posted` are READONLY, not merely uneditable by
+    # convention. All three are machine-stamped lifecycle columns whose whole contract is "set once,
+    # never reset", and the form is `fields = '__all__'` -- so leaving them writable meant a curator
+    # opening a change form to fix a typo would post back whatever the page rendered with, clearing
+    # the stamp and re-announcing a contract the community already heard about. Shown, because
+    # knowing when something published and when it was announced is useful; just not typed into.
+    #
+    # `announcement_posted` is the one with the widest blast radius, and it is a CHECKBOX, which is
+    # far more inviting to tick than a datetime is to retype. Ticking it on a baselined launch
+    # contract -- which already has an `announced_at` -- puts that contract into EVERY hunter's
+    # Career new-contracts modal on their next load, with nothing having been announced anywhere.
+    readonly_fields = ('created_at', 'updated_at', 'went_live_at', 'announced_at',
+                       'announcement_posted')
     inlines = [ContractBundleInline]
     actions = ['suggest_jobs', 'make_live', 'make_not_live']
 

@@ -143,6 +143,38 @@ class CareerView(LoginRequiredMixin, TemplateView):
         # First-visit explainer: server-side render gate so returning users never see a flash.
         # The flag is written by the quick-settings API's ui_flag branch when dismissed.
         context['show_career_explainer'] = 'career_explainer' not in (self.request.user.ui_flags or {})
+
+        # NEW CONTRACTS since this hunter last looked. Precedence: the explainer WINS -- showing
+        # somebody new contracts before they know what a contract is is backwards, and the explainer
+        # fires once in an account's life where this waits harmlessly for the next visit. Never both
+        # on one visit: two scrims back to back, and the gate would be settled by whichever closed
+        # first while the other still covered the page.
+        from trophies.services import new_contracts_modal
+        from core.previews import previewing as _door
+        previewing = _door(self.request, 'new-contracts')
+        # ASKED ONLY WHEN THE ANSWER CAN BE USED. On a first visit the explainer wins and this modal
+        # cannot render, so computing it meant paying for the count, 200 rows, the jobs prefetch and
+        # the hero covers to build a dict the template discards -- on the one visit in an account's
+        # life that is already the heaviest.
+        if context['show_career_explainer'] and not previewing:
+            nc = new_contracts_modal.empty()
+        else:
+            nc = new_contracts_modal.new_for(
+                getattr(self.request.user, 'profile', None), self.request.user, preview=previewing)
+        # PREVIEW SUPPRESSES THE EXPLAINER rather than sitting alongside it. The first cut ORed
+        # preview onto the precedence rule, which quietly made "never both on one visit" false for
+        # the one account type that can reach it: a staff member who has not dismissed the explainer
+        # got two auto-opening modals stacked, two scrims, and two focus traps fighting over Tab.
+        # Asking to preview this modal is asking to see THIS modal.
+        if previewing and nc['rows']:
+            context['show_career_explainer'] = False
+        context['nc'] = nc
+        context['nc_preview'] = previewing
+        context['new_contracts_stamp'] = nc['newest'].isoformat() if nc['newest'] else ''
+        # No `previewing or ...` here: a preview has already set the explainer flag False above, so
+        # the precedence rule alone gives the right answer and a second clause is a second thing to
+        # keep in step with the first.
+        context['show_new_contracts'] = bool(nc['rows']) and not context['show_career_explainer']
         context['explainer_debug'] = settings.DEBUG
         return context
 

@@ -12,13 +12,24 @@ The LAUNCH SET is excluded by the same rule for free. Those ~1,000 badge-derived
 `went_live_at = NULL` by decision, so the first run after the cutover announces nothing rather
 than dumping the whole catalogue into the channel.
 
-Grouped by JOB rather than listed flat: twenty contracts as twenty title lines is a wall nobody
-reads, and the thing a hunter actually wants to know is which of their jobs just gained work.
+SHAPE: a lead embed carrying the count, the reach-ranked headliners with cover art and the board
+link, then ONE EMBED PER DISCIPLINE that gained work, tinted with that discipline's colour and
+listing its jobs with counts.
+
+The per-discipline split is not decoration. A Discord embed carries exactly one colour and cannot
+tint individual lines, so grouping by discipline turns that limit into the labelling: the colour
+says which discipline without spending a word or needing an emoji uploaded to the guild.
+
+Counts rather than titles below the fold, deliberately. Twenty contracts as twenty title lines is a
+wall nobody reads, and the titles worth acting on are already at the top with their art. The trade
+is that a hunter following one job learns THAT it gained work, not which game did it -- the board
+link is what answers that.
 """
 import logging
 
 from django.conf import settings
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from trophies.discord_utils.discord_notifications import escape_md
@@ -28,6 +39,46 @@ from trophies.services.contracts_service import new_contract_cutoff
 logger = logging.getLogger(__name__)
 
 EMBED_COLOR = 0x003791          # Platinum brand blue, same as the trophy tracker's default
+
+#: THE FIVE DISCIPLINE COLOURS, as Discord integers.
+#:
+#: A Discord embed carries exactly ONE colour and cannot tint individual lines, so the post uses one
+#: embed PER DISCIPLINE and lets that constraint do the grouping. This is the owner's design and it is
+#: better than the alternatives: the colour is the label, so no emoji need uploading to the guild and
+#: no icon has to survive Discord's markdown.
+#:
+#: CONVERTED FROM oklch, which is what `static/css/components/elements.css` declares and which Discord
+#: cannot parse -- the same conversion the email work had to make for the brand colours. The oklch
+#: source is recorded beside each value so a change to the stylesheet is DETECTABLE here rather than
+#: silently leaving the channel a shade off the site. A test pins the pair.
+DISCIPLINE_COLORS = {
+    'combat':      (0xFC5855, 'oklch(0.68 0.20 25)'),
+    'exploration': (0x59D38C, 'oklch(0.78 0.15 155)'),
+    'mind':        (0x9C93FF, 'oklch(0.72 0.16 285)'),
+    'heart':       (0xFF68A0, 'oklch(0.72 0.19 0)'),
+    'finesse':     (0xFCB442, 'oklch(0.82 0.15 75)'),
+}
+
+#: Canonical order, matching `Job.DISCIPLINES` and the Career page's own bands. Deliberately NOT
+#: biggest-first: this post recurs, and a reader who learns where Combat sits should find it there
+#: every time. Ordering by size would reshuffle the message on every wave for no gain.
+DISCIPLINE_ORDER = ('combat', 'exploration', 'mind', 'heart', 'finesse')
+
+#: Named headliners; everything past them is counted as "and N more". Three is a judgement about the
+#: lead embed's shape, not about art: every pick is titled whether or not a cover exists, and the one
+#: image the embed can carry comes from the first pick that has one.
+MAX_HIGHLIGHTS = 3
+
+#: Discord caps the SUM of every embed's text in one message at 6000, on top of the per-description
+#: limit below. The single-embed version never had to know this. It matters for the same reason the
+#: description cap does: overrunning is a 400, the command raises, the wave is never stamped, and the
+#: identical wave fails identically every night until someone runs --limit by hand. A fail-closed
+#: retry is what makes a transient error safe and a deterministic one permanent.
+DISCORD_TOTAL_LIMIT = 6000
+#: Slack under the hard cap. NOT a reservation for the lead -- the lead is added to the running
+#: total before any block is weighed, so it can never be squeezed out. This is margin against
+#: Discord counting something we do not, which is why _embed_len counts more than we emit.
+_TOTAL_BUDGET = DISCORD_TOTAL_LIMIT - 512
 #: Career deep-links on `?view=`, NOT `?tab=` (that is job detail's param). Getting it wrong does
 #: not 404 or look broken -- the contracts panel renders correctly filtered but stays `hidden`, so
 #: the reader lands on the Jobs tab and has to go hunting for what the post just told them about.
@@ -39,23 +90,23 @@ BOARD_URL = '/career/?view=contracts'
 #: on an EMPTY board -- the one place the post promised its contents would be.
 BOARD_URL_LATEST = BOARD_URL + '&new=1'
 
-#: A very large wave lists its biggest jobs and counts the rest. Chosen over truncating the title
-#: list inside each job: "and 40 more" under a job someone follows is a worse read than a complete
-#: picture of the jobs, which is the grouping the post exists to give.
-MAX_JOB_LINES = 12
-#: Per job, before the same treatment applies to its titles.
-MAX_TITLES_PER_JOB = 6
+#: Job lines inside ONE discipline block before the rest are counted.
+#:
+#: FIVE, because the catalogue has exactly five jobs per discipline (migration 0247) -- so this is a
+#: backstop against the catalogue growing, not a working limit, and it is unreachable today. It was 12
+#: while the cap applied across the WHOLE post; per discipline that could never fire, which is how a
+#: test asserting its "and N more jobs" tail came to be unsatisfiable. Set to the real ceiling so the
+#: number states a fact rather than implying a trimming that cannot happen.
+MAX_JOB_LINES = 5
 
 #: Discord's hard cap on an embed description. This is ENFORCED against the assembled string, not
-#: approximated by the line caps above -- those bound the line COUNT, and PlayStation titles are
-#: long enough that twelve jobs of six titles can clear 4096 well inside MAX_WAVE. Overrunning it
+#: approximated by the line caps above -- those bound the line COUNT, and a curator-authored name can
+#: be 255 characters before escaping doubles it. Overrunning it
 #: is not a cosmetic failure: Discord answers 400, the command raises, the wave is never stamped,
 #: and the identical wave fails identically every night until someone runs --limit by hand. The
 #: fail-closed retry that makes transient errors safe is exactly what makes a deterministic one
 #: permanent, so the deterministic one must not be reachable.
 DISCORD_DESCRIPTION_LIMIT = 4096
-#: Headroom under the cap, so the closing link and tail always fit.
-_BUDGET = DISCORD_DESCRIPTION_LIMIT - 256
 
 #: Contract and job names are curator-authored free text going into a markdown description, so a
 #: game legitimately titled "Sam & Max: *Beyond* Time and Space" should render as its own title and
@@ -74,15 +125,101 @@ def pending_contracts():
             .prefetch_related(Prefetch('jobs', queryset=Job.objects.order_by('name'))))
 
 
-def _by_job(contracts):
-    """{job_name: [contract names]}, biggest group first. A contract feeding several jobs appears
-    under each of them -- that IS the fact being reported (one game levelling three jobs), and
-    picking a single 'primary' job would invent a hierarchy the model does not have."""
+def highlights(contracts, limit=MAX_HIGHLIGHTS):
+    """The wave's headline games: the ones the most hunters here have actually played.
+
+    `Game.played_count` is a denormalized, indexed count of profiles that have played the game --
+    PP-specific, so it measures reach on THIS site rather than globally, which is the more useful
+    figure for deciding what to lead a post to this community with.
+
+    Reached through `_member_at_igdb`, the same correlated-subquery shape `annotated_contracts` uses,
+    rather than a membership join: contract membership is DERIVED from the raw igdb id, so there is no
+    join to make.
+
+    ART IS NOT A REQUIREMENT TO BE A HIGHLIGHT. The first cut skipped contracts without a usable
+    cover, reasoning that a highlight with nothing to look at wastes a slot -- but the slot is a TITLE
+    LINE, and the image is one separate thing on the embed. On a wave whose games had no art that rule
+    listed nothing at all: "5 new contracts … and 5 more", strictly worse than the post it replaced.
+    So every pick is titled, and `art` is '' when there is none; the caller takes the image from the
+    first pick that has one.
+    """
+    from trophies.models import Game               # local: keeps the module import-light
+    from trophies.services.contracts_service import _member_at_igdb
+
+    reach = Subquery(
+        Game.objects.filter(**_member_at_igdb('concept__'))
+        .order_by('-played_count').values('played_count')[:1]
+    )
+    # Fetch only the SCORES and sort the caller's own objects, rather than re-fetching rows we were
+    # handed. Two reasons, and the second is the one that bites later: the caller's contracts arrive
+    # with `jobs` prefetched, and returning fresh instances would silently drop that -- so the day a
+    # headliner line wants to name the jobs it levels ("Hollow Knight — Combat, Mind"), it becomes a
+    # per-headliner query with nothing in the code to warn you. Ranking still happens in the database.
+    reach_by_pk = dict(
+        Contract.objects.filter(pk__in=[c.pk for c in contracts])
+        .annotate(reach=Coalesce(reach, Value(0)))
+        .values_list('pk', 'reach')
+    )
+    ordered = sorted(contracts, key=lambda c: (-reach_by_pk.get(c.pk, 0), c.went_live_at, c.name))
+    return [(contract, cover_url_for(contract)) for contract in ordered[:limit]]
+
+
+def cover_url_for(contract):
+    """The cover of the contract's most-played member game, or ''.
+
+    Goes through `Game.display_image_url`, the single source of truth for the fallback chain
+    (trusted IGDB cover -> PSN concept icon -> title image -> title icon). Reimplementing that chain
+    inline is explicitly forbidden by CLAUDE.md, and it would be wrong here in a way that shows: a PSN
+    fallback is square where an IGDB cover is 3:4, and Discord renders whatever it is given.
+
+    `.defer(...raw_response)` is not decoration either -- that column is the ~30 KB IGDB blob that
+    caused the May 2026 web-server OOM, and nothing in a cover URL reads it.
+    """
+    from trophies.models import Game
+    from trophies.services.contracts_service import _member_gate
+
+    game = (Game.objects
+            .filter(**_member_gate('concept__'), concept__igdb_match__igdb_id=contract.igdb_id)
+            .select_related('concept', 'concept__igdb_match')
+            .defer('concept__igdb_match__raw_response')
+            .order_by('-played_count')
+            .first())
+    if game is None:
+        return ''
+    url = game.display_image_url or ''
+    # Discord fetches this itself, anonymously, so anything it cannot resolve must become NO image
+    # rather than a broken one. There was a `/`-prefixed branch here rewriting relative paths onto
+    # SITE_URL; it was dead. Every source in the fallback chain is a URLField holding an absolute PSN
+    # or IGDB CDN url, so a relative value cannot arise -- and if one ever did, dropping it is the
+    # better failure than posting an embed with an unfetchable image.
+    return url if url.startswith('http') else ''
+
+
+def _by_discipline(contracts):
+    """{discipline: {job_name: contract_count}}, in canonical discipline order.
+
+    A contract feeding jobs in three disciplines is counted under all three -- that IS the fact being
+    reported (one game levelling work across three disciplines), and picking a single "primary" would
+    invent a hierarchy the model does not have. The consequence is that the per-discipline counts sum
+    to MORE than the wave total, which is why the header carries the authoritative number and the
+    blocks answer a different question: which of your jobs just gained work.
+    """
     groups = {}
-    for c in contracts:
-        for job in c.jobs.all():
-            groups.setdefault(job.name, []).append(c.name)
-    return dict(sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])))
+    for contract in contracts:
+        for job in contract.jobs.all():
+            disc = groups.setdefault(job.discipline, {})
+            disc[job.name] = disc.get(job.name, 0) + 1
+    # An unrecognised discipline is DROPPED -- and says so. Without the log this is the quietest
+    # possible failure: every contract touching that job vanishes from every future post while the
+    # header count stays truthful, so the post looks correct and nobody ever notices. The budget path
+    # below warns before it drops content; dropping here is the same event and gets the same volume.
+    unknown = set(groups) - set(DISCIPLINE_ORDER)
+    if unknown:
+        logger.warning("Contract announcement: unknown discipline(s) %s on live jobs; their work is "
+                       "not in the post. Add them to DISCIPLINE_ORDER/DISCIPLINE_COLORS.",
+                       sorted(unknown))
+    return {d: dict(sorted(groups[d].items(), key=lambda kv: (-kv[1], kv[0])))
+            for d in DISCIPLINE_ORDER if d in groups}
 
 
 def build_announcement(contracts):
@@ -97,57 +234,142 @@ def build_announcement(contracts):
         return None
 
     n = len(contracts)
-    groups = _by_job(contracts)
     # Only filter the board to Latest when the whole wave is still inside that window (see
     # BOARD_URL_LATEST). Every contract here has a stamp -- pending_contracts() requires one.
     cutoff = new_contract_cutoff()
     board = BOARD_URL_LATEST if all(c.went_live_at >= cutoff for c in contracts) else BOARD_URL
+    link = f"[See them on your board]({settings.SITE_URL}{board})"
+
+    # ── the lead embed: what landed, with the reach-ranked headliners ────────────────────────────
+    picks = highlights(contracts)
     head = f"**{n} new contract{'' if n == 1 else 's'}** just hit the Job Board."
     lines = [head, '']
-    used = len(head) + 1
+    lines += [f"**{escape_markdown(c.name)}**" for c, _art in picks]
+    rest = n - len(picks)
+    if rest > 0:
+        lines.append(f"*…and {rest} more*")
+    lines += ['', link]
 
-    # Take job lines while they FIT, not just while they are under MAX_JOB_LINES. Whatever does not
-    # fit rolls into the same "and N more jobs" tail that the line cap already produces, so an
-    # oversized wave degrades into a shorter post instead of an unpostable one.
-    shown_jobs = 0
-    for job_name, titles in list(groups.items())[:MAX_JOB_LINES]:
-        shown = titles[:MAX_TITLES_PER_JOB]
-        extra = len(titles) - len(shown)
-        tail = f" *and {extra} more*" if extra else ''
-        line = f"**{escape_markdown(job_name)}** — {', '.join(escape_markdown(t) for t in shown)}{tail}"
-        if used + len(line) + 1 > _BUDGET:
-            break
-        lines.append(line)
-        used += len(line) + 1
-        shown_jobs += 1
-
-    hidden_jobs = len(groups) - shown_jobs
-    if hidden_jobs > 0:
-        lines.append(f"*…and {hidden_jobs} more job{'' if hidden_jobs == 1 else 's'}.*")
-
-    lines += ['', f"[See them on your board]({settings.SITE_URL}{board})"]
-    description = '\n'.join(lines)
-
-    # Belt and braces. The budget above is computed from the pieces; this measures the result, so a
-    # future edit to the header, tail or link cannot quietly reintroduce a 400.
-    if len(description) > DISCORD_DESCRIPTION_LIMIT:
-        logger.error("Contract announcement description was %d chars; falling back to the summary.",
-                     len(description))
-        description = (f"{head}\n\n[See them on your board]"
-                       f"({settings.SITE_URL}{BOARD_URL})")
-
-    return {'embeds': [{
+    lead = {
         'title': '📋 New Contracts',
-        'description': description,
+        'description': _capped('\n'.join(lines), fallback=f"{head}\n\n{link}"),
         'color': EMBED_COLOR,
         'footer': {'text': 'Contracts are curated | Powered by Plat Pursuit'},
-    }]}
+    }
+    # ONE image, so it belongs to the top-ranked highlight. Discord fetches this itself, from the
+    # public game-art CDN -- nothing is proxied through us.
+    art = next((url for _c, url in picks if url), '')
+    if art:
+        lead['image'] = {'url': art}
+
+    embeds = [lead]
+    used = _embed_len(lead)
+
+    # ── one embed per discipline that gained work, canonical order ───────────────────────────────
+    # Counts, not titles. The titles a reader can act on are already above with their art; repeating
+    # every game under every job is the wall the previous version fought with two line caps, and it
+    # is what the room in a Discord post is actually short of. The trade is real: a hunter following
+    # one job sees THAT it gained work, not which game did it. The board link answers that.
+    labels = dict(Job.DISCIPLINES)
+    for disc, jobs in _by_discipline(contracts).items():
+        # .get, not a subscript. `Job.discipline` is a CharField(choices=...) and Django choices
+        # are NOT a database constraint, so a value written by a data migration, a fixture or raw
+        # SQL is perfectly storable. A KeyError here propagates out of build_announcement, the
+        # wave is never stamped, and the identical wave fails identically every night forever --
+        # which is the one outcome every budget comment in this module exists to prevent. An
+        # unknown discipline gets the brand colour and still gets its work announced.
+        colour, _oklch = DISCIPLINE_COLORS.get(disc, (EMBED_COLOR, ''))
+        shown = list(jobs.items())[:MAX_JOB_LINES]
+        job_lines = [
+            f"**{escape_markdown(name)}** — {count} new contract{'' if count == 1 else 's'}"
+            for name, count in shown
+        ]
+        hidden = len(jobs) - len(shown)
+        if hidden > 0:
+            job_lines.append(f"*…and {hidden} more job{'' if hidden == 1 else 's'}.*")
+
+        block = {
+            'title': labels.get(disc, disc.title()),
+            'description': _capped('\n'.join(job_lines)),
+            'color': colour,
+        }
+        # DEGRADE BY DROPPING WHOLE BLOCKS, never by overrunning. The per-description cap above and
+        # this total are different limits (4096 vs 6000 across the message), and only the total can
+        # be breached by a post whose every individual embed is legal.
+        if used + _embed_len(block) > _TOTAL_BUDGET:
+            logger.warning("Contract announcement hit the %d-char message budget; dropping the "
+                           "remaining discipline blocks.", DISCORD_TOTAL_LIMIT)
+            break
+        embeds.append(block)
+        used += _embed_len(block)
+
+    return {'embeds': embeds}
+
+
+def _embed_len(embed):
+    """What Discord counts toward the 6000-per-message total.
+
+    Title + description + footer text + author name + every field's name and value. The embeds built
+    here carry no author and no fields, so the last two are always zero -- they are counted anyway
+    because the alternative is a function that is correct only for today's shapes. Adding one `fields`
+    entry to a discipline block is the obvious next iteration, and it would otherwise silently
+    under-count and reopen the breach this whole module is arranged around.
+    """
+    fields = embed.get('fields') or []
+    return (len(embed.get('title', ''))
+            + len(embed.get('description', ''))
+            + len(embed.get('footer', {}).get('text', ''))
+            + len(embed.get('author', {}).get('name', ''))
+            + sum(len(f.get('name', '')) + len(f.get('value', '')) for f in fields))
+
+
+def _capped(description, fallback=None):
+    """Belt and braces on the PER-DESCRIPTION limit.
+
+    The line caps above bound the line COUNT; this measures the assembled result, so a future edit to
+    a header, a tail or the link cannot quietly reintroduce a 400 that would strand the wave forever.
+    """
+    if len(description) <= DISCORD_DESCRIPTION_LIMIT:
+        return description
+    logger.error("Contract announcement description was %d chars; falling back.", len(description))
+    if fallback is not None:
+        return fallback
+    return description[:DISCORD_DESCRIPTION_LIMIT - 1].rstrip() + '…'
+
+
+def webhook_url():
+    """(url, label) for the channel a wave belongs in.
+
+    `DISCORD_CONTRACTS_WEBHOOK_URL` when it is set, and the platinum channel when it is not. The
+    fallback is deliberate: this runs from a daily cron, and a deploy that has not configured the new
+    channel yet should keep announcing rather than start failing every morning at 06:00.
+
+    A silent fallback would be the wrong kind of safe, though -- "we made a contracts channel" and
+    "the posts are still going to the platinum channel" look identical from here. So the label comes
+    back with the url and the command prints which room it used.
+    """
+    url = getattr(settings, 'DISCORD_CONTRACTS_WEBHOOK_URL', None)
+    if url:
+        return url, 'the contracts channel'
+    return settings.DISCORD_PLATINUM_WEBHOOK_URL, ('the platinum channel '
+                                                  '(DISCORD_CONTRACTS_WEBHOOK_URL is unset)')
 
 
 def mark_announced(contracts, when=None):
-    """Stamp a wave as announced. Called ONLY after a confirmed 2xx, so a failed post leaves the
-    whole wave pending for the next run rather than silently swallowing it."""
+    """Stamp a wave as POSTED. Called ONLY after a confirmed 2xx, so a failed post leaves the whole
+    wave pending for the next run rather than silently swallowing it.
+
+    Sets `announcement_posted` as well as the timestamp, and that distinction is the whole point of
+    the flag: `--baseline` also stamps `announced_at`, because it also settles the row for
+    idempotency -- but it settles it by deciding NOT to post. Only this path told anybody."""
     ids = [c.pk for c in contracts]
     if not ids:
         return 0
-    return Contract.objects.filter(pk__in=ids).update(announced_at=when or timezone.now())
+    stamped = Contract.objects.filter(pk__in=ids).update(
+        announced_at=when or timezone.now(), announcement_posted=True)
+    # The nav's new-contracts dot reads a cached site-wide "newest announcement". Without this it
+    # would take up to that cache's TTL to appear -- a strange way to treat the one event the whole
+    # feature is built around.
+    from trophies.services.career_attention import forget_latest_announced
+    forget_latest_announced()
+    return stamped

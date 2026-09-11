@@ -21,7 +21,8 @@ The leaderboard system ranks hunters by badge progress and Badge Points, per ser
 | Career XP | `ProfileCareerStanding` | No Redis equivalent ever existed |
 
 All of it is `trophies/services/badge_leaderboards.py` ("Lane B"): indexed reads over denormalized
-standing columns, written by the recompute the sync path already runs. No cron, no sorted sets, and
+standing columns, written by the recompute the sync path already runs -- with ONE exception, the
+Shovelware Free board, whose store is written by a nightly batch command (see below). No sorted sets, and
 identity is read live at render so a renamed hunter cannot show a stale name.
 
 **What the Redis backend cost, and why it is worth remembering.** It needed a rebuild cron
@@ -65,8 +66,8 @@ as the whole thing.
 
 | Filter | Applies to | Mechanism |
 |---|---|---|
-| Country | all three boards | a WHERE on `country_code`, served by `(country, ...board order)` |
-| Edition | **Badge Points only** (of the three here) | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
+| Country | all five boards | a WHERE on `country_code`, served by `(country, ...board order)` |
+| Edition | **Badge Points only** (of the five here) | a different STORE: `ProfileEditionStanding`, indexed `(edition, [country,] ...board order)` |
 
 Badge detail's Ranks tab carries the same two, and its edition filter works the same way one level down:
 a different STORE (`SeriesEditionStanding`), never a WHERE over the series board. See **The per-edition
@@ -94,7 +95,9 @@ exists to undo after the May 2026 incident.
 
 It is also a better board. "Trophies earned in games that happen to have badges" largely measures how many
 badge-covered games somebody has played; platinums earned is the figure every hunter already knows about
-themselves. The three boards now read one per domain: overall hunting, badges, career.
+themselves. The five boards read one per domain: hunting excluding shovelware (the DEFAULT), hunting
+weighted by rarity, all hunting, badges, career. The first three group behind ONE chip in the strip --
+they answer one question and differ only in what counts.
 
 `ProfileEditionStanding` names its columns identically to `ProfileBadgeStanding`, so `badge_store(edition)`
 picks a manager and every board query stays as written. An unrecognised key returns an EMPTY store rather
@@ -233,7 +236,7 @@ They are recomputed from scratch each time, so no incremental writer exists to d
   distinct platform list x tier, bounded by the catalogue's platform vocabulary), never `EarnedTrophy`
   rows. `test_the_aggregate_does_not_grow_with_the_library` is what stops that distinction eroding.
 
-- **Every store with a `country_code` mirror must be in `signals.country_mirrored_standings()`.** Missing
+- **Every store with a `country_code` mirror must be in `signals.profile_mirrored_standings()`.** Missing
   one does not error. It leaves that board ranking a relocated hunter under their old flag while the others
   have already moved them, which only a reader who emigrated would ever notice.
   `ProfileEditionStanding` shipped with the column and without the entry;
@@ -282,7 +285,15 @@ They are recomputed from scratch each time, so no incremental writer exists to d
 
 ## Management Commands
 
-None. The boards read live from the standing tables, so there is nothing to rebuild.
+**Two, and both arrived in 2026-09.** `recompute_clean_standings` writes the Shovelware Free board's
+store; `recompute_rarity_standings` writes Rarity Score's. Everything below was written when the answer
+was "none", and it is still the right default -- but it now has two exceptions, and the rule that
+distinguishes them is worth stating: a store needs its own writer when its figures are NOT a projection
+of something an existing seam already computes. Badge standings fall out of badge evaluation; these two
+do not fall out of anything, because a shovelware flag and a trophy's rarity are properties of the
+CATALOGUE, not of the hunter, so nothing in the sync path has cause to recompute them per profile.
+
+The original rule, which still holds for anything that IS such a projection:
 
 That includes new stores: `SeriesEditionStanding` (migration 0313) was created empty and populated by the
 `evaluate_badges --all` that a deploy runs anyway, exactly as `ProfileEditionStanding` was in 0300. A
@@ -306,3 +317,155 @@ command, not a leaderboard one -- see [badge-system.md](badge-system.md).
 - [Gamification](gamification.md): ProfileGamification model that powers the XP leaderboard
 - [Redis Keys](../reference/redis-keys.md): Complete key map for raw Redis and Django cache
 - [Cron Jobs](../guides/cron-jobs.md): the nightly `evaluate_badges --all` that keeps standings fresh
+
+## The Shovelware Free board (2026-09)
+
+The fourth Global Board, and the one a bare `/leaderboards/` lands on. It ranks the same hunters as the
+Trophies board by the same rule -- platinums, total trophies breaking the tie -- over a narrower
+population: trophies earned on games the shovelware detector has not flagged.
+
+It is a **separate board rather than a filter on Trophies**, and that is forced rather than chosen. The
+Trophies board ranks `Profile.total_plats` / `total_trophies`, which are denormalized INTEGER COLUMNS.
+Country and edition are cheap because they filter the store; shovelware is not a property of the profile,
+so there is nothing to filter -- the number itself has to be different, which means materializing it.
+
+| Piece | Where |
+|---|---|
+| Store | `ProfileTrophyStanding` (migration `0332`) -- one row per linked hunter, `country_code` + `is_linked` mirrored, two partial indexes |
+| Rule | `SHOVELWARE_FLAGGED_STATUSES` in `models.py`; `manually_cleared` counts as CLEAN |
+| Reads | `clean_store()` / `clean_rows()` / `clean_rank()` + `CLEAN_KEYS` in `badge_leaderboards.py` |
+| Writer | `recompute_clean_standings`, `nightly` step 2 -- the ONLY writer |
+
+Three things that are easy to get wrong:
+
+- **It has no incremental path, deliberately.** Shovelware is a property of the GAME, so re-flagging one
+  invalidates every hunter who earned a trophy on it -- a fan-out no per-row signal can see. The
+  equivalent aggregate inside a sync seam is exactly what got `ProfileBadgeStanding`'s trophy counts
+  deleted in 2026-08. It must stay a batch job.
+- **Its store is written for LINKED hunters only**, unlike the badge and career stores. Those are written
+  for everybody because their rows also serve profile pages, so gating at read means verifying reveals a
+  standing that already existed. This store serves one board, so a row for an unlinked profile would be
+  computed, stored and never read. The cost: a newly-verified hunter joins this board on the next nightly
+  rather than instantly. That is the one exception to the "verifying puts you on the boards immediately"
+  rule stated above.
+- **Every board figure is UNFILTERED** (2026-09). `hide_hiddens` is a per-hunter DISPLAY preference --
+  "keep these out of MY list" -- not a claim about what was earned, so honouring it on a leaderboard
+  ranks two hunters by two different rules and leaves the board unreproducible by anyone but its owner.
+  `hide_zeros` could not apply in any case: it drops games with zero earned trophies, which contribute
+  nothing to a count of earned ones (it does not move `Profile.total_trophies` either, for the same
+  reason). All three trophy boards rank on "every trophy synced to us" -- see `Profile.total_trophies_raw`
+  below.
+- **`clean_trophies > 0` still does NOT imply `total_trophies_raw > 0`**, because the two are written at
+  different TIMES -- the profile counters by signal plus a nightly reconcile, this store nightly only.
+  That is why `active_countries()` needs this store as a fourth source; omitting it left a country
+  unselectable on the very board its hunters appear on.
+
+### The two boards that say when they update
+
+Shovelware Free and Rarity Score are the only boards no sync touches. Every other board moves with the
+hunter: All Trophies reads the `total_trophies_raw` counter sync maintains, Badge Points reads standings
+`recompute_standing` rewrites per sync, Career XP moves on the claim itself.
+
+So on these two a hunter can sync, earn a platinum, reload, and find their rank unchanged. That is
+correct, and it is indistinguishable from a broken board. The board card carries a note saying so, driven
+by `OverallBadgeLeaderboardsView.NIGHTLY_BOARDS` rather than by the template, because the note is a claim
+about `nightly.STEPS` and a hardcoded caption would keep making it after a board moved to a live path.
+
+`board_freshness` is optional in `leaderboard_boardcard.html`. Badge, game and job detail pass nothing
+and render nothing: their panels rank a single badge or game live, so the note would be false there.
+
+**Adding a sixth board?** A test asserts the complement (`BOARD_KEYS - NIGHTLY_BOARDS`) exactly, so a new
+board fails until someone decides which side it is on. Silence would default it to "live", which is the
+wrong way for this to be wrong.
+
+## The Rarity Score board (2026-09)
+
+The fifth Global Board, and the third of the three that group behind the **Trophies** chip. It ranks
+linked hunters by the sum of `100 / trophy_earn_rate` over their **1,000 rarest base-game trophies**.
+
+Points read as *"how many players you would line up to find one who has this"* -- a 1% trophy is worth
+100, a 10% trophy 10. So a hunter's score is that total across their rarest thousand, which is the whole
+board in one sentence. PURE RARITY: no trophy-type base, so a 0.5% bronze outscores a 40% platinum,
+because the board answers "who has done the hardest things" and a platinum on an easy game is not one.
+
+The scale is 1 to 1,000 per trophy and that range is **PSN's, not ours** -- it reports no rate above 100%
+or below 0.1%. A perfect score is therefore exactly 1,000,000.
+
+| Piece | Where |
+|---|---|
+| Rule | `services/rarity_score.py` -- the formula, the scorable filter, the constants |
+| Store | `ProfileRarityStanding` (migration `0335`) -- `rarity_score`, `avg_earn_rate`, `scored_count`, the two mirrors, two partial indexes |
+| Reads | `rarity_store()` / `rarity_rows()` / `rarity_rank()` + `RARITY_KEYS` in `badge_leaderboards.py` |
+| Writer | `recompute_rarity_standings`, `nightly` step 3 -- the ONLY writer |
+
+**Membership is a FULL 1,000 scorable trophies**, not "more than none". Below the cap a hunter's sum is
+short *by construction*, so they would rank low for having played LESS rather than for having played
+easier -- the one thing this board is not meant to measure. That literal appears in four query sites and
+in both partial index conditions, and `rarity_score.TOP_N` is asserted equal to it by test.
+
+### Five things that are easy to get wrong
+
+- **The two rate fields carry different units.** `Trophy.trophy_earn_rate` is PSN's global figure and is a
+  PERCENTAGE (`12.3` means 12.3%, rendered as `{{ x }}%`). `Trophy.earn_rate` is ours and is a FRACTION
+  (rendered with `|multiply:100`). Feeding the wrong one in scales every score by 100 and nothing errors.
+  This board uses PSN's: tens of millions of samples against our ~50,000 linked hunters, so ours is noisy
+  on obscure games, and PSN's is the number hunters already recognise from the console.
+- **A rate of `0.0` means UNKNOWN, never "nobody has it".** The field defaults to 0.0 and
+  `psn_api_service` stores 0.0 whenever PSN omits the figure. Read as a rate it is infinitely rare, so
+  under `100 / rate` a hunter with a few hundred unsynced trophies tops the board outright -- silently, no
+  error, just an impossible number. `rarity_score.scorable_q` excludes it, and that exclusion is
+  MANDATORY rather than defensive: the recompute selects by ordering on RATE (indexed) rather than on
+  points, and an unknown rate sorts FIRST, ahead of every genuine ultra-rare. Under a points ordering the
+  same omission would be harmless. `scorable_earned()` exists so the filter and the ordering cannot be
+  written apart.
+- **DLC is excluded outright, and cannot be corrected instead.** PSN divides a DLC trophy's earners by
+  everyone who owns the BASE GAME rather than the DLC, so DLC rarity is systematically overstated. On a
+  top-N board that is decisive rather than marginal: the inflated trophies simply fill the slots. Our own
+  data cannot fix it -- `ProfileTrophyGroup` rows exist only where a hunter EARNED something in a group,
+  so we can see engagement but never ownership.
+- **AGGREGATE, DO NOT SORT.** The obvious implementation orders a hunter's trophies by rarity and slices
+  the first thousand -- a 250,000-row sort per whale, with no index able to serve it, and this codebase
+  has already dropped one query of that shape on cost (Browse Hunters' `rarest_avg_plat`). The recompute
+  groups by RATE and counts, then walks buckets rarest-first taking `min(n, remaining)`. PSN reports rates
+  to one decimal, so the result set is bounded by the ~1,000 distinct rate VALUES rather than by library
+  size. Note `--chunk-size` therefore means something different here than in its sibling: that command
+  emits one row per profile, this one up to a thousand.
+- **Ties are arbitrary, and safe ONLY while nothing row-identified is stored.** Points are strictly
+  decreasing in rate only ABOVE the 0.1% floor, and with ~1,000 distinct rates over ~1.03M trophies the
+  boundary lands inside a tie bucket for essentially every qualifying hunter. So "the rarest 1,000" is not
+  a well-defined SET OF ROWS. It does not matter, because every figure this store holds is a function of
+  the rate alone -- any choice of tie members yields the same two numbers. That stops being true the
+  moment something persists a row identity taken from the slice: a rarest-trophy pointer, a per-trophy
+  breakdown, a cached list of the scoring thousand.
+
+### Not to be confused with the other PP Score
+
+`CommunityTrophyDay.pp_score` is a different measure entirely: `total_trophies + 5*platinums +
+3*ultra_rares`, computed per DAY across the whole Discord-linked community and posted by the trophy
+tracker. This board was briefly called "PP Score" too, in a field of the same name, before the collision
+was noticed; it was renamed before shipping. See [community trophy tracker](../features/community-trophy-tracker.md).
+
+## `Profile.total_trophies_raw` (2026-09)
+
+The Trophies board sorted on `total_plats` (unfiltered) and broke ties on `total_trophies` -- which is
+**filter-respecting**: `update_profile_trophy_counts` honours the owner's `hide_hiddens` when it writes.
+So two hunters level on platinums were separated by a private setting, and a hunter who hid their whole
+library fell off the board entirely, `total_trophies == 0` failing the membership rule.
+
+`total_trophies_raw` is the unfiltered grand total -- the sum of the four type counters, which were
+already unfiltered. The board's ordering, its tiebreak and its membership rule all moved onto it, and the
+two partial indexes moved with them (migration `0333`). An index left on the old column would simply stop
+matching, silently, taking `trophy_rank` back to the seq scan 0307 measured at 16 ms.
+
+| | maintained by | reconciled |
+|---|---|---|
+| `total_trophies` (filtered) | `sync_complete`, settings POST | **nothing** -- a cron cannot recompute it without each profile's settings |
+| `total_trophies_raw` | `EarnedTrophy` signals | `recalc_profile_counters`, nightly, from ground truth |
+
+That second row is the other half of the argument: the filtered figure is the one with no safety net, so
+a missed write there persists until that hunter next syncs. It is still what a PROFILE shows, which is
+right -- a personal view should honour a personal preference. A shared scale should not.
+
+The backfill is exact and lives in the migration rather than in a deploy step: every earned trophy is one
+of the four types, so the new value is their sum and the whole fill is one arithmetic UPDATE over columns
+that already exist. There is no window where the board reads zeros.

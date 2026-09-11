@@ -156,7 +156,8 @@ class GameQuerySet(models.QuerySet):
         Returns:
             QuerySet: Non-shovelware games
         """
-        return self.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+        from trophies.models import SHOVELWARE_FLAGGED_STATUSES
+        return self.exclude(shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES)
 
     def for_platform(self, platforms):
         """

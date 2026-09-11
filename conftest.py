@@ -83,7 +83,16 @@ def _clear_rarity_cache():
     # (the hourly cron is the sole writer in prod), so a render can never warm it -- every test
     # that seeds it does its own try/finally delete. A future test that forgets the finally
     # would leak it; add the dated key here if that class of bug ever shows up.
-    keys = [COMMUNITY_SIZE_CACHE_KEY, 'lb:picker:countries', 'lb:picker:editions']
+    from trophies.management.commands.recompute_clean_standings import CURSOR_KEY
+    from trophies.management.commands.recompute_rarity_standings import (
+        CURSOR_KEY as RARITY_CURSOR_KEY,
+    )
+
+    # CURSOR_KEY is the Shovelware Free sweep's resume point, written with a SEVEN-DAY ttl. A test that
+    # exercises the budget cap leaves one behind, so a later test calling `recompute_clean_standings`
+    # bare would resume after it and silently skip profiles -- a cross-test leak that only shows up in a
+    # group run, which is the same shape as the `lb:picker:` bug documented below.
+    keys = [COMMUNITY_SIZE_CACHE_KEY, 'lb:picker:countries', 'lb:picker:editions', CURSOR_KEY, RARITY_CURSOR_KEY]
 
     def _drop():
         for key in keys:

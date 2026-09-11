@@ -210,7 +210,7 @@ The tutorial endpoints are not currently routed.
 | GET | `/api/v1/youtube/attribution-lookup` | Staff | Resolve a YouTube video's attribution |
 | GET | `/api/v1/games/search` | Login | Game search (autocomplete/typeahead) |
 | GET | `/api/v1/games/<np_communication_id>/players` | No | Players of a game, for the game-detail panel |
-| POST | `/api/v1/user/quick-settings/` | Login | Single-setting writes: profile toggles (hide hiddens / zeros), 24hr clock, timezone, browse defaults, and one-shot `ui_flag` education flags (see [onboarding.md](../features/onboarding.md)) |
+| POST | `/api/v1/user/quick-settings/` | Login | Single-setting writes: profile toggles (hide hiddens / zeros), 24hr clock, timezone, browse defaults, one-shot `ui_flag` education flags (see [onboarding.md](../features/onboarding.md)), `whats_new_seen` — the id of the newest announcement dismissed, validated against the shipped entries (see [whats-new.md](../features/whats-new.md)), and `contracts_seen` — an ISO timestamp, the newest announcement the Career new-contracts modal has SHOWN this hunter; validated, clamped to now, floored a year back and monotonic (see [onboarding.md](../features/onboarding.md)) |
 
 ## Rate Limits
 

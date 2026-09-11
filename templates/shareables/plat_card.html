@@ -169,7 +169,7 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
                 `-webkit-line-clamp`ed, so it drops a line and still reads. The game's name is the one
                 element on this card that has to be legible -- it is what the card is FOR -- so it is
                 the one element that must never be the thing that gives.{% endcomment %}
-                <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; flex-shrink: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
+                <div data-fit-title style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 50px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.022em; line-height: 1.04; margin-top: 12px; max-height: 108px; flex-shrink: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{{ game_name }}</div>
 
                 {% if platform_label or completed_at or user_rating.overall_rating %}
                 <div style="display: flex; align-items: center; gap: 16px; margin-top: 11px;">
@@ -391,3 +391,74 @@ Context: see core/services/completion_card_service.get_card_data + api/shareable
         {% endif %}
     </div>
 </div>
+
+{% comment %} FIT THE TITLE TO ONE LINE, and shrink only as far as it takes.
+
+Two lines is what breaks this card. The title box is the tallest thing in the column, and at 50px a
+wrapped name takes 108px -- which on a card that also has a badge band, a jobs row and a full quick
+take is the difference between composed and cramped. The `flex-shrink: 0` above stops the flex
+algorithm stealing that height back (it used to, and sliced through the glyphs), so the height has to
+come from the type instead.
+
+MEASURED, NOT COUNTED. A character-count rule would wrap "LEGO Harry Potter Collection: Years 1-4"
+(39 chars) and needlessly shrink "Marvel's Spider-Man: Miles Morales" (34) -- the widths are nowhere
+near proportional to the counts. This asks the browser, which is the only thing that knows.
+
+AND MEASURED TWICE. The @font-face rules are base64 data: URIs, and `load` does not wait for fonts,
+so the first pass can run against fallback metrics. The second runs on `document.fonts.ready`, which
+the renderer now awaits before screenshotting -- so whichever pass is last is the one captured, and
+it is the one measured in the real typeface.
+
+Below the floor it stops shrinking and wraps: a 60-character name should be two readable lines, not
+one illegible one. Two lines at the floor is still ~35px shorter than two lines at 50px, so even the
+give-up case leaves the card better off than it was. {% endcomment %}
+<script>
+(function () {
+    'use strict';
+    // SCOPED TO THIS CARD, not the document. `document.currentScript` is the node executing right
+    // now -- including when PlatPursuit.runScripts re-creates it to arm an innerHTML'd fragment --
+    // so its parent is the container this card was injected into. A global lookup would fit
+    // whichever `[data-fit-title]` came first in the page, which on a page holding more than one
+    // card means shrinking one nobody is looking at and leaving the visible one wrapped.
+    //
+    // Captured HERE, synchronously: `currentScript` is null by the time the fonts promise resolves.
+    var root = (document.currentScript && document.currentScript.parentElement) || document;
+    var el = root.querySelector('[data-fit-title]');
+    if (!el) { return; }
+
+    var MAX = 50, MIN = 32, STEP = 2;
+
+    function fit() {
+        // Measured as a plain nowrap block: `-webkit-box` + line-clamp is a clamped box, so its
+        // scrollWidth describes the clamp rather than the text. Restored either way below.
+        el.style.display = 'block';
+        el.style.whiteSpace = 'nowrap';
+        el.style.webkitLineClamp = 'unset';
+        el.style.maxHeight = 'none';
+
+        var size = MAX;
+        el.style.fontSize = size + 'px';
+        while (size > MIN && el.scrollWidth > el.clientWidth) {
+            size = Math.max(MIN, size - STEP);   // never overshoot the floor on an odd STEP
+            el.style.fontSize = size + 'px';
+        }
+
+        // RESTORED UNCONDITIONALLY, on both branches. The fitting branch used to leave the box as
+        // `block; nowrap; clamp:none; max-height:none` -- borrowed for measuring and never given
+        // back. With the template's `overflow: hidden` still in force, a title that measured as
+        // fitting and then painted even slightly wider (the sync pass runs before the real face is
+        // live) was clipped mid-word with no ellipsis, instead of falling back to the two-line
+        // clamp the CSS exists to provide. Measuring must not destroy the degradation path.
+        //
+        // `white-space: normal` on the fits branch too: it still renders one line at the size just
+        // chosen, and if the painted metrics ever disagree it wraps rather than clipping.
+        el.style.display = '-webkit-box';
+        el.style.whiteSpace = 'normal';
+        el.style.webkitLineClamp = '2';
+        el.style.maxHeight = '108px';
+    }
+
+    fit();
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fit); }
+})();
+</script>

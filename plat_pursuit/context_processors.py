@@ -10,6 +10,29 @@ def site_links(request):
     return {'discord_invite_url': settings.DISCORD_INVITE_URL}
 
 
+def whats_new_unread(request):
+    """Whether this viewer has an unread What's New entry -- the avatar's attention dot.
+
+    ZERO QUERIES, which is what makes a site-wide processor affordable here: `ui_flags` rides the user
+    object authentication already loaded, and the entries are a module-level tuple. Nothing is fetched.
+    Keep it that way -- this runs on every render of every page, including the Django admin.
+
+    IT IS NOT REDUNDANT WITH THE MODAL, which is the objection I raised when this was first left out.
+    The modal fires on the LOBBY, for SYNCED hunters only, so it reaches nobody who lands deep from a
+    bookmark or a link, nobody signed in without a linked PSN, and nobody who closes it by reflex having
+    read nothing. The dot is the signal for exactly those people.
+
+    Fails closed, like `moderation_alert` below: a viewer loses a dot for one render, nobody gains one.
+    """
+    try:
+        from core import whats_new
+        unread = whats_new.is_due(getattr(request, 'user', None)) or whats_new.previewing(request)
+        return {'whats_new_unread': unread}
+    except Exception:
+        logger.debug("Failed to resolve the What's New unread state", exc_info=True)
+        return {}
+
+
 def active_fundraiser(request):
     """
     Inject the currently active fundraiser for the site-wide banner.
@@ -186,6 +209,40 @@ def moderation_alert(request):
         # "we could not establish whether this person is a moderator" -- and the safe answer to that
         # is no. A moderator loses a shortcut for one render; nobody gains one.
         logger.debug("Failed to resolve the moderation attention count", exc_info=True)
+        return {}
+
+
+def career_attention(request):
+    """The two markers on the My Pursuit nav item: a claim COUNT and a NEW pill.
+
+    A number for work that is theirs and waiting; a word for news. Two counts side by side would
+    compete, and only one of them is a reason to go somewhere.
+
+    Anonymous and profile-less viewers return an empty dict before anything happens, which is the
+    whole cost for them. For everyone else it is one cached per-user count plus one cached
+    SITE-WIDE value compared against a marker already on the user object -- see
+    `trophies.services.career_attention` for why that second half is free.
+
+    Fails closed, like `whats_new_unread` and `moderation_alert` above: a hunter loses a marker for
+    one render, nobody gains one. A nav that 500s because a badge could not be counted would be a
+    poor trade for a marker.
+    """
+    user = getattr(request, 'user', None)
+    if not (user and user.is_authenticated and hasattr(user, 'profile')):
+        return {}
+    try:
+        from trophies.services import career_attention as svc
+        count = svc.claimable_count(user.profile)
+        new = svc.has_new_contracts(user)
+        # `?preview=career-markers` (staff): the markers only show when there is something to say,
+        # which makes them the hardest thing here to look at on purpose. See `svc.preview_counts`.
+        forced = svc.preview_counts(request)
+        if forced is not None:
+            count = forced[0] if forced[0] is not None else (count or 3)
+            new = forced[1]
+        return {'career_claimable': count, 'career_new_contracts': new}
+    except Exception:
+        logger.debug("Failed to resolve the My Pursuit attention markers", exc_info=True)
         return {}
 
 

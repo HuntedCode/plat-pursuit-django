@@ -8,6 +8,7 @@ from django.views.generic import TemplateView, View
 
 from trophies.mixins import StaffRequiredMixin
 from trophies.util_modules.cache import redis_client
+from core import whats_new
 from core.services import home_service
 from core.services.site_heartbeat import get_cached_heartbeat
 
@@ -60,6 +61,41 @@ class AboutView(TemplateView):
 
 class ContactView(TemplateView):
     template_name = 'pages/contact.html'
+
+
+class WhatsNewView(TemplateView):
+    """Every What's New entry, newest first -- the archive the modal links out to.
+
+    PUBLIC, and signed out on purpose. The modal is a nudge for hunters who were already here; this page
+    is what the site has been doing, which is a fair question for someone deciding whether to sign up.
+    It reads a module-level tuple, so it costs no queries at all and needs no caching.
+
+    READING IS DISMISSING. Opening this page marks the newest entry seen, which clears the avatar
+    marker and retires the modal. That REVERSED an earlier rule ("reading is not dismissing", so a
+    shared link could not burn somebody's notice) and the reversal is deliberate: once the avatar
+    carried an unread marker driven by the same value, a reader who clicked it, read the page and came
+    back would still have the marker and no way to clear it by doing the obvious thing.
+
+    The write is a POST fired by the page, never a side effect of this GET -- the page is public and
+    crawlable, and a mutating GET is the wrong shape whoever can reach it. So this view still writes
+    nothing itself; what it does is decide whether the page should ask.
+    """
+    template_name = 'pages/whats_new.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = getattr(self.request, 'user', None)
+        context['entries'] = whats_new.ENTRIES
+        # Which rows wear a "New" pill. Derived from the same single marker the modal and the avatar
+        # read, so the three can never disagree about what this reader has already been shown.
+        # `previewing` forces them on for the team: a door that opens the modal and the avatar marker
+        # but not this surface is the half-open door `whats_new.previewing` exists to prevent, and this
+        # is the surface that is hardest to retest any other way.
+        context['unseen_ids'] = whats_new.unseen_ids(user, previewing=whats_new.previewing(self.request))
+        # Whether the page should fire the mark-seen POST. Deliberately NOT `whats_new_unread` (which is
+        # `is_due OR previewing`): gating on that made a preview spend the marker.
+        context['mark_seen'] = whats_new.is_due(user)
+        return context
 
 
 # ── Design workshops (staff-only) ──────────────────────────────────────────
@@ -156,11 +192,9 @@ class HomeView(TemplateView):
         the beta requires logging in, so reviewers need a door. Team-gated: the param is
         harmless (the landing is cached community data), but the front door should not grow an
         undocumented public mode."""
-        return (
-            self.request.GET.get('preview') == 'landing'
-            and self.request.user.is_authenticated
-            and (self.request.user.is_staff or getattr(self.request.user, 'is_moderator', False))
-        )
+        from core.previews import previewing
+
+        return previewing(self.request, 'landing')
 
     def _team_previewing_syncing(self):
         """True when a team member asks to SEE the first-sync waiting room
@@ -168,11 +202,9 @@ class HomeView(TemplateView):
         syncing hero is an onboarding surface worth reviewing. Note: a synced
         previewer has trophies, so `is_initial_sync` renders False -- the DEBUG dev panel on
         the page covers the initial-sync copy path."""
-        return (
-            self.request.GET.get('preview') == 'syncing'
-            and self.request.user.is_authenticated
-            and (self.request.user.is_staff or getattr(self.request.user, 'is_moderator', False))
-        )
+        from core.previews import previewing
+
+        return previewing(self.request, 'syncing')
 
     def _resolve_state(self):
         """Compute the home-page state for the current request user."""
@@ -208,15 +240,36 @@ class HomeView(TemplateView):
             # not yet greeted (ui_flags), fully dormant while PP_LAUNCH_DATE is unset.
             # ?preview=launch-welcome (team-gated, mirroring the other preview doors) forces
             # it so the modal can be reviewed on prod without shell surgery.
+            from core.previews import previewing
+
             user = self.request.user
             context['show_launch_welcome'] = bool(
                 settings.PP_LAUNCH_DATE
                 and user.date_joined < settings.PP_LAUNCH_DATE
                 and 'launch_welcome' not in (user.ui_flags or {})
-            ) or (
-                self.request.GET.get('preview') == 'launch-welcome'
-                and (user.is_staff or getattr(user, 'is_moderator', False))
-            )
+            ) or previewing(self.request, 'launch-welcome')
+
+            # WHAT'S NEW, and the precedence rule between the two modals.
+            #
+            # Never both on one visit: that is two scrims back to back, and the second arrives while the
+            # reader is still deciding what the first was. The 1.0 greeting wins because it fires exactly
+            # once in an account's lifetime and cannot be deferred to a better moment, whereas this entry
+            # stays undismissed and is simply due again next visit. Nothing is lost by waiting.
+            #
+            # Decided HERE rather than inside either modal, because it is the one place that can see
+            # both. `whats_new.is_due` deliberately knows nothing about the greeting.
+            is_previewing = whats_new.previewing(self.request)
+            # The preview sits INSIDE the precedence guard, not beside it. With `or is_previewing`
+            # hanging off the end, a staff member who was also due the 1.0 greeting got BOTH modals:
+            # two scrims, two focus traps fighting over the same document, one Escape closing both, and
+            # the gate settled by whichever closed first while the other was still covering the page.
+            # The launch-welcome door is naturally immune (forcing that flag suppresses this one), so
+            # only this side could break the invariant home.html states as impossible.
+            context['show_whats_new'] = not context['show_launch_welcome'] and (
+                whats_new.is_due(user) or is_previewing
+            ) and whats_new.latest() is not None
+            # The entry itself, so the template renders from data and never restates the copy.
+            context['whats_new'] = whats_new.latest()
             return context
 
         # All pre-synced states share the cached site heartbeat for their

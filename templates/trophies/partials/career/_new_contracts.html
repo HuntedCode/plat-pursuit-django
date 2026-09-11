@@ -1,0 +1,392 @@
+{% comment %} NEW CONTRACTS since this hunter last looked, on the Career page.
+
+Server-gated entirely (`show_new_contracts` in career_views.py): something is newer than their
+`contracts_seen` marker, and the first-visit explainer is not also due. Render == armed.
+
+BUILT TO BE STAYED IN, not dismissed. Three parts, in the order somebody actually reads them:
+
+  HEROES   -- the top MAX_HEROES (6) of the same order the list uses, with real cover art, their job
+              icons and this viewer's status. All six render and CSS shows 2 / 4 / 6 by breakpoint,
+              so the count follows the screen without a second render path.
+  FILTER   -- the site's own discipline dropdowns (`.rp-discs`, shared with the contracts board and
+              Browse Games): five triggers in discipline colours, each opening its jobs. The owner
+              follows Mastermind specifically, and "what landed for MY job" is the question this
+              modal exists to answer.
+  THE LIST -- every new contract, scrolling. Capped at MAX_LIST, because this renders on every
+              Career load and a bulk publish must not become 300 rows nobody asked for.
+
+Filtering is CLIENT-side. Every row already carries its job and discipline slugs, so selecting is a
+hidden toggle, not a round trip -- and the counts cannot disagree with the list, because the facets
+are built from the rows the list renders.
+
+Behaviour is PlatPursuit.DetailModal; the page's motion gate is armed separately and synchronously by
+_career_modal_gate.html, so nothing waits on this script to run.
+{% endcomment %}
+{% load job_icons %}
+{% comment %} `data-auto` is the DISMISSAL arm, not the open (that is `autoOpenDelay` below), so
+a preview renders without it: looking at the modal must not record the looker as having seen a
+wave. A preview also ignores the marker and the 14-day floor, which makes its stamp the newest
+announcement on the site -- so recording it would cost the previewer every wave they had not yet
+been shown, and the server's monotonic clamp makes that unrecoverable. {% endcomment %}
+<div class="pp-detail-modal pp-howto" id="new-contracts"{% if not nc_preview %} data-auto{% endif %} hidden>
+    <div class="pp-detail-modal__scrim" data-nc-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog nc__dialog" role="dialog" aria-modal="true" aria-labelledby="new-contracts-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-nc-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+            <p class="nc__eyebrow">New on the Job Board</p>
+            <h2 class="pp-howto__title" id="new-contracts-title">
+                <svg class="pp-howto__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="8" y="2" rx="1"/><path d="m9 14 2 2 4-4"/></svg>
+                {{ nc.total }} new contract{{ nc.total|pluralize }}
+            </h2>
+
+            {% comment %} HEROES. `aspect-[3/4]` + object-cover object-top is the house rule for game
+            art: PSN fallbacks are square or 4:3 and centre-crop badly, and object-top keeps the logo
+            at the top of the cover. {% endcomment %}
+            <div class="nc__heroes">
+                {% for c in nc.heroes %}
+                    <figure class="nc__hero">
+                        <div class="nc__hero-art">
+                            {% if c.cover_url %}
+                                <img src="{{ c.cover_url }}" alt="" loading="lazy" decoding="async" />
+                            {% else %}
+                                <span class="nc__hero-noart" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 14 2 2 4-4"/></svg>
+                                </span>
+                            {% endif %}
+                            {% if c.status == 'claimable' %}
+                                {% comment %} "Ready", not "Ready to claim": the full phrase wrapped to two lines across the
+                            bottom of the cover. The row below says it in full. {% endcomment %}<span class="nc__hero-chip nc__chip--claim">Ready</span>
+                            {% elif c.status == 'pursuing' %}
+                                <span class="nc__hero-chip nc__chip--going">{{ c.max_progress }}%</span>
+                            {% endif %}
+                        </div>
+                        <figcaption class="nc__hero-name">{{ c.name }}</figcaption>
+                        <span class="nc__jobs">
+                            {% for job in c.jobs.all %}
+                                {% comment %} role="img" + aria-label per icon: an aria-label on the
+                                bare wrapper span (generic role) is dropped by assistive tech, and
+                                `title` alone does not name an element reliably. {% endcomment %}
+                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" role="img" aria-label="{{ job.name }}" title="{{ job.name }}">{% job_icon_use job.icon 'nc__job-ic' %}</span>
+                            {% endfor %}
+                        </span>
+                    </figure>
+                {% endfor %}
+            </div>
+
+            {% comment %} THE FILTER, in the site's existing discipline-dropdown idiom (`.rp-discs`,
+            shared by the Career contracts board and Browse Games): a trigger per discipline in its own
+            colour, opening a popover of that discipline's jobs. Five triggers rather than a horizontal
+            scroll of up to 25 chips, and a reader who follows one job finds it under its discipline
+            exactly where the board already taught them to look.
+
+            `PlatPursuit.discPopovers` owns open/close, the viewport-edge flip, aria-expanded and
+            click-outside; SELECTION is ours, below. A discipline's count is DISTINCT contracts, so it
+            is never the sum of its jobs' counts -- one contract feeding two of its jobs is one
+            contract to the discipline. {% endcomment %}
+            <div class="nc__toolbar">
+            {% if nc.disciplines %}
+                <div class="nc__filter rp-discs" role="group" aria-label="Filter by discipline or job">
+                    <button type="button" class="rp-chip is-active" data-nc-all aria-pressed="true">All <span class="rp-disc__count">{{ nc.rows|length }}</span></button>
+                    {% for d in nc.disciplines %}
+                        <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
+                            <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-nc-disc="{{ d.slug }}" aria-haspopup="true" aria-expanded="false" aria-pressed="false">
+                                <span class="rp-disc__name">{{ d.label }}</span><span class="rp-disc__count">{{ d.count }}</span>
+                                <svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <div class="rp-pop" role="group" aria-label="{{ d.label }} jobs" hidden>
+                                <button type="button" class="rp-pop__item rp-pop__item--head" data-nc-disc="{{ d.slug }}" aria-pressed="false"><span>All {{ d.label }}</span><span class="rp-pop__n">{{ d.count }}</span></button>
+                                {% for j in d.jobs %}
+                                    <button type="button" class="rp-pop__item" data-nc-job="{{ j.slug }}" aria-pressed="false">{% job_icon_use j.icon 'rp-pop__ico' %}<span>{{ j.name }}</span><span class="rp-pop__n">{{ j.count }}</span></button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+                {% comment %} SORT. Progress first because it is the answer to "which of these am I
+                already most of the way through" -- the thing that turns a catalogue notice into a
+                short list of finishable games. A-Z is for the reader looking for one title they
+                heard about. The shared segmented switcher (`.pp-switch`), which is the site's ONE
+                treatment for a toggle like this.
+
+                The list is re-ordered CLIENT-side: every row is already here and carries both keys,
+                so a sort is a re-append, not a round trip. `data-nc-i` is the server's order, which
+                is what "Progress" restores -- recomputing it here would be a second, drifting
+                definition of the ordering the heroes were picked by. {% endcomment %}
+                <div class="pp-switch nc__sort" role="group" aria-label="Sort the list" data-nc-sort>
+                    <button type="button" class="pp-switch__chip is-active" data-nc-order="progress" aria-pressed="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                        <span class="pp-switch__lbl">Progress</span>
+                    </button>
+                    <button type="button" class="pp-switch__chip" data-nc-order="name" aria-pressed="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"/><path d="m3 16 4 4 4-4"/><path d="M14 6h6"/><path d="M14 18h6"/><path d="M14 12h6"/></svg>
+                        <span class="pp-switch__lbl">A-Z</span>
+                    </button>
+                </div>
+            </div>
+
+            <ul class="nc__list" data-nc-list>
+                {% for c in nc.rows %}
+                    <li class="nc__row nc__row--{{ c.status }}" data-nc-i="{{ forloop.counter0 }}" data-nc-name="{{ c.name|lower }}" data-nc-jobs="{% for job in c.jobs.all %}{{ job.slug }} {% endfor %}" data-nc-discs="{% for job in c.jobs.all %}{{ job.discipline }} {% endfor %}">
+                        <span class="nc__name">{{ c.name }}</span>
+                        <span class="nc__jobs" aria-hidden="true">
+                            {% for job in c.jobs.all %}
+                                <span class="nc__job" style="--disc: var(--disc-{{ job.discipline }});" title="{{ job.name }}">{% job_icon_use job.icon 'nc__job-ic' %}</span>
+                            {% endfor %}
+                        </span>
+                        {% if c.status == 'claimable' %}
+                            <span class="nc__chip nc__chip--claim">Ready to claim</span>
+                        {% elif c.status == 'pursuing' %}
+                            <span class="nc__chip nc__chip--going">{{ c.max_progress }}% done</span>
+                        {% else %}
+                            <span class="nc__chip">New</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+            {% comment %} aria-live, because a filter that empties the list is otherwise silent: the
+            rows just stop existing with nothing said. Also not "for that job" -- the same message
+            shows when the filter was a whole discipline. {% endcomment %}
+            <p class="nc__empty" data-nc-empty role="status" aria-live="polite"></p>
+
+            {% if nc.extra %}
+                <p class="nc__more">and {{ nc.extra }} more on the board</p>
+            {% endif %}
+
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-nc-close>Got it</button>
+                <a class="pp-howto__more" href="{% url 'career' %}?view=contracts&amp;new=1" data-nc-close>Open the board &rarr;</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% comment %} The is-closing exit lives with the other pp-howto clones in series-list.css, which is
+also where the reason it must be ID-scoped is written down. {% endcomment %}
+
+<script>
+(function () {
+    'use strict';
+    var el = document.getElementById('new-contracts');
+    var settle = function () { if (window.ppSettleCareerModal) { window.ppSettleCareerModal('contracts'); } };
+    if (!el) { settle(); return; }
+
+    // THE FILTER. Client-side because every row already carries its slugs: selecting is a hidden
+    // toggle, so there is no round trip, no loading state, and no way for the counts to disagree with
+    // what the list shows.
+    //
+    // discPopovers owns the OPEN/CLOSE mechanics only -- one popover at a time, the viewport-edge
+    // flip, aria-expanded, click-outside and Escape. That is the shared contract the Career board and
+    // Browse Games already use, and reimplementing it here is how the three come to behave
+    // differently. Selection is ours, because it is the part that differs.
+    var filterRoot = el.querySelector('.nc__filter');
+    var sortRoot = el.querySelector('[data-nc-sort]');
+    var list = el.querySelector('[data-nc-list]');
+    var empty = el.querySelector('[data-nc-empty]');
+    var rows = list ? Array.prototype.slice.call(list.querySelectorAll('.nc__row')) : [];
+    var pops = { closeAll: function () {} };
+
+    // The stamp this render is offering, and where an unrecorded dismissal parks the one it was
+    // actually shown. See onDismiss at the bottom.
+    var PAGE_STAMP = '{{ new_contracts_stamp|escapejs }}';
+    var opened = false;   // did the reader actually SEE this page's wave? (see onDismiss)
+    var STAMP_KEY = 'pp-new-contracts-stamp';
+    function stored() {
+        try { return localStorage.getItem(STAMP_KEY) || ''; } catch (e) { return ''; }
+    }
+
+    // ESCAPE BELONGS TO THE INNERMOST THING THAT IS OPEN. discPopovers closes popovers on Escape and
+    // DetailModal closes the modal on Escape, both listening on document in the bubble phase -- so one
+    // press did both, and a reader dismissing a dropdown lost the whole modal with it. A capture-phase
+    // listener runs before either, and claims the key only while a popover is actually open.
+    function popoverOpen() { return !el.hidden && !!el.querySelector('.rp-pop:not([hidden])'); }
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape' || !popoverOpen()) { return; }
+        e.stopPropagation();
+        pops.closeAll();
+    }, true);
+
+    // THE CLICK TWIN OF THE SAME COLLISION, and SCOPED TO THE SCRIM. discPopovers treats a scrim
+    // click as click-outside while DetailModal treats it as dismiss, so closing a dropdown that way
+    // closed the whole modal and recorded the wave as read.
+    //
+    // The first cut guarded on "not inside `.rp-disc`", which is everything else in the dialog --
+    // and stopPropagation from a document CAPTURE listener kills the event before any handler
+    // below. So while a dropdown was open, the first click on the close button, the sort chips, the
+    // All chip and the board link all did nothing. The board link was the bad one: stopPropagation
+    // is not preventDefault, so it navigated anyway while the handler that records the dismissal
+    // never ran -- the reader left for the board and met the same modal forever.
+    document.addEventListener('click', function (e) {
+        if (!popoverOpen() || !e.target.closest) { return; }
+        var scrim = e.target.closest('.pp-detail-modal__scrim');
+        if (!scrim || !el.contains(scrim)) { return; }
+        e.stopPropagation();
+        pops.closeAll();
+    }, true);
+
+    function applyFilter(attr, want) {
+        if (!list) { return; }
+        var shown = 0;
+        rows.forEach(function (row) {
+            // Padded both sides so `mage` cannot match `mastermind`: the slugs share one
+            // space-separated attribute, and a bare indexOf is a prefix trap.
+            var hay = ' ' + (row.getAttribute(attr) || '') + ' ';
+            var hit = !want || hay.indexOf(' ' + want + ' ') !== -1;
+            row.hidden = !hit;
+            if (hit) { shown++; }
+        });
+        // TEXT, not `hidden`. A live region that is hidden at the moment its content changes is not
+        // reliably announced, so toggling the element itself said nothing to a screen reader -- the
+        // silence this was added to fix.
+        if (empty) { empty.textContent = shown ? '' : 'Nothing new there.'; }
+    }
+
+    // SORT. Both keys are already on every row, so this is a re-append rather than a fetch. One
+    // fragment, one reflow -- appending 200 rows one at a time is 200 of them.
+    function applySort(mode) {
+        if (!list) { return; }
+        var byName = mode === 'name';
+        var frag = document.createDocumentFragment();
+        rows.slice().sort(function (a, b) {
+            if (byName) {
+                // localeCompare, not `<`: the catalogue has accented and punctuated titles, and
+                // codepoint order files them somewhere nobody would look.
+                return a.getAttribute('data-nc-name').localeCompare(b.getAttribute('data-nc-name'));
+            }
+            // The SERVER's order, restored -- not recomputed. It is the order the heroes were
+            // chosen by, and a second definition of it here would drift from that one.
+            return (+a.getAttribute('data-nc-i')) - (+b.getAttribute('data-nc-i'));
+        }).forEach(function (row) { frag.appendChild(row); });
+        list.appendChild(frag);
+    }
+
+    function markActive(button) {
+        if (!filterRoot) { return; }
+        // The pressed control lights up -- and so does the discipline TRIGGER above a pressed popover
+        // item, because the item itself is back inside a closed popover a moment later and the trigger
+        // is then the only place the selection is still visible.
+        var owner = button && button.closest('.rp-disc');
+        filterRoot.querySelectorAll('.rp-chip').forEach(function (c) {
+            var ownerTrigger = !!owner && c.classList.contains('rp-disc__trigger') && c.closest('.rp-disc') === owner;
+            var on = c === button || ownerTrigger;
+            c.classList.toggle('is-active', on);
+            // The class was the ONLY indicator, so a screen reader could not tell which discipline
+            // was filtering -- and the trigger is where the selection lives once the popover shuts.
+            c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        filterRoot.querySelectorAll('.rp-pop__item').forEach(function (i) {
+            // `is-selected` is the shared popover's own selected state (the tick in elements.css); the
+            // board sets it too. Reusing half a pattern is how two copies come to look different.
+            i.classList.toggle('is-selected', i === button);
+            i.setAttribute('aria-pressed', i === button ? 'true' : 'false');
+        });
+    }
+
+    if (filterRoot) {
+        filterRoot.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var all = e.target.closest('[data-nc-all]');
+            var disc = e.target.closest('[data-nc-disc]');
+            var job = e.target.closest('[data-nc-job]');
+
+            if (all) { applyFilter('data-nc-jobs', ''); markActive(all); pops.closeAll(); return; }
+            // A JOB wins over its discipline: the job item lives inside the discipline's popover, so
+            // both selectors match the same click and the more specific one is what was pressed.
+            if (job) { applyFilter('data-nc-jobs', job.getAttribute('data-nc-job')); markActive(job); pops.closeAll(); return; }
+            // The trigger itself only opens the popover -- discPopovers handles that. Only the
+            // popover's "All <discipline>" head filters, or a click to open would also filter.
+            if (disc && disc.classList.contains('rp-pop__item')) {
+                applyFilter('data-nc-discs', disc.getAttribute('data-nc-disc'));
+                markActive(disc);
+                pops.closeAll();
+            }
+        });
+    }
+
+    if (sortRoot) {
+        // The click handler is OURS, and wireTablist is asked for keyboard only (`manual`). The
+        // switcher then still works if utils.js failed to load -- a <button> fires click from Enter
+        // and Space natively -- and only the arrow-key roving is lost.
+        // NO `wireTablist` HERE, deliberately. It installs a roving tabindex (active 0, the rest
+        // -1) for a `role="tablist"` of tabs; this is a `role="group"` of two aria-pressed toggle
+        // buttons, where every button should stay in the tab order and nothing announces that arrows
+        // move between them. Wiring it and not calling the returned `syncTabindex` after each toggle
+        // left the ACTIVE chip at tabindex -1 -- unreachable by keyboard, which is worse than the
+        // arrow keys it was added for.
+        sortRoot.addEventListener('click', function (e) {
+            var chip = e.target.closest && e.target.closest('[data-nc-order]');
+            if (!chip || !sortRoot.contains(chip)) { return; }
+            sortRoot.querySelectorAll('[data-nc-order]').forEach(function (c) {
+                c.classList.toggle('is-active', c === chip);
+                c.setAttribute('aria-pressed', c === chip ? 'true' : 'false');
+            });
+            applySort(chip.getAttribute('data-nc-order'));
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { settle(); return; }
+        if (PlatPursuit.discPopovers) { pops = PlatPursuit.discPopovers(filterRoot); }
+
+        PlatPursuit.DetailModal(el, {
+            closeSelector: '[data-nc-close]',
+            autoOpenDelay: 450,
+            {% comment %} Both omitted in a preview. Without `onDismiss` the retry path is a no-op
+            (DetailModal checks for it), and without `seenKey` the "already dismissed on this device"
+            branch cannot fire either -- which would otherwise re-POST the preview's stamp without
+            ever opening anything. {% endcomment %}
+            {% comment %} onOpened stays in a preview -- it only cancels the page's 4s motion
+            backstop, which writes nothing. Dropping it meant the preview released Career's count-ups
+            behind its own scrim at 4 seconds, which is the exact failure the gate exists to prevent:
+            a preview that does not reproduce it is not showing you the real render. {% endcomment %}
+            onOpened: function () {
+                opened = true;
+                if (window.ppHoldCareerModal) { window.ppHoldCareerModal('contracts'); }
+            },
+            onSettled: settle,
+            {% comment %} ONLY THE STATE WRITERS are dropped in a preview. `onSettled` belongs on
+            both paths for the same reason `onOpened` does -- and more sharply: it is what releases
+            the page's motion when the modal closes, so omitting it while cancelling the backstop
+            left a preview whose count-ups never ran at all. {% endcomment %}
+            {% if not nc_preview %}
+            seenKey: 'pp-new-contracts-seen',
+            onDismiss: function () {
+                if (!(window.PlatPursuit && PlatPursuit.API)) {
+                    // PARK FIRST. DetailModal arms its retry on any rejection, so rejecting before
+                    // the .then() below left nothing to replay -- and the retry then posted a LATER
+                    // page's stamp, which is the fortnight-wide skip this whole path exists to stop.
+                    try { localStorage.setItem(STAMP_KEY, PAGE_STAMP); } catch (e) {}
+                    return Promise.reject();
+                }
+                // The stamp comes from the WAVE, not the clock: a wave announced between this
+                // render and this click was announced before the click but after the query, and a
+                // now-stamp would mark it seen without ever showing it.
+                //
+                // AND NOT THIS PAGE'S STAMP EITHER, when an earlier dismissal is still unrecorded.
+                // DetailModal retries a failed dismissal on the NEXT page load by calling this
+                // function again -- on a page that may carry a newer stamp. Replaying that one
+                // would mark a wave seen that this reader has never been shown, which is the same
+                // skip the paragraph above rejects, only a fortnight wide instead of seconds.
+                // A REAL DISMISSAL RECORDS THIS PAGE'S STAMP; only the retry replays a parked
+                // one. Preferring the parked stamp unconditionally meant a second tab's genuine
+                // dismissal was recorded as the first tab's older stamp -- and then cleared the key,
+                // so nothing retried and the reader met a wave they had already read.
+                var stamp = opened ? PAGE_STAMP : (stored() || PAGE_STAMP);
+                return PlatPursuit.API.post('/api/v1/user/quick-settings/', {
+                    setting: 'contracts_seen', value: stamp
+                }).then(function (res) {
+                    try { localStorage.removeItem(STAMP_KEY); } catch (e) {}
+                    return res;
+                }, function (err) {
+                    // Kept so the retry above has something to replay. DetailModal's own seenKey
+                    // records THAT a dismissal failed; this records WHICH one.
+                    try { localStorage.setItem(STAMP_KEY, stamp); } catch (e) {}
+                    throw err;
+                });
+            },
+            {% endif %}
+        });
+    });
+})();
+</script>

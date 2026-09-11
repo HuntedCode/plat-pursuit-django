@@ -176,11 +176,14 @@
         wireFreshnessLine();  // mirrors navsync's state onto the line the user clicked
         if (STILL) { return; }
 
-        // Gated on the 1.0 launch greeting: on the one visit that modal auto-opens, the whole
-        // motion pass would play out behind its scrim. Behind the gate the server-rendered
-        // values stand (correct for no-JS and reduced motion too); on "Look around" the pass
-        // plays as the payoff. Fail-open: no gate published = run immediately.
-        (window.ppAfterLaunchWelcome || function (f) { f(); })(function () {
+        // Gated on whichever lobby modal is up -- the 1.0 greeting or What's New. On a visit that
+        // opens one, the whole motion pass would play out behind its scrim and be over before the
+        // reader looked. Behind the gate the server-rendered values stand (correct for no-JS and
+        // reduced motion too); on dismissal the pass plays as the payoff.
+        //
+        // Fail-open: no gate armed = run immediately. It was `ppAfterLaunchWelcome`, named for the
+        // only modal the lobby had; the gate is now armed by _home_modal_gate.html for either.
+        (window.ppAfterHomeModal || function (f) { f(); })(function () {
             // Left-to-right, top-to-bottom: DOM order IS reading order here, so a flat per-index step reads
             // as a cascade without measuring anything. Capped so a long stat row never trickles.
             wireRingPace();

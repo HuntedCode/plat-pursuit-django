@@ -80,7 +80,8 @@ override their base genre job. Freelancer is the no-specialization fallback, hou
 | `igdb_id` | **the raw IGDB game id this Contract keys on.** `IntegerField(null=True, unique=True)` — nullable+unique so episodic (bundle-only) contracts can exist with no id |
 | `is_live` | curation gate (mirrors `Badge.is_live`); hidden until released |
 | `went_live_at` | when it FIRST went live. Stamped **only on the TRANSITION** to live — by `save()` (which compares against the value `from_db()` recorded) and by the admin's `make_live`, which uses `queryset.update()`, so it stamps `is_live=False` rows itself *before* flipping them. **Never reset**, so un-publishing and re-publishing does not re-announce. Drives everything below |
-| `announced_at` | when `announce_contracts` posted it to Discord. Stamped only after a confirmed 2xx |
+| `announced_at` | when the announcer SETTLED this row. Set by a confirmed 2xx **and** by `--baseline`. Idempotency only — it does not mean anybody was told |
+| `announcement_posted` | whether it was actually POSTED. Only a confirmed 2xx sets it, and it is what the Career new-contracts modal filters on. Readonly in the admin: it is a checkbox, and ticking it on a baselined contract puts that contract in every hunter's modal |
 | `jobs` | **M2M → Job** — the job profile (≤ 6); XP splits **evenly** across these |
 | `xp_total_override` | nullable; default uses the global base `T`, override for specials |
 
@@ -144,6 +145,42 @@ by (profile, job) — **DB aggregation, never Python iteration**. Mirrors the ex
 - Each game → at most one home Contract (unique `Contract.igdb_id`).
 - Each (profile, Contract, tier) granted **at most once**.
 - Every Contract is worth the same total `T` (split among its ≤6 jobs) unless overridden.
+
+## The nightly sweep's cost
+
+`process_contracts --all` evaluates, per live Contract, every profile that has completed a member
+game **and still has a tier left to stamp**. That second condition is what keeps a full sweep
+affordable as the catalogue grows.
+
+A Contract can only ever write two fields on an `EarnedContract` — `platinum_reached_at` and
+`full_reached_at` — and only when they are `None`. So a hunter whose applicable stamps are already
+set cannot produce a mark tonight or any night. Without the exclusion the sweep re-ran full tier
+detection on them anyway, every night, to re-confirm what it had already written: in production,
+461 of every 462 candidates. The cost now tracks UNSTAMPED pairs, which shrinks as the catalogue
+matures rather than growing with users × contracts.
+
+**Ask the platinum question fresh.** `EarnedContract.has_platinum` is frozen when the row is created
+and never updated, while membership is IGDB-derived and can gain a platinum-bearing game later. A
+row written before that keeps saying `False` forever, so excluding on it would strand that hunter's
+platinum tier permanently and silently. The sweep asks `_has_platinum(contract, member_ids)` once per
+Contract instead — one catalogue-bounded `.exists()` against thousands of skipped detections.
+
+**The fresh question fixes the STAMP, not the PAYOUT.** `_pending_tiers` still gates on the frozen
+`has_platinum`, so a hunter whose row was created before the contract had a platinum ends up with
+`platinum_reached_at` correctly stamped and the tier never offered, never paid, no error. Entirely
+pre-existing and orthogonal to the sweep -- but the sentence above should not be read as resolving
+it.
+
+**Read `N candidate(s), M settled` as the alarm.** For a mature Contract the healthy steady state is
+`0 candidate(s)` -- which is byte-identical to what a broken candidate query or a mis-passed
+`has_plat` would print. The settled count is what distinguishes a quiet sweep from a blind one:
+0 candidates with a large settled count is correct; 0 and 0 on a Contract people have completed is
+not.
+
+**`has_plat` is fresh per SWEEP OF THAT CONTRACT, not per instant.** Under `--incremental` a
+Contract that gains its first platinum may not be revisited for up to `FULL_SWEEP_INTERVAL`, so the
+weak exclusion applies until then. Bounded, self-healing, and the same window membership gains
+already had -- but "asked fresh" does not mean instantaneous.
 
 ## Reconciliation — when membership changes under a hunter
 
@@ -260,10 +297,13 @@ merely nearly true. **The Discord announcer is NOT a fourth reader** — see bel
 `is_live=False` possibly weeks before staff publish it, so `created_at` answers "when was this
 drafted", not "what is new".
 
-**The launch set reads as not-new by design.** Those ~1,000 badge-derived contracts carry
-`went_live_at = NULL` (they went live before the column existed), so the chip starts empty and
-fills as waves land, rather than calling the whole catalogue new on day one. The transition rule
-in the Gotchas is what keeps that true once curators start editing them.
+**The launch set carries real `went_live_at` stamps** — checked against prod, 2026-09-10. This
+doc said for months that they were NULL because they predate the column; they are not. The Latest
+chip is unaffected because those stamps sit at launch and fall outside the 14-day window, but the
+**announcer has no window**, so `pending_contracts()` sees all ~1,000 of them and the first real
+run refuses the wave. `--baseline` is therefore REQUIRED at cutover, not the cheap insurance the
+deploy notes called it. The transition rule in the Gotchas is what stops a curator's typo fix
+re-publishing one.
 
 Two traps this cost us, both recorded as tests:
 
@@ -285,25 +325,189 @@ Two traps this cost us, both recorded as tests:
 
 ## Announcing a wave
 
-`announce_contracts` (daily, 06:00 UTC) posts newly published contracts to Discord grouped by JOB,
-linking to the board with Latest applied. **Silent when nothing is new**, which is most days.
+A published wave is announced TWICE, to two different audiences, from one source of truth about
+what is new. The Discord post goes out to the channel; the Career modal meets the hunter on the
+page where the work is claimed. Neither is a summary of the other: the post is a broadcast that has
+to survive being scrolled past, the modal is a browsable index of the same wave for one reader.
+
+**`announced_at` is that source of truth, and the announcer is the only writer.** Publishing puts a
+contract on the board; being ANNOUNCED is what puts it in front of a reader. The modal reads the
+same column the post stamps, so a game fixed on a Tuesday travels with Wednesday's wave instead of
+popping a modal at every hunter by itself, and a wave that failed to reach Discord shows nobody a
+modal claiming it was announced.
+
+### The Discord post (`announce_contracts`, daily 06:00 UTC)
+
+`core/services/contract_announcer.py`. **Silent when nothing is new**, which is most days.
+
+**Its own channel.** `DISCORD_CONTRACTS_WEBHOOK_URL` — a wave is a catalogue notice, not
+somebody's achievement, and it lands daily, so it gets its own room rather than pushing
+hunters' platinums up the scroll. UNSET falls back to the platinum channel, because this runs
+from a cron and a deploy that has not configured it yet should keep announcing rather than
+start failing every morning. The success line names the channel it used, so the fallback is
+never silent. Both unset is refused before posting: `requests.post(None, ...)` raises an error
+the webhook helper redacts to "URL redacted", which is useless to debug from.
 
 Announceable = `is_live=True` + `went_live_at` stamped + `announced_at` null. That answers "what
 about games awaiting admin review?" structurally: a staged candidate is `is_live=False`, so it has
 no `went_live_at` and cannot reach the announcer. **Publishing is the only act that makes a
 contract announceable.**
 
+| Piece | What it is | Why |
+|---|---|---|
+| Lead embed | the count, up to `MAX_HEROES` (3) headliners with cover art, the board link | the games worth acting on, with the art that sells them |
+| Per-discipline embeds | one embed per discipline that gained work, tinted in that discipline's colour, listing its jobs with counts | an embed carries exactly ONE colour and cannot tint lines, so the colour IS the label: no emoji to upload, no icon to survive markdown |
+| Headliner order | reach-ranked (`highlights()`), the same signal the candidate pipeline gates on | the wave's own definition of "most people will care", not a second one |
+| Below the fold | counts, not titles | twenty title lines is a wall nobody reads; the titles worth acting on are already at the top. The trade: a hunter following one job learns THAT it gained work, and the board link answers which game |
+
+`DISCIPLINE_COLORS` holds each colour as an **integer plus its oklch source**, because the
+stylesheet declares oklch and Discord cannot parse it. Keeping the source beside the value makes a
+stylesheet change DETECTABLE rather than silently leaving the channel a shade off the site; a test
+pins the pair. Embeds are capped against Discord's limits (4096 per description, **6000 across all
+embeds**, 10 embeds) by `_capped()`, which drops from the bottom.
+
 Idempotency is the `announced_at` COLUMN rather than a Redis watermark: a lost watermark
-re-announces everything behind it, one that runs ahead silently swallows a wave. `MAX_WAVE` (40)
+re-announces everything behind it, one that runs ahead silently swallows a wave. **`--limit` and `--force` are NOT peers of `--baseline` for the launch set.** Both call
+`mark_announced`, so both set `announcement_posted` — `--limit 40` puts 40 launch-era games in
+every hunter's modal, `--force` puts all ~1,000 there. Before the modal existed, choosing wrong
+cost a Discord post; now it costs a site-wide modal too.
+
+**Never `--baseline` over a wave you meant to announce.** It stamps EVERY pending contract when
+`--limit` is absent, and `announced_at` is never cleared — a real wave published between the
+deploy and the baseline run is then posted nowhere and shown to nobody, permanently. Baseline
+first, publish second.
+
+`MAX_WAVE` (40)
 refuses a bulk publish — a staff sweep publishing hundreds of staged candidates in one changelist
-action — with `--baseline` (record as known, post nothing) as the operator's answer. NOT the
-launch set: those contracts predate the column and carry NULL, so `pending_contracts()` never
-sees them.
+action, **and the ~1,000 launch contracts, which do carry `went_live_at`** — with `--baseline`
+(record as known, post nothing) as the operator's answer.
+
+**`announced_at` alone does not mean "posted".** `--baseline` stamps it too, because it also settles
+the row for idempotency — it just settles it by deciding not to post. `announcement_posted` is the
+half that only a confirmed 2xx sets, and it is what the Career modal reads: the operator's way of
+NOT announcing a backlog must not announce that backlog to every hunter instead.
 
 The post's link only filters the board to Latest when the WHOLE wave is still inside that window.
 `announced_at` and `NEW_CONTRACT_WINDOW_DAYS` answer different questions and share no floor, so a
 long webhook outage or a `--limit` trickle produces a legitimate post about contracts that have
 aged out — and a filtered link would land the reader on an empty board.
+
+### The nav markers (`trophies/services/career_attention.py`)
+
+Two markers on the **My Pursuit** nav item, in the navbar and the mobile tab bar. That item goes
+straight to `/career/`, so it is the only place either signal needs to be.
+
+| Marker | Means | Shape |
+|---|---|---|
+| Count | rewards this hunter has earned and not taken | a NUMBER — "how many" is answerable without a click, and is the whole reason to go |
+| New pill | contracts announced since they last looked | a WORD — the correction the avatar's own New marker already made: a dot has to be decoded, a word is read |
+
+Both can show at once. The count comes first, so the order is always "what is yours, then what is
+new". On the tab bar they ride the icon and the pill yields to the count: four items across a 375px
+phone has no room for both.
+
+**This renders on every page of the site**, including the Django admin, so cost is the design:
+
+- **The count** is answered from the hunter's own `EarnedContract` rows, not the catalogue. All four
+  stamps that decide "claimable" live there, so it is one indexed query over a handful of rows
+  rather than `annotated_contracts`' four correlated subqueries across every live contract. Cached
+  per hunter (5 min) and cleared by `contract_service.claim`.
+- **The pill** costs nothing per hunter. "Is anything new to you" is a comparison between a marker
+  already on `request.user` (loaded by authentication) and a SITE-WIDE maximum — so the only fetch
+  is one value shared by every visitor, cached 15 minutes and cleared by `mark_announced`.
+
+**Previewing them.** They only appear when there is something to say, which makes them the hardest
+thing here to look at deliberately -- you need an unclaimed reward and an unseen announcement at the
+same moment. `?preview=career-markers` (staff/moderator, any page) lights both; `&n=12` forces the
+count to see the `9+` cap, `&n=0` leaves the New pill on its own. Writes nothing, like every other preview
+door -- they all go through `core/previews.py` now, because this was the third copy of the same four
+lines and the first two had already drifted once.
+
+**Gotchas**
+
+- **The count is a second definition of "claimable" and must not drift.** The badge and the board
+  have to agree or the badge is lying; a test pins them together.
+- **The pill's query must match the modal's, `has_jobs` included.** It filtered only `is_live` at
+  first, which was UNBOUNDED rather than stale: a jobless newest announcement lit the pill for
+  everyone whose marker was older, rendered no modal, and so never advanced anyone's marker.
+- **The pill reads the same gate as the modal** (`announcement_posted`, the marker, the 14-day
+  first-visit floor). A marker that leads to no modal trains the reader to ignore markers.
+- Both fail closed: a hunter loses a marker for one render, nobody gains one. A nav that 500s
+  because a badge could not be counted would be a poor trade for a marker.
+
+### The Career modal (`trophies/services/new_contracts_modal.py`)
+
+Opens on `/career/` when contracts have been ANNOUNCED since this hunter last saw it.
+
+**The marker is what was SHOWN, not the clock.** `ui_flags['contracts_seen']` stores the newest
+`announced_at` in the wave the reader was actually shown. A now-stamp would silently skip a wave
+announced between the query and the dismissal — it was announced before the click but after the
+query. Same reasoning as What's New storing the newest entry id rather than a boolean.
+
+**The marker and the filter must read the SAME column.** A marker holding a `went_live_at` against
+a filter on `announced_at` drops every contract published before the marker and announced after it
+— which is exactly the batched one-off the gate exists to deliver.
+
+**A first visit falls back to the 14-day window.** A hunter with no marker has no personal answer
+to "what is new to you", and the literal one — everything ever posted — is useless: someone signing
+up in a year would meet every wave since launch. With no marker the modal shows the last
+`NEW_CONTRACT_WINDOW_DAYS`, so a first visit sees exactly what the board is calling new. It never
+applies to someone who HAS a marker, which is the whole point of the paragraph below.
+
+**Deliberately NOT `NEW_CONTRACT_WINDOW_DAYS`.** That 14-day window (the board's Latest chip, the
+card markers) answers "is this contract new?"; the marker answers "is this new TO YOU?". A hunter
+away for three weeks is told nothing by the window and everything by the marker, and they are the
+person the modal exists for.
+
+| Piece | Rule |
+|---|---|
+| First visit | no marker → the last `NEW_CONTRACT_WINDOW_DAYS` of announcements, not the archive |
+| The stamp stored | the newest `announced_at` **among the rows actually rendered**, not over the whole filtered set. Above `MAX_LIST` the two differ, and the global max would mark contracts seen that were never shown |
+| Who reaches it | `announcement_posted` **and** `announced_at` (and `is_live` still true — the stamp is never cleared, so un-publishing is the only thing that withdraws an announced contract). The flag is what excludes a `--baseline`d backlog; `went_live_at` needs no filter of its own, since the announcer only ever sees contracts that have one |
+| Order | `_ORDER` = `status_order`, `-sort_progress`, `-announced_at`, `-went_live_at`, `name` — the board's own default, annotated in SQL by `annotated_contracts`. Sorting the slice in Python could never promote a claimable or nearly-finished contract from outside the first page into it |
+| Heroes | the first `MAX_HEROES` (6) of that order, so the covers are what this hunter is furthest along on. The server renders all six; CSS shows **2 / 4 / 6** by breakpoint, so the count follows the screen with no second render path |
+| Hero art | `_hero_covers()` — ONE query for all six (DISTINCT ON over the member-game gate), not the announcer's per-contract `cover_url_for`. Same gate, same `display_image_url` chain, same most-played tie-break |
+| The list | every contract in the wave up to `MAX_LIST` (200), in a scroll box that flexes to whatever the dialog has left |
+| The filter | the site's shared `.rp-discs` discipline dropdowns (`PlatPursuit.discPopovers`) — five triggers, each opening its jobs, so "what did Mastermind gain?" is two clicks |
+| Sort | the shared `.pp-switch`: **Progress** (restores the server's order, which is what the heroes were picked from) or **A-Z**. Client-side re-append — both keys ride on every row, so there is no round trip |
+| Facets | computed from the RENDERED ROWS, never a separate aggregate |
+
+**Gotchas**
+
+- **Publishing is not announcing, and neither is `--baseline`.** A contract published outside a
+  wave — a one-off fix, a single game re-added, a correction — is on the board the moment it goes
+  live and reaches nobody's modal until `announce_contracts` POSTS it. A baselined row is settled,
+  not posted, so it never reaches a modal at all. That also means **the modal never fires if the cron is not
+  registered**: no announcement, no stamp, no modal.
+- **A facet counted independently can promise more than the list shows.** Past the cap, an
+  aggregate over the full queryset advertises contracts the list cannot display, and the filter
+  leads somewhere emptier than the number said. Build facets from `rows`.
+- **A discipline's count is DISTINCT CONTRACTS**, not the sum of its jobs' counts: one contract
+  feeding two jobs in the same discipline is one contract to that discipline.
+- **Icons must use `job_icon_use` (the sprite), not `job_icon`.** 186 bytes against 674. The list
+  cap sat at 60 purely because the inline form was being used; the sprite is what pays for 200.
+- **A bare `.rp-discs` lookup is whichever group comes FIRST in the page.** This modal is included
+  at the top of `career.html`, so when it gained a discipline group the board's
+  `document.querySelector('.rp-discs')` started returning the MODAL's: the board's popovers lost
+  their controller and the modal's got two. Two controllers on one root means a click opens the
+  popover and the second handler, finding it open, closes it inside the same click — nothing
+  appears and nothing errors. The board's lookups are scoped to `#rp-advanced` now.
+- **The dialog must not clip.** The popovers are absolutely positioned inside it, so any `overflow`
+  other than `visible` cuts them off at its edge. That is why `.nc__dialog` is a height-capped flex
+  column with the scrolling pushed down into `.nc__list`, rather than the scrolling dialog the
+  `.pp-howto` base gives it — which also keeps the close button on screen.
+- **A popover with no room below it opens upward** (`.rp-pop--up`, measured after `discPopovers`
+  opens it). The shared controller flips at the horizontal viewport edge only: on a page you can
+  always scroll to a popover, and inside a dialog you cannot.
+- **Escape belongs to the innermost open thing.** `discPopovers` and `DetailModal` both close on
+  Escape from `document` in the bubble phase, so one press did both and dismissing a dropdown took
+  the modal with it. The partial claims the key in the CAPTURE phase, and only while a popover is
+  actually open.
+- **The page owns the choreography gate, not the modal.** `_career_modal_gate.html` arms
+  `ppAfterCareerModal` synchronously (Career's count-ups are in view at load and would finish
+  behind the scrim). Its backstop is measured from `DOMContentLoaded`, not parse — on a heavy page
+  a parse-relative deadline fires BEFORE the modal opens — and is cancelled by `ppHoldCareerModal`
+  the moment something opens.
 
 ## Creating Contracts (admin)
 
@@ -387,9 +591,10 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   change form to fix a typo posts back whatever the page rendered with, clearing the stamp and
   re-announcing a contract the community already heard about. Any NEW machine-stamped lifecycle
   column needs adding to `readonly_fields` for the same reason.
-- **"Live and unstamped" is NOT the same as "being published."** Every contract that went live
-  before `went_live_at` existed is live with a NULL stamp — on prod that is the whole ~1,000
-  launch set — and NULL is honest there: their first publish predates the record. Stamping on any
+- **"Live and unstamped" is NOT the same as "being published."** A contract that went live before
+  `went_live_at` existed is live with a NULL stamp, and NULL is honest there: its first publish
+  predates the record. (This bullet used to name the ~1,000 launch set as that case. It is not —
+  those rows do carry stamps. The rule below is still right; the example was wrong.) Stamping on any
   save of such a row meant a curator opening one to fix a typo silently republished it (a New badge
   for 14 days, and a Discord post about a game that had been on the board since launch), leaking
   the launch set into "new" one edit at a time. Both writers now key on the **transition**.

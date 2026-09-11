@@ -1,0 +1,110 @@
+{% comment %} CAREER'S CHOREOGRAPHY GATE, armed for whichever modal is about to cover the page.
+
+Career's numbers count up as they scroll into view, and the ones above the fold are in view at load --
+so on a visit that opens a modal they tick to their final values behind the scrim and are finished
+before the reader has closed it. Three blocks in career.html wrap their kick-offs in this gate.
+
+WHY THE PAGE OWNS IT AND NOT A MODAL. It was `ppAfterCareerHowto`, published by the explainer's own
+inline script, which was correct while the explainer was the only modal here. The new-contracts modal
+makes it two, and a gate named after one of them is a gate the other cannot use -- exactly the
+situation the lobby was in before What's New, and fixed the same way. It must also be armed
+SYNCHRONOUSLY, before career.html's own scripts run, while the modals are wired from end-of-body
+utils.js: a gate armed alongside the modal wiring would arm after the code waiting on it gave up.
+
+So: the page arms, and each modal reports back when nothing is going to cover the screen.
+
+FAIL-OPEN both directions. Consumers call through `(window.ppAfterCareerModal || function (f) { f(); })`,
+so an unarmed gate runs the motion immediately, and `ppSettleCareerModal` is safe to call when nothing
+is pending.
+{% endcomment %}
+<script>
+(function () {
+    'use strict';
+    {% comment %} A SET OF NAMED ARMS, not one boolean, and that is a bug fix rather than a
+    flourish. The explainer's markup renders on EVERY visit (the edhint has to be able to reopen it);
+    only its auto-open is gated. So on a new-contracts visit the explainer wired itself as a MANUAL
+    modal, and DetailModal settles a manual modal immediately -- at DOMContentLoaded, from a partial
+    that sits earlier in the document, about 450ms before the new-contracts modal opened.
+
+    One boolean with two owners means the owner with nothing to show always wins the race, and the
+    gate released the page's count-ups just before the scrim landed on top of them. That is the exact
+    failure this file exists to prevent, on every visit of the only kind it was built for.
+
+    Naming the arms makes an unarmed modal's settle a no-op: it can only ever remove ITSELF, and it
+    was never in the set. {% endcomment %}
+    var pending = {};
+    {% if show_career_explainer %}pending.explainer = true;{% endif %}
+    {% if show_new_contracts %}pending.contracts = true;{% endif %}
+    var waiting = Object.keys(pending).length;
+    var EVT = 'pp-career-modal:settled';
+
+    window.ppAfterCareerModal = function (fn) {
+        if (waiting) { document.addEventListener(EVT, function () { fn(); }, { once: true }); }
+        else { fn(); }
+    };
+    {% comment %} `name` identifies the caller. Omitted means "release everything", which is the
+    backstop's business and nobody else's. {% endcomment %}
+    window.ppSettleCareerModal = function (name) {
+        if (!waiting) { return; }
+        if (name) {
+            if (!pending[name]) { return; }
+            delete pending[name];
+            waiting -= 1;
+            if (waiting) { return; }
+        } else {
+            pending = {};
+            waiting = 0;
+        }
+        document.dispatchEvent(new CustomEvent(EVT));
+    };
+
+    {% comment %} THE BACKSTOP covers exactly one failure: nothing ever appeared. The gate is armed
+    from the server, but everything able to settle it lives in end-of-body JS, so a script error or a
+    blocked bundle would otherwise leave the page's numbers frozen at 0 -- worse here than on the
+    lobby, where the server-rendered values at least stand.
+
+    MEASURED FROM DOMContentLoaded, not from parse. At parse it is really "4 seconds minus however
+    long the page took", and Career is a heavy page: past ~3.5s the deadline fires BEFORE the modal
+    opens and releases the motion anyway, which is the original bug surviving in the tail. The lobby's
+    first cut had exactly this and it was caught by audit. DCL fires whether or not our bundle loads,
+    so the failsafe still covers the case it exists for.
+
+    Cancelled the moment a modal actually opens (ppHoldCareerModal), or a normal visit releases the
+    motion at 4s while the reader is still reading. {% endcomment %}
+    var backstop = null;
+    var held = false;
+    function armBackstop() {
+        if (held) { return; }
+        backstop = window.setTimeout(window.ppSettleCareerModal, 4000);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', armBackstop, { once: true });
+    } else {
+        armBackstop();
+    }
+    {% comment %} PER ARM. `held` was one latch, so the FIRST modal to open cancelled the deadline
+    for every arm still pending -- and on a new-contracts visit the explainer is openable at any time
+    from the summary card's edhint. Opening it disarmed the safety net for a modal it has nothing to
+    do with, and the refcount had already removed the accidental net the old single boolean gave.
+
+    A hold from a modal the gate is not waiting on is ignored. {% endcomment %}
+    window.ppHoldCareerModal = function (name) {
+        if (name && !pending[name]) { return; }
+        held = true;
+        window.clearTimeout(backstop);
+    };
+    {% comment %} HOUSEKEEPING FOR THE NEW-CONTRACTS KEYS, and it lives here because this partial
+    renders on EVERY Career visit while the modal's own partial renders only while a wave is due.
+
+    Those two keys mean "this device dismissed a wave and the server never heard". If the server now
+    says nothing is due, it did hear -- from this device or another -- and they are stale. Left
+    behind, DetailModal's seen-branch reads the stale key on the NEXT wave, never opens the modal,
+    and replays a stamp the server already has: that device silently loses a whole wave. {% endcomment %}
+    {% if not show_new_contracts %}
+    try {
+        localStorage.removeItem('pp-new-contracts-seen');
+        localStorage.removeItem('pp-new-contracts-stamp');
+    } catch (e) {}
+    {% endif %}
+})();
+</script>
