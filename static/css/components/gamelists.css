@@ -162,7 +162,12 @@
    could disturb the grid -- `.pp-gtile-grid` styles no direct children (just columns and gap) and
    `.pp-gtile` takes its height from `aspect-ratio`, so the wrapper inherits the column's width and
    the tile fills it. Adding layout here is what would break the grid. */
-.gl-item { position: relative; }
+/* Holds one `.pp-gcard`. `display: flex` is load-bearing now that it wraps a card rather than a
+   tile: `.pp-gcard` is `height: 100%`, which resolves against the flex line here, so without it a
+   card with a one-line title would come up short against its neighbours and the grid row would
+   ragged. The tile it replaced sized itself from `aspect-ratio` and needed no such help. */
+.gl-item { position: relative; display: flex; }
+.gl-item > .pp-gcard { flex: 1; min-width: 0; }
 
 /* Quiet at rest, per the design conversation's "an icon, not a labelled button". Hidden from the
    pointer until hover, but ALWAYS present for the keyboard: `:focus-visible` opens it, so tabbing a
@@ -224,7 +229,7 @@
    `.is-revealed` mark the shared engine writes to each card's tile. */
 @media (prefers-reduced-motion: no-preference) {
     .pp-reveal .gl-item .gl-item__remove { opacity: 0; }
-    .pp-reveal .gl-item .pp-gtile.is-revealed ~ .gl-item__remove { opacity: 1; }
+    .pp-reveal .gl-item .pp-gcard.is-revealed ~ .gl-item__remove { opacity: 1; }
 }
 
 /* The new transforms above are gated, like the dialog's are and like every sibling component's
@@ -238,6 +243,25 @@
 }
 
 /* The row being removed, held for the length of the exit before the panel re-renders. */
+/* The per-entry note, under the title rather than over the art. Clamped so one hunter's essay
+   cannot make its card twice the height of its neighbours and break the grid's rhythm. */
+.gl-item__note {
+    font-size: 11px; line-height: 1.35; color: var(--pp-text-dim);
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* No trophy list behind the concept at all, so there is no image in the chain to fall back to. The
+   shared card always renders an <img>; this fills the same frame with a glyph instead of leaving a
+   broken one. */
+.gl-item__noart {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    color: var(--pp-text-mute);
+    background: color-mix(in oklab, var(--pp-text) 3%, var(--pp-bg-2));
+}
+.gl-item__noart svg { width: 34%; height: 34%; opacity: 0.5; }
+
 .gl-item.is-removing { opacity: 0.35; pointer-events: none; transition: opacity 0.18s ease; }
 
 /* ---- The adder ------------------------------------------------------------

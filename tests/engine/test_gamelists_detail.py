@@ -554,7 +554,10 @@ def test_a_visitor_gets_no_remove_controls(client):
     assert 'data-gl-remove' not in body
     assert '/remove/' not in body
     # The games themselves are still there -- this is not an empty page passing by accident.
-    assert body.count('data-gtile') == 2
+    # `data-gcard`, since the detail games moved onto the shared game card. This is the POSITIVE
+    # CONTROL for the two `not in` assertions above -- without it they pass on an empty page -- and
+    # it earned its keep by failing the moment the hook changed.
+    assert body.count('data-gcard') == 2
 
 
 def test_the_remove_control_sits_beside_the_tile_and_not_inside_it(client):
@@ -1000,3 +1003,41 @@ def test_the_action_caption_can_actually_take_its_own_row(client):
     )
     # And the dead child-combinator form is gone rather than left beside the working one.
     assert '.gl-actions>span:not(.contents)' not in built.replace(' ', '')
+
+
+def test_the_games_use_the_shared_card_not_the_overlay_tile(client):
+    """A game should look the same everywhere on the site, and the overlay tile was the wrong
+    primitive here for a structural reason rather than a stylistic one.
+
+    `.pp-gtile` puts its title on the art behind a scrim. That works for a genre or franchise tile,
+    where the image is ONE backdrop serving as decoration. Here the cover IS the content -- the grid
+    is scanned by art to find a specific game -- and the scrim needed to keep white text legible over
+    marketing covers darkens exactly what is being scanned. Protecting the text hid the art;
+    protecting the art lost the text.
+
+    Both halves pinned: the card is used, AND the tile is gone. Asserting only the first would pass
+    with both rendered.
+    """
+    owner = _staff(client)
+    game_list = _list(owner, 3)
+
+    body = client.get(_url(game_list)).content.decode()
+    grid = body[body.index('id="gl-items"'):body.index('id="gl-items"') + 6000]
+
+    assert 'pp-gcard__cover' in grid and 'pp-gcard__title' in grid
+    assert 'pp-gtile__scrim' not in grid, 'the overlay tile is still rendering'
+    assert 'pp-gtile__body' not in grid
+
+    # The column ladder moved with it -- more per row, which is what pays for the taller card.
+    assert 'pp-gbrowse__grid' in body
+
+
+def test_the_reveal_observer_follows_the_card_class(client):
+    """`.pp-reveal .pp-gcard { opacity: 0 }` holds every card hidden until an observer clears it, so
+    the selector the JS hands `staggerReveal` has to match the class the template renders. Leaving it
+    on `.pp-gtile` would have found nothing and left the whole grid invisible after any sort -- the
+    same blank-grid failure this page already shipped once."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    assert "cardSelector: '.pp-gcard'" in js
+    assert "cardSelector: '.pp-gtile'" not in js

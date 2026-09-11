@@ -1,49 +1,68 @@
 {% comment %}
 The games on a list -- the sort swap's payload, and nothing else.
 
+ON THE SHARED GAME CARD, not the grouping tile. These are single GAMES, and a game should look the
+same everywhere on the site, so this is `.pp-gcard` in `.pp-gbrowse__grid` -- the same card and the
+same column ladder Browse Games uses.
+
+Why it moved off `.pp-gtile`: that tile overlays its title on the art behind a scrim, which works for
+a genre or franchise tile because the image there is ONE backdrop serving as decoration. Here the
+cover IS the content -- you scan the grid looking for a specific game by its art -- and the scrim
+needed to keep white text legible over high-contrast marketing covers darkens the very thing being
+scanned. Protecting the text hid the art; protecting the art lost the text. Separating them ends that
+trade rather than tuning it.
+
+Cards are TALLER this way (a cover plus a text strip, where the text used to sit inside the cover),
+so the column ladder pays it back: `.pp-gbrowse__grid` runs 2/3/4/5/6 against the tile grid's
+2/3/4/5, and its own comment gives the reason -- a catalogue you scan by cover art wants narrow
+columns.
+
 `pp-reveal` is baked in on htmx requests only (settle strips a JS-added class from id'd swapped
 elements), and `list-detail.js` wires the observer that clears it. NOT `gamelists.js`, which this
 said until an audit caught it -- that file is the My Lists page and is deliberately not loaded here,
-so the sentence pointed a reader at the wrong file for exactly the blank-grid bug it describes. Both halves, deliberately: baking
-the class with nothing to reveal it is what left the My Lists panel blank.
+so the sentence pointed a reader at the wrong file for exactly the blank-grid bug it describes. Both
+halves, deliberately: baking the class with nothing to reveal it is what left the My Lists panel
+blank.
 {% endcomment %}
 {% load humanize %}
-<div id="gl-items" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}">
+<div id="gl-items" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}">
     {% for item in items %}
-    {% comment %}The wrapper exists so the owner's remove control can sit BESIDE the tile rather than
-    inside it: the tile is an <a>, and a <button> nested in a link is invalid HTML that swallows the
-    link's own activation. It is rendered for everyone, not just owners, so the grid has exactly one
-    DOM shape. Safe to add because `.pp-gtile-grid` styles no direct children -- it sets only
-    grid-template-columns and gap -- and `.pp-gtile` takes its height from `aspect-ratio`, so the
-    wrapper becomes the grid item and the tile fills it.{% endcomment %}
+    {% comment %}The wrapper exists so the owner's remove control can sit BESIDE the card rather than
+    inside it: the card is an <a>, and a <button> nested in a link is invalid HTML that swallows the
+    link's own activation. Rendered for everyone, not just owners, so the grid has exactly one DOM
+    shape.{% endcomment %}
     <div class="gl-item">
     {% comment %}Links to the CONCEPT page -- the site's word "game" -- rather than to a trophy list,
     which is the whole reason entries are concept-keyed.{% endcomment %}
-    <a href="{{ item.concept.game_page_url }}" class="pp-gtile" data-gtile
+    <a href="{{ item.concept.game_page_url }}" class="pp-gcard" data-gcard
        aria-label="{{ item.concept.unified_title }}">
-        {% if item.cover %}
-        <span class="pp-gtile__art">
+        <div class="pp-gcard__cover">
+            {% if item.cover %}
+            {% comment %}`display_image_url` is the single source for the cover chain (IGDB-first),
+            and `has_cover_art` picks the fit: real art fills the frame, a generic PS icon is
+            contained with padding rather than stretched.{% endcomment %}
             <img src="{{ item.cover.display_image_url }}" alt="" loading="lazy"
-                 class="pp-gtile__tile-art{% if not item.cover.has_cover_art %} pp-gtile__tile-art--icon{% endif %}" />
-        </span>
-        {% else %}
-        <span class="pp-gtile__art pp-gtile__art--empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-            </svg>
-        </span>
-        {% endif %}
+                 class="pp-gcard__art{% if not item.cover.has_cover_art %} pp-gcard__art--placeholder{% endif %}" />
+            {% else %}
+            {% comment %}No trophy list at all behind this concept (a `PP_*` stub, or one whose games
+            were reassigned), so there is no image to fall back to -- a quiet glyph rather than a
+            broken frame.{% endcomment %}
+            <span class="gl-item__noart">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+            </span>
+            {% endif %}
+        </div>
 
-        <span class="pp-gtile__scrim" aria-hidden="true"></span>
-
-        <span class="pp-gtile__body">
-            <span class="pp-gtile__name">{{ item.concept.unified_title }}</span>
+        <div class="pp-gcard__body">
+            <h3 class="pp-gcard__title">{{ item.concept.unified_title }}</h3>
             {% if item.note %}
             {% comment %}`pr-1` because the note is italic inside a line-clamp, and italic glyphs
             slant past the text box where the clamp cuts them.{% endcomment %}
-            <span class="pp-gtile__author italic pr-1">{{ item.note }}</span>
+            <p class="gl-item__note italic pr-1">{{ item.note }}</p>
             {% endif %}
-        </span>
+        </div>
     </a>
 
     {% if is_owner %}

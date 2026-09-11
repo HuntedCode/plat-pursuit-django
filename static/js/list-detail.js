@@ -9,7 +9,7 @@
  *
  * THE REVEAL HERE IS A BUG FIX, not decoration. `detail_items.html` bakes `pp-reveal` onto the grid
  * on htmx requests (it must: htmx's settle step restores server attributes on id'd swapped elements,
- * so a class added afterwards is wiped), and `.pp-reveal .pp-gtile { opacity: 0 }` then holds every
+ * so a class added afterwards is wiped), and `.pp-reveal .pp-gcard { opacity: 0 }` then holds every
  * tile hidden until an observer clears it. Nothing wired that observer for `#gl-items`, so sorting
  * the list rendered an empty-looking grid. That is the same failure My Lists shipped and had fixed;
  * the server half of the pattern was copied here and the client half was not.
@@ -56,7 +56,7 @@
         var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
         var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
         revealHandle = PP.staggerReveal({
-            grid: grid, cardSelector: '.pp-gtile', step: 22,
+            grid: grid, cardSelector: '.pp-gcard', step: 22,
             reveal: function (el, delayMs) {
                 if (!el.animate) { return; }
                 el.animate([{ opacity: 0 }, { opacity: 1 }],
@@ -812,7 +812,7 @@
         // gains a tile while the toolbar stays absent until a manual reload; remove the last one and
         // a dead sort control is left behind. Crossing that boundary is rare and once per list, so
         // reload rather than teach the client to build a control the server owns.
-        var hasItems = !!(grid && grid.querySelector('.pp-gtile'));
+        var hasItems = !!(grid && grid.querySelector('.pp-gcard'));
         var hasToolbar = !!document.getElementById('gl-detail-form');
         if (hasItems !== hasToolbar) { window.location.reload(); return; }
 
