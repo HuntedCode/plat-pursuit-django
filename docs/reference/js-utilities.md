@@ -586,6 +586,22 @@ To add a new utility: define it above the export block, then add a `window.PlatP
 - **`PlatPursuit.API.request()` throws an `Error` with a `.response` property** (raw Response object) on non-ok status. Extract messages with `await error.response?.json().catch(() => null)`. Pass `{}` as body for no-body POSTs.
 - **Don't migrate binary fetches** (blob/image downloads) to `PlatPursuit.API`. It's designed for JSON APIs.
 
+### `wireCharCounters(root)`
+
+Declarative live character counters. Put `data-charcount` on an input or textarea **with a
+`maxlength`**, and give the counter element `data-charcount-for="<input id>"` — the markup says which
+goes with which, so the JS does not need to know both ids. Defaults to `document`; pass a root to
+scope it.
+
+Bound automatically on `DOMContentLoaded`, so most pages need no call at all.
+
+Shared because it was the **third** copy: `admin-notifications.js` had one bound to three specific
+element ids and `comments.js` had an inline listener that only ever wrote a number. Neither was
+reusable and both re-implemented the same escalation. Those two are candidates to migrate onto this.
+
+Escalation classes are toggled by the helper and live in the Tailwind safelist — if a third is ever
+added, safelist it too.
+
 ## Related Docs
 
 - [Template Architecture](template-architecture.md): Where utils.js is included and how the zoom wrapper works

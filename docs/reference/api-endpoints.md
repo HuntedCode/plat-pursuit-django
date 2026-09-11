@@ -112,9 +112,31 @@ The notification system is **hidden pending its rebuild** ([notification-system.
 | GET | `/api/v1/recap/<year>/<month>/deck/` | Login | Every slide's HTML in one response (what the deck uses) |
 | GET | `/api/v1/recap/<year>/<month>/slide/<type>/` | Login | One slide partial. No in-repo caller |
 
-### Game Lists — RETIRED (2026-08)
+### Game Lists — REBUILT (2026-09), off `/api/v1/`
 
-The Game Lists feature is hidden pending a revamp; all 11 `/api/v1/lists/*` endpoints are unrouted. The
+The rebuilt feature's endpoints live under the PAGE's path, not here: they share the pages' gate,
+they answer one template's fetches, and routing them through DRF would mean a second permission stack
+that has to agree with the first. They are listed in
+[docs/features/game-lists.md](../features/game-lists.md#api-endpoints) with their rate limits.
+
+| Route | Name | Method |
+|---|---|---|
+| `/community/lists/create/` | `list_create` | POST (form) |
+| `/community/lists/<id>/update/` | `list_update` | POST — rename, describe, publish |
+| `/community/lists/<id>/reorder/` | `list_reorder` | POST — **no caller yet** (awaits Ranked) |
+| `/community/lists/<id>/like/` | `list_like` | POST |
+| `/community/lists/<id>/follow/` | `list_follow` | POST |
+| `/community/lists/<id>/add/` | `list_add_game` | POST |
+| `/community/lists/<id>/items/<item>/remove/` | `list_remove_game` | POST |
+| `/community/lists/<id>/search/` | `list_game_search` | GET |
+
+All resolve their list through `readable_by()` and answer a uniform 404, so an id alone cannot
+confirm a list exists or whose it is.
+
+The LEGACY `/api/v1/lists/*` endpoints remain unrouted. `GameSearchView` (`/api/v1/games/search/`),
+which outlived that cut, was **deleted in 2026-09**: its last caller died with the legacy templates,
+and its `?exclude_list=` parameter read `GameListItem` for any list id with no ownership or
+visibility check. The
 models and templates are retained.
 
 ### Game Families (Staff Only)

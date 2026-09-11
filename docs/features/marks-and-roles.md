@@ -118,7 +118,9 @@ surfaces (tier chips, become-preview) keep the flat run at every size.
 - **`user.save()` triggers a profile write** (the mark refresh). Bulk user updates via
   `queryset.update()` skip it -- if a bulk operation changes roles, refresh marks explicitly.
 - **Comments render the full partial** (glyph included -- a moderator's authority must not be
-  hue-alone, and staff crimson sits near `--pp-error`). Game-list surfaces are dormant and stay
-  plain until the Game Lists revamp.
+  hue-alone, and staff crimson sits near `--pp-error`). Game-list surfaces render the author's
+  name plain: the rebuilt list card (2026-09) shows `display_psn_username` with no mark treatment,
+  which is a DECISION to revisit rather than the dormancy this used to describe. A browse grid of
+  twenty cards would carry twenty marks, and the card's job is to identify the LIST.
 - **Unlinking a PSN profile clears the mark** (`update_profile_premium` handles the orphaned
   no-user case) -- an orphaned profile keeps rendering on Browse Hunters and the boards.
