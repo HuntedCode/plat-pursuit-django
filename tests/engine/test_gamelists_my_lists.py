@@ -864,3 +864,41 @@ def test_at_the_cap_the_empty_state_offers_no_button_that_would_refuse(client):
     # Not empty here, so the gating is asserted where it lives: the header's opener refuses.
     assert 'aria-disabled="true"' in _header(resp.content.decode())
     assert len(made) == FREE_MAX_LISTS
+
+
+def test_my_lists_offers_a_route_back_to_everyone_elses(client):
+    """This page was the feature's one dead end.
+
+    Browse carries a button to My Lists and the detail page's crumb links back to browse, but My
+    Lists linked nowhere -- so arriving here left no route to the public lists short of the back
+    button. Asserted as a LINK in the trail, not merely as the words appearing somewhere: the page
+    header says "My Lists" too, and the blurb names lists repeatedly.
+    """
+    _staff_hunter(client)
+
+    body = client.get(MY_LISTS).content.decode()
+    # `</nav>` searched FROM the breadcrumb, not from the start of the document -- the navbar has
+    # its own and closes first, so the naive slice was empty and every assertion below it would have
+    # failed for the wrong reason (or passed, had they been negative ones).
+    start = body.index('aria-label="Breadcrumb"')
+    trail = body[start:body.index('</nav>', start)]
+
+    assert 'Game Lists' in trail
+    assert reverse('lists_browse') in trail, 'the trail does not link back to browse'
+    # And the page is still identified as its own -- the crumb was added, not swapped.
+    assert 'My Lists' in trail
+
+
+def test_every_list_surface_can_reach_the_others(client):
+    """The three pages form a loop, and a one-directional link is how a feature becomes a maze. Each
+    of the two inner pages must reach browse, and browse must reach My Lists."""
+    owner = _staff_hunter(client)
+    game_list = svc.create_list(owner, name='Reachable', is_public=True)
+
+    browse = client.get('/community/lists/').content.decode()
+    mine = client.get(MY_LISTS).content.decode()
+    detail = client.get(f'/community/lists/{game_list.id}/').content.decode()
+
+    assert reverse('my_lists') in browse, 'browse cannot reach My Lists'
+    assert reverse('lists_browse') in mine, 'My Lists cannot reach browse'
+    assert reverse('lists_browse') in detail, 'a list page cannot reach browse'

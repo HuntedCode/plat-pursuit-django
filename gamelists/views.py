@@ -305,8 +305,20 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
         context['name_max_length'] = NAME_MAX_LENGTH
         context['description_max_length'] = DESCRIPTION_MAX_LENGTH
 
+        # `Game Lists` is LINKED here, which it was not: this page was the one dead end in the
+        # feature. Browse carries a button to My Lists, the detail page's crumb carries a link back
+        # to browse, and My Lists carried nothing -- so arriving here left no route to everyone
+        # else's lists short of the back button.
+        #
+        # Fixed in the breadcrumb rather than with another toolbar control. The crumb is the
+        # structural answer (the parent link was simply absent, and the detail page already has the
+        # identical trail), it is present on every state of the page including the empty ones, and it
+        # does not add a third item to a row that already holds the create action and the switcher at
+        # 375px. When the Community hub is re-formed, its sub-nav carries both directions and the
+        # toolbar link on browse goes away too -- so a second temporary button would be churn.
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Game Lists', 'url': reverse_lazy('lists_browse')},
             {'text': 'My Lists'},
         ]
         return context
