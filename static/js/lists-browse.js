@@ -24,7 +24,7 @@
         var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
         var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
         revealHandle = PP.staggerReveal({
-            grid: grid, cardSelector: '.pp-gtile', step: 22,
+            grid: grid, cardSelector: '.pp-gcard', step: 22,
             reveal: function (el, delayMs) {
                 if (!el.animate) { return; }
                 el.animate([{ opacity: 0 }, { opacity: 1 }],
@@ -40,7 +40,7 @@
         if (!PP.InfiniteScroller) { return; }
         scroller = PP.InfiniteScroller.create({
             gridId: 'items-grid', sentinelId: 'gl-sentinel', loadingId: 'gl-loading',
-            paginateBy: 24, cardSelector: '.pp-gtile',    // matches BrowseListsView.paginate_by
+            paginateBy: 24, cardSelector: '.pp-gcard',    // matches BrowseListsView.paginate_by
             onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
         });
     }

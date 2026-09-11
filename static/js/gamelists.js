@@ -109,7 +109,7 @@
      *
      * NOT optional here, and that is the whole point: the results partial bakes `pp-reveal` into its
      * markup on htmx requests (it has to -- htmx's settle step restores server attributes on id'd
-     * swapped elements, so a class added afterwards is wiped). `.pp-reveal .pp-gtile { opacity: 0 }`
+     * swapped elements, so a class added afterwards is wiped). `.pp-reveal .pp-gcard { opacity: 0 }`
      * then holds every tile hidden until something reveals it. With no observer wired, swapped-in
      * tiles stayed invisible forever and the panel read as blank. The Following tab hid the bug by
      * being empty -- no tiles, nothing to hide -- so it only showed on the way back to Mine.
@@ -125,7 +125,7 @@
         var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
         var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
         revealHandle = window.PlatPursuit.staggerReveal({
-            grid: grid, cardSelector: '.pp-gtile', step: 22,
+            grid: grid, cardSelector: '.pp-gcard', step: 22,
             reveal: function (el, delayMs) {
                 if (!el.animate) { return; }
                 el.animate([{ opacity: 0 }, { opacity: 1 }],
@@ -151,7 +151,7 @@
             sentinelId: 'gl-my-sentinel',
             loadingId: 'gl-my-loading',
             paginateBy: 24,               // matches MyListsView.paginate_by
-            cardSelector: '.pp-gtile',
+            cardSelector: '.pp-gcard',
             // Newly appended tiles carry the same server-baked `pp-reveal`, so they need the
             // observer too or they append invisible -- the identical trap the swap path hit.
             onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },

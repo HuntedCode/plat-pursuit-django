@@ -1,73 +1,87 @@
-{% comment %} A community game list, on the shared grouping tile (.pp-gtile).
+{% comment %} A community game list, on the shared game card (`.pp-gcard`) with a wider cover.
 
-Deliberately the SAME component as the genre/franchise/company tiles rather than a parallel one. That tile
-already adapts to what an object carries -- companies add a logo chip and a country line, franchises a
-type badge -- and a list adds two more: a cover MOSAIC instead of one backdrop, and its author. Everything
-underneath (hover glow, focus ring, scrim, the reveal states, the empty state) is shared, which is the
-whole point of having a tile component.
+MOVED OFF `.pp-gtile` for the same reason the detail page's games did: that tile overlays its title
+on the art behind a scrim, which is right when the image is ONE backdrop serving as decoration, and
+wrong when the image is the content. A list's cover is a MOSAIC of up to four real game covers --
+the thing a reader scans to recognise a list -- and the scrim needed to keep white text legible over
+four unpredictable, high-contrast covers darkens exactly that. Protecting the title hid the art;
+protecting the art lost the title. Separating them ends the trade instead of tuning it.
 
-The mosaic is what makes a list read as a COLLECTION at a glance instead of looking like a game. It draws
-from `cover_items` -- the first four items, prefetched in BrowseListsView -- and lays them out by how many
-there actually are, so a two-game list looks composed rather than like a four-slot grid with holes.
+`--list` changes ONE thing about the shared card: the cover goes 4:3 instead of 3:4. At the card's
+own portrait ratio each of four covers gets a quarter of an already-narrow box; 4:3 gives them real
+width, and it usefully makes a list read as a different KIND of object from a game at a glance --
+which matters wherever the two appear near each other.
+
+The grid stays `.pp-gtile-grid` (2/3/4/5) rather than the games ladder (2/3/4/5/6), and that is
+deliberate: a list card is READ -- name, author, two counts -- where a game card is SCANNED by art.
+`game-browse.css` makes the same argument for its own `--lib` variant. The class name is about
+columns and gap and carries no tile styling, so reusing it beats duplicating four identical
+breakpoints.
 
 Expects: `game_list` with `cover_items`, `name`, `game_count`, `like_count`, `owner`.
 
-`cover_items` is now a list of GAME rows -- the cover-representative trophy list per concept,
-picked in one batched query by `gamelists.services.covers`. Items point at CONCEPTS now (the
-site's word "game"), and `display_image_url` needs a Game, so the pick happens in the service
-rather than here. That is also why the loop reads `item.display_image_url` and not `item.game.*`.
+`cover_items` is a list of GAME rows -- the cover-representative trophy list per concept, picked in
+one batched query by `gamelists.services.covers`. Items point at CONCEPTS (the site's word "game"),
+and `display_image_url` needs a Game, so the pick happens in the service rather than here. That is
+also why the loop reads `item.display_image_url` and not `item.game.*`.
 {% endcomment %}
 {% load humanize %}
-<a href="{% url 'list_detail' game_list.id %}" class="pp-gtile" data-gtile
+<a href="{% url 'list_detail' game_list.id %}" class="pp-gcard pp-gcard--list" data-gcard
    aria-label="{{ game_list.name }} by {{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}, {{ game_list.game_count }} game{{ game_list.game_count|pluralize }}, {{ game_list.like_count }} like{{ game_list.like_count|pluralize }}">
-    {% if game_list.cover_items %}
-    {% comment %} `is-N` picks the composition: 1 fills, 2 splits down the middle, 3 gives the first a full
-    column beside a stacked pair, 4 quarters. Covers come from `display_image_url` (the single-source
-    IGDB-first chain) -- this tile used to read `game.title_image` directly, which is why lists were the
-    one surface showing PSN art where the rest of the site shows the IGDB cover. {% endcomment %}
-    <span class="pp-gtile__mosaic is-{{ game_list.cover_items|length }}" aria-hidden="true">
-        {% for item in game_list.cover_items %}
-        <img src="{{ item.display_image_url }}" alt="" loading="lazy"
-             class="pp-gtile__tile-art{% if not item.has_cover_art %} pp-gtile__tile-art--icon{% endif %}" />
-        {% endfor %}
-    </span>
-    {% else %}
-    {% comment %} Same placeholder treatment as a coverless grouping tile: a quiet tinted field and a
-    glyph, so an empty list still reads as deliberate rather than broken. {% endcomment %}
-    <span class="pp-gtile__art pp-gtile__art--empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-        </svg>
-    </span>
-    {% endif %}
-
-    <span class="pp-gtile__scrim" aria-hidden="true"></span>
-
-    <span class="pp-gtile__body">
-        <span class="pp-gtile__name">{{ game_list.name }}</span>
-        <span class="pp-gtile__author">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</span>
-        <span class="pp-gtile__meta">
-            <span class="pp-gtile__count">{{ game_list.game_count|intcomma }} game{{ game_list.game_count|pluralize }}</span>
-            {% comment %} Privacy reads only on YOUR OWN lists (`show_privacy`), because on the public
-            browse grid every tile is public by definition and a "public" chip on all of them is noise.
-            Marking the PRIVATE state rather than the public one is the same choice: a list is private
-            when it is born, so the chip marks the exception, and its absence is the signal that this
-            one is out in the world. {% endcomment %}
-            {% if show_privacy and not game_list.is_public %}
-            <span class="pp-gtile__stat" title="Only you can see this list">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                Private
-            </span>
-            {% endif %}
-            {% comment %} The like count earns its accent pill only when there is one -- a "0" in the
-            highlight colour advertises the wrong thing about somebody's list. {% endcomment %}
-            {% if game_list.like_count %}
-            <span class="pp-gtile__stat">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                {{ game_list.like_count|intcomma }}
-            </span>
-            {% endif %}
+    <div class="pp-gcard__cover">
+        {% if game_list.cover_items %}
+        {% comment %} `is-N` picks the composition: 1 fills, 2 splits down the middle, 3 gives the first a full
+        column beside a stacked pair, 4 quarters. Covers come from `display_image_url` (the single-source
+        IGDB-first chain) -- this card used to read `game.title_image` directly, which is why lists were the
+        one surface showing PSN art where the rest of the site shows the IGDB cover. {% endcomment %}
+        <span class="pp-gtile__mosaic is-{{ game_list.cover_items|length }}" aria-hidden="true">
+            {% for item in game_list.cover_items %}
+            <img src="{{ item.display_image_url }}" alt="" loading="lazy"
+                 class="pp-gtile__tile-art{% if not item.has_cover_art %} pp-gtile__tile-art--icon{% endif %}" />
+            {% endfor %}
         </span>
-    </span>
+        {% else %}
+        {% comment %} An empty list still reads as deliberate rather than broken: the same quiet tinted field
+        and glyph a coverless game card gets. {% endcomment %}
+        <span class="gl-item__noart">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="pp-gcard__body">
+        <h3 class="pp-gcard__title">{{ game_list.name }}</h3>
+        <p class="gl-card__author">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</p>
+
+        {% comment %} The shared foot: a hairline above the facts, so the counts read as metadata rather
+        than as a third line of the title. {% endcomment %}
+        <div class="pp-gcard__foot">
+            <span class="gl-card__count">{{ game_list.game_count|intcomma }} game{{ game_list.game_count|pluralize }}</span>
+
+            <span class="gl-card__marks">
+                {% comment %} Privacy reads only on YOUR OWN lists (`show_privacy`), because on the public
+                browse grid every tile is public by definition and a "public" chip on all of them is noise.
+                Marking the PRIVATE state rather than the public one is the same choice: a list is private
+                when it is born, so the chip marks the exception, and its absence is the signal that this
+                one is out in the world. {% endcomment %}
+                {% if show_privacy and not game_list.is_public %}
+                <span class="gl-card__chip" title="Only you can see this list">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Private
+                </span>
+                {% endif %}
+                {% comment %} The like count earns its accent only when there is one -- a "0" in the
+                highlight colour advertises the wrong thing about somebody's list. {% endcomment %}
+                {% if game_list.like_count %}
+                <span class="gl-card__chip gl-card__chip--likes">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    {{ game_list.like_count|intcomma }}
+                </span>
+                {% endif %}
+            </span>
+        </div>
+    </div>
 </a>

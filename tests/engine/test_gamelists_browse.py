@@ -322,7 +322,9 @@ def test_an_empty_list_draws_the_placeholder_rather_than_a_broken_mosaic(staff_c
 
     body = staff_client.get(BROWSE).content.decode()
 
-    assert 'pp-gtile__art--empty' in body
+    # `.gl-item__noart` since the list moved onto the shared card -- same job, and shared with
+    # the detail page's coverless games so both draw the placeholder the same way.
+    assert 'gl-item__noart' in body
     assert 'pp-gtile__mosaic' not in body
 
 
@@ -536,3 +538,40 @@ def test_every_submit_path_cancels_a_pending_debounced_one():
     assert js.count('cancelPendingSubmit()') >= 3, 'a submit path no longer cancels pending work'
     # Declared where the pagination delegate can see them.
     assert js.index('let numberTimer') < js.index('function init()')
+
+
+def test_the_list_card_protects_its_covers_and_its_title(linked_staff_client):
+    """The list moved off the overlay tile for the same structural reason its games did.
+
+    `.pp-gtile` puts the title on the art behind a scrim. That is right when the image is one
+    backdrop serving as decoration, and wrong here: a list's cover is a MOSAIC of up to four real
+    game covers, and that is what a reader scans to recognise a list. The scrim needed to keep white
+    text legible over four unpredictable, high-contrast covers darkens exactly that.
+
+    Both halves, because asserting only the first passes with both rendered.
+    """
+    owner = _hunter(psn='card-author')
+    _list(owner, 4, name='Four covers')
+
+    body = linked_staff_client.get(BROWSE).content.decode()
+
+    assert 'pp-gcard--list' in body
+    assert 'pp-gcard__title' in body
+    assert 'pp-gtile__scrim' not in body, 'the overlay tile is still rendering'
+    # The mosaic is REUSED inside the card's cover -- it is `position: absolute; inset: 0`, so it
+    # needed no change. A list of four still composes as four.
+    assert 'pp-gtile__mosaic is-4' in body
+
+
+def test_the_list_card_reveal_selector_matches_what_the_template_renders():
+    """`.pp-reveal .pp-gcard { opacity: 0 }` holds every card hidden until an observer clears it, so
+    the selector handed to `staggerReveal` has to match the rendered class. Left on `.pp-gtile` it
+    would find nothing and leave the whole grid invisible after any filter swap -- the blank-grid
+    failure this feature has already shipped once."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    for name in ('lists-browse.js', 'gamelists.js'):
+        js = (root / 'static' / 'js' / name).read_text(encoding='utf-8')
+        assert "cardSelector: '.pp-gcard'" in js, f'{name} reveals nothing'
+        assert "cardSelector: '.pp-gtile'" not in js, f'{name} still targets the old tile'
