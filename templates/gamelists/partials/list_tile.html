@@ -27,7 +27,12 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
 {% endcomment %}
 {% load humanize %}
 <a href="{% url 'list_detail' game_list.id %}" class="pp-gcard pp-gcard--list" data-gcard
-   aria-label="{{ game_list.name }} by {{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}, {{ game_list.game_count }} game{{ game_list.game_count|pluralize }}, {{ game_list.like_count }} like{{ game_list.like_count|pluralize }}">
+   {% comment %}`aria-label` REPLACES the contents-derived name rather than adding to it, so anything
+   omitted here is invisible to a screen reader no matter how prominent it looks. The Private chip was
+   omitted, which on My Lists made a private list and a public one sound identical -- and that chip is
+   the only privacy signal on the card. The like count is stated only when there is one, matching what
+   the card actually shows rather than announcing "0 likes" for every list.{% endcomment %}
+   aria-label="{{ game_list.name }}{% if show_privacy and not game_list.is_public %}, private{% endif %} by {{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}, {{ game_list.game_count }} game{{ game_list.game_count|pluralize }}{% if game_list.like_count %}, {{ game_list.like_count }} like{{ game_list.like_count|pluralize }}{% endif %}">
     <div class="pp-gcard__cover">
         {% if game_list.cover_items %}
         {% comment %} `is-N` picks the composition: 1 fills, 2 splits down the middle, 3 gives the first a full
@@ -43,7 +48,7 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
         {% else %}
         {% comment %} An empty list still reads as deliberate rather than broken: the same quiet tinted field
         and glyph a coverless game card gets. {% endcomment %}
-        <span class="gl-item__noart">
+        <span class="gl-noart">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
                 <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
@@ -68,7 +73,7 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
                 when it is born, so the chip marks the exception, and its absence is the signal that this
                 one is out in the world. {% endcomment %}
                 {% if show_privacy and not game_list.is_public %}
-                <span class="gl-card__chip" title="Only you can see this list">
+                <span class="gl-chip gl-chip--private" title="Only you can see this list">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     Private
                 </span>
@@ -76,7 +81,7 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
                 {% comment %} The like count earns its accent only when there is one -- a "0" in the
                 highlight colour advertises the wrong thing about somebody's list. {% endcomment %}
                 {% if game_list.like_count %}
-                <span class="gl-card__chip gl-card__chip--likes">
+                <span class="gl-chip gl-chip--likes">
                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                     {{ game_list.like_count|intcomma }}
                 </span>

@@ -324,7 +324,7 @@ def test_an_empty_list_draws_the_placeholder_rather_than_a_broken_mosaic(staff_c
 
     # `.gl-item__noart` since the list moved onto the shared card -- same job, and shared with
     # the detail page's coverless games so both draw the placeholder the same way.
-    assert 'gl-item__noart' in body
+    assert 'gl-noart' in body
     assert 'pp-gtile__mosaic' not in body
 
 
@@ -575,3 +575,51 @@ def test_the_list_card_reveal_selector_matches_what_the_template_renders():
         js = (root / 'static' / 'js' / name).read_text(encoding='utf-8')
         assert "cardSelector: '.pp-gcard'" in js, f'{name} reveals nothing'
         assert "cardSelector: '.pp-gtile'" not in js, f'{name} still targets the old tile'
+
+
+def test_the_card_foot_can_wrap_rather_than_clipping_its_chips(linked_staff_client):
+    """It CLIPPED. `.pp-gcard__foot` is `space-between` with no wrap and both children are nowrap, so
+    at 375px a count plus a Private chip plus a likes chip needs ~181px against ~148px of body -- and
+    `.pp-gcard` sets `overflow: hidden`, so the excess cut the like count off rather than wrapping.
+
+    `game-card.css` documents this exact failure on this exact foot for `.pp-gcard__facts`, in the
+    file, before this was written. Asserted against the BUILT stylesheet because the bug renders
+    correctly and merely renders off the edge.
+    """
+    from pathlib import Path
+
+    built = (Path(__file__).resolve().parents[2] / 'staticfiles' / 'css' / 'output.css').read_text(
+        encoding='utf-8')
+
+    # NOT `.replace(' ', '')` on the haystack: `.a .b` and `.a.b` are different selectors, and
+    # stripping every space turns the descendant combinator into a compound one, so the assertion
+    # searched for a rule that does not and should not exist.
+    assert '.pp-gcard--list .pp-gcard__foot{flex-wrap:wrap' in built, (
+        'the list foot no longer wraps and will clip its chips at two columns'
+    )
+    # The state signal must survive a squeeze even after wrapping; the like count is expendable.
+    assert '.gl-chip--private{flex-shrink:0}' in built
+
+
+def test_the_list_card_names_its_private_state_to_a_screen_reader(linked_staff_client):
+    """`aria-label` REPLACES the contents-derived name, so anything omitted is invisible to a screen
+    reader however prominent it looks. The Private chip was omitted, which made a private list and a
+    public one sound identical on My Lists -- where that chip is the only privacy signal."""
+    # The list has to belong to the LOGGED-IN profile: My Lists shows only your own, so building it
+    # for a different hunter renders an empty grid and every assertion below searches an absent name.
+    from trophies.models import Profile
+
+    owner = Profile.objects.get(psn_username='curator')
+    svc.create_list(owner, name='Kept back', is_public=False)
+
+    body = linked_staff_client.get('/my-lists/').content.decode()
+
+    assert 'Kept back' in body, 'the private list did not render for its own owner'
+
+    # The LABEL's own value, start to closing quote. Slicing up to the list name instead cut the
+    # string immediately before the state, since the label reads "{name}, private by {owner}".
+    at = body.index('aria-label="', body.index('data-gcard'))
+    label = body[at + len('aria-label="'):body.index('"', at + len('aria-label="'))]
+
+    assert 'Kept back' in label
+    assert 'private' in label.lower(), f'the accessible name omits the private state: {label!r}'

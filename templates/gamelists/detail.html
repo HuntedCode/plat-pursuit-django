@@ -39,13 +39,13 @@ below with no outer wrapper.
                             private when it is born, so the chip marks the exception. Always rendered
                             now (hidden when public) so publishing can dissolve it in place rather
                             than needing a reload to remove it.{% endcomment %}
-                            {% comment %}`.gl-card__chip`, not `.pp-gtile__stat`. That block belongs to the
+                            {% comment %}`.gl-chip`, not `.pp-gtile__stat`. That block belongs to the
                             grouping TILE and was the only non-tile use of it on the site -- borrowed
                             when this header had no chip of its own. It is also tinted
                             `--pp-primary`, which the visual identity reserves for accent and
                             achievement, so "Private" rendered as a highlight rather than as the
                             restriction it is. The list card's chip is neutral and purpose-built.{% endcomment %}
-                            <span class="gl-card__chip" title="Only you can see this list"
+                            <span class="gl-chip gl-chip--private" title="Only you can see this list"
                                   data-gl-private-chip {% if game_list.is_public %}hidden{% endif %}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                 Private

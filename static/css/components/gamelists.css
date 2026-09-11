@@ -162,10 +162,11 @@
    could disturb the grid -- `.pp-gtile-grid` styles no direct children (just columns and gap) and
    `.pp-gtile` takes its height from `aspect-ratio`, so the wrapper inherits the column's width and
    the tile fills it. Adding layout here is what would break the grid. */
-/* Holds one `.pp-gcard`. `display: flex` is load-bearing now that it wraps a card rather than a
-   tile: `.pp-gcard` is `height: 100%`, which resolves against the flex line here, so without it a
-   card with a one-line title would come up short against its neighbours and the grid row would
-   ragged. The tile it replaced sized itself from `aspect-ratio` and needed no such help. */
+/* Holds one `.pp-gcard`, and anchors the remove control that has to sit OUTSIDE the card's <a>.
+   `display: flex` + `flex: 1` is belt-and-braces rather than load-bearing: this is a grid item with
+   `height: auto`, so it stretches to the row either way and `height: 100%` on the card would resolve
+   against that same definite height under `display: block`. An earlier comment here claimed the flex
+   line was what made it work, which is not true and would mislead anyone who tried to simplify it. */
 .gl-item { position: relative; display: flex; }
 .gl-item > .pp-gcard { flex: 1; min-width: 0; }
 
@@ -181,6 +182,10 @@
     /* The house idiom for an opaque chip over cover art (cf. `.pp-gtile__logo`), not a literal. */
     background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
     color: var(--pp-text-dim);
+    /* Tailwind v4's preflight sets no `cursor: pointer` on buttons, so every control has to declare
+       it -- which this file argues explicitly 195 lines down while naming THIS element, and which
+       `.gl-edit-open` honours. The destructive control was the one still rendering an arrow. */
+    cursor: pointer;
     opacity: 0;
     transform: scale(0.9);
     transition: opacity 0.16s ease, transform 0.16s ease, color 0.16s ease, border-color 0.16s ease;
@@ -202,9 +207,10 @@
 /* Touch has no hover, so the control would never appear. Show it at rest instead -- and at the
    design system's 44px minimum (design-system.md), which the first cut set to 30px. This file
    already honours that rule 110 lines up for a merely DISMISSIVE control; the one that deletes a
-   curated entry had the smaller target. On a 375px phone a tile is ~166x125px, so a mis-tap here
-   destroys work with no confirm step. The visual circle stays 30px -- the extra is transparent
-   padding, so the target grows without the button getting heavier. */
+   curated entry had the smaller target. A mis-tap here destroys curated work with no confirm step.
+   (The ~166x125px figure quoted here was the 4:3 grouping tile's; the card's 3:4 cover at 375px is
+   ~166x222px. The argument survives the move, the number did not.) The visual circle stays 30px --
+   the extra is transparent padding, so the target grows without the button getting heavier. */
 @media (hover: none) {
     .gl-item__remove {
         opacity: 1; transform: none;
@@ -221,8 +227,8 @@
     .gl-item__remove svg { position: relative; }
 }
 
-/* The button is a SIBLING of the tile (a <button> inside an <a> is invalid), so
-   `.pp-reveal .pp-gtile { opacity: 0 }` never covered it. On desktop that was masked because it
+/* The button is a SIBLING of the card (a <button> inside an <a> is invalid), so
+   `.pp-reveal .pp-gcard { opacity: 0 }` (game-card.css) never covered it. On desktop that was masked because it
    rests at opacity 0 anyway -- but on touch it is forced visible, so after every sort, add and
    remove the grid showed a row of bare floating "x" glyphs hanging over empty space for ~500ms
    while the tiles faded up beneath them. Hidden on the same terms, and released by the same
@@ -242,7 +248,6 @@
     .gl-item__remove:hover { transform: none; }
 }
 
-/* The row being removed, held for the length of the exit before the panel re-renders. */
 /* The per-entry note, under the title rather than over the art. Clamped so one hunter's essay
    cannot make its card twice the height of its neighbours and break the grid's rhythm. */
 .gl-item__note {
@@ -251,16 +256,19 @@
     overflow: hidden;
 }
 
-/* No trophy list behind the concept at all, so there is no image in the chain to fall back to. The
-   shared card always renders an <img>; this fills the same frame with a glyph instead of leaving a
-   broken one. */
-.gl-item__noart {
+/* No trophy list behind the concept at all (a `PP_*` stub, or one whose games were reassigned), so
+   there is no image in the chain to fall back to. The template renders THIS instead of the <img>,
+   filling the same frame with a glyph rather than leaving a broken one.
+
+   Named `gl-noart` rather than `gl-item__noart`: both the detail page's games and the browse/My
+   Lists cards use it, so scoping it to the `gl-item` block was a naming leak. */
+.gl-noart {
     position: absolute; inset: 0;
     display: grid; place-items: center;
     color: var(--pp-text-mute);
     background: color-mix(in oklab, var(--pp-text) 3%, var(--pp-bg-2));
 }
-.gl-item__noart svg { width: 34%; height: 34%; opacity: 0.5; }
+.gl-noart svg { width: 34%; height: 34%; opacity: 0.5; }
 
 .gl-item.is-removing { opacity: 0.35; pointer-events: none; transition: opacity 0.18s ease; }
 
@@ -497,22 +505,55 @@
    title still line their counts up across a row. `.pp-gcard__body` is already a flex column. */
 .pp-gcard--list .pp-gcard__foot { margin-top: auto; }
 
+/* THE FOOT WRAPS BELOW `md`, and this is not precaution -- it CLIPPED.
+ *
+ * `.pp-gcard__foot` is `justify-content: space-between` with no wrap, and both children are nowrap,
+ * so neither can shrink below its text. At 375px the card is 166.5px and the body leaves ~148.5px:
+ * a count ("1,284 games", ~73px) plus a Private chip (~62px) plus a likes chip (~33px) plus the two
+ * gaps needs ~181px. `.pp-gcard` sets `overflow: hidden`, so the excess does not scroll or wrap --
+ * it cuts the like count off.
+ *
+ * game-card.css documents this exact failure, on this exact foot, for `.pp-gcard__facts`: "the row's
+ * floor is ~182px against a 148px body at 2 columns ... it CLIPS the last item." That comment was
+ * already in the file when this was written. Same component, same shape, same mistake, and the fix
+ * is the one it settled on: two lines below the breakpoint where it fits, costing ~18px of height
+ * and losing nothing.
+ *
+ * Reachable on My Lists, where `show_privacy` renders the extra chip -- and a private list can carry
+ * likes, since "Make private" un-publishes without zeroing the count. */
+@media (max-width: 767px) {
+    .pp-gcard--list .pp-gcard__foot { flex-wrap: wrap; row-gap: 6px; }
+    .pp-gcard--list .gl-card__marks { width: 100%; }
+}
+
 .gl-card__count {
     font-size: 11px; font-weight: 600; color: var(--pp-text-dim);
     font-variant-numeric: tabular-nums; white-space: nowrap;
+    flex-shrink: 0;
 }
 .gl-card__marks { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
 
-.gl-card__chip {
+/* The chip anatomy is `.pp-gcard__plat`'s, VALUE FOR VALUE -- same font-size, weight, tracking,
+   padding, radius, colour, fill and border. It was written a few pixels off on each of those for no
+   reason, and the two now sit in the same foot on a site where a reader sees both, so the wobble
+   would have read as sloppiness rather than as distinction.
+
+   It stays its own class rather than becoming `.pp-gcard--list .pp-gcard__chip`, which the card's
+   own convention would otherwise ask for, because the detail page's header uses it too -- outside
+   any card. A variant-scoped name would break there. */
+.gl-chip {
     display: inline-flex; align-items: center; gap: 3px;
-    padding: 2px 6px; border-radius: 5px;
-    font-size: 10.5px; font-weight: 700; line-height: 1;
+    padding: 3px 6px; border-radius: 4px;
+    font-size: 0.58rem; font-weight: 700; line-height: 1;
+    text-transform: uppercase; letter-spacing: 0.03em;
     font-variant-numeric: tabular-nums;
     color: var(--pp-text-dim);
     background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent);
     border: 1px solid var(--pp-border);
     white-space: nowrap;
 }
-.gl-card__chip svg { width: 10px; height: 10px; }
+.gl-chip svg { width: 10px; height: 10px; }
+/* The state signal must survive a squeeze; the like count is the expendable one. */
+.gl-chip--private { flex-shrink: 0; }
 /* Only the like count takes the accent, and only when there is one to show. */
-.gl-card__chip--likes { color: var(--pp-primary); border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
+.gl-chip--likes { color: var(--pp-primary); border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
