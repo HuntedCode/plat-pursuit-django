@@ -139,8 +139,14 @@ honest — for the shell and the importer too.
 - The numeral shows on **every** sort, because a rank is a fact about the entry rather than about
   the current view. The drag handles do not, because rearranging a sorted page would post an
   order that means nothing.
-- Drag via `DragReorderManager` (SortableJS), bound to a dedicated grip rather than the card — the
-  card is a link, and a draggable link turns every mis-timed tap into the wrong action.
+- Drag via `DragReorderManager` (SortableJS). **The whole card is the drag surface**, not just the
+  grip: the grip was a 26px target on a 166px card, and people reach for the thing itself. That is
+  only safe because the card's navigation is suppressed while the mode is on — a click the browser
+  did not classify as a drag would otherwise leave the page mid-rearrange. The grip stays as the
+  keyboard affordance and the per-card signal that a card is movable.
+- **Touch requires a hold** (320ms, `delayOnTouchOnly`), because a finger resting on a card is how a
+  scroll begins. `touchStartThreshold` lets a scroll cancel a pending pick-up — without it a finger
+  that drifts during the hold arms the drag anyway and the scroll is lost.
 
 ### Position editing is a mode
 
@@ -190,6 +196,19 @@ The refresh deliberately drops `?sort`: the new type has its own default, and a 
 that opened on A-Z would hide the ordering the switch was made for. The address bar is cleaned to
 match. The editor stays open **only** for a type change — after a plain rename, closing it is the
 natural "done", since the heading behind it has already updated.
+
+While the mode is on, the grid changes state in three ways, and each is doing a job:
+
+- **The hover goes quiet.** `.pp-gcard:hover` lifts the art, glows the border and recolours the
+  title — an invitation to click, which is wrong while dragging, and it fires on every card the
+  pointer crosses during a single drag, so the whole grid flickers.
+- **The cards wobble** (±0.55°, phase varied per card). The reference is a phone home screen in edit
+  mode, and it earns its place: it says *these are loose* about every card at once, which is what
+  lets the gesture go unexplained. Transform-only on the wrapper, so it stays compositor work and
+  leaves `.pp-gcard`'s own transform free. The dragged card holds still — a rotating drop target
+  makes the swap threshold feel unpredictable.
+- **Reduced motion gets a standing accent border instead.** Dropping the animation and stopping there
+  would make the state signal something only some readers receive.
 
 Three implementation facts that are not free choices:
 

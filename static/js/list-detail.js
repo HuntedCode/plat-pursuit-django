@@ -1078,13 +1078,33 @@
         reorderManager = new PP.DragReorderManager({
             container: grid,
             itemSelector: '.gl-item',
-            // The card is an <a> to the concept page. Without a dedicated grip, every mis-timed tap
-            // is either a drag meant as a click or a navigation meant as a drag.
-            handleSelector: '[data-gl-grab]',
+            // NO `handleSelector`: the whole card drags. A grip-only drag was the safe first cut --
+            // the card is an <a>, so anything else risked a tap being read as the wrong gesture --
+            // but it makes the one action the mode exists for a 26px target on a 166px card, and
+            // people reach for the thing itself. `onCardClick` below removes the risk instead of
+            // designing around it. The grip stays: it is the keyboard affordance and the visual
+            // statement that a card is movable.
+            //
+            // LONG-PRESS ON TOUCH, immediate with a mouse. A finger resting on a card is how you
+            // begin a scroll, so touch needs a deliberate hold before a drag arms -- the gesture
+            // every phone home screen already teaches. `delayOnTouchOnly` keeps the mouse instant,
+            // and the threshold inside the manager lets a scroll cancel a pending pick-up.
+            delay: 320,
+            delayOnTouchOnly: true,
+            // The grip is a button; a drag starting ON it still works, because it is inside the
+            // draggable item. Nothing here needs excluding while the remove control is hidden in
+            // this mode -- listed for the next control that is not.
             onReorder: function (_itemId, _newPosition, allItemIds) {
                 saveOrder(grid, allItemIds, 'Order saved.');
             },
         });
+
+        // WHILE ARRANGING, A CARD DOES NOT NAVIGATE. Now that the whole card is the drag surface, a
+        // click that the browser did not classify as a drag would otherwise leave the page in the
+        // middle of rearranging it -- and the shorter the drag, the likelier that is. The mode you
+        // are in is the same answer a phone home screen gives while its icons are jiggling: tapping
+        // does nothing until you leave it.
+        grid.addEventListener('click', onCardClick);
 
         // SortableJS runs `forceFallback`, which is pointer-only. Without this the grip is a real
         // button in the tab order, announced as "Reorder <game>", that does nothing when activated --
@@ -1099,7 +1119,21 @@
     // now `display: none` would still accept a drag begun on the card itself.
     function detachDrag() {
         if (reorderManager) { reorderManager.destroy(); reorderManager = null; }
-        if (dragGrid) { dragGrid.removeEventListener('keydown', onGrabKey); dragGrid = null; }
+        if (dragGrid) {
+            dragGrid.removeEventListener('keydown', onGrabKey);
+            dragGrid.removeEventListener('click', onCardClick);
+            dragGrid = null;
+        }
+    }
+
+    // Swallow the navigation, not the event: the grip's own click still has to reach it, and so
+    // would any control added to a card later. Guarded on the mode as well as on the listener being
+    // attached, because a listener that outlived its mode would make the list unclickable.
+    function onCardClick(e) {
+        if (!positioning) { return; }
+        var card = e.target.closest && e.target.closest('.pp-gcard');
+        if (!card) { return; }
+        e.preventDefault();
     }
 
     /**

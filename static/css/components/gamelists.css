@@ -509,6 +509,101 @@
     border-color: color-mix(in oklab, var(--pp-error) 35%, var(--pp-border));
 }
 
+/* ══ POSITION-EDITING MODE: how the grid behaves while you are arranging it ══════════════════════
+ *
+ * The whole card is the drag surface here, so everything the card does when it is a LINK has to stop
+ * doing it. Three separate behaviours, all of them right in browse mode and all of them wrong here.
+ */
+
+/* 1. THE HOVER GOES QUIET. `.pp-gcard:hover` lifts the art 5%, glows the border, throws a coloured
+ *    shadow and recolours the title -- an invitation to click, which is exactly what a card must not
+ *    look like while you are dragging it. Worse, the pointer crosses half a dozen cards during a
+ *    single drag, so the whole grid flickers as each one lights up and drops again.
+ *
+ *    ID specificity, so these outrank `game-card.css`'s own `@media (hover: hover)` rules without
+ *    `!important` and without touching that file, which four other pages depend on. */
+@media (hover: hover) {
+    #gl-items-panel[data-positioning] .pp-gcard:hover {
+        border-color: var(--pp-border);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+    }
+    #gl-items-panel[data-positioning] .pp-gcard:hover .pp-gcard__art { transform: none; }
+    #gl-items-panel[data-positioning] .pp-gcard:hover .pp-gcard__title { color: var(--pp-text); }
+}
+/* The press-dip too: a card you are picking up should not also flinch. */
+#gl-items-panel[data-positioning] .pp-gcard:active { transform: none; }
+
+/* 2. THE CURSOR SAYS GRAB, over the whole card rather than over the grip alone. */
+#gl-items-panel[data-positioning] .gl-item,
+#gl-items-panel[data-positioning] .pp-gcard { cursor: grab; }
+#gl-items-panel[data-positioning] .gl-item:active,
+#gl-items-panel[data-positioning] .pp-gcard:active { cursor: grabbing; }
+
+/* 3. TOUCH MUST NOT TREAT A HELD CARD AS TEXT OR AS A LINK. Long-press on a phone otherwise raises
+ *    the selection handles or the link preview sheet, both of which land at roughly the moment the
+ *    drag arms -- so the gesture that picks a card up also opens a menu over it. */
+#gl-items-panel[data-positioning] .gl-item {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* ── The tell ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * A small, continuous wobble, and the reference is the one everybody already knows: a phone home
+ * screen in edit mode. It is doing a specific job rather than being decoration -- it says "these are
+ * loose" about every card at once, which is a thing no cursor and no single highlighted control can
+ * say, and it is why the gesture needs no instructions.
+ *
+ * THE RESTRAINT IS IN THE AMPLITUDE. iOS rotates about a degree; more than that reads as a novelty
+ * and gets tiring within seconds on a grid this dense. 0.55deg is enough to register as motion
+ * without any card becoming hard to look at.
+ *
+ * PHASE IS VARIED PER CARD. Identical timing makes a grid pulse in lockstep, which reads as one
+ * animated SHEET rather than as a lot of loose objects -- the opposite of the message. Three buckets
+ * of duration and delay is enough to break the pattern; the eye stops finding the repeat.
+ *
+ * TRANSFORM ONLY, on the wrapper rather than the card. Rotation is compositor-work, so a full grid
+ * stays cheap, and keeping it off `.pp-gcard` leaves that element's own `transition: transform` free
+ * for the press and hover states it already owns.
+ */
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes glLoose {
+        0%   { transform: rotate(-0.55deg); }
+        50%  { transform: rotate(0.55deg); }
+        100% { transform: rotate(-0.55deg); }
+    }
+    #gl-items-panel[data-positioning] .gl-item {
+        animation: glLoose 1.05s ease-in-out infinite;
+        transform-origin: 50% 50%;
+    }
+    #gl-items-panel[data-positioning] .gl-item:nth-child(3n + 2) {
+        animation-duration: 1.22s;
+        animation-delay: -0.35s;
+    }
+    #gl-items-panel[data-positioning] .gl-item:nth-child(3n) {
+        animation-duration: 0.94s;
+        animation-delay: -0.62s;
+    }
+    /* The card being dragged holds still. It is under the cursor and already lifted, and a wobbling
+       one is much harder to place accurately -- SortableJS moves the FALLBACK clone, and a rotating
+       drop target makes the 65% swap threshold feel unpredictable. */
+    #gl-items-panel[data-positioning] .gl-item.sortable-ghost,
+    #gl-items-panel[data-positioning] .gl-item.sortable-chosen,
+    #gl-items-panel[data-positioning] .gl-item.sortable-fallback { animation: none; }
+}
+
+/* REDUCED MOTION GETS THE SAME INFORMATION, WITHOUT THE MOTION. Dropping the animation and stopping
+   there would leave those readers with no sign at all that the grid had changed state -- the tell
+   would be an accessibility feature only some people get. A standing accent edge on every card says
+   the same thing statically. */
+@media (prefers-reduced-motion: reduce) {
+    #gl-items-panel[data-positioning] .pp-gcard {
+        border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    }
+}
+
+
 /* SortableJS states. `forceFallback: true` is set in DragReorderManager, so the thing under the
    cursor is `.sortable-fallback` (a clone on <body>) and `.sortable-ghost` is the gap left behind --
    which is why the ghost is styled as a HOLE rather than as a moving card. */

@@ -108,9 +108,16 @@ blank.
     unreachable on touch, where `forceFallback` drag most needs a dedicated grip so a drag cannot be
     mistaken for a scroll.
 
-    Dragging is bound to THIS element only (`handleSelector`), not to the card: the card is a link to
-    the concept page, and making the whole thing draggable turns every mis-timed tap into either a
-    drag that was meant as a click or a navigation that was meant as a drag.
+    THE WHOLE CARD DRAGS, not just this grip -- which is the opposite of what this comment said for
+    two commits after the behaviour changed. Binding the drag to the grip alone was the safe first
+    cut, because the card is a link and a mis-timed tap could be read as the wrong gesture; the cost
+    was that the one action this mode exists for had a 26px target on a 166px card. `list-detail.js`
+    suppresses the card's navigation while the mode is on instead, which removes the risk rather than
+    designing around it.
+
+    So the grip is no longer the drag HANDLE. It stays because it is the keyboard affordance (arrow
+    keys move an entry through the order) and because it is the per-card statement that this thing is
+    movable, which a cursor change alone cannot make on touch.
 
     `can_reorder` and not `is_owner`: the view withholds this when the page is showing any sort other
     than the real sequence, and when the list is longer than one render can hold -- see its comment,

@@ -896,6 +896,10 @@ class DragReorderManager {
      * @param {string|object} [config.group] - SortableJS group (string or {name, put, pull}). When two managers share a group, items can be dragged between their containers.
      * @param {Function} [config.onMove] - Callback when an item is dropped into THIS container from ANOTHER (cross-container drop). Signature: (itemId, evt) => Promise. evt.from/evt.to/evt.newIndex available. Replaces the onReorder call for that drop.
      * @param {Function} [config.canAccept] - Predicate (draggedEl, toContainer, fromContainer) => bool. Return false to reject the drop. Mirrors SortableJS onMove.
+     * @param {number} [config.delay] - Hold time in ms before a drag starts. Pairs with delayOnTouchOnly (default true), so touch gets long-press-to-drag and a mouse stays immediate.
+     * @param {boolean} [config.delayOnTouchOnly] - Apply `delay` to touch only. Defaults to true when `delay` is set; pass false to delay pointer drags as well.
+     * @param {number} [config.touchStartThreshold] - Pixels of movement that cancel a pending delayed drag, so a scroll gesture does not pick an item up. Defaults to 5.
+     * @param {string} [config.dragExclude] - Selector for descendants a drag must not start from (buttons, links that must stay clickable). Sets SortableJS `filter` with `preventOnFilter: false`.
      */
     constructor(config) {
         this.container = config.container;
@@ -908,6 +912,10 @@ class DragReorderManager {
         this.group = config.group || null;
         this.onMove = config.onMove || null;
         this.canAccept = config.canAccept || null;
+        this.delay = config.delay || 0;
+        this.delayOnTouchOnly = config.delayOnTouchOnly;
+        this.touchStartThreshold = config.touchStartThreshold || 0;
+        this.dragExclude = config.dragExclude || null;
         this.sortable = null;
 
         this._initSortable();
@@ -983,6 +991,27 @@ class DragReorderManager {
 
         if (this.handleSelector) {
             sortableConfig.handle = this.handleSelector;
+        }
+        // LONG-PRESS TO DRAG ON TOUCH, immediate with a mouse. Without `delayOnTouchOnly` the same
+        // delay applies to the pointer too, which makes a desktop drag feel broken; with it, touch
+        // gets the hold-to-pick-up gesture people already know from rearranging home screens, and a
+        // mouse keeps its instant grab.
+        //
+        // `touchStartThreshold` is the other half and is not optional: without it a finger that moves
+        // a few pixels during the hold still arms the drag, so trying to SCROLL a grid of draggable
+        // cards picks one up instead. A small movement budget lets a scroll cancel the pending drag.
+        if (this.delay) {
+            sortableConfig.delay = this.delay;
+            sortableConfig.delayOnTouchOnly = this.delayOnTouchOnly !== false;
+            sortableConfig.touchStartThreshold = this.touchStartThreshold || 5;
+        }
+        // Elements a drag must never start from, even when the whole item is draggable -- controls
+        // that do something else when pressed.
+        if (this.dragExclude) {
+            sortableConfig.filter = this.dragExclude;
+            // Without this SortableJS calls preventDefault on the filtered element, and a <button>
+            // inside it never receives its click.
+            sortableConfig.preventOnFilter = false;
         }
         if (this.group) {
             sortableConfig.group = this.group;

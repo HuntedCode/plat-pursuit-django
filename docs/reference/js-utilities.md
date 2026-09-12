@@ -602,6 +602,24 @@ reusable and both re-implemented the same escalation. Those two are candidates t
 Escalation classes are toggled by the helper and live in the Tailwind safelist — if a third is ever
 added, safelist it too.
 
+### `DragReorderManager` — long-press and drag exclusions (2026-09)
+
+Four optional config keys, added for the Ranked game-list grid:
+
+| Key | Does |
+|---|---|
+| `delay` | Hold time in ms before a drag starts |
+| `delayOnTouchOnly` | Apply that hold to touch only (defaults true when `delay` is set), so a mouse stays immediate |
+| `touchStartThreshold` | Pixels of movement that cancel a pending delayed drag (defaults 5) |
+| `dragExclude` | Selector for descendants a drag must not start from; sets SortableJS `filter` with `preventOnFilter: false` |
+
+**`touchStartThreshold` is not optional in practice.** With `delay` alone, a finger that drifts a few
+pixels during the hold still arms the drag — so trying to *scroll* a grid of draggable cards picks
+one up instead. The threshold is what lets a scroll cancel the pending pick-up.
+
+**`preventOnFilter: false` is why `dragExclude` works.** SortableJS otherwise calls `preventDefault`
+on the filtered element, and a `<button>` inside it never receives its click.
+
 ## Related Docs
 
 - [Template Architecture](template-architecture.md): Where utils.js is included and how the zoom wrapper works

@@ -602,6 +602,81 @@ def test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor(client)
         'closing the editor must end the mode it started'
 
 
+def test_the_whole_card_drags_and_does_not_navigate_while_arranging(client):
+    """The grip was a 26px target on a 166px card, and people reach for the thing itself.
+
+    Dropping `handleSelector` makes the card the drag surface, which is only safe because the card's
+    navigation is suppressed for the duration -- a click the browser did not classify as a drag would
+    otherwise leave the page in the middle of rearranging it. Both halves, or this is a regression:
+    the risk the grip was avoiding is real.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    attach = js[js.index('function attachDrag('):js.index('function detachDrag(')]
+    assert 'handleSelector' not in attach, 'the drag is still confined to the grip'
+    assert "addEventListener('click', onCardClick)" in attach
+
+    guard = js[js.index('function onCardClick('):js.index('function syncPositioning(')]
+    assert 'if (!positioning) { return; }' in guard, \
+        'a click guard that outlives the mode makes the list unclickable'
+    assert 'e.preventDefault()' in guard
+    # NOT stopPropagation: the grip's own click, and any control added to a card later, still has to
+    # reach its handler.
+    assert 'stopPropagation' not in guard
+
+    # The grip survives, because it is the keyboard path and the per-card signal.
+    assert 'data-gl-grab' in client.get(_url(_ranked(_staff(client), 2))).content.decode()
+
+
+def test_touch_needs_a_deliberate_hold_before_a_card_moves(client):
+    """A finger resting on a card is how you begin a SCROLL. Without a hold, dragging and scrolling
+    are the same gesture and the grid picks up a card every time somebody tries to scroll past it."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    attach = js[js.index('function attachDrag('):js.index('function detachDrag(')]
+    assert 'delay:' in attach
+    assert 'delayOnTouchOnly: true' in attach, 'a mouse drag must stay immediate'
+
+    # The manager has to honour it, and has to pair it with a movement budget -- without one, a
+    # finger that drifts during the hold still arms the drag and the scroll is lost anyway.
+    utils = _decommented(_read('static/js/utils.js'))
+    assert 'sortableConfig.delay = this.delay' in utils
+    assert 'sortableConfig.delayOnTouchOnly' in utils
+    assert 'sortableConfig.touchStartThreshold' in utils
+
+
+def test_arranging_quiets_the_card_hover_and_shows_the_cards_are_loose(client):
+    """Hover lifts the art, glows the border and recolours the title -- an invitation to click, which
+    is wrong while dragging, and it fires on every card the pointer crosses mid-drag.
+
+    The idle wobble is the counterpart: it says "these are loose" about every card at once, which is
+    what makes the gesture need no instructions.
+    """
+    css = _read('static/css/components/gamelists.css')
+
+    mode = css[css.index('POSITION-EDITING MODE'):]
+    for suppressed in ('.pp-gcard:hover .pp-gcard__art { transform: none; }',
+                       '.pp-gcard:active { transform: none; }'):
+        assert suppressed in mode, f'hover is still live while arranging: {suppressed}'
+
+    assert '@keyframes glLoose' in css
+    # Varied phase, or the grid pulses in lockstep and reads as one animated sheet.
+    assert 'nth-child(3n + 2)' in mode and 'nth-child(3n)' in mode
+
+    # The dragged card holds still: a rotating drop target makes the swap threshold feel random.
+    assert '.gl-item.sortable-fallback { animation: none; }' in mode
+
+    # Reduced motion still gets a state signal, or the tell is a feature only some readers receive.
+    # Anchored on text unique to THAT block: this file holds several `prefers-reduced-motion: reduce`
+    # rules and a bare search found the grip's one, several hundred lines away.
+    reduced = css[css.index('REDUCED MOTION GETS THE SAME INFORMATION'):]
+    assert '--pp-primary' in reduced[:500], 'reduced motion is given no sign the mode is on'
+
+    # And it must survive the build -- lightningcss silently drops keyframes it cannot parse, which
+    # is why no `color-mix()` appears inside the block above.
+    assert 'glLoose' in _read('staticfiles/css/output.css')
+
+
 def test_saving_a_type_change_refreshes_in_place_instead_of_reloading(client):
     """A type switch changes three server-rendered things -- the cards, which sorts exist, and whether
     the position bar exists at all -- and the last two live OUTSIDE the swapped panel. That is why it
