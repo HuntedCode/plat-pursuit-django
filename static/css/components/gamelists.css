@@ -445,26 +445,59 @@
     .gl-item__grab:hover { transform: none; }
 }
 
-/* The mode's own controls, inside the edit panel. */
+/* THE POSITION BAR, directly above the grid it acts on.
+ *
+ * It began as a small ghost button at the foot of the edit form and was, in the owner's words, hard
+ * to see -- which it was: the single control that the whole Ranked type exists for was the quietest
+ * thing on the page, in a panel you had to scroll past the name and description to reach. Moved out
+ * of the form, given the grid's full width, and promoted to a solid CTA.
+ *
+ * The bar is a SURFACE rather than a floating button, so the mode reads as a state the list is in
+ * rather than as one more control among the sort and filter chrome. When the mode is on, that
+ * surface is what changes -- the accent border and tint carry the state across the full width, which
+ * is much harder to miss than a button label flipping from one word to another. */
 .gl-positions {
-    margin-top: 2px;
-    padding-top: 10px;
-    border-top: 1px solid var(--pp-border);
+    display: flex;
+    margin: 0 0 12px;
+    padding: 11px 13px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 7%, var(--pp-bg-1));
+    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
-.gl-positions__row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.gl-positions__btn { font-size: 0.72rem; padding: 6px 11px; gap: 6px; }
-.gl-positions__btn svg { width: 13px; height: 13px; }
+/* ON. Stronger tint, and a ring so the whole strip reads as live at a glance from across the page. */
+.gl-positions.is-on {
+    border-color: color-mix(in oklab, var(--pp-primary) 62%, transparent);
+    background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-1));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 28%, transparent),
+                0 8px 26px -14px color-mix(in oklab, var(--pp-primary) 60%, #000);
+}
+
+.gl-positions__row {
+    display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+    width: 100%;
+}
+.gl-positions__btn { font-size: 0.78rem; padding: 8px 14px; gap: 7px; flex: none; }
+.gl-positions__btn svg { width: 15px; height: 15px; }
 .gl-positions__hint {
-    margin-top: 6px;
-    font-size: 0.68rem; line-height: 1.35;
+    margin: 0; flex: 1 1 14ch; min-width: 0;
+    font-size: 0.72rem; line-height: 1.35;
     color: var(--pp-text-dim);
+}
+/* At 375px the button and the hint side by side leave the hint about twelve characters, so it wraps
+   to three ragged lines under a button that is already self-explanatory once pressed. The hint goes
+   below instead of being squeezed, which is the reference standard's instruction for exactly this. */
+@media (max-width: 520px) {
+    .gl-positions__row { gap: 8px; }
+    .gl-positions__btn { width: 100%; justify-content: center; }
+    .gl-positions__hint { flex: 1 1 100%; }
 }
 /* The save signal. Sized and coloured to be noticed without competing with the button beside it --
    this reports on something the hunter already did, rather than inviting an action. */
 .gl-positions__status {
-    display: inline-flex; align-items: center;
-    padding: 3px 8px; border-radius: 999px;
-    font-size: 0.64rem; font-weight: 700;
+    display: inline-flex; align-items: center; flex: none;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 0.66rem; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.04em;
     color: var(--pp-primary);
     background: color-mix(in oklab, var(--pp-primary) 12%, transparent);

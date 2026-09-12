@@ -49,6 +49,9 @@
     // Whether the hunter has turned position editing ON. Distinct from whether the server
     // allows it (`data-gl-reorder`), which is a capability rather than an intent.
     var positioning = false;
+    // Whether the in-place editor is open. The position bar is gated on it, so entering the mode is
+    // always a deliberate second step rather than something a stray drag can start.
+    var editorOpen = false;
     // Reorder writes run one at a time; see `saveOrder`.
     var orderChain = Promise.resolve();
     // Per-node, and NOT serializable -- see the header. A `data-` attribute here
@@ -624,6 +627,8 @@
             reset();
             view.hidden = true;
             form.hidden = false;
+            editorOpen = true;
+            syncPositionsVisibility();
             var tallies = document.querySelector('[data-gl-tallies]');
             if (tallies) { tallies.hidden = true; }
             nameField.focus();
@@ -634,7 +639,8 @@
             // Leaving the editor leaves position editing, because the mode was entered FROM here:
             // a hunter who closes the panel has finished editing the list, and handles left live on
             // a page with no visible sign of why is how a drag happens by accident again.
-            exitPositioning(true);
+            editorOpen = false;
+            syncPositionsVisibility();
             form.hidden = true;
             view.hidden = false;
             var tallies = document.querySelector('[data-gl-tallies]');
@@ -660,10 +666,19 @@
             var current = form.querySelector('[name="list_type"][value="'
                                              + (root.dataset.listType || '') + '"]');
             if (current) { current.checked = true; }
+            // ...and the bar follows it back, or cancelling a switch to Collection leaves the offer
+            // to reorder hidden on a list that is still ranked.
+            syncPositionsVisibility();
             [nameField, descField].forEach(function (el) {
                 el.dispatchEvent(new Event('input', { bubbles: true }));   // resync the counters
             });
         }
+
+        // The bar follows the SELECTED type, not the stored one: picking Collection must take the
+        // offer to reorder away immediately, or the page contradicts the choice just made.
+        form.addEventListener('change', function (e) {
+            if (e.target && e.target.name === 'list_type') { syncPositionsVisibility(); }
+        });
 
         var opener = root.querySelector('[data-gl-edit-open]');
         if (opener) { opener.addEventListener('click', open); }
@@ -982,9 +997,21 @@
         var toggle = document.querySelector('[data-gl-positions-toggle]');
         if (!toggle) { return; }
         toggle.setAttribute('aria-pressed', positioning ? 'true' : 'false');
-        toggle.classList.toggle('pp-cta--ghost', !positioning);
         var label = toggle.querySelector('[data-gl-positions-label]');
-        if (label) { label.textContent = positioning ? 'Done editing positions' : 'Edit list positions'; }
+        if (label) { label.textContent = positioning ? 'Done' : 'Edit list positions'; }
+
+        // The BAR carries the state, not just the button. A label flipping between two words is easy
+        // to miss; a full-width surface changing colour is not, and it is the difference between
+        // knowing the mode is on and inferring it from the grips.
+        var block = document.querySelector('[data-gl-positions]');
+        if (block) { block.classList.toggle('is-on', positioning); }
+
+        var hint = document.querySelector('[data-gl-positions-hint]');
+        if (hint) {
+            hint.textContent = positioning
+                ? 'Drag a card, or use the arrow keys on its grip. Moves save as you make them.'
+                : 'Then drag a card, or use the arrow keys on its grip.';
+        }
     }
 
     // The SIGHTED save signal. Kept out of the accessibility tree on purpose: the spoken version
@@ -1042,11 +1069,49 @@
     function syncPositioning() {
         var grid = document.getElementById('gl-items');
         var allowed = !!(grid && grid.hasAttribute('data-gl-reorder'));
-        var block = document.querySelector('[data-gl-positions]');
-        if (block) { block.hidden = !allowed; }
-
-        if (!allowed) { exitPositioning(true); return; }
+        syncPositionsVisibility();
+        if (!allowed) { return; }
         if (positioning) { attachDrag(grid); }
+    }
+
+    /**
+     * Decide whether the bar is on screen, from the three things that actually govern it.
+     *
+     * 1. The SERVER allows reordering here (`data-gl-reorder` on the live grid) -- owner, ranked,
+     *    real sequence, whole list rendered.
+     * 2. The editor is open. That is the deliberate-entry half; without it the handles are live on a
+     *    page nobody said they were editing, which is what made dragging feel accidental.
+     * 3. The type radio currently SELECTED is still the ranked one.
+     *
+     * The third is why this cannot be left to the template. `can_reorder` is computed from the list
+     * as STORED, so switching the radio to Collection changed nothing server-side and the bar sat
+     * there offering to reorder a list the hunter had just said was a shelf. Nothing would have
+     * broken -- the write still goes to a ranked row until they save -- but the page contradicted
+     * the choice they had just made, which is the kind of thing that reads as the form not working.
+     *
+     * Note the asymmetry, which is deliberate: selecting Ranked on a list that is STORED as a
+     * Collection does not reveal the bar, because there is nothing to reorder yet. The grid has no
+     * grips and no item ids, and saving the type reloads the page, which brings the bar with it.
+     */
+    function syncPositionsVisibility() {
+        var block = document.querySelector('[data-gl-positions]');
+        if (!block) { return; }
+
+        var grid = document.getElementById('gl-items');
+        var allowed = !!(grid && grid.hasAttribute('data-gl-reorder'));
+        var show = allowed && editorOpen && selectedTypeIsRanked();
+
+        block.hidden = !show;
+        if (!show) { exitPositioning(true); }
+    }
+
+    // The radio if the editor rendered one, else the stored type. A visitor and a non-owner have no
+    // form at all, and neither has anything to fall back FROM.
+    function selectedTypeIsRanked() {
+        var checked = document.querySelector('[data-gl-identity-edit] [name="list_type"]:checked');
+        if (checked) { return checked.value === 'ranked'; }
+        var root = document.querySelector('[data-gl-identity]');
+        return !!root && root.dataset.listType === 'ranked';
     }
 
     //: Arrow keys move an entry one place through the ORDER, which is the axis a ranked list is

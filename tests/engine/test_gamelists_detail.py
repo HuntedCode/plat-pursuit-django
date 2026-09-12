@@ -556,7 +556,15 @@ def test_reordering_is_a_mode_you_have_to_enter(client):
     # The toggle is offered...
     assert 'data-gl-positions-toggle' in body
     assert 'Edit list positions' in body
-    assert 'Moves save as you make them.' in body, 'the save model has to be stated, not discovered'
+    # ...next to the grid it acts on, not buried in the edit panel above it. Asserted by position,
+    # because "it is on the page somewhere" is what let it ship somewhere nobody could find it.
+    assert body.index('data-gl-positions') > body.index('data-gl-identity-edit'), \
+        'the bar belongs below the editor, beside the list'
+    assert body.index('data-gl-positions') < body.index('id="gl-items-panel"'), \
+        'the bar belongs directly above the grid'
+    # The save model is stated once the mode is on; the JS owns that copy because it swaps with state.
+    js = _decommented(_read('static/js/list-detail.js'))
+    assert 'Moves save as you make them.' in js, 'the save model has to be stated, not discovered'
     # ...and the grips are rendered but inert until the mode is on, which is CSS, not markup.
     css = _read('static/css/components/gamelists.css')
     assert '#gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }' in css
@@ -585,13 +593,58 @@ def test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor(client)
     the drag manager is bound to, and closing the panel the mode was entered from."""
     js = _decommented(_read('static/js/list-detail.js'))
 
-    sync = js[js.index('function syncPositioning() {'):js.index('function saveOrder(')]
-    assert 'exitPositioning(true)' in sync, 'sorting away from the order must end the mode'
+    sync = js[js.index('function syncPositioning() {'):js.index('function syncPositionsVisibility() {')]
     assert 'attachDrag(grid)' in sync, 'a replaced grid must be re-attached while the mode is on'
-    assert 'block.hidden = !allowed' in sync, 'the header toggle must follow the grid below it'
+    assert 'syncPositionsVisibility()' in sync, 'the bar must follow the grid below it'
 
     close_body = js[js.index('function close() {'):js.index('function reset() {')]
-    assert 'exitPositioning(' in close_body, 'closing the editor must end the mode it started'
+    assert 'editorOpen = false' in close_body and 'syncPositionsVisibility()' in close_body, \
+        'closing the editor must end the mode it started'
+
+
+def test_the_bar_disappears_when_the_type_is_switched_away_from_ranked(client):
+    """The bug: switching the radio to Collection left "Edit list positions" sitting there.
+
+    `can_reorder` is computed from the list as STORED, so a radio change -- which is client-side until
+    Save -- could not reach it. Nothing would have broken (the write still goes to a ranked row until
+    they save), but the page contradicted the choice just made, which reads as the form not working.
+
+    Three sources feed the decision, and all three have to be consulted client-side.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    vis = js[js.index('function syncPositionsVisibility() {'):js.index('function selectedTypeIsRanked(')]
+    assert 'editorOpen' in vis, 'the bar is gated on the editor being open'
+    assert 'selectedTypeIsRanked()' in vis, 'the bar must follow the SELECTED type, not the stored one'
+    assert "hasAttribute('data-gl-reorder')" in vis, 'and on the server still allowing it'
+    assert 'block.hidden = !show' in vis
+    assert 'exitPositioning(true)' in vis, 'hiding the bar must also leave the mode'
+
+    # The radio has to actually fire it. Without a listener the function is correct and never called.
+    assert "e.target.name === 'list_type'" in js, 'nothing re-syncs the bar when the type changes'
+
+    # And the fallback reads the STORED type, for the pages that render no form at all.
+    # Sliced FORWARD again: `function attachDrag(` is DEFINED above this one, so searching from 0
+    # returns an earlier index and the slice comes back empty. Third time on this file.
+    picker_start = js.index('function selectedTypeIsRanked(')
+    picker = js[picker_start:js.index('    }', js.index('root.dataset.listType', picker_start))]
+    assert "checked.value === 'ranked'" in picker
+    assert "root.dataset.listType === 'ranked'" in picker
+
+
+def test_the_bar_starts_hidden_and_is_never_offered_to_a_visitor(client):
+    """Hidden at rest because it is revealed by opening the editor -- and absent entirely for anyone
+    who could not act on it, rather than merely hidden from them."""
+    owner = _staff(client, psn='owner')
+    ranked = _ranked(owner, 3)
+
+    body = client.get(_url(ranked)).content.decode()
+    bar = body[body.index('data-gl-positions'):]
+    assert bar[:120].find('hidden') != -1, 'the bar must start hidden; the editor reveals it'
+
+    client.logout()
+    _staff(client, psn='visitor')
+    assert 'data-gl-positions' not in client.get(_url(ranked)).content.decode()
 
 
 def test_the_save_indicator_reports_both_outcomes(client):

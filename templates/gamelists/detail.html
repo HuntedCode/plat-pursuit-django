@@ -120,39 +120,6 @@ below with no outer wrapper.
                             </div>
                         </fieldset>
 
-                        {% if can_reorder %}
-                        {% comment %}POSITION EDITING IS A MODE, and entering it is deliberate.
-
-                        The handles used to be on whenever a ranked list was viewed by its owner,
-                        which made dragging something you could do by accident rather than something
-                        you decided to do. It is its own button inside the edit panel, so the order
-                        of operations reads: edit this list -> edit its positions.
-
-                        `type="button"` because it sits inside the identity form and must not submit
-                        it. It is deliberately NOT part of that form's save cycle, which is why the
-                        hint says so out loud: Cancel undoes a rename, and it cannot undo a move that
-                        was already written.{% endcomment %}
-                        <div class="gl-positions" data-gl-positions>
-                            <div class="gl-positions__row">
-                                <button type="button" class="pp-cta pp-cta--ghost gl-positions__btn"
-                                        data-gl-positions-toggle aria-pressed="false">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 8 2-2 2 2"/><path d="m3 16 2 2 2-2"/>
-                                    </svg>
-                                    <span data-gl-positions-label>Edit list positions</span>
-                                </button>
-                                {% comment %}`aria-hidden`: this is the SIGHTED signal. The spoken one
-                                goes through the page's existing status region, which says what
-                                happened once rather than narrating every state change twice.{% endcomment %}
-                                <span class="gl-positions__status" data-gl-positions-status
-                                      aria-hidden="true" hidden></span>
-                            </div>
-                            <p class="gl-positions__hint">
-                                Drag a card, or use the arrow keys on its grip. Moves save as you make them.
-                            </p>
-                        </div>
-                        {% endif %}
-
                         <div class="gl-edit__foot">
                             <button type="submit" class="pp-cta" data-gl-edit-save>Save</button>
                             <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-cancel>Cancel</button>
@@ -338,6 +305,44 @@ below with no outer wrapper.
     them is not an announcement -- `#toast-container` in base.html carries no `aria-live`, so nothing
     ToastManager writes is read out at all.{% endcomment %}
     {% if is_owner %}<p class="sr-only" aria-live="polite" data-gl-status></p>{% endif %}
+
+    {% if can_reorder %}
+    {% comment %}POSITION EDITING IS A MODE, and this bar is how you enter it.
+
+    IT LIVES HERE, DIRECTLY ABOVE THE GRID, rather than inside the edit panel where it started. Two
+    reasons, both from using it: a control belongs next to the thing it changes, and buried at the
+    bottom of a form it was genuinely hard to find -- it is the whole point of the Ranked type, and it
+    was the least visible control on the page.
+
+    It is still GATED on the editor being open, which is the deliberate-entry part: the handles used
+    to be live whenever a ranked list was viewed by its owner, so rearranging was something you could
+    do by accident. Opening the editor is the statement of intent; this is the act.
+
+    Rendered `hidden` and shown by JS, because its visibility depends on two things the server cannot
+    see: whether the editor is open, and which type radio is currently SELECTED (which changes before
+    anything is saved).
+
+    Outside the identity <form> on purpose -- it is not part of that form's save cycle, and the hint
+    says so, because Cancel undoes a rename and cannot undo a move that was already written.{% endcomment %}
+    <div class="gl-positions" data-gl-positions hidden>
+        <div class="gl-positions__row">
+            <button type="button" class="pp-cta gl-positions__btn"
+                    data-gl-positions-toggle aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 8 2-2 2 2"/><path d="m3 16 2 2 2-2"/>
+                </svg>
+                <span data-gl-positions-label>Edit list positions</span>
+            </button>
+            <p class="gl-positions__hint" data-gl-positions-hint>
+                Then drag a card, or use the arrow keys on its grip.
+            </p>
+            {% comment %}`aria-hidden`: this is the SIGHTED signal. The spoken one goes through the
+            page's existing status region, which says what happened once rather than narrating every
+            state change twice.{% endcomment %}
+            <span class="gl-positions__status" data-gl-positions-status aria-hidden="true" hidden></span>
+        </div>
+    </div>
+    {% endif %}
 
     <div id="gl-items-panel">
         {% include 'gamelists/partials/detail_items.html' %}

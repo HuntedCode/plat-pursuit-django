@@ -149,9 +149,20 @@ POSSIBLE here; the mode is the hunter saying they want to do it now. Conflating 
 first, and it made rearranging a list something you could do by accident.
 
 Open the editor → **Edit list positions** → grips appear → drag or arrow-key → a pill reads *Saving*
-then *Saved* → press again, or close the editor, and it ends. The hint states that moves save
-immediately, because the toggle sits inside a form whose Cancel button cannot undo a write that
-already happened.
+then *Saved* → press **Done**, or close the editor, and it ends. The hint states that moves save
+immediately, because the editor's Cancel button cannot undo a write that already happened.
+
+**The bar sits directly above the grid**, not in the edit panel, where it started and was hard to
+find: the one control the Ranked type exists for was the quietest thing on the page. It is still
+gated on the editor being open — that is the deliberate-entry half — but it lives next to the thing
+it changes, is full-width, and the whole surface changes colour when the mode is on rather than only
+a button label.
+
+Its visibility is computed **client-side from three things**, which is why the template only renders
+it hidden: the server allows reordering here, the editor is open, and *the currently selected type
+radio is still Ranked*. That third one is the reason it cannot be left to `can_reorder` — that is
+computed from the list as STORED, so switching the radio to Collection left the bar offering to
+reorder a list the hunter had just said was a shelf.
 
 Three implementation facts that are not free choices:
 
