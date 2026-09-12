@@ -123,7 +123,7 @@ that has to agree with the first. They are listed in
 |---|---|---|
 | `/community/lists/create/` | `list_create` | POST (form) |
 | `/community/lists/<id>/update/` | `list_update` | POST — rename, describe, publish |
-| `/community/lists/<id>/reorder/` | `list_reorder` | POST — **no caller yet** (awaits Ranked) |
+| `/community/lists/<id>/reorder/` | `list_reorder` | POST — Ranked lists only |
 | `/community/lists/<id>/like/` | `list_like` | POST |
 | `/community/lists/<id>/follow/` | `list_follow` | POST |
 | `/community/lists/<id>/add/` | `list_add_game` | POST |

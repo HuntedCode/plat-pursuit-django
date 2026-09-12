@@ -14,6 +14,7 @@ import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
+from gamelists.models import LIST_TYPE_RANKED
 from gamelists.services import game_list_service as svc
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 
@@ -329,6 +330,12 @@ def test_a_collection_offers_no_curated_order(client):
     `position` itself stays and stays dense -- it is insertion order here, and `attach_cover_games`
     bounds the tile mosaic on `position__lt=4`, so a gap would render a three-cover mosaic on a
     four-game list.
+
+    TWO OF THESE ASSERTIONS WERE VACUOUS once Ranked shipped, and were rewritten rather than left
+    passing. They named `'position'` as the sort key and `data-gl-drag` as the attribute; the
+    implementation calls them `rank` and `data-gl-reorder`, so both checked for strings that appear
+    nowhere in the codebase and would have passed against a Collection rendering full drag handles.
+    Guessing an identifier the code does not use is the easiest way to write a test that cannot fail.
     """
     owner = _staff(client)
     game_list = _list(owner, 3)
@@ -337,12 +344,277 @@ def test_a_collection_offers_no_curated_order(client):
     body = resp.content.decode()
 
     assert resp.context['sort'] == 'name', 'a shelf should default to being findable, i.e. A-Z'
-    assert 'position' not in dict(resp.context['sort_choices'])
+    assert 'rank' not in dict(resp.context['sort_choices'])
+    assert resp.context['is_ranked'] is False
+    assert resp.context['can_reorder'] is False
     assert 'List order' not in body
-    assert 'data-gl-drag' not in body
+    assert 'data-gl-reorder' not in body
+    assert 'data-gl-grab' not in body
 
     # The field is still dense, which is what the mosaic depends on.
     assert list(game_list.items.order_by('position').values_list('position', flat=True)) == [0, 1, 2]
+
+
+def _ranked(owner, games=0, **kwargs):
+    game_list = _list(owner, games, **kwargs)
+    svc.update_list(game_list, owner, list_type=LIST_TYPE_RANKED)
+    game_list.refresh_from_db()
+    return game_list
+
+
+def test_a_ranked_list_leads_with_the_order_its_author_chose(client):
+    owner = _staff(client)
+    game_list = _ranked(owner, 3)
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['is_ranked'] is True
+    assert resp.context['sort'] == 'rank', 'a ranked list should open on its real sequence'
+    assert 'rank' in dict(resp.context['sort_choices'])
+    assert 'List order' in resp.content.decode()
+
+
+def test_a_ranked_list_renders_one_based_numerals_in_position_order(client):
+    """`position` is 0-indexed; a reader counts from 1. Off-by-one here is silent and wrong on every
+    row at once."""
+    owner = _staff(client)
+    game_list = _ranked(owner)
+    for title in ('Zulu', 'Alpha', 'Mike'):
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        svc.add_concept(game_list, owner, concept)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    ranks = re.findall(r'<span class="gl-rank"[^>]*>(\d+)</span>', body)
+    assert ranks == ['1', '2', '3'], 'numerals should start at 1 and run down the list'
+    # ...against the ORDER, or the numerals could be right while the games are shuffled.
+    assert [i.concept.unified_title for i in client.get(_url(game_list)).context['items']] \
+        == ['Zulu', 'Alpha', 'Mike']
+
+
+def test_the_numeral_survives_a_different_sort_but_the_handles_do_not(client):
+    """A rank is a fact about the ENTRY, so it still reads "#3" when the page is sorted A-Z. Dragging
+    is a fact about the VIEW: rearranging a sorted page would post an order that means nothing, so
+    the handles go while the numerals stay."""
+    owner = _staff(client)
+    game_list = _ranked(owner)
+    for title in ('Zulu', 'Alpha'):
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        svc.add_concept(game_list, owner, concept)
+
+    resp = client.get(_url(game_list), {'sort': 'name'})
+    body = resp.content.decode()
+
+    assert resp.context['can_reorder'] is False
+    assert 'data-gl-grab' not in body
+    # Alpha is second in the list and first alphabetically, so its numeral must still read 2.
+    assert re.findall(r'<span class="gl-rank"[^>]*>(\d+)</span>', body) == ['2', '1']
+
+
+def test_only_the_owner_gets_handles(client):
+    owner = _staff(client, psn='owner')
+    game_list = _ranked(owner, 2)
+    client.logout()
+    _staff(client, psn='somebodyelse')
+
+    resp = client.get(_url(game_list))
+    body = resp.content.decode()
+
+    assert resp.context['is_ranked'] is True, 'a visitor should still see it AS a ranked list'
+    assert 'gl-rank' in body, '...numerals included'
+    assert resp.context['can_reorder'] is False
+    assert 'data-gl-grab' not in body
+    assert 'data-gl-reorder' not in body
+
+
+def test_a_truncated_ranked_list_withholds_the_handles_and_says_why(client, monkeypatch):
+    """`reorder` refuses a partial order by design, so a page that cannot render the whole list
+    cannot post a valid one. Offering a handle here would fail on every single use.
+
+    Patching the ceiling rather than building 201 lists: the boundary is what is under test, and the
+    fixture cost of the real number would push this test into minutes.
+    """
+    from gamelists import views as gl_views
+    monkeypatch.setattr(gl_views, 'MAX_ITEMS_RENDERED', 2)
+
+    owner = _staff(client)
+    game_list = _ranked(owner, 3)
+
+    resp = client.get(_url(game_list))
+    body = resp.content.decode()
+
+    assert resp.context['items_truncated'] is True
+    assert resp.context['can_reorder'] is False
+    assert 'data-gl-grab' not in body
+    assert 'Reordering needs the whole list on screen' in body, \
+        'their absence must be explained, or it reads as a bug on the one type built for ordering'
+
+
+def test_the_handles_and_the_endpoint_are_there_when_they_can_work(client):
+    """The positive case, so every refusal above is a real narrowing rather than a feature that never
+    renders at all."""
+    owner = _staff(client)
+    game_list = _ranked(owner, 3)
+
+    resp = client.get(_url(game_list))
+    body = resp.content.decode()
+
+    assert resp.context['can_reorder'] is True
+    assert body.count('data-gl-grab') == 3, 'one grip per row'
+    assert f'data-reorder-url="/community/lists/{game_list.id}/reorder/"' in body
+    assert body.count('data-item-id=') == 3, 'the drag payload needs an id per row'
+
+
+def test_the_rank_sort_is_reachable_explicitly(client):
+    """A hunter who sorts A-Z to find something needs a way back to the order they built.
+
+    THIS TEST USED TO CLAIM MORE THAN IT CHECKED. It made a request at `?sort=name` first and called
+    itself a round trip -- but sort is read from `request.GET` and stored nowhere, so the first GET
+    could be deleted with no effect. The real round-trip failure was on the CLIENT (the drag wiring
+    read htmx's pre-settle attributes and died on exactly this navigation), and this test's framing
+    implied coverage of it. That is pinned below instead, where it lives.
+    """
+    owner = _staff(client)
+    game_list = _ranked(owner, 2)
+
+    resp = client.get(_url(game_list), {'sort': 'rank'})
+
+    assert resp.context['sort'] == 'rank'
+    assert resp.context['can_reorder'] is True
+
+
+def test_the_drag_is_wired_after_settle_not_after_swap(client):
+    """The sort swap replaces `#gl-items`, and htmx stabilises attributes on id'd elements: for ~20ms
+    after `htmx:afterSwap` the new grid still wears the OLD one's attributes.
+
+    So wiring on swap breaks both directions. A-Z -> List order reads `data-gl-reorder` as absent and
+    returns early, leaving every grip inert until a reload. List order -> A-Z reads it as present,
+    wires a grid that must not be draggable, and marks it in the WeakSet so the settle pass skips it.
+
+    Asserted against the source because no server test can see it, and because this file's own header
+    already documents the same mechanism for `pp-reveal`.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    assert "addEventListener('htmx:afterSettle'" in js, 'the drag must re-wire on settle'
+    # And NOT from the swap handler, which is what made the second direction worse than the first.
+    swap_handler = js[js.index('function onAfterSwap('):js.index('function onAfterSettle(')]
+    assert 'wireReorder()' not in swap_handler, \
+        'wiring on swap reads stale attributes and poisons the WeakSet'
+
+
+def test_the_edit_form_sends_only_what_changed(client):
+    """`update_list` runs the restriction gate whenever `name` or `description` is present, so a form
+    that always posts both makes every type switch a gated write -- and the service's documented
+    "a restricted hunter can still switch type" becomes unreachable through the only UI that can send
+    the field."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    # The ACTUAL comparisons, not a fuzzy "is there an `if` somewhere above". The first draft of this
+    # test looked for `'if (' in` the preceding 200 characters, which almost any code satisfies -- it
+    # would have passed against the unconditional version it exists to catch.
+    assert "nameField.value.trim() !== previousName" in js, \
+        'the name is posted without comparing it to what the server rendered'
+    assert "descField.value.trim() !== previousDesc" in js, \
+        'the description is posted without comparing it to what the server rendered'
+    # And the type switch must be able to travel ALONE, which is the whole point.
+    assert "if (typeChanged) { body.append('list_type'" in js
+
+
+def test_the_grip_is_operable_from_a_keyboard(client):
+    """It is a real button in the tab order announced as "Reorder <game>". SortableJS runs
+    `forceFallback`, which is pointer-only, so without an explicit handler the control promises an
+    action it cannot perform -- on a long list, once per row."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    assert 'ArrowUp' in js and 'ArrowDown' in js
+    # BOUND, not merely defined. The first version of this test asserted the function existed and its
+    # body called `saveOrder` -- both still true with the `addEventListener` line deleted, so the
+    # mutation that unbinds the handler entirely walked straight through it.
+    assert "grid.addEventListener('keydown', onGrabKey)" in js, \
+        'the key handler is defined but never attached'
+    # It must actually SAVE, not merely move the node in the DOM.
+    handler = js[js.index('function onGrabKey('):js.index('function itemIdsIn(')]
+    assert 'saveOrder(' in handler, 'a keyboard move that never persists is worse than none'
+
+
+def test_cancelling_the_editor_restores_the_type_too(client):
+    """Pick Ranked, cancel, reopen to fix a typo, save -- and the abandoned radio was still checked,
+    so a rename silently carried the type change with it and reloaded the page underneath them.
+
+    `reset()` restores every other field from the server-rendered DOM; this one was reading whatever
+    was left over from the cancelled edit.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    # Sliced FORWARD from `reset()`, because `var opener = root.querySelector(` also appears inside
+    # `close()` higher up -- searching from 0 found that one, produced an empty slice, and made this
+    # test fail for a reason that had nothing to do with what it checks. A mutation run reported it
+    # as "killed" on that basis, which is a false pass hiding inside a false failure.
+    start = js.index('function reset() {')
+    reset_body = js[start:js.index('var opener = root.querySelector(', start)]
+    assert "form.querySelector('[name=\"list_type\"][value=\"'" in reset_body, \
+        'reset() leaves an abandoned type selection checked'
+    assert 'current.checked = true' in reset_body
+
+    # And the value it restores TO has to be on the page, or reset() silently checks nothing.
+    owner = _staff(client)
+    game_list = _ranked(owner, 1)
+    body = client.get(_url(game_list)).content.decode()
+    assert f'data-list-type="{game_list.list_type}"' in body
+
+
+def test_a_ranked_entry_announces_its_rank(client):
+    """The visible numeral is `aria-hidden`, and an `aria-label` on the link REPLACES the name
+    computed from its descendants -- so a rank placed in a hidden span inside the card was
+    unreachable, on the one list type whose whole content is the ordering."""
+    owner = _staff(client)
+    game_list = _ranked(owner)
+    for title in ('Zulu', 'Alpha'):
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        svc.add_concept(game_list, owner, concept)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'aria-label="Number 1: Zulu"' in body
+    assert 'aria-label="Number 2: Alpha"' in body
+    # A Collection says nothing about numbers, because it has none.
+    plain = _list(owner, 1)
+    assert 'Number 1:' not in client.get(_url(plain)).content.decode()
+
+
+def test_truncation_is_read_from_the_rows_not_the_drifting_counter(client, monkeypatch):
+    """`game_count` drifts HIGH and nothing repairs it -- `GameListItem.concept` is CASCADE, so
+    deleting a Concept removes rows without the service. Deriving truncation from that counter meant
+    one deleted concept permanently withdrew the drag handles from a six-game ranked list, and
+    printed "Reordering needs the whole list on screen" as the reason.
+    """
+    owner = _staff(client)
+    game_list = _ranked(owner, 3)
+
+    # Exactly the drift the service documents: rows gone, counter untouched.
+    game_list.items.first().delete()
+    assert game_list.game_count == 3, 'the premise: the counter still says three'
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['items_truncated'] is False, 'a 2-game list is not truncated'
+    assert resp.context['can_reorder'] is True, 'counter drift must not withdraw the handles'
+
+
+def test_a_collection_cannot_reach_the_rank_sort_by_url(client):
+    """`?sort=rank` on an unordered list must fall back rather than answering 200 with insertion
+    order dressed up as a curated sequence."""
+    owner = _staff(client)
+    game_list = _list(owner, 2)
+
+    resp = client.get(_url(game_list), {'sort': 'rank'})
+
+    assert resp.context['sort'] == 'name'
+    assert resp.context['can_reorder'] is False
 
 
 def test_a_junk_sort_falls_back_to_the_default(client):
@@ -725,12 +997,18 @@ def test_the_writes_refuse_a_redirected_html_page(client):
     js = _decommented(_read('static/js/list-detail.js'))
 
     assert 'function postJson(' in js
-    # Every write goes through the guard; none may call the raw helper directly.
-    # `>= 4` counted the DEFINITION as a call site, so the real floor was three of five writes --
-    # two could bypass the redirect guard. Five call sites plus one definition.
-    assert js.count('postJson(') == 6
+    # THE INVARIANT, not a headcount. This asserted `postJson(` appeared exactly 6 times, which meant
+    # every new write on this page failed a test about redirect handling and got "fixed" by bumping a
+    # number -- the reorder write did exactly that. Worse, the count cannot tell a new GUARDED write
+    # from a new UNGUARDED one; both move it by one.
+    #
+    # What actually matters is that the raw helper is called in exactly one place, inside `postJson`.
+    # That is what makes bypassing impossible, it needs no maintenance as writes are added, and it
+    # fails for the case the count was blind to.
     assert 'API.postFormData(' in js, 'postJson should still be built on the shared helper'
     assert js.count('API.postFormData(') == 1, 'a write is bypassing the redirect guard'
+    # A floor, so the guard cannot pass by there being no writes left to guard.
+    assert js.count('postJson(') >= 6, 'writes seem to have disappeared rather than been guarded'
 
 
 def test_owner_actions_have_somewhere_to_announce(client):
@@ -916,9 +1194,15 @@ def test_the_editor_hooks_the_audit_findings_depend_on_are_rendered(client):
     assert 'data-gl-unpublish' in body
 
 
-def test_the_drag_removal_left_no_orphaned_hooks(client):
-    """`data-item-id` was read only by the deleted drag manager. A markup hook with no reader is
-    how a future reader concludes a feature still exists."""
+def test_a_collection_carries_no_drag_hooks(client):
+    """`data-item-id` is read only by the reorder payload. A markup hook with no reader is how a
+    future reader concludes a feature exists where it does not.
+
+    This was written when drag was deleted, and it kept its value when Ranked brought drag back: the
+    hook is now rendered `{% if can_reorder %}`, so it is present exactly where something reads it
+    and absent everywhere else. Had it been rendered unconditionally instead, this would have been
+    "fixed" by deletion and the site would carry a dead hook on every Collection.
+    """
     owner = _staff(client)
     game_list = _list(owner, 2)
 

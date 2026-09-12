@@ -42,6 +42,10 @@
     var searchField = null;
     var pendingFocusIndex = null;
     var refreshSeq = 0;
+    // The live SortableJS wrapper, so a replaced grid's instance can be destroyed rather than leaked.
+    var reorderManager = null;
+    // Reorder writes run one at a time; see `saveOrder`.
+    var orderChain = Promise.resolve();
     // Per-node, and NOT serializable -- see the header. A `data-` attribute here
     // survives htmx's history snapshot and disables the wiring it was meant to guard.
     var wired = new WeakSet();
@@ -640,6 +644,13 @@
             nameField.value = heading ? heading.textContent.trim() : '';
             var desc = root.querySelector('[data-gl-description]');
             descField.value = desc && !desc.hidden ? desc.textContent.trim() : '';
+            // The TYPE resets too, and it did not. Pick Ranked, cancel, reopen to fix a typo, save --
+            // and the abandoned radio was still checked, so the rename quietly took the type change
+            // with it and reloaded the page underneath them. Every other field in this form is
+            // restored from the server-rendered DOM; this one was reading whatever was left over.
+            var current = form.querySelector('[name="list_type"][value="'
+                                             + (root.dataset.listType || '') + '"]');
+            if (current) { current.checked = true; }
             [nameField, descField].forEach(function (el) {
                 el.dispatchEvent(new Event('input', { bubbles: true }));   // resync the counters
             });
@@ -673,14 +684,41 @@
             if (save && save.dataset.busy === '1') { return; }
             if (save) { save.dataset.busy = '1'; }
 
-            var body = new FormData();
-            body.append('name', nameField.value);
-            body.append('description', descField.value);
-
             // Captured before the write so the announcement can say which thing changed. It used to
             // say "renamed" unconditionally, including when only the description was edited.
             var heading = root.querySelector('[data-gl-name]');
             var previousName = heading ? heading.textContent.trim() : '';
+            var descEl = root.querySelector('[data-gl-description]');
+            var previousDesc = descEl && !descEl.hidden ? descEl.textContent.trim() : '';
+
+            // The TYPE decides three things the server renders -- which sorts the toolbar offers,
+            // whether each card carries a numeral, and whether the handles exist -- so a change here
+            // is answered with a reload rather than by teaching the client to assemble all three.
+            var typeField = form.querySelector('[name="list_type"]:checked');
+            var typeChanged = !!typeField && typeField.value !== (root.dataset.listType || '');
+
+            // ONLY WHAT CHANGED IS SENT, which is not tidiness: `update_list` runs the restriction
+            // gate whenever `name` or `description` is present, so posting them unconditionally made
+            // every type switch a gated write. A restricted hunter could switch type per the service
+            // (and a service test proves it) and could not per the product, because this form always
+            // put a name in the body. The view reads membership (`'field' in request.POST`), so
+            // omitting a field means "leave alone" -- an empty string still reaches it as a real
+            // edit.
+            var body = new FormData();
+            if (nameField.value.trim() !== previousName) { body.append('name', nameField.value); }
+            if (descField.value.trim() !== previousDesc) {
+                body.append('description', descField.value);
+            }
+            if (typeChanged) { body.append('list_type', typeField.value); }
+
+            // Nothing to say: close rather than asking the server to refuse an empty edit, which is
+            // what "Nothing to change." was doing to anyone who opened the panel and thought better
+            // of it.
+            if (!body.has('name') && !body.has('description') && !body.has('list_type')) {
+                if (save) { save.dataset.busy = ''; }
+                close();
+                return;
+            }
 
             postJson(root.dataset.updateUrl, body)
                 .then(function (data) {
@@ -702,6 +740,9 @@
                              ? 'List renamed to ' + data.name + '.'
                              : 'List details saved.');
                     close();
+                    // AFTER the announcement and the close, so a screen reader has the message and
+                    // the page is in a settled state if the reload is slow.
+                    if (typeChanged) { window.location.reload(); }
                 })
                 .catch(function (err) { toastError(err, 'Those changes could not be saved.'); })
                 .finally(function () { if (save) { save.dataset.busy = ''; } });
@@ -820,6 +861,33 @@
     }
 
     /**
+     * Re-wire the drag AFTER SETTLE, not after swap, and this distinction is the whole of it.
+     *
+     * htmx stabilises attributes on id'd elements: for an element present in both the old and new
+     * content it copies the OLD node's attributes onto the new one before insertion, then restores
+     * the real ones in a settle task ~20ms later. So at `htmx:afterSwap` the fresh `#gl-items` is
+     * still wearing the previous grid's attributes, and `data-gl-reorder` reads as whatever the
+     * PREVIOUS sort had.
+     *
+     * Both directions were broken by wiring on swap, and the second is the nastier one:
+     *
+     *   A-Z -> List order: the new grid should be draggable, reads as not, returns early. Settle
+     *   then restores the attribute and nothing re-runs, so every grip on the page is inert until a
+     *   reload -- the exact navigation somebody makes to get back to their order.
+     *
+     *   List order -> A-Z: the new grid should NOT be draggable, reads as draggable, gets wired AND
+     *   added to `wired`. Settle cannot undo it, because the WeakSet now says the grid is handled.
+     *
+     * This file's own header documents the same mechanism as the reason `pp-reveal` is baked in
+     * server-side, which is where I should have looked first.
+     */
+    function onAfterSettle(e) {
+        var target = (e.detail && e.detail.target) || e.target;
+        if (!target || target.id !== 'gl-items-panel') { return; }
+        wireReorder();
+    }
+
+    /**
      * Put the keyboard back where it was after a removal.
      *
      * The refresh replaces the whole panel, so the focused remove button is destroyed and focus
@@ -841,17 +909,172 @@
         if (next) { next.focus(); }
     }
 
+    /* ------------------------------------------------------------------ reorder ---- */
+
+    /**
+     * Drag to reorder a RANKED list.
+     *
+     * Wired only where the server said so. The grid carries `data-gl-reorder` when `can_reorder` is
+     * true -- owner, ranked, showing the real sequence, and short enough to render whole -- so this
+     * file never decides who may reorder; it reads the decision. `reorder` refuses a partial order by
+     * design, so a handle on a truncated page would fail on every use.
+     *
+     * WeakSet-guarded on the GRID NODE rather than on a flag, because every sort swap and every
+     * add/remove refresh replaces `#gl-items` with a fresh element. A boolean would leave the new
+     * grid unwired; a `data-` attribute would be copied into htmx's snapshot and make a restored
+     * page look wired when its SortableJS instance is gone.
+     */
+    function wireReorder() {
+        var grid = document.getElementById('gl-items');
+        // Tear the previous one down FIRST, and unconditionally -- before the early returns, because
+        // the case that leaks hardest is the one that returns: a sort away from `rank` replaces the
+        // grid with an undraggable one, so nothing below runs and the old Sortable instance is
+        // dropped on the floor still holding a detached grid and every row in it. Thirty removals in
+        // a session leaked thirty grids' worth of DOM.
+        if (reorderManager) { reorderManager.destroy(); reorderManager = null; }
+
+        if (!grid || !grid.hasAttribute('data-gl-reorder')) { return; }
+        if (wired.has(grid)) { return; }
+        if (!PP.DragReorderManager) { return; }
+        wired.add(grid);
+
+        reorderManager = new PP.DragReorderManager({
+            container: grid,
+            itemSelector: '.gl-item',
+            // The card is an <a> to the concept page. Without a dedicated grip, every mis-timed tap
+            // is either a drag meant as a click or a navigation meant as a drag.
+            handleSelector: '[data-gl-grab]',
+            onReorder: function (_itemId, _newPosition, allItemIds) { saveOrder(grid, allItemIds); },
+        });
+
+        // SortableJS runs `forceFallback`, which is pointer-only. Without this the grip is a real
+        // button in the tab order, announced as "Reorder <game>", that does nothing when activated --
+        // on a long list, a hundred tab stops each promising an action and delivering none. The
+        // remove control beside it works from the keyboard, so a grip that does not is read as
+        // broken rather than as unbuilt.
+        grid.addEventListener('keydown', onGrabKey);
+    }
+
+    //: Arrow keys move an entry one place through the ORDER, which is the axis a ranked list is
+    //: about. Left/Up go earlier and Right/Down go later -- the grid wraps across several columns,
+    //: so "up" cannot mean "one row up" without depending on the viewport width, and a keyboard user
+    //: moving an item to rank 1 wants N presses in one direction rather than arithmetic.
+    var GRAB_EARLIER = ['ArrowUp', 'ArrowLeft'];
+    var GRAB_LATER = ['ArrowDown', 'ArrowRight'];
+
+    function onGrabKey(e) {
+        var grab = e.target.closest && e.target.closest('[data-gl-grab]');
+        if (!grab) { return; }
+        var earlier = GRAB_EARLIER.indexOf(e.key) !== -1;
+        if (!earlier && GRAB_LATER.indexOf(e.key) === -1) { return; }
+
+        var row = grab.closest('.gl-item');
+        var grid = row && row.parentElement;
+        if (!row || !grid) { return; }
+        var neighbour = earlier ? row.previousElementSibling : row.nextElementSibling;
+        // Already at the end it is being pushed towards: do nothing, and let the arrow key keep its
+        // normal meaning rather than swallowing it into a no-op.
+        if (!neighbour || !neighbour.classList.contains('gl-item')) { return; }
+
+        e.preventDefault();
+        if (earlier) { grid.insertBefore(row, neighbour); }
+        else { grid.insertBefore(neighbour, row); }
+
+        saveOrder(grid, itemIdsIn(grid));
+        // The move destroyed nothing, but the browser scrolls focus out of view on a long list.
+        grab.focus();
+        var position = Array.prototype.indexOf.call(grid.querySelectorAll('.gl-item'), row) + 1;
+        announce('Moved to number ' + position + '.');
+    }
+
+    // DOM order IS the order. Read here rather than trusted from an event, so the keyboard path and
+    // the drag path agree by construction.
+    function itemIdsIn(grid) {
+        var ids = [];
+        var rows = grid.querySelectorAll('.gl-item[data-item-id]');
+        for (var i = 0; i < rows.length; i++) { ids.push(rows[i].dataset.itemId); }
+        return ids;
+    }
+
+    /**
+     * Persist a dragged order, and repaint the numerals.
+     *
+     * The numerals are renumbered HERE rather than by re-rendering the panel from the server. A
+     * refresh would be the honest-looking choice and is the wrong one: it destroys the grid node
+     * mid-interaction, which tears down the SortableJS instance the hunter is still holding, and it
+     * spends a round trip redrawing forty covers that did not change. The rank text is the only
+     * thing a reorder can alter on screen, so it is the only thing repainted.
+     *
+     * Repainted OPTIMISTICALLY, before the response: SortableJS has already moved the row, so
+     * leaving the numbers until the server answers shows "3, 1, 2" against the new arrangement for
+     * the length of a round trip. A failure reverts by refreshing from the server, which is the one
+     * source of truth about what the order actually is.
+     */
+    function saveOrder(grid, itemIds) {
+        renumber(grid);
+
+        var body = new FormData();
+        for (var i = 0; i < itemIds.length; i++) { body.append('item_ids[]', itemIds[i]); }
+
+        // SERIALISED, because two drags in quick succession are a LAST-WRITER-WINS race that nothing
+        // downstream can detect. Both orders are complete and valid, so both succeed; if they reach
+        // the row lock out of order the database keeps the EARLIER one while the grid shows the
+        // later one, with no error anywhere and no sign of it until the next reload. Fire-and-forget
+        // is only safe for a write whose result does not depend on the others, and an ordering is
+        // the opposite of that. `refreshItems` carries `refreshSeq` for the same class of bug.
+        //
+        // A chain rather than a sequence-number guard: the point is not to discard the stale
+        // response, it is to stop the stale REQUEST from being written second.
+        orderChain = orderChain
+            .catch(function () { /* a previous failure already reported itself; do not block this */ })
+            .then(function () { return postJson(grid.dataset.reorderUrl, body); })
+            .then(function () { announce('Order saved.'); })
+            .catch(function (err) {
+                toastError(err, 'That new order could not be saved.');
+                // The client and the server now disagree about the order, and the client is the one
+                // that is wrong. Re-render rather than trying to undo the drag by hand.
+                return refreshItems().catch(function (refreshErr) {
+                    logFailure('items refresh after a failed reorder', refreshErr);
+                    announce('The list could not be restored. Reload the page.');
+                });
+            });
+        return orderChain;
+    }
+
+    // 1-based, matching the template's `position|add:1`.
+    //
+    // BOTH the visible numeral and the link's `aria-label` -- the label is where the rank actually
+    // reaches a screen reader (an `aria-label` overrides the name computed from descendants), so
+    // repainting only the numeral would leave every row announcing its pre-drag position. An earlier
+    // version repainted an `sr-only` span inside the link instead, which nothing ever announced.
+    function renumber(grid) {
+        var rows = grid.querySelectorAll('.gl-item');
+        for (var i = 0; i < rows.length; i++) {
+            var badge = rows[i].querySelector('.gl-rank');
+            if (badge) { badge.textContent = String(i + 1); }
+
+            var card = rows[i].querySelector('.pp-gcard');
+            if (!card) { continue; }
+            var label = card.getAttribute('aria-label') || '';
+            // Replace an existing "Number N: " prefix rather than stacking another one on.
+            card.setAttribute('aria-label',
+                              'Number ' + (i + 1) + ': ' + label.replace(/^Number \d+:\s*/, ''));
+        }
+    }
+
     function boot(first) {
         handledGrid = null;
         searchField = null;
         wireAdder();
         wireIdentityEditor();
         wireVisibility();
+        wireReorder();
         initReveal();
         if (PP.wireCharCounters) { PP.wireCharCounters(); }
         if (first) {
             document.body.addEventListener('click', onBodyClick);
             document.body.addEventListener('htmx:afterSwap', onAfterSwap);
+            document.body.addEventListener('htmx:afterSettle', onAfterSettle);
         }
     }
 

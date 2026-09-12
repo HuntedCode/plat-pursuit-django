@@ -248,6 +248,186 @@
     .gl-item__remove:hover { transform: none; }
 }
 
+
+/* ── The type picker ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Radio cards, shared by the create dialog and the detail page's edit panel. A <fieldset> because
+ * the group needs one accessible name across two inputs, and the native radio is kept in the DOM
+ * (visually hidden, not `display: none`) so arrow-key navigation, the label association and form
+ * submission all keep working without a line of JavaScript.
+ */
+.gl-type { border: none; padding: 0; margin: 0; }
+.gl-type__opts { display: grid; gap: 8px; }
+/* Side by side once there is room. At 375px two of these in a row would each hold ~160px of a
+   sentence, which wraps to four lines and makes the taller option set the height of both. */
+@media (min-width: 640px) {
+    .gl-type__opts { grid-template-columns: 1fr 1fr; }
+}
+
+.gl-type__opt {
+    position: relative;
+    display: block;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-0) 45%, transparent);
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease;
+}
+/* Hidden from sight, NOT from the accessibility tree or the keyboard: `display: none` would take
+   the input out of the tab order and break the arrow-key group entirely. */
+.gl-type__opt input {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%);
+    white-space: nowrap;
+}
+.gl-type__body { display: block; min-width: 0; }
+.gl-type__name {
+    display: block;
+    font-size: 0.82rem; font-weight: 700; line-height: 1.2;
+    color: var(--pp-text);
+}
+.gl-type__hint {
+    display: block; margin-top: 3px;
+    font-size: 0.7rem; line-height: 1.35;
+    color: var(--pp-text-dim);
+}
+.gl-type__note {
+    margin-top: 7px;
+    font-size: 0.68rem; line-height: 1.35;
+    color: var(--pp-text-dim);
+}
+
+.gl-type__opt:has(input:checked) {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+}
+.gl-type__opt:has(input:checked) .gl-type__name { color: var(--pp-primary); }
+/* The focus ring goes on the LABEL because the input it belongs to is visually hidden -- without
+   this, tabbing into the group moves an invisible focus and the page looks inert. */
+.gl-type__opt:has(input:focus-visible) {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+}
+@media (hover: hover) {
+    .gl-type__opt:hover { border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
+}
+/* The checked state is signalled by colour alone -- border, tint and the name going accent -- and
+   forced colours overrides all three, so under Windows High Contrast NEITHER option looked chosen.
+   The focus ring survives because it is an `outline`, which is exactly the property to reuse: a
+   reader could see where focus was but not what was selected. */
+@media (forced-colors: active) {
+    .gl-type__opt:has(input:checked) { outline: 3px solid; outline-offset: -3px; }
+}
+
+
+/* ── Ranked lists ────────────────────────────────────────────────────────────────────────────────
+ *
+ * The numeral lives in the card's TEXT STRIP, beside the title, and not as a badge over the cover.
+ * These cards were moved off the overlay tile specifically so that nothing sits on the art -- the
+ * cover is what you scan a list by -- and a corner numeral would reintroduce exactly that on the one
+ * type that most invites a big number. The strip already exists to carry text; the rank is text.
+ */
+.gl-rank-row {
+    display: flex; align-items: baseline; gap: 7px;
+    /* Both halves matter: the flex ITEM needs `min-width: 0` to be allowed to shrink, and the title
+       inside it needs its own, or `line-clamp` never gets a bounded width and a long title pushes
+       the card wider than its grid column. */
+    min-width: 0;
+}
+.gl-rank-row .pp-gcard__title { min-width: 0; }
+.gl-rank {
+    flex: none;
+    /* `ch`-based so 1 and 10 reserve the same space and the titles line up down the column without
+       a hardcoded pixel width that a font swap would break. Two digits fit; a rank past 99 pushes
+       its own title along rather than being clipped, which is the right failure. */
+    min-width: 2ch;
+    font-size: 0.95rem; font-weight: 800; line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-primary);
+}
+
+/* The grip. Mirrors the remove control across the card (top-LEFT to its top-right) and shares its
+   geometry, but is visible AT REST rather than on hover: reordering is the whole point of a ranked
+   list, so its affordance should not have to be discovered, and a hover-only grip does not exist at
+   all on touch. */
+.gl-item__grab {
+    position: absolute; top: 6px; left: 6px; z-index: 2;
+    display: grid; place-items: center;
+    width: 26px; height: 26px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    color: var(--pp-text-dim);
+    cursor: grab;
+    /* `opacity` is in the list because the reveal rules below animate it -- the remove control's
+       transition includes it and this one did not, so after every sort and every removal the cards
+       faded up and the grips snapped in. Same pair of rules, two behaviours. */
+    transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+.gl-item__grab svg { width: 14px; height: 14px; }
+.gl-item__grab:active { cursor: grabbing; }
+.gl-item__grab:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+    color: var(--pp-text);
+}
+@media (hover: hover) {
+    .gl-item__grab:hover {
+        color: var(--pp-text);
+        border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+        transform: scale(1.06);
+    }
+}
+/* The same 44px minimum the remove control takes, and for a stronger reason: this one has to be
+   grabbed and held while dragging, not merely hit. The visual circle stays 26px inside transparent
+   padding. */
+@media (hover: none) {
+    .gl-item__grab {
+        width: 44px; height: 44px;
+        top: 0; left: 0;
+        background: none; border: none;
+    }
+    .gl-item__grab::before {
+        content: ''; position: absolute; inset: 9px;
+        border-radius: 999px;
+        border: 1px solid var(--pp-border);
+        background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    }
+    .gl-item__grab svg { position: relative; }
+}
+/* Same sibling problem the remove control documents above: the grip is outside the card's <a>, so
+   the shared reveal never covers it, and it would hang over empty space while the tiles fade up. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .gl-item .gl-item__grab { opacity: 0; }
+    .pp-reveal .gl-item .pp-gcard.is-revealed ~ .gl-item__grab { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    /* `opacity` stays: the reveal is a fade, not motion, and the remove control keeps it here too. */
+    .gl-item__grab { transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease; }
+    .gl-item__grab,
+    .gl-item__grab:hover { transform: none; }
+}
+
+/* SortableJS states. `forceFallback: true` is set in DragReorderManager, so the thing under the
+   cursor is `.sortable-fallback` (a clone on <body>) and `.sortable-ghost` is the gap left behind --
+   which is why the ghost is styled as a HOLE rather than as a moving card. */
+.gl-item.sortable-ghost {
+    opacity: 0.45;
+}
+.gl-item.sortable-ghost .pp-gcard {
+    outline: 2px dashed color-mix(in oklab, var(--pp-primary) 60%, transparent);
+    outline-offset: -2px;
+}
+.gl-item.sortable-fallback {
+    /* Lifted, not enlarged. A scale here fights the grid it is being dropped back into. */
+    box-shadow: 0 18px 38px -12px rgb(0 0 0 / 0.55);
+    cursor: grabbing;
+}
+.gl-item.sortable-fallback .gl-item__grab,
+.gl-item.sortable-fallback .gl-item__remove { opacity: 0; }
+
 /* The per-entry note, under the title rather than over the art. Clamped so one hunter's essay
    cannot make its card twice the height of its neighbours and break the grid's rhythm. */
 .gl-item__note {

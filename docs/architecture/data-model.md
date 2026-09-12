@@ -406,6 +406,7 @@ User-created collection of games. See **[docs/features/game-lists.md](../feature
 for the full picture; the model facts that matter elsewhere:
 
 - `owner` FK to `Profile` (**not** `profile` — that is the legacy field name)
+- `list_type` — `collection` or `ranked`, presentation only; switching it moves no rows
 - Denormalized `game_count`, `like_count`, `follower_count`, maintained only by the service
 - Soft delete via `is_deleted` + `deleted_at`
 - `GameListQuerySet` exposes `visible()` / `public()` / `owned_by()` / `readable_by()`. Only

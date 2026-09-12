@@ -51,6 +51,38 @@ FREE_MAX_LISTS = 3
 # tease; three is enough to see what lists are for.
 MEMBER_MAX_LISTS = 25
 
+#: What a list IS, which here means only how it presents. The rows are identical either way -- a
+#: Ranked list is a Collection whose `position` is meant rather than incidental -- so the type is one
+#: CharField and switching it loses nothing and needs no migration of items.
+#:
+#: ONLY THE TWO THAT RENDER ARE HERE. docs/design/game-list-types.md plans five more (Top-N, Progress,
+#: Sectioned, Tier, Backlog tracker) and it is tempting to declare them now; declaring a choice that
+#: no template can draw is how a hunter picks "Tier" and gets a Collection with a different label.
+#: Each arrives with its presentation.
+LIST_TYPE_COLLECTION = 'collection'
+LIST_TYPE_RANKED = 'ranked'
+LIST_TYPE_CHOICES = [
+    (LIST_TYPE_COLLECTION, 'Collection'),
+    (LIST_TYPE_RANKED, 'Ranked'),
+]
+#: The service validates against this, so an unknown type cannot reach the column from the API.
+LIST_TYPES = frozenset(value for value, _ in LIST_TYPE_CHOICES)
+
+#: One line per type, for the pickers. It lives beside the choices rather than in the two templates
+#: that render it, so a new type cannot ship with a label and no explanation -- and so the create
+#: dialog and the detail page's switcher cannot describe the same type differently.
+#: Says what the hunter GETS, not what the field stores: "sorted however you like" is the difference
+#: they can act on, where "list_type=collection" is not.
+LIST_TYPE_BLURBS = {
+    LIST_TYPE_COLLECTION: 'A shelf. Sort it any way you like.',
+    LIST_TYPE_RANKED: 'An order you choose. Drag to arrange, numbered 1 down.',
+}
+
+
+def list_type_options():
+    """`(value, label, blurb)` for a picker, so a template never hardcodes the set."""
+    return [(value, label, LIST_TYPE_BLURBS[value]) for value, label in LIST_TYPE_CHOICES]
+
 #: Field lengths, defined ONCE and read by the column, the service and the form.
 #:
 #: They used to be written three times each -- `max_length` on the field, a literal in
@@ -116,6 +148,16 @@ class GameList(models.Model):
     )
     name = models.CharField(max_length=NAME_MAX_LENGTH)
     description = models.TextField(max_length=DESCRIPTION_MAX_LENGTH, blank=True, default='')
+    #: Presentation only -- see LIST_TYPE_CHOICES. Deliberately NOT indexed: browse does not filter
+    #: on it today, and an index on a two-value column over a table this size would be read past
+    #: anyway. It gets one when a type filter ships, not before.
+    list_type = models.CharField(
+        max_length=20,
+        choices=LIST_TYPE_CHOICES,
+        default=LIST_TYPE_COLLECTION,
+        help_text='How the list presents. Switching is lossless: the rows and their order are the '
+                  'same either way.',
+    )
     is_public = models.BooleanField(
         default=False,
         help_text='Opt-IN. A list is private until its author decides otherwise.',

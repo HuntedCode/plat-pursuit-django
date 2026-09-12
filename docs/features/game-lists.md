@@ -109,6 +109,41 @@ refuse a member's own data. Enforced in exactly one place, `max_lists_for`.
 
 ---
 
+## List types
+
+`GameList.list_type` picks the PRESENTATION and nothing else. The rows are identical either way,
+so switching is lossless and needs no migration of items — which is why the picker says so out
+loud, since the thing that stops people choosing is the fear of choosing wrong.
+
+| Type | What it is | Order |
+|---|---|---|
+| **Collection** | the default: a shelf | unordered; A-Z and date sorts, no drag |
+| **Ranked** | an order the author chose | `position`, 1-based numerals, drag to arrange |
+
+**Only the types that RENDER are declared.** `LIST_TYPE_CHOICES` holds these two and not the five
+more that [game-list-types.md](../design/game-list-types.md) plans, because a choice a template
+cannot draw means somebody picks "Tier" and gets a Collection with a different label. `choices` is
+not a database constraint, so `_check_list_type` in the service is what actually keeps the column
+honest — for the shell and the importer too.
+
+### What Ranked adds
+
+- A `rank` ("List order") sort, offered ONLY by ranked lists and their default.
+- A numeral per card, in the **text strip beside the title, not over the cover**. These cards were
+  moved off the overlay tile precisely so nothing sits on the art; a corner badge would walk that
+  back on the one type that most invites a big number.
+- The numeral shows on **every** sort, because a rank is a fact about the entry rather than about
+  the current view. The drag handles do not, because rearranging a sorted page would post an
+  order that means nothing.
+- Drag via `DragReorderManager` (SortableJS), bound to a dedicated grip rather than the card — the
+  card is a link, and a draggable link turns every mis-timed tap into the wrong action.
+
+**Switching type is not restriction-gated.** Choosing between two presentations of your own rows
+submits no content, so it sits with un-publishing and deleting on the allowed side of the line
+`update_list` draws.
+
+---
+
 ## Key Flows
 
 ### Publishing
@@ -150,16 +185,17 @@ All are POST and JSON except the search, and all are rate-limited per user.
 |---|---|---|---|
 | `/community/lists/create/` | `list_create` | Create (form post, redirects) | 30/m |
 | `…/<id>/update/` | `list_update` | Rename, re-describe, **publish/unpublish** | 60/m |
-| `…/<id>/reorder/` | `list_reorder` | Set item order | 60/m |
+| `…/<id>/reorder/` | `list_reorder` | Set item order (Ranked) | 60/m |
 | `…/<id>/like/` | `list_like` | Like / unlike | 60/m |
 | `…/<id>/follow/` | `list_follow` | Follow / unfollow | 60/m |
 | `…/<id>/add/` | `list_add_game` | Add a concept | 120/m |
 | `…/<id>/items/<item>/remove/` | `list_remove_game` | Remove an entry | 120/m |
 | `…/<id>/search/` | `list_game_search` | Adder typeahead (GET) | 120/m |
 
-**`list_reorder` has no caller.** A Collection is unordered by design; the endpoint and its service
-function are finished, tested work waiting for the Ranked list type. See
-[game-list-types.md](../design/game-list-types.md).
+**`list_reorder` is reached by Ranked lists only** (2026-09). A Collection is unordered by design,
+so the drag handles render only when the server says `can_reorder`: owner, ranked, showing the
+real sequence, and short enough to render whole. The endpoint had been built and left dormant
+ahead of that UI and needed no changes when it arrived.
 
 Every endpoint **that takes a list id** resolves it through `readable_by()` and answers a uniform
 **404** — never 403, never a service error — so an id alone can never confirm that a list exists or
@@ -198,6 +234,10 @@ redirects with a Django message rather than answering JSON.
 - **The adder's typeahead is a sequential scan.** Django compiles `__icontains` to
   `UPPER(col::text) LIKE …`, which the `gin_trgm_ops` index on the raw column cannot serve. Bounded,
   cached and rate-limited; the index question is shared catalogue work and belongs in its own lane.
+- **A truncated list cannot be reordered**, and says so. `reorder` refuses a partial ordering by
+  design, so past `MAX_ITEMS_RENDERED` the page cannot post a complete one and `can_reorder` goes
+  false. The handles vanishing without explanation would read as a bug on the one type built for
+  ordering, so the truncation line adds a sentence for the owner.
 - **The detail page renders at most 200 items** (`MAX_ITEMS_RENDERED`) and says so. Real pagination is
   a follow-up.
 

@@ -31,6 +31,9 @@ below with no outer wrapper.
                 `hidden`. The owner edits HERE, where the result is visible, which is the whole reason
                 there is no separate edit page.{% endcomment %}
                 <div class="min-w-0 flex-1" data-gl-identity
+                     {% comment %}The CURRENT type, so the editor can tell a real switch from a
+                     re-save that left it alone -- only the former needs the reload.{% endcomment %}
+                     data-list-type="{{ game_list.list_type }}"
                      {% if is_owner %}data-update-url="{% url 'list_update' game_list.id %}"{% endif %}>
                     <div data-gl-identity-view>
                         <div class="flex items-center gap-2 flex-wrap">
@@ -91,6 +94,31 @@ below with no outer wrapper.
                             <span class="gl-countchars" id="gl-edit-description-count"
                                   data-charcount-for="gl-edit-description" aria-live="polite"></span>
                         </div>
+
+                        {% comment %}The type belongs in the edit panel rather than in a control of
+                        its own: it is part of what the list IS, alongside its name and description,
+                        and switching it is lossless so it needs no confirmation step of its own.
+                        The same options and the same copy the create dialog shows, from the same
+                        source, so the two cannot describe a type differently.
+
+                        Changing this reloads the page (see `list-detail.js`) because the type
+                        decides the sort options, the numerals and the handles -- three things the
+                        server renders and the client should not try to assemble.{% endcomment %}
+                        <fieldset class="stg-field gl-type">
+                            <legend class="stg-field__label">Type</legend>
+                            <div class="gl-type__opts">
+                                {% for value, label, blurb in list_type_options %}
+                                <label class="gl-type__opt">
+                                    <input type="radio" name="list_type" value="{{ value }}"
+                                           {% if value == game_list.list_type %}checked{% endif %} />
+                                    <span class="gl-type__body">
+                                        <span class="gl-type__name">{{ label }}</span>
+                                        <span class="gl-type__hint">{{ blurb }}</span>
+                                    </span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </fieldset>
 
                         <div class="gl-edit__foot">
                             <button type="submit" class="pp-cta" data-gl-edit-save>Save</button>

@@ -12,6 +12,8 @@ from django.utils import timezone
 
 from gamelists.models import (
     FREE_MAX_LISTS,
+    LIST_TYPE_COLLECTION,
+    LIST_TYPE_RANKED,
     MEMBER_MAX_LISTS,
     GameList,
     GameListFollow,
@@ -635,4 +637,93 @@ def test_reorder_leaves_positions_dense():
         GameListItem.objects.filter(game_list=game_list).order_by('position')
         .values_list('position', flat=True)
     ) == [0, 1, 2]
+
+
+# ── list types ───────────────────────────────────────────────────────────────────────────────────
+
+def test_a_new_list_is_a_collection_unless_asked_otherwise():
+    profile = _hunter()
+
+    assert svc.create_list(profile, name='Default').list_type == LIST_TYPE_COLLECTION
+    assert svc.create_list(
+        profile, name='Ranked one', list_type=LIST_TYPE_RANKED).list_type == LIST_TYPE_RANKED
+
+
+@pytest.mark.parametrize('bogus', ['tier', 'progress', 'RANKED', '', 'collection ranked'])
+def test_a_type_that_cannot_be_rendered_is_refused_rather_than_stored(bogus):
+    """`choices` is a form-level concern, NOT a database constraint.
+
+    Without the service check these land in the column and the detail page -- which branches on the
+    two types it can draw -- renders a Collection while the hunter believes they made something else.
+    The capitalised variant is in here on purpose: the column would take 'RANKED' happily and every
+    `== 'ranked'` comparison on the site would then be false.
+    """
+    profile = _hunter()
+
+    with pytest.raises(svc.ListError):
+        svc.create_list(profile, name='Bogus', list_type=bogus)
+    assert GameList.objects.count() == 0, 'the refusal still wrote a row'
+
+    game_list = svc.create_list(profile, name='Real')
+    with pytest.raises(svc.ListError):
+        svc.update_list(game_list, profile, list_type=bogus)
+
+    game_list.refresh_from_db()
+    assert game_list.list_type == LIST_TYPE_COLLECTION, 'a refused type reached the column'
+
+
+def test_switching_type_keeps_every_game_and_its_order():
+    """The type is PRESENTATION. Switching it must not be a data migration in disguise, because a
+    hunter trying Ranked and going back to Collection would otherwise lose the sequence they set."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Switcher')
+    items = [svc.add_concept(game_list, profile, ConceptFactory()) for _ in range(4)]
+    svc.reorder(game_list, profile, [items[3].id, items[1].id, items[0].id, items[2].id])
+    expected = [items[3].id, items[1].id, items[0].id, items[2].id]
+
+    svc.update_list(game_list, profile, list_type=LIST_TYPE_RANKED)
+    svc.update_list(game_list, profile, list_type=LIST_TYPE_COLLECTION)
+
+    game_list.refresh_from_db()
+    assert game_list.list_type == LIST_TYPE_COLLECTION
+    assert game_list.game_count == 4
+    assert list(
+        GameListItem.objects.filter(game_list=game_list).order_by('position')
+        .values_list('id', flat=True)
+    ) == expected, 'the round trip through Ranked reshuffled the list'
+
+
+def test_a_restricted_hunter_can_still_switch_type():
+    """The gate is scoped to acts that put WORDS in front of people.
+
+    Choosing between two presentations of your own rows submits no content, so it sits with
+    un-publishing and deleting on the allowed side -- the same line `update_list` documents. Gating
+    it would freeze a restricted hunter's list in a shape they cannot change while leaving the list
+    itself up, which is punishment with no moderation value.
+    """
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Mine', list_type=LIST_TYPE_RANKED)
+    _restrict(profile)
+
+    svc.update_list(game_list, profile, list_type=LIST_TYPE_COLLECTION)
+
+    game_list.refresh_from_db()
+    assert game_list.list_type == LIST_TYPE_COLLECTION
+
+    # ...but the restriction is still live on the field beside it, or the test above proves nothing.
+    with pytest.raises(svc.ListError):
+        svc.update_list(game_list, profile, name='A new name')
+
+
+def test_switching_type_is_not_smuggled_publishing():
+    """`list_type` travels through the same endpoint as `is_public`, so the two must stay separable:
+    a type switch alone must never change visibility."""
+    profile = _hunter()
+    game_list = svc.create_list(profile, name='Private one')
+    assert game_list.is_public is False
+
+    svc.update_list(game_list, profile, list_type=LIST_TYPE_RANKED)
+
+    game_list.refresh_from_db()
+    assert game_list.is_public is False, 'a type switch published the list'
 

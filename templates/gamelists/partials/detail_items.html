@@ -25,17 +25,27 @@ halves, deliberately: baking the class with nothing to reveal it is what left th
 blank.
 {% endcomment %}
 {% load humanize %}
-<div id="gl-items" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}">
+<div id="gl-items" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}"
+     {% if can_reorder %}data-gl-reorder data-reorder-url="{% url 'list_reorder' game_list.id %}"{% endif %}>
     {% for item in items %}
     {% comment %}The wrapper exists so the owner's remove control can sit BESIDE the card rather than
     inside it: the card is an <a>, and a <button> nested in a link is invalid HTML that swallows the
     link's own activation. Rendered for everyone, not just owners, so the grid has exactly one DOM
     shape.{% endcomment %}
-    <div class="gl-item">
+    {% comment %}`data-item-id` only where something READS it -- the reorder payload is built from
+    these. Rendering it on every list would leave a markup hook with no reader on every Collection,
+    which is how a future reader concludes drag still exists somewhere. A test pins this.{% endcomment %}
+    <div class="gl-item"{% if can_reorder %} data-item-id="{{ item.pk }}"{% endif %}>
     {% comment %}Links to the CONCEPT page -- the site's word "game" -- rather than to a trophy list,
     which is the whole reason entries are concept-keyed.{% endcomment %}
+    {% comment %}THE RANK GOES IN THE `aria-label`, not in an `sr-only` span inside the link.
+
+    An `aria-label` REPLACES the name computed from descendants, so a hidden span in the title was
+    unreachable: the visible numeral is `aria-hidden`, the spoken one was overridden, and the
+    ordering -- the entire content of a ranked list -- was the one thing a screen reader never got.
+    The JS repainted that span after every drag, maintaining a string nothing announced.{% endcomment %}
     <a href="{{ item.concept.game_page_url }}" class="pp-gcard" data-gcard
-       aria-label="{{ item.concept.unified_title }}">
+       aria-label="{% if is_ranked %}Number {{ item.position|add:1 }}: {% endif %}{{ item.concept.unified_title }}">
         <div class="pp-gcard__cover">
             {% if item.cover %}
             {% comment %}`display_image_url` is the single source for the cover chain (IGDB-first),
@@ -56,7 +66,30 @@ blank.
         </div>
 
         <div class="pp-gcard__body">
+            {% comment %}THE RANK SITS IN THE TEXT STRIP, NOT ON THE ART.
+
+            A corner badge over the cover is the obvious place for it and is what most ranked grids
+            do, but these cards were moved off the overlay tile days ago precisely so that nothing
+            sits on top of the cover: the art IS the content here, you scan the grid by it, and the
+            whole point of separating the text strip was to stop protecting one by damaging the
+            other. Putting a numeral back over the corner would walk that straight back for the one
+            list type that most invites a big number.
+
+            `position|add:1` because `position` is 0-indexed and dense -- a hunter reading a ranked
+            list counts from 1. Dense is what makes this honest: a gap would print a rank nobody
+            holds. It is shown on EVERY sort, not only `rank`, because "Elden Ring, #3 on this list"
+            is a fact about the entry rather than about the current view -- which is also what makes
+            re-sorting a ranked list useful instead of destructive.{% endcomment %}
+            {% if is_ranked %}
+            <div class="gl-rank-row">
+                {% comment %}`aria-hidden` because the link's own label already carries the rank --
+                without it a reader hears the number twice.{% endcomment %}
+                <span class="gl-rank" aria-hidden="true">{{ item.position|add:1 }}</span>
+                <h3 class="pp-gcard__title">{{ item.concept.unified_title }}</h3>
+            </div>
+            {% else %}
             <h3 class="pp-gcard__title">{{ item.concept.unified_title }}</h3>
+            {% endif %}
             {% if item.note %}
             {% comment %}`pr-1` because the note is italic inside a line-clamp, and italic glyphs
             slant past the text box where the clamp cuts them.{% endcomment %}
@@ -64,6 +97,30 @@ blank.
             {% endif %}
         </div>
     </a>
+
+    {% if can_reorder %}
+    {% comment %}THE HANDLE, and it is deliberately always visible rather than revealed on hover like
+    the remove control beside it. Reordering is the entire point of a Ranked list, so its affordance
+    is the one thing on the card that should not have to be discovered -- and a hover-only handle is
+    unreachable on touch, where `forceFallback` drag most needs a dedicated grip so a drag cannot be
+    mistaken for a scroll.
+
+    Dragging is bound to THIS element only (`handleSelector`), not to the card: the card is a link to
+    the concept page, and making the whole thing draggable turns every mis-timed tap into either a
+    drag that was meant as a click or a navigation that was meant as a drag.
+
+    `can_reorder` and not `is_owner`: the view withholds this when the page is showing any sort other
+    than the real sequence, and when the list is longer than one render can hold -- see its comment,
+    and `ReorderItemsView`, which refuses a partial order rather than applying it.{% endcomment %}
+    <button type="button" class="gl-item__grab" data-gl-grab
+            aria-label="Reorder {{ item.concept.unified_title }}">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
+            <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
+            <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
+        </svg>
+    </button>
+    {% endif %}
 
     {% if is_owner %}
     {% comment %}Quiet by default and revealed on hover or keyboard focus -- the design conversation
@@ -109,5 +166,13 @@ INSIDE the partial, so it re-renders with the grid. Outside it, every add and re
 sentence quoting a stale count next to a header tally that had just been updated.{% endcomment %}
 <p class="text-xs text-base-content/50 mt-3 text-center">
     Showing the first {{ items_shown|intcomma }} of {{ game_list.game_count|intcomma }} games.
+    {% if is_owner and is_ranked %}
+    {% comment %}SAID OUT LOUD, to the owner only. The handles are absent here because a page that
+    cannot show the whole list cannot post a complete order, and `reorder` refuses a partial one by
+    design. Without this sentence their absence reads as a bug on the one list type whose whole
+    purpose is ordering -- and the fix a hunter would reach for (reload, try another browser) cannot
+    work.{% endcomment %}
+    Reordering needs the whole list on screen, so it is unavailable here.
+    {% endif %}
 </p>
 {% endif %}

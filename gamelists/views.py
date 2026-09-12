@@ -23,8 +23,9 @@ from django.views.generic import DetailView, ListView, View
 from django_ratelimit.decorators import ratelimit
 
 from api.utils import safe_bool, safe_int
-from gamelists.models import (DESCRIPTION_MAX_LENGTH, NAME_MAX_LENGTH, GameList,
-                             GameListFollow, GameListItem, GameListLike)
+from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED,
+                              NAME_MAX_LENGTH, GameList, GameListFollow, GameListItem,
+                              GameListLike, list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
 from trophies.mixins import HtmxListMixin, StaffRequiredMixin
@@ -300,6 +301,9 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
         context['list_cap'] = svc.max_lists_for(profile)
         context['at_cap'] = context['list_count'] >= context['list_cap']
         context['suggested_names'] = svc.SUGGESTED_NAMES
+        # The type picker's options come from the model, so the dialog cannot offer a type the
+        # service would refuse -- and a type added there appears here without a template edit.
+        context['list_type_options'] = list_type_options()
         # From the model, so the form's `maxlength` and the counter cannot drift from
         # what the service will accept.
         context['name_max_length'] = NAME_MAX_LENGTH
@@ -348,6 +352,11 @@ class CreateListView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequire
                 request.user.profile,
                 name=request.POST.get('name', ''),
                 description=request.POST.get('description', ''),
+                # Unlike `is_public`, the TYPE is read from the form: it decides what the list is
+                # for, so it is part of making one. The service validates it, so a hand-posted value
+                # cannot reach the column. Absent means Collection, which is what a plain form post
+                # from a browser with no JS sends.
+                list_type=request.POST.get('list_type') or LIST_TYPE_COLLECTION,
                 # Deliberately NOT read from the form. A list is private on creation and publishing
                 # is a separate, deliberate act on the list itself -- the decision that makes the
                 # public/private state mean something rather than being a checkbox you tick while
@@ -384,16 +393,22 @@ class GameListDetailView(_DevelopmentGate, DetailView):
     #: its author chose, so that is the default and the rest are ways to interrogate it.
     # A COLLECTION IS UNORDERED. It has no curated sequence, so it offers no "List order" and no
     # drag: what a hunter wants from a shelf is to find things on it, which is what A-Z is for.
-    # An ordered list is a different TYPE (Ranked), coming with the type system -- see
-    # docs/design/game-list-types.md. `GameListItem.position` stays and stays DENSE regardless: it is
-    # insertion order here, and `attach_cover_games` bounds the tile mosaic on `position__lt=4`.
+    # An ordered list is a different TYPE -- Ranked, which adds `rank` below and nothing else.
+    # `GameListItem.position` stays and stays DENSE for both: it is insertion order on a Collection
+    # and the author's sequence on a Ranked list, and `attach_cover_games` bounds the tile mosaic on
+    # `position__lt=4` either way.
     SORT_CHOICES = (
         ('name', 'A-Z'),
         ('name_desc', 'Z-A'),
         ('added', 'Recently added'),
         ('oldest', 'First added'),
     )
+    #: A RANKED list leads with the order its author chose, and keeps every other sort as a way to
+    #: interrogate it. "List order" is first because it is the default and because it is the only one
+    #: that is the list's actual content rather than a view of it.
+    RANKED_SORT_CHOICES = (('rank', 'List order'),) + SORT_CHOICES
     _DEFAULT_SORT = 'name'
+    _RANKED_DEFAULT_SORT = 'rank'
 
     def get_queryset(self):
         # `select_related('owner')` for the byline; the cover art is attached per-item below.
@@ -404,9 +419,24 @@ class GameListDetailView(_DevelopmentGate, DetailView):
             return None
         return getattr(self.request.user, 'profile', None)
 
+    def _is_ranked(self):
+        return self.object.list_type == LIST_TYPE_RANKED
+
+    def _sort_choices(self):
+        """The toolbar's options, which depend on the TYPE.
+
+        `rank` is offered by ranked lists only. A Collection that accepted `?sort=rank` would answer
+        200 and order by insertion, which is not a curated sequence and would read as one.
+        """
+        return self.RANKED_SORT_CHOICES if self._is_ranked() else self.SORT_CHOICES
+
+    def _default_sort(self):
+        return self._RANKED_DEFAULT_SORT if self._is_ranked() else self._DEFAULT_SORT
+
     def _selected_sort(self):
-        raw = self.request.GET.get('sort', self._DEFAULT_SORT)
-        return raw if raw in dict(self.SORT_CHOICES) else self._DEFAULT_SORT
+        default = self._default_sort()
+        raw = self.request.GET.get('sort', default)
+        return raw if raw in dict(self._sort_choices()) else default
 
     def get_template_names(self):
         # The sort swap returns the items only. Same shape as the browse pages, and the same reason:
@@ -436,6 +466,7 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         # two different orders on two loads, which reads as a bug and cannot be reproduced on demand.
         title = Lower('concept__unified_title')
         order = {
+            'rank': ('position',),
             'name': (title.asc(), 'position'),
             'name_desc': (title.desc(), 'position'),
             'added': ('-added_at', 'position'),
@@ -455,13 +486,26 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         # allocation on the page and invisible to a query-COUNT test, because the shape stays O(1)
         # while the bytes do not. CLAUDE.md's whale rule names exactly this: an explicit `[:N]` slice
         # is the acceptable form. The overflow is surfaced rather than silently dropped.
+        # ONE EXTRA ROW, and truncation read from the ROWS rather than from `game_count`.
+        #
+        # `game_count > len(items)` looked equivalent and was not, because that counter drifts HIGH
+        # and nothing repairs it: `GameListItem.concept` is CASCADE, so deleting a Concept removes
+        # rows with no service involvement and `_recount` (whose docstring says so) only ever runs
+        # from add and remove. A six-game ranked list that lost one concept then reported itself
+        # truncated forever -- which cost a wrong sentence before Ranked, and costs the owner their
+        # drag handles now, permanently, with the page explaining that the list is too long to
+        # reorder. No user action clears it.
+        #
+        # Fetching `MAX_ITEMS_RENDERED + 1` answers "is there more?" from the data itself, is correct
+        # in both drift directions, and costs one row.
         items = list(
             game_list.items
             .select_related('concept', 'concept__igdb_match')
             .defer('concept__igdb_match__raw_response')
-            .order_by(*order)[:MAX_ITEMS_RENDERED]
+            .order_by(*order)[:MAX_ITEMS_RENDERED + 1]
         )
-        context['items_truncated'] = game_list.game_count > len(items)
+        context['items_truncated'] = len(items) > MAX_ITEMS_RENDERED
+        del items[MAX_ITEMS_RENDERED:]
         context['items_shown'] = len(items)
         # One batched query for every cover on the page, not one per row -- the same helper the
         # browse tiles use, for the same reason.
@@ -471,8 +515,35 @@ class GameListDetailView(_DevelopmentGate, DetailView):
 
         context['items'] = items
         context['sort'] = sort
-        context['sort_choices'] = self.SORT_CHOICES
+        context['sort_choices'] = self._sort_choices()
+        context['is_ranked'] = self._is_ranked()
         context['is_owner'] = viewer is not None and game_list.owner_id == viewer.id
+        # DRAG IS OFFERED ONLY WHERE IT CAN SUCCEED, and each clause closes a way it could not.
+        #
+        # `sort == 'rank'` -- dragging row 3 above row 1 while the page is sorted A-Z posts an order
+        # that means nothing, because what the hunter rearranged was a VIEW of the list rather than
+        # the list. The affordance belongs to the one sort that shows the real sequence. This clause
+        # also carries the type: `rank` is only ever selected on a ranked list, because
+        # `_selected_sort` clamps to `_sort_choices()` and only the ranked set contains it.
+        #
+        # An `is_ranked` clause stood here too and was removed as dead weight. Mutation testing
+        # showed no test could kill it -- which was not a gap in the tests: given the clamp above,
+        # there is no reachable state where `sort == 'rank'` and the list is not ranked, so the
+        # branch could never be false when the rest were true. A condition that cannot change an
+        # outcome reads as a safety net and is only a place for a future reader to be confused.
+        # The clamp is the real guard and `test_a_collection_cannot_reach_the_rank_sort_by_url`
+        # pins it.
+        #
+        # `not items_truncated` -- `svc.reorder` refuses a partial ordering by design (a subset means
+        # the client and the server disagree about what is on the list, and applying it would drop
+        # the rest), so past `MAX_ITEMS_RENDERED` the page cannot post a complete one. Offering a
+        # handle there would give every drag a refusal. `ReorderItemsView`'s own docstring asks
+        # callers to withhold the affordance rather than build one whose every use fails.
+        context['can_reorder'] = (
+            context['is_owner']
+            and sort == 'rank'
+            and not context['items_truncated']
+        )
         # `is_linked`, not merely "has a profile". The action ENDPOINTS carry
         # `_LinkedProfileRequired`, which 302s to link_psn -- so without this an unlinked viewer was
         # shown both buttons and got an HTML redirect back from a JSON fetch. The page and the
@@ -497,6 +568,7 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         # service will store and the first a hunter hears of it is a refusal on save.
         context['name_max_length'] = NAME_MAX_LENGTH
         context['description_max_length'] = DESCRIPTION_MAX_LENGTH
+        context['list_type_options'] = list_type_options()
         return context
 
 
@@ -540,18 +612,22 @@ class _ListActionView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequir
 
 
 class UpdateListView(_ListActionView):
-    """Rename, re-describe and publish -- the owner's three edits, through one endpoint.
+    """Rename, re-describe, switch type and publish -- the owner's edits, through one endpoint.
 
-    One view rather than three because they are one service call. `update_list` already takes each
-    field optionally and touches only what it is given, and splitting them would mean three
+    One view rather than four because they are one service call. `update_list` already takes each
+    field optionally and touches only what it is given, and splitting them would mean four
     permission stacks that have to agree with each other forever.
+
+    `list_type` rides `FIELDS` rather than getting a branch of its own: unlike `is_public` it needs
+    no coercion (the service validates it against the types that render) and unlike a boolean it has
+    no "absent means false" trap.
 
     `'field' in request.POST` rather than `.get('field')`: an empty description is a real edit ("clear
     it"), and `.get()` cannot tell that apart from "not sent". Absent means leave alone; present and
     empty means set to empty.
     """
 
-    FIELDS = ('name', 'description')
+    FIELDS = ('name', 'description', 'list_type')
 
     @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))
     def post(self, request, list_id):
@@ -583,27 +659,24 @@ class UpdateListView(_ListActionView):
             'name': updated.name,
             'description': updated.description,
             'is_public': updated.is_public,
+            'list_type': updated.list_type,
         })
 
 
 class ReorderItemsView(_ListActionView):
     """Set the list's order to exactly the posted ids.
 
-    NO UI REACHES THIS YET, and that is deliberate rather than an oversight. A Collection is an
-    UNORDERED list -- it offers A-Z and date sorts and no drag -- so this endpoint waits for the
-    Ranked type (docs/design/game-list-types.md), whose server side is exactly this. The drag UI that
-    briefly existed here was deleted rather than left dormant, because Ranked will present ordering
-    differently and a half-built interface is worse than none.
-
-    Kept rather than deleted because it is finished, tested work for a decided type, not speculation:
-    the client half will be rewritten, the server half will not. If Ranked is ever dropped, delete
-    this, `game_list_service.reorder`, and their tests together.
+    REACHED BY RANKED LISTS ONLY. A Collection is unordered -- it offers A-Z and date sorts and no
+    drag -- so the handle appears only on `list_type='ranked'`, and only for the owner, and only
+    while the page is showing the real sequence rather than a sort of it. This endpoint was built
+    ahead of that UI and kept dormant rather than deleted, and the server half needed no changes when
+    the client half arrived.
 
     The service refuses a partial ordering rather than applying it, which is right -- a subset means
     the client and the server disagree about what is on the list, and applying it would silently drop
-    whatever the client did not send. That means a list longer than `MAX_ITEMS_RENDERED` can never be
-    reordered from a rendered page, so whatever UI Ranked grows must withhold the affordance there
-    rather than offer one whose every use is refused.
+    whatever the client did not send. That means a list longer than `MAX_ITEMS_RENDERED` cannot be
+    reordered from a rendered page, so `can_reorder` withholds the affordance there rather than
+    offering one whose every use would be refused.
     """
 
     @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))

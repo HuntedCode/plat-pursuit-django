@@ -32,6 +32,8 @@ from django.utils import timezone
 from gamelists.models import (
     DESCRIPTION_MAX_LENGTH,
     FREE_MAX_LISTS,
+    LIST_TYPE_COLLECTION,
+    LIST_TYPES,
     MEMBER_MAX_LISTS,
     NAME_MAX_LENGTH,
     NOTE_MAX_LENGTH,
@@ -158,6 +160,21 @@ def _check_description(raw):
     return text
 
 
+def _check_list_type(raw):
+    """Validate against the types that actually RENDER.
+
+    Django's `choices` is a form/admin concern and is not enforced at the database level, so an API
+    that passed the value straight through would happily store `list_type='tier'` -- and the detail
+    page, which branches on the two it knows, would draw a Collection while the hunter believed they
+    had made something else. Checking here keeps the column honest for the shell and the importer
+    too, since both go through this service.
+    """
+    value = (raw or '').strip()
+    if value not in LIST_TYPES:
+        raise ListError('That is not a list type.')
+    return value
+
+
 def _lock_list(game_list):
     """Re-read the list FOR UPDATE and re-assert the precondition on the row that came back.
 
@@ -200,12 +217,14 @@ def _require_owner(game_list, profile):
 # ── lists ────────────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
-def create_list(profile, *, name, description='', is_public=False):
+def create_list(profile, *, name, description='', is_public=False,
+                list_type=LIST_TYPE_COLLECTION):
     _refuse_if_unlinked(profile)
     _refuse_if_restricted(profile)
 
     name = _check_name(name)
     description = _check_description(description)
+    list_type = _check_list_type(list_type)
 
     # THE LOCK GOES ON THE PROFILE, not on the lists. `@transaction.atomic` does nothing for this by
     # itself: at READ COMMITTED two requests both COUNT 2, both pass `2 >= 3`, both insert, and the
@@ -222,19 +241,23 @@ def create_list(profile, *, name, description='', is_public=False):
         )
 
     return GameList.objects.create(
-        owner=profile, name=name, description=description, is_public=bool(is_public))
+        owner=profile, name=name, description=description, is_public=bool(is_public),
+        list_type=list_type)
 
 
 @transaction.atomic
-def update_list(game_list, profile, *, name=None, description=None, is_public=None):
+def update_list(game_list, profile, *, name=None, description=None, is_public=None,
+                list_type=None):
     """Edit a list you own. Every argument is optional; only what is passed is touched.
 
     The restriction gate is scoped to the acts that PUT WORDS IN FRONT OF PEOPLE, in either of the
     two ways that can happen: writing them, or making already-written ones visible. A restricted
-    hunter can still un-publish their own list, still delete it, and still change its theme -- taking
-    your own content down is the opposite of the act being restricted, and a gradient is not
-    user-submitted content. Gating the whole function trapped a restricted hunter's list in public,
-    which is the same failure `api/rating_views.py` documents from the other direction.
+    hunter can still un-publish their own list, still delete it, and still switch its TYPE -- taking
+    your own content down is the opposite of the act being restricted, and choosing between a
+    Collection and a Ranked presentation submits no content. (This clause used to name the gradient
+    theme, which was deleted in 2026-09; `list_type` inherits the reasoning, not just the slot.)
+    Gating the whole function trapped a restricted hunter's list in public, which is the same failure
+    `api/rating_views.py` documents from the other direction.
 
     PUBLISHING IS GATED and the first version did not gate it, because the condition only looked at
     `name`/`description` and did not care which way `is_public` moved. A POST carrying nothing but
@@ -264,6 +287,9 @@ def update_list(game_list, profile, *, name=None, description=None, is_public=No
     if is_public is not None:
         game_list.is_public = bool(is_public)
         changed.append('is_public')
+    if list_type is not None:
+        game_list.list_type = _check_list_type(list_type)
+        changed.append('list_type')
 
     if changed:
         game_list.save(update_fields=[*changed, 'updated_at'])
@@ -351,9 +377,10 @@ def _recount(locked):
     `position__lt=4`, so the tile quietly composes a three-cover mosaic for a four-game list.
     `Concept.absorb()` repairs both, but that is the MERGE path; nothing repairs a plain delete.
 
-    Closing that needs a `post_delete` receiver or a reconciliation command, and it is recorded in
-    docs/design/game-list-types.md rather than fixed here because it wants to be decided alongside
-    the same question for the other denormalized counters.
+    Closing that needs a `post_delete` receiver or a reconciliation command. It is recorded in
+    docs/features/game-lists.md (Gotchas) rather than fixed here because it wants to be decided
+    alongside the same question for the other denormalized counters. (This pointer named
+    game-list-types.md, which says nothing about it.)
     """
     GameList.objects.filter(pk=locked.pk).update(
         game_count=GameListItem.objects.filter(game_list=locked).count(),

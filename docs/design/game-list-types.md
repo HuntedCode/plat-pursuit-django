@@ -1,7 +1,8 @@
 # Game List Types
 
-> **Status:** design. Collection ships in the Game Lists rebuild; the other types are planned on top
-> of it. Nothing below is implemented except Collection.
+> **Status:** partly built. **Collection and Ranked are implemented** (2026-09) — see
+> [docs/features/game-lists.md](../features/game-lists.md#list-types) for what shipped. The rest of
+> this document is still design.
 >
 > See also: [product-identity.md](product-identity.md), and the rebuild's own
 > [playbook](rebuild/rebuild-playbook.md).
@@ -13,7 +14,8 @@ same rows arranged differently, and building them as one model with several pres
 makes the ambition affordable. Building them as separate features is what would make it a swamp.
 
 **The whole type system is one field on the list and one on the item.** `GameList.list_type` picks
-the presentation; `GameListItem.group` holds a section key. `position` already exists, is dense, and
+the presentation (it exists, holding `collection` and `ranked`); `GameListItem.group` will hold a
+section key (not built). `position` already exists, is dense, and
 `Meta.ordering = ['position']`, so ranked ordering is free at the model level.
 
 ## Lists are not Challenges
@@ -35,8 +37,8 @@ Challenge is that PlatPursuit authored it and pays for it.
 
 | Type | Sections | Order | Notes |
 |---|---|---|---|
-| **Collection** | none | insertion | The default. What ships first. |
-| **Ranked** | none | author, 1..N | Numerals + drag. `position` already does the work. |
+| **Collection** | none | insertion | The default. **Shipped 2026-09.** |
+| **Ranked** | none | author, 1..N | Numerals + drag. **Shipped 2026-09**, and `position` did indeed do all the work — the type cost one CharField and no item migration. |
 | **Top-N** | none | author, 1..N | Ranked with a cap. Constraint drives quality; makes the best share card. |
 | **Progress** | none | any | Each row shows trophy progress. See below. |
 | **Sectioned** | author-named | within section | "Finished / Playing / Someday". |

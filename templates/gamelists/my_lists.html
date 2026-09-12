@@ -202,6 +202,35 @@ meaningless.
                 <span class="gl-countchars" id="gl-description-count"
                       data-charcount-for="gl-description" aria-live="polite"></span>
             </div>
+
+            {% comment %}A FIELDSET of radios, not a <select>. Two options whose difference needs a
+            sentence each: a select hides both the second option and every explanation behind a tap,
+            which is how somebody makes a Collection while meaning to make a Ranked list.
+
+            Radios also mean the dialog still works with no JavaScript, which the whole form already
+            does deliberately -- the modal is enhancement over a form that would submit on its own.
+
+            Options come from the model (`list_type_options`), so this cannot offer a type the
+            service would refuse, and a new type arrives here with its label AND its explanation
+            rather than appearing as a bare value.{% endcomment %}
+            <fieldset class="stg-field gl-type">
+                <legend class="stg-field__label">Type</legend>
+                <div class="gl-type__opts">
+                    {% for value, label, blurb in list_type_options %}
+                    <label class="gl-type__opt">
+                        <input type="radio" name="list_type" value="{{ value }}"
+                               {% if forloop.first %}checked{% endif %} />
+                        <span class="gl-type__body">
+                            <span class="gl-type__name">{{ label }}</span>
+                            <span class="gl-type__hint">{{ blurb }}</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% comment %}Said here rather than discovered later: the reason somebody hesitates
+                over this choice is the fear of picking wrong, and the honest answer removes it.{% endcomment %}
+                <p class="gl-type__note">You can switch this later without losing anything.</p>
+            </fieldset>
         </div>
 
         <div class="gl-dialog__foot">
