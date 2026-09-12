@@ -63,6 +63,23 @@ blank.
                 </svg>
             </span>
             {% endif %}
+
+            {% if is_ranked %}
+            {% comment %}A PLATE IN THE COVER'S TOP-LEFT CORNER. Owner's call, 2026-09, over an
+            earlier version that kept the numeral in the text strip to leave the art completely
+            alone: on a ranked list the number is the point, and it has to be readable at a glance
+            across a grid.
+
+            Solid rather than translucent for that reason. A tinted chip is legible over the dark
+            covers and vanishes over a bright one (Journey, Sackboy) and over a busy one (Persona 5);
+            an opaque plate in the accent with dark text reads the same over all of them, which is
+            what "easy to read" has to mean when the background is arbitrary.
+
+            `aria-hidden` because the link's own label already carries the rank -- see the anchor
+            above, and note an `aria-label` REPLACES the name computed from descendants, so the
+            spoken rank has to live there rather than here.{% endcomment %}
+            <span class="gl-rank" aria-hidden="true">{{ item.position|add:1 }}</span>
+            {% endif %}
         </div>
 
         <div class="pp-gcard__body">
@@ -80,16 +97,9 @@ blank.
             holds. It is shown on EVERY sort, not only `rank`, because "Elden Ring, #3 on this list"
             is a fact about the entry rather than about the current view -- which is also what makes
             re-sorting a ranked list useful instead of destructive.{% endcomment %}
-            {% if is_ranked %}
-            <div class="gl-rank-row">
-                {% comment %}`aria-hidden` because the link's own label already carries the rank --
-                without it a reader hears the number twice.{% endcomment %}
-                <span class="gl-rank" aria-hidden="true">{{ item.position|add:1 }}</span>
-                <h3 class="pp-gcard__title">{{ item.concept.unified_title }}</h3>
-            </div>
-            {% else %}
+            {% comment %}The title is the same on both types now that the rank moved onto the cover,
+            so there is no branch here any more.{% endcomment %}
             <h3 class="pp-gcard__title">{{ item.concept.unified_title }}</h3>
-            {% endif %}
             {% if item.note %}
             {% comment %}`pr-1` because the note is italic inside a line-clamp, and italic glyphs
             slant past the text box where the clamp cuts them.{% endcomment %}

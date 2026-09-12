@@ -129,14 +129,39 @@ honest — for the shell and the importer too.
 ### What Ranked adds
 
 - A `rank` ("List order") sort, offered ONLY by ranked lists and their default.
-- A numeral per card, in the **text strip beside the title, not over the cover**. These cards were
-  moved off the overlay tile precisely so nothing sits on the art; a corner badge would walk that
-  back on the one type that most invites a big number.
+- A numeral per card, as an **opaque plate in the cover's top-left corner**. It started in the text
+  strip beside the title, on the reasoning that these cards had just been moved off the overlay tile
+  so nothing would sit on the art. That reasoning holds for a TITLE (long, wrapping, needing a scrim
+  that darkens the image it is printed over) and not for two characters: a small plate covers a
+  corner rather than the picture, and on a ranked list the number is what you are scanning for.
+  Opaque rather than tinted is the load-bearing part: a translucent chip reads well over the dark
+  covers most games ship and vanishes over a bright or high-frequency one.
 - The numeral shows on **every** sort, because a rank is a fact about the entry rather than about
   the current view. The drag handles do not, because rearranging a sorted page would post an
   order that means nothing.
 - Drag via `DragReorderManager` (SortableJS), bound to a dedicated grip rather than the card — the
   card is a link, and a draggable link turns every mis-timed tap into the wrong action.
+
+### Position editing is a mode
+
+Reordering is **entered deliberately**, not always live. `data-gl-reorder` is the server saying it is
+POSSIBLE here; the mode is the hunter saying they want to do it now. Conflating the two shipped
+first, and it made rearranging a list something you could do by accident.
+
+Open the editor → **Edit list positions** → grips appear → drag or arrow-key → a pill reads *Saving*
+then *Saved* → press again, or close the editor, and it ends. The hint states that moves save
+immediately, because the toggle sits inside a form whose Cancel button cannot undo a write that
+already happened.
+
+Three implementation facts that are not free choices:
+
+- The mode flag lives on `#gl-items-panel`, the htmx swap **target**. On `#gl-items` (swapped
+  content) htmx restores the server's attributes on settle and the flag disappears.
+- Grips are `display: none` outside the mode, never `opacity: 0` — an invisible button is still a tab
+  stop that announces itself.
+- `syncPositioning` runs on **`htmx:afterSettle`**, never `afterSwap`. During swap the new grid still
+  wears the previous one's attributes, so the capability reads stale in both directions. See the
+  Gotchas.
 
 **Switching type is not restriction-gated.** Choosing between two presentations of your own rows
 submits no content, so it sits with un-publishing and deleting on the allowed side of the line
@@ -234,6 +259,11 @@ redirects with a Django message rather than answering JSON.
 - **The adder's typeahead is a sequential scan.** Django compiles `__icontains` to
   `UPPER(col::text) LIKE …`, which the `gin_trgm_ops` index on the raw column cannot serve. Bounded,
   cached and rate-limited; the index question is shared catalogue work and belongs in its own lane.
+- **Wire the drag on `htmx:afterSettle`, not `afterSwap`.** htmx copies the OLD node's attributes
+  onto the new one before insertion and restores the real ones on settle, so during `afterSwap` an
+  id'd swapped element reads as whatever the previous content was. Sorting a ranked list A-Z and back
+  left every grip inert; the reverse wired a grid that must not be draggable *and* marked it handled
+  so settle could not undo it.
 - **A truncated list cannot be reordered**, and says so. `reorder` refuses a partial ordering by
   design, so past `MAX_ITEMS_RENDERED` the page cannot post a complete one and `can_reorder` goes
   false. The handles vanishing without explanation would read as a bug on the one type built for

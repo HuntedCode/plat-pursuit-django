@@ -322,32 +322,49 @@
 }
 
 
-/* ── Ranked lists ────────────────────────────────────────────────────────────────────────────────
+/* ── Ranked lists ──────────────────────────────────────────────────────────────
  *
- * The numeral lives in the card's TEXT STRIP, beside the title, and not as a badge over the cover.
- * These cards were moved off the overlay tile specifically so that nothing sits on the art -- the
- * cover is what you scan a list by -- and a corner numeral would reintroduce exactly that on the one
- * type that most invites a big number. The strip already exists to carry text; the rank is text.
+ * THE NUMERAL IS A PLATE IN THE COVER'S TOP-LEFT CORNER. Owner's call, 2026-09.
+ *
+ * The first version kept it in the text strip beside the title, reasoning that these cards had just
+ * been moved off the overlay tile so that nothing would sit on the art. That reasoning holds for a
+ * TITLE -- long, wrapping, needing a scrim to stay legible, which is what darkened the art it was
+ * printed over -- and it does not transfer to two characters: a small opaque plate occupies a corner
+ * rather than the image. On a ranked list the number is the thing being scanned for, and it was
+ * reading as an afterthought next to the title.
+ *
+ * OPAQUE, NOT TINTED, and that is the load-bearing choice rather than a style preference. A
+ * translucent chip reads well over the dark covers most games ship and disappears over a bright one
+ * and over a high-frequency one. An accent plate with dark text on it reads identically over every
+ * cover, which is what "easy to read" has to mean when the background is arbitrary art nobody
+ * controls.
+ *
+ * Top-LEFT specifically: covers put their logo at the top CENTRE, and the art's focal point is
+ * usually centre or lower-centre. The top-left corner is the quietest region of a game cover.
  */
-.gl-rank-row {
-    display: flex; align-items: baseline; gap: 7px;
-    /* Both halves matter: the flex ITEM needs `min-width: 0` to be allowed to shrink, and the title
-       inside it needs its own, or `line-clamp` never gets a bounded width and a long title pushes
-       the card wider than its grid column. */
-    min-width: 0;
-}
-.gl-rank-row .pp-gcard__title { min-width: 0; }
 .gl-rank {
-    flex: none;
-    /* `ch`-based so 1 and 10 reserve the same space and the titles line up down the column without
-       a hardcoded pixel width that a font swap would break. Two digits fit; a rank past 99 pushes
-       its own title along rather than being clipped, which is the right failure. */
-    min-width: 2ch;
-    font-size: 0.95rem; font-weight: 800; line-height: 1.15;
-    letter-spacing: -0.02em;
+    position: absolute; top: 7px; left: 7px; z-index: 2;
+    display: grid; place-items: center;
+    /* `min-width` + padding rather than a fixed width, so 1 and 10 both sit in a plate that looks
+       deliberate and a three-digit rank grows instead of clipping. `ch` ties that to the digits
+       rather than to a pixel guess a font change would invalidate. */
+    min-width: 1.9ch; height: 26px; padding: 0 8px;
+    border-radius: 8px;
+    font-size: 0.92rem; font-weight: 800; line-height: 1;
+    letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
-    color: var(--pp-primary);
+    color: var(--pp-bg-0);
+    background: var(--pp-primary);
+    /* Lifts the plate off busy art so its edge stays findable without needing a border. */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
 }
+/* Larger where there is room. The plate is what the eye is chasing down the grid, and at `md` the
+   cards are wide enough that 26px starts to read as timid. */
+@media (min-width: 768px) {
+    .gl-rank { top: 8px; left: 8px; height: 29px; font-size: 1.02rem; border-radius: 9px; }
+}
+/* The cover's art scales on hover; the plate must not ride along with it. */
+.gl-rank { transform: none; }
 
 /* THE GRIPS EXIST ONLY IN POSITION-EDITING MODE.
  *
@@ -359,13 +376,20 @@
  * attributes. On `#gl-items` it would be wiped on settle -- the trap documented twice in
  * list-detail.js. */
 #gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }
+/* ...and the destructive control steps aside while positioning, so the corner is never contested and
+   the mode offers one action rather than two. Arranging a list and deleting from it are different
+   jobs, and the one that cannot be undone is not the one to leave under a moving cursor. */
+#gl-items-panel[data-positioning] .gl-item__remove { display: none; }
 
 /* The grip. Mirrors the remove control across the card (top-LEFT to its top-right) and shares its
    geometry, but is visible at rest WITHIN the mode: once you have said you are arranging the list,
    the thing you arrange it with should not also have to be discovered, and a hover-only grip does
    not exist at all on touch. */
 .gl-item__grab {
-    position: absolute; top: 6px; left: 6px; z-index: 2;
+    /* TOP-RIGHT, because the rank plate owns the top-left now. It shares this corner with the remove
+       control and never collides with it: `.gl-item__remove` is hidden while positioning (below), so
+       a card offers exactly one control per mode. */
+    position: absolute; top: 6px; right: 6px; z-index: 2;
     display: grid; place-items: center;
     width: 26px; height: 26px;
     border-radius: 999px;
@@ -397,7 +421,7 @@
 @media (hover: none) {
     .gl-item__grab {
         width: 44px; height: 44px;
-        top: 0; left: 0;
+        top: 0; right: 0;
         background: none; border: none;
     }
     .gl-item__grab::before {
