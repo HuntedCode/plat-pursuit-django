@@ -773,6 +773,17 @@
                         desc.textContent = data.description;
                         desc.hidden = !data.description;
                     }
+                    // THE STORED TYPE, RE-ANCHORED. `typeChanged` above is measured against this
+                    // attribute, and the in-place refresh does not re-render the block that carries
+                    // it (only the grid, the sort control and the bar slot travel). So after one
+                    // successful switch it still named the OLD type, and switching back computed
+                    // `typeChanged === false`: nothing was sent, and with the name and description
+                    // untouched the request was skipped entirely and the editor just closed. The
+                    // second switch of a session silently did nothing.
+                    //
+                    // Read from the RESPONSE rather than from the radio, so it records what the
+                    // server stored rather than what was asked for.
+                    if (data.list_type) { root.dataset.listType = data.list_type; }
                     document.title = data.name;
                     // The breadcrumb is the third place the name appears, and it was the one left
                     // showing the old value until a reload.

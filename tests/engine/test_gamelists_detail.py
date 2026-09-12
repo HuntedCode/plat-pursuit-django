@@ -630,6 +630,31 @@ def test_saving_a_type_change_refreshes_in_place_instead_of_reloading(client):
     assert 'replaceState' in refresh, 'the address bar must not keep a sort that no longer applies'
 
 
+def test_the_editor_re_anchors_the_stored_type_after_a_save(client):
+    """The client-side half of the two-switches bug (see `test_switching_type_twice_in_one_session`).
+
+    `typeChanged` is measured against `data-list-type` on the identity block, and the in-place refresh
+    does not re-render that block -- so it has to be updated from the response, or the SECOND switch
+    of a session computes "nothing changed" and is dropped before it is ever sent.
+
+    Re-anchored from the RESPONSE, not from the radio: what matters is what the server stored.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    handler_start = js.index("form.addEventListener('submit'")
+    handler = js[handler_start:js.index('function wireVisibility(', handler_start)]
+    assert 'root.dataset.listType = data.list_type' in handler, \
+        'nothing re-anchors the stored type, so a second switch is silently dropped'
+    # From the response. Taking it off the radio would record the request rather than the result, and
+    # would be wrong for any write the service normalises or refuses.
+    assert 'root.dataset.listType = typeField.value' not in handler
+
+    # And the attribute it re-anchors is really the one the page renders.
+    owner = _staff(client)
+    ranked = _ranked(owner, 2)
+    assert f'data-list-type="{ranked.list_type}"' in client.get(_url(ranked)).content.decode()
+
+
 def test_the_type_change_refresh_carries_the_chrome_the_swap_cannot_reach(client):
     """The out-of-band half, asserted against the rendered response rather than the template source.
 

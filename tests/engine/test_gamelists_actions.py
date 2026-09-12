@@ -8,7 +8,8 @@ refused call writes nothing.
 import pytest
 from django.urls import reverse
 
-from gamelists.models import GameList, GameListFollow, GameListItem, GameListLike
+from gamelists.models import (LIST_TYPE_COLLECTION, LIST_TYPE_RANKED, GameList, GameListFollow,
+                              GameListItem, GameListLike)
 from gamelists.services import game_list_service as svc
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 from users.models import UserRestriction
@@ -488,6 +489,54 @@ def test_the_owner_can_rename_and_redescribe(client):
     assert game_list.description == 'New words'
     # The STORED values come back, not the submitted ones -- the client re-renders from these.
     assert resp.json()['name'] == 'New name'
+
+
+def test_switching_type_twice_in_one_session_works(client):
+    """THE SECOND SWITCH SILENTLY DID NOTHING, and the endpoint was never the problem.
+
+    The client measures "did the type change" against a `data-list-type` attribute on the identity
+    block, and the in-place refresh that replaced the page reload re-renders only the grid, the sort
+    control and the position bar -- not that block. So after one successful switch the attribute still
+    named the OLD type: switching back computed no change, sent no `list_type`, and with the name and
+    description also untouched the request was skipped altogether and the editor just closed.
+
+    The server half is what this pins: every response carries the STORED type, so the client has
+    something authoritative to re-anchor to. Asserted across two consecutive writes, because one
+    write could not have caught it.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Switcher')
+    assert game_list.list_type == LIST_TYPE_COLLECTION
+
+    first = client.post(reverse('list_update', args=[game_list.id]),
+                        {'list_type': LIST_TYPE_RANKED})
+    assert first.status_code == 200
+    assert first.json()['list_type'] == LIST_TYPE_RANKED, \
+        'the client re-anchors from this; without it the next switch is a no-op'
+
+    second = client.post(reverse('list_update', args=[game_list.id]),
+                         {'list_type': LIST_TYPE_COLLECTION})
+    assert second.status_code == 200
+    assert second.json()['list_type'] == LIST_TYPE_COLLECTION
+
+    game_list.refresh_from_db()
+    assert game_list.list_type == LIST_TYPE_COLLECTION, 'the switch back did not land'
+
+
+def test_a_type_switch_alone_is_a_complete_request(client):
+    """The client sends ONLY what changed, so a type switch arrives with no name and no description.
+    That has to be a valid edit rather than "Nothing to change"."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Keep me', description='Keep these words')
+
+    resp = client.post(reverse('list_update', args=[game_list.id]),
+                       {'list_type': LIST_TYPE_RANKED})
+
+    assert resp.status_code == 200
+    game_list.refresh_from_db()
+    assert game_list.list_type == LIST_TYPE_RANKED
+    assert game_list.name == 'Keep me', 'an omitted field must be left alone, not cleared'
+    assert game_list.description == 'Keep these words'
 
 
 def test_an_edit_returns_what_was_stored_not_what_was_sent(client):
