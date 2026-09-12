@@ -210,10 +210,22 @@ Removing `_DevelopmentGate` is necessary and **not sufficient**. The full switch
 4. Add `lists_browse` to `StaticViewSitemap`.
 5. **`static/robots.txt` has no lists rules**: `/my-lists/` is personal and login-only, the search
    endpoint returns bare JSON, and the write endpoints sit under a crawlable prefix.
-6. **Decide the IA.** These paths sit under `/community/`, which was *retired* in 2026-08 and 301s to
-   `/leaderboards/`. [ia-and-subnav.md](../architecture/ia-and-subnav.md) names this as the decision
-   to revisit. `core/hub_subnav.py` has no entry for any of the three pages, so they currently render
-   with no hub highlighted — and **nothing links to `/community/lists/` at all.**
+6. **Build the Community hub.** DECIDED 2026-09 — see
+   [ia-and-subnav.md](../architecture/ia-and-subnav.md#community-returned-2026-09). The hub returns
+   holding Hunters, Game Lists and (later) Challenges and the Hall of Fame, on the rule that
+   user-generated content is its own class regardless of intent. **The paths stay** — `/community/lists/`
+   becomes correct rather than incoherent, and `/my-lists/` is unchanged.
+
+   Concretely: a `COMMUNITY_HUB` in `core/hub_subnav.py` with prefixes `/community/` and `/hunters/`;
+   the `profiles` item MOVED there out of Browse (sub-nav only, `/hunters/` is unchanged); items for
+   `lists_browse` and `my_lists`; `SUBNAV_MAP` entries for `lists_browse`, `list_detail` and
+   `my_lists`; the Support Us tab swapped for Community in `mobile_tabbar.html` with Support Us moving
+   into the avatar dropdown; and the Support hub relabelled "Support Us".
+
+   **This ships WITH the un-hide, not before it,** and that is a constraint rather than a preference:
+   `HubSubnavItem` has `auth_required` and `membership_required` but no staff gate, so a Game Lists
+   entry added while `_DevelopmentGate` is on would show every visitor a link that 302s them. A
+   Community hub holding only Hunters in the meantime would be churn with no benefit.
 7. Give the detail page `seo_title` / `seo_description`; it is the indexable, shareable page and
    currently inherits the site-wide generic ones while browse sets its own.
 8. Wire the `game_list_create` / `game_list_share` `SiteEvent` types, which are declared and unfired.

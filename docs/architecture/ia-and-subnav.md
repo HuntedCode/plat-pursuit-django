@@ -26,8 +26,9 @@ URL-matched.
 > back to `items=()` -- the shape it was designed with, and the one Support runs in. A hub landing is
 > reached by its own navbar entry; a one-pill rail naming the page you are on is not navigation. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
-| **Leaderboards** | `/leaderboards/` | how everyone ranks | "where do I stand" |
-| **Support** | `/support/` | the membership storefront (live) + `/support/roadmap/` (live) + `/support/membership/` (live) + the coming fundraiser sub-page | "ways to support us" |
+| **Leaderboards** | `/leaderboards/` | how everyone ranks (PSN-derived) | "where do I stand" |
+| **Community** | `/community/`, `/hunters/` | hunters, and what they make: lists, challenges, the Hall of Fame | "what is everyone doing" |
+| **Support Us** | `/support/` | the membership storefront (live) + `/support/roadmap/` (live) + `/support/membership/` (live) + the coming fundraiser sub-page | "ways to support us" |
 
 **Above the hubs: the lobby (`/`).** Where every login lands (`LOGIN_REDIRECT_URL`), and the one page
 that belongs to NO hub — so it renders no sub-nav strip, because on a lobby the CTAs *are* the navigation
@@ -40,17 +41,89 @@ curated GLANCE that teases and links into a page, never the page's content embed
 used to be the personal hub's first tab, was narrowed into this in 2026-08.
 
 **Organizing principle — "login-gated + mine."** A surface belongs to My Pursuit if it's personal
-AND login-gated. Browse = find; Leaderboards = standings; Support = ways to support. Four mental
-modes, four hubs — resist a 5th. Gamification expands My Pursuit's strip; it does not earn its own hub.
+AND login-gated. Browse = find; Leaderboards = standings; Support Us = ways to support.
+Gamification expands My Pursuit's strip; it does not earn its own hub.
 
-> **Community was retired (2026-08)** and Leaderboards took its place in the nav. Not because
-> community failed, but because everything in the hub had gone somewhere else: Challenges retired,
-> Reviews archived, Lists hidden pending a revamp, Profiles moved to Browse (hunters are another thing
-> you browse), Rate My Games to My Pursuit → Tools (it makes community DATA, but the act is personal
-> and login-only), and Leaderboards promoted to a hub of their own. What remained was a landing page
-> with nothing of its own to land on. `/community/` 301s to `/leaderboards/`; the reviews tombstone and
-> the hidden-lists redirects still live under the prefix. **If Lists, Reviews or the Pursuit Feed come
-> back, they need a home — that is the decision to revisit, not this one.**
+**The "resist a 5th hub" rule was amended in 2026-09, deliberately and narrowly.** It used to end
+"four mental modes, four hubs — resist a 5th," and that is still the right default. What it missed is
+that the four modes sort by the reader's INTENT (find / rank / mine / support) while there is a second
+axis the nav has to respect: **who authored the thing**.
+
+Everything in Browse and Leaderboards is content the SITE owns — Games, Trophy Lists and Recently
+Added are PSN; Franchises, Companies and Genres are IGDB; Badges and Jobs are PlatPursuit-authored;
+the boards rank facts derived from PSN. Not one item is something a hunter wrote.
+
+User-generated content is a different class, and the codebase already says so: `restriction_service`
+carries an `all_ugc` scope — one switch governing comments, reviews, ratings and game lists — because
+UGC is moderated, reportable, restrictable and removable in ways site-owned content is not. Taking
+down somebody's list is categorically unlike delisting a game. **So the fifth hub exists because of a
+different rule set, not a different intent**, and the default stands for everything else: a surface
+that is merely *new* still has to fit one of the four.
+
+## Community (returned 2026-09)
+
+| | |
+|---|---|
+| Holds | Hunters, Game Lists, Challenges, Hall of Fame / community stats |
+| Prefixes | `/community/`, `/hunters/` |
+| Question it answers | "what is everyone making and doing" |
+
+**Hunters moved back from Browse.** It went there in 2026-08 only because this hub was retired
+("hunters are another thing you browse"), and while a profile is mostly PSN data, you look for a
+community member where the community is. It keeps `/hunters/` — a sub-nav move, not a URL move.
+
+**What did NOT move, and why the line holds:**
+
+- **My Lists and My Challenges stay in My Pursuit → Tools.** The private side of a public system is
+  still personal and login-gated, exactly as *Collection* stays in My Pursuit while *Badges* sits in
+  Browse. A hub is not a feature's address; it is a mode.
+- **Leaderboards stays raw PSN standings.** Challenge boards and the Hall of Fame go to Community,
+  because what they rank is participation in a PlatPursuit activity rather than a PSN fact.
+- **Browse stays the site-owned catalogue**, which is what it was already.
+- **Community challenges** (collective, site-wide goals) follow the Badge Art Reveal shape — a
+  site-wide banner plus an event page — rather than becoming a hub item.
+
+`/community/` itself still 301s to `/leaderboards/` and that is fine: hubs here are nav groupings
+with no landing URL of their own, so nothing needs to live there. The redirect is exact-path and was
+set for inbound links; `/community/lists/` is unaffected. It also cannot be repointed — a permanent
+redirect that has been live since 2026-08 is cached in browsers indefinitely.
+
+### The mobile trade
+
+The tab bar holds four, and five does not fit: items are `flex: 1` at `0.62rem`, so a fifth takes
+each from ~93px to ~75px at 375px, and "Leaderboards" alone runs ~68-72px before padding. So
+**Support Us leaves the tab bar for the avatar dropdown** (its own labelled entry near the top,
+marked active when `hub_section == 'support'`) and Community takes the slot. Every size from `md`
+shows all five.
+
+Support Us is the right one to demote by frequency: a storefront, a roadmap, a fundraiser page and a
+membership manager are occasional visits, where lists and challenges are habitual. The cost is that
+no tab highlights while you are in Support Us — accepted knowingly, and smaller than it sounds,
+because that hub carries its own sub-nav rail showing which of its four pages you are on. The tab bar
+echo is redundant orientation there, not the only signal.
+
+### "Support Us", not "Support"
+
+Renamed 2026-09. "Support" alone reads as a help desk on most of the web, and this is the one place a
+confused reader would look for one. Naming the ask is also the more earnest form, which is the site's
+voice. It resolves a small existing oddity too: the hub and its first item were both called Support,
+so the rail read "Support → Support".
+
+> **Open, small:** that first item — the tier storefront — probably wants a truer name now that it
+> sits under "Support Us" beside "My Membership". Something like *Tiers* or *Ways to Help*.
+
+> **Community was retired (2026-08) and returned (2026-09).** It was retired not because community
+> failed but because everything in it had gone somewhere else: Challenges retired, Reviews archived,
+> Lists hidden pending a revamp, Profiles moved to Browse, Rate My Games to My Pursuit → Tools (it
+> makes community DATA, but the act is personal and login-only), and Leaderboards promoted to a hub of
+> their own. What remained was a landing page with nothing of its own to land on.
+>
+> It came back when Game Lists was rebuilt and Challenges was scoped with a public browser, a
+> nearest-completion board and a Hall of Fame — i.e. when there was user-generated content again. See
+> **[Community (returned 2026-09)](#community-returned-2026-09)** below for the hub and the amended
+> principle behind it. The question this note used to leave open — "if Lists, Reviews or the Pursuit
+> Feed come back, they need a home" — is answered for Lists and Challenges. **Reviews and the Pursuit
+> Feed are still open**, though the same provenance rule would put both here.
 
 ## The personal hub (My Pursuit)
 
