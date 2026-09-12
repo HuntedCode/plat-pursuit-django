@@ -202,13 +202,17 @@ While the mode is on, the grid changes state in three ways, and each is doing a 
 - **The hover goes quiet.** `.pp-gcard:hover` lifts the art, glows the border and recolours the
   title — an invitation to click, which is wrong while dragging, and it fires on every card the
   pointer crosses during a single drag, so the whole grid flickers.
-- **The cards wobble** (±0.55°, phase varied per card). The reference is a phone home screen in edit
-  mode, and it earns its place: it says *these are loose* about every card at once, which is what
-  lets the gesture go unexplained. Transform-only on the wrapper, so it stays compositor work and
-  leaves `.pp-gcard`'s own transform free. The dragged card holds still — a rotating drop target
-  makes the swap threshold feel unpredictable.
-- **Reduced motion gets a standing accent border instead.** Dropping the animation and stopping there
-  would make the state signal something only some readers receive.
+- **The grid recesses into a tray and the cards lift off it.** Loose objects resting on a surface are
+  things you can pick up, which is the whole message, and it holds that message without repeating
+  it. Both halves are load-bearing: the recess is what the cards read as raised *relative to*, and
+  the elevation is what makes them read as pick-up-able rather than merely selected — an accent
+  border alone says "selected", which is a different idea. The dragged card lifts further still.
+
+  This was a continuous ±0.55° wobble first (the phone-home-screen idiom), and it worked, but a grid
+  of up to 200 cards moving forever is a lot to impose to convey one bit of state, and it keeps
+  asking for attention long after it has been understood. Cut 2026-09.
+- **It arrives as a transition, not an animation** — one moment of change, then stillness. Reduced
+  motion skips the 200ms of easing and lands on the identical end state, so nobody loses the signal.
 
 Three implementation facts that are not free choices:
 

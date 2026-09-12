@@ -548,61 +548,48 @@
     user-select: none;
 }
 
-/* ── The tell ────────────────────────────────────────────────────────────────────────────────────
+/* ── The tell ────────────────────────────────────────────────────────────────
  *
- * A small, continuous wobble, and the reference is the one everybody already knows: a phone home
- * screen in edit mode. It is doing a specific job rather than being decoration -- it says "these are
- * loose" about every card at once, which is a thing no cursor and no single highlighted control can
- * say, and it is why the gesture needs no instructions.
+ * DEPTH, NOT MOTION. This was a continuous wobble -- the phone-home-screen idiom -- and it worked,
+ * but a grid of up to 200 cards moving forever is a lot to impose to communicate one bit of state,
+ * and it keeps asking for attention long after it has been understood. Owner's call to drop it.
  *
- * THE RESTRAINT IS IN THE AMPLITUDE. iOS rotates about a degree; more than that reads as a novelty
- * and gets tiring within seconds on a grid this dense. 0.55deg is enough to register as motion
- * without any card becoming hard to look at.
+ * The replacement says the same thing structurally: the grid becomes a recessed TRAY and the cards
+ * LIFT OFF IT. Loose objects resting on a surface are things you can pick up -- which is the whole
+ * message -- and unlike the wobble it holds that message without repeating it, reads identically to
+ * somebody who has reduced motion turned on, and costs nothing per frame.
  *
- * PHASE IS VARIED PER CARD. Identical timing makes a grid pulse in lockstep, which reads as one
- * animated SHEET rather than as a lot of loose objects -- the opposite of the message. Three buckets
- * of duration and delay is enough to break the pattern; the eye stops finding the repeat.
- *
- * TRANSFORM ONLY, on the wrapper rather than the card. Rotation is compositor-work, so a full grid
- * stays cheap, and keeping it off `.pp-gcard` leaves that element's own `transition: transform` free
- * for the press and hover states it already owns.
+ * It arrives as a TRANSITION rather than an animation: a state the grid moves into over ~200ms and
+ * then stays in. There is one moment of change, which is what makes it noticeable, and no loop.
  */
-@media (prefers-reduced-motion: no-preference) {
-    @keyframes glLoose {
-        0%   { transform: rotate(-0.55deg); }
-        50%  { transform: rotate(0.55deg); }
-        100% { transform: rotate(-0.55deg); }
-    }
-    #gl-items-panel[data-positioning] .gl-item {
-        animation: glLoose 1.05s ease-in-out infinite;
-        transform-origin: 50% 50%;
-    }
-    #gl-items-panel[data-positioning] .gl-item:nth-child(3n + 2) {
-        animation-duration: 1.22s;
-        animation-delay: -0.35s;
-    }
-    #gl-items-panel[data-positioning] .gl-item:nth-child(3n) {
-        animation-duration: 0.94s;
-        animation-delay: -0.62s;
-    }
-    /* The card being dragged holds still. It is under the cursor and already lifted, and a wobbling
-       one is much harder to place accurately -- SortableJS moves the FALLBACK clone, and a rotating
-       drop target makes the 65% swap threshold feel unpredictable. */
-    #gl-items-panel[data-positioning] .gl-item.sortable-ghost,
-    #gl-items-panel[data-positioning] .gl-item.sortable-chosen,
-    #gl-items-panel[data-positioning] .gl-item.sortable-fallback { animation: none; }
+#gl-items {
+    /* Declared unconditionally so entering the mode has something to transition FROM. On a shorthand
+       that is only set in the active state, the first paint jumps. */
+    border-radius: 14px;
+    transition: background 0.2s ease, box-shadow 0.2s ease, padding 0.2s ease;
+}
+#gl-items-panel[data-positioning] #gl-items {
+    padding: 12px;
+    /* Tinted with the accent rather than merely darkened: it is the same language the position bar
+       above it speaks, so the two read as one mode rather than as two unrelated highlights. */
+    background: color-mix(in oklab, var(--pp-primary) 5%, var(--pp-bg-0));
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45),
+                inset 0 0 0 1px color-mix(in oklab, var(--pp-primary) 18%, transparent);
 }
 
-/* REDUCED MOTION GETS THE SAME INFORMATION, WITHOUT THE MOTION. Dropping the animation and stopping
-   there would leave those readers with no sign at all that the grid had changed state -- the tell
-   would be an accessibility feature only some people get. A standing accent edge on every card says
-   the same thing statically. */
+/* The cards come UP off that surface. `.pp-gcard` already transitions border-color and box-shadow
+   for its hover state, so this inherits the easing it was tuned with. The shadow is the load-bearing
+   half -- the accent border alone reads as "selected", which is a different and wrong idea. */
+#gl-items-panel[data-positioning] .gl-item .pp-gcard {
+    border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 10px 22px -8px rgba(0, 0, 0, 0.55);
+}
+
 @media (prefers-reduced-motion: reduce) {
-    #gl-items-panel[data-positioning] .pp-gcard {
-        border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
-    }
+    /* The END STATE is identical, so nobody loses the signal -- only the 200ms of easing into it. */
+    #gl-items { transition: none; }
 }
-
 
 /* SortableJS states. `forceFallback: true` is set in DragReorderManager, so the thing under the
    cursor is `.sortable-fallback` (a clone on <body>) and `.sortable-ghost` is the gap left behind --
@@ -610,14 +597,23 @@
 .gl-item.sortable-ghost {
     opacity: 0.45;
 }
+/* The gap reads as an EMPTY SLOT in the tray, not as a faded card: the elevation the mode gives
+   every card is taken back off this one, so the hole looks like the hole. */
 .gl-item.sortable-ghost .pp-gcard {
     outline: 2px dashed color-mix(in oklab, var(--pp-primary) 60%, transparent);
     outline-offset: -2px;
+    box-shadow: none;
+    background: transparent;
 }
 .gl-item.sortable-fallback {
-    /* Lifted, not enlarged. A scale here fights the grid it is being dropped back into. */
-    box-shadow: 0 18px 38px -12px rgb(0 0 0 / 0.55);
     cursor: grabbing;
+}
+/* The one under the cursor lifts FURTHER than the resting elevation, so the thing being moved is
+   unmistakably distinct from the ones it is moving past. Lifted, not enlarged: a scale here fights
+   the grid it is being dropped back into. */
+.gl-item.sortable-fallback .pp-gcard {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 22px 46px -12px rgba(0, 0, 0, 0.65);
 }
 .gl-item.sortable-fallback .gl-item__grab,
 .gl-item.sortable-fallback .gl-item__remove { opacity: 0; }

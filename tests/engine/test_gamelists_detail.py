@@ -649,32 +649,44 @@ def test_arranging_quiets_the_card_hover_and_shows_the_cards_are_loose(client):
     """Hover lifts the art, glows the border and recolours the title -- an invitation to click, which
     is wrong while dragging, and it fires on every card the pointer crosses mid-drag.
 
-    The idle wobble is the counterpart: it says "these are loose" about every card at once, which is
-    what makes the gesture need no instructions.
+    The counterpart says "these are loose" about every card at once, which is what lets the gesture
+    go unexplained. It was a wobble and is now DEPTH: the grid recesses into a tray and the cards
+    lift off it. Same message, held rather than repeated, and identical for a reader with reduced
+    motion turned on.
     """
     css = _read('static/css/components/gamelists.css')
 
-    mode = css[css.index('POSITION-EDITING MODE'):]
+    # BOUNDED at both ends. Slicing to end-of-file swept in every later rule in the stylesheet,
+    # including an unrelated publish animation, so an assertion about this section was really an
+    # assertion about the rest of the file.
+    mode_start = css.index('POSITION-EDITING MODE')
+    mode = css[mode_start:css.index('/* SortableJS states.', mode_start)]
     for suppressed in ('.pp-gcard:hover .pp-gcard__art { transform: none; }',
                        '.pp-gcard:active { transform: none; }'):
         assert suppressed in mode, f'hover is still live while arranging: {suppressed}'
 
-    assert '@keyframes glLoose' in css
-    # Varied phase, or the grid pulses in lockstep and reads as one animated sheet.
-    assert 'nth-child(3n + 2)' in mode and 'nth-child(3n)' in mode
+    # THE TELL IS DEPTH, NOT MOTION. This asserted a continuous wobble until the owner cut it: a grid
+    # of up to 200 cards moving forever is a lot to impose to convey one bit of state, and it keeps
+    # asking for attention long after it has been understood.
+    assert 'glLoose' not in css, 'the wobble was removed; nothing should reintroduce it'
+    # Against the CODE, not the prose. The first version of this line matched the comment that
+    # explains why there is no animation -- a comment is a claim, and here it made a true assertion
+    # fail. The same slip in the other direction is how a guard passes while checking nothing.
+    assert 'animation:' not in _decommented(mode), 'the mode signal must not be an animation'
 
-    # The dragged card holds still: a rotating drop target makes the swap threshold feel random.
-    assert '.gl-item.sortable-fallback { animation: none; }' in mode
+    # The grid becomes a tray and the cards lift off it. BOTH halves: the recess is what the cards
+    # read as loose ON, and the elevation is what makes them read as pick-up-able rather than merely
+    # selected -- an accent border on its own says "selected", which is a different idea.
+    assert '#gl-items-panel[data-positioning] #gl-items {' in mode
+    assert 'inset 0 1px 3px' in mode, 'the tray has no recess, so nothing is raised relative to it'
+    assert '#gl-items-panel[data-positioning] .gl-item .pp-gcard {' in mode
+    lifted = mode[mode.index('#gl-items-panel[data-positioning] .gl-item .pp-gcard {'):]
+    assert 'box-shadow' in lifted[:400], 'the cards carry no elevation, only a border'
 
-    # Reduced motion still gets a state signal, or the tell is a feature only some readers receive.
-    # Anchored on text unique to THAT block: this file holds several `prefers-reduced-motion: reduce`
-    # rules and a bare search found the grip's one, several hundred lines away.
-    reduced = css[css.index('REDUCED MOTION GETS THE SAME INFORMATION'):]
-    assert '--pp-primary' in reduced[:500], 'reduced motion is given no sign the mode is on'
-
-    # And it must survive the build -- lightningcss silently drops keyframes it cannot parse, which
-    # is why no `color-mix()` appears inside the block above.
-    assert 'glLoose' in _read('staticfiles/css/output.css')
+    # It arrives as a transition, so there is one moment of change and no loop -- and the END state is
+    # identical under reduced motion, or the signal would be a feature only some readers receive.
+    assert 'transition: background 0.2s ease, box-shadow 0.2s ease' in mode
+    assert '#gl-items { transition: none; }' in mode
 
 
 def test_saving_a_type_change_refreshes_in_place_instead_of_reloading(client):
