@@ -158,11 +158,38 @@ gated on the editor being open — that is the deliberate-entry half — but it 
 it changes, is full-width, and the whole surface changes colour when the mode is on rather than only
 a button label.
 
-Its visibility is computed **client-side from three things**, which is why the template only renders
-it hidden: the server allows reordering here, the editor is open, and *the currently selected type
-radio is still Ranked*. That third one is the reason it cannot be left to `can_reorder` — that is
-computed from the list as STORED, so switching the radio to Collection left the bar offering to
-reorder a list the hunter had just said was a shelf.
+Its visibility is the **server's answer plus one client condition**: `can_reorder` decides whether
+the bar exists at all, and the JS shows it only while the editor is open.
+
+There was briefly a third condition — whether the *selected* type radio was still Ranked — because
+saving a type change meant a full page reload, so between switching the radio and saving, the bar
+would have offered to reorder a list the hunter had just called a shelf. **Saving refreshes the bar's
+slot instead**, so that condition is gone along with the reload, and what is left is more honest: the
+list really is still ranked until the save lands.
+
+### Saving a type change refreshes in place
+
+A type switch changes three server-rendered things, and two of them live **outside** the swapped
+panel: the cards (numerals and grips), which sorts exist, and whether the position bar exists at all.
+That is why this used to reload the page — which lost the hunter's place and made them re-open the
+editor to reach the positions they had just switched the list over to use.
+
+One request now carries all three. The grid is the main swap; `?chrome=1` makes `detail_items.html`
+append **out-of-band** copies of the sort `<select>` and the position-bar slot.
+
+Two details worth keeping:
+
+- It swaps **the `<select>`, not its form**. The form carries the htmx attributes and the `change`
+  listener `browse-filters.js` binds to it; replacing it would silently unbind the sort auto-submit
+  until the next full page load. A `change` event bubbles, so swapping only the options is safe.
+- The bar is wrapped in a **slot that always exists** (`#gl-positions-slot`), empty when the list is a
+  Collection. htmx matches out-of-band content by id against an element already in the document, and
+  going Collection → Ranked would otherwise have no bar to match.
+
+The refresh deliberately drops `?sort`: the new type has its own default, and a freshly-ranked list
+that opened on A-Z would hide the ordering the switch was made for. The address bar is cleaned to
+match. The editor stays open **only** for a type change — after a plain rename, closing it is the
+natural "done", since the heading behind it has already updated.
 
 Three implementation facts that are not free choices:
 

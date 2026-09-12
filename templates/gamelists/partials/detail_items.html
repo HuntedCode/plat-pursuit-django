@@ -75,6 +75,11 @@ blank.
             an opaque plate in the accent with dark text reads the same over all of them, which is
             what "easy to read" has to mean when the background is arbitrary.
 
+            `position|add:1` because `position` is 0-indexed and dense -- a hunter reading a ranked
+            list counts from 1. Dense is what makes this honest: a gap would print a rank nobody
+            holds. Shown on EVERY sort, not only `rank`, because "Elden Ring, #3 on this list" is a
+            fact about the entry rather than about the current view.
+
             `aria-hidden` because the link's own label already carries the rank -- see the anchor
             above, and note an `aria-label` REPLACES the name computed from descendants, so the
             spoken rank has to live there rather than here.{% endcomment %}
@@ -83,22 +88,10 @@ blank.
         </div>
 
         <div class="pp-gcard__body">
-            {% comment %}THE RANK SITS IN THE TEXT STRIP, NOT ON THE ART.
-
-            A corner badge over the cover is the obvious place for it and is what most ranked grids
-            do, but these cards were moved off the overlay tile days ago precisely so that nothing
-            sits on top of the cover: the art IS the content here, you scan the grid by it, and the
-            whole point of separating the text strip was to stop protecting one by damaging the
-            other. Putting a numeral back over the corner would walk that straight back for the one
-            list type that most invites a big number.
-
-            `position|add:1` because `position` is 0-indexed and dense -- a hunter reading a ranked
-            list counts from 1. Dense is what makes this honest: a gap would print a rank nobody
-            holds. It is shown on EVERY sort, not only `rank`, because "Elden Ring, #3 on this list"
-            is a fact about the entry rather than about the current view -- which is also what makes
-            re-sorting a ranked list useful instead of destructive.{% endcomment %}
             {% comment %}The title is the same on both types now that the rank moved onto the cover,
-            so there is no branch here any more.{% endcomment %}
+            so there is no branch here any more. (A long comment arguing the rank belonged in THIS
+            strip rather than on the art survived here for one commit after the rank moved, still
+            making its case beside markup that no longer did what it described.){% endcomment %}
             <h3 class="pp-gcard__title">{{ item.concept.unified_title }}</h3>
             {% if item.note %}
             {% comment %}`pr-1` because the note is italic inside a line-clamp, and italic glyphs
@@ -185,4 +178,17 @@ sentence quoting a stale count next to a header tally that had just been updated
     Reordering needs the whole list on screen, so it is unavailable here.
     {% endif %}
 </p>
+{% endif %}
+
+{% if request.GET.chrome %}
+{% comment %}OUT-OF-BAND CHROME, sent only when the caller asks for it (`?chrome=1`).
+
+A type switch changes three server-rendered things: the cards (numerals and grips, in the swap
+above), which sorts exist, and whether the position bar exists at all. Those last two live OUTSIDE
+`#gl-items-panel`, so before this they could only be refreshed by reloading the whole page.
+
+Sent on the type-change save alone, not on the sort swap or the add/remove refresh -- those change
+none of it, and re-sending the select mid-sort would replace the control the hunter just used.{% endcomment %}
+{% include 'gamelists/partials/detail_positions.html' with oob=True %}
+{% if items %}{% include 'gamelists/partials/detail_sort_select.html' with oob=True %}{% endif %}
 {% endif %}

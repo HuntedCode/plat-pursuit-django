@@ -602,34 +602,80 @@ def test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor(client)
         'closing the editor must end the mode it started'
 
 
-def test_the_bar_disappears_when_the_type_is_switched_away_from_ranked(client):
-    """The bug: switching the radio to Collection left "Edit list positions" sitting there.
+def test_saving_a_type_change_refreshes_in_place_instead_of_reloading(client):
+    """A type switch changes three server-rendered things -- the cards, which sorts exist, and whether
+    the position bar exists at all -- and the last two live OUTSIDE the swapped panel. That is why it
+    used to reload the whole page, which lost the hunter's place and made them re-open the editor to
+    reach the positions they had just switched the list over to use.
 
-    `can_reorder` is computed from the list as STORED, so a radio change -- which is client-side until
-    Save -- could not reach it. Nothing would have broken (the write still goes to a ranked row until
-    they save), but the page contradicted the choice just made, which reads as the form not working.
-
-    Three sources feed the decision, and all three have to be consulted client-side.
+    One request carries all three now: the grid as the main swap, the other two out-of-band.
     """
     js = _decommented(_read('static/js/list-detail.js'))
 
-    vis = js[js.index('function syncPositionsVisibility() {'):js.index('function selectedTypeIsRanked(')]
-    assert 'editorOpen' in vis, 'the bar is gated on the editor being open'
-    assert 'selectedTypeIsRanked()' in vis, 'the bar must follow the SELECTED type, not the stored one'
-    assert "hasAttribute('data-gl-reorder')" in vis, 'and on the server still allowing it'
-    assert 'block.hidden = !show' in vis
-    assert 'exitPositioning(true)' in vis, 'hiding the bar must also leave the mode'
+    # Scoped to the SAVE path. A blanket search was wrong: `onAfterSwap` reloads on purpose when the
+    # sort toolbar crosses the exists/does-not-exist boundary, which is a different, rarer case.
+    save_handler = js[js.index("form.addEventListener('submit'"):js.index('function wireVisibility(')]
+    assert 'window.location.reload()' not in save_handler, 'a save must not reload the page'
+    assert 'refreshAfterTypeChange()' in save_handler
+    # Code landmarks at BOTH ends, searched FORWARD. Comments are gone (`_decommented`) and several
+    # function names in this file are defined above the one being sliced, so a bare `.index()` for
+    # either end silently returns the wrong offset or raises.
+    refresh_start = js.index('function refreshAfterTypeChange() {')
+    refresh = js[refresh_start:js.index('var TOGGLES', refresh_start)]
+    assert "'?chrome=1'" in refresh or "+ '?chrome=1'" in refresh, 'the refresh must ask for the chrome'
+    assert "target: '#gl-items-panel'" in refresh
+    # No `sort` carried across: the new type has its own default, and a freshly-ranked list that
+    # opened on A-Z would hide the very ordering the switch was made to use.
+    assert 'sort' not in refresh.split('htmx.ajax')[1].split(')')[0]
+    assert 'replaceState' in refresh, 'the address bar must not keep a sort that no longer applies'
 
-    # The radio has to actually fire it. Without a listener the function is correct and never called.
-    assert "e.target.name === 'list_type'" in js, 'nothing re-syncs the bar when the type changes'
 
-    # And the fallback reads the STORED type, for the pages that render no form at all.
-    # Sliced FORWARD again: `function attachDrag(` is DEFINED above this one, so searching from 0
-    # returns an earlier index and the slice comes back empty. Third time on this file.
-    picker_start = js.index('function selectedTypeIsRanked(')
-    picker = js[picker_start:js.index('    }', js.index('root.dataset.listType', picker_start))]
-    assert "checked.value === 'ranked'" in picker
-    assert "root.dataset.listType === 'ranked'" in picker
+def test_the_type_change_refresh_carries_the_chrome_the_swap_cannot_reach(client):
+    """The out-of-band half, asserted against the rendered response rather than the template source.
+
+    Both fragments must be addressed to ids that EXIST on the page, or htmx drops them silently: the
+    sort `<select>` (not its form -- replacing the form would unbind the auto-submit that
+    `browse-filters.js` attaches to it) and a position-bar SLOT that is present even when the bar is
+    not, since going Collection -> Ranked has no bar to match against.
+    """
+    owner = _staff(client)
+    ranked = _ranked(owner, 3)
+
+    page = client.get(_url(ranked)).content.decode()
+    assert 'id="gl-sort-select"' in page
+    assert 'id="gl-positions-slot"' in page
+
+    fragment = client.get(_url(ranked), {'chrome': '1'},
+                          HTTP_X_REQUESTED_WITH='XMLHttpRequest').content.decode()
+    # PER TAG, not "the attribute appears somewhere". A single `hx-swap-oob in fragment` passed with
+    # the flag stripped from the select, because the positions slot still carried one -- one
+    # assertion standing in for two things, which is how half a feature ships green.
+    for tag_id in ('gl-sort-select', 'gl-positions-slot'):
+        opening = fragment[fragment.index(f'id="{tag_id}"'):]
+        opening = opening[:opening.index('>')]
+        assert 'hx-swap-oob="true"' in opening, f'{tag_id} is sent without its out-of-band flag'
+    # The FORM must not travel with it.
+    assert 'data-browse-form' not in fragment, \
+        'replacing the form would unbind the sort auto-submit until the next full load'
+
+    # And a Collection sends an EMPTY slot, which is how the bar disappears on save.
+    plain = _list(owner, 3)
+    collection_fragment = client.get(_url(plain), {'chrome': '1'},
+                                     HTTP_X_REQUESTED_WITH='XMLHttpRequest').content.decode()
+    assert 'id="gl-positions-slot"' in collection_fragment
+    assert 'data-gl-positions-toggle' not in collection_fragment
+
+
+def test_the_ordinary_refresh_does_not_resend_the_chrome(client):
+    """Add, remove and sort all re-render the grid and change none of it. Re-sending the `<select>`
+    on a sort swap would replace the control the hunter just used, mid-interaction."""
+    owner = _staff(client)
+    ranked = _ranked(owner, 3)
+
+    fragment = client.get(_url(ranked), HTTP_X_REQUESTED_WITH='XMLHttpRequest').content.decode()
+
+    assert 'hx-swap-oob' not in fragment
+    assert 'id="gl-sort-select"' not in fragment
 
 
 def test_the_bar_starts_hidden_and_is_never_offered_to_a_visitor(client):
@@ -662,8 +708,9 @@ def test_the_save_indicator_reports_both_outcomes(client):
     # The visible pill is kept OUT of the accessibility tree, because the spoken half goes through
     # `announce()` once per action -- a live region here would narrate "Saving" then "Saved" on top
     # of every move.
-    detail = _read('templates/gamelists/detail.html')
-    status_tag = detail[detail.index('data-gl-positions-status'):]
+    # The bar lives in its own partial now, because a type change swaps it out-of-band.
+    bar = _read('templates/gamelists/partials/detail_positions.html')
+    status_tag = bar[bar.index('data-gl-positions-status'):]
     assert 'aria-hidden="true"' in status_tag[:200]
 
 

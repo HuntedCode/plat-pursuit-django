@@ -236,6 +236,33 @@
             });
     }
 
+    /**
+      * Re-render everything a type switch changed, in one request, without leaving the page.
+      *
+      * `?chrome=1` asks the items partial to append out-of-band copies of the sort <select> and the
+      * position-bar slot. The main swap replaces the grid; htmx routes the OOB fragments to their own
+      * ids elsewhere in the document. One round trip, and the server stays the only thing that
+      * decides what a ranked list looks like.
+      *
+      * NO `sort` PARAMETER, deliberately: the new type has its own default (Ranked opens on "List
+      * order"), and carrying the old one across would land a freshly-ranked list on A-Z. The address
+      * bar is cleaned to match, so a reload does not resurrect a sort that no longer applies.
+      */
+     function refreshAfterTypeChange() {
+        var path = window.location.pathname;
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState({}, '', path);
+        }
+        return window.htmx.ajax('GET', path + '?chrome=1',
+                                { target: '#gl-items-panel', swap: 'innerHTML' })
+            .catch(function (err) {
+                // The row is already saved -- only the view is stale -- so say what is true and let
+                // them decide, rather than reloading out from under an open editor.
+                logFailure('chrome refresh after a type change', err);
+                announce('Saved. Reload the page to see the change.');
+            });
+    }
+
     /* ------------------------------------------------------------------ social ---- */
 
     // Like and follow are the same control with different words, so they are the same code with a
@@ -666,19 +693,10 @@
             var current = form.querySelector('[name="list_type"][value="'
                                              + (root.dataset.listType || '') + '"]');
             if (current) { current.checked = true; }
-            // ...and the bar follows it back, or cancelling a switch to Collection leaves the offer
-            // to reorder hidden on a list that is still ranked.
-            syncPositionsVisibility();
             [nameField, descField].forEach(function (el) {
                 el.dispatchEvent(new Event('input', { bubbles: true }));   // resync the counters
             });
         }
-
-        // The bar follows the SELECTED type, not the stored one: picking Collection must take the
-        // offer to reorder away immediately, or the page contradicts the choice just made.
-        form.addEventListener('change', function (e) {
-            if (e.target && e.target.name === 'list_type') { syncPositionsVisibility(); }
-        });
 
         var opener = root.querySelector('[data-gl-edit-open]');
         if (opener) { opener.addEventListener('click', open); }
@@ -763,10 +781,23 @@
                     announce(data.name !== previousName
                              ? 'List renamed to ' + data.name + '.'
                              : 'List details saved.');
-                    close();
-                    // AFTER the announcement and the close, so a screen reader has the message and
-                    // the page is in a settled state if the reload is slow.
-                    if (typeChanged) { window.location.reload(); }
+                    // A TYPE CHANGE REFRESHES THE LIST IN PLACE AND LEAVES THE EDITOR OPEN.
+                    //
+                    // It used to reload the whole page, because the type decides three things the
+                    // server renders and the client should not assemble: the cards, the sorts on
+                    // offer, and whether the position bar exists. The refresh below carries all
+                    // three (the last two out-of-band), so the reload bought nothing except losing
+                    // the hunter's place and making them re-open the panel to reach the positions
+                    // they had just switched the list over to use.
+                    //
+                    // The editor stays open ONLY here. After a plain rename, closing it is the
+                    // natural "done" -- the heading behind it has already updated and there is
+                    // nothing further to do. After a type change there usually is.
+                    if (typeChanged) {
+                        refreshAfterTypeChange();
+                    } else {
+                        close();
+                    }
                 })
                 .catch(function (err) { toastError(err, 'Those changes could not be saved.'); })
                 .finally(function () { if (save) { save.dataset.busy = ''; } });
@@ -908,6 +939,10 @@
     function onAfterSettle(e) {
         var target = (e.detail && e.detail.target) || e.target;
         if (!target || target.id !== 'gl-items-panel') { return; }
+        // The position slot may have been replaced out-of-band by the same response, so the toggle
+        // is a new node with no listener. `wirePositioning` is WeakSet-guarded on that node, so this
+        // is a no-op when nothing was swapped.
+        wirePositioning();
         syncPositioning();
     }
 
@@ -1081,17 +1116,13 @@
      *    real sequence, whole list rendered.
      * 2. The editor is open. That is the deliberate-entry half; without it the handles are live on a
      *    page nobody said they were editing, which is what made dragging feel accidental.
-     * 3. The type radio currently SELECTED is still the ranked one.
      *
-     * The third is why this cannot be left to the template. `can_reorder` is computed from the list
-     * as STORED, so switching the radio to Collection changed nothing server-side and the bar sat
-     * there offering to reorder a list the hunter had just said was a shelf. Nothing would have
-     * broken -- the write still goes to a ranked row until they save -- but the page contradicted
-     * the choice they had just made, which is the kind of thing that reads as the form not working.
-     *
-     * Note the asymmetry, which is deliberate: selecting Ranked on a list that is STORED as a
-     * Collection does not reveal the bar, because there is nothing to reorder yet. The grid has no
-     * grips and no item ids, and saving the type reloads the page, which brings the bar with it.
+     * There WAS a third: whether the type radio currently selected was still the ranked one. It
+     * existed because saving a type change meant a full page reload, so between switching the radio
+     * and saving, the bar would otherwise have offered to reorder a list the hunter had just said
+     * was a shelf. Saving now refreshes the bar's slot from the server instead, so the condition is
+     * gone along with the reload -- and what is left is more honest, because the list really is
+     * still ranked until the save lands.
      */
     function syncPositionsVisibility() {
         var block = document.querySelector('[data-gl-positions]');
@@ -1099,19 +1130,10 @@
 
         var grid = document.getElementById('gl-items');
         var allowed = !!(grid && grid.hasAttribute('data-gl-reorder'));
-        var show = allowed && editorOpen && selectedTypeIsRanked();
+        var show = allowed && editorOpen;
 
         block.hidden = !show;
         if (!show) { exitPositioning(true); }
-    }
-
-    // The radio if the editor rendered one, else the stored type. A visitor and a non-owner have no
-    // form at all, and neither has anything to fall back FROM.
-    function selectedTypeIsRanked() {
-        var checked = document.querySelector('[data-gl-identity-edit] [name="list_type"]:checked');
-        if (checked) { return checked.value === 'ranked'; }
-        var root = document.querySelector('[data-gl-identity]');
-        return !!root && root.dataset.listType === 'ranked';
     }
 
     //: Arrow keys move an entry one place through the ORDER, which is the axis a ranked list is

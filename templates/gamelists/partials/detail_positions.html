@@ -1,0 +1,45 @@
+{% comment %}The position bar, in a SLOT that always exists.
+
+The bar itself appears and disappears with the list's type, so it cannot be its own out-of-band
+target: htmx matches OOB content by id against an element already in the document, and going from
+Collection to Ranked means the bar is not there to match. The empty slot is always there, so the swap
+always lands.
+
+VISIBILITY IS THE SERVER'S ANSWER NOW. An earlier version computed it in JS from the currently
+SELECTED type radio, because saving a type change meant a full page reload and the bar would
+otherwise have sat there offering to reorder a list the hunter had just said was a shelf. Saving now
+refreshes this slot instead, so the bar simply reflects what the list IS -- which is also more honest
+while the radio is changed but unsaved, since the list really is still ranked until you save.
+
+The JS still hides it while the editor is closed. That is the deliberate-entry half: the handles used
+to be live whenever a ranked list was viewed by its owner, which made rearranging something you could
+do by accident.{% endcomment %}
+<div id="gl-positions-slot"{% if oob %} hx-swap-oob="true"{% endif %}>
+{% if can_reorder %}
+    {% comment %}Directly above the grid, not in the edit panel where it started: the one control the
+    Ranked type exists for was the quietest thing on the page, behind a scroll past the name and
+    description. Full width, solid CTA, and the BAR carries the mode state rather than only the
+    button label.
+
+    Outside the identity <form> on purpose -- it is not part of that form's save cycle, and the hint
+    says so, because Cancel undoes a rename and cannot undo a move that was already written.{% endcomment %}
+    <div class="gl-positions" data-gl-positions hidden>
+        <div class="gl-positions__row">
+            <button type="button" class="pp-cta gl-positions__btn"
+                    data-gl-positions-toggle aria-pressed="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 8 2-2 2 2"/><path d="m3 16 2 2 2-2"/>
+                </svg>
+                <span data-gl-positions-label>Edit list positions</span>
+            </button>
+            <p class="gl-positions__hint" data-gl-positions-hint>
+                Then drag a card, or use the arrow keys on its grip.
+            </p>
+            {% comment %}`aria-hidden`: this is the SIGHTED signal. The spoken one goes through the
+            page's existing status region, which says what happened once rather than narrating every
+            state change twice.{% endcomment %}
+            <span class="gl-positions__status" data-gl-positions-status aria-hidden="true" hidden></span>
+        </div>
+    </div>
+{% endif %}
+</div>
