@@ -4,11 +4,11 @@
 > Browse / Community / My Pursuit with a separate Dashboard). The four-part IA build: personal-hub
 > unify, the Support hub, ownership-aware profile chrome, and the mobile collapse-to-grid strip.
 
-## The 4 hubs
+## The hubs
 
-The IA is four top-level hubs, reached from the global navbar (and the mobile bottom tab bar). Each
-owns a family of pages; a sticky sub-nav strip below the navbar surfaces that hub's pages,
-URL-matched.
+The IA is **four** top-level hubs today, reached from the global navbar (and the mobile bottom tab
+bar), with a **fifth decided and not yet built** (Community, below). Each owns a family of pages; a
+sticky sub-nav strip below the navbar surfaces that hub's pages, URL-matched.
 
 | Hub | Landing | Owns | Mental mode |
 |-----|---------|------|-------------|
@@ -27,8 +27,8 @@ URL-matched.
 > reached by its own navbar entry; a one-pill rail naming the page you are on is not navigation. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | **Leaderboards** | `/leaderboards/` | how everyone ranks (PSN-derived) | "where do I stand" |
-| **Community** | `/community/`, `/hunters/` | hunters, and what they make: lists, challenges, the Hall of Fame | "what is everyone doing" |
-| **Support Us** | `/support/` | the membership storefront (live) + `/support/roadmap/` (live) + `/support/membership/` (live) + the coming fundraiser sub-page | "ways to support us" |
+| **Community** *(decided, not built)* | `/community/`, `/hunters/` | hunters, and what they make: lists, challenges, the Hall of Fame | "what is everyone doing" |
+| **Support** *(to be relabelled "Support Us")* | `/support/` | the membership storefront + `/support/roadmap/` + `/support/membership/` + `/support/fundraiser/` (all live) | "ways to support us" |
 
 **Above the hubs: the lobby (`/`).** Where every login lands (`LOGIN_REDIRECT_URL`), and the one page
 that belongs to NO hub — so it renders no sub-nav strip, because on a lobby the CTAs *are* the navigation
@@ -41,7 +41,7 @@ curated GLANCE that teases and links into a page, never the page's content embed
 used to be the personal hub's first tab, was narrowed into this in 2026-08.
 
 **Organizing principle — "login-gated + mine."** A surface belongs to My Pursuit if it's personal
-AND login-gated. Browse = find; Leaderboards = standings; Support Us = ways to support.
+AND login-gated. Browse = find; Leaderboards = standings; Support = ways to support.
 Gamification expands My Pursuit's strip; it does not earn its own hub.
 
 **The "resist a 5th hub" rule was amended in 2026-09, deliberately and narrowly.** It used to end
@@ -60,41 +60,59 @@ down somebody's list is categorically unlike delisting a game. **So the fifth hu
 different rule set, not a different intent**, and the default stands for everything else: a surface
 that is merely *new* still has to fit one of the four.
 
-## Community (returned 2026-09)
+## Community (decided 2026-09, NOT YET BUILT)
+
+> **Nothing in this section is in the code yet.** `HUB_SUBNAV_CONFIG` holds four hubs, the
+> mobile tab bar holds four tabs, and `test_lists_hidden.py` actively asserts that no hub carries
+> a `lists` slug. This records a DECISION and its reasoning; the implementation ships with the
+> Game Lists un-hide, because `HubSubnavItem` has no staff gate and a Game Lists entry added
+> earlier would show every visitor a link that 302s them. The concrete change list lives in
+> [game-lists.md](../features/game-lists.md#turning-it-on).
 
 | | |
 |---|---|
-| Holds | Hunters, Game Lists, Challenges, Hall of Fame / community stats |
+| Will hold | Hunters, Game Lists, Challenges, Hall of Fame / community stats |
 | Prefixes | `/community/`, `/hunters/` |
 | Question it answers | "what is everyone making and doing" |
 
-**Hunters moved back from Browse.** It went there in 2026-08 only because this hub was retired
+**Hunters moves back from Browse.** It went there in 2026-08 only because this hub was retired
 ("hunters are another thing you browse"), and while a profile is mostly PSN data, you look for a
 community member where the community is. It keeps `/hunters/` — a sub-nav move, not a URL move.
 
 **What did NOT move, and why the line holds:**
 
-- **My Lists and My Challenges stay in My Pursuit → Tools.** The private side of a public system is
+- **My Lists and My Challenges will stay in My Pursuit → Tools.** The private side of a public system is
   still personal and login-gated, exactly as *Collection* stays in My Pursuit while *Badges* sits in
   Browse. A hub is not a feature's address; it is a mode.
-- **Leaderboards stays raw PSN standings.** Challenge boards and the Hall of Fame go to Community,
-  because what they rank is participation in a PlatPursuit activity rather than a PSN fact.
+- **Leaderboards stays raw PSN standings.** Challenge boards and the Hall of Fame will go to
+  Community, because what they rank is participation in a PlatPursuit activity rather than a PSN
+  fact.
 - **Browse stays the site-owned catalogue**, which is what it was already.
 - **Community challenges** (collective, site-wide goals) follow the Badge Art Reveal shape — a
   site-wide banner plus an event page — rather than becoming a hub item.
 
-`/community/` itself still 301s to `/leaderboards/` and that is fine: hubs here are nav groupings
-with no landing URL of their own, so nothing needs to live there. The redirect is exact-path and was
-set for inbound links; `/community/lists/` is unaffected. It also cannot be repointed — a permanent
-redirect that has been live since 2026-08 is cached in browsers indefinitely.
+`/community/` itself 301s to `/leaderboards/` and will keep doing so. That is fine because THIS
+hub needs no landing page — its pages are Hunters, Lists and Challenges, each of which is its own
+address. It is not a general rule: the table above has a **Landing** column for a reason, and
+`/support/` in particular is a real page (`SupportStorefrontView`) that is simultaneously the hub
+root, the hub's first rail item and the mobile tab's target.
+
+The redirect is exact-path and was set for inbound links, so `/community/lists/` is unaffected. It
+also cannot be repointed — a permanent redirect live since 2026-08 is cached in browsers
+indefinitely.
 
 ### The mobile trade
 
-The tab bar holds four, and five does not fit: items are `flex: 1` at `0.62rem`, so a fifth takes
-each from ~93px to ~75px at 375px, and "Leaderboards" alone runs ~68-72px before padding. So
-**Support Us leaves the tab bar for the avatar dropdown** (its own labelled entry near the top,
-marked active when `hub_section == 'support'`) and Community takes the slot. Every size from `md`
-shows all five.
+The tab bar holds four, and five does not fit: items are `flex: 1` at `0.62rem`
+(`chrome.css`), so a fifth takes each from ~93px to ~75px at 375px, while "Leaderboards" alone
+runs ~68-72px of text before padding (measured by eye, not computed — it is close enough to the
+floor to decide the question either way). So **Support leaves the tab bar for the avatar
+dropdown** (its own labelled entry near the top, marked active when `hub_section == 'support'`)
+and Community takes the slot.
+
+The breakpoint is **`lg`, not `md`**: the tab bar is `lg:hidden` and the navbar hub row is
+`hidden lg:flex`, so `md` still gets the four-tab bar and the full set appears only at `lg`.
+(Four tabs, not five, for a signed-out reader — My Pursuit is auth-gated.)
 
 Support Us is the right one to demote by frequency: a storefront, a roadmap, a fundraiser page and a
 membership manager are occasional visits, where lists and challenges are habitual. The cost is that
@@ -104,7 +122,8 @@ echo is redundant orientation there, not the only signal.
 
 ### "Support Us", not "Support"
 
-Renamed 2026-09. "Support" alone reads as a help desk on most of the web, and this is the one place a
+**Decided 2026-09, not yet applied** — `hub_subnav.py` and the tab bar both still say "Support".
+"Support" alone reads as a help desk on most of the web, and this is the one place a
 confused reader would look for one. Naming the ask is also the more earnest form, which is the site's
 voice. It resolves a small existing oddity too: the hub and its first item were both called Support,
 so the rail read "Support → Support".

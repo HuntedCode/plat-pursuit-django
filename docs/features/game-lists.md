@@ -58,7 +58,7 @@ gate.
 | `gamelists/models.py` | The four models, the queryset, the caps and field lengths |
 | `gamelists/services/game_list_service.py` | **Every write.** Rules live here, nowhere else |
 | `gamelists/services/covers.py` | Batched cover resolution for the tile mosaic |
-| `gamelists/views.py` | Three pages + seven JSON endpoints |
+| `gamelists/views.py` | Three pages, seven JSON endpoints, and the create form post |
 | `templates/gamelists/` | `browse.html`, `my_lists.html`, `detail.html` + partials |
 | `static/js/lists-browse.js` | Browse page motion + infinite scroll |
 | `static/js/gamelists.js` | My Lists: the create dialog and the scope switcher |
@@ -82,15 +82,20 @@ Full field-level detail in [data-model.md](../architecture/data-model.md). What 
 
 ### Visibility
 
-`GameListQuerySet` gives one supported read per question, and three of the four ride a partial index
-whose predicate they mirror exactly:
+`GameListQuerySet` gives one supported read per question. **Which of them an index actually serves
+is narrower than it looks**, and the difference is the sort:
 
 | Method | Question | Indexed |
 |---|---|---|
-| `visible()` | not soft-deleted — the floor | ✅ |
-| `public()` | somebody else's list | ✅ |
+| `visible()` | not soft-deleted — the floor | ❌ (no owner, no ordering: nothing to serve) |
+| `public()` | somebody else's list | ⚠️ only when the caller NAMES one of the two browse sorts |
 | `owned_by(profile)` | your lists | ✅ |
 | `readable_by(profile)` | public **or** yours — what a detail page asks | ❌ (its OR spans two columns) |
+
+The three partial indexes are `(owner, -updated_at)` and the two public browse sorts,
+`(-like_count, -created_at)` and `(-created_at)`. `Meta.ordering` is `-updated_at`, which matches
+**neither** public index — so a `.public()` read that leans on the default ordering is a scan, and
+`BrowseListsView` orders explicitly for exactly that reason.
 
 `readable_by()` should stay bounded to one list or a small page. The manager deliberately does **not**
 filter in `get_queryset()`: a default manager that hides soft-deleted rows makes `objects` lie about
@@ -156,8 +161,10 @@ All are POST and JSON except the search, and all are rate-limited per user.
 function are finished, tested work waiting for the Ranked list type. See
 [game-list-types.md](../design/game-list-types.md).
 
-Every endpoint resolves its list through `readable_by()` and answers a uniform **404** — never 403,
-never a service error — so an id alone can never confirm that a list exists or whose it is.
+Every endpoint **that takes a list id** resolves it through `readable_by()` and answers a uniform
+**404** — never 403, never a service error — so an id alone can never confirm that a list exists or
+whose it is. `list_create` is the exception with nothing to resolve: it is a form post that
+redirects with a Django message rather than answering JSON.
 
 ---
 
@@ -200,7 +207,7 @@ never a service error — so an id alone can never confirm that a list exists or
 
 Removing `_DevelopmentGate` is necessary and **not sufficient**. The full switch:
 
-1. Delete the class and its seven mixin references in `gamelists/views.py`.
+1. Delete the class and its **six** mixin references in `gamelists/views.py`.
 2. **Invert `tests/engine/test_lists_hidden.py`** — it pins that anonymous and ordinary hunters are
    refused, that no hub sub-nav or footer links here, and that the sitemap excludes it.
 3. **`core/sitemaps.py::GameListSitemap` is a landmine.** It imports `GameList` from
@@ -211,7 +218,7 @@ Removing `_DevelopmentGate` is necessary and **not sufficient**. The full switch
 5. **`static/robots.txt` has no lists rules**: `/my-lists/` is personal and login-only, the search
    endpoint returns bare JSON, and the write endpoints sit under a crawlable prefix.
 6. **Build the Community hub.** DECIDED 2026-09 — see
-   [ia-and-subnav.md](../architecture/ia-and-subnav.md#community-returned-2026-09). The hub returns
+   [ia-and-subnav.md](../architecture/ia-and-subnav.md#community-decided-2026-09-not-yet-built). The hub returns
    holding Hunters, Game Lists and (later) Challenges and the Hall of Fame, on the rule that
    user-generated content is its own class regardless of intent. **The paths stay** — `/community/lists/`
    becomes correct rather than incoherent, and `/my-lists/` is unchanged.
@@ -226,9 +233,14 @@ Removing `_DevelopmentGate` is necessary and **not sufficient**. The full switch
    `HubSubnavItem` has `auth_required` and `membership_required` but no staff gate, so a Game Lists
    entry added while `_DevelopmentGate` is on would show every visitor a link that 302s them. A
    Community hub holding only Hunters in the meantime would be churn with no benefit.
-7. Give the detail page `seo_title` / `seo_description`; it is the indexable, shareable page and
-   currently inherits the site-wide generic ones while browse sets its own.
-8. Wire the `game_list_create` / `game_list_share` `SiteEvent` types, which are declared and unfired.
+7. Give the detail page `seo_description` (and consider `seo_title`, which feeds the og/twitter
+   tags). It is the indexable, shareable page: today it sets its own `{% block title %}` but no
+   `seo_description`, so the social card falls back to the site-wide generic. Browse sets
+   `seo_description` and no `seo_title`, so neither page is complete here.
+8. Wire the `game_list_create` / `game_list_share` `SiteEvent` types. Both are declared in
+   `core/models.py`; `game_list_share` has no call site at all, and `game_list_create` has exactly
+   one — `api/game_list_views.py`, which is unrouted, so the call is unreachable rather than
+   missing. Do not be reassured by the grep hit.
 
 ---
 
@@ -238,4 +250,5 @@ Removing `_DevelopmentGate` is necessary and **not sufficient**. The full switch
   lists-vs-challenges line
 - [data-model.md](../architecture/data-model.md) — field-level model detail
 - [api-endpoints.md](../reference/api-endpoints.md)
-- [ia-and-subnav.md](../architecture/ia-and-subnav.md) — where these pages live, unresolved
+- [ia-and-subnav.md](../architecture/ia-and-subnav.md) — where these pages live (Community hub,
+  decided 2026-09, ships with the un-hide)

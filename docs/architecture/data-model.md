@@ -408,8 +408,10 @@ for the full picture; the model facts that matter elsewhere:
 - `owner` FK to `Profile` (**not** `profile` — that is the legacy field name)
 - Denormalized `game_count`, `like_count`, `follower_count`, maintained only by the service
 - Soft delete via `is_deleted` + `deleted_at`
-- `GameListQuerySet` exposes `visible()` / `public()` / `owned_by()` / `readable_by()`; the first
-  three mirror a partial index predicate exactly, `readable_by()` cannot (its OR spans two columns)
+- `GameListQuerySet` exposes `visible()` / `public()` / `owned_by()` / `readable_by()`. Only
+  `owned_by()` is unconditionally index-served; `public()` is served when the caller names one of
+  the two browse sorts (`Meta.ordering` matches neither), and `visible()` and `readable_by()` are
+  not. See [game-lists.md](../features/game-lists.md#visibility) for the table.
 
 **Caps: 3 lists free, 25 for members. There is no cap on list SIZE**, and that absence is deliberate
 — the legacy system gave members unlimited games per list, so any ceiling would take a perk back and
@@ -434,8 +436,8 @@ on a four-game list. The service re-compacts on removal and `absorb()` repairs a
 
 ### gamelists.GameListLike / gamelists.GameListFollow
 
-Both are `FK(list) + FK(Profile)` with `unique_together`, the shape the four existing vote models in
-`trophies` share. **`GameListFollow` is the site's first follow relation** — there is no
+Both are `FK(list) + FK(Profile)` with a `UniqueConstraint` on the pair — the shape the four
+existing vote models in `trophies` share, though those spell it as `unique_together`. **`GameListFollow` is the site's first follow relation** — there is no
 follow/follower anything anywhere else — so it is a new abstraction rather than a borrowed one. Its
 only delivery surface today is My Lists' "Following" scope; there is no notification for it.
 
@@ -568,6 +570,7 @@ Profile
   |-- 1:N --> GameList          (legacy; the rebuild uses `owner`, see below)
   |-- 1:N --> gamelists.GameList     (as `owner`)
   |-- 1:N --> gamelists.GameListFollow
+  |-- 1:N --> gamelists.GameListLike
   |-- 1:N --> UserConceptRating
   |-- 1:N --> UserChecklistProgress
   |-- 1:N --> Donation
@@ -582,6 +585,7 @@ Concept
   |-- 1:N --> UserConceptRating
   |-- 1:N --> ConceptTrophyGroup
   |-- 1:N --> FeaturedGuide
+  |-- 1:N --> gamelists.GameListItem   (as `list_entries`)
   |-- M2M <-> Stage (via Stage.concepts)
 
 Game

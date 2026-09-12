@@ -130,8 +130,9 @@ that has to agree with the first. They are listed in
 | `/community/lists/<id>/items/<item>/remove/` | `list_remove_game` | POST |
 | `/community/lists/<id>/search/` | `list_game_search` | GET |
 
-All resolve their list through `readable_by()` and answer a uniform 404, so an id alone cannot
-confirm a list exists or whose it is.
+Every one that takes a list id resolves it through `readable_by()` and answers a uniform 404, so an
+id alone cannot confirm a list exists or whose it is. `list_create` has no list to resolve and
+redirects with a message instead.
 
 The LEGACY `/api/v1/lists/*` endpoints remain unrouted. `GameSearchView` (`/api/v1/games/search/`),
 which outlived that cut, was **deleted in 2026-09**: its last caller died with the legacy templates,
