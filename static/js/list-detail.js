@@ -44,6 +44,11 @@
     var refreshSeq = 0;
     // The live SortableJS wrapper, so a replaced grid's instance can be destroyed rather than leaked.
     var reorderManager = null;
+    // The grid that wrapper is attached to, so its keydown listener can be removed with it.
+    var dragGrid = null;
+    // Whether the hunter has turned position editing ON. Distinct from whether the server
+    // allows it (`data-gl-reorder`), which is a capability rather than an intent.
+    var positioning = false;
     // Reorder writes run one at a time; see `saveOrder`.
     var orderChain = Promise.resolve();
     // Per-node, and NOT serializable -- see the header. A `data-` attribute here
@@ -626,6 +631,10 @@
         }
 
         function close() {
+            // Leaving the editor leaves position editing, because the mode was entered FROM here:
+            // a hunter who closes the panel has finished editing the list, and handles left live on
+            // a page with no visible sign of why is how a drag happens by accident again.
+            exitPositioning(true);
             form.hidden = true;
             view.hidden = false;
             var tallies = document.querySelector('[data-gl-tallies]');
@@ -884,7 +893,17 @@
     function onAfterSettle(e) {
         var target = (e.detail && e.detail.target) || e.target;
         if (!target || target.id !== 'gl-items-panel') { return; }
-        wireReorder();
+        syncPositioning();
+    }
+
+    function wirePositioning() {
+        var toggle = document.querySelector('[data-gl-positions-toggle]');
+        if (!toggle || wired.has(toggle)) { return; }
+        wired.add(toggle);
+        toggle.addEventListener('click', function () {
+            if (positioning) { exitPositioning(); } else { enterPositioning(); }
+        });
+        paintPositionsToggle();
     }
 
     /**
@@ -924,19 +943,64 @@
      * grid unwired; a `data-` attribute would be copied into htmx's snapshot and make a restored
      * page look wired when its SortableJS instance is gone.
      */
-    function wireReorder() {
+    /**
+     * Turn the mode ON. Wires SortableJS against the live grid.
+     *
+     * `data-gl-reorder` is the server's statement that reordering is POSSIBLE here (owner, ranked,
+     * showing the real sequence, short enough to render whole). The mode is the hunter's statement
+     * that they want to do it now. Both are required, and they are different things -- conflating
+     * them is what made dragging something you could do by accident.
+     */
+    function enterPositioning() {
         var grid = document.getElementById('gl-items');
-        // Tear the previous one down FIRST, and unconditionally -- before the early returns, because
-        // the case that leaks hardest is the one that returns: a sort away from `rank` replaces the
-        // grid with an undraggable one, so nothing below runs and the old Sortable instance is
-        // dropped on the floor still holding a detached grid and every row in it. Thirty removals in
-        // a session leaked thirty grids' worth of DOM.
-        if (reorderManager) { reorderManager.destroy(); reorderManager = null; }
-
         if (!grid || !grid.hasAttribute('data-gl-reorder')) { return; }
-        if (wired.has(grid)) { return; }
+        positioning = true;
+        var panel = document.getElementById('gl-items-panel');
+        // The flag lives on the PANEL, not on `#gl-items`. The panel is the swap TARGET, so its own
+        // attributes survive; `#gl-items` is swapped content, and htmx would restore its
+        // server-rendered attributes on settle and silently drop the flag -- the trap this file
+        // already documents twice.
+        if (panel) { panel.dataset.positioning = '1'; }
+        attachDrag(grid);
+        paintPositionsToggle();
+        setPositionsStatus('');
+        announce('Position editing on. Drag a card, or use the arrow keys on its grip.');
+    }
+
+    function exitPositioning(silent) {
+        if (!positioning) { return; }
+        positioning = false;
+        var panel = document.getElementById('gl-items-panel');
+        if (panel) { delete panel.dataset.positioning; }
+        detachDrag();
+        paintPositionsToggle();
+        setPositionsStatus('');
+        if (!silent) { announce('Position editing off.'); }
+    }
+
+    function paintPositionsToggle() {
+        var toggle = document.querySelector('[data-gl-positions-toggle]');
+        if (!toggle) { return; }
+        toggle.setAttribute('aria-pressed', positioning ? 'true' : 'false');
+        toggle.classList.toggle('pp-cta--ghost', !positioning);
+        var label = toggle.querySelector('[data-gl-positions-label]');
+        if (label) { label.textContent = positioning ? 'Done editing positions' : 'Edit list positions'; }
+    }
+
+    // The SIGHTED save signal. Kept out of the accessibility tree on purpose: the spoken version
+    // goes through `announce()` once per action, where a live region here would narrate "Saving"
+    // and then "Saved" on top of it for every single move.
+    function setPositionsStatus(text) {
+        var el = document.querySelector('[data-gl-positions-status]');
+        if (!el) { return; }
+        el.textContent = text;
+        el.hidden = !text;
+        el.classList.toggle('is-failed', text === 'Not saved');
+    }
+
+    function attachDrag(grid) {
+        detachDrag();
         if (!PP.DragReorderManager) { return; }
-        wired.add(grid);
 
         reorderManager = new PP.DragReorderManager({
             container: grid,
@@ -944,7 +1008,9 @@
             // The card is an <a> to the concept page. Without a dedicated grip, every mis-timed tap
             // is either a drag meant as a click or a navigation meant as a drag.
             handleSelector: '[data-gl-grab]',
-            onReorder: function (_itemId, _newPosition, allItemIds) { saveOrder(grid, allItemIds); },
+            onReorder: function (_itemId, _newPosition, allItemIds) {
+                saveOrder(grid, allItemIds, 'Order saved.');
+            },
         });
 
         // SortableJS runs `forceFallback`, which is pointer-only. Without this the grip is a real
@@ -953,6 +1019,34 @@
         // remove control beside it works from the keyboard, so a grip that does not is read as
         // broken rather than as unbuilt.
         grid.addEventListener('keydown', onGrabKey);
+        dragGrid = grid;
+    }
+
+    // Leaving the mode must actually leave it: a live Sortable instance on a grid whose grips are
+    // now `display: none` would still accept a drag begun on the card itself.
+    function detachDrag() {
+        if (reorderManager) { reorderManager.destroy(); reorderManager = null; }
+        if (dragGrid) { dragGrid.removeEventListener('keydown', onGrabKey); dragGrid = null; }
+    }
+
+    /**
+     * Keep the mode honest across swaps.
+     *
+     * Every sort change, add and remove replaces `#gl-items`, and the server's answer about whether
+     * reordering is possible can change with it -- sorting a ranked list A-Z takes the capability
+     * away. So after each settle: re-attach to the NEW grid if the mode is on and still allowed,
+     * leave the mode if it is not, and show or hide the toggle to match. The toggle is rendered once
+     * in the page header and never swapped, so without this it would sit there offering a mode the
+     * grid below it can no longer support.
+     */
+    function syncPositioning() {
+        var grid = document.getElementById('gl-items');
+        var allowed = !!(grid && grid.hasAttribute('data-gl-reorder'));
+        var block = document.querySelector('[data-gl-positions]');
+        if (block) { block.hidden = !allowed; }
+
+        if (!allowed) { exitPositioning(true); return; }
+        if (positioning) { attachDrag(grid); }
     }
 
     //: Arrow keys move an entry one place through the ORDER, which is the axis a ranked list is
@@ -963,6 +1057,7 @@
     var GRAB_LATER = ['ArrowDown', 'ArrowRight'];
 
     function onGrabKey(e) {
+        if (!positioning) { return; }
         var grab = e.target.closest && e.target.closest('[data-gl-grab]');
         if (!grab) { return; }
         var earlier = GRAB_EARLIER.indexOf(e.key) !== -1;
@@ -980,11 +1075,12 @@
         if (earlier) { grid.insertBefore(row, neighbour); }
         else { grid.insertBefore(neighbour, row); }
 
-        saveOrder(grid, itemIdsIn(grid));
+        var rows = grid.querySelectorAll('.gl-item');
+        var position = Array.prototype.indexOf.call(rows, row) + 1;
+        saveOrder(grid, itemIdsIn(grid),
+                  'Moved to number ' + position + ' of ' + rows.length + '.');
         // The move destroyed nothing, but the browser scrolls focus out of view on a long list.
         grab.focus();
-        var position = Array.prototype.indexOf.call(grid.querySelectorAll('.gl-item'), row) + 1;
-        announce('Moved to number ' + position + '.');
     }
 
     // DOM order IS the order. Read here rather than trusted from an event, so the keyboard path and
@@ -1010,8 +1106,9 @@
      * the length of a round trip. A failure reverts by refreshing from the server, which is the one
      * source of truth about what the order actually is.
      */
-    function saveOrder(grid, itemIds) {
+    function saveOrder(grid, itemIds, successMessage) {
         renumber(grid);
+        setPositionsStatus('Saving…');
 
         var body = new FormData();
         for (var i = 0; i < itemIds.length; i++) { body.append('item_ids[]', itemIds[i]); }
@@ -1028,8 +1125,14 @@
         orderChain = orderChain
             .catch(function () { /* a previous failure already reported itself; do not block this */ })
             .then(function () { return postJson(grid.dataset.reorderUrl, body); })
-            .then(function () { announce('Order saved.'); })
+            .then(function () {
+                setPositionsStatus('Saved');
+                // ONE spoken message per action, said after the write rather than before it, so
+                // "moved to number 3" is only ever heard about a move that actually persisted.
+                announce(successMessage || 'Order saved.');
+            })
             .catch(function (err) {
+                setPositionsStatus('Not saved');
                 toastError(err, 'That new order could not be saved.');
                 // The client and the server now disagree about the order, and the client is the one
                 // that is wrong. Re-render rather than trying to undo the drag by hand.
@@ -1068,7 +1171,7 @@
         wireAdder();
         wireIdentityEditor();
         wireVisibility();
-        wireReorder();
+        wirePositioning();
         initReveal();
         if (PP.wireCharCounters) { PP.wireCharCounters(); }
         if (first) {

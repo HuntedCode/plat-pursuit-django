@@ -500,9 +500,13 @@ def test_the_drag_is_wired_after_settle_not_after_swap(client):
 
     assert "addEventListener('htmx:afterSettle'" in js, 'the drag must re-wire on settle'
     # And NOT from the swap handler, which is what made the second direction worse than the first.
+    # The named function moved (`wireReorder` -> `syncPositioning`) when reordering became a mode,
+    # and this assertion kept passing against a name that no longer existed anywhere in the file --
+    # the same way a test goes quietly vacuous when the thing it guards is renamed around it.
     swap_handler = js[js.index('function onAfterSwap('):js.index('function onAfterSettle(')]
-    assert 'wireReorder()' not in swap_handler, \
-        'wiring on swap reads stale attributes and poisons the WeakSet'
+    for wirer in ('syncPositioning()', 'attachDrag(', 'enterPositioning()'):
+        assert wirer not in swap_handler, \
+            f'{wirer} on swap reads stale attributes and poisons the wiring guard'
 
 
 def test_the_edit_form_sends_only_what_changed(client):
@@ -538,6 +542,76 @@ def test_the_grip_is_operable_from_a_keyboard(client):
     # It must actually SAVE, not merely move the node in the DOM.
     handler = js[js.index('function onGrabKey('):js.index('function itemIdsIn(')]
     assert 'saveOrder(' in handler, 'a keyboard move that never persists is worse than none'
+
+
+def test_reordering_is_a_mode_you_have_to_enter(client):
+    """Handles on by default made dragging something you could do by ACCIDENT. The capability
+    (`data-gl-reorder`) and the intent (the mode) are now separate: the server still says where
+    reordering is possible, and the hunter says when."""
+    owner = _staff(client)
+    game_list = _ranked(owner, 3)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    # The toggle is offered...
+    assert 'data-gl-positions-toggle' in body
+    assert 'Edit list positions' in body
+    assert 'Moves save as you make them.' in body, 'the save model has to be stated, not discovered'
+    # ...and the grips are rendered but inert until the mode is on, which is CSS, not markup.
+    css = _read('static/css/components/gamelists.css')
+    assert '#gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }' in css
+    # `display: none` and not `opacity: 0` -- an invisible button is still a tab stop that announces
+    # itself, which is the bug this is avoiding rather than a detail of how it looks.
+    assert 'opacity: 0' not in css[css.index('#gl-items-panel:not([data-positioning])'):
+                                   css.index('.gl-item__grab {')]
+
+
+def test_the_mode_is_not_offered_where_reordering_is_impossible(client):
+    """The toggle lives in the page header, which the sort swap does not re-render, so it must not be
+    rendered for a list that cannot be reordered at all."""
+    owner = _staff(client)
+
+    plain = _list(owner, 2)
+    assert 'data-gl-positions-toggle' not in client.get(_url(plain)).content.decode()
+
+    ranked = _ranked(owner, 2)
+    sorted_away = client.get(_url(ranked), {'sort': 'name'}).content.decode()
+    assert 'data-gl-positions-toggle' not in sorted_away
+
+
+def test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor(client):
+    """Three ways the mode could outlive its own preconditions, all pinned at the source because none
+    is reachable from a server test: a sort that removes the capability, a swap that replaces the grid
+    the drag manager is bound to, and closing the panel the mode was entered from."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    sync = js[js.index('function syncPositioning() {'):js.index('function saveOrder(')]
+    assert 'exitPositioning(true)' in sync, 'sorting away from the order must end the mode'
+    assert 'attachDrag(grid)' in sync, 'a replaced grid must be re-attached while the mode is on'
+    assert 'block.hidden = !allowed' in sync, 'the header toggle must follow the grid below it'
+
+    close_body = js[js.index('function close() {'):js.index('function reset() {')]
+    assert 'exitPositioning(' in close_body, 'closing the editor must end the mode it started'
+
+
+def test_the_save_indicator_reports_both_outcomes(client):
+    """"Saving" with no terminal state is worse than silence: it never tells you whether the move
+    landed. Both ends are written, and the failure path is distinguishable."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    # Bounded by CODE landmarks. A comment cannot be an anchor here: `_decommented` has already
+    # removed every one of them, so slicing to a comment raises rather than matching.
+    save = js[js.index('function saveOrder('):js.index('function renumber(')]
+    assert "setPositionsStatus('Saving…')" in save
+    assert "setPositionsStatus('Saved')" in save
+    assert "setPositionsStatus('Not saved')" in save
+
+    # The visible pill is kept OUT of the accessibility tree, because the spoken half goes through
+    # `announce()` once per action -- a live region here would narrate "Saving" then "Saved" on top
+    # of every move.
+    detail = _read('templates/gamelists/detail.html')
+    status_tag = detail[detail.index('data-gl-positions-status'):]
+    assert 'aria-hidden="true"' in status_tag[:200]
 
 
 def test_cancelling_the_editor_restores_the_type_too(client):

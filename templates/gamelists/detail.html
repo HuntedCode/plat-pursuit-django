@@ -120,6 +120,39 @@ below with no outer wrapper.
                             </div>
                         </fieldset>
 
+                        {% if can_reorder %}
+                        {% comment %}POSITION EDITING IS A MODE, and entering it is deliberate.
+
+                        The handles used to be on whenever a ranked list was viewed by its owner,
+                        which made dragging something you could do by accident rather than something
+                        you decided to do. It is its own button inside the edit panel, so the order
+                        of operations reads: edit this list -> edit its positions.
+
+                        `type="button"` because it sits inside the identity form and must not submit
+                        it. It is deliberately NOT part of that form's save cycle, which is why the
+                        hint says so out loud: Cancel undoes a rename, and it cannot undo a move that
+                        was already written.{% endcomment %}
+                        <div class="gl-positions" data-gl-positions>
+                            <div class="gl-positions__row">
+                                <button type="button" class="pp-cta pp-cta--ghost gl-positions__btn"
+                                        data-gl-positions-toggle aria-pressed="false">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 8 2-2 2 2"/><path d="m3 16 2 2 2-2"/>
+                                    </svg>
+                                    <span data-gl-positions-label>Edit list positions</span>
+                                </button>
+                                {% comment %}`aria-hidden`: this is the SIGHTED signal. The spoken one
+                                goes through the page's existing status region, which says what
+                                happened once rather than narrating every state change twice.{% endcomment %}
+                                <span class="gl-positions__status" data-gl-positions-status
+                                      aria-hidden="true" hidden></span>
+                            </div>
+                            <p class="gl-positions__hint">
+                                Drag a card, or use the arrow keys on its grip. Moves save as you make them.
+                            </p>
+                        </div>
+                        {% endif %}
+
                         <div class="gl-edit__foot">
                             <button type="submit" class="pp-cta" data-gl-edit-save>Save</button>
                             <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-cancel>Cancel</button>
