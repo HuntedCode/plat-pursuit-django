@@ -527,6 +527,73 @@ def test_the_edit_form_sends_only_what_changed(client):
     assert "if (typeChanged) { body.append('list_type'" in js
 
 
+def test_clicking_a_card_picks_it_up_so_the_arrow_keys_have_a_target(client):
+    """THE ARROW KEYS DID NOT WORK, and the hint said they did.
+
+    They were bound to the GRID and only fired while a grip had focus -- which meant tabbing to a
+    26px control nobody had a reason to suspect. So the instruction described a key that, as far as
+    anyone could tell, did nothing.
+
+    Clicking a card now picks it up, and the keys follow the picked card. That also gives the click a
+    job: suppressing the card's navigation was necessary once the whole card became the drag surface,
+    but it left a click meaning nothing, and a card that visibly ignores you reads as broken.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    click = js[js.index('function onCardClick('):js.index('function togglePicked(')]
+    assert 'e.preventDefault()' in click, 'the card must not navigate while arranging'
+    assert 'togglePicked(row)' in click, 'a click must pick the card up'
+
+    # On the DOCUMENT, or it only fires while something inside the grid has focus -- which is the
+    # bug. And bound/unbound with the mode, or it outlives it.
+    attach = js[js.index('function attachDrag('):js.index('function detachDrag(')]
+    assert "document.addEventListener('keydown', onPositionKey)" in attach
+    detach = js[js.index('function detachDrag('):js.index('function onCardClick(')]
+    assert "document.removeEventListener('keydown', onPositionKey)" in detach
+    assert 'dropPicked(true)' in detach, 'a pick-up must not survive the mode'
+
+    # The same click drops it, and Escape does too: never make somebody hunt for the way out of a
+    # selection they made by accident.
+    toggle = js[js.index('function togglePicked('):js.index('function dropPicked(')]
+    assert 'if (pickedRow === row) { dropPicked(); return; }' in toggle
+
+    key = js[js.index('function onPositionKey('):js.index('function itemIdsIn(')]
+    assert "e.key === 'Escape'" in key
+
+
+def test_the_arrow_keys_stay_out_of_the_editor_text_fields(client):
+    """The identity editor is OPEN whenever this mode is -- that is how you reach it -- so a document
+    listener would move a card every time somebody moved the caret through the list's name."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    key = js[js.index('function onPositionKey('):js.index('function itemIdsIn(')]
+    assert 'isTyping(e.target)' in key
+
+    typing = js[js.index('function isTyping('):js.index('function onPositionKey(')]
+    for field in ("'INPUT'", "'TEXTAREA'", "'SELECT'", 'isContentEditable'):
+        assert field in typing, f'{field} is not treated as typing'
+
+
+def test_a_picked_card_is_unmistakable_and_the_bar_shouts(client):
+    """Two visual jobs. The picked card has to stand out among up to 200 cards that are ALL already
+    lifted, so it is a ring rather than more elevation -- a second, louder shadow would read as "more
+    of the same" rather than "this one".
+
+    And the bar is the only thing on the page that says which mode you are in. Its first active state
+    was a 14% tint the owner could look straight past.
+    """
+    css = _read('static/css/components/gamelists.css')
+
+    picked = css[css.index('.gl-item.is-picked .pp-gcard {'):]
+    assert 'outline: 2px solid var(--pp-primary)' in picked[:400]
+    # `outline`, not `border`: a border changes the box and shifts the grid as cards are picked up.
+    assert 'border-width' not in picked[:400]
+
+    on = css[css.index('.gl-positions.is-on {'):]
+    assert 'border-color: var(--pp-primary);' in on[:300], 'the active bar needs a full-weight border'
+    assert 'color-mix(in oklab, var(--pp-primary) 22%' in on[:400], 'the active wash is still timid'
+
+
 def test_the_grip_is_operable_from_a_keyboard(client):
     """It is a real button in the tab order announced as "Reorder <game>". SortableJS runs
     `forceFallback`, which is pointer-only, so without an explicit handler the control promises an
@@ -534,13 +601,16 @@ def test_the_grip_is_operable_from_a_keyboard(client):
     js = _decommented(_read('static/js/list-detail.js'))
 
     assert 'ArrowUp' in js and 'ArrowDown' in js
-    # BOUND, not merely defined. The first version of this test asserted the function existed and its
-    # body called `saveOrder` -- both still true with the `addEventListener` line deleted, so the
-    # mutation that unbinds the handler entirely walked straight through it.
-    assert "grid.addEventListener('keydown', onGrabKey)" in js, \
+    # BOUND, not merely defined. An earlier version asserted the function existed and that its body
+    # called `saveOrder` -- both still true with the `addEventListener` line deleted, so the mutation
+    # that unbinds it entirely walked straight through.
+    assert "document.addEventListener('keydown', onPositionKey)" in js, \
         'the key handler is defined but never attached'
+    # The GRIP path still works alongside the picked-card one, and a focused grip WINS, because it is
+    # the element the hunter is actually touching.
+    handler = js[js.index('function onPositionKey('):js.index('function itemIdsIn(')]
+    assert "closest('[data-gl-grab]')" in handler, 'the grip no longer drives the keys'
     # It must actually SAVE, not merely move the node in the DOM.
-    handler = js[js.index('function onGrabKey('):js.index('function itemIdsIn(')]
     assert 'saveOrder(' in handler, 'a keyboard move that never persists is worse than none'
 
 

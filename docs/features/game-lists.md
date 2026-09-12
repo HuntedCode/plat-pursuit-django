@@ -147,6 +147,16 @@ honest — for the shell and the importer too.
 - **Touch requires a hold** (320ms, `delayOnTouchOnly`), because a finger resting on a card is how a
   scroll begins. `touchStartThreshold` lets a scroll cancel a pending pick-up — without it a finger
   that drifts during the hold arms the drag anyway and the scroll is lost.
+- **Clicking a card picks it up; the arrow keys then move it.** Escape or a second click drops it.
+  This replaced an arrow-key path bound to the grid that only fired while a *grip* had focus — which
+  meant tabbing to a 26px control nobody had reason to suspect, so the on-screen hint described a key
+  that appeared to do nothing. It also gives the click a job: suppressing the card's navigation was
+  necessary once the whole card became the drag surface, but it left a click meaning nothing, and a
+  card that visibly ignores you reads as broken. A focused grip still wins over the picked card, so
+  the tab-and-arrow path survives for keyboard readers.
+- The key listener is on the **document**, so it needs an `isTyping` guard: the identity editor is
+  open whenever this mode is, and an arrow key moving the caret through the list's name must not also
+  move a card.
 
 ### Position editing is a mode
 

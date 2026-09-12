@@ -465,13 +465,22 @@
     background: color-mix(in oklab, var(--pp-primary) 7%, var(--pp-bg-1));
     transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
-/* ON. Stronger tint, and a ring so the whole strip reads as live at a glance from across the page. */
+/* ON, and LOUD. The first version tinted this 14% and drew a hairline ring, which the owner could
+   look straight past -- the bar is the only thing on the page that says which mode you are in, so
+   subtlety here is a cost with no benefit. It now reads as a different surface rather than the same
+   surface slightly warmer: a solid accent wash, a full-weight border, and a standing glow.
+
+   This is the one place on the page that is allowed to shout. Everything else the mode does -- the
+   tray, the elevation, the quieted hover -- is deliberately quiet, and works because THIS is not. */
 .gl-positions.is-on {
-    border-color: color-mix(in oklab, var(--pp-primary) 62%, transparent);
-    background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-1));
-    box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 28%, transparent),
-                0 8px 26px -14px color-mix(in oklab, var(--pp-primary) 60%, #000);
+    border-color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 22%, var(--pp-bg-1));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 45%, transparent),
+                0 10px 30px -12px color-mix(in oklab, var(--pp-primary) 70%, #000);
 }
+/* The supporting text comes up with it: at rest it is a dim hint, and while the mode is live it is
+   the instructions. */
+.gl-positions.is-on .gl-positions__hint { color: var(--pp-text); }
 
 .gl-positions__row {
     display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
@@ -589,6 +598,22 @@
 @media (prefers-reduced-motion: reduce) {
     /* The END STATE is identical, so nobody loses the signal -- only the 200ms of easing into it. */
     #gl-items { transition: none; }
+}
+
+/* A PICKED-UP CARD. Clicking one is how the arrow keys get a target, so this has to be unmistakable
+   among up to two hundred cards that are all already lifted -- which is why it is a RING and not
+   more shadow. Elevation is the mode's language and is spoken by every card here; a second, louder
+   elevation would read as "more of the same" rather than as "this one".
+
+   `outline` rather than `border`, deliberately: a border would change the card's box and shift the
+   grid by a pixel as cards are picked up and dropped. */
+#gl-items-panel[data-positioning] .gl-item.is-picked .pp-gcard {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+    border-color: var(--pp-primary);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 16px 34px -10px rgba(0, 0, 0, 0.6),
+                0 0 22px -6px color-mix(in oklab, var(--pp-primary) 55%, transparent);
 }
 
 /* SortableJS states. `forceFallback: true` is set in DragReorderManager, so the thing under the

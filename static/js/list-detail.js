@@ -52,6 +52,9 @@
     // Whether the in-place editor is open. The position bar is gated on it, so entering the mode is
     // always a deliberate second step rather than something a stray drag can start.
     var editorOpen = false;
+    // The card the arrow keys act on -- picked up by clicking it. Not "selected": you are holding it,
+    // and it moves when you press a key.
+    var pickedRow = null;
     // Reorder writes run one at a time; see `saveOrder`.
     var orderChain = Promise.resolve();
     // Per-node, and NOT serializable -- see the header. A `data-` attribute here
@@ -1054,9 +1057,16 @@
 
         var hint = document.querySelector('[data-gl-positions-hint]');
         if (hint) {
-            hint.textContent = positioning
-                ? 'Drag a card, or use the arrow keys on its grip. Moves save as you make them.'
-                : 'Then drag a card, or use the arrow keys on its grip.';
+            // THREE STATES, because the middle one is what was missing: the old copy said "use the
+            // arrow keys on its grip", which required tabbing to a 26px control nobody had reason to
+            // suspect -- so it described a key that, as far as anyone could tell, did nothing.
+            if (!positioning) {
+                hint.textContent = 'Then drag a card, or click one to move it with the arrow keys.';
+            } else if (pickedRow) {
+                hint.textContent = 'Arrow keys move it. Click it again or press Escape to drop it.';
+            } else {
+                hint.textContent = 'Drag a card, or click one to pick it up. Moves save as you make them.';
+            }
         }
     }
 
@@ -1072,6 +1082,8 @@
     }
 
     function attachDrag(grid) {
+        // Also drops any pick-up: a swap replaces every row, so `pickedRow` would be pointing at a
+        // node that is no longer in the document and the arrow keys would move nothing.
         detachDrag();
         if (!PP.DragReorderManager) { return; }
 
@@ -1106,12 +1118,11 @@
         // does nothing until you leave it.
         grid.addEventListener('click', onCardClick);
 
-        // SortableJS runs `forceFallback`, which is pointer-only. Without this the grip is a real
-        // button in the tab order, announced as "Reorder <game>", that does nothing when activated --
-        // on a long list, a hundred tab stops each promising an action and delivering none. The
-        // remove control beside it works from the keyboard, so a grip that does not is read as
-        // broken rather than as unbuilt.
-        grid.addEventListener('keydown', onGrabKey);
+        // ON THE DOCUMENT, not on the grid. Bound to the grid, the arrow keys only fired while a
+        // GRIP had focus -- which meant tabbing to a 26px control nobody had a reason to suspect, so
+        // in practice the hint told people to use a key that did nothing. The keys now follow the
+        // PICKED card instead, which is a thing you can see.
+        document.addEventListener('keydown', onPositionKey);
         dragGrid = grid;
     }
 
@@ -1119,21 +1130,53 @@
     // now `display: none` would still accept a drag begun on the card itself.
     function detachDrag() {
         if (reorderManager) { reorderManager.destroy(); reorderManager = null; }
+        document.removeEventListener('keydown', onPositionKey);
+        dropPicked(true);
         if (dragGrid) {
-            dragGrid.removeEventListener('keydown', onGrabKey);
             dragGrid.removeEventListener('click', onCardClick);
             dragGrid = null;
         }
     }
 
-    // Swallow the navigation, not the event: the grip's own click still has to reach it, and so
-    // would any control added to a card later. Guarded on the mode as well as on the listener being
-    // attached, because a listener that outlived its mode would make the list unclickable.
+    /**
+     * A click PICKS A CARD UP rather than doing nothing.
+     *
+     * Suppressing the navigation was necessary once the whole card became the drag surface, but it
+     * left a click with no meaning at all -- and a card that visibly ignores you reads as broken.
+     * Giving the click a job solves that and the keyboard problem at the same time: the picked card
+     * is the one the arrow keys move, so the feature is reachable without a pointer AND without
+     * knowing the grip exists.
+     *
+     * The same click drops it again, which is the behaviour every file manager and home screen has:
+     * you should never have to hunt for the way out of a selection you made by accident.
+     */
     function onCardClick(e) {
         if (!positioning) { return; }
         var card = e.target.closest && e.target.closest('.pp-gcard');
         if (!card) { return; }
+        // The navigation, not the event -- the grip's own click still has to reach it.
         e.preventDefault();
+        var row = card.closest('.gl-item');
+        if (row) { togglePicked(row); }
+    }
+
+    function togglePicked(row) {
+        if (pickedRow === row) { dropPicked(); return; }
+        dropPicked(true);
+        pickedRow = row;
+        row.classList.add('is-picked');
+        var card = row.querySelector('.pp-gcard');
+        var name = (card && card.getAttribute('aria-label')) || 'Card';
+        announce(name + ' picked up. Arrow keys move it, Escape drops it.');
+        paintPositionsToggle();
+    }
+
+    function dropPicked(silent) {
+        if (!pickedRow) { return; }
+        pickedRow.classList.remove('is-picked');
+        pickedRow = null;
+        if (!silent) { announce('Dropped.'); }
+        paintPositionsToggle();
     }
 
     /**
@@ -1188,15 +1231,35 @@
     var GRAB_EARLIER = ['ArrowUp', 'ArrowLeft'];
     var GRAB_LATER = ['ArrowDown', 'ArrowRight'];
 
-    function onGrabKey(e) {
-        if (!positioning) { return; }
-        var grab = e.target.closest && e.target.closest('[data-gl-grab]');
-        if (!grab) { return; }
+    // Text fields are the reason this cannot be a bare document listener: the identity editor is
+    // OPEN whenever this mode is (that is how you get here), so an arrow key pressed while moving
+    // the caret through a list's name would otherwise also move a card.
+    function isTyping(el) {
+        if (!el) { return false; }
+        var tag = el.tagName;
+        return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+    }
+
+    function onPositionKey(e) {
+        if (!positioning || isTyping(e.target)) { return; }
+
+        if (e.key === 'Escape' && pickedRow) {
+            e.preventDefault();
+            dropPicked();
+            return;
+        }
+
         var earlier = GRAB_EARLIER.indexOf(e.key) !== -1;
         if (!earlier && GRAB_LATER.indexOf(e.key) === -1) { return; }
 
-        var row = grab.closest('.gl-item');
-        var grid = row && row.parentElement;
+        // A FOCUSED GRIP WINS over the picked card. Both paths exist on purpose -- the grip is what a
+        // keyboard reader reaches by tabbing and what a screen reader announces per card, and picking
+        // a card up is what somebody with a pointer does -- and when both are live, the one the
+        // hunter is actually touching is the focused one.
+        var grab = e.target.closest && e.target.closest('[data-gl-grab]');
+        var row = (grab && grab.closest('.gl-item')) || pickedRow;
+        if (!row) { return; }
+        var grid = row.parentElement;
         if (!row || !grid) { return; }
         var neighbour = earlier ? row.previousElementSibling : row.nextElementSibling;
         // Already at the end it is being pushed towards: do nothing, and let the arrow key keep its
@@ -1211,8 +1274,16 @@
         var position = Array.prototype.indexOf.call(rows, row) + 1;
         saveOrder(grid, itemIdsIn(grid),
                   'Moved to number ' + position + ' of ' + rows.length + '.');
-        // The move destroyed nothing, but the browser scrolls focus out of view on a long list.
-        grab.focus();
+
+        // `grab` is only set on the focused-grip path, and calling `.focus()` unconditionally would
+        // throw on the picked-card path -- which is now the common one.
+        if (grab) { grab.focus(); }
+        // The card keeps its pick-up across the move, so the arrow key repeats. Dropping it after
+        // each press would make moving something five places a five-click, five-press alternation.
+        // A long list can also scroll the row out of view, and nothing else brings it back.
+        if (row === pickedRow && row.scrollIntoView) {
+            row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
     }
 
     // DOM order IS the order. Read here rather than trusted from an event, so the keyboard path and
