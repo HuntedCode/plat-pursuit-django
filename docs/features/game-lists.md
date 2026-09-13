@@ -196,6 +196,57 @@ whatever sort is showing. Two wrong answers preceded that rule and both are wort
    list renumbers 1..N alphabetically, claiming the alphabet was the author's ranking. `detail_card`
    shows the plate on every sort precisely because a rank is a fact about the **entry**, not the view.
 
+### Previewing the non-member render
+
+`?preview=lists-free` on any list you own renders the page as a **free hunter** sees it, for staff
+and moderators only, through the shared door in `core/previews.py`. Sections are the one
+membership-gated thing on this page, so a single flag is the whole surface: `can_manage_sections`
+goes false and nothing else changes. Everything a free owner really can do — arrange, delete a
+section, reorder, add games — stays live under the preview, because a preview that also withdrew
+the ungated controls would answer a different question than the one it was asked. A ribbon says the
+mode is on, which matters because for a free owner with no sections the honest render is that
+*nothing appears* — indistinguishable from a broken preview otherwise.
+
+**What a free owner actually sees**, which is worth knowing before the next membership decision:
+
+| Their list | What renders |
+|---|---|
+| Ranked, with games | the arrange bar (arranging is ungated), no section controls |
+| Collection, no sections | no arrange bar at all |
+| Any list that already has sections | headers, **delete** but no rename |
+
+...plus the **sections lockup** in every row, which is what closes the gap this table used to
+describe: before it, a free owner whose list had never had a section saw no trace of the feature
+anywhere, so the perk was invisible to exactly the hunter who might buy it.
+
+### The sections lockup
+
+One block, two states, sitting where the section controls would be:
+
+| Their state | What it says |
+|---|---|
+| Never had sections | "Group this list into sections" + what members get + **See membership** |
+| Membership lapsed | "Your sections are still here" + what they keep + **See membership** |
+
+Four things about it are load-bearing:
+
+- **It is a sibling of the arrange bar, not a row inside it.** That bar is `hidden` until the identity
+  editor is opened and does not render at all for a free owner of a section-less Collection, so
+  anything inside it is invisible to the exact hunter this is for. The line it replaced
+  (`.gl-sections__locked`) lived there and reached nobody.
+- **It is gated on `is_linked`.** An unlinked owner also fails `can_manage_sections`, and selling them
+  a membership answers a question they did not ask — what stands between them and sections is linking
+  a PSN account.
+- **It needs `bool(items)`.** Sections group games; on an empty list this is selling a way to organise
+  nothing.
+- **It is STATIC.** A flag, a heading and a link — no provider, no query, nothing per-user beyond
+  booleans the render already computed. CLAUDE.md's premium-preview rule exists because a locked UI
+  twice ran its real data path for people who could not use it, and a test asserts the free render
+  costs exactly as many queries as the member one.
+
+The voice is additive: it says what membership **adds**, never what the hunter lacks. Lists, games,
+ranking, publishing and sharing are all theirs already.
+
 ### Filing a game: two payloads, on purpose
 
 Dragging a card into another section posts to **one of two endpoints**, and the split is the design

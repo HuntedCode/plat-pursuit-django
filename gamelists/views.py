@@ -25,6 +25,7 @@ from django.views.generic import DetailView, ListView, View
 from django_ratelimit.decorators import ratelimit
 
 from api.utils import safe_bool, safe_int
+from core.previews import previewing
 from core.services.tracking import track_site_event
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED,
                               NAME_MAX_LENGTH, SECTION_NAME_MAX_LENGTH, GameList, GameListFollow,
@@ -714,8 +715,41 @@ class GameListDetailView(DetailView):
         # `rename_section` refuse regardless, so this is the affordance and not the gate.
         # No `viewer is not None`: `is_owner` already carries it, and a clause that cannot change the
         # answer is the dead weight the `is_ranked` note above was written about.
+        #
+        # `?preview=lists-free` renders this page as a NON-MEMBER sees it, for the team only. Sections
+        # are the one membership-gated thing on this page, so a single flag is the whole surface --
+        # everything else a free owner can do (arrange, delete a section, reorder, add games) is
+        # already ungated and must stay that way under the preview, or it would answer a different
+        # question than the one it is asked.
+        #
+        # Through `core.previews` rather than reading the querystring here. An anti-drift test walks
+        # every module looking for a hand-rolled read of that parameter and fails it, because a door
+        # that opens only half of a thing is not a preview and copies of the gate drift. That test is
+        # a plain grep, so it cannot tell code from prose -- do not quote the expression it looks for
+        # in a comment, which is how this line first failed it.
+        context['free_preview'] = previewing(self.request, 'lists-free')
         context['can_manage_sections'] = (
-            context['is_owner'] and viewer.is_linked and viewer.user_is_premium)
+            context['is_owner'] and viewer.is_linked and viewer.user_is_premium
+            and not context['free_preview'])
+        # WHO IS TOLD ABOUT SECTIONS WITHOUT HAVING THEM. Derived from `can_manage_sections` rather
+        # than re-testing membership, so the CTA and the controls can never both be absent (which is
+        # what shipped first: a free owner whose list had never had a section saw no trace of the
+        # feature anywhere, so the perk was invisible to exactly the hunter who might buy it).
+        #
+        # `is_linked` is the clause that keeps this honest. An UNLINKED owner also fails
+        # `can_manage_sections`, and selling them a membership is answering a question they did not
+        # ask -- what stands between them and sections is linking a PSN account, not paying.
+        #
+        # `bool(items)` because sections group games, and a CTA on an empty list is asking somebody to
+        # buy a way to organise nothing.
+        #
+        # STATIC, and that is a rule rather than an accident: CLAUDE.md's premium-preview pattern
+        # exists because a locked UI twice ran its real data path for people who could not use it.
+        # This is a flag, a heading and a link -- no provider, no query, nothing per-user beyond the
+        # three booleans already computed above.
+        context['sections_locked'] = (
+            context['is_owner'] and viewer.is_linked
+            and not context['can_manage_sections'] and bool(items))
         # `is_linked`, not merely "has a profile". The action ENDPOINTS carry
         # `_LinkedProfileRequired`, which 302s to link_psn -- so without this an unlinked viewer was
         # shown both buttons and got an HTML redirect back from a JSON fetch. The page and the

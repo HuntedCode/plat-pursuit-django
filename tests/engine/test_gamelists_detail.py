@@ -13,8 +13,9 @@ from pathlib import Path
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 
-from gamelists.models import LIST_TYPE_RANKED
+from gamelists.models import LIST_TYPE_RANKED, GameListSection
 from gamelists.services import game_list_service as svc
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 
@@ -1316,7 +1317,9 @@ def test_the_adder_uses_the_shared_search_chrome(client):
     # SCOPED to the adder. `data-search-clear` is on the navbar's own search on every page, so the
     # third of these three "shared chrome" assertions was answered by the site chrome -- deleting
     # the adder's clear button left it green.
-    adder = body[body.index('<div class="pp-bgal__search"'):body.index('data-gl-adder-results')]
+    # The class LIST, which gained `.gl-adder` when the adder was raised to the toolbar's focal
+    # point. Anchoring on the bare shared class matched nothing once a second class sat beside it.
+    adder = body[body.index('<div class="pp-bgal__search gl-adder"'):body.index('data-gl-adder-results')]
     assert 'data-search-wrap' in adder
     assert 'pp-search-spin' in adder
     assert 'data-search-clear' in adder
@@ -2327,7 +2330,11 @@ def test_a_free_owner_keeps_their_sections_and_is_told_what_changed(client):
     assert 'data-gl-section-rename' not in body
     # DELETE SURVIVES: removing your own thing is not the act the perk covers.
     assert 'data-gl-section-delete' in body
-    assert 'gl-sections__locked' in body
+    # `gl-lockup`, not `gl-sections__locked`: the lapsed-member line moved OUT of the arrange bar and
+    # became the second state of the CTA block, because the bar it lived in is hidden until the
+    # editor is opened and does not render at all for a section-less Collection.
+    assert 'gl-lockup' in body
+    assert 'Your sections are still here' in body
 
 
 def test_renaming_is_member_gated_and_deleting_is_not(client):
@@ -2778,3 +2785,326 @@ def test_the_section_field_does_not_steal_a_caret_that_moved_on(client):
     fn = js[js.index('function restoreSectionFocus('):js.index('function restorePick(')]
     assert 'document.activeElement' in fn, 'focus is taken back unconditionally'
     assert 'document.body' in fn
+
+
+# -- the adder as the toolbar's focal point --------------------------------------------------------
+
+def test_the_adder_is_raised_without_forking_the_shared_field(client):
+    """Owner's note, 2026-09: the one control on the page that ADDS anything sat in a grey bar between
+    a section title and a sort select, all three the same weight, and read as one more filter.
+
+    RAISED, NOT REBUILT. `.gl-adder` layers over `.pp-bgal__search` rather than replacing it, so the
+    geometry, the `/` hint, the clear button and the spinner stay the shared ones. This page already
+    carries the scar from the other approach -- a private field that drifted off the shared values on
+    every dimension until two search fields on one feature disagreed."""
+    owner = _staff(client)
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'class="pp-bgal__search gl-adder"' in body, 'the modifier replaced the shared class'
+
+    css = _read('static/css/components/gamelists.css')
+    block = css[css.index('.gl-adder {'):css.index('.gl-adder__panel {')]
+    assert 'flex: 1 1 320px' in block, 'it does not take the bar\'s slack'
+
+    # THE REST RULE ONLY. Slicing to the whole block swept in `:hover` and `:focus`, which carry the
+    # same accent declaration -- so the assertion passed with the resting accent removed, which is
+    # precisely the state it exists to protect. A field that only lights up once you touch it cannot
+    # be the thing your eye lands on first.
+    rest = block[block.index('.gl-adder input {'):block.index('.gl-adder input::placeholder')]
+    assert 'border-color: color-mix(in oklab, var(--pp-primary)' in rest, \
+        'the accent is focus-only again, so the adder is quiet until you touch it'
+    assert 'background: color-mix(in oklab, var(--pp-primary)' in rest
+    # The 44px floor every other control in this feature's bar carries.
+    assert 'min-height: 44px' in rest
+
+
+def test_the_adder_glyph_says_add_rather_than_search(client):
+    """Searching is the means here; adding is the act, and a leading icon should say what pressing the
+    thing achieves. The magnifier is what made it read as a filter."""
+    owner = _staff(client)
+    game_list = _list(owner, 1)
+
+    body = client.get(_url(game_list)).content.decode()
+    adder = body[body.index('class="pp-bgal__search gl-adder"'):body.index('id="gl-adder-input"')]
+
+    assert 'M12 8v8M8 12h8' in adder, 'the plus glyph is not there'
+    # The magnifier's circle+handle pair, which is what it replaced.
+    assert 'x1="21" y1="21"' not in adder, 'the field still leads with a magnifier'
+
+
+# -- previewing the non-member render --------------------------------------------------------------
+
+def test_a_free_owner_gets_no_section_controls_but_is_told_they_exist(client):
+    """WHAT A NON-MEMBER ACTUALLY SEES, asserted rather than reasoned about.
+
+    THIS TEST DID NOT DO ITS JOB and the reason is worth keeping. It was written to record that a free
+    owner saw no trace of sections anywhere, and its own comment promised that "if an upsell line is
+    ever added here, this is the assertion that fails and asks for the decision". The upsell was added
+    and it passed: the hook list named `gl-sections__locked`, that class was deleted in the SAME
+    change, and the block that replaced it is called `gl-lockup`. A negative assertion over a list of
+    names cannot notice a name that did not exist when it was written, so it quietly became a test of
+    nothing while still claiming, in its title, to guard the opposite of what now ships.
+
+    The fix is to assert the POSITIVE alongside the negatives: the controls are absent AND the CTA is
+    present. A test that says what should be there fails when that stops being true; a test that only
+    lists what should not be there passes by default forever."""
+    owner = _staff(client, psn='free')
+
+    # 1. A ranked list: the arrange bar renders (arranging is ungated) with no section controls.
+    ranked = _ranked(owner, 3)
+    ranked_body = client.get(_url(ranked)).content.decode()
+    assert 'data-gl-positions' in ranked_body, 'a free owner lost the arrange bar'
+
+    # 2. A collection with no sections: no bar at all, which is the case the CTA had to live outside
+    #    the bar to reach.
+    collection = _list(owner, 3)
+    collection_body = client.get(_url(collection)).content.decode()
+    assert 'data-gl-positions' not in collection_body
+
+    for page in (ranked_body, collection_body):
+        # No CONTROL they cannot use...
+        for hook in ('gl-section__head', 'data-gl-section-add', 'data-gl-numbering',
+                     'data-gl-section-rename'):
+            assert hook not in page, f'a free owner is shown {hook} after all'
+        # ...and the OFFER, which is the half that has to be asserted positively.
+        assert 'gl-lockup' in page, 'the perk is invisible to the hunter who might buy it'
+        assert 'Group this list into sections' in page
+
+
+def test_the_preview_renders_the_page_as_a_non_member_sees_it(client):
+    """`?preview=lists-free`. Sections are the one membership-gated thing on this page, so a single
+    flag is the whole surface."""
+    owner = _member(client, psn='member')
+    game_list = _ranked(owner, 3)
+    svc.create_section(game_list, owner, name='Playing')
+
+    normal = client.get(_url(game_list))
+    assert normal.context['can_manage_sections'] is True
+    assert 'data-gl-section-add' in normal.content.decode()
+
+    preview = client.get(_url(game_list) + '?preview=lists-free')
+
+    assert preview.context['free_preview'] is True
+    assert preview.context['can_manage_sections'] is False
+    body = preview.content.decode()
+    assert 'data-gl-section-add' not in body, 'the member control survived the preview'
+    assert 'data-gl-section-rename' not in body
+    # EVERYTHING UNGATED STAYS. A preview that also withdrew the ungated controls would answer a
+    # different question than the one it is asked.
+    assert 'data-gl-section-delete' in body, 'deleting your own section is not the gated act'
+    assert preview.context['can_arrange'] is True
+    assert 'gl-lockup' in body, 'the lapsed-member line is part of what they see'
+
+
+def test_the_preview_announces_itself(client):
+    """For a free owner with no sections the honest answer is that NOTHING appears, which is
+    indistinguishable from a broken preview without a line saying so."""
+    owner = _member(client, psn='member')
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list) + '?preview=lists-free').content.decode()
+
+    assert 'gl-preview' in body
+    assert 'Previewing as a non-member' in body
+    # The exit link is the page's own address: no state is written by a preview, so leaving one is
+    # just dropping the querystring.
+    assert f'href="/community/lists/{game_list.id}/"' in body
+
+
+def test_the_preview_door_is_team_only(client):
+    """Several of these doors bypass the gate they exist to preview, so the querystring cannot be
+    something anybody can type. A non-member who typed it would otherwise be shown the gate they are
+    already behind, which is harmless -- but a MEMBER typing it silently loses their own controls and
+    reports it as a bug."""
+    owner = ProfileFactory(is_linked=True, psn_username='plain')
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    client.force_login(owner.user)
+
+    game_list = _list(owner, 2)
+    svc.create_section(game_list, owner, name='Playing')
+
+    resp = client.get(_url(game_list) + '?preview=lists-free')
+
+    assert resp.context['free_preview'] is False, 'a non-team hunter opened the door'
+    assert resp.context['can_manage_sections'] is True
+    assert 'gl-preview' not in resp.content.decode()
+
+
+def test_the_preview_writes_nothing(client):
+    """The property that makes it safe to hand to somebody and say "just add this to the URL"."""
+    owner = _member(client, psn='member')
+    game_list = _ranked(owner, 2)
+    section = svc.create_section(game_list, owner, name='Playing')
+    before = game_list.updated_at
+
+    client.get(_url(game_list) + '?preview=lists-free')
+
+    game_list.refresh_from_db()
+    section.refresh_from_db()
+    owner.refresh_from_db()
+    assert game_list.updated_at == before
+    assert section.name == 'Playing'
+    assert owner.user_is_premium is True, 'the preview touched the real membership flag'
+    assert GameListSection.objects.filter(game_list=game_list).count() == 1
+
+
+def test_the_preview_door_is_the_shared_one(client):
+    """An anti-drift test walks the tree and fails any module that hand-rolls `GET.get('preview')` --
+    a door that opens only half of a thing is not a preview, and copies of the gate drift. This is the
+    local half of that rule, so the coupling is visible from here too."""
+    source = _read('gamelists/views.py')
+
+    # THE POSITIVE ONLY. The first version asserted the hand-rolled read was ABSENT, and matched the
+    # comment explaining the rule instead of any code -- `_decommented` in this file strips JS
+    # comments, not Python ones, so it could not have helped either. The negative is already owned,
+    # tree-wide, by `test_every_team_preview_door_is_the_same_door`; a second, weaker copy of it here
+    # is exactly the duplication that guard exists to prevent.
+    assert 'from core.previews import previewing' in source
+    assert "previewing(self.request, 'lists-free')" in source
+
+
+# -- the sections CTA ------------------------------------------------------------------------------
+
+def test_a_free_owner_is_told_sections_exist_and_what_adds_them(client):
+    """THE GAP THIS CLOSES. A free owner whose list had never had a section saw no trace of the
+    feature anywhere on the page, so the perk was invisible to exactly the hunter who might buy it."""
+    owner = _staff(client, psn='free')
+    game_list = _list(owner, 3)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'gl-lockup' in body
+    assert 'Group this list into sections' in body
+    # SCOPED TO THE BLOCK. The navbar and the footer both link to /support/ on every page, so a bare
+    # `href="/support/" in body` was true with the CTA's own link deleted -- it was asserting that
+    # the site chrome exists.
+    block = body[body.index('gl-lockup'):body.index('</div>', body.index('gl-lockup__go'))]
+    assert f'href="{reverse("support_hub")}"' in block, 'the CTA has no way to act on'
+    assert 'See membership' in block
+
+    # ON A COLLECTION WITH NO SECTIONS, which is the case the old line could not reach at all: the
+    # arrange bar does not render here, so anything inside it was invisible.
+    assert 'data-gl-positions' not in body, 'the fixture stopped testing the hard case'
+
+
+def test_the_cta_is_outside_the_bar_that_hides_itself(client):
+    """The arrange bar is `hidden` until the identity editor is opened. A CTA inside it would be
+    behind a control the hunter has no reason to press, which is where the line it replaced lived."""
+    owner = _staff(client, psn='free')
+    game_list = _ranked(owner, 3)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    bar_start = body.index('<div class="gl-positions"')
+    bar_end = body.index('</div>', body.index('data-gl-positions-status'))
+    assert body.index('gl-lockup') > bar_end, 'the CTA is inside the bar that hides itself'
+    assert bar_start < bar_end
+
+
+def test_a_lapsed_member_is_told_what_they_keep_first(client):
+    """Two states of ONE block. Somebody who has never had sections needs to be told what they are;
+    somebody whose membership lapsed needs to be told what they keep -- and on a list that visibly HAS
+    sections, a rename control quietly going missing reads as a bug rather than a membership change."""
+    owner, game_list, _items, _first, _second = _sectioned(client)
+    owner.user_is_premium = False
+    owner.save(update_fields=['user_is_premium'])
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'Your sections are still here' in body
+    assert 'Group this list into sections' not in body, 'both states rendered at once'
+
+    # THE OTHER DIRECTION, which is what actually pins the branch: a free owner with NO sections must
+    # get the other copy. Asserting only that the lapsed page lacks the never-had copy passes with the
+    # condition hard-wired to the lapsed branch.
+    client.logout()
+    newcomer = _staff(client, psn='newcomer')
+    plain = _list(newcomer, 2)
+    other = client.get(_url(plain)).content.decode()
+    assert 'Group this list into sections' in other
+    assert 'Your sections are still here' not in other
+
+    # The 44px floor every control this feature renders carries, including the one in the offer.
+    css = _read('static/css/components/gamelists.css')
+    go = css[css.index('.gl-lockup__go {'):css.index('@media (max-width: 519px)',
+                                                    css.index('.gl-lockup__go {'))]
+    assert 'min-height: 44px' in go
+    # Their sections and the ungated controls are all still there, which is what the copy promises.
+    assert 'gl-section__head' in body
+    assert 'data-gl-section-delete' in body
+
+
+def test_the_cta_is_never_shown_to_somebody_it_cannot_help(client):
+    """Four negatives, and the unlinked one is the one worth having: an unlinked owner also fails
+    `can_manage_sections`, and selling them a membership answers a question they did not ask. What
+    stands between them and sections is linking a PSN account."""
+    owner = _member(client, psn='member')
+
+    # 1. A MEMBER, who already has them.
+    member_list = _list(owner, 2)
+    assert 'gl-lockup' not in client.get(_url(member_list)).content.decode()
+
+    # 2. A FREE owner's EMPTY list: sections group games, and this would be selling a way to
+    #    organise nothing. The owner has to be free, or the CTA is absent for the membership reason
+    #    and this proves nothing about `bool(items)` -- which is how it first passed with that clause
+    #    deleted.
+    client.logout()
+    pauper = _staff(client, psn='pauper')
+    empty = _list(pauper, 0)
+    assert 'gl-lockup' not in client.get(_url(empty)).content.decode(), \
+        'a free owner of an empty list was sold a way to organise nothing'
+    populated = _list(pauper, 2, name='Has games')
+    assert 'gl-lockup' in client.get(_url(populated)).content.decode(), \
+        'the premise: the same owner DOES get it once there are games'
+
+    # 3. A READER, on somebody else's public list.
+    free = _staff(client, psn='free')
+    theirs = _list(free, 2, public=True)
+    client.logout()
+    assert 'gl-lockup' not in client.get(_url(theirs)).content.decode()
+
+    # 4. An UNLINKED owner. Built while linked, because `create_list` refuses otherwise.
+    unlinked = _staff(client, psn='unlinked')
+    their_list = _list(unlinked, 2)
+    unlinked.is_linked = False
+    unlinked.save(update_fields=['is_linked'])
+    resp = client.get(_url(their_list))
+    assert resp.context['is_owner'] is True, 'the fixture stopped testing what it claims'
+    assert 'gl-lockup' not in resp.content.decode(), 'an unlinked owner was sold a membership'
+
+
+def test_the_cta_runs_no_per_user_data_path(client):
+    """CLAUDE.md's premium-preview rule, which exists because a locked UI twice ran its real data path
+    for people who could not use it. This is a flag, a heading and a link: rendering it must cost the
+    same as not rendering it."""
+    free = _staff(client, psn='free')
+    game_list = _list(free, 4)
+
+    client.get(_url(game_list))  # warm whatever the first render of a page fills
+    with CaptureQueriesContext(connection) as locked:
+        client.get(_url(game_list))
+
+    free.user_is_premium = True
+    free.save(update_fields=['user_is_premium'])
+    client.get(_url(game_list))  # ...and again for the other branch
+    with CaptureQueriesContext(connection) as unlocked:
+        resp = client.get(_url(game_list))
+
+    assert 'gl-lockup' not in resp.content.decode(), 'the premise: the member render has no CTA'
+    assert len(locked.captured_queries) == len(unlocked.captured_queries), \
+        'the CTA costs queries a member does not pay'
+
+
+def test_the_preview_shows_the_cta_a_free_owner_would_get(client):
+    """The whole point of the door: `can_manage_sections` going false has to carry the CTA with it, or
+    the preview shows an absence rather than the real render."""
+    owner = _member(client, psn='member')
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list) + '?preview=lists-free').content.decode()
+
+    assert 'gl-lockup' in body
+    assert 'Group this list into sections' in body

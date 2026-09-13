@@ -107,15 +107,53 @@ not the second, which is why the toggle inside is gated separately from the bar 
             </label>
             {% endif %}
         </div>
-        {% elif is_owner and sections %}
-        {% comment %}A LAPSED MEMBER's list keeps every section it has, and they keep arranging it --
-        what they lose is making another. Said plainly rather than by the controls silently being
-        absent, which reads as a bug on a list that visibly has sections.{% endcomment %}
-        <p class="gl-sections__locked">
-            Your sections are still here, and you can still move games between them.
-            <a href="{% url 'support_hub' %}">Membership</a> is what adds new ones.
+        {% endif %}
+    </div>
+{% endif %}
+
+{% if sections_locked %}
+{% comment %}THE SECTIONS CTA, and it is deliberately a SIBLING of the arrange bar rather than a row
+inside it. The bar is `hidden` until the identity editor is opened, and it does not render at all for
+a free owner of a section-less Collection -- so a CTA inside it would be invisible to precisely the
+hunter it is for. This sits in the same out-of-band slot, so it still re-renders when the type or the
+sections change, and it is never hidden.
+
+ONE BLOCK, TWO STATES, because they are two halves of one sentence rather than two features. Somebody
+who has never had sections needs to be told what they are; somebody whose membership lapsed needs to
+be told what they keep. Writing them as separate components is how the second one ends up saying the
+first one's thing after a copy edit.
+
+THE VOICE IS ADDITIVE. It says what membership ADDS, never what the hunter lacks -- lists, games,
+ranking, publishing and sharing are all theirs already, and a line that frames this page as
+half-disabled would be both unkind and untrue.{% endcomment %}
+<div class="gl-lockup" role="note">
+    <span class="gl-lockup__icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/>
+        </svg>
+    </span>
+    <div class="gl-lockup__body">
+        {% if sections %}
+        {% comment %}A LAPSED member. Their sections are intact and they can still arrange them --
+        said out loud, because on a list that visibly HAS sections a rename control quietly going
+        missing reads as a bug rather than as a membership change.{% endcomment %}
+        <p class="gl-lockup__title">Your sections are still here</p>
+        <p class="gl-lockup__hint">
+            Nothing moved, and you can still file games between them. Membership is what adds new
+            ones.
+        </p>
+        {% else %}
+        <p class="gl-lockup__title">Group this list into sections</p>
+        <p class="gl-lockup__hint">
+            Playing, Finished, Someday: your own headers, in your own order. Members get sections on
+            every list they own.
         </p>
         {% endif %}
     </div>
+    {% comment %}A ghost CTA, not a solid one. The solid `.pp-cta` on this page belongs to the arrange
+    mode, which is a thing the hunter is doing; this is an offer, and an offer that shouts louder than
+    the page's real controls is the kind of upsell the product identity doc rules out.{% endcomment %}
+    <a class="pp-cta pp-cta--ghost gl-lockup__go" href="{% url 'support_hub' %}">See membership</a>
+</div>
 {% endif %}
 </div>

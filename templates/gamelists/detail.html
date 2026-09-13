@@ -240,6 +240,30 @@ below with no outer wrapper.
         </div>
     </section>
 
+{% comment %}THE PREVIEW SAYS SO. A door whose whole point is that the page looks like somebody
+    else's needs to announce itself, or you cannot tell "previewing correctly" from "the controls are
+    missing" -- and for a free owner with no sections the honest answer IS that nothing appears,
+    which is indistinguishable from a broken preview without this line.
+
+    Team-only, like the door itself. `previewing()` has already established that, so the template
+    asks nothing further -- a second, weaker check here is how the two drift.
+
+    The exit link drops the querystring rather than toggling anything: no state is written by a
+    preview, so leaving one is just the page's own address.{% endcomment %}
+    {% if free_preview %}
+    <div class="gl-preview" role="note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span class="gl-preview__body">
+            <strong>Previewing as a non-member.</strong>
+            Sections are the only member-gated control on this page, so everything else here is what
+            a free hunter really sees.
+        </span>
+        <a class="gl-preview__exit" href="{% url 'list_detail' game_list.id %}">Exit preview</a>
+    </div>
+    {% endif %}
+
     {% comment %}ONE toolbar card: title, the owner's adder, and sort -- the same bar the browse pages
     use (`.pp-toolbar-card` > `.pp-gbrowse__bar`, a flex row that wraps on narrow phones). The adder
     was previously a hand-rolled card of its own sitting directly beneath this one, which put two
@@ -272,10 +296,20 @@ below with no outer wrapper.
             hint the other pages show. Safe here: the handler takes the first VISIBLE candidate, and
             this page has no other -- the sort form holds a select, which the fallback does not
             match.{% endcomment %}
-            <div class="pp-bgal__search" data-search-wrap data-gl-adder
+            {% comment %}`.gl-adder` ON TOP OF the shared field, never instead of it. The shared
+            class keeps the geometry, the chrome and `wireSearchField`; the modifier does nothing but
+            raise this one instance, so the two search fields on the site still agree about what a
+            search field IS. (The private field this page used to carry is why that matters -- it had
+            drifted on every dimension and is documented in gamelists.css.)
+
+            THE GLYPH IS A PLUS, NOT A MAGNIFIER. Owner's note, 2026-09: sitting in a grey bar with a
+            magnifier and a sort select beside it, the one control on the page that ADDS anything read
+            as a filter and was easy to look straight past. Searching is the means here; adding is the
+            act, and a leading icon should say what pressing the thing achieves.{% endcomment %}
+            <div class="pp-bgal__search gl-adder" data-search-wrap data-gl-adder
                  data-search-url="{% url 'list_game_search' game_list.id %}"
                  data-add-url="{% url 'list_add_game' game_list.id %}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
                 {% comment %}Deliberately NOT `role="combobox"`. The results are real <button>s, so they
                 are already focusable, activatable and announced correctly; layering a combobox on top
                 would mean owning aria-activedescendant and a selection model to describe what the

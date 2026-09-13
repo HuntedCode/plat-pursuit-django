@@ -638,17 +638,55 @@
 }
 .gl-sections__numbering input { width: 15px; height: 15px; flex: none; accent-color: var(--pp-primary); }
 
-/* The lapsed-member line. Reads as information rather than as a pitch: it opens with what they keep,
-   because that is the part they are most likely to be worried about. */
-.gl-sections__locked {
-    margin: 0;
-    padding-top: 10px;
-    border-top: 1px solid var(--pp-border);
+/* ── The sections lockup ─────────────────────────────────────────────────────────────────────────
+ *
+ * What a free hunter sees where the section controls would be. It replaced a one-line
+ * `.gl-sections__locked` note that lived INSIDE the arrange bar, which meant it reached nobody it was
+ * written for: that bar is hidden until the editor is opened and does not render at all for a free
+ * owner of a section-less Collection.
+ *
+ * CARDED, because the rule this project keeps relearning is that content does not sit bare on the
+ * page background. It is a `.scard`-grammar surface in miniature: one hairline, one radius, an icon
+ * rail and a body, the same anatomy the design system gives a utility card.
+ *
+ * WARM, NOT ACCENT. `--pp-primary` on this page means "this control is live" (the arrange bar, the
+ * adder). An offer is not a control, and dressing it in the same colour makes the page's real
+ * affordances harder to find -- which is the cost an upsell is never allowed to impose here. */
+.gl-lockup {
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 26%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-warning) 5%, var(--pp-bg-1));
+}
+.gl-lockup__icon {
+    flex: none;
+    display: grid; place-items: center;
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 13%, transparent);
+}
+.gl-lockup__icon svg { width: 17px; height: 17px; }
+.gl-lockup__body { flex: 1 1 auto; min-width: 0; }
+.gl-lockup__title { margin: 0; font-size: 0.82rem; font-weight: 700; color: var(--pp-text); }
+.gl-lockup__hint {
+    margin: 2px 0 0;
     font-size: 0.72rem; line-height: 1.45;
     color: var(--pp-text-dim);
 }
-.gl-sections__locked a { color: var(--pp-primary); font-weight: 700; }
-.gl-sections__locked a:hover { text-decoration: underline; }
+/* The 44px floor, like every other control this feature renders. */
+.gl-lockup__go { flex: none; font-size: 0.74rem; padding: 8px 13px; min-height: 44px; }
+
+/* At 375px the icon, two lines of body and a button leave the hint about eight characters a line.
+   The button drops beneath the text and spans the width rather than being squeezed -- the reference
+   standard's instruction for exactly this, on the same 519/520 boundary the bar above already uses.
+   The ICON stays on the first row: it is what makes the block scannable, and it costs 34px. */
+@media (max-width: 519px) {
+    .gl-lockup { flex-wrap: wrap; }
+    .gl-lockup__go { width: 100%; justify-content: center; margin-top: 2px; }
+}
 
 /* ── Section header controls ─────────────────────────────────────────────────────────────────────
  *
@@ -932,6 +970,98 @@
    state row. They mirror the nav search's structure (`.pp-navsearch__*` in chrome.css) without
    borrowing its block name: that block belongs to the site FRAME, and a page module reaching into it
    couples the two. Same grammar, own namespace. */
+
+/* THE TEAM PREVIEW RIBBON. Deliberately unlike anything else on the page -- it is not part of the
+   product, it is a note to one person about what they are looking at, and a preview that blends in
+   is how you forget it is on and file a bug against it. Warm rather than accent, because the accent
+   here means "this control is live" and this control is not one. */
+.gl-preview {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin: 0 0 12px;
+    padding: 10px 13px;
+    border-radius: 12px;
+    border: 1px dashed color-mix(in oklab, var(--pp-warning) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-warning) 9%, var(--pp-bg-1));
+    font-size: 0.74rem; line-height: 1.45;
+    color: var(--pp-text-dim);
+}
+.gl-preview > svg { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--pp-warning); }
+.gl-preview__body { flex: 1 1 auto; min-width: 0; }
+.gl-preview__body strong { color: var(--pp-text); font-weight: 700; }
+.gl-preview__exit {
+    flex: none;
+    /* The 44px floor, reached with padding so the link keeps its type size. */
+    display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px;
+    font-weight: 700;
+    color: var(--pp-primary);
+}
+.gl-preview__exit:hover { text-decoration: underline; }
+/* Below 520px the ribbon's three parts leave the sentence about four words a line, so the exit link
+   drops beneath the text rather than being squeezed -- the reference standard's instruction for
+   exactly this, and the same 519/520 boundary the position bar already uses. */
+@media (max-width: 519px) {
+    .gl-preview { flex-wrap: wrap; }
+    .gl-preview__exit { margin-left: auto; }
+}
+
+/* THE ADDER IS THE TOOLBAR'S FOCAL POINT, and everything below is about earning that.
+ *
+ * It began as the bare shared field, which was correct and too quiet: in a grey bar between a
+ * section title and a sort select, three controls of equal weight, the one that adds a game read as
+ * one more filter. The owner's note was that it "is not really the focal point and can be easily
+ * overlooked", which is exactly what a shared neutral treatment buys you when one of the three
+ * controls is the primary action and the other two are chrome.
+ *
+ * RAISED, NOT REBUILT. Every rule here is scoped to `.gl-adder` and layers over `.pp-bgal__search`
+ * rather than replacing it, so the geometry, the `/` hint, the clear button and the spinner all stay
+ * the shared ones. This file already carries the scar from the other approach: a private field that
+ * drifted off the shared values on every dimension until two search fields on one feature disagreed.
+ *
+ * The accent lives at REST here, which is the one place this page spends it outside the arrange bar.
+ * A field that only lights up on focus cannot be the thing your eye lands on before you have touched
+ * anything. */
+.gl-adder {
+    /* Takes the bar's slack. `.pp-gbrowse__bar > .pp-bgal__search` sets `1 1 200px`; at 200px this
+       sat roughly level with the sort select and read as its twin. The larger basis makes it the
+       widest thing in the row wherever there is room, and the bar's `flex-wrap` still drops it to
+       its own full-width line on a phone. */
+    flex: 1 1 320px;
+}
+.gl-adder > svg {
+    /* The accent, and a touch larger than the shared 16px. The icon is the first thing read in a
+       field with placeholder text, so it carries the "this adds something" message on its own. */
+    width: 18px; height: 18px;
+    left: 12px;
+    color: var(--pp-primary);
+}
+.gl-adder input {
+    /* Taller than the shared field (7px padding lands ~31px, under the 44px floor the design system
+       sets and every other control in this feature's bar now carries) and with room for the wider
+       glyph. */
+    padding: 11px 12px 11px 38px;
+    min-height: 44px;
+    font-size: 13.5px;
+    border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 6%, var(--pp-bg-2));
+    transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+/* The placeholder is the label here -- there is no visible one, because the toolbar already says
+   "Games" and a second heading over one field is noise -- so it reads at full text weight rather
+   than as the usual muted hint. */
+.gl-adder input::placeholder { color: var(--pp-text-dim); }
+@media (hover: hover) {
+    .gl-adder:hover input {
+        border-color: color-mix(in oklab, var(--pp-primary) 58%, var(--pp-border));
+        background: color-mix(in oklab, var(--pp-primary) 9%, var(--pp-bg-2));
+    }
+}
+/* Focus is a RING rather than a bigger border, so the field does not shift by a pixel when it takes
+   focus -- and it outranks the shared `:focus` rule below it on specificity, not on `!important`. */
+.gl-adder input:focus {
+    border-color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2));
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 22%, transparent);
+}
 
 /* An OVERLAY, like `.pp-navsearch__panel` and `.gd-lb__suggest`. In flow it pushed the whole grid
    down by up to 336px on every debounced keystroke that changed the result count -- on a 375px phone

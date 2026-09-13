@@ -36,6 +36,7 @@ Moderators unlock four things beyond the mark:
 | The [Moderation Center](moderation-center.md) at `/mod/` (2026-09) | `is_mod_or_admin()` / `ModeratorRequiredMixin` |
 | The beta / staging site | `BetaStaffGateMiddleware` (2026-08-23: the mod team reviews the beta too) |
 | The home-page team previews (`?preview=landing` / `syncing` / `launch-welcome`) | `core/views.py` |
+| The non-member list render (`?preview=lists-free`) | `gamelists/views.py` |
 
 Analytics and the staff mixins stay admin-only deliberately. (This list said "one gate, everything
 else admin-only including the beta site" until 2026-09, which contradicted both the middleware and
