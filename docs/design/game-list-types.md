@@ -95,7 +95,21 @@ it *measured* has the right tool.
 | **Collection** | none | insertion | **Shipped 2026-09.** The default. |
 | **Ranked** | none | author, 1..N | **Shipped 2026-09.** Numerals + drag. |
 | **Top-N** | none | author, 1..N | Candidate. Ranked with a cap — constraint drives quality, and it makes the best share card. |
-| **Sectioned** | author-named | within section | Candidate, and now unjustified on its own (see above). |
+
+**Top-N was cut** (owner's call, 2026-09-13): once Ranked exists, a hunter who wants a top ten simply
+makes one with ten games. A cap adds enforcement, an edge case when it is lowered below the current
+size, and a second thing that renders identically to Ranked — for a constraint people apply
+themselves.
+
+**Sectioned is no longer a type either.** It became a capability that composes with the two that
+exist, and moved to [list-sections.md](list-sections.md). It failed the one-rendering test from the
+other direction: sectioning is not a different presentation, it is structure any presentation can
+carry, and as a type it would have meant `sectioned` plus `sectioned-ranked` and a combinatorial
+table.
+
+**Which leaves the type system finished at two.** Collection and Ranked are what `list_type` is for,
+and everything else that was once planned for it is either cut, its own system, or an orthogonal
+capability. That is a better outcome than the seven-row table this document opened with.
 
 ## Parked: brackets
 
