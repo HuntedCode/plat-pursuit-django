@@ -304,6 +304,12 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
         # The type picker's options come from the model, so the dialog cannot offer a type the
         # service would refuse -- and a type added there appears here without a template edit.
         context['list_type_options'] = list_type_options()
+        # From the constant, not from `forloop.first`. Every other default reads
+        # `LIST_TYPE_COLLECTION`; the dialog read whichever type happened to be declared first, so
+        # reordering the choices -- which "each new type arrives with its presentation" makes likely
+        # -- would silently change what a JS-enabled hunter creates, while the no-JS path (no field
+        # posted) still created a Collection.
+        context['default_list_type'] = LIST_TYPE_COLLECTION
         # From the model, so the form's `maxlength` and the counter cannot drift from
         # what the service will accept.
         context['name_max_length'] = NAME_MAX_LENGTH
@@ -438,11 +444,21 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         raw = self.request.GET.get('sort', default)
         return raw if raw in dict(self._sort_choices()) else default
 
+    def _is_fragment(self):
+        """Is this the items-panel request rather than a full page render?
+
+        Extracted so `get_template_names` and the out-of-band chrome flag cannot drift: the OOB
+        fragments are only meaningful when the response IS the partial, and gating them on the
+        querystring alone put a second copy of the sort control and the position bar into the full
+        page.
+        """
+        return bool(self.request.htmx
+                    or self.request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+
     def get_template_names(self):
         # The sort swap returns the items only. Same shape as the browse pages, and the same reason:
         # re-sorting a 200-game list should not re-render the header, the toolbar and the chrome.
-        is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        if self.request.htmx or is_xhr:
+        if self._is_fragment():
             return ['gamelists/partials/detail_items.html']
         return [self.template_name]
 
@@ -539,8 +555,16 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         # the rest), so past `MAX_ITEMS_RENDERED` the page cannot post a complete one. Offering a
         # handle there would give every drag a refusal. `ReorderItemsView`'s own docstring asks
         # callers to withhold the affordance rather than build one whose every use fails.
+        # `is_linked` for the same reason `can_act` below carries it: `ReorderItemsView` is behind
+        # `_LinkedProfileRequired`, which answers a JSON caller with an HTML redirect. The page and
+        # the endpoint have to agree about who can act.
+        #
+        # `items` because an EMPTY ranked list otherwise renders the bar and `data-gl-reorder` over
+        # zero rows -- a mode offered for nothing, whose one possible action the endpoint 400s.
         context['can_reorder'] = (
             context['is_owner']
+            and viewer.is_linked
+            and bool(items)
             and sort == 'rank'
             and not context['items_truncated']
         )
@@ -569,6 +593,14 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         context['name_max_length'] = NAME_MAX_LENGTH
         context['description_max_length'] = DESCRIPTION_MAX_LENGTH
         context['list_type_options'] = list_type_options()
+        # THE OUT-OF-BAND CHROME, and only on a fragment request. Gated on the querystring alone,
+        # `GET ...?chrome=1` in a browser rendered the FULL page -- which includes the position slot
+        # and the sort control -- and then had the items partial render both AGAIN inside
+        # `#gl-items-panel`. Two elements per id, so `getElementById` picks the first and the second
+        # bar is dead markup, plus a stray unlabelled <select> below the grid and inert `hx-swap-oob`
+        # attributes in the initial document. Reachable by typing or sharing the URL.
+        # `== '1'` rather than truthiness, so `?chrome=0` means what it says.
+        context['oob_chrome'] = self._is_fragment() and self.request.GET.get('chrome') == '1'
         return context
 
 

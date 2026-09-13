@@ -57,6 +57,13 @@
     var pickedRow = null;
     // Reorder writes run one at a time; see `saveOrder`.
     var orderChain = Promise.resolve();
+    // Bumped when a reorder write fails, so anything already queued stands down rather than
+    // re-applying the order the recovery refresh just undid.
+    var orderGen = 0;
+    // How many reorder writes are outstanding, so "Saved" is not shown over one still in flight.
+    var pendingSaves = 0;
+    // Set for one tick after a drop; see the `onEnd` note in `attachDrag`.
+    var justDragged = false;
     // Per-node, and NOT serializable -- see the header. A `data-` attribute here
     // survives htmx's history snapshot and disables the wiring it was meant to guard.
     var wired = new WeakSet();
@@ -251,13 +258,25 @@
       * order"), and carrying the old one across would land a freshly-ranked list on A-Z. The address
       * bar is cleaned to match, so a reload does not resurrect a sort that no longer applies.
       */
-     function refreshAfterTypeChange() {
+    function refreshAfterTypeChange() {
         var path = window.location.pathname;
         if (window.history && window.history.replaceState) {
             window.history.replaceState({}, '', path);
         }
+        // The same guard `refreshItems` documents at length, and for the same reason: htmx resolves
+        // its ajax promise for EVERY status and maps 4xx/5xx to `swap: false`. Without this a 500
+        // here resolved quietly, leaving numerals and grips on a list the server no longer calls
+        // ranked, a sort control still offering "List order", and no sign anywhere.
+        var mine = ++refreshSeq;
+        var before = document.getElementById('gl-items');
         return window.htmx.ajax('GET', path + '?chrome=1',
                                 { target: '#gl-items-panel', swap: 'innerHTML' })
+            .then(function () {
+                if (mine !== refreshSeq) { return; }
+                if (document.getElementById('gl-items') === before) {
+                    throw new Error('the items panel did not swap');
+                }
+            })
             .catch(function (err) {
                 // The row is already saved -- only the view is stale -- so say what is true and let
                 // them decide, rather than reloading out from under an open editor.
@@ -565,9 +584,14 @@
 
         // Arrow keys walk the results; Escape anywhere in them returns to the field. Rows are real
         // buttons, so Tab already works and this only adds the vertical shortcut.
+        // `stopPropagation` as well as `preventDefault`, because the position mode listens for the
+        // same keys on the DOCUMENT. The result rows are <button>s, so `isTyping` does not exclude
+        // them, and arrowing through search results ALSO moved the picked card and fired a reorder
+        // write -- Escape likewise both closed the panel and dropped the pick.
         panel.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') { input.focus(); abandon(); return; }
+            if (e.key === 'Escape') { e.stopPropagation(); input.focus(); abandon(); return; }
             if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') { return; }
+            e.stopPropagation();
             var rows = Array.prototype.slice.call(
                 panel.querySelectorAll('.gl-adder__opt:not(:disabled)'));
             var at = rows.indexOf(document.activeElement);
@@ -971,6 +995,25 @@
     }
 
     /**
+     * The grip picks a card up too, which it did not.
+     *
+     * It is a real <button> announced as "Reorder <game>", and pressing it -- by click, Enter or
+     * Space -- did nothing at all: `onCardClick` requires a `.pp-gcard` ancestor and the grip is the
+     * card's SIBLING, so the only thing that ever read it was the arrow-key handler. A button that
+     * is inert on activation is a broken promise however good the arrow-key path is.
+     *
+     * Delegated on the body rather than bound per grip, because there is one per row and they are
+     * replaced on every swap.
+     */
+    function onGrabClick(e) {
+        if (!positioning) { return; }
+        var grab = e.target.closest && e.target.closest('[data-gl-grab]');
+        if (!grab) { return; }
+        var row = grab.closest('.gl-item');
+        if (row) { togglePicked(row); }
+    }
+
+    /**
      * Put the keyboard back where it was after a removal.
      *
      * The refresh replaces the whole panel, so the focused remove button is destroyed and focus
@@ -1017,7 +1060,16 @@
      */
     function enterPositioning() {
         var grid = document.getElementById('gl-items');
-        if (!grid || !grid.hasAttribute('data-gl-reorder')) { return; }
+        // BOTH refusals happen before any state changes. `attachDrag` bails when SortableJS is
+        // missing, and it used to do so AFTER `positioning` and `[data-positioning]` were already
+        // set -- leaving the tray, the "Done" label and the hidden remove buttons over a grid with
+        // no drag, no pick-up, and cards that still navigate.
+        if (!grid || !grid.hasAttribute('data-gl-reorder') || !PP.DragReorderManager) {
+            // Not silent: the bar is on screen offering this, so if it cannot be honoured the bar is
+            // wrong and should correct itself rather than the press appearing to do nothing.
+            syncPositionsVisibility();
+            return;
+        }
         positioning = true;
         var panel = document.getElementById('gl-items-panel');
         // The flag lives on the PANEL, not on `#gl-items`. The panel is the swap TARGET, so its own
@@ -1028,7 +1080,8 @@
         attachDrag(grid);
         paintPositionsToggle();
         setPositionsStatus('');
-        announce('Position editing on. Drag a card, or use the arrow keys on its grip.');
+        announce('Position editing on. Drag a card, or click one to pick it up and move it with '
+                 + 'the arrow keys.');
     }
 
     function exitPositioning(silent) {
@@ -1045,7 +1098,13 @@
     function paintPositionsToggle() {
         var toggle = document.querySelector('[data-gl-positions-toggle]');
         if (!toggle) { return; }
-        toggle.setAttribute('aria-pressed', positioning ? 'true' : 'false');
+        // NOT `aria-pressed`. This carried both a pressed state AND a changing label, which APG
+        // says a toggle button must not do: the two describe the same fact twice and disagree about
+        // what the word means -- "Done, pressed" leaves a reader unsure whether "Done" is the state
+        // or the action. The label change is the more useful half on a control this size, so the
+        // button is an ACTION button naming what it will do next, and the mode change itself is
+        // announced through the live region.
+        toggle.removeAttribute('aria-pressed');
         var label = toggle.querySelector('[data-gl-positions-label]');
         if (label) { label.textContent = positioning ? 'Done' : 'Edit list positions'; }
 
@@ -1109,6 +1168,14 @@
             onReorder: function (_itemId, _newPosition, allItemIds) {
                 saveOrder(grid, allItemIds, 'Order saved.');
             },
+            // Sortable swallows the click that follows a drop -- except on Chrome for Android, where
+            // it skips registering that listener entirely. Without this, finishing a drag there
+            // immediately picks the card back up (or drops the one that was held). Cleared on the
+            // next tick, so a real click a moment later still works.
+            onEnd: function () {
+                justDragged = true;
+                window.setTimeout(function () { justDragged = false; }, 0);
+            },
         });
 
         // WHILE ARRANGING, A CARD DOES NOT NAVIGATE. Now that the whole card is the drag surface, a
@@ -1151,7 +1218,7 @@
      * you should never have to hunt for the way out of a selection you made by accident.
      */
     function onCardClick(e) {
-        if (!positioning) { return; }
+        if (!positioning || justDragged) { return; }
         var card = e.target.closest && e.target.closest('.pp-gcard');
         if (!card) { return; }
         // The navigation, not the event -- the grip's own click still has to reach it.
@@ -1160,11 +1227,22 @@
         if (row) { togglePicked(row); }
     }
 
+    function setGrabPressed(row, pressed) {
+        var grab = row && row.querySelector('[data-gl-grab]');
+        if (grab) { grab.setAttribute('aria-pressed', pressed ? 'true' : 'false'); }
+    }
+
     function togglePicked(row) {
         if (pickedRow === row) { dropPicked(); return; }
         dropPicked(true);
         pickedRow = row;
         row.classList.add('is-picked');
+        // The GRIP carries the state, as a toggle button. Announcing the pick-up once through the
+        // live region told somebody at the moment it happened and then left no way to ask again --
+        // navigate away and back, or get interrupted by the "Saved" message, and nothing anywhere
+        // says which card is held. "Reorder Elden Ring, toggle button, pressed" is that statement,
+        // and it is on the control that already means this card.
+        setGrabPressed(row, true);
         var card = row.querySelector('.pp-gcard');
         var name = (card && card.getAttribute('aria-label')) || 'Card';
         announce(name + ' picked up. Arrow keys move it, Escape drops it.');
@@ -1174,6 +1252,7 @@
     function dropPicked(silent) {
         if (!pickedRow) { return; }
         pickedRow.classList.remove('is-picked');
+        setGrabPressed(pickedRow, false);
         pickedRow = null;
         if (!silent) { announce('Dropped.'); }
         paintPositionsToggle();
@@ -1213,15 +1292,22 @@
      * still ranked until the save lands.
      */
     function syncPositionsVisibility() {
-        var block = document.querySelector('[data-gl-positions]');
-        if (!block) { return; }
-
+        // THE GRID DECIDES, NOT THE BAR. This used to bail when `[data-gl-positions]` was missing --
+        // and switching Ranked -> Collection DELETES it, because the slot renders the bar only under
+        // `can_reorder`. `exitPositioning` is the only thing that turns the mode off, so it became
+        // unreachable in exactly the case that most needs it, and the mode stayed on forever:
+        // `[data-positioning]` kept every remove button hidden on a Collection, the keydown listener
+        // stayed bound, and `pickedRow` went on pointing at a detached row whose grid still carried
+        // `data-reorder-url` -- so arrow keys silently rewrote positions on a list nobody could see.
+        //
+        // Reordering the two halves is the whole fix: leave the mode FIRST, then update the bar if
+        // there still is one.
         var grid = document.getElementById('gl-items');
-        var allowed = !!(grid && grid.hasAttribute('data-gl-reorder'));
-        var show = allowed && editorOpen;
-
-        block.hidden = !show;
+        var show = !!(grid && grid.hasAttribute('data-gl-reorder')) && editorOpen;
         if (!show) { exitPositioning(true); }
+
+        var block = document.querySelector('[data-gl-positions]');
+        if (block) { block.hidden = !show; }
     }
 
     //: Arrow keys move an entry one place through the ORDER, which is the axis a ranked list is
@@ -1325,16 +1411,33 @@
         //
         // A chain rather than a sequence-number guard: the point is not to discard the stale
         // response, it is to stop the stale REQUEST from being written second.
+        // A GENERATION, on top of the chain. The chain alone stops the writes racing; it does not
+        // stop a queued write from UNDOING the recovery. Two quick arrow presses, the first POST
+        // fails: its handler refreshes the grid back to the server's order, and then the second
+        // request goes out carrying a body captured from the pre-refresh DOM -- a complete, valid
+        // order that includes the move the hunter was just told was not saved. The server takes it,
+        // the pill flips to "Saved", and the screen now disagrees with the database in the other
+        // direction. Bumping the generation on failure makes everything already queued stand down.
+        var generation = orderGen;
+        pendingSaves += 1;
         orderChain = orderChain
             .catch(function () { /* a previous failure already reported itself; do not block this */ })
-            .then(function () { return postJson(grid.dataset.reorderUrl, body); })
             .then(function () {
-                setPositionsStatus('Saved');
+                if (generation !== orderGen) { return null; }
+                return postJson(grid.dataset.reorderUrl, body);
+            })
+            .then(function (result) {
+                if (generation !== orderGen || result === null) { return; }
+                // Only when nothing is still in flight. "Saved" used to appear as soon as the FIRST
+                // of two queued writes came back, so the pill claimed success over an outstanding
+                // request and could then flip to "Not saved".
+                if (pendingSaves <= 1) { setPositionsStatus('Saved'); }
                 // ONE spoken message per action, said after the write rather than before it, so
                 // "moved to number 3" is only ever heard about a move that actually persisted.
                 announce(successMessage || 'Order saved.');
             })
             .catch(function (err) {
+                orderGen += 1;
                 setPositionsStatus('Not saved');
                 toastError(err, 'That new order could not be saved.');
                 // The client and the server now disagree about the order, and the client is the one
@@ -1343,7 +1446,8 @@
                     logFailure('items refresh after a failed reorder', refreshErr);
                     announce('The list could not be restored. Reload the page.');
                 });
-            });
+            })
+            .then(function () { pendingSaves = Math.max(0, pendingSaves - 1); });
         return orderChain;
     }
 
@@ -1371,6 +1475,16 @@
     function boot(first) {
         handledGrid = null;
         searchField = null;
+        // THE MODE'S STATE TOO. This file's header commits to honouring the `onPageReady` restore
+        // contract even though the current htmx config never fires it -- and under that contract
+        // these six carried over: a restored page would paint "Done" on a toggle whose panel has no
+        // `[data-positioning]`, show the bar over a CLOSED editor, and keep a live Sortable and a
+        // document keydown bound to a discarded grid.
+        detachDrag();
+        positioning = false;
+        editorOpen = false;
+        orderChain = Promise.resolve();
+        pendingSaves = 0;
         wireAdder();
         wireIdentityEditor();
         wireVisibility();
@@ -1379,6 +1493,7 @@
         if (PP.wireCharCounters) { PP.wireCharCounters(); }
         if (first) {
             document.body.addEventListener('click', onBodyClick);
+            document.body.addEventListener('click', onGrabClick);
             document.body.addEventListener('htmx:afterSwap', onAfterSwap);
             document.body.addEventListener('htmx:afterSettle', onAfterSettle);
         }

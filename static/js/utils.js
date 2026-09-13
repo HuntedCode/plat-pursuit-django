@@ -914,7 +914,10 @@ class DragReorderManager {
         this.canAccept = config.canAccept || null;
         this.delay = config.delay || 0;
         this.delayOnTouchOnly = config.delayOnTouchOnly;
-        this.touchStartThreshold = config.touchStartThreshold || 0;
+        // `=== undefined`, not `||`: a caller passing 0 to disable the threshold meant it, and the
+        // falsy default silently gave them 5 instead.
+        this.touchStartThreshold =
+            config.touchStartThreshold === undefined ? 5 : config.touchStartThreshold;
         this.dragExclude = config.dragExclude || null;
         this.sortable = null;
 
@@ -1003,7 +1006,7 @@ class DragReorderManager {
         if (this.delay) {
             sortableConfig.delay = this.delay;
             sortableConfig.delayOnTouchOnly = this.delayOnTouchOnly !== false;
-            sortableConfig.touchStartThreshold = this.touchStartThreshold || 5;
+            sortableConfig.touchStartThreshold = this.touchStartThreshold;
         }
         // Elements a drag must never start from, even when the whole item is draggable -- controls
         // that do something else when pressed.

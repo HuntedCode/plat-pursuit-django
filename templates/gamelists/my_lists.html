@@ -219,7 +219,7 @@ meaningless.
                     {% for value, label, blurb in list_type_options %}
                     <label class="gl-type__opt">
                         <input type="radio" name="list_type" value="{{ value }}"
-                               {% if forloop.first %}checked{% endif %} />
+                               {% if value == default_list_type %}checked{% endif %} />
                         <span class="gl-type__body">
                             <span class="gl-type__name">{{ label }}</span>
                             <span class="gl-type__hint">{{ blurb }}</span>

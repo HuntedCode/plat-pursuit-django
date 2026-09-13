@@ -199,6 +199,15 @@ class GameList(models.Model):
             # sharing a name -- there is no unique constraint on (owner, name) and there should not
             # be, since "Backlog" and "Backlog" are a user's problem, not a data-integrity one.
             models.CheckConstraint(condition=~Q(name=''), name='gamelist_name_not_blank'),
+            # `choices` is a form and admin concern; Postgres does not enforce it. The constraint
+            # above exists because "the admin, the shell and the importer all write around the
+            # service", and that reasoning applies here identically -- `_check_list_type` only
+            # guards the two service functions. A `list_type='tier'` written from a shell or a data
+            # migration renders as a Collection AND leaves the detail page's radio group with
+            # nothing checked, so the owner has no UI path back.
+            models.CheckConstraint(
+                condition=Q(list_type__in=[value for value, _ in LIST_TYPE_CHOICES]),
+                name='gamelist_list_type_valid'),
         ]
 
     def __str__(self):

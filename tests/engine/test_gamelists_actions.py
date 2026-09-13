@@ -523,6 +523,47 @@ def test_switching_type_twice_in_one_session_works(client):
     assert game_list.list_type == LIST_TYPE_COLLECTION, 'the switch back did not land'
 
 
+@pytest.mark.parametrize('endpoint', ['list_update', 'list_create'])
+def test_a_bogus_type_over_http_is_a_refusal_not_a_500(client, endpoint):
+    """The service refuses it, which is tested -- but nothing checked what that refusal looks like on
+    the wire. `CreateListView` passes `request.POST.get('list_type')` straight in, so a hand-posted
+    value reaches the service unvalidated and the only question is whether the view translates the
+    `ListError` or lets it become a 500."""
+    owner = _staff(client)
+
+    if endpoint == 'list_create':
+        resp = client.post(reverse('list_create'), {'name': 'Bogus', 'list_type': 'tier'})
+        # A form post, so a refusal is a redirect carrying a message rather than a JSON 400.
+        assert resp.status_code == 302
+        assert not GameList.objects.filter(name='Bogus').exists()
+        return
+
+    game_list = svc.create_list(owner, name='Real')
+    resp = client.post(reverse('list_update', args=[game_list.id]), {'list_type': 'tier'})
+
+    assert resp.status_code == 400, 'an unknown type must be refused, not raised'
+    game_list.refresh_from_db()
+    assert game_list.list_type == LIST_TYPE_COLLECTION
+
+
+def test_the_database_refuses_a_type_the_service_never_saw(client):
+    """`choices` is not a constraint, and the service is not the only writer that will ever exist --
+    the planned importer and any data migration write around it, which is exactly why the blank-name
+    rule is a `CheckConstraint` rather than a service check alone.
+
+    A stored `list_type='tier'` renders as a Collection AND leaves the detail page's radio group with
+    nothing checked, so the owner has no UI path back.
+    """
+    from django.db import IntegrityError, transaction
+
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Guarded')
+
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            GameList.objects.filter(pk=game_list.pk).update(list_type='tier')
+
+
 def test_a_type_switch_alone_is_a_complete_request(client):
     """The client sends ONLY what changed, so a type switch arrives with no name and no description.
     That has to be a valid edit rather than "Nothing to change"."""

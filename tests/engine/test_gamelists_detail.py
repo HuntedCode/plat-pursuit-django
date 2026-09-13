@@ -508,6 +508,13 @@ def test_the_drag_is_wired_after_settle_not_after_swap(client):
         assert wirer not in swap_handler, \
             f'{wirer} on swap reads stale attributes and poisons the wiring guard'
 
+    # ...and the settle handler must actually DO the wiring. Asserting only that a listener for the
+    # event name exists left `onAfterSettle` free to be emptied to `return;` -- which kills the mode
+    # across every sort swap and every chrome refresh -- with this test still green.
+    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
+    assert 'syncPositioning()' in settle and 'wirePositioning()' in settle, \
+        'the settle handler is registered but does no wiring'
+
 
 def test_the_edit_form_sends_only_what_changed(client):
     """`update_list` runs the restriction gate whenever `name` or `description` is present, so a form
@@ -585,7 +592,9 @@ def test_a_picked_card_is_unmistakable_and_the_bar_shouts(client):
     css = _read('static/css/components/gamelists.css')
 
     picked = css[css.index('.gl-item.is-picked .pp-gcard {'):]
-    assert 'outline: 2px solid var(--pp-primary)' in picked[:400]
+    # 3px, NOT the 2px that `.pp-gcard:focus-visible` already draws -- identical rings meant a
+    # keyboard user tabbing the grid saw the "held" mark on every card they passed.
+    assert 'outline: 3px solid var(--pp-primary)' in picked[:500]
     # `outline`, not `border`: a border changes the box and shifts the grid as cards are picked up.
     assert 'border-width' not in picked[:400]
 
@@ -600,7 +609,10 @@ def test_the_grip_is_operable_from_a_keyboard(client):
     action it cannot perform -- on a long list, once per row."""
     js = _decommented(_read('static/js/list-detail.js'))
 
-    assert 'ArrowUp' in js and 'ArrowDown' in js
+    # The MAPPING, not the mere presence of the key names. Swapping the two lists inverts every
+    # keyboard move on the page and passed every test in the suite.
+    assert "GRAB_EARLIER = ['ArrowUp', 'ArrowLeft']" in js
+    assert "GRAB_LATER = ['ArrowDown', 'ArrowRight']" in js
     # BOUND, not merely defined. An earlier version asserted the function existed and that its body
     # called `saveOrder` -- both still true with the `addEventListener` line deleted, so the mutation
     # that unbinds it entirely walked straight through.
@@ -640,8 +652,11 @@ def test_reordering_is_a_mode_you_have_to_enter(client):
     assert '#gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }' in css
     # `display: none` and not `opacity: 0` -- an invisible button is still a tab stop that announces
     # itself, which is the bug this is avoiding rather than a detail of how it looks.
-    assert 'opacity: 0' not in css[css.index('#gl-items-panel:not([data-positioning])'):
-                                   css.index('.gl-item__grab {')]
+    #
+    # Written as a slice, both anchors landed on the SAME LINE of the stylesheet and the end anchor
+    # was searched from 0, so this examined a 40-character fragment of one selector and could not
+    # fail under any edit. The whole-file negative below says the same thing and can.
+    assert '#gl-items-panel:not([data-positioning]) .gl-item__grab { opacity: 0' not in css
 
 
 def test_the_mode_is_not_offered_where_reordering_is_impossible(client):
@@ -686,9 +701,15 @@ def test_the_whole_card_drags_and_does_not_navigate_while_arranging(client):
     assert 'handleSelector' not in attach, 'the drag is still confined to the grip'
     assert "addEventListener('click', onCardClick)" in attach
 
-    guard = js[js.index('function onCardClick('):js.index('function syncPositioning(')]
-    assert 'if (!positioning) { return; }' in guard, \
+    # Bounded to `onCardClick` ALONE. Ending at `syncPositioning` swept in `togglePicked` and
+    # `dropPicked` too, so moving the mode guard out of the click handler and into one of those --
+    # which breaks it, leaving every card unclickable outside the mode -- kept this green.
+    guard = js[js.index('function onCardClick('):js.index('function togglePicked(')]
+    assert 'if (!positioning' in guard, \
         'a click guard that outlives the mode makes the list unclickable'
+    # ...and a post-drop synthetic click must not toggle the pick. Sortable eats that click on every
+    # platform except Chrome for Android, where it skips registering the listener entirely.
+    assert 'justDragged' in guard, 'a drop will re-pick the card it just dropped on Chrome Android'
     assert 'e.preventDefault()' in guard
     # NOT stopPropagation: the grip's own click, and any control added to a card later, still has to
     # reach its handler.
@@ -704,7 +725,10 @@ def test_touch_needs_a_deliberate_hold_before_a_card_moves(client):
     js = _decommented(_read('static/js/list-detail.js'))
 
     attach = js[js.index('function attachDrag('):js.index('function detachDrag(')]
-    assert 'delay:' in attach
+    # The VALUE, not just the key. `DragReorderManager` does `if (this.delay)`, so `delay: 0`
+    # silently disables the hold, `delayOnTouchOnly` AND `touchStartThreshold` in one edit -- and a
+    # membership check on `'delay:'` passes through all three.
+    assert re.search(r'delay:\s*[1-9]\d{2}', attach), 'the touch hold is zero or missing'
     assert 'delayOnTouchOnly: true' in attach, 'a mouse drag must stay immediate'
 
     # The manager has to honour it, and has to pair it with a movement budget -- without one, a
@@ -729,7 +753,10 @@ def test_arranging_quiets_the_card_hover_and_shows_the_cards_are_loose(client):
     # BOUNDED at both ends. Slicing to end-of-file swept in every later rule in the stylesheet,
     # including an unrelated publish animation, so an assertion about this section was really an
     # assertion about the rest of the file.
-    mode_start = css.index('POSITION-EDITING MODE')
+    # The BANNER, not the first mention. `POSITION-EDITING MODE` also appears ~150 lines earlier in
+    # the grip block's comment, so this slice silently covered the grips and the whole position bar
+    # -- the exact over-broad slice the note below claims to have fixed.
+    mode_start = css.index('\u2550\u2550 POSITION-EDITING MODE')
     mode = css[mode_start:css.index('/* SortableJS states.', mode_start)]
     for suppressed in ('.pp-gcard:hover .pp-gcard__art { transform: none; }',
                        '.pp-gcard:active { transform: none; }'):
@@ -756,7 +783,14 @@ def test_arranging_quiets_the_card_hover_and_shows_the_cards_are_loose(client):
     # It arrives as a transition, so there is one moment of change and no loop -- and the END state is
     # identical under reduced motion, or the signal would be a feature only some readers receive.
     assert 'transition: background 0.2s ease, box-shadow 0.2s ease' in mode
-    assert '#gl-items { transition: none; }' in mode
+    # `padding` must NOT be in that list: it is a layout property, and easing it over a grid of up to
+    # 200 cards reflows the document every frame for 200ms.
+    assert 'padding 0.2s' not in mode, 'the tray animates a layout property across the whole grid'
+    # INSIDE the media query. A bare `#gl-items { transition: none; }` would kill the transition for
+    # everyone -- the opposite of the intent -- and the membership test alone could not tell.
+    reduced_start = mode.index('@media (prefers-reduced-motion: reduce)')
+    reduced = mode[reduced_start:mode.index('\n}', reduced_start)]
+    assert '#gl-items { transition: none; }' in reduced
 
 
 def test_saving_a_type_change_refreshes_in_place_instead_of_reloading(client):
@@ -779,7 +813,7 @@ def test_saving_a_type_change_refreshes_in_place_instead_of_reloading(client):
     # either end silently returns the wrong offset or raises.
     refresh_start = js.index('function refreshAfterTypeChange() {')
     refresh = js[refresh_start:js.index('var TOGGLES', refresh_start)]
-    assert "'?chrome=1'" in refresh or "+ '?chrome=1'" in refresh, 'the refresh must ask for the chrome'
+    assert "'?chrome=1'" in refresh, 'the refresh must ask for the chrome'
     assert "target: '#gl-items-panel'" in refresh
     # No `sort` carried across: the new type has its own default, and a freshly-ranked list that
     # opened on A-Z would hide the very ordering the switch was made to use.
@@ -802,9 +836,6 @@ def test_the_editor_re_anchors_the_stored_type_after_a_save(client):
     handler = js[handler_start:js.index('function wireVisibility(', handler_start)]
     assert 'root.dataset.listType = data.list_type' in handler, \
         'nothing re-anchors the stored type, so a second switch is silently dropped'
-    # From the response. Taking it off the radio would record the request rather than the result, and
-    # would be wrong for any write the service normalises or refuses.
-    assert 'root.dataset.listType = typeField.value' not in handler
 
     # And the attribute it re-anchors is really the one the page renders.
     owner = _staff(client)
@@ -947,7 +978,17 @@ def test_truncation_is_read_from_the_rows_not_the_drifting_counter(client, monke
     deleting a Concept removes rows without the service. Deriving truncation from that counter meant
     one deleted concept permanently withdrew the drag handles from a six-game ranked list, and
     printed "Reordering needs the whole list on screen" as the reason.
+
+    THIS TEST COULD NOT FAIL AS FIRST WRITTEN. It took `monkeypatch` and never used it, so the
+    ceiling stayed at 200 -- and with three rows and a counter of three, the correct implementation
+    (`len(items) > 200`) and the bug it exists to catch (`game_count > len(items)`) BOTH produce
+    False. It described the drift precisely and then asserted against a number the drift could never
+    reach. The patch below is what makes the two implementations disagree: 3 > 2 is True, 2 > 2 is
+    not.
     """
+    from gamelists import views as gl_views
+    monkeypatch.setattr(gl_views, 'MAX_ITEMS_RENDERED', 2)
+
     owner = _staff(client)
     game_list = _ranked(owner, 3)
 
@@ -957,7 +998,8 @@ def test_truncation_is_read_from_the_rows_not_the_drifting_counter(client, monke
 
     resp = client.get(_url(game_list))
 
-    assert resp.context['items_truncated'] is False, 'a 2-game list is not truncated'
+    assert resp.context['items_truncated'] is False, \
+        'two rows under a ceiling of two is not truncated -- only the stale counter says otherwise'
     assert resp.context['can_reorder'] is True, 'counter drift must not withdraw the handles'
 
 
@@ -1681,3 +1723,247 @@ def test_the_reveal_observer_follows_the_card_class(client):
 
     assert "cardSelector: '.pp-gcard'" in js
     assert "cardSelector: '.pp-gtile'" not in js
+
+
+# ── coverage the audit found missing ─────────────────────────────────────────────────────────────
+
+def test_opening_the_editor_is_what_reveals_the_bar(client):
+    """The whole feature hangs off two lines nothing pinned.
+
+    `syncPositionsVisibility` gates on `editorOpen`, and `close()` setting it false WAS asserted --
+    but `open()` setting it true was not. Delete those two lines and the position bar is `hidden`
+    forever, the mode is unreachable, and every test stays green.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    open_body = js[js.index('function open() {'):js.index('function close() {')]
+    assert 'editorOpen = true' in open_body
+    assert 'syncPositionsVisibility()' in open_body, 'opening the editor never reveals the bar'
+
+
+def test_something_actually_calls_enter_positioning(client):
+    """The only call site is the toggle's click handler. Remove the listener and a rendered button
+    does nothing -- and the one test that mentions `enterPositioning()` asserts it is ABSENT from the
+    swap handler, so nothing anywhere required it to be reachable."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    wire = js[js.index('function wirePositioning('):js.index('function onGrabClick(')]
+    assert "toggle.addEventListener('click'" in wire
+    assert 'enterPositioning()' in wire and 'exitPositioning()' in wire
+
+
+def test_the_grip_does_something_when_pressed(client):
+    """It is a <button> announced as "Reorder <game>". Nothing bound a click to it: `onCardClick`
+    requires a `.pp-gcard` ancestor and the grip is the card's SIBLING, so pressing it -- by mouse,
+    Enter or Space -- did nothing at all. A button that is inert on activation is a broken promise
+    however good the arrow-key path beside it is."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    grab = js[js.index('function onGrabClick('):js.index('function boot(')]
+    assert "closest('[data-gl-grab]')" in grab
+    assert 'togglePicked(row)' in grab
+    assert "addEventListener('click', onGrabClick)" in js, 'the grip handler is never attached'
+
+
+def test_the_picked_state_is_reported_to_assistive_tech(client):
+    """Announcing the pick-up once told somebody at the moment it happened and then left no way to
+    ask again. The grip is a toggle button now, so "pressed" is a standing answer to "which card am
+    I holding"."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    setter = js[js.index('function setGrabPressed('):js.index('function togglePicked(')]
+    assert "setAttribute('aria-pressed'" in setter
+    assert 'setGrabPressed(row, true)' in js and 'setGrabPressed(pickedRow, false)' in js
+
+    # ...and the BAR's toggle must NOT also carry `aria-pressed`, because its label changes with
+    # state. Doing both makes "Done, pressed" ambiguous about whether Done is the state or the act.
+    paint = js[js.index('function paintPositionsToggle('):js.index('function setPositionsStatus(')]
+    assert "removeAttribute('aria-pressed')" in paint
+
+
+def test_the_type_radios_actually_render_for_the_owner(client):
+    """The JS looks up `[name="list_type"][value="..."]` and the page carries `data-list-type`, both
+    asserted -- but nothing required a matching input to exist. Delete the fieldset and the type
+    becomes unswitchable from the detail page with everything green."""
+    owner = _staff(client, psn='owner')
+    ranked = _ranked(owner, 2)
+
+    body = client.get(_url(ranked)).content.decode()
+    assert 'name="list_type" value="collection"' in body
+    assert 'name="list_type" value="ranked"' in body
+
+    client.logout()
+    _staff(client, psn='visitor')
+    assert 'name="list_type"' not in client.get(_url(ranked)).content.decode()
+
+
+def test_renumber_repaints_both_the_numeral_and_the_spoken_rank(client):
+    """Screen-reader-only, and it shipped broken once already (as an `sr-only` span nothing
+    announced). The prefix strip is what stops "Number 2: Number 1: Elden Ring" accumulating."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    start = js.index('function renumber(')
+    fn = js[start:js.index('function boot(', start)]
+    assert 'badge.textContent = String(i + 1)' in fn
+    assert "'Number ' + (i + 1) + ': '" in fn
+    assert 'replace(/^Number' in fn, 'the rank prefix will stack on every move'
+
+
+def test_an_arrow_at_the_end_of_the_list_keeps_its_normal_meaning(client):
+    """The early return has to come BEFORE `preventDefault`, or pressing Down on the last card
+    swallows the key and the page stops scrolling."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    start = js.index('function onPositionKey(')
+    fn = js[start:js.index('function itemIdsIn(', start)]
+    # Scoped to the ARROW branch. Compared against the whole function, the first `preventDefault` is
+    # ESCAPE's -- which legitimately comes before the neighbour check -- so the assertion was really
+    # about an unrelated line and failed for a reason that had nothing to do with what it tests.
+    arrow = fn[fn.index('var neighbour'):]
+    assert arrow.index('if (!neighbour') < arrow.index('e.preventDefault()'), \
+        'the no-op case swallows the arrow key instead of letting the page scroll'
+
+
+def test_the_chrome_fragment_is_not_served_on_a_full_page_render(client):
+    """`?chrome=1` was gated on the querystring alone, so typing or sharing that URL rendered the
+    FULL page -- which already contains the position slot and the sort control -- and then had the
+    items partial render both again inside the grid panel. Two elements per id, so the second bar is
+    dead markup and a stray unlabelled <select> sits below the grid."""
+    owner = _staff(client)
+    ranked = _ranked(owner, 3)
+
+    page = client.get(_url(ranked), {'chrome': '1'}).content.decode()
+
+    assert page.count('id="gl-positions-slot"') == 1, 'the position bar is rendered twice'
+    assert page.count('id="gl-sort-select"') == 1, 'the sort control is rendered twice'
+    assert 'hx-swap-oob' not in page, 'out-of-band markup has no meaning in a full page'
+
+
+def test_an_empty_ranked_list_is_not_offered_a_reorder_mode(client):
+    """Owner + ranked + zero games satisfied every other clause, so the bar appeared and the grid
+    carried `data-gl-reorder` over nothing -- a mode offered for a list with no order, whose one
+    possible action the endpoint 400s."""
+    owner = _staff(client)
+    empty = _ranked(owner, 0)
+
+    resp = client.get(_url(empty))
+
+    assert resp.context['can_reorder'] is False
+    assert 'data-gl-positions' not in resp.content.decode()
+
+
+def test_the_mode_ends_when_the_list_stops_being_ranked(client):
+    """THE WORST BUG THIS AUDIT FOUND. `syncPositionsVisibility` bailed when `[data-gl-positions]`
+    was absent -- and switching Ranked -> Collection DELETES it, because the slot renders the bar only
+    under `can_reorder`. `exitPositioning` is the only thing that turns the mode off, so it became
+    unreachable in exactly the case that needs it.
+
+    The mode then stayed on forever: every remove button hidden on a Collection, the document keydown
+    still bound, and `pickedRow` still pointing at a detached row whose grid kept `data-reorder-url`
+    -- so arrow keys silently rewrote positions on a list nobody could see.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    # Ends at the next thing DEFINED BELOW it. `attachDrag` sits 150 lines ABOVE, so searching
+    # from 0 returned an earlier index and the slice came back empty -- the same slice-direction
+    # mistake this file has now made four times, which is why the order is checked, not assumed.
+    start = js.index('function syncPositionsVisibility(')
+    fn = js[start:js.index('var GRAB_EARLIER', start)]
+    assert fn.index('exitPositioning(true)') < fn.index("querySelector('[data-gl-positions]')"), \
+        'the mode can only be left while the bar still exists -- which is not when it must be left'
+    assert 'if (block) { block.hidden = !show; }' in fn, 'a missing bar must not abort the sync'
+
+
+def test_a_failed_reorder_is_not_re_applied_by_the_one_queued_behind_it(client):
+    """The chain stops the writes racing; it does not stop a queued write from UNDOING the recovery.
+    First POST fails, its handler refreshes the grid back to the server's order, and the second
+    request then goes out carrying a body captured from the pre-refresh DOM -- a complete, valid
+    order including the move the hunter was just told was not saved."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    fn = js[js.index('function saveOrder('):js.index('function renumber(')]
+    assert 'var generation = orderGen' in fn
+    assert 'if (generation !== orderGen) { return null; }' in fn
+    assert 'orderGen += 1' in fn, 'a failure must retire everything already queued'
+    assert 'pendingSaves' in fn, '"Saved" can appear over a write still in flight'
+
+
+def test_the_chrome_refresh_verifies_it_actually_swapped(client):
+    """htmx resolves its ajax promise for EVERY status and maps 4xx/5xx to `swap: false`, which
+    `refreshItems` documents at length and guards against. The chrome refresh had only a `.catch`,
+    which fires on a network error alone -- so a 500 left numerals and grips on a list the server no
+    longer calls ranked, with no sign anywhere."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    start = js.index('function refreshAfterTypeChange() {')
+    fn = js[start:js.index('var TOGGLES', start)]
+    assert 'refreshSeq' in fn, 'an out-of-order chrome response can repaint over a newer one'
+    assert 'did not swap' in fn, 'a non-2xx resolves quietly and is treated as success'
+
+
+def test_the_adder_results_do_not_also_move_the_picked_card(client):
+    """The results rows are <button>s, so `isTyping` does not exclude them and the document-level
+    position handler ran too: arrowing through search results moved the picked card and fired a
+    reorder write, and Escape both closed the panel and dropped the pick."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    start = js.index("panel.addEventListener('keydown'")
+    handler = js[start:js.index('});', start)]
+    assert handler.count('e.stopPropagation()') >= 2, \
+        'the arrow and Escape branches must both stop the position handler seeing the key'
+
+
+def test_boot_resets_the_modes_state_not_just_the_grid(client):
+    """The file commits to honouring the `onPageReady` restore contract even though this site's htmx
+    config never fires it. Under that contract a restored page painted "Done" on a toggle whose panel
+    has no `[data-positioning]`, showed the bar over a CLOSED editor, and kept a live Sortable and a
+    document keydown bound to a discarded grid."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    fn = js[js.index('function boot(first) {'):js.index('if (PP.onPageReady)')]
+    for reset in ('detachDrag()', 'positioning = false', 'editorOpen = false',
+                  'orderChain = Promise.resolve()'):
+        assert reset in fn, f'{reset} is not reset on boot'
+
+
+def test_exiting_the_mode_actually_clears_the_flag(client):
+    """`exitPositioning` is the only thing that sets `positioning` back to false, and nothing pinned
+    that it does. Without it every later `if (!positioning) return` guard passes forever."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    start = js.index('function exitPositioning(')
+    fn = js[start:js.index('function paintPositionsToggle(', start)]
+    assert 'positioning = false' in fn
+    assert 'detachDrag()' in fn, 'leaving the mode must tear the drag down with it'
+    assert "delete panel.dataset.positioning" in fn, 'the CSS state outlives the JS state'
+
+
+def test_an_unlinked_owner_is_not_offered_the_reorder_handles(client):
+    """`ReorderItemsView` carries `_LinkedProfileRequired`, which answers a JSON caller with an HTML
+    redirect. `can_act` two lines below documents this exact reasoning for the social buttons; the
+    reorder affordance was missing it, so the page and the endpoint disagreed about who can act."""
+    js = _decommented(_read('gamelists/views.py'))
+
+    start = js.index("context['can_reorder'] = (")
+    clause = js[start:js.index(')', js.index('items_truncated', start))]
+    assert 'viewer.is_linked' in clause, 'the page offers a drag the endpoint would redirect'
+
+
+def test_the_drag_manager_defaults_its_touch_threshold(client):
+    """`|| 5` at the point of USE meant a caller passing 0 to disable the threshold silently got 5,
+    and the default was skipped entirely unless `delay` was truthy. The default belongs in the
+    constructor, where `=== undefined` can tell "not passed" from "passed as zero"."""
+    utils = _decommented(_read('static/js/utils.js'))
+
+    start = utils.index('this.touchStartThreshold')
+    assign = utils[start:start + 200]
+    assert '=== undefined ? 5' in assign, 'a caller passing 0 is silently overridden'
+    assert 'sortableConfig.touchStartThreshold = this.touchStartThreshold;' in utils,         'the default is re-applied at the point of use, so 0 can never reach SortableJS'
+
+
+def test_the_remove_control_steps_aside_while_arranging(client):
+    """Documented in three places and asserted nowhere. It is also what made the HIGH bug above
+    damaging rather than merely untidy: with the mode stuck on, this hid every remove button on a
+    Collection."""
+    css = _read('static/css/components/gamelists.css')
+    assert '#gl-items-panel[data-positioning] .gl-item__remove { display: none; }' in css

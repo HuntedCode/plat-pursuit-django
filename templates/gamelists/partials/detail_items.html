@@ -174,8 +174,12 @@ list" and "that is as much as this page shows".
 
 INSIDE the partial, so it re-renders with the grid. Outside it, every add and remove left this
 sentence quoting a stale count next to a header tally that had just been updated.{% endcomment %}
+{% comment %}NO TOTAL. It read "the first N of {{ game_list.game_count }}" -- the same
+denormalized counter this render stopped trusting when truncation moved onto the rows, and one that
+drifts HIGH when a Concept is deleted. Quoting it here would have reported "the first 200 of 512" for
+a list with 205 rows, in the one place the change was specifically hardening.{% endcomment %}
 <p class="text-xs text-base-content/50 mt-3 text-center">
-    Showing the first {{ items_shown|intcomma }} of {{ game_list.game_count|intcomma }} games.
+    Showing the first {{ items_shown|intcomma }} games; this list is longer than one page shows.
     {% if is_owner and is_ranked %}
     {% comment %}SAID OUT LOUD, to the owner only. The handles are absent here because a page that
     cannot show the whole list cannot post a complete order, and `reorder` refuses a partial one by
@@ -187,7 +191,7 @@ sentence quoting a stale count next to a header tally that had just been updated
 </p>
 {% endif %}
 
-{% if request.GET.chrome %}
+{% if oob_chrome %}
 {% comment %}OUT-OF-BAND CHROME, sent only when the caller asks for it (`?chrome=1`).
 
 A type switch changes three server-rendered things: the cards (numerals and grips, in the swap

@@ -32,8 +32,12 @@ do by accident.{% endcomment %}
                 </svg>
                 <span data-gl-positions-label>Edit list positions</span>
             </button>
+            {% comment %}Must match `paintPositionsToggle`'s off-state string, which replaces it
+            on boot. This shipped as "use the arrow keys on its grip" -- the phrasing the JS
+            deliberately abandoned, because it described a key that appeared to do nothing -- so the
+            server-rendered copy contradicted the copy that replaced it a frame later.{% endcomment %}
             <p class="gl-positions__hint" data-gl-positions-hint>
-                Then drag a card, or use the arrow keys on its grip.
+                Then drag a card, or click one to move it with the arrow keys.
             </p>
             {% comment %}`aria-hidden`: this is the SIGHTED signal. The spoken one goes through the
             page's existing status region, which says what happened once rather than narrating every
