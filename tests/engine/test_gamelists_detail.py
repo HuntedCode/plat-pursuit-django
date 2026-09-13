@@ -679,7 +679,7 @@ def test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor(client)
     js = _decommented(_read('static/js/list-detail.js'))
 
     sync = js[js.index('function syncPositioning() {'):js.index('function syncPositionsVisibility() {')]
-    assert 'attachDrag(grid)' in sync, 'a replaced grid must be re-attached while the mode is on'
+    assert 'attachDrag(grids)' in sync, 'a replaced grid must be re-attached while the mode is on'
     assert 'syncPositionsVisibility()' in sync, 'the bar must follow the grid below it'
 
     close_body = js[js.index('function close() {'):js.index('function reset() {')]
@@ -774,7 +774,11 @@ def test_arranging_quiets_the_card_hover_and_shows_the_cards_are_loose(client):
     # The grid becomes a tray and the cards lift off it. BOTH halves: the recess is what the cards
     # read as loose ON, and the elevation is what makes them read as pick-up-able rather than merely
     # selected -- an accent border on its own says "selected", which is a different idea.
-    assert '#gl-items-panel[data-positioning] #gl-items {' in mode
+    # `[data-gl-arrange]` and NOT `#gl-items`: that id is rendered only by a FLAT list, so scoping
+    # the tray to it left every SECTIONED list with cards lifting off nothing at all -- half a
+    # two-part signal, on exactly the lists sections introduced.
+    assert '#gl-items-panel[data-positioning] [data-gl-arrange] {' in mode
+    assert '#gl-items {' not in mode, 'the tray still keys on the flat-list id'
     assert 'inset 0 1px 3px' in mode, 'the tray has no recess, so nothing is raised relative to it'
     assert '#gl-items-panel[data-positioning] .gl-item .pp-gcard {' in mode
     lifted = mode[mode.index('#gl-items-panel[data-positioning] .gl-item .pp-gcard {'):]
@@ -790,7 +794,7 @@ def test_arranging_quiets_the_card_hover_and_shows_the_cards_are_loose(client):
     # everyone -- the opposite of the intent -- and the membership test alone could not tell.
     reduced_start = mode.index('@media (prefers-reduced-motion: reduce)')
     reduced = mode[reduced_start:mode.index('\n}', reduced_start)]
-    assert '#gl-items { transition: none; }' in reduced
+    assert '[data-gl-arrange] { transition: none; }' in reduced
 
 
 def test_saving_a_type_change_refreshes_in_place_instead_of_reloading(client):
@@ -1804,9 +1808,13 @@ def test_renumber_repaints_both_the_numeral_and_the_spoken_rank(client):
 
     start = js.index('function renumber(')
     fn = js[start:js.index('function boot(', start)]
-    assert 'badge.textContent = String(i + 1)' in fn
-    assert "'Number ' + (i + 1) + ': '" in fn
+    # `running`, not a per-grid `i + 1`. The counter walks EVERY grid on the page, so an index scoped
+    # to one grid would restart at 1 under each header regardless of which numbering mode the list is
+    # in -- showing the restart mode to somebody who chose continue-through.
+    assert 'badge.textContent = String(running)' in fn
+    assert "'Number ' + running + ': '" in fn
     assert 'replace(/^Number' in fn, 'the rank prefix will stack on every move'
+    assert 'restartNumbering()' in fn, 'the repaint must honour the mode the list is actually in'
 
 
 def test_an_arrow_at_the_end_of_the_list_keeps_its_normal_meaning(client):
@@ -1871,7 +1879,10 @@ def test_the_mode_ends_when_the_list_stops_being_ranked(client):
     fn = js[start:js.index('var GRAB_EARLIER', start)]
     assert fn.index('exitPositioning(true)') < fn.index("querySelector('[data-gl-positions]')"), \
         'the mode can only be left while the bar still exists -- which is not when it must be left'
-    assert 'if (block) { block.hidden = !show; }' in fn, 'a missing bar must not abort the sync'
+    # `!editorOpen` and not `!show`: the bar carries the section controls too, and a member owner of
+    # a list with nothing to drag still gets the "Add a section" row. Tying the whole bar to whether
+    # a DRAG is possible hid the only way to create the sections that would make one possible.
+    assert 'if (block) { block.hidden = !editorOpen; }' in fn, 'a missing bar must not abort the sync'
 
 
 def test_a_failed_reorder_is_not_re_applied_by_the_one_queued_behind_it(client):
@@ -1940,13 +1951,27 @@ def test_exiting_the_mode_actually_clears_the_flag(client):
 
 def test_an_unlinked_owner_is_not_offered_the_reorder_handles(client):
     """`ReorderItemsView` carries `_LinkedProfileRequired`, which answers a JSON caller with an HTML
-    redirect. `can_act` two lines below documents this exact reasoning for the social buttons; the
-    reorder affordance was missing it, so the page and the endpoint disagreed about who can act."""
-    js = _decommented(_read('gamelists/views.py'))
+    redirect. `can_act` documents this exact reasoning for the social buttons; the reorder affordance
+    was missing it, so the page and the endpoint disagreed about who can act.
 
-    start = js.index("context['can_reorder'] = (")
-    clause = js[start:js.index(')', js.index('items_truncated', start))]
-    assert 'viewer.is_linked' in clause, 'the page offers a drag the endpoint would redirect'
+    ASSERTED AGAINST THE RENDER rather than against the source. This read the `can_reorder` clause out
+    of `views.py` and searched it for `viewer.is_linked` -- which broke the moment that condition
+    moved into a shared `arrangeable` local, even though the behaviour was identical. A test that
+    fails when correct code is refactored is testing the spelling."""
+    # Built while linked and unlinked AFTERWARDS, because `create_list` refuses an unlinked author --
+    # which means this state is only reachable the way a real hunter reaches it, by unlinking a PSN
+    # account they already had.
+    owner = _staff(client, psn='unlinked')
+    game_list = _ranked(owner, 3)
+    owner.is_linked = False
+    owner.save(update_fields=['is_linked'])
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['is_owner'] is True, 'the fixture stopped testing what it claims'
+    assert resp.context['can_reorder'] is False, 'the page offers a drag the endpoint would redirect'
+    assert resp.context['can_arrange'] is False
+    assert 'data-gl-grab' not in resp.content.decode()
 
 
 def test_the_drag_manager_defaults_its_touch_threshold(client):
@@ -2014,7 +2039,11 @@ def test_a_list_without_sections_renders_exactly_as_it_did(client):
 
 
 def test_a_sectioned_list_groups_its_games_under_their_headers(client):
+    """The owner's view carries an EMPTY ungrouped bucket as well, because it is the only way back
+    out of a section -- see `test_the_ungrouped_bucket_leads_and_only_shows_when_it_holds_something`.
+    A reader gets exactly the two named groups."""
     owner, game_list, items, first, second = _sectioned(client)
+    client.logout()
 
     resp = client.get(_url(game_list))
     groups = resp.context['groups']
@@ -2030,18 +2059,31 @@ def test_a_sectioned_list_groups_its_games_under_their_headers(client):
     assert 'id="gl-items"' not in body
 
 
-def test_the_ungrouped_bucket_leads_and_only_shows_when_it_holds_something(client):
+def test_the_ungrouped_bucket_leads_and_stays_for_whoever_can_file(client):
     """A list that has just gained sections has EVERYTHING unassigned, so this is the normal state on
-    the way in rather than an error. Burying it under the named sections would hide the games
-    somebody is about to file."""
+    the way in rather than an error. Burying it under the named sections would hide the games somebody
+    is about to file.
+
+    IT ALSO STAYS WHEN EMPTY, but only for somebody who can arrange. A header for nothing is noise to
+    a reader, so they never see it -- but for the owner it is the only way back OUT of a section:
+    filing the last loose card used to remove the bucket and take the drop target with it, so nothing
+    could be un-filed by pointer (no grid to drop onto) or by keyboard (no group before the first
+    section) until they deleted a whole section to get their game back."""
     owner, game_list, items, first, _second = _sectioned(client)
 
-    # Everything is filed, so there is no bucket.
+    # Everything is filed. The OWNER keeps the empty bucket...
+    owner_groups = client.get(_url(game_list)).context['groups']
+    assert [s.name if s else None for s, _ in owner_groups] == [None, 'Finished', 'Playing']
+    assert owner_groups[0][1] == [], 'the kept bucket should be the empty one'
+    assert 'Not in a section' in client.get(_url(game_list)).content.decode()
+
+    # ...and a READER does not, because for them it is a header over nothing.
+    client.logout()
     assert [s.name for s, _ in client.get(_url(game_list)).context['groups']] == \
         ['Finished', 'Playing']
     assert 'Not in a section' not in client.get(_url(game_list)).content.decode()
 
-    # Un-file one, and the bucket appears FIRST.
+    # Un-file one, and the bucket carries it, still FIRST, for everyone.
     svc.assign_item(game_list, owner, items[0], None)
 
     groups = client.get(_url(game_list)).context['groups']
@@ -2052,20 +2094,45 @@ def test_the_ungrouped_bucket_leads_and_only_shows_when_it_holds_something(clien
 
 def test_numbering_runs_through_the_whole_list_by_default(client):
     """Continue-through is the default because it is what a ranked list already MEANS: adding
-    sections to one should group it, not renumber it underneath the author."""
+    sections to one should group it, not renumber it underneath the author.
+
+    ONCE THERE ARE SECTIONS, THE SECTIONS ARE PART OF THE SEQUENCE. Alpha and Charlie hold positions
+    0 and 2 and sit together in the first section, so they read 1 and 2 -- not 1 and 3. This asserted
+    1 and 3 for one slice, pinning `position + 1` straight through: individually true numerals that
+    no reader could follow down the column, because grouping reorders the page and `position` does
+    not know it happened."""
     owner, game_list, items, _first, _second = _sectioned(client)
 
     groups = client.get(_url(game_list)).context['groups']
     ranks = {i.concept.unified_title: i.display_rank for _s, bucket in groups for i in bucket}
 
-    # Alpha and Charlie are positions 0 and 2 but sit together in the first section, so a
-    # continue-through list shows 1 and 3 -- NOT 1 and 2.
-    assert ranks == {'Alpha': 1, 'Charlie': 3, 'Bravo': 2, 'Delta': 4}
+    assert ranks == {'Alpha': 1, 'Charlie': 2, 'Bravo': 3, 'Delta': 4}
+
+
+def test_a_rank_does_not_change_when_the_sort_does(client):
+    """THE INVARIANT THAT DECIDED THE RULE ABOVE, and the reason "just number down the page" is wrong.
+
+    `detail_card.html` shows the plate on every sort because a rank is a fact about the ENTRY rather
+    than about the view. Numbering the RENDERED order honours that on the rank sort and destroys it
+    everywhere else: sorted A-Z, the list would renumber 1..N alphabetically and claim the alphabet
+    was the author's ranking. So the rank comes from the canonical order -- sections in their own
+    order, `position` within each -- and is merely DISPLAYED under whatever sort is showing."""
+    owner, game_list, items, _first, _second = _sectioned(client)
+
+    def ranks(sort):
+        groups = client.get(_url(game_list) + f'?sort={sort}').context['groups']
+        return {i.concept.unified_title: i.display_rank for _s, bucket in groups for i in bucket}
+
+    canonical = ranks('rank')
+    assert canonical == {'Alpha': 1, 'Charlie': 2, 'Bravo': 3, 'Delta': 4}
+    # Z-A, so the buckets arrive REVERSED and a page-order count would hand out 1 and 2 to Charlie
+    # and Alpha instead. Same entries, same numbers.
+    assert ranks('name_desc') == canonical
 
 
 def test_numbering_can_restart_in_each_section(client):
     owner, game_list, items, _first, _second = _sectioned(client)
-    svc.set_section_numbering(game_list, owner, restart=True)
+    svc.update_list(game_list, owner, restart_numbering=True)
 
     groups = client.get(_url(game_list)).context['groups']
     ranks = {i.concept.unified_title: i.display_rank for _s, bucket in groups for i in bucket}
@@ -2080,7 +2147,7 @@ def test_the_visible_plate_and_the_spoken_rank_agree(client):
     """They are computed from one field now, which is why. The plate is `aria-hidden` and the rank
     reaches a screen reader through the card's `aria-label`, so the two drifting apart is silent."""
     owner, game_list, items, _first, _second = _sectioned(client)
-    svc.set_section_numbering(game_list, owner, restart=True)
+    svc.update_list(game_list, owner, restart_numbering=True)
 
     body = client.get(_url(game_list)).content.decode()
 
@@ -2097,25 +2164,75 @@ def test_a_sort_orders_within_each_section_rather_than_flattening_it(client):
 
     groups = client.get(_url(game_list), {'sort': 'name_desc'}).context['groups']
 
-    assert [s.name for s, _ in groups] == ['Finished', 'Playing'], 'the sort reordered the sections'
-    assert [[i.concept.unified_title for i in bucket] for _, bucket in groups] == [
+    # The NAMED groups. An owner also carries the empty ungrouped bucket, and what this test is about
+    # is that a sort orders WITHIN a section rather than flattening the grouping away -- not how many
+    # buckets the page happens to render.
+    named = [s.name for s, _ in groups if s is not None]
+    assert named == ['Finished', 'Playing'], 'the sort reordered the sections'
+    assert [[i.concept.unified_title for i in bucket] for s, bucket in groups if s is not None] == [
         ['Charlie', 'Alpha'], ['Delta', 'Bravo']], 'the sort did not apply inside each section'
 
 
-def test_drag_waits_for_the_slice_that_can_cross_a_section(client):
-    """Dragging across a boundary is a cross-container drop PLUS an assignment, and nothing wires the
-    second half yet -- so the grips would move a card within its group and silently refuse to move it
-    out. A drag that works in one direction is worse than none."""
+def test_a_sectioned_ranked_list_can_be_both_ordered_and_filed(client):
+    """The slice this waited for. `can_reorder` was held false on any sectioned list because dragging
+    across a boundary is a cross-container drop PLUS an assignment and only the first half was wired
+    -- a drag that worked in one direction, which is worse than none.
+
+    Both flags now, and they are not the same one: `can_arrange` is "a card can be dragged at all"
+    and `can_reorder` is the stricter "a drop POSITION means something"."""
     owner, game_list, _items, _first, _second = _sectioned(client)
 
     resp = client.get(_url(game_list))
 
-    assert resp.context['can_reorder'] is False
-    assert 'data-gl-grab' not in resp.content.decode()
+    assert resp.context['can_arrange'] is True
+    assert resp.context['can_reorder'] is True
+    body = resp.content.decode()
+    assert 'data-gl-grab' in body
+    # Every group is a drop target, and the SECTION each one stands for travels with it -- without
+    # that a drop has nowhere to report it landed. THREE, not two: the owner also keeps the empty
+    # ungrouped bucket, which is the only way back OUT of a section.
+    assert body.count('data-gl-arrange') == 3
+    assert 'data-gl-arrange data-section-id=""' in body, 'no way back out of a section'
+    assert f'data-section-id="{_first.id}"' in body and f'data-section-id="{_second.id}"' in body
 
-    # ...and an unsectioned ranked list still has it, so this is a narrowing rather than a removal.
-    plain = _ranked(owner, 3)
-    assert client.get(_url(plain)).context['can_reorder'] is True
+
+def test_a_sectioned_collection_can_be_filed_but_not_ordered(client):
+    """THE CASE THE SINGLE FLAG COULD NOT EXPRESS, and the reason there are two.
+
+    A Collection has no `rank` sort at all, so a drop position is an artefact of whatever sort is
+    showing and writing it back would invent an order the author never chose. But filing a game under
+    a header is exactly what sections are for, and withholding the drag because ordering is
+    impossible left every sectioned Collection with headers nothing could be moved into."""
+    owner = _member(client, psn='collector')
+    game_list = _list(owner, 2)
+    svc.create_section(game_list, owner, name='Playing')
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['can_arrange'] is True
+    assert resp.context['can_reorder'] is False
+    body = resp.content.decode()
+    assert 'data-gl-arrange' in body
+    # No ordering hooks: no grips (the keyboard moves a card through a sequence, and there is none)
+    # and no reorder endpoint on the grids.
+    assert 'data-gl-grab' not in body
+    assert 'data-gl-reorder' not in body
+    # ...but the cards still carry an identity and somewhere to report a move to.
+    assert 'data-assign-url' in body
+
+
+def test_a_list_with_no_sections_and_no_order_offers_no_drag_at_all(client):
+    """The negative that keeps `can_arrange` from meaning "owner". A Collection with no sections has
+    nowhere to file anything and no sequence to change, so a drag would be a gesture with no act
+    behind it."""
+    owner = _member(client, psn='plain')
+    game_list = _list(owner, 3)
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['can_arrange'] is False
+    body = resp.content.decode()
+    assert 'data-gl-arrange' not in body and 'data-item-id' not in body
 
 
 def test_a_sectioned_page_does_not_scale_with_its_sections(client):
@@ -2174,3 +2291,490 @@ def test_a_free_hunter_sees_a_sectioned_list_exactly_as_anyone_does(client):
     assert resp.status_code == 200
     assert [s.name for s, _ in resp.context['groups']] == ['Finished', 'Playing']
     assert '>Finished</h2>' in resp.content.decode()
+
+
+# ── the arrange bar and the section controls ─────────────────────────────────────────────────────
+
+def test_a_member_owner_gets_the_section_controls_and_a_reader_never_does(client):
+    owner, game_list, _items, first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+    assert 'data-gl-section-add' in body
+    assert f'data-rename-url="/community/lists/{game_list.id}/sections/{first.id}/rename/"' in body
+    assert f'data-delete-url="/community/lists/{game_list.id}/sections/{first.id}/delete/"' in body
+
+    client.logout()
+    reader = client.get(_url(game_list)).content.decode()
+    assert 'data-gl-section-add' not in reader
+    assert 'data-gl-section-rename' not in reader
+    assert 'data-gl-section-delete' not in reader
+
+
+def test_a_free_owner_keeps_their_sections_and_is_told_what_changed(client):
+    """Membership ending must not delete data or reshuffle a list. What they lose is making MORE --
+    so the headers, their delete controls and the drag all stay, and the one thing that goes is said
+    out loud rather than silently absent, which on a list that visibly HAS sections reads as a bug."""
+    owner, game_list, _items, first, _second = _sectioned(client)
+    owner.user_is_premium = False
+    owner.save(update_fields=['user_is_premium'])
+
+    resp = client.get(_url(game_list))
+    body = resp.content.decode()
+
+    assert resp.context['can_manage_sections'] is False
+    assert resp.context['can_arrange'] is True, 'a lapsed member can still tidy their own list'
+    assert 'data-gl-section-add' not in body
+    assert 'data-gl-section-rename' not in body
+    # DELETE SURVIVES: removing your own thing is not the act the perk covers.
+    assert 'data-gl-section-delete' in body
+    assert 'gl-sections__locked' in body
+
+
+def test_renaming_is_member_gated_and_deleting_is_not(client):
+    """The affordances have to match the service exactly rather than approximately, or a hunter is
+    shown a control whose endpoint refuses them."""
+    service = _read('gamelists/services/game_list_service.py')
+
+    for fn, gated in (('create_section', True), ('rename_section', True),
+                      ('delete_section', False), ('reorder_sections', False),
+                      ('assign_item', False)):
+        start = service.index(f'def {fn}(')
+        body = service[start:service.index('\n\n\n', start)]
+        assert ('_refuse_if_not_member' in body) is gated, f'{fn} has the wrong membership gate'
+
+
+def test_the_numbering_toggle_appears_only_where_it_is_a_real_question(client):
+    """Two modes that mean the same thing is a question with one answer. It needs a ranked list (a
+    Collection has no numerals) AND at least one section (nothing to restart at)."""
+    owner, sectioned, _items, _first, _second = _sectioned(client)
+    assert 'data-gl-numbering' in client.get(_url(sectioned)).content.decode()
+
+    plain_ranked = _ranked(owner, 2)
+    assert 'data-gl-numbering' not in client.get(_url(plain_ranked)).content.decode()
+
+    collection = _list(owner, 2)
+    svc.create_section(collection, owner, name='Playing')
+    assert 'data-gl-numbering' not in client.get(_url(collection)).content.decode()
+
+
+def test_an_empty_section_still_has_something_to_drop_onto(client):
+    """A grid with no children collapses to zero height, and receiving the first card is the entire
+    purpose of an empty section -- `emptyInsertThreshold` cannot rescue a box with no box."""
+    owner, game_list, _items, _first, _second = _sectioned(client)
+    empty = svc.create_section(game_list, owner, name='Backlog')
+
+    body = client.get(_url(game_list)).content.decode()
+
+    # A ::before ON THE GRID, drawn from this attribute, and NOT a child element. SortableJS's
+    # empty-container detection tests `lastChild` with no selector, so any element child switches off
+    # the generous `emptyInsertThreshold` hit band -- the placeholder added to make an empty section
+    # droppable was the reason it was hard to drop into.
+    assert 'data-empty-label="Drop a game here"' in body
+    assert 'gl-group__empty' not in body, 'the placeholder is back to being a real child'
+    # The empty section is still a DROP TARGET, which is the only reason the box is there.
+    assert f'data-section-id="{empty.id}"' in body
+
+
+def test_a_reader_is_not_invited_to_drop_anything(client):
+    """An invitation to an action that does not exist for you is how a page teaches somebody it is
+    broken."""
+    owner, game_list, _items, _first, _second = _sectioned(client)
+    svc.create_section(game_list, owner, name='Backlog')
+    client.logout()
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'Drop a game here' not in body
+    assert 'data-empty-label="Nothing here yet"' in body,         'the box must keep its shape or the section reads as broken'
+
+
+def test_the_loose_bucket_is_a_destination_and_not_a_missing_value(client):
+    """`data-section-id` is EMPTY on the ungrouped bucket rather than absent. Empty means "out of
+    every section", which is a real place to land; absent would make un-filing impossible to express
+    and is why the client reads the attribute's presence rather than its truthiness."""
+    owner, game_list, items, _first, _second = _sectioned(client)
+    svc.assign_item(game_list, owner, items[0], None)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-arrange data-section-id=""' in body
+
+
+def test_the_swap_sentinel_exists_in_every_shape_of_the_partial(client):
+    """Both refresh helpers prove a swap happened by comparing the node they remembered against the
+    node that is there afterwards. They used `#gl-items`, which a SECTIONED list does not render at
+    all -- so the comparison was `null === null` and every successful refresh of a sectioned list
+    reported a failure over a swap that had just worked."""
+    owner = _member(client, psn='shapes')
+
+    empty = _list(owner, 0)
+    flat = _list(owner, 2, name='Flat')
+    _sectioned_owner, sectioned, _i, _f, _s = _sectioned(client, psn='shapes2')
+
+    for game_list in (empty, flat):
+        assert 'id="gl-items-root"' in client.get(_url(game_list)).content.decode()
+    client.logout()
+    assert 'id="gl-items-root"' in client.get(_url(sectioned)).content.decode()
+
+    js = _decommented(_read('static/js/list-detail.js'))
+    assert "getElementById('gl-items-root')" in js
+    # And nothing still reaches for the flat grid's id, which is the id that does not always exist.
+    assert "getElementById('gl-items')" not in js
+
+
+def test_the_items_partial_closes_every_element_it_opens(client):
+    """A stray `</div>` left over from the card extraction closed `#gl-items-panel` early, so the
+    truncation line and the out-of-band chrome rendered outside the panel they travel with while a
+    second `</div>` in `detail.html` closed the page wrapper. Counted rather than eyeballed."""
+    partial = _read('templates/gamelists/partials/detail_items.html')
+    source = re.sub(r'{% comment %}.*?{% endcomment %}', '', partial, flags=re.S)
+
+    opens = len(re.findall(r'<div\b', source))
+    closes = len(re.findall(r'</div>', source))
+    assert opens == closes, f'{opens} <div> against {closes} </div> in detail_items.html'
+
+
+def test_a_section_change_asks_for_the_chrome_and_an_ordinary_refresh_does_not(client):
+    """The arrange bar lives OUTSIDE the swap target and its contents depend on whether any section
+    exists, so a section change has to re-render it -- while an add or a remove changes none of it and
+    re-sending the sort select mid-sort would replace the control the hunter just used."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    for fn in ('onSectionAdd', 'onSectionDelete', 'onSectionRename'):
+        body = js[js.index(f'function {fn}('):js.index('\n    }', js.index(f'function {fn}('))]
+        assert 'refreshItems(true)' in body, f'{fn} leaves the bar describing the previous list'
+
+    remove = js[js.index('function onRemove('):js.index('function placeholderIcon(')]
+    assert 'refreshItems()' in remove and 'refreshItems(true)' not in remove
+
+
+def test_the_numbering_toggle_has_exactly_one_writer(client):
+    """It saves through `list_update`, the same call the identity editor uses, because it is a
+    property of the list exactly as its type is. `set_section_numbering` existed for one slice and was
+    folded in: two ways to write one field is how they drift."""
+    service = _read('gamelists/services/game_list_service.py')
+    assert 'def set_section_numbering' not in service
+
+    js = _decommented(_read('static/js/list-detail.js'))
+    body = js[js.index('function onNumberingChange('):js.index('function boot(')]
+    assert 'updateUrl' in body
+    # 'on'/'' is what a checkbox posts and what `safe_bool` reads. A literal 'true' is the bug
+    # `is_public` already shipped once.
+    assert "'on'" in body
+
+
+def test_a_group_change_refreshes_and_a_plain_reorder_does_not(client):
+    """A card CHANGING GROUP changes things the optimistic repaint cannot reach: the count beside each
+    header, and whether the group it left still exists at all (the loose bucket is omitted when empty,
+    so emptying it by hand leaves a header reading 0 over nothing).
+
+    A plain reorder must NOT refresh: it would spend a round trip redrawing forty covers that did not
+    change and tear down the Sortable instance mid-interaction. The rank text is the only thing a
+    reorder alters on screen, which is why `renumber` exists."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    drop = js[js.index('function onCrossSectionDrop('):js.index('function fullOrder(')]
+    assert 'refresh: true' in drop, 'a cross-group drop leaves both section counts stale'
+
+    save = js[js.index('function saveOrder('):js.index('function renumber(')]
+    assert 'move.refresh' in save, 'the flag is set and never read'
+    # Guarded on the flag, so the ordinary drag keeps its cheap repaint.
+    assert 'if (move && move.refresh)' in save
+
+    # The within-grid path sends no move at all, so it cannot ask for one.
+    attach = js[js.index('function attachDragTo('):js.index('function onCrossSectionDrop(')]
+    reorder_cb = attach[attach.index('onReorder: function'):attach.index('onEnd: function')]
+    assert 'refresh' not in reorder_cb, 'a plain reorder must not round-trip the whole grid'
+
+
+# -- the audit round ------------------------------------------------------------------------------
+
+def test_a_cross_section_drop_reads_where_the_card_LANDED(client):
+    """THE WORST BUG THE AUDIT FOUND, and it made the whole feature a no-op.
+
+    SortableJS routes its `end` event to the Sortable the drag STARTED in, not the one that received
+    the drop -- the bundle dispatches `add` with `rootEl: parentEl` (the destination) but dispatches
+    `end` with `sortable: this` (the source). `utils.js` asserted the opposite in a comment for a long
+    time, so `onCrossSectionDrop` read the section id off its OWN container and posted the card
+    straight back where it came from: on a Collection the refresh snapped it home, and on a Ranked
+    list it wrote the right order with the wrong filing -- the exact "correctly placed and wrongly
+    filed" state the single-request design exists to prevent.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    drop = js[js.index('function onCrossSectionDrop('):js.index('function fullOrder(')]
+    assert 'evt.to' in drop, 'the drop reports the section it came FROM'
+    # And not off the manager's own container, which is the origin.
+    assert 'grid.dataset.sectionId' not in drop
+
+    # The shared primitive has to stop telling the next caller the wrong thing.
+    utils = _read('static/js/utils.js')
+    assert 'the manager whose container the drop landed in' not in utils, \
+        'the routing comment that caused this is still there for the next caller to believe'
+
+
+def test_the_keyboard_can_cross_a_section_boundary(client):
+    """A pointer could move a card between headers and a keyboard could not: `onPositionKey` stepped
+    to `previousElementSibling` within one grid and bailed at its edge, so a card at the top of
+    "Backlog" could not reach "Playing" by any key at all. On a sectioned Collection there was no
+    keydown listener bound whatsoever, while the button read "Move games between sections"."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    key = js[js.index('function onPositionKey('):js.index('function stepIntoNeighbourGrid(')]
+    assert 'stepIntoNeighbourGrid(' in key, 'the arrow keys still stop at a section boundary'
+    # Crossing a header is a SECTION change, so it must reach the same two writes the drag picks
+    # between -- not the reorder endpoint regardless of what the page can honour.
+    assert 'saveAssignment(' in key and 'orderingLive(' in key
+
+    attach = js[js.index('function attachDrag('):js.index('function attachDragTo(')]
+    assert "document.addEventListener('keydown', onPositionKey)" in attach
+    assert 'if (ordering) { document.addEventListener' not in attach, \
+        'arrange-only mode has no keyboard again'
+
+
+def test_the_numbering_repaint_survives_a_lapsed_membership(client):
+    """`can_arrange` does not require membership -- a lapsed member keeps arranging, by design -- but
+    the numbering CHECKBOX renders only under `can_manage_sections`, which does. Reading the absent
+    box as "continue through" repainted every badge into the wrong mode on each drag, and the next
+    page load silently put them back."""
+    owner, game_list, _items, _first, _second = _sectioned(client)
+    svc.update_list(game_list, owner, restart_numbering=True)
+    owner.user_is_premium = False
+    owner.save(update_fields=['user_is_premium'])
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-numbering' not in body, 'the fixture stopped testing what it claims'
+    assert 'data-restart-numbering="1"' in body, 'the repaint has no way to know the mode'
+
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = js[js.index('function restartNumbering('):js.index('function rankOf(')]
+    assert 'itemsRoot()' in fn, 'the fallback the gated checkbox cannot provide'
+
+
+def test_the_spoken_rank_matches_the_printed_one(client):
+    """`onPositionKey` announced a continue-through number unconditionally, so with restart-numbering
+    on a card whose plate read "1" was announced as "number 24 of 40". A sighted owner and a blind one
+    were told two different facts about the same move, and the spoken one was unverifiable."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    # `announceAndSave`, NOT `onPositionKey`. The composing code moved out of the key handler when the
+    # boundary-crossing branch needed it too, so slicing the handler asserted against a function that
+    # no longer contains the line -- mutation testing caught this assertion passing over the bug it
+    # names. `announceAndSave` is defined BELOW `stepIntoNeighbourGrid`, so the slice runs to the end
+    # of the file rather than to a marker that sits above it.
+    compose = js[js.index('function announceAndSave('):]
+    assert 'rankOf(row)' in compose, 'the announcement is not computed in the printed mode'
+    assert 'fullOrder().indexOf' not in compose, \
+        'the announcement counts straight through regardless of the numbering mode'
+
+    rank = js[js.index('function rankOf('):js.index('function sectionNameFor(')]
+    assert 'restartNumbering()' in rank
+    # The TOTAL moves with the mode too: "2 of 5" about a list of forty is a different claim, not a
+    # smaller one.
+    assert 'restart ? rows.length : fullOrder().length' in rank
+
+
+def test_section_writes_queue_behind_the_arrangement_writes(client):
+    """A queued `saveOrder` carries a body captured from the DOM as it was. A section delete that
+    lands first leaves that reorder posting a deleted section id: the server refuses, the pill flips
+    to "Not saved", and the owner is told a move failed that they never made."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    for fn in ('onSectionAdd', 'onSectionRename', 'onSectionDelete', 'onNumberingChange'):
+        start = js.index('function ' + fn + '(')
+        body = js[start:js.index('\n    }', start)]
+        assert 'queueSectionWrite(' in body, fn + ' races the drag writes'
+
+
+def test_the_add_field_keeps_focus_across_its_own_refresh(client):
+    """`refreshItems(true)` out-of-band swaps the bar and takes the field with it, so adding two
+    sections meant tabbing from the top of the document between them. `restoreRemoveFocus` pays the
+    same debt for the remove button."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    assert 'function restoreSectionFocus(' in js
+    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
+    assert 'restoreSectionFocus()' in settle
+    # AFTER the re-wiring, or the field being focused is the node about to be replaced.
+    assert settle.index('wireSections()') < settle.index('restoreSectionFocus()')
+
+    # And the remove-focus helper stopped keying on the flat grid's id, which a sectioned list has
+    # never rendered -- so focus fell to <body> after every removal there.
+    restore = js[js.index('function restoreRemoveFocus('):js.index('function restoreSectionFocus(')]
+    assert "'#gl-items-root [data-gl-remove]'" in restore
+
+
+def test_a_labelled_grid_carries_a_role_that_can_hold_the_label(client):
+    """A role-less <div> maps to `generic`, which does not support name-from-author -- so
+    `aria-labelledby` on it is dropped and four sections read as four undifferentiated runs of links.
+    Only where there IS a label: a role with no accessible name is noise."""
+    owner, game_list, _items, first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'role="group" aria-labelledby="gl-section-' + str(first.id) + '"' in body
+
+    # A FLAT list has no heading to point at, so it gets neither.
+    plain = _ranked(owner, 2)
+    flat = client.get(_url(plain)).content.decode()
+    assert 'role="group"' not in flat and 'aria-labelledby="gl-section' not in flat
+
+
+def test_the_section_controls_are_real_touch_targets_and_do_not_stick(client):
+    """Rename and delete sit ~10px apart. At 28px a mis-tap on "Rename" lands on "Delete the section",
+    and an unguarded `:hover` leaves the red wash painted on after the confirm is dismissed -- which
+    reads as "the delete is still armed"."""
+    css = _read('static/css/components/gamelists.css')
+
+    act = css[css.index('.gl-section__act {'):css.index('.gl-section__head .gl-section__name')]
+    assert 'width: 44px; height: 44px;' in act, 'a 28px target between two destructive neighbours'
+    assert '@media (hover: hover)' in act, 'the hover state sticks after a tap on touch'
+    assert act.index('@media (hover: hover)') < act.index('.gl-section__act:hover')
+
+    # The one control you must hit to use the feature at all was the one under the floor.
+    field = css[css.index('.gl-sections__input {'):css.index('.gl-sections__go {')]
+    assert 'min-height: 44px' in field
+
+
+def test_sections_stay_usable_on_a_list_too_long_to_render_whole(client, monkeypatch):
+    """`not items_truncated` belongs to REORDERING ALONE, and sharing it made sections creatable and
+    permanently unusable on exactly the lists they are for.
+
+    `svc.reorder` refuses a partial ordering, so past `MAX_ITEMS_RENDERED` the page cannot post a
+    complete one -- that is the whole reason the clause exists. `svc.assign_item` takes one item and
+    one section and is correct however many rows rendered. With the clause shared, a member curating a
+    400-game backlog could create "Playing / Finished / Someday" (`can_manage_sections` has no
+    truncation clause) and then file nothing under any of them: no `data-gl-arrange`, no
+    `data-item-id`, and no non-drag path to the endpoint. On a sectioned COLLECTION the affordance
+    vanished with no message at all, because the explanatory line is gated on `is_ranked`.
+    """
+    from gamelists import views as gl_views
+    monkeypatch.setattr(gl_views, 'MAX_ITEMS_RENDERED', 2)
+
+    owner = _member(client, psn='backlogger')
+    game_list = _ranked(owner, 4)
+    svc.create_section(game_list, owner, name='Playing')
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['items_truncated'] is True, 'the fixture stopped testing what it claims'
+    assert resp.context['can_reorder'] is False, 'a partial page cannot post a complete order'
+    assert resp.context['can_arrange'] is True, 'sections are unusable on the lists that need them'
+
+    body = resp.content.decode()
+    assert 'data-gl-arrange' in body
+    assert 'data-assign-url' in body, 'nothing to post a filing to'
+    # ...and still no ordering hooks, because that half genuinely cannot work here.
+    assert 'data-gl-reorder' not in body
+
+
+# -- the re-audit round ---------------------------------------------------------------------------
+
+def test_an_empty_grid_is_actually_empty_so_the_drop_box_can_render(client):
+    """THE FIX THAT DID NOTHING. The empty-section box is a `::before` gated on `:empty`, and `:empty`
+    (Selectors 3, which is what every shipping engine implements) does NOT match an element holding a
+    whitespace text node. The tag was laid out over four lines, so an empty grid still contained
+    "\n    \n" -- the box never drew, in any state, which is the exact failure it was introduced to
+    cure. The first test only asserted the ATTRIBUTE was present, so it passed over an invisible box.
+    """
+    owner, game_list, _items, _first, _second = _sectioned(client)
+    empty = svc.create_section(game_list, owner, name='Backlog')
+
+    body = client.get(_url(game_list)).content.decode()
+
+    # The GRID, not the delete button -- which now carries `data-section-id` as well, so the bare
+    # marker matched the button and this test measured the inside of a <button>.
+    marker = f'data-gl-arrange data-section-id="{empty.id}"'
+    start = body.index(marker)
+    open_end = body.index('>', start)
+    close = body.index('</div>', open_end)
+    between = body[open_end + 1:close]
+
+    assert between == '', f'the grid is not :empty, so the drop box cannot render: {between!r}'
+
+
+def test_the_empty_box_rule_is_scoped_to_this_features_grid(client):
+    """`.pp-gbrowse__grid:empty::before` was site-wide. Any genuinely childless browse grid -- Browse
+    Games, a franchise or company page -- would have drawn an 18px dashed box whose
+    `attr(data-empty-label)` resolves to the empty string: a bordered blank. It was masked only by the
+    whitespace bug above, which the same change removes."""
+    css = _read('static/css/components/gamelists.css')
+
+    assert '.gl-group__grid:empty::before' in css
+    assert '.pp-gbrowse__grid:empty' not in css, 'the rule still reaches every grid on the site'
+
+
+def test_a_keyboard_move_across_a_header_keeps_the_card_picked_up(client):
+    """Crossing a section ALWAYS refreshes -- the counts and the group membership change -- and the
+    refresh tears down and re-attaches the drag, whose `detachDrag` drops the pick SILENTLY. So the
+    keyboard path worked exactly once per pick: a second arrow press did nothing, with no announcement
+    explaining why, and focus had already fallen to <body>. Walking one card down several headers is
+    the gesture the path was added for."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    key = js[js.index('function onPositionKey('):js.index('function stepIntoNeighbourGrid(')]
+    # THE BOUNDARY BRANCH ONLY. Slicing to the end of the function swept in the within-group move
+    # below it, which legitimately still focuses the grip -- nothing refreshes there, so that node
+    # survives. The first version of this assertion covered both and failed on correct code.
+    # ...and it ends where the within-group path BEGINS, not at the first `return;` -- that one is
+    # `if (!moved) { return; }` two lines in, which made the slice four words long and the assertion
+    # below vacuous in the other direction.
+    branch_start = key.index('stepIntoNeighbourGrid(')
+    branch = key[branch_start:key.index('if (earlier) { grid.insertBefore(', branch_start)]
+    assert 'pendingPickId = row.dataset.itemId' in branch, 'the pick is lost on every crossing'
+    assert 'grab.focus()' not in branch, 'focus is put on a row that is about to be replaced'
+
+    assert 'function restorePick(' in js
+    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
+    # AFTER `syncPositioning`, whose `detachDrag` drops any pick -- restoring before it is undone one
+    # line later.
+    assert settle.index('syncPositioning()') < settle.index('restorePick()')
+
+
+def test_a_failed_refresh_is_not_reported_as_a_failed_section_write(client):
+    """Each handler was `post(...).then(refresh).catch(report)`, and `refreshItems` rejects on a
+    4xx/5xx -- so a failed re-render reported "That section could not be added" over a section that
+    exists. The owner adds it again, `create_section` does not dedupe names, and now there are two
+    identical headers and two of twenty slots spent. `onRemove`, the adder and `saveOrder` all carry
+    the inner catch and say the same thing."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    for fn, nxt in (('onSectionAdd', 'onSectionRename'),
+                    ('onSectionRename', 'onSectionDelete'),
+                    ('onNumberingChange', 'boot')):
+        body = js[js.index('function ' + fn + '('):js.index('function ' + nxt + '(')]
+        if 'refreshItems(' in body:
+            assert 'refreshItems(true).catch(' in body, \
+                fn + ' reports a stale view as a failed write'
+
+    delete_body = js[js.index('function onSectionDelete('):js.index('function onNumberingChange(')]
+    assert 'refreshItems(true).catch(' in delete_body
+
+
+def test_a_doomed_section_stops_being_a_drop_target_at_once(client):
+    """The header and its grid stay on screen for the whole delete round trip. A card dropped into
+    them in that window queues a reorder carrying a section id that is about to stop existing -- the
+    server refuses it, and the owner is told their ORDER could not be saved, which was never the
+    problem."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    body = js[js.index('function onSectionDelete('):js.index('function onNumberingChange(')]
+    assert "removeAttribute('data-gl-arrange')" in body, 'a doomed section is still a drop target'
+    # BEFORE the write is queued, not in its callback -- the window is the round trip itself.
+    assert body.index("removeAttribute('data-gl-arrange')") < body.index('queueSectionWrite(')
+
+    owner, game_list, _items, first, _second = _sectioned(client)
+    rendered = client.get(_url(game_list)).content.decode()
+    assert f'data-gl-section-delete\n            data-section-id="{first.id}"' in rendered \
+        or f'data-section-id="{first.id}"' in rendered, 'the client cannot find the doomed grid'
+
+
+def test_the_section_field_does_not_steal_a_caret_that_moved_on(client):
+    """The refresh settles ~300ms later, and by then the owner may have clicked into the description
+    and started typing. `onRemove` guards its own restore the same way and says why."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    fn = js[js.index('function restoreSectionFocus('):js.index('function restorePick(')]
+    assert 'document.activeElement' in fn, 'focus is taken back unconditionally'
+    assert 'document.body' in fn

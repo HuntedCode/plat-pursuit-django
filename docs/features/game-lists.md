@@ -55,14 +55,14 @@ gate.
 
 | Path | Role |
 |---|---|
-| `gamelists/models.py` | The four models, the queryset, the caps and field lengths |
+| `gamelists/models.py` | The five models, the queryset, the caps and field lengths |
 | `gamelists/services/game_list_service.py` | **Every write.** Rules live here, nowhere else |
 | `gamelists/services/covers.py` | Batched cover resolution for the tile mosaic |
-| `gamelists/views.py` | Three pages, seven JSON endpoints, and the create form post |
+| `gamelists/views.py` | Three pages, twelve JSON endpoints, and the create form post |
 | `templates/gamelists/` | `browse.html`, `my_lists.html`, `detail.html` + partials |
 | `static/js/lists-browse.js` | Browse page motion + infinite scroll |
 | `static/js/gamelists.js` | My Lists: the create dialog and the scope switcher |
-| `static/js/list-detail.js` | Detail: the adder, remove, like/follow, rename, publish |
+| `static/js/list-detail.js` | Detail: the adder, remove, like/follow, rename, publish, arranging, sections |
 | `static/css/components/gamelists.css` | Only what the shared primitives do not cover |
 
 ---
@@ -78,6 +78,11 @@ Full field-level detail in [data-model.md](../architecture/data-model.md). What 
   the tile mosaic with `position__lt=4`, so a gap renders a three-cover mosaic on a four-game list.
 - **`GameListFollow` is the site's first follow relation.** Nothing else on the site has
   follow/follower semantics.
+- **`GameListItem.section` is nullable and `SET_NULL`.** Deleting a section keeps its games —
+  they fall back into the ungrouped bucket. A `CASCADE` here would delete somebody's games because
+  they tidied a header, which is the opposite of what the control says it does. `GameListSection`
+  itself cascades from its list, and **needs no `Concept.absorb()` branch**: it has no relation to
+  `Concept` at all, and its items travel through the `GameListItem` branch that is already there.
 - Denormalized `game_count` / `like_count` / `follower_count`, written only by the service.
 
 ### Visibility
@@ -129,10 +134,92 @@ importer too.
 **The planned type list shrank on 2026-09-13.** Progress and the Backlog tracker were cut (the whale
 rule, and the use case is really a user-created challenge — now in scope for the Challenges rebuild),
 and Tier became [its own system](../design/tier-lists.md) rather than a type, because a tier list has
-one template and N per-viewer responses and `list_type` is a presentation field. What remains as
-candidates is Top-N and Sectioned. See
-[game-list-types.md](../design/game-list-types.md#the-test-a-type-has-to-pass) for the test a type
-now has to pass.
+one template and N per-viewer responses and `list_type` is a presentation field. Top-N was cut too:
+once Ranked exists, a hunter self-regulates the length. Sectioned did not become a type either — it
+became a **capability that composes with both** (below), which is why the table above still has two
+rows. See [game-list-types.md](../design/game-list-types.md#the-test-a-type-has-to-pass) for the test
+a type now has to pass.
+
+---
+
+## Sections
+
+**A capability, not a type.** Sections group the games on a list under named headers, and they work
+identically on a Collection and on a Ranked list — which is exactly why they are not a third row in
+the table above: a type decides how a list PRESENTS, and sections decide how it is DIVIDED. Making
+"Sectioned" a type would have meant four types the day a second capability arrived.
+
+**Members only, for creating and renaming.** Everyone makes lists, adds games, ranks them, publishes
+and shares. Members get to *organise* them — the same "everyone X, members X more" shape the `sync`
+perk already ships, rather than a capability a free hunter cannot reach at all. What is **not** gated,
+and is the part easiest to get wrong:
+
+| Act | Gated | Why |
+|---|---|---|
+| Create a section | **yes** | authoring a new thing |
+| Rename a section | **yes** | same |
+| Delete a section | no | removing your own thing is not the act the perk covers |
+| Reorder sections | no | arranging |
+| Move a game between sections | no | arranging |
+| Choose the numbering mode | no | a display choice, ungated like `list_type` |
+| **Read** a sectioned list | no | sections are the author's tool; a free hunter's view is identical |
+
+A **lapsed** member keeps every section they have and keeps arranging them. Membership ending must
+never delete data or reshuffle a list. The page says so in a line rather than silently dropping the
+controls, which on a list that visibly has sections reads as a bug.
+
+### Rendering
+
+`_grouped()` returns `[(section_or_None, [items])]` — the **ungrouped bucket first**, then sections in
+their own `position`. Ungrouped leads because a list that has just gained its first section has
+everything in it, so burying it would hide the games somebody is about to file; it is omitted only
+when empty. The chosen sort orders *within* each group, so sorting a sectioned list A-Z sorts inside
+each section rather than flattening the grouping away. **One extra query** for the whole page
+(`game_list.sections.all()`), and the grouping is done in Python over rows already fetched.
+
+### Numbering (Ranked only)
+
+Two modes on `GameList.sections_restart_numbering`, both computed at render — `position` stays global
+and dense, so neither mode stores or reorders anything.
+
+- **Continue through** (default): 1..N down the list.
+- **Restart in each section**: back to 1 under every header.
+
+**Once a list has sections, the sections are part of the sequence.** A rank is computed from the
+canonical order — sections in their own order, `position` within each — and then *displayed* under
+whatever sort is showing. Two wrong answers preceded that rule and both are worth knowing:
+
+1. `position + 1` straight through. Correct on a flat list, unreadable on a sectioned one: items 0-3
+   alternating between two sections print "1, 3" under one header and "2, 4" under the next. Every
+   numeral individually true, and the column cannot be read down.
+2. Number the *rendered* order. Honours the rank sort and destroys everything else — sorted A-Z the
+   list renumbers 1..N alphabetically, claiming the alphabet was the author's ranking. `detail_card`
+   shows the plate on every sort precisely because a rank is a fact about the **entry**, not the view.
+
+### Filing a game: two payloads, on purpose
+
+Dragging a card into another section posts to **one of two endpoints**, and the split is the design
+rather than an omission:
+
+| Page state | Endpoint | Why |
+|---|---|---|
+| Ranked **at the `rank` sort** | `list_reorder` (+ `moved_item`, `section`) | the drop POSITION is content, and the order and the filing must land together or not at all |
+| Anything else | `list_item_assign` | the position under the cursor belongs to the SORT; posting it would rewrite the author's sequence to match a view of it |
+
+In the second case the drag is configured `sort: false`, so the gesture cannot even promise an order
+it will not keep. Two context flags carry the distinction to the template: **`can_arrange`** ("a card
+can be dragged at all") and the stricter **`can_reorder`** ("a drop position means something").
+Collapsing them into one is what an earlier slice did, and it had to withhold the drag from every
+sectioned list to stay honest.
+
+`reorder()` applies the **assignment first**, so a refused section leaves the order untouched. The
+function is `@transaction.atomic`, so a raise would roll the whole thing back anyway; the ordering is
+belt-and-braces against a future caller that drops the decorator, and it keeps the refusal cheap.
+
+`section_id=None` **with** a `moved_item_id` means the loose bucket, which is a real destination —
+dragging a card out of every section is how you un-file one. So "no section" and "no move" are told
+apart by whether `moved_item_id` was sent, never by `section_id` being falsy. The same distinction
+runs all the way out to `data-section-id=""` on the ungrouped grid.
 
 ### What Ranked adds
 
@@ -294,6 +381,11 @@ All are POST and JSON except the search, and all are rate-limited per user.
 | `…/<id>/follow/` | `list_follow` | Follow / unfollow | 60/m |
 | `…/<id>/add/` | `list_add_game` | Add a concept | 120/m |
 | `…/<id>/items/<item>/remove/` | `list_remove_game` | Remove an entry | 120/m |
+| `…/<id>/items/<item>/section/` | `list_item_assign` | File one entry under a section | 120/m |
+| `…/<id>/sections/` | `list_section_create` | Add a section (**members**) | 30/m |
+| `…/<id>/sections/reorder/` | `list_sections_reorder` | Set section order | 60/m |
+| `…/<id>/sections/<s>/rename/` | `list_section_rename` | Rename (**members**) | 60/m |
+| `…/<id>/sections/<s>/delete/` | `list_section_delete` | Delete a section | 30/m |
 | `…/<id>/search/` | `list_game_search` | Adder typeahead (GET) | 120/m |
 
 **`list_reorder` is reached by Ranked lists only** (2026-09). A Collection is unordered by design,
@@ -305,6 +397,13 @@ Every endpoint **that takes a list id** resolves it through `readable_by()` and 
 **404** — never 403, never a service error — so an id alone can never confirm that a list exists or
 whose it is. `list_create` is the exception with nothing to resolve: it is a form post that
 redirects with a Django message rather than answering JSON.
+
+**Sub-resources are resolved WITHIN the list, never by their own id.** A section (and an item) is
+looked up as `filter(pk=…, game_list=game_list)`, so "exists on somebody else's list" and "does not
+exist" answer identically. Looking a section up by id alone would make the difference an oracle on
+the id space most easily walked — there are only a handful of sections per list. `AssignItemView`
+runs the raw `section` through `safe_int` before that filter, because `filter(pk='abc')` raises
+`ValueError` and a junk value would otherwise be a 500 on a route any logged-in hunter can post to.
 
 ---
 
@@ -349,6 +448,41 @@ redirects with a Django message rather than answering JSON.
   ordering, so the truncation line adds a sentence for the owner.
 - **The detail page renders at most 200 items** (`MAX_ITEMS_RENDERED`) and says so. Real pagination is
   a follow-up.
+- **`#gl-items` does not exist on a sectioned list.** A sectioned list renders a grid per group, so
+  anything reaching for that id gets `null` there. Both refresh helpers used it as their
+  swap-happened sentinel (`node before !== node after`), which on a sectioned list compared
+  `null === null` and reported a failure over a swap that had just worked; `onAfterSwap` used it to
+  ask whether the panel held any cards, got `false`, disagreed with the toolbar's presence and
+  **reloaded the page — on every swap, including the one the reload caused**. `#gl-items-root` wraps
+  all three shapes of the partial and is what those three now read.
+- **A drop is not always a reorder.** See [Filing a game](#filing-a-game-two-payloads-on-purpose).
+  Posting the drop index under a non-`rank` sort rewrites the author's sequence to match a view.
+- **The arrange bar is not gated on the drag.** It also carries "Add a section", so tying the whole
+  bar to whether a drag is possible hid the only control that could make one possible — a member with
+  a section-less Collection had no way in.
+- **The ungrouped bucket stays when empty, for whoever can arrange.** A reader never sees a header
+  over nothing; the owner always does, because it is the only way back *out* of a section. Filing the
+  last loose card used to remove the bucket and take the drop target with it, so nothing could be
+  un-filed by pointer (no grid to drop onto) or by keyboard (no group before the first section) until
+  the owner deleted a whole section to get their game back.
+- **`:empty` does not tolerate whitespace.** The empty-section drop box is a `::before` gated on
+  `:empty`, so the grid's tags must close up tight against the `{% for %}` — laid out over separate
+  lines an empty grid still holds `"
+    
+"`, never matches, and the box never draws in any state.
+  Selectors 4 relaxes this; no shipping engine implements it. A test asserts the rendered grid is
+  byte-for-byte empty, because asserting the *attribute* is present passes over an invisible box.
+- **SortableJS routes `end` to the drag's SOURCE, not its destination.** `onMove` therefore fires on
+  the manager the card left; read `evt.to` for where it landed. `utils.js` asserted the opposite for a
+  long time and the comment is now corrected there — reading the manager's own container files every
+  card straight back where it came from, which looks like a working drag that undoes itself.
+- **A cross-section move always refreshes, so it always drops the pick-up.** `refreshItems` →
+  settle → `syncPositioning` → `attachDrag` → `detachDrag` → `dropPicked`. The keyboard path carries
+  `pendingPickId` across and `restorePick` re-applies it *after* `syncPositioning`; without that the
+  keys worked exactly once per pick.
+- **Give every `refreshItems` its own catch.** It rejects on a 4xx/5xx, so a shared `.catch` reports
+  a stale view as a failed write — "That section could not be added" over a section that exists, and
+  `create_section` does not dedupe names.
 
 ---
 

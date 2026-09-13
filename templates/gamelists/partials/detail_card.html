@@ -11,8 +11,16 @@ Rendered inside `detail_group.html`, which owns the grid and the section header.
     shape.{% endcomment %}
     {% comment %}`data-item-id` only where something READS it -- the reorder payload is built from
     these. Rendering it on every list would leave a markup hook with no reader on every Collection,
-    which is how a future reader concludes drag still exists somewhere. A test pins this.{% endcomment %}
-    <div class="gl-item"{% if can_reorder %} data-item-id="{{ item.pk }}"{% endif %}>
+    which is how a future reader concludes drag still exists somewhere. A test pins this.
+
+    `can_arrange`, NOT `can_reorder`: filing a card under a section is a drag too, and it reports the
+    item by this id. Gating on the narrower flag left every sectioned Collection with draggable cards
+    whose identity nothing could read -- the drop fired and had nothing to send.{% endcomment %}
+    {% comment %}`data-assign-url` rides the row for the same reason the remove URL does: the server
+    owns URL shapes, and a path assembled in JS from a base plus an id is what breaks silently the day
+    a route moves. Only rendered where a drag can reach it.{% endcomment %}
+    <div class="gl-item"{% if can_arrange %} data-item-id="{{ item.pk }}"
+         data-assign-url="{% url 'list_item_assign' game_list.id item.pk %}"{% endif %}>
     {% comment %}Links to the CONCEPT page -- the site's word "game" -- rather than to a trophy list,
     which is the whole reason entries are concept-keyed.{% endcomment %}
     {% comment %}THE RANK GOES IN THE `aria-label`, not in an `sr-only` span inside the link.

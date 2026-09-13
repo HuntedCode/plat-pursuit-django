@@ -247,6 +247,34 @@ def _lock_item(item, locked_list):
     return fresh
 
 
+def _lock_section(section, locked_list):
+    """The same treatment `_lock_item` gives an item pivot, for the same reason.
+
+    A section arrives here as the object the VIEW fetched, before the list lock was taken -- so by the
+    time the write runs it may already be gone, and `Model.delete()` on an already-deleted row removes
+    nothing and does NOT raise. `delete_section` read `position` off that stale object and then shifted
+    every section above it, so a double-submit ran the shift twice against the same pivot and left two
+    sections sharing a position: `Meta.ordering` goes non-deterministic and `create_section`'s
+    `Max(position) + 1` leaves a permanent hole that no user action repairs.
+
+    `rename_section` had the milder version of the same problem. It took no lock at all, so a rename
+    racing a delete reached `save(update_fields=['name'])` against zero rows -- which Django 5.2 turns
+    into `DatabaseError("Save with update_fields did not affect any rows.")`, i.e. a 500 where the
+    client expects the 400 it knows how to display.
+
+    Scoped to the parent as well as the pk, so this doubles as the ownership check the two callers
+    would otherwise each have to remember.
+    """
+    fresh = (
+        GameListSection.objects.select_for_update()
+        .filter(pk=section.pk, game_list=locked_list)
+        .first()
+    )
+    if fresh is None:
+        raise ListError('That section is no longer on this list.')
+    return fresh
+
+
 def _require_owner(game_list, profile):
     """Ownership, asked about the row rather than about the URL."""
     if game_list.is_deleted:
@@ -288,7 +316,7 @@ def create_list(profile, *, name, description='', is_public=False,
 
 @transaction.atomic
 def update_list(game_list, profile, *, name=None, description=None, is_public=None,
-                list_type=None):
+                list_type=None, restart_numbering=None):
     """Edit a list you own. Every argument is optional; only what is passed is touched.
 
     The restriction gate is scoped to the acts that PUT WORDS IN FRONT OF PEOPLE, in either of the
@@ -331,6 +359,12 @@ def update_list(game_list, profile, *, name=None, description=None, is_public=No
     if list_type is not None:
         game_list.list_type = _check_list_type(list_type)
         changed.append('list_type')
+    # Ungated by membership and by restriction, for the same reason `list_type` is: choosing between
+    # two renderings of your own rows submits no content. A lapsed member whose list is already
+    # sectioned can still choose how it reads.
+    if restart_numbering is not None:
+        game_list.sections_restart_numbering = bool(restart_numbering)
+        changed.append('sections_restart_numbering')
 
     if changed:
         game_list.save(update_fields=[*changed, 'updated_at'])
@@ -429,12 +463,23 @@ def _recount(locked):
 
 
 @transaction.atomic
-def reorder(game_list, profile, item_ids):
-    """Set the order to exactly `item_ids`.
+def reorder(game_list, profile, item_ids, *, moved_item_id=None, section_id=None):
+    """Set the order to exactly `item_ids`, and optionally re-file one item as part of the same write.
 
     Refuses a partial list rather than accepting one. A drag-reorder that posts a subset means the
     client and the server disagree about what is on the list, and applying it would silently drop
     the entries the client forgot.
+
+    ONE CALL, BECAUSE A CROSS-SECTION DROP IS ONE ACT. Dragging a card from "Playing" to "Finished"
+    changes two things -- where it sits in the global order, and which section it belongs to -- and
+    sending them as two requests means either can fail alone. The interesting failure is not the loud
+    one: it is the card that lands in the right place under the wrong header, which looks correct
+    until the page is reloaded. Doing both inside one transaction removes the state rather than
+    detecting it.
+
+    `section_id=None` with a `moved_item_id` means UNGROUPED, which is a real destination -- dragging
+    a card out of every section and into the loose bucket is how you un-file one. So "no section" and
+    "no move" are distinguished by `moved_item_id`, not by `section_id` being falsy.
     """
     _require_owner(game_list, profile)
 
@@ -447,6 +492,27 @@ def reorder(game_list, profile, item_ids):
     items = {i.id: i for i in GameListItem.objects.filter(game_list=locked)}
     if sorted(wanted) != sorted(items):
         raise ListError('That order does not match the list. Reload and try again.')
+
+    # THE ASSIGNMENT FIRST, so that a refusal here leaves the order untouched rather than half
+    # applied. Validated against THIS list on both sides: an item id from another list is already
+    # excluded by the membership check above, and a section id from another list is refused below --
+    # without which a card could be filed under a section the caller may not even be able to see.
+    if moved_item_id is not None:
+        try:
+            moved_item_id = int(moved_item_id)
+        except (TypeError, ValueError):
+            raise ListError('That move is not valid. Reload and try again.')
+        if moved_item_id not in items:
+            raise ListError('That game is not on this list.')
+
+        section = None
+        if section_id is not None:
+            section = GameListSection.objects.filter(
+                pk=section_id, game_list=locked).first()
+            if section is None:
+                raise ListError('That section is not on this list.')
+        items[moved_item_id].section = section
+        items[moved_item_id].save(update_fields=['section'])
 
     for position, item_id in enumerate(wanted):
         items[item_id].position = position
@@ -489,9 +555,17 @@ def rename_section(section, profile, *, name):
     _refuse_if_restricted(profile)
     _refuse_if_not_member(profile)
 
-    section.name = _check_section_name(name)
-    section.save(update_fields=['name'])
-    return section
+    # Locked like every other section write. This was the one that took no lock at all, so a rename
+    # racing a delete saved against zero rows and Django turned that into a 500; it was also the one
+    # write that could interleave with `delete_section`'s position shift.
+    locked = _lock_list(section.game_list)
+    fresh = _lock_section(section, locked)
+    fresh.name = _check_section_name(name)
+    fresh.save(update_fields=['name'])
+    # The CALLER's object too, because the view answers with `section.name` and would otherwise echo
+    # the name it arrived with rather than the one that was stored.
+    section.name = fresh.name
+    return fresh
 
 
 @transaction.atomic
@@ -508,8 +582,11 @@ def delete_section(section, profile):
     _require_owner(section.game_list, profile)
 
     locked = _lock_list(section.game_list)
-    position = section.position
-    section.delete()
+    # RE-READ UNDER THE LOCK. The pivot cannot come off the object the view fetched -- see
+    # `_lock_section` for the double-submit that leaves two sections sharing a position.
+    fresh = _lock_section(section, locked)
+    position = fresh.position
+    fresh.delete()
     # Dense, like everything else that orders here.
     GameListSection.objects.filter(game_list=locked, position__gt=position).update(
         position=models.F('position') - 1)
@@ -559,28 +636,18 @@ def assign_item(game_list, profile, item, section):
     locked = _lock_list(game_list)
     fresh = _lock_item(item, locked)
 
-    if section is not None and section.game_list_id != locked.pk:
-        raise ListError('That section is not on this list.')
+    # RE-RESOLVED UNDER THE LOCK, not merely checked for the right parent. The caller resolved this
+    # section before the transaction, so it may have been deleted while this request waited on the
+    # list lock -- and writing the FK then raises IntegrityError, which reaches a JSON client as a 500
+    # HTML page instead of the 400 it knows how to display. `reorder` already did it this way; these
+    # two are the same act and must not disagree about how careful it is.
+    if section is not None:
+        section = _lock_section(section, locked)
 
     fresh.section = section
     fresh.save(update_fields=['section'])
     GameList.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
     return fresh
-
-
-@transaction.atomic
-def set_section_numbering(game_list, profile, *, restart):
-    """Continue 1..N through the list, or restart at 1 in each section.
-
-    A display choice, so it is ungated by membership for the same reason `list_type` is ungated by
-    restriction: choosing between two renderings of your own rows submits no content. A lapsed
-    member whose list is already sectioned can still choose how it reads.
-    """
-    _require_owner(game_list, profile)
-
-    game_list.sections_restart_numbering = bool(restart)
-    game_list.save(update_fields=['sections_restart_numbering', 'updated_at'])
-    return game_list
 
 
 # ── social ───────────────────────────────────────────────────────────────────────────────────────

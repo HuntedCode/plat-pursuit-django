@@ -23,9 +23,11 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
-from gamelists.views import (AddConceptView, BrowseListsView, CreateListView, DeleteListView,
+from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
+                            CreateSectionView, DeleteListView, DeleteSectionView,
                             GameListDetailView, ListGameSearchView, MyListsView,
-                            RemoveItemView, ReorderItemsView, ToggleFollowView,
+                            RemoveItemView, RenameSectionView, ReorderItemsView,
+                            ReorderSectionsView, ToggleFollowView,
                             ToggleLikeView, UpdateListView)
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
@@ -409,11 +411,30 @@ urlpatterns = [
     # since the rebuild with nothing calling it -- invisible while only staff could make a list, and
     # a hard stop at list four for every free hunter the moment they could.
     path('community/lists/<int:list_id>/delete/', DeleteListView.as_view(), name='list_delete'),
+    # Sections (2026-09). Creating and renaming are members-only, enforced in the service; the rest
+    # is arranging your own content and is open to any owner.
+    #
+    # A CROSS-SECTION DROP HAS TWO ROUTES, which is deliberate and is not a duplicate. At the real
+    # sequence it rides `list_reorder`, because there the drop changes both the order and the filing
+    # and those have to land together or not at all. Under any other sort the position beneath the
+    # cursor belongs to the VIEW rather than to the list, so sending it would rewrite the author's
+    # sequence to match a sort; `list_item_assign` below reports only the filing, which is all the
+    # drag meant. `AssignItemView`'s docstring carries the full argument.
+    path('community/lists/<int:list_id>/sections/', CreateSectionView.as_view(),
+         name='list_section_create'),
+    path('community/lists/<int:list_id>/sections/reorder/', ReorderSectionsView.as_view(),
+         name='list_sections_reorder'),
+    path('community/lists/<int:list_id>/sections/<int:section_id>/rename/',
+         RenameSectionView.as_view(), name='list_section_rename'),
+    path('community/lists/<int:list_id>/sections/<int:section_id>/delete/',
+         DeleteSectionView.as_view(), name='list_section_delete'),
     path('community/lists/<int:list_id>/like/', ToggleLikeView.as_view(), name='list_like'),
     path('community/lists/<int:list_id>/follow/', ToggleFollowView.as_view(), name='list_follow'),
     path('community/lists/<int:list_id>/add/', AddConceptView.as_view(), name='list_add_game'),
     path('community/lists/<int:list_id>/items/<int:item_id>/remove/',
          RemoveItemView.as_view(), name='list_remove_game'),
+    path('community/lists/<int:list_id>/items/<int:item_id>/section/',
+         AssignItemView.as_view(), name='list_item_assign'),
     path('community/lists/<int:list_id>/search/', ListGameSearchView.as_view(),
          name='list_game_search'),
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),

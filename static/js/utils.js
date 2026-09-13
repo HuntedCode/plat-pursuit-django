@@ -894,12 +894,13 @@ class DragReorderManager {
      * @param {Function} [config.onStart] - Optional callback when drag starts
      * @param {Function} [config.onEnd] - Optional callback when drag ends
      * @param {string|object} [config.group] - SortableJS group (string or {name, put, pull}). When two managers share a group, items can be dragged between their containers.
-     * @param {Function} [config.onMove] - Callback when an item is dropped into THIS container from ANOTHER (cross-container drop). Signature: (itemId, evt) => Promise. evt.from/evt.to/evt.newIndex available. Replaces the onReorder call for that drop.
+     * @param {Function} [config.onMove] - Callback for a cross-container drop, fired on the manager the drag STARTED in (SortableJS routes `end` to the source, not the destination — see the note in onEnd). Signature: (itemId, evt) => Promise. Read `evt.to` for where the item landed; `this.container` is the origin. `evt.from`/`evt.newIndex` also available. Replaces the onReorder call for that drop.
      * @param {Function} [config.canAccept] - Predicate (draggedEl, toContainer, fromContainer) => bool. Return false to reject the drop. Mirrors SortableJS onMove.
      * @param {number} [config.delay] - Hold time in ms before a drag starts. Pairs with delayOnTouchOnly (default true), so touch gets long-press-to-drag and a mouse stays immediate.
      * @param {boolean} [config.delayOnTouchOnly] - Apply `delay` to touch only. Defaults to true when `delay` is set; pass false to delay pointer drags as well.
      * @param {number} [config.touchStartThreshold] - Pixels of movement that cancel a pending delayed drag, so a scroll gesture does not pick an item up. Defaults to 5.
      * @param {string} [config.dragExclude] - Selector for descendants a drag must not start from (buttons, links that must stay clickable). Sets SortableJS `filter` with `preventOnFilter: false`.
+     * @param {boolean} [config.sort] - Whether items can be reordered WITHIN this container. Defaults to true. Pass false to keep a container a valid drag source and drop target while refusing in-place reordering -- the shape a bucket has when membership is meaningful and order is not (a list grouped into sections but displayed A-Z, where the drop position belongs to the sort rather than to the data).
      */
     constructor(config) {
         this.container = config.container;
@@ -919,6 +920,10 @@ class DragReorderManager {
         this.touchStartThreshold =
             config.touchStartThreshold === undefined ? 5 : config.touchStartThreshold;
         this.dragExclude = config.dragExclude || null;
+        // `!== false`, not `||`: the whole point of this option is passing `false`, which `||` would
+        // read as "unset" and silently turn back into the default. The same trap
+        // `touchStartThreshold` above documents for 0.
+        this.sort = config.sort !== false;
         this.sortable = null;
 
         this._initSortable();
@@ -968,10 +973,18 @@ class DragReorderManager {
                 if (this._onEndCallback) this._onEndCallback(evt);
 
                 // Cross-container drop: fire onMove instead of onReorder.
-                // The destination manager owns the post-drop sync (it
-                // knows the new bucket's identity); the source manager
-                // doesn't see this event (SortableJS routes onEnd to the
-                // manager whose container the drop landed in).
+                //
+                // THIS FIRES ON THE **SOURCE** MANAGER, not the destination. That is the opposite of
+                // what this comment claimed for a long time ("the destination manager owns the
+                // post-drop sync … the source manager doesn't see this event"), and the claim was
+                // checked against the vendored bundle rather than inferred: `Sortable.min.js`
+                // dispatches `add` with `rootEl: parentEl` (the destination) but dispatches `end`
+                // with `sortable: this` — `this` being the Sortable whose `_onDrop` ran, which is
+                // the one the drag STARTED in.
+                //
+                // So `this.container` here is `evt.from`. A handler that needs to know where the item
+                // LANDED must read `evt.to`; reading its own container silently reports the origin,
+                // which looks like a working drag that undoes itself on the next render.
                 if (evt.from !== evt.to) {
                     if (this.onMove) {
                         const itemId = evt.item.dataset.itemId;
@@ -1018,6 +1031,11 @@ class DragReorderManager {
         }
         if (this.group) {
             sortableConfig.group = this.group;
+        }
+        // Set only when false, so a container that never asked keeps SortableJS's own default rather
+        // than having this manager's opinion written over it.
+        if (!this.sort) {
+            sortableConfig.sort = false;
         }
         // SortableJS onMove fires during the drag; returning false rejects
         // the drop. canAccept is the manager's hook for that, used e.g. to

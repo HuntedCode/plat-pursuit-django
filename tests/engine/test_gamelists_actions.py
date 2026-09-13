@@ -9,8 +9,7 @@ import pytest
 from django.urls import reverse
 
 from gamelists.models import (FREE_MAX_LISTS, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED, GameList,
-                              GameListFollow,
-                              GameListItem, GameListLike)
+                              GameListFollow, GameListItem, GameListLike, GameListSection)
 from gamelists.services import game_list_service as svc
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 from users.models import UserRestriction
@@ -875,3 +874,295 @@ def test_creating_a_list_is_rate_limited_like_every_other_write(client):
         nxt = source.find('\nclass ', start + 1)
         block = source[start:nxt if nxt != -1 else len(source)]
         assert 'ratelimit(' in block, f'{view} has no rate limit'
+
+
+# ── sections, over the wire ──────────────────────────────────────────────────────────────────────
+
+def _member(client, psn='member'):
+    profile = _staff(client, psn=psn)
+    profile.user_is_premium = True
+    profile.save(update_fields=['user_is_premium'])
+    return profile
+
+
+def test_the_section_endpoints_enforce_the_membership_gate(client):
+    """The gate lives in the service; these check the refusal reaches the wire as a 400 rather than a
+    500 or a silent success -- and that CREATE and RENAME are the two it covers."""
+    owner = _staff(client, psn='free')
+    owner.user_is_premium = False
+    owner.save(update_fields=['user_is_premium'])
+    game_list = svc.create_list(owner, name='Mine')
+
+    resp = client.post(reverse('list_section_create', args=[game_list.id]), {'name': 'Playing'})
+    assert resp.status_code == 400
+    assert 'member' in resp.json()['error'].lower()
+    assert GameListSection.objects.count() == 0
+
+
+def test_a_member_can_create_rename_reorder_and_delete_over_the_wire(client):
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Backlog')
+
+    first = client.post(reverse('list_section_create', args=[game_list.id]), {'name': 'Playing'})
+    second = client.post(reverse('list_section_create', args=[game_list.id]), {'name': 'Finished'})
+    assert first.status_code == 200 and second.status_code == 200
+    a, b = first.json()['id'], second.json()['id']
+
+    renamed = client.post(reverse('list_section_rename', args=[game_list.id, a]),
+                          {'name': '  Now playing  '})
+    # The STORED name: `_check_section_name` trims, so echoing the submitted value would show one the
+    # database does not have.
+    assert renamed.json()['name'] == 'Now playing'
+
+    assert client.post(reverse('list_sections_reorder', args=[game_list.id]),
+                       {'section_ids[]': [b, a]}).status_code == 200
+    assert list(game_list.sections.values_list('id', flat=True)) == [b, a]
+
+    assert client.post(reverse('list_section_delete', args=[game_list.id, a])).status_code == 200
+    assert GameListSection.objects.filter(game_list=game_list).count() == 1
+
+
+def test_a_section_on_another_list_is_a_404_not_a_403(client):
+    """The section lookup is scoped to the LIST, so "exists on somebody else's list" and "does not
+    exist" answer identically. Looking it up by id alone would make the difference an oracle on the
+    id space most easily walked -- sections are few per list."""
+    author = _member(client, psn='author')
+    theirs = svc.create_list(author, name='Theirs')
+    their_section = svc.create_section(theirs, author, name='Elsewhere')
+
+    client.logout()
+    stranger = _member(client, psn='stranger')
+    mine = svc.create_list(stranger, name='Mine')
+
+    for url in (reverse('list_section_rename', args=[mine.id, their_section.id]),
+                reverse('list_section_delete', args=[mine.id, their_section.id])):
+        assert client.post(url, {'name': 'Hijacked'}).status_code == 404, url
+
+    their_section.refresh_from_db()
+    assert their_section.name == 'Elsewhere'
+
+
+def test_a_cross_section_drop_is_one_atomic_write(client):
+    """THE REASON THIS RIDES `list_reorder`. Dragging a card between sections changes where it sits
+    AND which section it belongs to. Sent as two requests, either can fail alone -- and the
+    interesting failure is the quiet one: a card in the right place under the wrong header, which
+    looks correct until the page is reloaded."""
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Backlog', list_type=LIST_TYPE_RANKED)
+    items = [svc.add_concept(game_list, owner, _concept(f'G{n}')) for n in range(3)]
+    playing = svc.create_section(game_list, owner, name='Playing')
+    finished = svc.create_section(game_list, owner, name='Finished')
+    for item in items:
+        svc.assign_item(game_list, owner, item, playing)
+
+    # Drag the last card to the front AND into the other section, in one drop.
+    resp = client.post(reverse('list_reorder', args=[game_list.id]), {
+        'item_ids[]': [items[2].id, items[0].id, items[1].id],
+        'moved_item': items[2].id,
+        'section': finished.id,
+    })
+
+    assert resp.status_code == 200
+    items[2].refresh_from_db()
+    assert items[2].position == 0, 'the order did not apply'
+    assert items[2].section_id == finished.id, 'the assignment did not apply'
+
+
+def test_dropping_a_card_out_of_every_section_is_a_real_destination(client):
+    """An EMPTY `section` means the loose bucket, not a missing value -- so the two are told apart by
+    whether `moved_item` was sent, rather than by `section` being falsy. Getting that backwards makes
+    un-filing a card impossible by drag."""
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    item = svc.add_concept(game_list, owner, _concept('Only'))
+    section = svc.create_section(game_list, owner, name='Playing')
+    svc.assign_item(game_list, owner, item, section)
+
+    resp = client.post(reverse('list_reorder', args=[game_list.id]), {
+        'item_ids[]': [item.id],
+        'moved_item': item.id,
+        'section': '',
+    })
+
+    assert resp.status_code == 200
+    item.refresh_from_db()
+    assert item.section_id is None, 'the card could not be dragged out of its section'
+
+
+def test_a_drop_into_another_lists_section_is_refused_and_writes_nothing(client):
+    """Without this a card is filed under a section id from a list the caller may not be able to see:
+    it renders nowhere, and the refusal (or its absence) confirms that section exists."""
+    author = _member(client, psn='author')
+    theirs = svc.create_list(author, name='Theirs')
+    their_section = svc.create_section(theirs, author, name='Elsewhere')
+
+    client.logout()
+    owner = _member(client, psn='owner')
+    mine = svc.create_list(owner, name='Mine', list_type=LIST_TYPE_RANKED)
+    items = [svc.add_concept(mine, owner, _concept(f'M{n}')) for n in range(2)]
+
+    resp = client.post(reverse('list_reorder', args=[mine.id]), {
+        'item_ids[]': [items[1].id, items[0].id],
+        'moved_item': items[1].id,
+        'section': their_section.id,
+    })
+
+    assert resp.status_code == 400
+    items[1].refresh_from_db()
+    assert items[1].section_id is None
+    # THE ORDER IS UNTOUCHED TOO, which is the point of doing the assignment first: a refusal must
+    # not leave the list half-reordered.
+    assert items[1].position == 1, 'a refused move still reordered the list'
+
+
+def test_the_numbering_toggle_rides_the_editor_save(client):
+    """It is a property of the list exactly as `list_type` is, so it saves with the rest rather than
+    having an endpoint of its own -- two writers for one field is how they drift."""
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Backlog', list_type=LIST_TYPE_RANKED)
+
+    resp = client.post(reverse('list_update', args=[game_list.id]), {'restart_numbering': 'on'})
+
+    assert resp.status_code == 200
+    assert resp.json()['restart_numbering'] is True
+    game_list.refresh_from_db()
+    assert game_list.sections_restart_numbering is True
+
+    # `safe_bool`, not `== 'true'`: 'on' is what a plain HTML checkbox sends, and the bare comparison
+    # reads it as False -- the exact bug `is_public` shipped and this inherits the fix for.
+    client.post(reverse('list_update', args=[game_list.id]), {'restart_numbering': 'false'})
+    game_list.refresh_from_db()
+    assert game_list.sections_restart_numbering is False
+
+
+def test_a_drag_that_only_files_does_not_rewrite_the_authors_order(client):
+    """THE REASON `list_item_assign` EXISTS BESIDE `list_reorder`.
+
+    Under any sort but the real sequence the position beneath the cursor is an artefact of the sort,
+    so posting it would overwrite the author's ranking with the shape of a view. This endpoint reports
+    the filing and nothing else."""
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Shelf')
+    items = [svc.add_concept(game_list, owner, _concept(f'S{n}')) for n in range(3)]
+    section = svc.create_section(game_list, owner, name='Playing')
+
+    before = list(GameListItem.objects.filter(game_list=game_list)
+                  .order_by('position').values_list('id', flat=True))
+
+    resp = client.post(reverse('list_item_assign', args=[game_list.id, items[2].id]),
+                       {'section': section.id})
+
+    assert resp.status_code == 200
+    items[2].refresh_from_db()
+    assert items[2].section_id == section.id
+    after = list(GameListItem.objects.filter(game_list=game_list)
+                 .order_by('position').values_list('id', flat=True))
+    assert after == before, 'filing a game silently reordered the list'
+
+
+def test_assigning_to_an_empty_section_un_files_a_game(client):
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Shelf')
+    item = svc.add_concept(game_list, owner, _concept('Only'))
+    section = svc.create_section(game_list, owner, name='Playing')
+    svc.assign_item(game_list, owner, item, section)
+
+    resp = client.post(reverse('list_item_assign', args=[game_list.id, item.id]), {'section': ''})
+
+    assert resp.status_code == 200
+    item.refresh_from_db()
+    assert item.section_id is None
+
+
+def test_assigning_to_a_junk_section_is_refused_rather_than_a_500(client):
+    """`filter(pk='abc')` raises ValueError, so without `safe_int` a junk value is a server error on
+    a route any logged-in hunter can post to."""
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Shelf')
+    item = svc.add_concept(game_list, owner, _concept('Only'))
+
+    for junk in ('abc', '99999999'):
+        resp = client.post(reverse('list_item_assign', args=[game_list.id, item.id]),
+                           {'section': junk})
+        assert resp.status_code == 400, junk
+    item.refresh_from_db()
+    assert item.section_id is None
+
+
+def test_a_non_owner_gets_the_same_answer_for_every_item_id(client):
+    """THE ORACLE, and the first version of this test did not build one.
+
+    `readable_by` lets anybody reach this endpoint for a PUBLIC list. Resolving the item first meant
+    an id that belongs to that list answered 400 "That is not your list" while an id that belongs
+    elsewhere answered 404 "no such entry" -- so the pair reports, for any id, whether it sits on the
+    list being probed. Item ids are not in the public DOM (`data-item-id` renders only under
+    `can_arrange`), so that is new information, and it maps the global id space onto public lists.
+
+    Comparing a foreign item against a missing one is what makes the two implementations disagree:
+    both 404 when the item is simply absent, so the earlier test passed either way.
+    """
+    author = _member(client, psn='author')
+    public = svc.create_list(author, name='Theirs', is_public=True)
+    on_their_list = svc.add_concept(public, author, _concept('Theirs'))
+
+    client.logout()
+    _member(client, psn='stranger')
+
+    on_it = client.post(reverse('list_item_assign', args=[public.id, on_their_list.id]),
+                        {'section': ''})
+    not_on_it = client.post(reverse('list_item_assign', args=[public.id, 99999999]),
+                            {'section': ''})
+
+    assert on_it.status_code == not_on_it.status_code, \
+        'the status tells a stranger whether that item id is on this list'
+    assert on_it.json()['error'] == not_on_it.json()['error'], \
+        'the message tells a stranger whether that item id is on this list'
+
+    on_their_list.refresh_from_db()
+    assert on_their_list.section_id is None, 'a refused call wrote something'
+
+
+def test_assigning_someone_elses_item_is_refused(client):
+    """The private case, which the outer `readable_by` 404 already covers -- kept because it is the
+    shape somebody actually attacks, and because it pins that the LIST-level refusal comes first."""
+    author = _member(client, psn='author')
+    theirs = svc.create_list(author, name='Theirs')
+    their_item = svc.add_concept(theirs, author, _concept('Theirs'))
+
+    client.logout()
+    owner = _member(client, psn='owner')
+    mine = svc.create_list(owner, name='Mine')
+
+    # Their PRIVATE list: a uniform 404 that never confirms it exists.
+    assert client.post(reverse('list_item_assign', args=[theirs.id, their_item.id]),
+                       {'section': ''}).status_code == 404
+    # And their item against MY list, which does not hold it.
+    assert client.post(reverse('list_item_assign', args=[mine.id, their_item.id]),
+                       {'section': ''}).status_code == 404
+
+    their_item.refresh_from_db()
+    assert their_item.section_id is None
+
+
+def test_removing_an_item_gives_a_non_owner_one_answer_too(client):
+    """The same id oracle `AssignItemView` was fixed for, one route away and left behind.
+
+    `readable_by` lets any signed-in hunter POST this for somebody else's PUBLIC list. Resolving the
+    item before the ownership check answered 400 "That is not your list" for an id that sits on that
+    list and 404 for one that does not -- reporting, for any id, whether it belongs to the list being
+    probed. `data-item-id` renders only for owners, so those ids are otherwise undisclosed."""
+    author = _member(client, psn='author')
+    public = svc.create_list(author, name='Theirs', is_public=True)
+    on_their_list = svc.add_concept(public, author, _concept('Theirs'))
+
+    client.logout()
+    _member(client, psn='stranger')
+
+    on_it = client.post(reverse('list_remove_game', args=[public.id, on_their_list.id]))
+    not_on_it = client.post(reverse('list_remove_game', args=[public.id, 99999999]))
+
+    assert on_it.status_code == not_on_it.status_code, \
+        'the status tells a stranger whether that item id is on this list'
+    assert on_it.json()['error'] == not_on_it.json()['error']
+
+    assert GameListItem.objects.filter(pk=on_their_list.pk).exists(), 'a refused call deleted a row'

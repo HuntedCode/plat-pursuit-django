@@ -128,7 +128,18 @@ that has to agree with the first. They are listed in
 | `/community/lists/<id>/follow/` | `list_follow` | POST |
 | `/community/lists/<id>/add/` | `list_add_game` | POST |
 | `/community/lists/<id>/items/<item>/remove/` | `list_remove_game` | POST |
+| `/community/lists/<id>/items/<item>/section/` | `list_item_assign` | POST — file one entry under a section |
+| `/community/lists/<id>/sections/` | `list_section_create` | POST — **members only** |
+| `/community/lists/<id>/sections/reorder/` | `list_sections_reorder` | POST |
+| `/community/lists/<id>/sections/<s>/rename/` | `list_section_rename` | POST — **members only** |
+| `/community/lists/<id>/sections/<s>/delete/` | `list_section_delete` | POST |
 | `/community/lists/<id>/search/` | `list_game_search` | GET |
+
+A cross-section drag posts to `list_reorder` **or** `list_item_assign` depending on whether the page
+is showing the list's real sequence — see
+[game-lists.md](../features/game-lists.md#filing-a-game-two-payloads-on-purpose) for why that is two
+endpoints rather than one. Sections and items are resolved **within their list**, never by their own
+id, so a sub-resource on somebody else's list 404s exactly as a missing one does.
 
 Every one that takes a list id resolves it through `readable_by()` and answers a uniform 404, so an
 id alone cannot confirm a list exists or whose it is. `list_create` has no list to resolve and

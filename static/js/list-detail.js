@@ -41,11 +41,22 @@
     var handledGrid = null;
     var searchField = null;
     var pendingFocusIndex = null;
+    // Set when an add-section write is in flight, so the field can be refocused once the refresh
+    // that replaced it settles. See `restoreSectionFocus`.
+    var pendingSectionFocus = false;
+    // The item id of a card that was picked up when a refresh started, so the pick can be restored
+    // on the fresh row. Crossing a section ALWAYS refreshes (the counts and the group membership
+    // change), and the refresh tears down and re-attaches the drag -- which drops the pick. Without
+    // this the keyboard path works exactly once per pick, which on the gesture it was added for
+    // (walking one card down several headers) is the whole feature missing.
+    var pendingPickId = null;
     var refreshSeq = 0;
-    // The live SortableJS wrapper, so a replaced grid's instance can be destroyed rather than leaked.
-    var reorderManager = null;
-    // The grid that wrapper is attached to, so its keydown listener can be removed with it.
-    var dragGrid = null;
+    // The live SortableJS wrappers, so replaced grids' instances can be destroyed rather than leaked.
+    // PLURAL since sections: a sectioned list renders a grid per group and every one of them is
+    // armed, sharing a `group` name so a card can be dragged from one into another.
+    var reorderManagers = [];
+    // The grids those wrappers are attached to, so their click listeners come off with them.
+    var dragGrids = [];
     // Whether the hunter has turned position editing ON. Distinct from whether the server
     // allows it (`data-gl-reorder`), which is a capability rather than an intent.
     var positioning = false;
@@ -73,7 +84,12 @@
     // The same grammar and the same shared engine as every other tile grid on the site.
     function initReveal() {
         if (revealHandle) { revealHandle.disconnect(); revealHandle = null; }
-        var grid = document.getElementById('gl-items');
+        // THE ROOT, not `#gl-items`. A sectioned list renders a grid per group, so pointing this at
+        // the flat grid's id revealed nothing on exactly the lists that have the most to reveal.
+        // `staggerReveal` selects its cards as DESCENDANTS, so one handle over the root covers every
+        // group -- and the stagger then runs continuously down the page rather than restarting at
+        // each header, which is what somebody scanning the list actually sees.
+        var grid = itemsRoot();
         if (!grid || !PP.staggerReveal) { return; }
         var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
         var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
@@ -214,12 +230,20 @@
      * (cover chain, note, remove control) then lives in exactly one place instead of being mirrored
      * in JS. It reuses the sort toolbar's own contract: same URL, same target, same partial.
      */
-    function refreshItems() {
+    function refreshItems(withChrome) {
         var form = document.getElementById('gl-detail-form');
         var base = (form && form.getAttribute('hx-get')) || window.location.pathname;
         var select = form && form.querySelector('select[name="sort"]');
-        var url = base + (select && select.value
-            ? '?sort=' + encodeURIComponent(select.value) : '');
+        var params = [];
+        if (select && select.value) { params.push('sort=' + encodeURIComponent(select.value)); }
+        // `chrome=1` asks for the out-of-band arrange bar as well. Adding or deleting a SECTION can
+        // change what that bar offers -- the first section on a Collection turns arranging on, the
+        // last one deleted turns it off, and the numbering choice only exists while there is one --
+        // and the bar lives outside the swap target, so without this it keeps offering yesterday's
+        // capability until a reload. The SORT is kept across it, unlike `refreshAfterTypeChange`:
+        // a section change does not invalidate the sort the hunter is reading the list in.
+        if (withChrome) { params.push('chrome=1'); }
+        var url = base + (params.length ? '?' + params.join('&') : '');
         // No `hx-push-url` here on purpose: this is a content update, not navigation. Pushing would
         // make Back step through every add and remove.
         //
@@ -230,20 +254,34 @@
         // grid still showing N with no warning anywhere. Both `.catch` blocks that were written to
         // report exactly that were unreachable for the case that matters.
         //
-        // The grid node identity is the signal: an `innerHTML` swap always builds new nodes, so if
-        // `#gl-items` is the same object afterwards, nothing was swapped.
+        // The node identity is the signal: an `innerHTML` swap always builds new nodes, so if the
+        // sentinel is the same object afterwards, nothing was swapped.
         var mine = ++refreshSeq;
-        var before = document.getElementById('gl-items');
+        var before = itemsRoot();
         return window.htmx.ajax('GET', url, { target: '#gl-items-panel', swap: 'innerHTML' })
             .then(function () {
                 // A later refresh already superseded this one -- two quick removals issue two
                 // independent GETs and the older response can land last, repainting the grid with a
                 // row that is already deleted.
                 if (mine !== refreshSeq) { return; }
-                if (document.getElementById('gl-items') === before) {
+                if (itemsRoot() === before) {
                     throw new Error('the items panel did not swap');
                 }
             });
+    }
+
+    /**
+     * The swap sentinel, and it is NOT `#gl-items`.
+     *
+     * Both refresh helpers prove a swap happened by comparing the node they remembered against the
+     * node that is there afterwards. `#gl-items` is rendered only by a FLAT list -- a sectioned one
+     * renders a grid per group and no element by that id -- so on a sectioned list the comparison was
+     * `null === null` and every successful refresh threw "the items panel did not swap", reporting a
+     * failure over a swap that had just worked. `#gl-items-root` wraps every branch of the partial,
+     * so it is there in all three shapes.
+     */
+    function itemsRoot() {
+        return document.getElementById('gl-items-root');
     }
 
     /**
@@ -268,12 +306,12 @@
         // here resolved quietly, leaving numerals and grips on a list the server no longer calls
         // ranked, a sort control still offering "List order", and no sign anywhere.
         var mine = ++refreshSeq;
-        var before = document.getElementById('gl-items');
+        var before = itemsRoot();
         return window.htmx.ajax('GET', path + '?chrome=1',
                                 { target: '#gl-items-panel', swap: 'innerHTML' })
             .then(function () {
                 if (mine !== refreshSeq) { return; }
-                if (document.getElementById('gl-items') === before) {
+                if (itemsRoot() === before) {
                     throw new Error('the items panel did not swap');
                 }
             })
@@ -928,6 +966,18 @@
         var remove = target.closest('[data-gl-remove]');
         if (remove) { onRemove(remove); return; }
 
+        // Section controls live inside the swapped panel and are replaced by the very refresh their
+        // own handler triggers, so they are delegated for exactly the reason the remove control is.
+        var rename = target.closest('[data-gl-section-rename]');
+        if (rename) { onSectionRename(rename); return; }
+
+        var dropSection = target.closest('[data-gl-section-delete]');
+        if (dropSection) { onSectionDelete(dropSection); return; }
+
+        // AFTER the section delete, because `[data-gl-delete]` is a prefix of nothing but reads like
+        // one: keeping the whole-list delete last means a future `[data-gl-delete-*]` cannot be
+        // swallowed by it. The list delete is the destructive one, so it is the one worth ordering
+        // defensively.
         var del = target.closest('[data-gl-delete]');
         if (del) { onDeleteList(del); }
     }
@@ -966,11 +1016,15 @@
     function onAfterSwap(e) {
         var target = (e.detail && e.detail.target) || e.target;
         if (!target || target.id !== 'gl-items-panel') { return; }
-        var grid = target.querySelector('#gl-items');
+        // `#gl-items-root`, not `#gl-items`: a SECTIONED list renders a grid per group and no element
+        // by the latter id, so `grid` was null, `null === handledGrid` matched on the very first
+        // swap, and the reveal never ran -- every refreshed card stayed at `pp-reveal`'s starting
+        // opacity. The root wraps all three shapes of the partial.
+        var root = target.querySelector('#gl-items-root');
         // htmx can fire afterSwap more than once for a single swap; re-revealing would replay the
         // animation over tiles that are already visible.
-        if (grid && grid === handledGrid) { return; }
-        handledGrid = grid;
+        if (root && root === handledGrid) { return; }
+        handledGrid = root;
         initReveal();
 
         // The sort toolbar is rendered `{% if items %}` and lives OUTSIDE the swapped panel, so it
@@ -978,7 +1032,11 @@
         // gains a tile while the toolbar stays absent until a manual reload; remove the last one and
         // a dead sort control is left behind. Crossing that boundary is rare and once per list, so
         // reload rather than teach the client to build a control the server owns.
-        var hasItems = !!(grid && grid.querySelector('.pp-gcard'));
+        // Across the whole swapped PANEL, not one grid. Scoped to `#gl-items` this asked "does the
+        // flat grid hold a card", which on a sectioned list is always no -- so `hasItems` was false
+        // while the toolbar was present, the two disagreed, and this reloaded the page. On every
+        // swap. Including the one the reload itself causes.
+        var hasItems = !!target.querySelector('.pp-gcard');
         var hasToolbar = !!document.getElementById('gl-detail-form');
         if (hasItems !== hasToolbar) { window.location.reload(); return; }
 
@@ -1013,7 +1071,18 @@
         // is a new node with no listener. `wirePositioning` is WeakSet-guarded on that node, so this
         // is a no-op when nothing was swapped.
         wirePositioning();
+        // The add-section form and the numbering checkbox live in that same out-of-band slot and are
+        // replaced with it, so they need the same treatment and carry the same WeakSet guard. They
+        // are NOT delegated like the header controls because both are form elements whose own events
+        // (`submit`, `change`) do not usefully delegate from the body.
+        wireSections();
         syncPositioning();
+        // AFTER `wireSections`, so the field being focused is the live one with its listener
+        // attached rather than the node that is about to be replaced.
+        restoreSectionFocus();
+        // AFTER `syncPositioning`, which re-attaches the drag -- and whose `detachDrag` drops any
+        // pick. Restoring before it would be undone one line later.
+        restorePick();
     }
 
     function wirePositioning() {
@@ -1038,6 +1107,10 @@
      * replaced on every swap.
      */
     function onGrabClick(e) {
+        // `justDragged` for the reason `onCardClick` carries it: SortableJS swallows the click after
+        // a drop EXCEPT on Chrome for Android, where a drag begun on the grip would otherwise pick
+        // the card straight back up the moment it landed.
+        if (justDragged) { return; }
         if (!positioning) { return; }
         var grab = e.target.closest && e.target.closest('[data-gl-grab]');
         if (!grab) { return; }
@@ -1060,11 +1133,63 @@
         if (pendingFocusIndex === null) { return; }
         var index = pendingFocusIndex;
         pendingFocusIndex = null;
-        var buttons = document.querySelectorAll('#gl-items [data-gl-remove]');
+        // `#gl-items-root`, because `#gl-items` exists only on a FLAT list -- so on a sectioned one
+        // this selector matched nothing and focus fell to <body> after every removal, which is the
+        // bug this function exists to prevent.
+        var buttons = document.querySelectorAll('#gl-items-root [data-gl-remove]');
         if (!buttons.length) { return; }
         // The row that took the removed one's place, or the new last row if it was the last.
         var next = buttons[Math.min(index, buttons.length - 1)];
         if (next) { next.focus(); }
+    }
+
+    /**
+     * Put the caret back in the add-section field after the refresh that replaced it.
+     *
+     * `refreshItems(true)` out-of-band swaps `#gl-positions-slot`, and the field lives in it -- so
+     * adding "Playing" then "Finished" meant tabbing from the top of the document between them. The
+     * same debt `restoreRemoveFocus` pays for the remove button, on a control somebody is mid-sentence
+     * in, which makes it worse.
+     *
+     * Only after an ADD. Rename and delete are one-shot actions whose control is gone afterwards, and
+     * dragging focus into a text field somebody did not open is its own bug.
+     */
+    function restoreSectionFocus() {
+        if (!pendingSectionFocus) { return; }
+        pendingSectionFocus = false;
+        var input = document.getElementById('gl-section-new');
+        if (!input) { return; }
+        input.value = '';
+        // ONLY IF NOBODY HAS MOVED ON. `onRemove` guards its own restore the same way and says why:
+        // the refresh settles ~300ms later, and by then the owner may have clicked into the
+        // description and started typing. Pulling the caret out of a textarea mid-sentence is worse
+        // than making them click back into a field they can see. `<body>` (or the field's own
+        // replaced node being gone) is the only state that means "focus was lost to the swap".
+        var active = document.activeElement;
+        if (active && active !== document.body && document.contains(active)) { return; }
+        input.focus();
+    }
+
+    /**
+     * Put the pick back on the card that carried it across a section boundary.
+     *
+     * The move refreshes the panel, so `pickedRow` points at a discarded node and `detachDrag` has
+     * already dropped it. Restoring by ITEM ID rather than by index: the card moved groups, so its
+     * position in the new render is not the one it had.
+     */
+    function restorePick() {
+        if (pendingPickId === null) { return; }
+        var id = pendingPickId;
+        pendingPickId = null;
+        if (!positioning) { return; }
+        var row = document.querySelector('.gl-item[data-item-id="' + id + '"]');
+        if (!row) { return; }
+        togglePicked(row);
+        // The grip only exists where ordering is live; in arrange-only mode the pick itself is the
+        // affordance and `togglePicked` has already announced it.
+        var grab = row.querySelector('[data-gl-grab]');
+        if (grab) { grab.focus(); }
+        else if (row.scrollIntoView) { row.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
     }
 
     /* ------------------------------------------------------------------ reorder ---- */
@@ -1090,13 +1215,27 @@
      * that they want to do it now. Both are required, and they are different things -- conflating
      * them is what made dragging something you could do by accident.
      */
+    // EVERY draggable grid, in document order -- which on a sectioned list is the loose bucket
+    // followed by each section in its own order, exactly as `_grouped` builds it. That ordering is
+    // load-bearing for `fullOrder` below.
+    function arrangeGrids() {
+        return Array.prototype.slice.call(document.querySelectorAll('[data-gl-arrange]'));
+    }
+
+    // Can a drop POSITION be honoured? The server answers per grid: `data-gl-reorder` is present only
+    // at the real sequence. Read from the first grid because the flag is a property of the page's
+    // sort, not of any one group -- the server sets it on all of them or none.
+    function orderingLive(grids) {
+        return !!(grids.length && grids[0].hasAttribute('data-gl-reorder'));
+    }
+
     function enterPositioning() {
-        var grid = document.getElementById('gl-items');
+        var grids = arrangeGrids();
         // BOTH refusals happen before any state changes. `attachDrag` bails when SortableJS is
         // missing, and it used to do so AFTER `positioning` and `[data-positioning]` were already
         // set -- leaving the tray, the "Done" label and the hidden remove buttons over a grid with
         // no drag, no pick-up, and cards that still navigate.
-        if (!grid || !grid.hasAttribute('data-gl-reorder') || !PP.DragReorderManager) {
+        if (!grids.length || !PP.DragReorderManager) {
             // Not silent: the bar is on screen offering this, so if it cannot be honoured the bar is
             // wrong and should correct itself rather than the press appearing to do nothing.
             syncPositionsVisibility();
@@ -1104,16 +1243,19 @@
         }
         positioning = true;
         var panel = document.getElementById('gl-items-panel');
-        // The flag lives on the PANEL, not on `#gl-items`. The panel is the swap TARGET, so its own
-        // attributes survive; `#gl-items` is swapped content, and htmx would restore its
+        // The flag lives on the PANEL, not on a grid. The panel is the swap TARGET, so its own
+        // attributes survive; the grids are swapped content, and htmx would restore their
         // server-rendered attributes on settle and silently drop the flag -- the trap this file
         // already documents twice.
         if (panel) { panel.dataset.positioning = '1'; }
-        attachDrag(grid);
+        attachDrag(grids);
         paintPositionsToggle();
         setPositionsStatus('');
-        announce('Position editing on. Drag a card, or click one to pick it up and move it with '
-                 + 'the arrow keys.');
+        announce(orderingLive(grids)
+            ? ('Arranging on. Drag a card, or click one to pick it up and move it with the arrow '
+               + 'keys.')
+            : ('Arranging on. Drag a card onto another section, or click one to pick it up and move '
+               + 'it between sections with the arrow keys.'));
     }
 
     function exitPositioning(silent) {
@@ -1124,7 +1266,7 @@
         detachDrag();
         paintPositionsToggle();
         setPositionsStatus('');
-        if (!silent) { announce('Position editing off.'); }
+        if (!silent) { announce('Arranging off.'); }
     }
 
     function paintPositionsToggle() {
@@ -1138,7 +1280,17 @@
         // announced through the live region.
         toggle.removeAttribute('aria-pressed');
         var label = toggle.querySelector('[data-gl-positions-label]');
-        if (label) { label.textContent = positioning ? 'Done' : 'Edit list positions'; }
+        // The off-state word depends on what the mode can actually do here, and it has to match the
+        // server-rendered string in `detail_positions.html` -- otherwise the button says one thing on
+        // load and another the first frame after boot, which is a bug this file already shipped once.
+        // `data-gl-arrange-only` is the server's own answer, carried on the button rather than
+        // re-derived from the grids, so the two cannot disagree.
+        var arrangeOnly = toggle.hasAttribute('data-gl-arrange-only');
+        if (label) {
+            label.textContent = positioning
+                ? 'Done'
+                : (arrangeOnly ? 'Move games between sections' : 'Edit list positions');
+        }
 
         // The BAR carries the state, not just the button. A label flipping between two words is easy
         // to miss; a full-width surface changing colour is not, and it is the difference between
@@ -1151,7 +1303,22 @@
             // THREE STATES, because the middle one is what was missing: the old copy said "use the
             // arrow keys on its grip", which required tabbing to a 26px control nobody had reason to
             // suspect -- so it described a key that, as far as anyone could tell, did nothing.
-            if (!positioning) {
+            if (arrangeOnly) {
+                // THREE STATES HERE TOO, now that the arrow keys work in this mode. The comment that
+                // stood here said there was no pick-up "because the arrow keys move a card through an
+                // ORDER and this mode has none" -- true of the order, and wrong about the keys, which
+                // cross HEADERS here. With no grip rendered (that is a `can_reorder` affordance) the
+                // hint is the only place the keyboard path is mentioned at all.
+                if (!positioning) {
+                    hint.textContent = 'Then drag a card onto another section.';
+                } else if (pickedRow) {
+                    hint.textContent = 'Arrow keys move it to the next section. '
+                        + 'Click it again or press Escape to drop it.';
+                } else {
+                    hint.textContent = 'Drag a card onto another section, or click one to pick it '
+                        + 'up. Moves save as you make them.';
+                }
+            } else if (!positioning) {
                 hint.textContent = 'Then drag a card, or click one to move it with the arrow keys.';
             } else if (pickedRow) {
                 hint.textContent = 'Arrow keys move it. Click it again or press Escape to drop it.';
@@ -1172,15 +1339,58 @@
         el.classList.toggle('is-failed', text === 'Not saved');
     }
 
-    function attachDrag(grid) {
+    /**
+     * Arm every grid on the page, as ONE drag surface.
+     *
+     * A sectioned list renders a grid per group, so this is N SortableJS instances sharing a `group`
+     * name -- which is what makes a card draggable out of one header and into another. A flat list is
+     * the same code with N of 1.
+     *
+     * The two payloads are decided HERE rather than per drop, because they are a property of the page
+     * and not of the gesture:
+     *
+     * - Ordering live (`data-gl-reorder`, i.e. a Ranked list at its real sequence): the drop position
+     *   is content, so the whole order travels, and a cross-group drop carries the assignment with it
+     *   in the same write. `sort` stays on.
+     * - Ordering not live (a Collection, or a Ranked list sorted A-Z): the position under the cursor
+     *   belongs to the SORT, and sending it would rewrite the author's sequence to match a view of
+     *   it. `sort: false` so the gesture cannot even promise an order, and the drop reports only the
+     *   filing. The card then lands wherever the sort puts it, which is honest -- it never claimed
+     *   otherwise.
+     */
+    function attachDrag(grids) {
         // Also drops any pick-up: a swap replaces every row, so `pickedRow` would be pointing at a
         // node that is no longer in the document and the arrow keys would move nothing.
         detachDrag();
         if (!PP.DragReorderManager) { return; }
 
-        reorderManager = new PP.DragReorderManager({
+        var ordering = orderingLive(grids);
+        grids.forEach(function (grid) { attachDragTo(grid, ordering); });
+        dragGrids = grids;
+
+        // ON THE DOCUMENT, not on a grid. Bound to the grid, the arrow keys only fired while a GRIP
+        // had focus -- which meant tabbing to a 26px control nobody had a reason to suspect, so in
+        // practice the hint told people to use a key that did nothing. The keys now follow the PICKED
+        // card instead, which is a thing you can see. Bound once for the whole surface rather than
+        // once per grid, or a sectioned list would move a card N places per press.
+        //
+        // BOUND IN BOTH MODES. Gating this on `ordering` left a sectioned Collection with no keyboard
+        // path whatsoever while its button said "Move games between sections" -- the pointer could
+        // cross a header and nothing else could. In arrange-only mode the keys move a card ACROSS
+        // headers and do nothing within one, which is exactly what that mode is.
+        document.addEventListener('keydown', onPositionKey);
+    }
+
+    function attachDragTo(grid, ordering) {
+        reorderManagers.push(new PP.DragReorderManager({
             container: grid,
             itemSelector: '.gl-item',
+            // ONE SHARED GROUP so a card can leave its own grid. Constant rather than derived from
+            // the list id: the page only ever shows one list, and two Sortables can only exchange
+            // items when their group names match exactly.
+            group: 'gl-items',
+            sort: ordering,
+            onMove: function (itemId, evt) { onCrossSectionDrop(grid, itemId, evt, ordering); },
             // NO `handleSelector`: the whole card drags. A grip-only drag was the safe first cut --
             // the card is an <a>, so anything else risked a tap being read as the wrong gesture --
             // but it makes the one action the mode exists for a 26px target on a 166px card, and
@@ -1197,8 +1407,12 @@
             // The grip is a button; a drag starting ON it still works, because it is inside the
             // draggable item. Nothing here needs excluding while the remove control is hidden in
             // this mode -- listed for the next control that is not.
-            onReorder: function (_itemId, _newPosition, allItemIds) {
-                saveOrder(grid, allItemIds, 'Order saved.');
+            // `fullOrder()` and NOT the `allItemIds` the manager hands over: that argument is this
+            // grid's rows, which on a sectioned list is one group out of several. `svc.reorder`
+            // refuses a partial ordering by design, so posting it would turn every drag inside a
+            // section into a refusal.
+            onReorder: function () {
+                saveOrder(grid, fullOrder(), 'Order saved.');
             },
             // Sortable swallows the click that follows a drop -- except on Chrome for Android, where
             // it skips registering that listener entirely. Without this, finishing a drag there
@@ -1208,7 +1422,7 @@
                 justDragged = true;
                 window.setTimeout(function () { justDragged = false; }, 0);
             },
-        });
+        }));
 
         // WHILE ARRANGING, A CARD DOES NOT NAVIGATE. Now that the whole card is the drag surface, a
         // click that the browser did not classify as a drag would otherwise leave the page in the
@@ -1216,25 +1430,73 @@
         // are in is the same answer a phone home screen gives while its icons are jiggling: tapping
         // does nothing until you leave it.
         grid.addEventListener('click', onCardClick);
+    }
 
-        // ON THE DOCUMENT, not on the grid. Bound to the grid, the arrow keys only fired while a
-        // GRIP had focus -- which meant tabbing to a 26px control nobody had a reason to suspect, so
-        // in practice the hint told people to use a key that did nothing. The keys now follow the
-        // PICKED card instead, which is a thing you can see.
-        document.addEventListener('keydown', onPositionKey);
-        dragGrid = grid;
+    /**
+     * A card landed in a DIFFERENT grid -- it changed section.
+     *
+     * `evt.to`, AND NOT `grid`. SortableJS routes its `end` event to the Sortable the drag STARTED
+     * in, so the manager that runs this — and therefore `grid`, which is its own container — is the
+     * ORIGIN. Reading the section id off it posted the card straight back where it came from: the
+     * arrange-only path then refreshed and the card visibly snapped home, and the ranked path wrote
+     * the right order with the wrong filing, which is exactly the "correctly placed and wrongly
+     * filed" state the one-request design exists to prevent. `utils.js` asserted the opposite routing
+     * in a comment for a long time; the bundle says otherwise and is quoted there.
+     *
+     * The attribute is read for PRESENCE and used for its value, which may legitimately be empty: the
+     * loose bucket is a real destination ("in no section"), and treating empty as missing is what
+     * would make un-filing a card impossible.
+     */
+    function onCrossSectionDrop(grid, itemId, evt, ordering) {
+        var landed = (evt && evt.to) || grid;
+        var sectionId = landed.dataset.sectionId || '';
+        if (ordering) {
+            // One write. The order AND the filing changed, and sending them separately leaves a
+            // window where the card sits in the right place under the wrong header -- which looks
+            // correct until the page is reloaded. `svc.reorder` takes both and applies the assignment
+            // first, so a refused section leaves the order untouched.
+            //
+            // `refresh: true` unlike a within-grid reorder, because a card CHANGING GROUP changes
+            // things the optimistic repaint cannot reach: the count beside each header, and whether
+            // the group it left still exists at all (the loose bucket is omitted when empty, so
+            // emptying it by hand leaves a header reading 0 over nothing). Renumbering alone was
+            // enough while a drag could only move a card within one grid.
+            saveOrder(grid, fullOrder(), 'Moved.',
+                      { movedItem: itemId, section: sectionId, refresh: true });
+            return;
+        }
+        // Filing only. There is no order to send: `sort: false` means the drop index is wherever the
+        // cursor happened to be over a grid the SERVER sorts, and posting it would overwrite the
+        // author's sequence with the shape of a view.
+        saveAssignment(itemId, sectionId, evt);
+    }
+
+    /**
+     * The whole list's order, across every grid, in document order.
+     *
+     * `svc.reorder` refuses a partial ordering by design, so a drop inside one section cannot post
+     * just that section -- the server would see a subset and (correctly) reject it. Document order is
+     * the right answer rather than a workaround: `_grouped` renders the loose bucket first and then
+     * the sections in their own order, so reading top to bottom IS the sequence a reader sees, and
+     * writing it back is what makes continue-through numbering count down the page.
+     */
+    function fullOrder() {
+        var ids = [];
+        arrangeGrids().forEach(function (grid) {
+            ids = ids.concat(itemIdsIn(grid));
+        });
+        return ids;
     }
 
     // Leaving the mode must actually leave it: a live Sortable instance on a grid whose grips are
     // now `display: none` would still accept a drag begun on the card itself.
     function detachDrag() {
-        if (reorderManager) { reorderManager.destroy(); reorderManager = null; }
+        for (var i = 0; i < reorderManagers.length; i++) { reorderManagers[i].destroy(); }
+        reorderManagers = [];
         document.removeEventListener('keydown', onPositionKey);
         dropPicked(true);
-        if (dragGrid) {
-            dragGrid.removeEventListener('click', onCardClick);
-            dragGrid = null;
-        }
+        dragGrids.forEach(function (grid) { grid.removeEventListener('click', onCardClick); });
+        dragGrids = [];
     }
 
     /**
@@ -1301,11 +1563,10 @@
      * grid below it can no longer support.
      */
     function syncPositioning() {
-        var grid = document.getElementById('gl-items');
-        var allowed = !!(grid && grid.hasAttribute('data-gl-reorder'));
+        var grids = arrangeGrids();
         syncPositionsVisibility();
-        if (!allowed) { return; }
-        if (positioning) { attachDrag(grid); }
+        if (!grids.length) { return; }
+        if (positioning) { attachDrag(grids); }
     }
 
     /**
@@ -1334,12 +1595,15 @@
         //
         // Reordering the two halves is the whole fix: leave the mode FIRST, then update the bar if
         // there still is one.
-        var grid = document.getElementById('gl-items');
-        var show = !!(grid && grid.hasAttribute('data-gl-reorder')) && editorOpen;
+        var show = arrangeGrids().length > 0 && editorOpen;
         if (!show) { exitPositioning(true); }
 
+        // The bar can be on screen with NO arrangeable grid behind it: a member owner of an empty or
+        // section-less list still gets the "Add a section" row, which is not a drag affordance and
+        // must not vanish with one. So the block's own visibility follows the editor, and only the
+        // MODE follows the grids.
         var block = document.querySelector('[data-gl-positions]');
-        if (block) { block.hidden = !show; }
+        if (block) { block.hidden = !editorOpen; }
     }
 
     //: Arrow keys move an entry one place through the ORDER, which is the axis a ranked list is
@@ -1378,20 +1642,52 @@
         var row = (grab && grab.closest('.gl-item')) || pickedRow;
         if (!row) { return; }
         var grid = row.parentElement;
-        if (!row || !grid) { return; }
-        var neighbour = earlier ? row.previousElementSibling : row.nextElementSibling;
-        // Already at the end it is being pushed towards: do nothing, and let the arrow key keep its
-        // normal meaning rather than swallowing it into a no-op.
-        if (!neighbour || !neighbour.classList.contains('gl-item')) { return; }
+        if (!grid) { return; }
+
+        // IN ARRANGE-ONLY MODE THE KEYS DO ONE THING: cross a header. There is no order to move
+        // through -- the page is showing a sort the list does not own -- so a within-group step would
+        // rearrange something that snaps back on the next render. Skipping straight to the boundary
+        // step is what gives this mode a keyboard at all; it had none, while its own button read
+        // "Move games between sections".
+        var neighbour = orderingLive(arrangeGrids())
+            ? (earlier ? row.previousElementSibling : row.nextElementSibling)
+            : null;
+
+        if (!neighbour || !neighbour.classList.contains('gl-item')) {
+            // AT THE EDGE OF ITS OWN GROUP -- which on a sectioned list is not the edge of anything
+            // the hunter cares about. The keys stopped dead here, so a card at the top of "Backlog"
+            // could not be moved into "Playing" by any key at all: a pointer could cross a boundary
+            // and a keyboard could not, which is the whole feature missing for anyone who cannot
+            // drag. Stepping into the adjacent grid is the same act the drag performs.
+            var moved = stepIntoNeighbourGrid(row, grid, earlier);
+            if (!moved) { return; }
+            e.preventDefault();
+            // The SECTION changed, so this saves through whichever of the two writes the page is
+            // entitled to -- the same fork `onCrossSectionDrop` makes for a drag, because a keyboard
+            // move across a header is the same act and must not reach a different endpoint.
+            var landedIn = moved.grid.dataset.sectionId || '';
+            if (orderingLive(arrangeGrids())) {
+                announceAndSave(row, moved.grid, {
+                    movedItem: row.dataset.itemId, section: landedIn, refresh: true,
+                });
+            } else {
+                saveAssignment(row.dataset.itemId, landedIn, null);
+            }
+            // NOT `grab.focus()`: the refresh below replaces every row, so focusing a node that
+            // is about to be discarded lands the caret on <body>. The pick is carried across
+            // instead, and `restorePick` re-focuses the grip on the new row when there is one.
+            // (In arrange-only mode there is no grip at all -- `[data-gl-grab]` renders only under
+            // `can_reorder` -- so `grab` was always null on that path anyway.)
+            if (row === pickedRow) { pendingPickId = row.dataset.itemId; }
+            if (row.scrollIntoView) { row.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+            return;
+        }
 
         e.preventDefault();
         if (earlier) { grid.insertBefore(row, neighbour); }
         else { grid.insertBefore(neighbour, row); }
 
-        var rows = grid.querySelectorAll('.gl-item');
-        var position = Array.prototype.indexOf.call(rows, row) + 1;
-        saveOrder(grid, itemIdsIn(grid),
-                  'Moved to number ' + position + ' of ' + rows.length + '.');
+        announceAndSave(row, grid, null);
 
         // `grab` is only set on the focused-grip path, and calling `.focus()` unconditionally would
         // throw on the picked-card path -- which is now the common one.
@@ -1402,6 +1698,47 @@
         if (row === pickedRow && row.scrollIntoView) {
             row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         }
+    }
+
+    /**
+     * Move a row into the group before or after its own, at the near edge.
+     *
+     * The keyboard equivalent of dragging across a header. The ADJACENT group, empty or not: an empty
+     * section is a legitimate destination -- filling it is the reason it exists -- so skipping past
+     * one would make the single section a keyboard user most wants to reach the one they cannot.
+     *
+     * Returns the destination grid, or null when there is no group that way, which is how the caller
+     * knows to leave the arrow key its normal meaning.
+     */
+    function stepIntoNeighbourGrid(row, grid, earlier) {
+        var grids = arrangeGrids();
+        var at = grids.indexOf(grid);
+        var next = at + (earlier ? -1 : 1);
+        if (at === -1 || next < 0 || next >= grids.length) { return null; }
+
+        var target = grids[next];
+        // Moving EARLIER lands at the end of the group above; moving LATER lands at the start of the
+        // one below. Either way the card comes to rest against the boundary it just crossed, so a
+        // second press carries on in the same direction rather than bouncing back off it.
+        if (earlier) { target.appendChild(row); }
+        else { target.insertBefore(row, target.firstElementChild); }
+        // NOTHING TO CLEAR: the empty-section box is a `::before` on the grid gated on `:empty`,
+        // so it disappears the instant the grid has a child and comes back on its own if the group
+        // empties again. It was a real element once, and had to be removed by hand here.
+        return { grid: target };
+    }
+
+    // SPOKEN THE WAY IT IS PRINTED. `rankOf` counts in whichever numbering mode the list is in, so
+    // the live region and the plate on the card cannot say different numbers -- which they did
+    // whenever restart-numbering was on, because the announcement counted straight through regardless.
+    function announceAndSave(row, grid, move) {
+        var where = rankOf(row);
+        var message = 'Moved.';
+        if (where) {
+            message = 'Moved to number ' + where.rank + ' of ' + where.total
+                + (where.section ? ' in ' + where.section : '') + '.';
+        }
+        return saveOrder(grid, fullOrder(), message, move);
     }
 
     // DOM order IS the order. Read here rather than trusted from an event, so the keyboard path and
@@ -1427,12 +1764,24 @@
      * the length of a round trip. A failure reverts by refreshing from the server, which is the one
      * source of truth about what the order actually is.
      */
-    function saveOrder(grid, itemIds, successMessage) {
-        renumber(grid);
+    function saveOrder(grid, itemIds, successMessage, move) {
+        renumber();
         setPositionsStatus('Saving…');
 
         var body = new FormData();
         for (var i = 0; i < itemIds.length; i++) { body.append('item_ids[]', itemIds[i]); }
+        // THE CROSS-SECTION HALF, when there is one. Sent on the same request as the order because a
+        // card that changed both has to change both or neither -- two requests can leave it correctly
+        // placed and wrongly filed, which reads as correct until the next reload.
+        //
+        // `section` is appended even when EMPTY. Empty means the loose bucket, which is a real
+        // destination, and the server tells "no move" from "moved out of every section" by whether
+        // `moved_item` was sent -- not by whether `section` has a value. Skipping the empty one here
+        // would make dragging a card out of a section impossible.
+        if (move && move.movedItem) {
+            body.append('moved_item', move.movedItem);
+            body.append('section', move.section || '');
+        }
 
         // SERIALISED, because two drags in quick succession are a LAST-WRITER-WINS race that nothing
         // downstream can detect. Both orders are complete and valid, so both succeed; if they reach
@@ -1467,6 +1816,18 @@
                 // ONE spoken message per action, said after the write rather than before it, so
                 // "moved to number 3" is only ever heard about a move that actually persisted.
                 announce(successMessage || 'Order saved.');
+                // Only a group CHANGE asks for this, and only after the write landed -- see
+                // `onCrossSectionDrop`. A plain reorder deliberately does not: refreshing would spend
+                // a round trip redrawing forty covers that did not change, and the rank text is the
+                // only thing a reorder can alter on screen.
+                if (move && move.refresh) {
+                    return refreshItems().catch(function (err) {
+                        // The write LANDED; only the view is stale. Saying it was not saved would
+                        // send somebody to redo a move they already made.
+                        logFailure('items refresh after a cross-section drop', err);
+                        announce('Moved. Reload the page to see the counts update.');
+                    });
+                }
             })
             .catch(function (err) {
                 orderGen += 1;
@@ -1489,19 +1850,366 @@
     // reaches a screen reader (an `aria-label` overrides the name computed from descendants), so
     // repainting only the numeral would leave every row announcing its pre-drag position. An earlier
     // version repainted an `sr-only` span inside the link instead, which nothing ever announced.
-    function renumber(grid) {
-        var rows = grid.querySelectorAll('.gl-item');
-        for (var i = 0; i < rows.length; i++) {
-            var badge = rows[i].querySelector('.gl-rank');
-            if (badge) { badge.textContent = String(i + 1); }
+    // ACROSS EVERY GRID, and it has to mirror `GameListDetailView._number` exactly -- this is the
+    // optimistic repaint of a number the server will compute again on the next render, and a
+    // disagreement between the two shows up as numerals that change on reload.
+    //
+    // Both modes count DOWN THE PAGE; only the reset differs. A per-grid `i + 1` was what this did
+    // before sections, and on a sectioned list it would restart at 1 under every header regardless of
+    // the setting -- silently showing the restart mode to somebody who chose continue-through.
+    function renumber() {
+        var restart = restartNumbering();
+        var running = 0;
+        arrangeGrids().forEach(function (grid) {
+            if (restart) { running = 0; }
+            var rows = grid.querySelectorAll('.gl-item');
+            for (var i = 0; i < rows.length; i++) {
+                running += 1;
+                var badge = rows[i].querySelector('.gl-rank');
+                if (badge) { badge.textContent = String(running); }
 
-            var card = rows[i].querySelector('.pp-gcard');
-            if (!card) { continue; }
-            var label = card.getAttribute('aria-label') || '';
-            // Replace an existing "Number N: " prefix rather than stacking another one on.
-            card.setAttribute('aria-label',
-                              'Number ' + (i + 1) + ': ' + label.replace(/^Number \d+:\s*/, ''));
+                var card = rows[i].querySelector('.pp-gcard');
+                if (!card) { continue; }
+                var label = card.getAttribute('aria-label') || '';
+                // Replace an existing "Number N: " prefix rather than stacking another one on.
+                card.setAttribute('aria-label',
+                                  'Number ' + running + ': ' + label.replace(/^Number \d+:\s*/, ''));
+            }
+        });
+    }
+
+    /**
+     * Which numbering mode to repaint in.
+     *
+     * THE CHECKBOX FIRST, because the toggle saves and repaints without a swap, so reading the value
+     * the page was rendered with would renumber to the mode the hunter just left.
+     *
+     * THE SERVER'S ATTRIBUTE SECOND, and that fallback is not belt-and-braces. The checkbox renders
+     * only under `can_manage_sections`, which requires membership -- but arranging does not, by
+     * design, so a LAPSED member owns a sectioned ranked list with restart-numbering on and no
+     * checkbox on the page. Reading the missing box as "continue through" repainted every badge and
+     * every card label into the wrong mode on each drag, and the next load put them back: exactly the
+     * client/server disagreement this repaint exists to avoid.
+     *
+     * Neither present (a flat list, or a Collection) means continue-through, which is the only
+     * meaning it can have with nothing to restart at.
+     */
+    function restartNumbering() {
+        var box = document.querySelector('[data-gl-numbering]');
+        if (box) { return !!box.checked; }
+        var root = itemsRoot();
+        return !!(root && root.dataset.restartNumbering);
+    }
+
+    /**
+     * Where a row sits, counted the way the page PRINTS it.
+     *
+     * `onPositionKey` announced `fullOrder().indexOf(id) + 1`, which is always a continue-through
+     * number -- so with restart-numbering on, a card whose plate read "1" was announced as "number 24
+     * of 40". A sighted owner and a blind one were told two different facts about the same move, and
+     * the spoken one was the one nobody could check.
+     *
+     * Mirrors `renumber`'s walk deliberately rather than reading the badge it paints: the badge is
+     * repainted inside `saveOrder`, after the message has been composed.
+     */
+    function rankOf(row) {
+        var restart = restartNumbering();
+        var grids = arrangeGrids();
+        var running = 0;
+        for (var g = 0; g < grids.length; g++) {
+            if (restart) { running = 0; }
+            var rows = grids[g].querySelectorAll('.gl-item');
+            for (var i = 0; i < rows.length; i++) {
+                running += 1;
+                if (rows[i] === row) {
+                    // The total is the span the NUMBER runs across, which is the group when the
+                    // counter restarts in it and the whole list when it does not. "2 of 5" about a
+                    // list of forty is not a smaller truth, it is a different one.
+                    return {
+                        rank: running,
+                        total: restart ? rows.length : fullOrder().length,
+                        section: restart ? sectionNameFor(grids[g]) : null,
+                    };
+                }
+            }
         }
+        return null;
+    }
+
+    // The heading immediately above a grid, which is how `detail_group.html` lays a group out. Used
+    // only to make a restarted number unambiguous when it is spoken.
+    function sectionNameFor(grid) {
+        var head = grid.previousElementSibling;
+        var name = head && head.querySelector && head.querySelector('.gl-section__name');
+        return name ? name.textContent.trim() : null;
+    }
+
+    /**
+     * Persist a FILING -- this game now belongs under that header -- and nothing else.
+     *
+     * The counterpart to `saveOrder`, used where a drop position has no meaning (see `attachDrag`).
+     * It rides the same chain and the same generation counter, because the two never both apply on
+     * one page but the failure handling is identical and a half-copied version of it is how the
+     * recovery path rots.
+     *
+     * On success the panel is REFRESHED rather than left as dropped. SortableJS has already put the
+     * card where the cursor let go, and the server sorts each group independently -- so without this
+     * the card sits out of alphabetical order until something else re-renders, which reads as a bug
+     * on the one sort whose whole promise is that it is alphabetical. The refresh also repaints both
+     * section counts, which the drop just changed.
+     */
+    function saveAssignment(itemId, sectionId, evt) {
+        setPositionsStatus('Saving…');
+        var url = assignUrlFor(itemId, evt);
+        if (!url) {
+            // Nothing to post to means the markup and this code disagree, which is a bug rather than
+            // a hunter error -- so it reports loudly instead of failing silently over a card that has
+            // visibly already moved.
+            logFailure('a section assignment with no endpoint', new Error('missing assign url'));
+            setPositionsStatus('Not saved');
+            return refreshItems().catch(function () {});
+        }
+
+        var body = new FormData();
+        body.append('section', sectionId || '');
+
+        var generation = orderGen;
+        pendingSaves += 1;
+        orderChain = orderChain
+            .catch(function () { /* a previous failure already reported itself */ })
+            .then(function () {
+                if (generation !== orderGen) { return null; }
+                return postJson(url, body);
+            })
+            .then(function (result) {
+                if (generation !== orderGen || result === null) { return; }
+                if (pendingSaves <= 1) { setPositionsStatus('Saved'); }
+                announce('Moved.');
+                return refreshItems().catch(function (err) {
+                    // The write LANDED; only the view is stale. Say so rather than implying the move
+                    // was lost, which would send somebody to redo a move they already made.
+                    logFailure('items refresh after a section assignment', err);
+                    announce('Moved. Reload the page to see it in order.');
+                });
+            })
+            .catch(function (err) {
+                orderGen += 1;
+                setPositionsStatus('Not saved');
+                toastError(err, 'That move could not be saved.');
+                return refreshItems().catch(function (refreshErr) {
+                    logFailure('items refresh after a failed assignment', refreshErr);
+                    announce('The list could not be restored. Reload the page.');
+                });
+            })
+            .then(function () { pendingSaves = Math.max(0, pendingSaves - 1); });
+        return orderChain;
+    }
+
+    // The endpoint is per ITEM, so it is read off the row the drag moved rather than built from a
+    // base path in here -- the server owns URL shapes, and a hand-assembled string is what breaks
+    // silently the day a route moves. `evt.item` is the dragged row itself, which SortableJS has
+    // already moved into the destination grid.
+    function assignUrlFor(itemId, evt) {
+        var row = (evt && evt.item)
+            || document.querySelector('.gl-item[data-item-id="' + itemId + '"]');
+        return (row && row.dataset.assignUrl) || null;
+    }
+
+    /* ---------------------------------------------------------------- sections ---- */
+
+    /**
+     * Create, rename, delete and the numbering choice.
+     *
+     * Wired in one place because they are one capability, and they all end the same way: a refresh of
+     * the items panel WITH its chrome. A section change moves more than the grid -- the arrange bar
+     * is outside the swap target and its contents depend on whether any section exists at all -- so
+     * splicing a header in client-side would leave the bar describing the list as it was a moment
+     * ago. One round trip, and the server stays the only thing that decides what a sectioned list
+     * looks like.
+     *
+     * Delegated from the panel rather than bound per control, because every one of these nodes is
+     * replaced by the refresh their own handler triggers.
+     */
+    /**
+     * Run a section write BEHIND whatever arrangement writes are still in flight.
+     *
+     * The chain existed for the two drag writers only, and section writes went straight out beside
+     * them. That is a real race, not a tidiness point: a queued `saveOrder` carries a body captured
+     * from the DOM as it was, so a section delete that lands first leaves the reorder posting
+     * `section=<deleted id>`. The server refuses it, `orderGen` bumps, the pill flips to "Not saved"
+     * and the owner is told a move failed that they never made — after a delete that succeeded.
+     *
+     * Joining the chain also means the section write sees a consistent list, and the `refreshItems`
+     * it ends with cannot land in the middle of an outstanding reorder.
+     */
+    function queueSectionWrite(run) {
+        orderChain = orderChain
+            .catch(function () { /* a previous failure already reported itself */ })
+            .then(run);
+        return orderChain;
+    }
+
+    function wireSections() {
+        var add = document.querySelector('[data-gl-section-add]');
+        if (add && !wired.has(add)) {
+            wired.add(add);
+            add.addEventListener('submit', function (e) {
+                e.preventDefault();
+                onSectionAdd(add);
+            });
+        }
+
+        var numbering = document.querySelector('[data-gl-numbering]');
+        if (numbering && !wired.has(numbering)) {
+            wired.add(numbering);
+            numbering.addEventListener('change', function () { onNumberingChange(numbering); });
+        }
+    }
+
+    function onSectionAdd(form) {
+        var input = form.querySelector('input[name="name"]');
+        var name = input ? input.value.trim() : '';
+        // The service refuses an empty name anyway; stopping here keeps a stray Enter in an empty
+        // field from spending a round trip to be told so.
+        if (!name) { if (input) { input.focus(); } return; }
+        if (form.dataset.busy) { return; }
+        form.dataset.busy = '1';
+
+        var body = new FormData();
+        body.append('name', name);
+        queueSectionWrite(function () {
+            return postJson(form.dataset.createUrl, body)
+                .then(function (data) {
+                    announce('Section "' + (data && data.name ? data.name : name) + '" added.');
+                    // FOCUS COMES BACK, because `refreshItems(true)` out-of-band swaps the whole bar
+                    // and takes this very field with it -- so adding three sections meant tabbing from
+                    // the top of the document twice. `restoreRemoveFocus` solves the same problem for
+                    // the remove button; this is the same debt on a field somebody is mid-sentence in.
+                    pendingSectionFocus = true;
+                    // THE REFRESH GETS ITS OWN CATCH. Without it a failed re-render fell into the
+                    // handler below and reported "That section could not be added" over a section
+                    // that exists -- so the owner adds it again, and `create_section` does not dedupe
+                    // names. Two identical headers and two of twenty slots spent. `onRemove`, the
+                    // adder and `saveOrder` all carry this guard and say the same thing.
+                    return refreshItems(true).catch(function (refreshErr) {
+                        pendingSectionFocus = false;
+                        logFailure('items refresh after adding a section', refreshErr);
+                        announce('Section added. Reload the page to see it.');
+                    });
+                })
+                .catch(function (err) {
+                    pendingSectionFocus = false;
+                    toastError(err, 'That section could not be added.');
+                })
+                .finally(function () { form.dataset.busy = ''; });
+        });
+    }
+
+    function onSectionRename(btn) {
+        // A `prompt()` rather than an inline field, and the same reasoning the delete confirm
+        // carries: the site's dialog primitive is for things you are composing, and this is one short
+        // string on a thing that already exists. It also keeps the header's markup identical for
+        // owners and readers, which is what stops the grid having two shapes.
+        var current = btn.dataset.sectionName || '';
+        var next = window.prompt('Rename this section', current);
+        if (next === null) { return; }
+        next = next.trim();
+        if (!next || next === current) { return; }
+        if (btn.dataset.busy) { return; }
+        btn.dataset.busy = '1';
+
+        var body = new FormData();
+        body.append('name', next);
+        queueSectionWrite(function () {
+            return postJson(btn.dataset.renameUrl, body)
+            .then(function (data) {
+                announce('Renamed to "' + (data && data.name ? data.name : next) + '".');
+                // The NAME is not the only thing that moved: the header, its controls and the
+                // `aria-labelledby` on the grid all carry it, so the panel re-renders rather than
+                // three nodes being patched in step. Its own catch, so a failed re-render is not
+                // reported as a failed rename over a name that is already stored.
+                return refreshItems(true).catch(function (refreshErr) {
+                    logFailure('items refresh after renaming a section', refreshErr);
+                    announce('Renamed. Reload the page to see it.');
+                });
+            })
+            .catch(function (err) { toastError(err, 'That section could not be renamed.'); })
+            .finally(function () { btn.dataset.busy = ''; });
+        });
+    }
+
+    function onSectionDelete(btn) {
+        var name = btn.dataset.sectionName || 'this section';
+        // SAYS WHAT SURVIVES. Deleting a section keeps every game on the list -- they fall back into
+        // the loose bucket -- and without that sentence this reads as "delete these twelve games",
+        // which is the one thing it does not do.
+        if (!window.confirm('Delete the section "' + name + '"?\n\n'
+                            + 'Its games stay on the list and move back to "Not in a section".')) {
+            return;
+        }
+        if (btn.dataset.busy) { return; }
+        btn.dataset.busy = '1';
+
+        // DISARMED IMMEDIATELY, before the write is even queued. The header and its grid stay on
+        // screen for the whole round trip, and a card dropped into them in that window queues a
+        // reorder carrying a section id that is about to stop existing -- the server refuses, and the
+        // owner is told their ORDER could not be saved, which was never the problem. Stripping the
+        // attributes takes the grid out of `arrangeGrids()` at once, so it is not a drop target and
+        // not a keyboard destination.
+        var doomed = document.querySelector(
+            '[data-gl-arrange][data-section-id="' + (btn.dataset.sectionId || '') + '"]');
+        if (doomed && btn.dataset.sectionId) {
+            doomed.removeAttribute('data-gl-arrange');
+            doomed.removeAttribute('data-gl-reorder');
+        }
+
+        queueSectionWrite(function () {
+            return postJson(btn.dataset.deleteUrl, new FormData())
+                .then(function () {
+                    announce('Section "' + name + '" deleted. Its games are still on the list.');
+                    // Its own catch: reporting "could not be deleted" over a section that is gone
+                    // (and whose games have already been orphaned) sends the owner looking for a
+                    // header that no longer exists.
+                    return refreshItems(true).catch(function (refreshErr) {
+                        logFailure('items refresh after deleting a section', refreshErr);
+                        announce('Section deleted. Reload the page to see the list.');
+                    });
+                })
+                .catch(function (err) { toastError(err, 'That section could not be deleted.'); })
+                .finally(function () { btn.dataset.busy = ''; });
+        });
+    }
+
+    /**
+     * Restart-per-section, or straight through.
+     *
+     * Saves through `list_update` -- the same call the identity editor uses -- because it is a
+     * property of the list exactly as its type is, and a field with two writers is a field that
+     * drifts. Repaints the numerals immediately rather than refreshing: the ranks are the only thing
+     * on screen this can change, and a swap mid-arrange would tear down the Sortable instances the
+     * hunter is holding.
+     */
+    function onNumberingChange(box) {
+        var wanted = box.checked;
+        var body = new FormData();
+        // 'on'/'' is what a checkbox posts, and `safe_bool` on the other end reads both -- the
+        // literal 'true' a `=== 'true'` comparison would need is the bug `is_public` already shipped.
+        body.append('restart_numbering', wanted ? 'on' : '');
+        renumber();
+        queueSectionWrite(function () {
+            return postJson(box.dataset.updateUrl, body)
+            .then(function () {
+                announce(wanted ? 'Numbering restarts in each section.'
+                                : 'Numbering runs straight through.');
+            })
+            .catch(function (err) {
+                // Put the control back where the DATA is, not where the click left it, and repaint to
+                // match -- otherwise the box says one thing and the numerals say the other.
+                box.checked = !wanted;
+                renumber();
+                toastError(err, 'That numbering choice could not be saved.');
+            });
+        });
     }
 
     function boot(first) {
@@ -1517,10 +2225,13 @@
         editorOpen = false;
         orderChain = Promise.resolve();
         pendingSaves = 0;
+        pendingSectionFocus = false;
+        pendingPickId = null;
         wireAdder();
         wireIdentityEditor();
         wireVisibility();
         wirePositioning();
+        wireSections();
         initReveal();
         if (PP.wireCharCounters) { PP.wireCharCounters(); }
         if (first) {

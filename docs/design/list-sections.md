@@ -1,10 +1,15 @@
 # List Sections
 
-> **Status:** design, nothing built. Decided 2026-09-13 with the owner. Sections are a **capability
-> that composes with the list types**, not a type of their own — which is why this is its own
-> document rather than a row in [game-list-types.md](game-list-types.md).
+> **Status: BUILT (2026-09-13).** This document is the design record and the argument; the live
+> description is [game-lists.md § Sections](../features/game-lists.md#sections), which is what to read
+> to find out how it behaves today. Every open question below has been answered — see
+> [What shipped](#what-shipped).
 >
-> **Members only.** Everyone creates and uses lists; sections are the perk.
+> Sections are a **capability that composes with the list types**, not a type of their own — which is
+> why this is its own document rather than a row in [game-list-types.md](game-list-types.md).
+>
+> **Members only** for creating and renaming. Everyone creates and uses lists; organising them is the
+> perk. Arranging, deleting and reading are ungated, which is the part that took care to get right.
 
 ## What it is
 
@@ -85,14 +90,42 @@ Three rules that have to hold, and the second is the one that is easy to get wro
 3. **A free hunter's view of a sectioned list is unaffected.** Sections are the author's tool; a
    reader does not need a membership to read a list that has them.
 
-## Open questions
+## What shipped
 
-- **Switching type with sections present.** Ranked → Collection keeps them (they are orthogonal), but
-  the numbering toggle becomes meaningless and should probably hide rather than reset.
-- **Deleting a section.** Its items go ungrouped rather than being deleted — same reasoning as
-  `absorb()`'s list branch, where a cascade would destroy hand-curated entries over a structural
-  change the hunter never saw.
-- **A cap on sections per list.** Lists are deliberately uncapped in SIZE; sections are cheap rows
-  but each one is a rendered header. Probably wants a modest ceiling, unlike list size.
-- **Drag between sections** reuses `DragReorderManager`'s existing cross-container support (`group`,
-  `onMove`, `canAccept`), which is machinery that already exists rather than new work.
+Every question this document opened, and how it was answered when the thing was actually built.
+
+- **Switching type with sections present.** Ranked → Collection keeps them; they are orthogonal, as
+  predicted. The numbering toggle **hides** rather than resetting: it renders only on a ranked list
+  that has at least one section, because two numbering modes mean the same thing on a flat list and
+  offering the choice would be asking a question with one answer. `sections_restart_numbering` keeps
+  its stored value across the switch, so switching back restores the hunter's choice rather than
+  silently defaulting it.
+- **Deleting a section.** Confirmed: `GameListItem.section` is `SET_NULL`, so its games fall back into
+  the ungrouped bucket. The confirm dialog says so out loud — without that sentence the control reads
+  as "delete these twelve games", which is the one thing it does not do.
+- **A cap on sections per list.** `MAX_SECTIONS_PER_LIST = 20`, enforced with the same lock-then-count
+  shape `create_list` uses (`@transaction.atomic` alone does not stop two requests both counting 19).
+  Unlike list size, this one is a real ceiling: each section is a rendered header.
+- **Drag between sections** did reuse `DragReorderManager`'s cross-container support — but needed one
+  addition to it, a `sort` pass-through, which turned out to be the crux of the whole slice rather
+  than a detail.
+
+### The thing this document did not anticipate
+
+**A drop means two different acts, and which one it is depends on the sort the page is showing.** At
+the real sequence (a Ranked list sorted by `rank`) the drop POSITION is content, so the order and the
+filing travel together in one write. Under any other sort — a Collection, or a Ranked list sorted A-Z
+— the position under the cursor is an artefact of the sort, and posting it would rewrite the author's
+sequence to match a view of it. So there are two endpoints, and in the second case the drag is
+configured `sort: false` so the gesture cannot promise an order it will not keep.
+
+That distinction also forced **two context flags** where the design assumed one: `can_arrange` ("a
+card can be dragged at all") and the stricter `can_reorder` ("a drop position means something"). The
+first implementation had only `can_reorder` and had to withhold the drag from every sectioned list to
+stay honest — which made sections useless on a Collection, the type most likely to want them.
+
+**And the numbering rule needed a third answer.** `position + 1` straight through is unreadable once
+grouping reorders the page; numbering the rendered order destroys the invariant that a rank is a fact
+about the entry rather than the view. The rank is computed from the canonical order — sections in
+their own order, `position` within each — and merely displayed under whatever sort is showing. See
+[game-lists.md § Numbering](../features/game-lists.md#numbering-ranked-only).

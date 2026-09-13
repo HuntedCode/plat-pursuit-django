@@ -89,6 +89,11 @@ Disallow: /community/lists/*/like/
 Disallow: /community/lists/*/follow/
 Disallow: /community/lists/*/add/
 Disallow: /community/lists/*/items/
+# Sections (2026-09), same reasoning as the rest of this block: POST-only, so a GET is a 405, and
+# nothing here is a page. Enumerated rather than wildcarded for the same reason too -- a
+# `/community/lists/*/sections*` rule would also match nothing useful while risking the detail
+# pages, which `*` matching zero characters makes easy to get wrong.
+Disallow: /community/lists/*/sections/
 # `/edit/` is an address the rebuilt app deliberately does not have: it 302s to the homepage for any
 # id, so it is an infinite soft-404 space over an unbounded integer. Every other id-keyed sub-path is
 # blocked and the detail pages are in a sitemap, which makes the shape guessable.

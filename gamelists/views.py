@@ -27,8 +27,8 @@ from django_ratelimit.decorators import ratelimit
 from api.utils import safe_bool, safe_int
 from core.services.tracking import track_site_event
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED,
-                              NAME_MAX_LENGTH, GameList, GameListFollow, GameListItem,
-                              GameListLike, list_type_options)
+                              NAME_MAX_LENGTH, SECTION_NAME_MAX_LENGTH, GameList, GameListFollow,
+                              GameListItem, GameListLike, GameListSection, list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
 from trophies.mixins import HtmxListMixin
@@ -434,13 +434,19 @@ class GameListDetailView(DetailView):
         return GameList.objects.readable_by(self._viewer()).select_related('owner')
 
     @staticmethod
-    def _grouped(items, sections):
+    def _grouped(items, sections, *, keep_empty_bucket=False):
         """`[(section_or_None, [items])]`, ungrouped first and then sections in their own order.
 
         UNGROUPED LEADS, and always renders when it has anything in it. A list that gains sections
         has every item unassigned, so this bucket is the normal state on the way in rather than an
-        error -- putting it last would hide the games somebody is about to file. It is omitted only
-        when it is empty, because a header for nothing is noise.
+        error -- putting it last would hide the games somebody is about to file.
+
+        IT ALSO RENDERS EMPTY FOR SOMEBODY WHO CAN ARRANGE, which is `keep_empty_bucket`. A header
+        for nothing is noise to a READER, so they still never see it -- but for the owner it is the
+        only way back out of a section. File the last loose card and the bucket disappeared, taking
+        the drop target with it: nothing could be un-filed by pointer (no grid to drop onto) or by
+        keyboard (no group before the first section), until the owner deleted a whole section to get
+        their game back.
 
         Sections keep their own `position`; the chosen SORT orders within each one. That falls out of
         iterating `items`, which arrives already sorted -- so sorting a sectioned list A-Z sorts
@@ -455,7 +461,7 @@ class GameListDetailView(DetailView):
             buckets.get(item.section_id, ungrouped).append(item)
 
         groups = []
-        if ungrouped:
+        if ungrouped or keep_empty_bucket:
             groups.append((None, ungrouped))
         groups.extend((section, buckets[section.id]) for section in sections)
         return groups
@@ -466,14 +472,41 @@ class GameListDetailView(DetailView):
 
         Two modes, one field, and the reason both are cheap is that `position` stayed GLOBAL and
         dense: neither of these stores anything or reorders anything.
+
+        ONCE A LIST HAS SECTIONS, THE SECTIONS ARE PART OF THE SEQUENCE. That is the whole of this
+        function, and it took two wrong answers to get to.
+
+        The first cut made continue-through `position + 1` in every case. That is right on a flat
+        list and unreadable on a sectioned one: grouping reorders the page without touching
+        `position`, so a list whose items 0-3 alternate between two sections printed "1, 3" under one
+        header and "2, 4" under the next. Every numeral was individually true and the column could
+        not be read down.
+
+        The obvious repair -- number down the page -- is worse, and the reason is the invariant
+        `detail_card.html` states: a rank is a fact about the ENTRY, not about the view, which is why
+        the plate shows on every sort. Numbering the rendered order would make the A-Z view renumber
+        the list 1..N alphabetically, claiming the alphabet was the author's ranking.
+
+        So the rank is computed from the CANONICAL order and then displayed under whatever sort the
+        page is using: sections in their own order, and `position` within each one. At the rank sort
+        that is exactly the rendered order, so the column reads 1, 2, 3 straight down. Under A-Z the
+        same entry keeps the same number, out of sequence on the page -- which is the point.
         """
-        if not restart or groups is None:
+        if groups is None:
             for item in items:
                 item.display_rank = item.position + 1
             return
+        # `restart` resets the counter at each header; otherwise it runs on through them.
+        running = 0
         for _section, bucket in groups:
-            for index, item in enumerate(bucket, start=1):
-                item.display_rank = index
+            if restart:
+                running = 0
+            # `sorted` by position and NOT the bucket's own order: the bucket arrives in the page's
+            # sort, and using it would make the rank a function of the sort. Cheap -- the buckets
+            # together hold at most `MAX_ITEMS_RENDERED` rows that are already in memory.
+            for item in sorted(bucket, key=lambda entry: entry.position):
+                running += 1
+                item.display_rank = running
 
     def _viewer(self):
         if not self.request.user.is_authenticated:
@@ -595,7 +628,18 @@ class GameListDetailView(DetailView):
         # this is one bounded query either way -- an empty result IS the answer.
         sections = list(game_list.sections.all())
         context['sections'] = sections
-        context['groups'] = self._grouped(items, sections) if sections else None
+        # `arrangeable` is settled HERE rather than further down where the flags are assembled,
+        # because the grouping needs it: an owner who can arrange keeps the ungrouped bucket even
+        # when it is empty, since it is the only way back out of a section. The two flags below are
+        # derived from this same local, so there is still one source for the answer.
+        arrangeable = (
+            viewer is not None
+            and game_list.owner_id == viewer.id
+            and viewer.is_linked
+            and bool(items)
+        )
+        context['groups'] = (
+            self._grouped(items, sections, keep_empty_bucket=arrangeable) if sections else None)
 
         # THE RANK EACH CARD SHOWS, computed here rather than in the template, because one of the two
         # modes cannot be expressed there: continue-through is `position + 1`, which a filter can do,
@@ -640,19 +684,38 @@ class GameListDetailView(DetailView):
         #
         # `items` because an EMPTY ranked list otherwise renders the bar and `data-gl-reorder` over
         # zero rows -- a mode offered for nothing, whose one possible action the endpoint 400s.
-        # `not sections` is TEMPORARY and deliberate. Dragging across a section boundary is a
-        # cross-container drop plus an assignment, which `DragReorderManager` supports and nothing
-        # here wires yet -- so on a sectioned list the grips would move a card within its own group
-        # and silently refuse to move it out. A drag that works in one direction is worse than none,
-        # so the affordance waits for the slice that can honour it.
+        #
+        # TWO FLAGS, because a drag now means two different acts and they are not available together.
+        # `can_arrange` is "cards can be dragged AT ALL", which on a sectioned list means FILING one
+        # under a header. `can_reorder` is the stricter "a drop POSITION means something", which is
+        # true only at the real sequence. Merging them is what the earlier `not sections` clause was
+        # standing in for: it withheld the whole affordance rather than admit that a Collection can be
+        # arranged and cannot be ordered.
+        # `arrangeable` was settled above, beside the grouping that also needs it -- the empty
+        # ungrouped bucket the grouping keeps and the drag these flags offer are the same permission,
+        # so it has one definition rather than two that must stay identical forever.
+        #
+        # `not items_truncated` belongs to REORDERING ALONE. `svc.reorder` refuses a partial ordering
+        # by design, so past `MAX_ITEMS_RENDERED` the page cannot post a complete one and every drag
+        # would be a refusal. `svc.assign_item` has no such requirement -- it takes one item and one
+        # section and is correct however many rows rendered. Sharing the clause made sections
+        # creatable and permanently unusable on exactly the 400-game backlogs they are for: the
+        # headers appeared, `can_manage_sections` has no truncation clause, and nothing could ever be
+        # filed under them.
         context['can_reorder'] = (
-            context['is_owner']
-            and viewer.is_linked
-            and bool(items)
-            and not sections
-            and sort == 'rank'
-            and not context['items_truncated']
-        )
+            arrangeable and sort == 'rank' and not context['items_truncated'])
+        # Filing needs somewhere to file TO, so a list with no sections offers it only when ordering
+        # is already on the table. Without the `or`, a sectioned Collection would render headers
+        # nothing could be moved into -- which is every sectioned Collection, since a list that has
+        # just gained its first section has everything in the loose bucket.
+        context['can_arrange'] = arrangeable and (bool(sections) or context['can_reorder'])
+        # MAKING a header is the member perk; arranging what you already have is not. The split is
+        # the service's, repeated here only to decide which controls render -- `create_section` and
+        # `rename_section` refuse regardless, so this is the affordance and not the gate.
+        # No `viewer is not None`: `is_owner` already carries it, and a clause that cannot change the
+        # answer is the dead weight the `is_ranked` note above was written about.
+        context['can_manage_sections'] = (
+            context['is_owner'] and viewer.is_linked and viewer.user_is_premium)
         # `is_linked`, not merely "has a profile". The action ENDPOINTS carry
         # `_LinkedProfileRequired`, which 302s to link_psn -- so without this an unlinked viewer was
         # shown both buttons and got an HTML redirect back from a JSON fetch. The page and the
@@ -677,6 +740,9 @@ class GameListDetailView(DetailView):
         # service will store and the first a hunter hears of it is a refusal on save.
         context['name_max_length'] = NAME_MAX_LENGTH
         context['description_max_length'] = DESCRIPTION_MAX_LENGTH
+        # The section field's ceiling, for the same reason: without it the `maxlength` renders empty
+        # and the field accepts a name `_check_section_name` will refuse.
+        context['section_name_max_length'] = SECTION_NAME_MAX_LENGTH
         context['list_type_options'] = list_type_options()
 
         # THE INDEXABLE, SHAREABLE PAGE, and until 2026-09 its social card fell back to the
@@ -775,6 +841,10 @@ class UpdateListView(_ListActionView):
             return self.not_found()
 
         fields = {name: request.POST[name] for name in self.FIELDS if name in request.POST}
+        # A checkbox, so `safe_bool` for the same reason `is_public` uses it: 'on' is what a plain
+        # HTML checkbox sends, and `== 'true'` reads that as False.
+        if 'restart_numbering' in request.POST:
+            fields['restart_numbering'] = safe_bool(request.POST['restart_numbering'])
         if 'is_public' in request.POST:
             # `safe_bool`, not `== 'true'`. The bare comparison read 'True', '1', 'on' and 'yes' as
             # FALSE, so anything but the exact lowercase literal silently took a published list back
@@ -799,6 +869,7 @@ class UpdateListView(_ListActionView):
             'description': updated.description,
             'is_public': updated.is_public,
             'list_type': updated.list_type,
+            'restart_numbering': updated.sections_restart_numbering,
         })
 
 
@@ -860,11 +931,118 @@ class ReorderItemsView(_ListActionView):
         if not item_ids:
             return self.fail('That order is not valid. Reload and try again.')
 
+        # A CROSS-SECTION DROP ARRIVES HERE TOO, as one request. `moved_item` names the card that
+        # changed section and `section` names where it landed.
+        #
+        # THE ASYMMETRY IS THE POINT, and this comment claimed the opposite for a slice. `section` is
+        # read for PRESENCE, because empty is a real destination -- the loose bucket -- and treating
+        # it as missing would make un-filing a card impossible. `moved_item` is read for TRUTH, with
+        # `or None`, because an empty one names no card and there is nothing to move; the two are
+        # then distinguished by `moved_item` rather than by `section` being falsy, which is what the
+        # branch below depends on.
+        moved_item_id = request.POST.get('moved_item') or None
+        section_id = None
+        if moved_item_id is not None:
+            raw = (request.POST.get('section') or '').strip()
+            section_id = safe_int(raw) if raw else None
+
         try:
-            svc.reorder(game_list, self._viewer(request), item_ids)
+            svc.reorder(game_list, self._viewer(request), item_ids,
+                        moved_item_id=moved_item_id, section_id=section_id)
         except svc.ListError as exc:
             return self.fail(exc)
         return JsonResponse({'ordered': len(item_ids)})
+
+
+class _SectionActionView(_ListActionView):
+    """Resolves a section on a list the viewer can act on.
+
+    Two lookups rather than one, and in this order: the LIST through `readable_by` (which answers the
+    uniform 404), then the section WITHIN it. Looking the section up by id alone would answer
+    differently for "exists on somebody else's list" and "does not exist", which is the oracle the
+    404 rule exists to close -- and it would do it on the id space most easily walked, since sections
+    are few per list.
+    """
+
+    def get_section(self, game_list, section_id):
+        return GameListSection.objects.filter(pk=section_id, game_list=game_list).first()
+
+
+class CreateSectionView(_ListActionView):
+    """Members only, enforced in the service. The view translates the refusal and nothing more."""
+
+    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+
+        try:
+            section = svc.create_section(game_list, self._viewer(request),
+                                         name=request.POST.get('name', ''))
+        except svc.ListError as exc:
+            return self.fail(exc)
+        # The whole panel re-renders from the server after this, so the id is what the client needs:
+        # the new section is a drop target, and the grid it belongs to does not exist yet.
+        return JsonResponse({'id': section.id, 'name': section.name})
+
+
+class RenameSectionView(_SectionActionView):
+    @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))
+    def post(self, request, list_id, section_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+        section = self.get_section(game_list, section_id)
+        if section is None:
+            return self.not_found()
+
+        try:
+            svc.rename_section(section, self._viewer(request), name=request.POST.get('name', ''))
+        except svc.ListError as exc:
+            return self.fail(exc)
+        # The STORED name, not the submitted one: `_check_section_name` trims and sanitizes, so a
+        # client re-rendering its own input would show a name the database does not have.
+        return JsonResponse({'name': section.name})
+
+
+class DeleteSectionView(_SectionActionView):
+    """Ungated by membership: removing your own content is not the act the perk covers."""
+
+    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
+    def post(self, request, list_id, section_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+        section = self.get_section(game_list, section_id)
+        if section is None:
+            return self.not_found()
+
+        try:
+            svc.delete_section(section, self._viewer(request))
+        except svc.ListError as exc:
+            return self.fail(exc)
+        # Its games are ORPHANED rather than deleted, so the grid still holds them -- the client
+        # re-renders and they appear in the loose bucket.
+        return JsonResponse({'deleted': True})
+
+
+class ReorderSectionsView(_ListActionView):
+    @method_decorator(ratelimit(key='user', rate='60/m', method='POST', block=True))
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+
+        section_ids = request.POST.getlist('section_ids[]') or request.POST.getlist('section_ids')
+        if not section_ids:
+            return self.fail('That order is not valid. Reload and try again.')
+
+        try:
+            svc.reorder_sections(game_list, self._viewer(request), section_ids)
+        except svc.ListError as exc:
+            return self.fail(exc)
+        return JsonResponse({'ordered': len(section_ids)})
 
 
 class ToggleLikeView(_ListActionView):
@@ -935,15 +1113,81 @@ class RemoveItemView(_ListActionView):
         game_list = self.get_list(request, list_id)
         if game_list is None:
             return self.not_found()
+        # OWNERSHIP BEFORE THE ITEM LOOKUP, the same ordering `AssignItemView` carries and for the
+        # same reason. `readable_by` lets anybody reach this for a PUBLIC list, so resolving the item
+        # first answered 400 "not your list" for an id that sits on it and 404 for one that does not
+        # -- which reports, for any id, whether it belongs to the list being probed. `data-item-id`
+        # renders only for owners, so those ids are otherwise undisclosed.
+        viewer = self._viewer(request)
+        if viewer is None or game_list.owner_id != viewer.id:
+            return self.fail('That is not your list.')
         item = GameListItem.objects.filter(pk=item_id, game_list=game_list).first()
         if item is None:
             return self.fail('That entry is no longer on this list.', status=404)
         try:
-            svc.remove_concept(game_list, self._viewer(request), item)
+            svc.remove_concept(game_list, viewer, item)
         except svc.ListError as exc:
             return self.fail(exc)
         game_list.refresh_from_db()
         return JsonResponse({'game_count': game_list.game_count})
+
+
+class AssignItemView(_ListActionView):
+    """File one game under a section, or out of every section.
+
+    SEPARATE FROM `list_reorder`, and the split is the point rather than an omission. A drop means
+    two different things depending on where the page is standing:
+
+    - At the real sequence (a Ranked list sorted by `rank`) the drop POSITION is content, so the
+      whole order travels and `reorder` carries the assignment with it, in one write.
+    - Anywhere else -- a Collection, or a Ranked list sorted A-Z -- the position under the cursor is
+      an artefact of the sort, and posting it would rewrite the author's sequence to match a view of
+      it. So the drag reports only what it actually meant: this game now belongs under that header.
+
+    The client picks by which the server offered (`can_reorder` vs `can_arrange`), and the drag is
+    configured `sort: false` in the second case so the gesture cannot promise an order it will not
+    keep.
+    """
+
+    @method_decorator(ratelimit(key='user', rate='120/m', method='POST', block=True))
+    def post(self, request, list_id, item_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+        # OWNERSHIP BEFORE THE ITEM LOOKUP, which is not merely tidier. `readable_by` lets a caller
+        # reach this endpoint for anybody's PUBLIC list, and answering "no such entry" (404) for an
+        # item id that belongs elsewhere while answering "not your list" (400) for one that belongs
+        # HERE turns the pair into an oracle over the global `GameListItem` id space -- ids a reader
+        # never sees, because `data-item-id` renders only under `can_arrange`. Asking the question in
+        # this order makes every item id give a non-owner the same answer.
+        viewer = self._viewer(request)
+        if viewer is None or game_list.owner_id != viewer.id:
+            return self.fail('That is not your list.')
+        item = GameListItem.objects.filter(pk=item_id, game_list=game_list).first()
+        if item is None:
+            return self.fail('That entry is no longer on this list.', status=404)
+
+        # EMPTY IS A DESTINATION -- the loose bucket -- so this reads "" as None rather than as a
+        # missing field. Dragging a card out of every section is the only way to un-file one.
+        raw = (request.POST.get('section') or '').strip()
+        section = None
+        if raw:
+            # Scoped to the list, like `_SectionActionView.get_section` and for the same reason: an
+            # id alone must not answer differently for "another hunter's section" and "no such
+            # section". `assign_item` refuses a foreign section too; this is what stops the refusal
+            # having to say which kind of wrong it was.
+            # `safe_int` and not the raw string: `filter(pk='abc')` raises ValueError, so a junk
+            # `section` would be a 500 on a route any logged-in hunter can post to.
+            section = GameListSection.objects.filter(
+                pk=safe_int(raw), game_list=game_list).first()
+            if section is None:
+                return self.fail('That section is not on this list.')
+
+        try:
+            svc.assign_item(game_list, viewer, item, section)
+        except svc.ListError as exc:
+            return self.fail(exc)
+        return JsonResponse({'section': section.id if section else None})
 
 
 class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):

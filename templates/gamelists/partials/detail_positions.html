@@ -1,9 +1,9 @@
-{% comment %}The position bar, in a SLOT that always exists.
+{% comment %}The arrange bar, in a SLOT that always exists.
 
-The bar itself appears and disappears with the list's type, so it cannot be its own out-of-band
-target: htmx matches OOB content by id against an element already in the document, and going from
-Collection to Ranked means the bar is not there to match. The empty slot is always there, so the swap
-always lands.
+The bar itself appears and disappears with the list's type and its sections, so it cannot be its own
+out-of-band target: htmx matches OOB content by id against an element already in the document, and
+going from Collection to Ranked means the bar is not there to match. The empty slot is always there,
+so the swap always lands.
 
 VISIBILITY IS THE SERVER'S ANSWER NOW. An earlier version computed it in JS from the currently
 SELECTED type radio, because saving a type change meant a full page reload and the bar would
@@ -13,9 +13,15 @@ while the radio is changed but unsaved, since the list really is still ranked un
 
 The JS still hides it while the editor is closed. That is the deliberate-entry half: the handles used
 to be live whenever a ranked list was viewed by its owner, which made rearranging something you could
-do by accident.{% endcomment %}
+do by accident.
+
+ONE BAR, TWO CAPABILITIES, and they are not the same one. `can_arrange` is "cards can be dragged at
+all", which on a sectioned list means FILING one under a header; `can_reorder` is the stricter "a drop
+position means something", true only at the real sequence. A sectioned Collection has the first and
+not the second, which is why the toggle inside is gated separately from the bar around it.
+{% endcomment %}
 <div id="gl-positions-slot"{% if oob %} hx-swap-oob="true"{% endif %}>
-{% if can_reorder %}
+{% if can_arrange or can_manage_sections %}
     {% comment %}Directly above the grid, not in the edit panel where it started: the one control the
     Ranked type exists for was the quietest thing on the page, behind a scroll past the name and
     description. Full width, solid CTA, and the BAR carries the mode state rather than only the
@@ -25,25 +31,91 @@ do by accident.{% endcomment %}
     says so, because Cancel undoes a rename and cannot undo a move that was already written.{% endcomment %}
     <div class="gl-positions" data-gl-positions hidden>
         <div class="gl-positions__row">
-            <button type="button" class="pp-cta gl-positions__btn"
-                    data-gl-positions-toggle aria-pressed="false">
+            {% if can_reorder %}
+            {% comment %}NO `aria-pressed`. `paintPositionsToggle` removes it on boot and explains
+            why at length (a toggle must not carry both a pressed state and a changing label), so
+            rendering it here meant AT saw a state the design rejects for every frame between paint
+            and boot, and again after each out-of-band swap.{% endcomment %}
+            <button type="button" class="pp-cta gl-positions__btn" data-gl-positions-toggle>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 8 2-2 2 2"/><path d="m3 16 2 2 2-2"/>
                 </svg>
                 <span data-gl-positions-label>Edit list positions</span>
             </button>
+            {% elif can_arrange %}
+            {% comment %}THE SAME MODE, NAMED FOR WHAT IT ACTUALLY DOES HERE. On a Collection, or on a
+            Ranked list being viewed A-Z, a drop position is an artefact of the sort -- so the mode
+            offers filing and nothing else, and the button must not promise ordering it will refuse.
+            Two labels rather than two modes: the gesture, the bar and the exit are identical, and
+            only the payload differs (see `AssignItemView`).{% endcomment %}
+            <button type="button" class="pp-cta gl-positions__btn"
+                    data-gl-positions-toggle data-gl-arrange-only>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>
+                </svg>
+                <span data-gl-positions-label>Move games between sections</span>
+            </button>
+            {% endif %}
+
             {% comment %}Must match `paintPositionsToggle`'s off-state string, which replaces it
             on boot. This shipped as "use the arrow keys on its grip" -- the phrasing the JS
             deliberately abandoned, because it described a key that appeared to do nothing -- so the
             server-rendered copy contradicted the copy that replaced it a frame later.{% endcomment %}
             <p class="gl-positions__hint" data-gl-positions-hint>
-                Then drag a card, or click one to move it with the arrow keys.
+                {% if can_reorder %}Then drag a card, or click one to move it with the arrow keys.
+                {% else %}Then drag a card onto another section.{% endif %}
             </p>
             {% comment %}`aria-hidden`: this is the SIGHTED signal. The spoken one goes through the
             page's existing status region, which says what happened once rather than narrating every
             state change twice.{% endcomment %}
             <span class="gl-positions__status" data-gl-positions-status aria-hidden="true" hidden></span>
         </div>
+
+        {% if can_manage_sections %}
+        {% comment %}SECTION CONTROLS, on their own row beneath the mode. They are available whether
+        or not the mode is on, because making a header is not a drag: a hunter who has just decided
+        their backlog needs a "Playing" shelf should not have to discover an arrange mode first.
+
+        The numbering choice appears only once there is something to number ACROSS -- a ranked list
+        with at least one section. On a flat list the two modes are the same answer, so offering the
+        choice would be asking a question with one meaning.{% endcomment %}
+        <div class="gl-sections__bar">
+            <form class="gl-sections__add" data-gl-section-add
+                  data-create-url="{% url 'list_section_create' game_list.id %}">
+                <label class="sr-only" for="gl-section-new">New section name</label>
+                <input type="text" id="gl-section-new" name="name" class="stg-input gl-sections__input"
+                       maxlength="{{ section_name_max_length }}" autocomplete="off"
+                       placeholder="Add a section (Playing, Finished…)" />
+                <button type="submit" class="pp-cta pp-cta--ghost gl-sections__go">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Add
+                </button>
+            </form>
+
+            {% if is_ranked and sections %}
+            <label class="gl-sections__numbering">
+                {% comment %}A plain checkbox, so it posts 'on' -- which is why the endpoint reads it
+                through `safe_bool` rather than comparing to 'true'. It saves on change through the
+                same `list_update` call the editor uses, because it is a property of the list exactly
+                as its type is, and two writers for one field is how they drift.{% endcomment %}
+                <input type="checkbox" data-gl-numbering
+                       data-update-url="{% url 'list_update' game_list.id %}"
+                       {% if game_list.sections_restart_numbering %}checked{% endif %} />
+                <span>Restart numbering in each section</span>
+            </label>
+            {% endif %}
+        </div>
+        {% elif is_owner and sections %}
+        {% comment %}A LAPSED MEMBER's list keeps every section it has, and they keep arranging it --
+        what they lose is making another. Said plainly rather than by the controls silently being
+        absent, which reads as a bug on a list that visibly has sections.{% endcomment %}
+        <p class="gl-sections__locked">
+            Your sections are still here, and you can still move games between them.
+            <a href="{% url 'support_hub' %}">Membership</a> is what adds new ones.
+        </p>
+        {% endif %}
     </div>
 {% endif %}
 </div>

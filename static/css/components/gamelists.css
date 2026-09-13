@@ -465,6 +465,15 @@
  * fact beside it rather than a badge. `space-between` puts the count at the far edge where the eye
  * lands after the name rather than immediately after it, which stops "Finished 12" reading as a
  * title. */
+/* The group's own grid, which is what the empty-section box keys on. Scoped to this class and
+   NOT to `.pp-gbrowse__grid`: that one is the site's shared browse grid, and an `:empty` rule on it
+   would draw a dashed box with empty content on any childless grid anywhere on the site. */
+
+/* The wrapper around every group. It replaced an `id` that nothing read -- this file's own convention
+   is that a hook exists where something uses it -- and gives the groups a block context of their own
+   so `.gl-section__head:first-child` means "the first header on the page". */
+.gl-groups { display: flex; flex-direction: column; }
+
 .gl-section__head {
     display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
     margin: 22px 0 9px;
@@ -514,8 +523,10 @@
  * rather than as one more control among the sort and filter chrome. When the mode is on, that
  * surface is what changes -- the accent border and tint carry the state across the full width, which
  * is much harder to miss than a button label flipping from one word to another. */
+/* A COLUMN, because the bar carries two rows now: the mode, and the section controls beneath it.
+   It was a single `display: flex` row when the mode was all it held. */
 .gl-positions {
-    display: flex;
+    display: flex; flex-direction: column; gap: 11px;
     margin: 0 0 12px;
     padding: 11px 13px;
     border-radius: 12px;
@@ -585,6 +596,157 @@
     border-color: color-mix(in oklab, var(--pp-error) 35%, var(--pp-border));
 }
 
+/* ── Section controls, the bar's second row ──────────────────────────────────────────────────────
+ *
+ * Divided from the mode above it by a hairline rather than boxed separately: they belong to the same
+ * bar because they are the same job (shaping the list rather than reading it), but making a header is
+ * not entering a mode, and the two must not look like one control with two halves.
+ *
+ * AVAILABLE WHETHER OR NOT THE MODE IS ON, which is the reason this row is not inside `.is-on`: a
+ * hunter who has decided their backlog needs a "Playing" shelf should not have to find an arrange
+ * mode first. */
+.gl-sections__bar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px;
+    padding-top: 10px;
+    border-top: 1px solid color-mix(in oklab, var(--pp-primary) 22%, var(--pp-border));
+}
+/* The field and its button are one control, so they sit on one line and share a growth budget: the
+   input takes the slack and the button never shrinks below its label. */
+.gl-sections__add { display: flex; align-items: center; gap: 8px; flex: 1 1 15rem; min-width: 0; }
+/* `min-height` because `.stg-input` sets none: 8+8 padding round a ~15px line box lands at ~33px,
+   under the 44px floor every control BESIDE it on this bar carries. It is also the one control you
+   have to hit to use the feature at all. */
+.gl-sections__input {
+    flex: 1 1 auto; min-width: 0;
+    font-size: 0.78rem; padding: 8px 11px;
+    min-height: 44px;
+}
+/* The 44px floor this file enforces for every other control on the bar. */
+.gl-sections__go { flex: none; font-size: 0.76rem; padding: 8px 13px; gap: 6px; min-height: 44px; }
+.gl-sections__go svg { width: 14px; height: 14px; }
+
+/* The numbering choice. A real checkbox rather than the page's `.pp-switch`, because this is a
+   SETTING inside a toolbar and not a view the page switches between -- the switcher is the site's
+   answer to "which of these am I looking at", and using it here would promise a change of surface
+   that never arrives. */
+.gl-sections__numbering {
+    display: flex; align-items: center; gap: 8px; flex: none;
+    font-size: 0.72rem; line-height: 1.3;
+    color: var(--pp-text-dim);
+    cursor: pointer;
+    min-height: 44px;
+}
+.gl-sections__numbering input { width: 15px; height: 15px; flex: none; accent-color: var(--pp-primary); }
+
+/* The lapsed-member line. Reads as information rather than as a pitch: it opens with what they keep,
+   because that is the part they are most likely to be worried about. */
+.gl-sections__locked {
+    margin: 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--pp-border);
+    font-size: 0.72rem; line-height: 1.45;
+    color: var(--pp-text-dim);
+}
+.gl-sections__locked a { color: var(--pp-primary); font-weight: 700; }
+.gl-sections__locked a:hover { text-decoration: underline; }
+
+/* ── Section header controls ─────────────────────────────────────────────────────────────────────
+ *
+ * Quiet until the header is hovered or something inside it takes focus -- the same restraint the
+ * card's remove control uses, and for the same reason: these sit beside content people are reading.
+ *
+ * `:focus-within` and not `:hover` alone, so tabbing through the page surfaces each header's controls
+ * in turn rather than leaving a keyboard user pressing buttons they cannot see. */
+.gl-section__act {
+    flex: none;
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+    margin-bottom: -4px;
+    border-radius: 8px;
+    color: var(--pp-text-mute);
+    background: transparent;
+    /* Tailwind v4's preflight does not set this on buttons; this file already says so twice. */
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.16s ease, color 0.16s ease, background 0.16s ease;
+}
+.gl-section__act svg { width: 14px; height: 14px; }
+.gl-section__head:hover .gl-section__act,
+.gl-section__head:focus-within .gl-section__act { opacity: 1; }
+/* THE 44px TOUCH TARGET, drawn at 28px. The same transparent-::before trick `.gl-item__grab` uses,
+   and it matters more here: rename and delete sit ~10px apart, so a 28px tap target means a mis-hit
+   on "Rename" lands on "Delete the section". Pseudo-element rather than padding so the visible
+   button keeps its size and the header keeps its rhythm. */
+.gl-section__act::before {
+    content: '';
+    position: absolute; top: 50%; left: 50%;
+    width: 44px; height: 44px;
+    transform: translate(-50%, -50%);
+}
+/* Always visible on touch, where there is no hover to reveal them and a control nobody can summon is
+   a control that does not exist. */
+@media (hover: none) {
+    .gl-section__act { opacity: 1; }
+}
+/* GUARDED, like every other hover-background in this file. On touch an unguarded `:hover` STICKS
+   after the tap -- so dismissing the delete confirm left the red wash painted on the button until
+   something else was tapped, which reads as "the delete is still armed". */
+@media (hover: hover) {
+    .gl-section__act:hover {
+        color: var(--pp-text);
+        background: color-mix(in oklab, var(--pp-text) 9%, transparent);
+    }
+    .gl-section__act--danger:hover {
+        color: var(--pp-error);
+        background: color-mix(in oklab, var(--pp-error) 12%, transparent);
+    }
+    .gl-sections__numbering:hover { color: var(--pp-text); }
+}
+.gl-section__act:focus-visible { opacity: 1; outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* The name takes the slack so the controls sit against the count rather than drifting with the
+   title's length. `space-between` on the head already puts the count at the far edge. */
+.gl-section__head .gl-section__name { flex: 1 1 auto; }
+
+/* ── An empty section ────────────────────────────────────────────────────────────────────────────
+ *
+ * A grid with no children collapses to zero height, and an empty section's whole purpose is to
+ * RECEIVE the first card -- so without something there is nothing to aim at. This is that box.
+ *
+ * IT IS A ::before ON THE GRID, NOT A CHILD ELEMENT, and that is not a tidiness choice. SortableJS's
+ * `_detectNearestEmptySortable` tests `!lastChild(el)` with NO selector argument, so ANY element
+ * child disqualifies a container from the generous `emptyInsertThreshold` hit band -- meaning the
+ * placeholder added to make an empty section droppable was the very thing switching off the 20px
+ * margin that makes it comfortably droppable. Drawing it as a pseudo-element keeps the box and
+ * leaves the container genuinely empty.
+ *
+ * `:empty` rather than a server-rendered class: the grid empties CLIENT-side too, when the last card
+ * is dragged or keyed out of it, and a class the server put there cannot know that. The rule then
+ * turns itself back on with no JS at all.
+ *
+ * Wrapped so `content` can carry the copy: `attr()` reads a `data-` attribute the template sets, so
+ * the owner's instruction and a reader's statement of fact stay in the template with the rest of the
+ * page's words rather than moving into the stylesheet. */
+.gl-group__grid:empty::before {
+    content: attr(data-empty-label);
+    display: block;
+    grid-column: 1 / -1;
+    padding: 18px 12px;
+    border: 1px dashed var(--pp-border);
+    border-radius: 12px;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--pp-text-mute);
+}
+/* While arranging, it is a TARGET and says so. Outside the mode it is just a statement of fact, and
+   an accent-dashed box inviting a drop nobody can perform is the kind of affordance that teaches
+   people the page is broken. */
+#gl-items-panel[data-positioning] .gl-group__grid:empty::before {
+    border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-primary) 6%, transparent);
+}
+
 /* ══ POSITION-EDITING MODE: how the grid behaves while you are arranging it ══════════════════════
  *
  * The whole card is the drag surface here, so everything the card does when it is a LINK has to stop
@@ -638,7 +800,10 @@
  * It arrives as a TRANSITION rather than an animation: a state the grid moves into over ~200ms and
  * then stays in. There is one moment of change, which is what makes it noticeable, and no loop.
  */
-#gl-items {
+/* `[data-gl-arrange]`, NOT `#gl-items`: that id is rendered only by a FLAT list, so on a sectioned
+   one the tray matched nothing -- no padding, no inset, no wash -- while the cards below still
+   lifted, and the mode read as "cards floating over nothing". The two halves are one signal. */
+[data-gl-arrange] {
     /* Declared unconditionally so entering the mode has something to transition FROM. On a shorthand
        that is only set in the active state, the first paint jumps.
 
@@ -651,7 +816,7 @@
     border-radius: 14px;
     transition: background 0.2s ease, box-shadow 0.2s ease;
 }
-#gl-items-panel[data-positioning] #gl-items {
+#gl-items-panel[data-positioning] [data-gl-arrange] {
     padding: 12px;
     /* Tinted with the accent rather than merely darkened: it is the same language the position bar
        above it speaks, so the two read as one mode rather than as two unrelated highlights. */
@@ -671,7 +836,7 @@
 
 @media (prefers-reduced-motion: reduce) {
     /* The END STATE is identical, so nobody loses the signal -- only the 200ms of easing into it. */
-    #gl-items { transition: none; }
+    [data-gl-arrange] { transition: none; }
 }
 
 /* A PICKED-UP CARD. Clicking one is how the arrow keys get a target, so this has to be unmistakable

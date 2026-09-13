@@ -788,7 +788,7 @@ def test_a_lapsed_member_keeps_their_sections_and_can_still_arrange_them():
     # ...and they can still ARRANGE what they have: move a game, reorder, delete, choose numbering.
     svc.assign_item(game_list, member, item, playing)
     svc.reorder_sections(game_list, member, [playing.id, finished.id])
-    svc.set_section_numbering(game_list, member, restart=True)
+    svc.update_list(game_list, member, restart_numbering=True)
     svc.delete_section(finished, member)
 
     # Only CREATING more is closed.
@@ -935,13 +935,18 @@ def test_reordering_sections_refuses_a_partial_order():
 
 def test_the_numbering_toggle_stores_a_choice_and_nothing_else():
     """It is a DISPLAY choice: both modes are render-time derivations of a global `position`, which
-    is why it cost a boolean rather than a migration."""
+    is why it cost a boolean rather than a migration.
+
+    It rides `update_list` rather than having a writer of its own -- it is a property of the list
+    exactly as `list_type` is, and the editor saves both in one press. A separate
+    `set_section_numbering` existed for one commit and was folded in; two ways to write one field is
+    how they drift."""
     member = _hunter(psn='numberer', premium=True)
     game_list = svc.create_list(member, name='Ranked', list_type=LIST_TYPE_RANKED)
     items = [svc.add_concept(game_list, member, ConceptFactory()) for _ in range(3)]
 
     assert game_list.sections_restart_numbering is False, 'continue-through is the default'
-    svc.set_section_numbering(game_list, member, restart=True)
+    svc.update_list(game_list, member, restart_numbering=True)
 
     game_list.refresh_from_db()
     assert game_list.sections_restart_numbering is True
@@ -963,9 +968,72 @@ def test_only_the_owner_can_touch_a_section():
         lambda: svc.delete_section(section, stranger),
         lambda: svc.reorder_sections(game_list, stranger, [section.id]),
         lambda: svc.assign_item(game_list, stranger, item, section),
-        lambda: svc.set_section_numbering(game_list, stranger, restart=True),
+        lambda: svc.update_list(game_list, stranger, restart_numbering=True),
     ):
         with pytest.raises(svc.ListError):
             call()
 
     assert GameListSection.objects.filter(game_list=game_list).count() == 1
+
+
+def test_deleting_a_section_twice_does_not_corrupt_the_order(client):
+    """`delete_section` read `position` off the object the VIEW fetched, pre-lock, and `Model.delete()`
+    on an already-deleted row removes nothing and does NOT raise -- so a double submit ran the shift
+    twice against the same pivot and left two sections sharing a position. `Meta.ordering` then goes
+    non-deterministic and `create_section`'s `Max(position) + 1` leaves a permanent hole.
+
+    `_lock_item` exists for exactly this on items and carries the story in its docstring; sections
+    shipped without the counterpart."""
+    owner = _hunter(premium=True)
+    game_list = svc.create_list(owner, name='Backlog')
+    kept_a = svc.create_section(game_list, owner, name='A')
+    doomed = svc.create_section(game_list, owner, name='B')
+    kept_c = svc.create_section(game_list, owner, name='C')
+    kept_d = svc.create_section(game_list, owner, name='D')
+
+    svc.delete_section(doomed, owner)
+    # The SAME stale object again, which is what a second tab (or a double click) posts.
+    with pytest.raises(svc.ListError):
+        svc.delete_section(doomed, owner)
+
+    positions = list(
+        GameListSection.objects.filter(game_list=game_list).order_by('position')
+        .values_list('name', 'position'))
+    assert positions == [('A', 0), ('C', 1), ('D', 2)], positions
+    assert len({p for _n, p in positions}) == 3, 'two sections share a position'
+
+    # ...and the next section still lands at the end rather than in a hole.
+    assert svc.create_section(game_list, owner, name='E').position == 3
+    assert kept_a.pk and kept_c.pk and kept_d.pk
+
+
+def test_renaming_a_deleted_section_is_refused_rather_than_a_500(client):
+    """It was the one section write that took no lock at all, so `save(update_fields=['name'])` ran
+    against zero rows -- which Django turns into `DatabaseError`, i.e. a 500 where the client expects
+    the 400 it knows how to display."""
+    owner = _hunter(premium=True)
+    game_list = svc.create_list(owner, name='Backlog')
+    section = svc.create_section(game_list, owner, name='Playing')
+    stale = GameListSection.objects.get(pk=section.pk)
+    svc.delete_section(section, owner)
+
+    with pytest.raises(svc.ListError):
+        svc.rename_section(stale, owner, name='Renamed')
+
+
+def test_filing_into_a_deleted_section_is_refused_rather_than_a_500(client):
+    """`assign_item` checked the section's PARENT and never that it still existed, so writing the FK
+    raised IntegrityError -- a 500 HTML body to a JSON caller. `reorder` re-resolved under the lock
+    all along; the two cross-section-drop paths must not disagree about how careful they are."""
+    owner = _hunter(premium=True)
+    game_list = svc.create_list(owner, name='Backlog')
+    item = svc.add_concept(game_list, owner, ConceptFactory())
+    section = svc.create_section(game_list, owner, name='Playing')
+    stale = GameListSection.objects.get(pk=section.pk)
+    svc.delete_section(section, owner)
+
+    with pytest.raises(svc.ListError):
+        svc.assign_item(game_list, owner, item, stale)
+
+    item.refresh_from_db()
+    assert item.section_id is None
