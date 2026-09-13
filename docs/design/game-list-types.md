@@ -1,9 +1,10 @@
 # Game List Types
 
-> **Status:** Collection and Ranked are **built** (2026-09) — see
-> [docs/features/game-lists.md](../features/game-lists.md#list-types). Top-N and Sectioned are
-> candidates. **Progress, Backlog tracker and Tier have been removed from this document's scope**
-> (2026-09-13); see [What left, and where it went](#what-left-and-where-it-went).
+> **Status: CLOSED at two types.** Collection and Ranked are built (2026-09) — see
+> [docs/features/game-lists.md](../features/game-lists.md#list-types). Everything else once planned
+> here is cut, its own system, or an orthogonal capability (2026-09-13); see
+> [What left, and where it went](#what-left-and-where-it-went). Nothing in this document is
+> outstanding work.
 >
 > See also: [product-identity.md](product-identity.md), and the rebuild's own
 > [playbook](rebuild/rebuild-playbook.md).
@@ -14,11 +15,15 @@ A list of games is one data shape with several jobs. A backlog and a top-ten are
 arranged differently, and building them as one model with several presentations is what makes the
 ambition affordable. Building them as separate features is what would make it a swamp.
 
-**The whole type system is one field on the list and one on the item.** `GameList.list_type` picks
-the presentation (it exists, holding `collection` and `ranked`); `GameListItem.group` would hold a
-section key (not built). `position` already exists, is dense, and `Meta.ordering = ['position']`, so
-ranked ordering was free at the model level — Ranked cost one CharField and no item migration, which
-is the evidence that this framing was right for the types it still covers.
+**The whole type system is ONE field.** `GameList.list_type` picks the presentation, holding
+`collection` and `ranked`. `position` already existed, is dense, and `Meta.ordering = ['position']`,
+so ranked ordering was free at the model level — Ranked cost one CharField and no item migration,
+which is the evidence that this framing was right for the types it still covers.
+
+(An earlier version added "and one on the item", a `GameListItem.group` holding a section key.
+Sections turned out not to be a type at all — see [list-sections.md](list-sections.md) — and they
+want their own table rather than a key, because a CharField cannot carry section ORDER or an empty
+section.)
 
 ## The test a type has to pass
 
@@ -26,11 +31,10 @@ Added 2026-09-13, and it is the reason three planned types left.
 
 > **A list type has ONE rendering. Every viewer sees identical bytes.**
 
-Collection, Ranked, Top-N and Sectioned all pass: one author arranges rows, and what you see does not
-depend on who you are. `list_type` is a *presentation* field, and a presentation is exactly what they
-differ by.
+Collection and Ranked pass: one author arranges rows, and what you see does not depend on who you
+are. `list_type` is a *presentation* field, and a presentation is exactly what they differ by.
 
-Progress, Backlog and Tier all fail, in two different ways:
+Progress, Backlog and Tier fail it, in two different ways:
 
 | | What varies per viewer | Storage it needs |
 |---|---|---|
@@ -63,10 +67,9 @@ Consequences worth recording, because they are all *removals*:
   platform stack rather than the whole concept, and with Progress gone the two partial constraints go
   with it. It also removes an obligation from `Concept.absorb()`'s `GameListItem` branch, which would
   have had to handle both shapes.
-- **Sectioned lost its main justification.** It was carried largely as Tier's engine ("build
-  sectioning once"), and Tier no longer needs it. "Finished / Playing / Someday" is still a real,
-  one-rendering list type — but it now has to earn its place on its own, and nobody has asked for it.
-  Treat it as a candidate, not a commitment.
+- **Sectioned lost its main justification here**, and found a better one elsewhere. It was carried
+  largely as Tier's engine ("build sectioning once"), and Tier no longer needed it. Rather than
+  earning its place as a type, it stopped being one: see [list-sections.md](list-sections.md).
 
 ## Lists are not Challenges
 
@@ -90,11 +93,13 @@ it *measured* has the right tool.
 
 ## The types
 
-| Type | Sections | Order | Status |
-|---|---|---|---|
-| **Collection** | none | insertion | **Shipped 2026-09.** The default. |
-| **Ranked** | none | author, 1..N | **Shipped 2026-09.** Numerals + drag. |
-| **Top-N** | none | author, 1..N | Candidate. Ranked with a cap — constraint drives quality, and it makes the best share card. |
+| Type | Order | Status |
+|---|---|---|
+| **Collection** | insertion | **Shipped 2026-09.** The default. |
+| **Ranked** | author, 1..N | **Shipped 2026-09.** Numerals + drag. |
+
+(The Sections column this table used to carry went with the decision that sections are not a type.
+Either type can have them.)
 
 **Top-N was cut** (owner's call, 2026-09-13): once Ranked exists, a hunter who wants a top ten simply
 makes one with ten games. A cap adds enforcement, an edge case when it is lowered below the current
