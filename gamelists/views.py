@@ -433,6 +433,48 @@ class GameListDetailView(DetailView):
         # `select_related('owner')` for the byline; the cover art is attached per-item below.
         return GameList.objects.readable_by(self._viewer()).select_related('owner')
 
+    @staticmethod
+    def _grouped(items, sections):
+        """`[(section_or_None, [items])]`, ungrouped first and then sections in their own order.
+
+        UNGROUPED LEADS, and always renders when it has anything in it. A list that gains sections
+        has every item unassigned, so this bucket is the normal state on the way in rather than an
+        error -- putting it last would hide the games somebody is about to file. It is omitted only
+        when it is empty, because a header for nothing is noise.
+
+        Sections keep their own `position`; the chosen SORT orders within each one. That falls out of
+        iterating `items`, which arrives already sorted -- so sorting a sectioned list A-Z sorts
+        inside each section rather than flattening the grouping away. Sections are structure; a sort
+        is a view of it.
+        """
+        buckets = {section.id: [] for section in sections}
+        ungrouped = []
+        for item in items:
+            # A section id that is not on this list cannot occur -- `assign_item` refuses it -- but
+            # `.get` rather than `[]` keeps a stale id from 500ing a public page.
+            buckets.get(item.section_id, ungrouped).append(item)
+
+        groups = []
+        if ungrouped:
+            groups.append((None, ungrouped))
+        groups.extend((section, buckets[section.id]) for section in sections)
+        return groups
+
+    @staticmethod
+    def _number(items, groups, restart):
+        """Attach `display_rank` to every item.
+
+        Two modes, one field, and the reason both are cheap is that `position` stayed GLOBAL and
+        dense: neither of these stores anything or reorders anything.
+        """
+        if not restart or groups is None:
+            for item in items:
+                item.display_rank = item.position + 1
+            return
+        for _section, bucket in groups:
+            for index, item in enumerate(bucket, start=1):
+                item.display_rank = index
+
     def _viewer(self):
         if not self.request.user.is_authenticated:
             return None
@@ -542,6 +584,30 @@ class GameListDetailView(DetailView):
         for item in items:
             item.cover = covers.get(item.concept_id)
 
+        # ── sections ────────────────────────────────────────────────────────────────────────────
+        #
+        # ONE QUERY for the headers, and the grouping is done in Python over rows already fetched --
+        # no second pass at the database and no per-section queryset. Both sides are bounded:
+        # `MAX_ITEMS_RENDERED` items and `MAX_SECTIONS_PER_LIST` headers, so this is the bounded-slice
+        # form CLAUDE.md's whale rule names as acceptable rather than the per-row iteration it bans.
+        # Fetched unconditionally rather than behind a `has_sections` property: a property that
+        # runs its own query per call is exactly what `first_game_image` was deleted for, and
+        # this is one bounded query either way -- an empty result IS the answer.
+        sections = list(game_list.sections.all())
+        context['sections'] = sections
+        context['groups'] = self._grouped(items, sections) if sections else None
+
+        # THE RANK EACH CARD SHOWS, computed here rather than in the template, because one of the two
+        # modes cannot be expressed there: continue-through is `position + 1`, which a filter can do,
+        # and restart-per-section is the item's INDEX WITHIN ITS GROUP, which needs the grouping.
+        # Doing both here also means the template has one expression instead of a branch, and the
+        # `aria-label` and the visible plate cannot drift apart.
+        # `self._is_ranked()` and not `context['is_ranked']`: that key is set further down, so
+        # reading it here is a KeyError rather than a wrong answer -- loudly, which is why this is
+        # worth noting. The predicate is the source either way.
+        if self._is_ranked():
+            self._number(items, context['groups'], game_list.sections_restart_numbering)
+
         context['items'] = items
         context['sort'] = sort
         context['sort_choices'] = self._sort_choices()
@@ -574,10 +640,16 @@ class GameListDetailView(DetailView):
         #
         # `items` because an EMPTY ranked list otherwise renders the bar and `data-gl-reorder` over
         # zero rows -- a mode offered for nothing, whose one possible action the endpoint 400s.
+        # `not sections` is TEMPORARY and deliberate. Dragging across a section boundary is a
+        # cross-container drop plus an assignment, which `DragReorderManager` supports and nothing
+        # here wires yet -- so on a sectioned list the grips would move a card within its own group
+        # and silently refuse to move it out. A drag that works in one direction is worse than none,
+        # so the affordance waits for the slice that can honour it.
         context['can_reorder'] = (
             context['is_owner']
             and viewer.is_linked
             and bool(items)
+            and not sections
             and sort == 'rank'
             and not context['items_truncated']
         )

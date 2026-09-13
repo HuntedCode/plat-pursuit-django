@@ -1967,3 +1967,170 @@ def test_the_remove_control_steps_aside_while_arranging(client):
     Collection."""
     css = _read('static/css/components/gamelists.css')
     assert '#gl-items-panel[data-positioning] .gl-item__remove { display: none; }' in css
+
+
+# ── sections ─────────────────────────────────────────────────────────────────────────────────────
+
+def _member(client, psn='member'):
+    profile = _staff(client, psn=psn)
+    profile.user_is_premium = True
+    profile.save(update_fields=['user_is_premium'])
+    return profile
+
+
+def _sectioned(client, psn='member'):
+    """A ranked list with two sections and four games, interleaved so that grouping and ORDERING
+    cannot be confused with one another: positions 0 and 2 go in the first section, 1 and 3 in the
+    second. A test that put 0,1 in one and 2,3 in the other would pass with the grouping ignored."""
+    owner = _member(client, psn=psn)
+    game_list = _ranked(owner, 0)
+    items = []
+    for title in ('Alpha', 'Bravo', 'Charlie', 'Delta'):
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        items.append(svc.add_concept(game_list, owner, concept))
+
+    first = svc.create_section(game_list, owner, name='Finished')
+    second = svc.create_section(game_list, owner, name='Playing')
+    svc.assign_item(game_list, owner, items[0], first)
+    svc.assign_item(game_list, owner, items[2], first)
+    svc.assign_item(game_list, owner, items[1], second)
+    svc.assign_item(game_list, owner, items[3], second)
+    return owner, game_list, items, first, second
+
+
+def test_a_list_without_sections_renders_exactly_as_it_did(client):
+    """The common path, and the one that must not change: `groups` is None until somebody makes a
+    section, so an ordinary list renders the single `#gl-items` grid it always did."""
+    owner = _staff(client)
+    game_list = _list(owner, 3)
+
+    resp = client.get(_url(game_list))
+    body = resp.content.decode()
+
+    assert resp.context['groups'] is None
+    assert body.count('id="gl-items"') == 1
+    assert 'gl-section__head' not in body, 'an unsectioned list rendered a section header'
+
+
+def test_a_sectioned_list_groups_its_games_under_their_headers(client):
+    owner, game_list, items, first, second = _sectioned(client)
+
+    resp = client.get(_url(game_list))
+    groups = resp.context['groups']
+
+    assert [s.name if s else None for s, _ in groups] == ['Finished', 'Playing']
+    assert [[i.concept.unified_title for i in bucket] for _, bucket in groups] == [
+        ['Alpha', 'Charlie'], ['Bravo', 'Delta']]
+
+    body = resp.content.decode()
+    assert '>Finished</h2>' in body and '>Playing</h2>' in body
+    # One grid PER GROUP, and `#gl-items` on none of them -- an id has to be unique.
+    assert body.count('pp-gbrowse__grid') == 2
+    assert 'id="gl-items"' not in body
+
+
+def test_the_ungrouped_bucket_leads_and_only_shows_when_it_holds_something(client):
+    """A list that has just gained sections has EVERYTHING unassigned, so this is the normal state on
+    the way in rather than an error. Burying it under the named sections would hide the games
+    somebody is about to file."""
+    owner, game_list, items, first, _second = _sectioned(client)
+
+    # Everything is filed, so there is no bucket.
+    assert [s.name for s, _ in client.get(_url(game_list)).context['groups']] == \
+        ['Finished', 'Playing']
+    assert 'Not in a section' not in client.get(_url(game_list)).content.decode()
+
+    # Un-file one, and the bucket appears FIRST.
+    svc.assign_item(game_list, owner, items[0], None)
+
+    groups = client.get(_url(game_list)).context['groups']
+    assert groups[0][0] is None, 'the ungrouped bucket is not first'
+    assert [i.concept.unified_title for i in groups[0][1]] == ['Alpha']
+    assert 'Not in a section' in client.get(_url(game_list)).content.decode()
+
+
+def test_numbering_runs_through_the_whole_list_by_default(client):
+    """Continue-through is the default because it is what a ranked list already MEANS: adding
+    sections to one should group it, not renumber it underneath the author."""
+    owner, game_list, items, _first, _second = _sectioned(client)
+
+    groups = client.get(_url(game_list)).context['groups']
+    ranks = {i.concept.unified_title: i.display_rank for _s, bucket in groups for i in bucket}
+
+    # Alpha and Charlie are positions 0 and 2 but sit together in the first section, so a
+    # continue-through list shows 1 and 3 -- NOT 1 and 2.
+    assert ranks == {'Alpha': 1, 'Charlie': 3, 'Bravo': 2, 'Delta': 4}
+
+
+def test_numbering_can_restart_in_each_section(client):
+    owner, game_list, items, _first, _second = _sectioned(client)
+    svc.set_section_numbering(game_list, owner, restart=True)
+
+    groups = client.get(_url(game_list)).context['groups']
+    ranks = {i.concept.unified_title: i.display_rank for _s, bucket in groups for i in bucket}
+
+    assert ranks == {'Alpha': 1, 'Charlie': 2, 'Bravo': 1, 'Delta': 2}
+
+    # ...and the STORED order is untouched, which is the whole point of computing this at render.
+    assert list(game_list.items.order_by('position').values_list('position', flat=True)) == [0, 1, 2, 3]
+
+
+def test_the_visible_plate_and_the_spoken_rank_agree(client):
+    """They are computed from one field now, which is why. The plate is `aria-hidden` and the rank
+    reaches a screen reader through the card's `aria-label`, so the two drifting apart is silent."""
+    owner, game_list, items, _first, _second = _sectioned(client)
+    svc.set_section_numbering(game_list, owner, restart=True)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert re.findall(r'<span class="gl-rank"[^>]*>(\d+)</span>', body) == ['1', '2', '1', '2']
+    assert 'aria-label="Number 1: Alpha"' in body
+    assert 'aria-label="Number 2: Charlie"' in body
+    assert 'aria-label="Number 1: Bravo"' in body
+
+
+def test_a_sort_orders_within_each_section_rather_than_flattening_it(client):
+    """Sections are STRUCTURE; a sort is a view of it. Sorting A-Z across a sectioned list would
+    dissolve the grouping, which is the one thing the author built."""
+    owner, game_list, items, _first, _second = _sectioned(client)
+
+    groups = client.get(_url(game_list), {'sort': 'name_desc'}).context['groups']
+
+    assert [s.name for s, _ in groups] == ['Finished', 'Playing'], 'the sort reordered the sections'
+    assert [[i.concept.unified_title for i in bucket] for _, bucket in groups] == [
+        ['Charlie', 'Alpha'], ['Delta', 'Bravo']], 'the sort did not apply inside each section'
+
+
+def test_drag_waits_for_the_slice_that_can_cross_a_section(client):
+    """Dragging across a boundary is a cross-container drop PLUS an assignment, and nothing wires the
+    second half yet -- so the grips would move a card within its group and silently refuse to move it
+    out. A drag that works in one direction is worse than none."""
+    owner, game_list, _items, _first, _second = _sectioned(client)
+
+    resp = client.get(_url(game_list))
+
+    assert resp.context['can_reorder'] is False
+    assert 'data-gl-grab' not in resp.content.decode()
+
+    # ...and an unsectioned ranked list still has it, so this is a narrowing rather than a removal.
+    plain = _ranked(owner, 3)
+    assert client.get(_url(plain)).context['can_reorder'] is True
+
+
+def test_a_free_hunter_sees_a_sectioned_list_exactly_as_anyone_does(client):
+    """Sections are the AUTHOR's tool. Nobody needs a membership to read a list that has them, and a
+    reader's view must not differ -- the gate is on making them, not on seeing them."""
+    owner, game_list, _items, _first, _second = _sectioned(client, psn='author')
+    svc.update_list(game_list, owner, is_public=True)
+
+    client.logout()
+    reader = _staff(client, psn='freereader')
+    reader.user_is_premium = False
+    reader.save(update_fields=['user_is_premium'])
+
+    resp = client.get(_url(game_list))
+
+    assert resp.status_code == 200
+    assert [s.name for s, _ in resp.context['groups']] == ['Finished', 'Playing']
+    assert '>Finished</h2>' in resp.content.decode()

@@ -454,6 +454,49 @@
     .gl-item__grab:hover { transform: none; }
 }
 
+/* ── Sections ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * A HEADER, not a card. The page's own rule is that content sits on carded surfaces, and a section
+ * header is the exception that proves it: it is a LABEL for the grid beneath it, and boxing it would
+ * put a card around a card around a game. The hairline rule under it is what does the separating,
+ * which is the same device the rebuilt pages use between stacked chrome and free content.
+ *
+ * Reading order over decoration: the name is the only thing that needs weight, and the count is a
+ * fact beside it rather than a badge. `space-between` puts the count at the far edge where the eye
+ * lands after the name rather than immediately after it, which stops "Finished 12" reading as a
+ * title. */
+.gl-section__head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    margin: 22px 0 9px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--pp-divider);
+}
+/* The first header on the page has the toolbar directly above it and needs no extra air. */
+.gl-section__head:first-child { margin-top: 0; }
+/* The ungrouped bucket gets a little more room BELOW it, because what follows is the first real
+   section header and two rules close together read as one broken rule. */
+.gl-section__head--loose { margin-bottom: 12px; }
+
+.gl-section__name {
+    font-size: 0.94rem; font-weight: 700; line-height: 1.2;
+    color: var(--pp-text);
+    min-width: 0; overflow-wrap: anywhere;
+}
+/* "Not in a section" is a state, not a name the author chose -- so it reads quieter than one they
+   did, and italic marks it as the system talking rather than the hunter. */
+.gl-section__name--muted { color: var(--pp-text-dim); font-weight: 600; font-style: italic; }
+
+.gl-section__count {
+    flex: none;
+    font-size: 0.72rem; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-text-mute);
+}
+@media (min-width: 768px) {
+    .gl-section__head { margin: 28px 0 11px; }
+    .gl-section__name { font-size: 1.02rem; }
+}
+
 /* Delete sits at the FAR END of the editor's action row, away from Save and Cancel. It is the one
    control there that a second press cannot undo, and putting it next to the button people reach for
    without looking is how a list goes missing. `margin-left: auto` rather than a wrapper: the row is

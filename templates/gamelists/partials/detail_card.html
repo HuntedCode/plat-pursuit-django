@@ -1,0 +1,135 @@
+{% comment %}ONE CARD on a list, extracted 2026-09 when sections arrived.
+
+Its own partial because a sectioned list renders one grid PER GROUP, and the alternative was an
+`{% if groups %}` wrapped around two near-identical copies of this markup -- which is how the two
+quietly drift, one getting the accessible-name fix and the other not.
+
+Rendered inside `detail_group.html`, which owns the grid and the section header.{% endcomment %}
+    {% comment %}The wrapper exists so the owner's remove control can sit BESIDE the card rather than
+    inside it: the card is an <a>, and a <button> nested in a link is invalid HTML that swallows the
+    link's own activation. Rendered for everyone, not just owners, so the grid has exactly one DOM
+    shape.{% endcomment %}
+    {% comment %}`data-item-id` only where something READS it -- the reorder payload is built from
+    these. Rendering it on every list would leave a markup hook with no reader on every Collection,
+    which is how a future reader concludes drag still exists somewhere. A test pins this.{% endcomment %}
+    <div class="gl-item"{% if can_reorder %} data-item-id="{{ item.pk }}"{% endif %}>
+    {% comment %}Links to the CONCEPT page -- the site's word "game" -- rather than to a trophy list,
+    which is the whole reason entries are concept-keyed.{% endcomment %}
+    {% comment %}THE RANK GOES IN THE `aria-label`, not in an `sr-only` span inside the link.
+
+    An `aria-label` REPLACES the name computed from descendants, so a hidden span in the title was
+    unreachable: the visible numeral is `aria-hidden`, the spoken one was overridden, and the
+    ordering -- the entire content of a ranked list -- was the one thing a screen reader never got.
+    The JS repainted that span after every drag, maintaining a string nothing announced.{% endcomment %}
+    <a href="{{ item.concept.game_page_url }}" class="pp-gcard" data-gcard
+       aria-label="{% if is_ranked %}Number {{ item.display_rank }}: {% endif %}{{ item.concept.unified_title }}">
+        <div class="pp-gcard__cover">
+            {% if item.cover %}
+            {% comment %}`display_image_url` is the single source for the cover chain (IGDB-first),
+            and `has_cover_art` picks the fit: real art fills the frame, a generic PS icon is
+            contained with padding rather than stretched.{% endcomment %}
+            <img src="{{ item.cover.display_image_url }}" alt="" loading="lazy"
+                 class="pp-gcard__art{% if not item.cover.has_cover_art %} pp-gcard__art--placeholder{% endif %}" />
+            {% else %}
+            {% comment %}No trophy list at all behind this concept (a `PP_*` stub, or one whose games
+            were reassigned), so there is no image to fall back to -- a quiet glyph rather than a
+            broken frame.{% endcomment %}
+            <span class="gl-noart">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+            </span>
+            {% endif %}
+
+            {% if is_ranked %}
+            {% comment %}A PLATE IN THE COVER'S TOP-LEFT CORNER. Owner's call, 2026-09, over an
+            earlier version that kept the numeral in the text strip to leave the art completely
+            alone: on a ranked list the number is the point, and it has to be readable at a glance
+            across a grid.
+
+            Solid rather than translucent for that reason. A tinted chip is legible over the dark
+            covers and vanishes over a bright one (Journey, Sackboy) and over a busy one (Persona 5);
+            an opaque plate in the accent with dark text reads the same over all of them, which is
+            what "easy to read" has to mean when the background is arbitrary.
+
+            `display_rank` is computed in the VIEW rather than as `position|add:1` here, because one
+            of the two numbering modes cannot be expressed in a template: continue-through is
+            `position + 1`, and restart-per-section is the item's index within its group, which needs
+            the grouping. Computing both in one place also means the plate and the `aria-label`
+            cannot drift apart.
+
+            Either way it counts from 1, and `position` staying dense is what makes that honest -- a
+            gap would print a rank nobody holds. Shown on EVERY sort, not only `rank`, because
+            "Elden Ring, #3 on this list" is a fact about the entry rather than about the view.
+
+            `aria-hidden` because the link's own label already carries the rank -- see the anchor
+            above, and note an `aria-label` REPLACES the name computed from descendants, so the
+            spoken rank has to live there rather than here.{% endcomment %}
+            <span class="gl-rank" aria-hidden="true">{{ item.display_rank }}</span>
+            {% endif %}
+        </div>
+
+        <div class="pp-gcard__body">
+            {% comment %}The title is the same on both types now that the rank moved onto the cover,
+            so there is no branch here any more. (A long comment arguing the rank belonged in THIS
+            strip rather than on the art survived here for one commit after the rank moved, still
+            making its case beside markup that no longer did what it described.){% endcomment %}
+            <h3 class="pp-gcard__title">{{ item.concept.unified_title }}</h3>
+            {% if item.note %}
+            {% comment %}`pr-1` because the note is italic inside a line-clamp, and italic glyphs
+            slant past the text box where the clamp cuts them.{% endcomment %}
+            <p class="gl-item__note italic pr-1">{{ item.note }}</p>
+            {% endif %}
+        </div>
+    </a>
+
+    {% if can_reorder %}
+    {% comment %}THE HANDLE, and it is deliberately always visible rather than revealed on hover like
+    the remove control beside it. Reordering is the entire point of a Ranked list, so its affordance
+    is the one thing on the card that should not have to be discovered -- and a hover-only handle is
+    unreachable on touch, where `forceFallback` drag most needs a dedicated grip so a drag cannot be
+    mistaken for a scroll.
+
+    THE WHOLE CARD DRAGS, not just this grip -- which is the opposite of what this comment said for
+    two commits after the behaviour changed. Binding the drag to the grip alone was the safe first
+    cut, because the card is a link and a mis-timed tap could be read as the wrong gesture; the cost
+    was that the one action this mode exists for had a 26px target on a 166px card. `list-detail.js`
+    suppresses the card's navigation while the mode is on instead, which removes the risk rather than
+    designing around it.
+
+    So the grip is no longer the drag HANDLE. It stays because it is the keyboard affordance (arrow
+    keys move an entry through the order) and because it is the per-card statement that this thing is
+    movable, which a cursor change alone cannot make on touch.
+
+    `can_reorder` and not `is_owner`: the view withholds this when the page is showing any sort other
+    than the real sequence, and when the list is longer than one render can hold -- see its comment,
+    and `ReorderItemsView`, which refuses a partial order rather than applying it.{% endcomment %}
+    <button type="button" class="gl-item__grab" data-gl-grab
+            aria-label="Reorder {{ item.concept.unified_title }}">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
+            <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
+            <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
+        </svg>
+    </button>
+    {% endif %}
+
+    {% if is_owner %}
+    {% comment %}Quiet by default and revealed on hover or keyboard focus -- the design conversation
+    asked the card affordance to be "an icon, not a labelled button". It stays reachable without a
+    pointer because `:focus-visible` opens it too, so tabbing through a list surfaces each control in
+    turn. The accessible name carries the game, since "Remove" repeated forty times tells a screen
+    reader nothing about which entry it is on.{% endcomment %}
+    {% comment %}The endpoint is rendered per row rather than assembled in JS from a base path: the
+    server owns URL shapes, and a hand-built string is what breaks silently the day a route moves.
+    (It nearly did here -- the route is `list_remove_game`, not the `list_remove_item` its view class
+    name suggests.){% endcomment %}
+    <button type="button" class="gl-item__remove" data-gl-remove
+            data-remove-url="{% url 'list_remove_game' game_list.id item.pk %}"
+            aria-label="Remove {{ item.concept.unified_title }} from this list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12"/>
+        </svg>
+    </button>
+    {% endif %}
+    </div>

@@ -1,0 +1,45 @@
+{% comment %}One group of games: a section's, or the ungrouped bucket's.
+
+Its own partial so the grid markup exists ONCE. The alternative was an `{% if groups %}` around two
+near-identical copies of the card loop, which is how the two quietly drift -- one gets the accessible
+name fix and the other does not.
+
+`#gl-items` IS ON THE UNSECTIONED GRID ONLY, because an id has to be unique and a sectioned list
+renders one grid per group. `list-detail.js` binds the drag to that id, which is part of why drag is
+withheld while a list has sections (see `can_reorder`): there is no single grid to bind to. The
+reveal is wired per grid instead, which it already was -- `staggerReveal` takes an element.
+{% endcomment %}
+{% load humanize %}
+
+{% if section %}
+{% comment %}THE HEADER, with a count beside the name. A sectioned list is usually a progress story
+-- "Finished 12" is the sentence somebody built the sections to read -- and the number is free here,
+since the group is already in hand.
+
+`aria-labelledby` ties the grid to its heading, so a screen reader entering the region hears which
+section it is rather than "list, 12 items" four times down the page.{% endcomment %}
+<div class="gl-section__head">
+    <h2 class="gl-section__name" id="gl-section-{{ section.id }}">{{ section.name }}</h2>
+    <span class="gl-section__count">{{ items|length|intcomma }}</span>
+</div>
+{% elif groups %}
+{% comment %}The ungrouped bucket, which renders only when it holds something and leads when it does.
+A list that has just gained sections has EVERYTHING in here, so burying it at the bottom would hide
+the games somebody is about to file.
+
+Named rather than blank: an unlabelled grid above a labelled one reads as a rendering failure. The
+label says what the bucket is, which is the only reason it exists.{% endcomment %}
+<div class="gl-section__head gl-section__head--loose">
+    <h2 class="gl-section__name gl-section__name--muted" id="gl-section-none">Not in a section</h2>
+    <span class="gl-section__count">{{ items|length|intcomma }}</span>
+</div>
+{% endif %}
+
+<div class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}"
+     {% if not groups %}id="gl-items"{% endif %}
+     {% if section %}aria-labelledby="gl-section-{{ section.id }}"{% elif groups %}aria-labelledby="gl-section-none"{% endif %}
+     {% if can_reorder %}data-gl-reorder data-reorder-url="{% url 'list_reorder' game_list.id %}"{% endif %}>
+    {% for item in items %}
+    {% include 'gamelists/partials/detail_card.html' %}
+    {% endfor %}
+</div>
