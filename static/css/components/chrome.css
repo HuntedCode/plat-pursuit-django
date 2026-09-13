@@ -660,6 +660,13 @@
     transition: color var(--pp-dur) var(--pp-ease);
 }
 .mobile-tabbar-item svg { width: 20px; height: 20px; }
+/* The fifth tab, present only where five fit. Mobile-first: absent by default, shown from `md`.
+   A fifth item at 375px takes every tab from ~93px to ~75px, and "Leaderboards" alone is ~68-72px
+   of text before padding -- so below this the avatar dropdown carries Support Us instead. */
+.mobile-tabbar-item--wide { display: none; }
+@media (min-width: 768px) {
+    .mobile-tabbar-item--wide { display: flex; }
+}
 @media (hover: hover) { .mobile-tabbar-item:hover { color: var(--pp-text); } }
 .mobile-tabbar-item:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -3px; border-radius: var(--pp-radius-md); }
 /* Active = cyan (the one brand accent) + a short top indicator bar (glow earned by state, like the navbar). */

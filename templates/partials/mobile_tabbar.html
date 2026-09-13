@@ -8,12 +8,17 @@ users have one-tap access at all scroll positions -- FOUR of the five, because
 five do not fit: the items are `flex: 1` at 0.62rem, so a fifth takes each from
 ~93px to ~75px at 375px while "Leaderboards" alone runs ~68-72px of text.
 
-Support Us is the one that leaves (2026-09) and lives in the avatar dropdown
-instead, demoted by frequency: a storefront, a roadmap, a fundraiser page and a
-membership manager are occasional visits, where lists and hunters are habitual.
-The cost is that no tab highlights while you are in Support Us -- accepted
-knowingly, and smaller than it sounds, because that hub carries its own sub-nav
-rail showing which of its four pages you are on. The desktop navbar's hub buttons are hidden
+Support Us is the one that leaves BELOW `md` (2026-09), demoted by frequency: a
+storefront, a roadmap, a fundraiser page and a membership manager are occasional
+visits, where lists and hunters are habitual. The avatar dropdown carries it
+there, at every width, so somebody who learns where it lives finds it in the
+same place on desktop.
+
+From `md` there is room for all five (~153px each at 768px) and it comes back,
+which is what closes the one real cost of the trade: below `md` no tab
+highlights while you are in Support Us. That is accepted knowingly and is
+smaller than it sounds, because the hub carries its own sub-nav rail showing
+which of its four pages you are on. The desktop navbar's hub buttons are hidden
 on <lg: precisely because this bar takes over. My Pursuit is login-gated (the
 personal hub is), so logged-out visitors see 3 tabs; the flex `justify-around`
 inner distributes 3 or 4 evenly.
@@ -71,12 +76,35 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             <span>Leaderboards</span>
         </a>
 
-        <!-- Support -->
+        {% comment %}Community. Points at Hunters, its only member today: `/community/` is a
+        permanent redirect, so the tab targets a real page.{% endcomment %}
         <a href="{% url 'profiles_list' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" {% if hub_section == 'community' %}aria-current="page"{% endif %} aria-label="Community">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span>Community</span>
+        </a>
+
+        {% comment %}Support Us: the FIFTH tab, and the only one conditional on width.
+
+        Below `md` it is not here at all -- five items are `flex: 1` at 0.62rem, so a fifth takes
+        each from ~93px to ~75px at 375px while "Leaderboards" alone runs ~68-72px of text -- and the
+        avatar dropdown carries it instead. From `md` there is room (~153px each at 768px), so it
+        comes back and the hub gets its highlight again on tablets.
+
+        A modifier class rather than a Tailwind `hidden md:flex`, because the item's own
+        `display: flex` would fight the utility depending on source order.
+
+        A `{% templatetag openblock %} comment {% templatetag closeblock %}` and not an HTML one:
+        these ship. The first version was `<!-- -->`, which sent this rationale to every visitor AND
+        defeated a test, because the comment contained the very class name the test was searching
+        the rendered page for.{% endcomment %}
+        <a href="{% url 'support_hub' %}" class="mobile-tabbar-item mobile-tabbar-item--wide {% if hub_section == 'support' %}active{% endif %}" {% if hub_section == 'support' %}aria-current="page"{% endif %} aria-label="Support Us">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>
-            <span>Support</span>
+            <span>Support Us</span>
         </a>
 
     </div>

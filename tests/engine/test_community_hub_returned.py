@@ -12,9 +12,13 @@ comments, reviews, ratings and lists.
 browsers indefinitely. `test_community_hub_retired.py` still pins that. A hub here is a grouping of
 destinations, not an address.
 """
+from pathlib import Path
+
 import pytest
 
 pytestmark = pytest.mark.django_db
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _req(path):
@@ -80,6 +84,50 @@ def test_the_hub_is_reachable_from_the_chrome(client):
     assert body.count('/hunters/') >= 2
 
 
+def test_the_mobile_tab_says_what_it_does(client):
+    """THE BUG THIS EXISTS FOR: the swap changed the tab's href and its `aria-label` and left the
+    VISIBLE span reading "Support" on a tab that navigated to Hunters.
+
+    Every assertion in this file passed -- `aria-label="Community"` was present, `aria-label="Support"`
+    was gone, and `>Community</a>` matched the DESKTOP button. Nothing looked at the one string a
+    sighted person actually reads. Checking a label and its `aria-label` separately is the point:
+    they are two different promises and either can be left behind.
+    """
+    body = client.get('/games/').content.decode()
+
+    bar = body[body.index('mobile-tabbar-inner'):]
+    bar = bar[:bar.index('</nav>')]
+
+    assert '<span>Community</span>' in bar, 'the Community tab does not say Community'
+    assert '<span>Support</span>' not in bar, 'a tab still carries the pre-swap label'
+    # ...and it goes where it says. `/community/` is a permanent redirect, so the target is Hunters.
+    community = bar[bar.index('aria-label="Community"') - 400:bar.index('aria-label="Community"')]
+    assert '/hunters/' in community
+
+
+def test_all_five_hubs_are_reachable_from_md_up(client):
+    """The third part of the mobile trade, and the one that closes its only real cost: below `md` no
+    tab highlights while you are in Support Us. From `md` there is room for five (~153px each at
+    768px), so it comes back as a tab and the highlight with it."""
+    body = client.get('/games/').content.decode()
+    css = (ROOT / 'static/css/components/chrome.css').read_text(encoding='utf-8')
+
+    bar = body[body.index('mobile-tabbar-inner'):]
+    bar = bar[:bar.index('</nav>')]
+    # On the ELEMENT's class attribute. A bare membership check on the rendered page was
+    # satisfied by an HTML comment that named the class -- the comment shipped, so the string
+    # was there with no fifth tab in sight.
+    assert 'class="mobile-tabbar-item mobile-tabbar-item--wide' in bar, (
+        'there is no fifth tab at any width')
+    assert '<span>Support Us</span>' in bar
+
+    # Mobile-first: absent by default, shown from `md`. The reverse (present, hidden below) would
+    # put a fifth item in the 375px bar for anyone whose CSS had not loaded.
+    rule = css[css.index('.mobile-tabbar-item--wide { display: none; }'):]
+    assert '@media (min-width: 768px)' in rule[:200]
+    assert 'display: flex' in rule[:300]
+
+
 def test_support_us_left_the_mobile_bar_for_the_dropdown(client):
     """Five tabs do not fit: they are `flex: 1` at 0.62rem, so a fifth takes each from ~93px to ~75px
     at 375px while "Leaderboards" alone runs ~68-72px of text. Support Us is the right one to demote
@@ -92,7 +140,9 @@ def test_support_us_left_the_mobile_bar_for_the_dropdown(client):
 
     body = client.get('/games/').content.decode()
 
-    assert 'aria-label="Support"' not in body, 'Support is still a mobile tab'
+    # `aria-label="Support"` exactly -- the fifth tab is labelled "Support Us", so this still catches
+    # the pre-swap tab coming back without flagging the deliberate md+ one.
+    assert 'aria-label="Support"' not in body, 'the pre-swap Support tab is back'
 
     # INSIDE THE AVATAR PANEL, not merely somewhere on the page. The desktop hub button now reads
     # "Support Us" too, so a bare membership check matches that instead -- delete the dropdown entry

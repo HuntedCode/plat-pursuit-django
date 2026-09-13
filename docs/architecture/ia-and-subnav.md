@@ -111,9 +111,15 @@ floor to decide the question either way). So **Support leaves the tab bar for th
 dropdown** (its own labelled entry near the top, marked active when `hub_section == 'support'`)
 and Community takes the slot.
 
-The breakpoint is **`lg`, not `md`**: the tab bar is `lg:hidden` and the navbar hub row is
-`hidden lg:flex`, so `md` still gets the four-tab bar and the full set appears only at `lg`.
-(Four tabs, not five, for a signed-out reader — My Pursuit is auth-gated.)
+**All five appear from `md`, and the mechanism is the tab bar rather than the navbar.** The desktop
+hub row is `hidden lg:flex` and the bar is `lg:hidden`, so `md` never sees the navbar's hubs — the
+fifth tab comes back in the BAR instead, via a `.mobile-tabbar-item--wide` modifier that is
+`display: none` by default and `flex` from 768px. At that width each tab has ~153px, which is ample.
+
+That is what closes the one real cost of the trade: below `md`, no tab highlights while you are in
+Support Us. From `md` up, it does again.
+
+(Four tabs, not five, for a signed-out reader below `md` — My Pursuit is auth-gated.)
 
 Support Us is the right one to demote by frequency: a storefront, a roadmap, a fundraiser page and a
 membership manager are occasional visits, where lists and challenges are habitual. The cost is that
