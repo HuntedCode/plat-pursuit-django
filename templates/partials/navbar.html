@@ -30,8 +30,14 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Browse</a>
         <a href="{% url 'overall_badge_leaderboards' %}" class="pp-navhub{% if hub_section == 'leaderboards' %} is-active{% endif %}"{% if hub_section == 'leaderboards' %} aria-current="page"{% endif %}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Leaderboards</a>
+        {% comment %}Community points at Hunters, its only member today. `/community/` itself 301s
+        to Leaderboards and always will, so the hub button targets a real page rather than a
+        redirect; when Game Lists comes off its gate the rail turns on and this stays as the
+        entry.{% endcomment %}
+        <a href="{% url 'profiles_list' %}" class="pp-navhub{% if hub_section == 'community' %} is-active{% endif %}"{% if hub_section == 'community' %} aria-current="page"{% endif %}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Community</a>
         <a href="{% url 'support_hub' %}" class="pp-navhub{% if hub_section == 'support' %} is-active{% endif %}"{% if hub_section == 'support' %} aria-current="page"{% endif %}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support</a>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support Us</a>
     </div>
 
     {% comment %} PSN profile search: a persistent typeahead bar on md+ that collapses to an icon
@@ -156,6 +162,17 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                     {% else %}
                         <a href="{% url 'link_psn' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Link PSN</a>
                     {% endif %}
+                    {% comment %}SUPPORT US LIVES HERE ON MOBILE. The bottom bar holds four items
+                    and Community took its slot: the tabs are `flex: 1` at 0.62rem, so a fifth takes
+                    each from ~93px to ~75px at 375px while "Leaderboards" alone runs ~68-72px of
+                    text. Support Us is the right one to demote by frequency -- a storefront, a
+                    roadmap, a fundraiser page and a membership manager are occasional visits, where
+                    lists and hunters are habitual.
+
+                    Rendered at every width rather than `lg:hidden`, because a person who learns
+                    where something lives should find it in the same place on their desktop. The
+                    active state is carried here too, since no tab can show it below `lg`.{% endcomment %}
+                    <a href="{% url 'support_hub' %}"{% if hub_section == 'support' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support Us</a>
                     <a href="{% url 'settings' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17 2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V15z"/></svg>Settings</a>
                     {% comment %} What's New earns its place by the same test the Mod Center passes and the
                     admin dashboard does not: it has something to say without being visited. It is also the

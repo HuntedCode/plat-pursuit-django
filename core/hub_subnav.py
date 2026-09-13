@@ -2,14 +2,14 @@
 Hub-of-Hubs IA: sub-navigation infrastructure.
 
 PlatPursuit's IA is a personal My Pursuit hub (rooted at the logged-in Home /)
-plus Browse, Community, and Support. The global navbar links to each. A
-persistent sub-navigation strip below the main navbar surfaces each hub's
-sub-pages on every URL in that hub's family, URL-prefix matched (the personal
-strip is auth-gated).
+plus Browse, Leaderboards, Community and Support Us. The global navbar links to
+each. A persistent sub-navigation strip below the main navbar surfaces each
+hub's sub-pages on every URL in that hub's family, URL-prefix matched (the
+personal strip is auth-gated).
 
 This module defines:
 
-1. ``HUB_SUBNAV_CONFIG`` — the four hub definitions, each with a list of
+1. ``HUB_SUBNAV_CONFIG`` — the five hub definitions, each with a list of
    sub-nav items and the URL prefixes that activate them.
 2. ``resolve_hub_subnav(request)`` — the matcher that inspects ``request.path``
    and returns the active hub + active sub-nav slug, or ``None`` for pages
@@ -116,10 +116,7 @@ BROWSE_HUB = HubSubnavConfig(
         # surface, and its relationship to Career's Dossier is the Collection-vs-Browse-Badges split --
         # scope, not pagination.
         '/jobs/',
-        # Both spellings while the /profiles/ -> /hunters/ 301s stand: this is a PATH PREFIX match, so a
-        # visitor landing on an old profile URL would otherwise lose the Browse rail on the way through.
-        '/hunters/',
-        '/profiles/',
+        # `/hunters/` and `/profiles/` moved to COMMUNITY_HUB in 2026-09.
     ),
     # Grouped rail (kept consistent with the other hubs' grouped rails -- Community's Explore/Create,
     # My Pursuit's Progress/Tools): Catalog = the core browse surfaces; Curation = the cross-cutting
@@ -135,7 +132,6 @@ BROWSE_HUB = HubSubnavConfig(
         # Label is "Hunters" (2026-08); the SLUG stays `profiles`, matching the url names it maps to
         # below -- it is an internal key, and churning it would touch the overrides map and its tests to
         # no visible end.
-        HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user', group='Catalog'),
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
         HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
         HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
@@ -200,9 +196,14 @@ LEADERBOARDS_HUB = HubSubnavConfig(
 # membership_required (premium_tier truthiness, the navbar link's own gate) in its 'Yours'
 # group -- a non-member's door is the storefront -- except when it IS the active page, which
 # always names itself.
+# Relabelled "Support Us" in 2026-09: "Support" alone reads as a help desk on most of the web, and
+# this is the one place a confused reader would look for one. Naming the ask is also the more earnest
+# form, which is the site's voice. NOTE the rail still reads "Support Us -> Support" because the first
+# ITEM keeps its name -- that one is an open naming question (Tiers? Ways to Help?) and is not being
+# decided by a rename that was about the hub.
 SUPPORT_HUB = HubSubnavConfig(
     key='support',
-    label='Support',
+    label='Support Us',
     icon='heart',
     prefixes=('/support/', '/fundraiser/'),
     items=(
@@ -215,6 +216,33 @@ SUPPORT_HUB = HubSubnavConfig(
 )
 
 
+# The Community hub, returned 2026-09 after being retired in 2026-08. It exists because the four
+# other hubs sort by the reader's INTENT (find / rank / mine / support) and miss a second axis: who
+# AUTHORED the thing. Everything in Browse and Leaderboards is site-owned -- PSN data, IGDB metadata,
+# PlatPursuit-authored badges and jobs -- and user-generated content is a different class, which the
+# codebase already says by carrying an `all_ugc` restriction scope over comments, reviews, ratings and
+# lists. See docs/architecture/ia-and-subnav.md.
+#
+# `items=()` FOR NOW, deliberately, and it is the same reasoning that emptied the Leaderboards rail:
+# a single pill naming the page you are already on is not navigation. Hunters is the only member
+# today; Game Lists joins when it comes off `_DevelopmentGate`, and the rail turns on then.
+#
+# NO LANDING PAGE, and it does not need one. `/community/` 301s permanently to `/leaderboards/` (live
+# since 2026-08 and therefore cached in browsers indefinitely, so it cannot be repointed) -- but a hub
+# here is a nav grouping, not an address, and every page in this one is its own destination. The
+# navbar button points at Hunters until there is a second item.
+COMMUNITY_HUB = HubSubnavConfig(
+    key='community',
+    label='Community',
+    icon='users',
+    # Both spellings while the /profiles/ -> /hunters/ 301s stand: this is a PATH PREFIX match, so a
+    # visitor landing on an old profile URL would otherwise lose the rail on the way through.
+    # `/community/` is here for the Lists pages already served under it, which are staff-gated today.
+    prefixes=('/community/', '/hunters/', '/profiles/'),
+    items=(),
+)
+
+
 # Order matters for matching: hubs are checked in this order. Within each
 # hub, prefixes are tried longest-first. Bare '/' is handled separately as
 # an exact-equality check below.
@@ -222,6 +250,7 @@ HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
     MY_PURSUIT_HUB,
     BROWSE_HUB,
     LEADERBOARDS_HUB,
+    COMMUNITY_HUB,
     SUPPORT_HUB,
 )
 
@@ -264,9 +293,9 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'roadmap_edit_ctg': ('browse', 'trophy-lists'),
     'roadmap_detail': ('browse', 'trophy-lists'),
     'roadmap_detail_dlc': ('browse', 'trophy-lists'),
-    # Community
-    'profile_detail': ('browse', 'profiles'),
-    'trophy_case': ('browse', 'profiles'),
+    # Hunters moved to the Community hub in 2026-09, and that hub runs `items=()` -- so there is no
+    # slug to light and these two overrides went with the move. The `/hunters/` prefix already puts
+    # both pages in the right hub, which is all the navbar needs to highlight the right tab.
     # Reviews archived 2026-05 and the Community hub retired 2026-08, so the notice page has no hub
     # to sit in -- it renders without a sub-nav strip, which is right for a tombstone.
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)

@@ -3,9 +3,17 @@
 {% comment %}
 Mobile bottom tab bar — the hub navigation for <lg: viewports.
 
-Mirrors the desktop navbar's hub buttons (My Pursuit / Browse / Leaderboards /
-Support) at the bottom of the viewport so mobile users have one-tap access to
-every hub at all scroll positions. The desktop navbar's hub buttons are hidden
+Mirrors the desktop navbar's hub buttons at the bottom of the viewport so mobile
+users have one-tap access at all scroll positions -- FOUR of the five, because
+five do not fit: the items are `flex: 1` at 0.62rem, so a fifth takes each from
+~93px to ~75px at 375px while "Leaderboards" alone runs ~68-72px of text.
+
+Support Us is the one that leaves (2026-09) and lives in the avatar dropdown
+instead, demoted by frequency: a storefront, a roadmap, a fundraiser page and a
+membership manager are occasional visits, where lists and hunters are habitual.
+The cost is that no tab highlights while you are in Support Us -- accepted
+knowingly, and smaller than it sounds, because that hub carries its own sub-nav
+rail showing which of its four pages you are on. The desktop navbar's hub buttons are hidden
 on <lg: precisely because this bar takes over. My Pursuit is login-gated (the
 personal hub is), so logged-out visitors see 3 tabs; the flex `justify-around`
 inner distributes 3 or 4 evenly.
@@ -64,7 +72,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         </a>
 
         <!-- Support -->
-        <a href="{% url 'support_hub' %}" class="mobile-tabbar-item {% if hub_section == 'support' %}active{% endif %}" {% if hub_section == 'support' %}aria-current="page"{% endif %} aria-label="Support">
+        <a href="{% url 'profiles_list' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" {% if hub_section == 'community' %}aria-current="page"{% endif %} aria-label="Community">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>

@@ -27,8 +27,8 @@ sticky sub-nav strip below the navbar surfaces that hub's pages, URL-matched.
 > reached by its own navbar entry; a one-pill rail naming the page you are on is not navigation. See
 > [leaderboards-rebuild](../design/rebuild/leaderboards-rebuild.md).
 | **Leaderboards** | `/leaderboards/` | how everyone ranks (PSN-derived) | "where do I stand" |
-| **Community** *(decided, not built)* | `/community/`, `/hunters/` | hunters, and what they make: lists, challenges, the Hall of Fame | "what is everyone doing" |
-| **Support** *(to be relabelled "Support Us")* | `/support/` | the membership storefront + `/support/roadmap/` + `/support/membership/` + `/support/fundraiser/` (all live) | "ways to support us" |
+| **Community** | `/community/`, `/hunters/` | hunters, and what they make: lists, challenges, the Hall of Fame | "what is everyone doing" |
+| **Support Us** | `/support/` | the membership storefront + `/support/roadmap/` + `/support/membership/` + `/support/fundraiser/` (all live) | "ways to support us" |
 
 **Above the hubs: the lobby (`/`).** Where every login lands (`LOGIN_REDIRECT_URL`), and the one page
 that belongs to NO hub — so it renders no sub-nav strip, because on a lobby the CTAs *are* the navigation
@@ -62,12 +62,13 @@ that is merely *new* still has to fit one of the four.
 
 ## Community (decided 2026-09, NOT YET BUILT)
 
-> **Nothing in this section is in the code yet.** `HUB_SUBNAV_CONFIG` holds four hubs, the
-> mobile tab bar holds four tabs, and `test_lists_hidden.py` actively asserts that no hub carries
-> a `lists` slug. This records a DECISION and its reasoning; the implementation ships with the
-> Game Lists un-hide, because `HubSubnavItem` has no staff gate and a Game Lists entry added
-> earlier would show every visitor a link that 302s them. The concrete change list lives in
-> [game-lists.md](../features/game-lists.md#turning-it-on).
+> **Built 2026-09-13, except the rail.** `COMMUNITY_HUB` exists, Hunters moved out of Browse,
+> the mobile tab bar swapped Support Us for Community, and the Support hub is relabelled. What is
+> NOT built is the sub-nav rail: the hub runs `items=()` because a single pill naming the page you
+> are already on is not navigation — the same reasoning that emptied the Leaderboards rail. Game
+> Lists joins when it comes off `_DevelopmentGate` (`HubSubnavItem` has no staff gate, so an entry
+> added earlier would show every visitor a link that 302s them), and the rail turns on then.
+> Pinned by `test_community_hub_returned.py`.
 
 | | |
 |---|---|
@@ -122,8 +123,9 @@ echo is redundant orientation there, not the only signal.
 
 ### "Support Us", not "Support"
 
-**Decided 2026-09, not yet applied** — `hub_subnav.py` and the tab bar both still say "Support".
-"Support" alone reads as a help desk on most of the web, and this is the one place a
+Applied 2026-09-13 to the HUB. Its first item is still called "Support", so the rail reads
+"Support Us → Support" — that one is the open naming question below and was deliberately not decided
+by a rename that was about the hub. "Support" alone reads as a help desk on most of the web, and this is the one place a
 confused reader would look for one. Naming the ask is also the more earnest form, which is the site's
 voice. It resolves a small existing oddity too: the hub and its first item were both called Support,
 so the rail read "Support → Support".

@@ -46,11 +46,19 @@ def test_other_hubs_unchanged():
     assert resolve_hub_subnav(_req('/leaderboards/'))['hub'].key == 'leaderboards'
 
 
-def test_the_retired_community_paths_belong_to_no_hub():
+def test_the_retired_community_paths_render_no_strip():
+    """RENAMED AND INVERTED, 2026-09. These paths now match the returned Community hub -- which is
+    correct, since that is where they would have lived -- but the property that matters is unchanged
+    and is what this asserts: a tombstone renders NO SUB-NAV STRIP. It gets that from the hub running
+    `items=()` rather than from matching no hub at all, and a reader lands on the right tab instead of
+    on a page with no chrome at all."""
     """What is left under /community/ is redirects and the reviews tombstone. None of it should sprout
     a sub-nav strip: a strip implies a section you are inside, and there is no longer one."""
-    assert resolve_hub_subnav(_req('/community/reviews/')) is None
-    assert hub_subnav(_req('/community/reviews/'))['hub_section'] is None
+    match = resolve_hub_subnav(_req('/community/reviews/'))
+    assert match['hub'].key == 'community'
+    assert match['hub'].items == (), 'a tombstone must render no strip'
+    assert hub_subnav(_req('/community/reviews/'))['hub_section'] == 'community'
+    assert not hub_subnav(_req('/community/reviews/'))['hub_subnav_items']
 
 
 def _grouped(ctx):
@@ -69,7 +77,8 @@ def test_browse_items_grouped_catalog_curation():
     # Added and Hunters keep their positions. 'trophy-lists' joins after games 2026-08-30
     # (Games/Trophy Lists IA phase 4: the list-level catalogue rides beside the game-level one;
     # the slug is deliberately NOT 'lists' -- that name belongs to the hidden GameList system).
-    assert groups['Catalog'] == ['games', 'trophy-lists', 'badges', 'jobs', 'recently-added', 'profiles']
+    # 'profiles' left for the Community hub in 2026-09 -- a sub-nav move, not a URL move.
+    assert groups['Catalog'] == ['games', 'trophy-lists', 'badges', 'jobs', 'recently-added']
     assert groups['Curation'] == ['franchises', 'companies', 'genres']
 
 
@@ -97,7 +106,7 @@ def test_strip_hidden_for_anon_on_public_member():
 def test_public_hubs_still_render_for_anon():
     # The anon gate is My-Pursuit-specific -- the public hubs' strips must still show.
     assert hub_subnav(_req('/games/'))['hub_section'] == 'browse'
-    assert hub_subnav(_req('/hunters/'))['hub_section'] == 'browse'
+    assert hub_subnav(_req('/hunters/'))['hub_section'] == 'community'
 
 
 # --- Support hub (phase 2) ---
@@ -146,13 +155,14 @@ def test_support_landing_renders(client):
 
 # --- Profile chrome ---
 
-def test_profiles_are_chromed_as_a_browse_surface():
+def test_hunters_is_chromed_as_a_community_surface():
     """They moved out from under /community/ with the hub teardown -- hunters are another thing you
     browse, alongside games and badges -- and were renamed Profiles -> Hunters (/hunters/) after."""
     them = ProfileFactory(is_linked=True)
     ctx = hub_subnav(_req(f'/hunters/{them.psn_username}/'))
-    assert ctx['hub_section'] == 'browse'
-    assert ctx['hub_subnav_active_slug'] == 'profiles'
+    assert ctx['hub_section'] == 'community'
+    # No slug: the hub runs `items=()` until Game Lists gives it a second destination.
+    assert ctx['hub_subnav_active_slug'] is None
 
 
 def test_your_own_profile_is_chromed_like_anyone_elses():
@@ -163,7 +173,7 @@ def test_your_own_profile_is_chromed_like_anyone_elses():
     now, and the page looks the same whoever is viewing it."""
     me = ProfileFactory(is_linked=True)
     ctx = hub_subnav(_req(f'/hunters/{me.psn_username}/', user=me.user))
-    assert ctx['hub_section'] == 'browse'
+    assert ctx['hub_section'] == 'community'
 
 
 def test_no_profile_tab_in_the_personal_strip():
@@ -176,13 +186,13 @@ def test_other_profile_shows_the_same_chrome():
     me = ProfileFactory(is_linked=True)
     them = ProfileFactory(is_linked=True)
     ctx = hub_subnav(_req(f'/hunters/{them.psn_username}/', user=me.user))
-    assert ctx['hub_section'] == 'browse'
+    assert ctx['hub_section'] == 'community'
 
 
 def test_anon_on_profile_shows_the_same_chrome():
     them = ProfileFactory(is_linked=True)
     ctx = hub_subnav(_req(f'/hunters/{them.psn_username}/'))   # anonymous viewer
-    assert ctx['hub_section'] == 'browse'
+    assert ctx['hub_section'] == 'community'
 
 
 def test_the_lobby_carries_no_strip_at_all():
