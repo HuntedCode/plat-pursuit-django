@@ -71,8 +71,21 @@ def _count_filter(raw):
     return value if value <= MAX_GAME_COUNT_FILTER else None
 
 
+@method_decorator(
+    # RATE-LIMITED BY IP, because this is the anonymous one. The typeahead below carries a limit, a
+    # 60s cache and a 3-character floor; this page shared only the LENGTH bound with it, and it is
+    # the path that needs them most -- `?q=` compiles to three `UPPER(col) LIKE '%x%'` scans plus a
+    # join to Profile, no index serves it, and there is no login in front. `key='ip'` rather than
+    # `key='user'`: the latter buckets every anonymous caller under one key, which the project
+    # already uses `key='ip'` to avoid on its other public GET.
+    ratelimit(key='ip', rate='60/m', method='GET', block=True), name='get')
 class BrowseListsView(HtmxListMixin, ListView):
     """Public lists from every hunter, newest or most-liked first."""
+
+    #: Matching the typeahead's floor, and for the reason its docstring gives: a one- or
+    #: two-character `%x%` is a guaranteed full scan that returns most of the table. Below this the
+    #: term is ignored rather than refused -- a browse page is not a form.
+    MIN_QUERY = 3
 
     model = GameList
     template_name = 'gamelists/browse.html'
@@ -116,6 +129,8 @@ class BrowseListsView(HtmxListMixin, ListView):
         # ANONYMOUS as of 2026-09. `_count_filter` below bounds the
         # numeric filters and none of that discipline had reached the text one.
         query = (self.request.GET.get('q') or '').strip()[:MAX_QUERY_LENGTH]
+        if len(query) < self.MIN_QUERY:
+            query = ''
         if query:
             queryset = queryset.filter(
                 Q(name__icontains=query)
@@ -713,6 +728,37 @@ class UpdateListView(_ListActionView):
             'is_public': updated.is_public,
             'list_type': updated.list_type,
         })
+
+
+class DeleteListView(_ListActionView):
+    """Soft-delete a list you own.
+
+    THE GATE WAS MASKING THIS. `delete_list` has existed in the service since the rebuild, fully
+    tested, with no view, no URL and no button -- and nobody noticed, because under
+    `_DevelopmentGate` the only accounts that could create a list were staff, who do not plausibly
+    hit a three-list ceiling. Every free hunter now does, at list four, permanently, and the refusal
+    they get names a remedy that did not exist: "Delete one to make room, or become a member."
+
+    It also made `CreateListView`'s rate-limit rationale describe an unreachable attack --
+    create-delete-create is not a loop if you cannot delete.
+
+    Soft, and the service is idempotent: a second press answers 200 rather than "that list no longer
+    exists", because somebody double-clicking has not made a mistake worth an error.
+    """
+
+    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+
+        try:
+            svc.delete_list(game_list, self._viewer(request))
+        except svc.ListError as exc:
+            return self.fail(exc)
+        # The list is gone, so the page it was on is gone: the client navigates rather than
+        # re-rendering a detail page for a row that no longer reads.
+        return JsonResponse({'deleted': True, 'redirect': reverse_lazy('my_lists')})
 
 
 class ReorderItemsView(_ListActionView):

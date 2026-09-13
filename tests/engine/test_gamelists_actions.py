@@ -8,7 +8,8 @@ refused call writes nothing.
 import pytest
 from django.urls import reverse
 
-from gamelists.models import (LIST_TYPE_COLLECTION, LIST_TYPE_RANKED, GameList, GameListFollow,
+from gamelists.models import (FREE_MAX_LISTS, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED, GameList,
+                              GameListFollow,
                               GameListItem, GameListLike)
 from gamelists.services import game_list_service as svc
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
@@ -334,14 +335,15 @@ def test_every_write_endpoint_needs_an_account_and_a_readable_list(client, name,
     who was not staff. With the gate gone, what is left is the permission stack that was always
     underneath it, and both halves still matter.
 
-    ANONYMOUS gets a redirect, from `LoginRequiredMixin`. A SIGNED-IN hunter gets past that and then
-    hits the real rule: every endpoint resolves its list through `readable_by()` and answers a
-    uniform 404 — never 403, never a service error — so an id alone can never confirm that a list
-    exists or whose it is. List 1 does not exist here, and the answer is indistinguishable from
-    somebody else's private list, which is the entire point.
+    ANONYMOUS gets a redirect, from `LoginRequiredMixin`. A SIGNED-IN hunter gets past that and hits
+    a uniform JSON 404.
 
-    Keeping the signed-in half is what makes this worth more than before: it is now the only thing
-    standing between a hand-crafted POST and somebody else's list.
+    WHAT THIS DOES AND DOES NOT COVER, because the first version of this docstring claimed its
+    sibling's work: list 1 does not exist, so what is exercised here is the MISSING-ROW path. Drop
+    the permission filter entirely -- `readable_by()` to `visible()` -- and this still passes. The
+    private-list half is `test_no_endpoint_confirms_a_private_list_exists` above, which creates a
+    real one; the point of this test is that a nonexistent id is answered IDENTICALLY, so the two
+    cases cannot be told apart.
     """
     assert client.post(reverse(name, args=args)).status_code == 302, 'anonymous is not refused'
 
@@ -351,12 +353,23 @@ def test_every_write_endpoint_needs_an_account_and_a_readable_list(client, name,
 
     resp = client.post(reverse(name, args=args))
     assert resp.status_code == 404, f'{name} does not answer a 404 for an unreadable list'
-    # A UNIFORM 404 with no detail. The gated version asserted the redirect TARGET here (`/`, not
-    # login) because the distinction mattered then; what matters now is that the body reveals
-    # nothing -- a 403, or an error naming the list, would confirm it exists.
+    # A UNIFORM 404 with no detail. `Content-Type` rules out the site's HTML `handler404`, which
+    # would be a different code path answering the same status.
     assert resp['Content-Type'] == 'application/json', f'{name} answered with a page, not JSON'
-    assert b'Should not exist' not in resp.content
-    assert GameList.objects.count() == 0
+
+    # IDENTICAL to the answer for somebody else's PRIVATE list, which is the property that makes the
+    # id useless as an oracle. This asserted `b'Should not exist' not in resp.content` -- a string
+    # this test never posts (it was copied from the create-endpoint test, which does) and which
+    # therefore no change to the views could have produced.
+    author = ProfileFactory(is_linked=True, psn_username='someone_else')
+    private = svc.create_list(author, name='Theirs')
+    private_resp = client.post(reverse(name, args=(private.id, *args[1:])))
+    assert private_resp.content == resp.content, (
+        f'{name} answers a private list differently from a missing one')
+    # The pre-existing "a refused POST wrote nothing" check, allowing for the one list this test now
+    # creates on purpose. Asserting the SET rather than a count, so it still fails if a write slips
+    # through rather than merely counting to the wrong number.
+    assert list(GameList.objects.values_list('id', flat=True)) == [private.id]
 
 
 def test_the_write_endpoints_refuse_a_get(client):
@@ -498,6 +511,62 @@ def test_the_owner_can_rename_and_redescribe(client):
     assert game_list.description == 'New words'
     # The STORED values come back, not the submitted ones -- the client re-renders from these.
     assert resp.json()['name'] == 'New name'
+
+
+def test_a_hunter_at_the_cap_can_delete_their_way_out(client):
+    """THE CAP PROMISED A REMEDY THE PRODUCT DID NOT SHIP. `delete_list` was written and tested with
+    no view, no URL and no button, and the refusal at the limit reads "Delete one to make room, or
+    become a member for more."
+
+    Invisible while only staff could create a list -- staff do not hit a three-list ceiling. Every
+    free hunter hits it at list four, permanently. This walks the whole path the message describes.
+    """
+    owner = _staff(client, psn='capped')
+    owner.user_is_premium = False
+    owner.save(update_fields=['user_is_premium'])
+
+    made = [svc.create_list(owner, name=f'List {n}') for n in range(FREE_MAX_LISTS)]
+    with pytest.raises(svc.ListError):
+        svc.create_list(owner, name='One too many')
+
+    resp = client.post(reverse('list_delete', args=[made[0].id]))
+    assert resp.status_code == 200
+    assert resp.json()['redirect'] == '/my-lists/', 'the client is not told where to go'
+
+    made[0].refresh_from_db()
+    assert made[0].is_deleted, 'the list was not deleted'
+    # ...and the slot is genuinely free, which is the whole claim the message makes.
+    svc.create_list(owner, name='Room at last')
+
+
+def test_deleting_is_idempotent_and_owner_only_over_http(client):
+    """Soft delete, so a double-press is not an error -- somebody double-clicking has not made a
+    mistake worth an error message. And a stranger gets the same uniform 404 every other endpoint
+    answers, rather than a 403 that would confirm the list exists."""
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    game_list = svc.create_list(author, name='Theirs', is_public=True)
+
+    # 400, NOT 404, and the distinction is the design rather than an inconsistency: this list is
+    # PUBLIC, so a stranger can legitimately see it and `readable_by` returns it -- the refusal comes
+    # from the service's ownership check. The uniform 404 is for lists you cannot see at all, where
+    # any other answer would confirm the list exists. `test_no_endpoint_confirms_a_private_list_exists`
+    # covers that half.
+    _staff(client, psn='stranger')
+    assert client.post(reverse('list_delete', args=[game_list.id])).status_code == 400
+    game_list.refresh_from_db()
+    assert not game_list.is_deleted, 'a stranger deleted a list that was not theirs'
+
+    client.logout()
+    client.force_login(author.user)
+    assert client.post(reverse('list_delete', args=[game_list.id])).status_code == 200
+
+    # A SECOND PRESS IS A 404, not a second 200, and that is right even though `delete_list` is
+    # idempotent: the view resolves through `readable_by()` FIRST, and `.visible()` excludes
+    # soft-deleted rows -- so a deleted list is indistinguishable from one that never existed, which
+    # is the same rule every other endpoint follows. The service's idempotence is therefore
+    # unreachable over HTTP, which is fine: the client navigates away on success, and the shell and
+    # the admin are where a second call could come from.
+    assert client.post(reverse('list_delete', args=[game_list.id])).status_code == 404
 
 
 def test_switching_type_twice_in_one_session_works(client):

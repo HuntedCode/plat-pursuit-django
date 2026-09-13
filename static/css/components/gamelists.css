@@ -454,6 +454,12 @@
     .gl-item__grab:hover { transform: none; }
 }
 
+/* Delete sits at the FAR END of the editor's action row, away from Save and Cancel. It is the one
+   control there that a second press cannot undo, and putting it next to the button people reach for
+   without looking is how a list goes missing. `margin-left: auto` rather than a wrapper: the row is
+   already a flex line and the gap between the safe pair stays as it was. */
+.gl-edit__delete { margin-left: auto; }
+
 /* THE POSITION BAR, directly above the grid it acts on.
  *
  * It began as a small ghost button at the foot of the edit form and was, in the owner's words, hard

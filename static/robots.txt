@@ -89,6 +89,10 @@ Disallow: /community/lists/*/like/
 Disallow: /community/lists/*/follow/
 Disallow: /community/lists/*/add/
 Disallow: /community/lists/*/items/
+# `/edit/` is an address the rebuilt app deliberately does not have: it 302s to the homepage for any
+# id, so it is an infinite soft-404 space over an unbounded integer. Every other id-keyed sub-path is
+# blocked and the detail pages are in a sitemap, which makes the shape guessable.
+Disallow: /community/lists/*/edit/
 
 # Profile-scoped variants of canonical pages (/games/<np>/<user>/ etc.) are NOT
 # handled here any more (2026-08-23, SEO Lane 0). The old wildcard rules

@@ -53,8 +53,10 @@ def test_the_rail_turned_on_when_there_was_somewhere_else_to_go():
     from core.hub_subnav import HUB_SUBNAV_CONFIG
 
     hub = next(h for h in HUB_SUBNAV_CONFIG if h.key == 'community')
+    # Exact equality, which already excludes `my_lists` -- a second assertion saying so was
+    # decoration wearing a guard's message, and no edit could make one pass while the other failed.
+    # `test_lists_live.py` carries the membership check that CAN fail independently.
     assert [i.slug for i in hub.items] == ['lists', 'profiles']
-    assert 'my_lists' not in [i.slug for i in hub.items], 'a personal page is in the public hub'
 
 
 def test_hunters_is_chromed_as_community_everywhere_it_is_reachable():

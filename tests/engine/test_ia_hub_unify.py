@@ -74,10 +74,14 @@ def test_the_retired_community_paths_sit_in_the_hub_that_replaced_them(client):
     # No item of its own: it is a notice, not a destination.
     assert match['active_slug'] is None, 'the tombstone lit a rail item as though it were a page'
 
-    body = client.get('/community/reviews/').content.decode()
-    assert 'pp-sub' in body, 'the tombstone offers no way onward'
-    assert 'lists_browse' in body or '/community/lists/' in body, (
-        'the rail is there but does not reach the section it belongs to')
+    # THE RAIL'S OWN ITEMS, not a substring of the page. The first version asserted
+    # `'lists_browse' in body or '/community/lists/' in body` -- and `lists_browse` is a URL NAME, so
+    # `{% url %}` renders it as a path and that half could never be true. The `or` made a
+    # single-clause check look like two. Worse, the surviving clause would be satisfied by any
+    # "Browse Game Lists" CTA added to the tombstone body, with the rail gone.
+    items = hub_subnav(_req('/community/reviews/'))['hub_subnav_items']
+    assert '/community/lists/' in [i.url for i in items], (
+        'the rail does not reach the section the tombstone belongs to')
 
 
 def _grouped(ctx):

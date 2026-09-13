@@ -317,10 +317,12 @@ class GameListSitemap(Sitemap):
     It was commented out of the index in `plat_pursuit/urls.py` while lists were hidden, which is
     the only reason this never shipped. Uncommenting without re-pointing was the trap.
 
-    `.visible()` rather than a hand-written pair of flags: it is the model's own floor and it mirrors
-    the partial index. `public()` would be the exact read, but it orders by `-id` here rather than by
-    either browse sort, so the index does not apply and the explicit filters say more plainly what a
-    crawler is allowed to see.
+    `.public()`, AND NEVER `.visible()`. This paragraph used to argue the reverse, describing the
+    hand-written `filter(is_public=True, is_deleted=False)` that preceded it and recommending the
+    model's floor instead -- which is wrong in the one way that matters here: `.visible()` is
+    `is_deleted=False` ALONE, so it admits every private list on the site. Swapping it in would
+    publish their ids and their count to Google, which is the enumerable oracle the uniform 404 on
+    every endpoint exists to prevent. `test_lists_live.py` now pins the filter, not just the model.
     """
 
     changefreq = 'weekly'
@@ -342,6 +344,10 @@ class GameListSitemap(Sitemap):
         return obj.updated_at
 
     def get_latest_lastmod(self):
+        # Index-backed by `glst_public_upd_idx`, whose predicate mirrors `.public()` exactly. Without
+        # it this is a filtered scan plus a sort on every `/sitemap.xml` hit -- anonymous, uncached
+        # and crawler-driven, which is the shape this file's header blames for the May 2026
+        # sitemap-index OOM.
         return (
             RebuiltGameList.objects.public()
             .order_by('-updated_at')

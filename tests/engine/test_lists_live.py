@@ -91,15 +91,25 @@ def test_no_view_still_carries_a_staff_gate():
     """The switch was six mixin references plus the class. Leaving one behind would gate a single
     surface while the rest opened -- the hardest half-shipped state to notice, because the feature
     demonstrably works."""
-    source = (ROOT / 'gamelists' / 'views.py').read_text(encoding='utf-8')
-    # PROSE STRIPPED FIRST. The module docstring legitimately explains what the gate was and why it
-    # went, so a bare membership check failed on the history rather than on any live code -- the
-    # mirror of a comment SATISFYING an assertion, and just as misleading.
-    code = re.sub(r'"""(?:.|\n)*?"""', '', source)
-    code = re.sub(r'^\s*#.*$', '', code, flags=re.M)
+    import ast
 
-    assert '_DevelopmentGate' not in code, 'a development gate survived the un-hide'
-    assert 'StaffRequiredMixin' not in code, 'a staff mixin survived the un-hide'
+    # PARSED, NOT STRIPPED. The first version regex-deleted docstrings and whole-line comments --
+    # necessary, because this module's docstring legitimately explains what the gate was, so a bare
+    # membership check failed on the history rather than on live code. But the regex paired `"""`
+    # POSITIONALLY: one stray triple-quote anywhere shifts every later pairing by one, at which point
+    # it deletes the code BETWEEN docstrings and a real `StaffRequiredMixin` in that gap is silently
+    # stripped -- the guard goes green while the gate is live. It also had no floor: move the views
+    # to a package with a re-export shim and both assertions pass against a two-line file.
+    #
+    # `ast` gives both for free, and asserts against the class BASES rather than the file's text.
+    tree = ast.parse((ROOT / 'gamelists' / 'views.py').read_text(encoding='utf-8'))
+    classes = {n.name: [ast.unparse(b) for b in n.bases]
+               for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+
+    assert 'BrowseListsView' in classes, 'the views moved; this guard is reading the wrong file'
+    for name, bases in classes.items():
+        assert not any('StaffRequired' in b or 'DevelopmentGate' in b for b in bases), (
+            f'{name} still carries a staff gate')
 
 
 def test_a_public_list_carries_its_own_social_card(client):
@@ -112,10 +122,19 @@ def test_a_public_list_carries_its_own_social_card(client):
     described = svc.create_list(owner, name='Hardest Platinums',
                                 description='Thirty that broke me.', is_public=True)
 
-    ctx = client.get(f'/community/lists/{described.id}/').context
+    resp = client.get(f'/community/lists/{described.id}/')
+    ctx = resp.context
     # The author's own words win: they wrote them to say what the list is for.
     assert ctx['seo_description'] == 'Thirty that broke me.'
     assert 'Hardest Platinums' in ctx['seo_title'] and 'author' in ctx['seo_title']
+
+    # AND IT REACHES THE TAG. `base.html` renders `seo_title` through `{% firstof %}` inside
+    # `{% block og_title %}` -- a block this template already overrides for `{% block title %}`, so
+    # overriding one more would leave the context key set, this test green, and every share preview
+    # back on the site-wide generic. That is the exact failure this test exists to prevent, one
+    # layer further down than it was looking.
+    body = resp.content.decode()
+    assert 'Hardest Platinums' in body[:body.index('</head>')], 'seo_title never reaches the head'
 
     # Without a description it is BUILT rather than left blank -- a bare "a game list" tells a reader
     # deciding whether to click precisely nothing.
@@ -170,6 +189,63 @@ def test_the_api_no_longer_accepts_writes_into_a_system_with_no_door(client):
         assert client.post(url, {}).status_code == control, f'{url} still accepts writes'
 
 
+def test_the_cover_fanout_is_bounded_on_a_public_detail_page(client):
+    """The `[:N]` slice on `items` bounds the ROWS. It does not bound this, and the two are different
+    numbers: a `Game` is one trophy list PER STACK, so 200 concepts fetch 400-1500 rows, each
+    dragging a joined Concept and IGDBMatch.
+
+    That is the half the whale rule is actually about -- the query shape stays O(1) while the bytes
+    do not -- on a page that is anonymous, enumerable by id, and now advertised in a sitemap. The
+    same shape as the 2026-08 incident where a crawler walking an index was the first domino.
+    """
+    from gamelists.services import covers
+    import inspect
+
+    source = inspect.getsource(covers.cover_games_for)
+    assert '[:len(ids) * 4]' in source, 'the cover fan-out is unbounded again'
+
+
+def test_the_anonymous_browse_search_has_a_floor(client):
+    """The typeahead has a rate limit, a 60s cache and a 3-character floor; this page shared only the
+    LENGTH bound with it -- and it is the one without a login in front. A one-character `%x%` against
+    three columns plus a join is a guaranteed full scan that returns most of the table."""
+    owner = ProfileFactory(is_linked=True, psn_username='findable')
+    from gamelists.services import game_list_service as svc
+    svc.create_list(owner, name='Backlog', is_public=True)
+
+    # A ONE-CHARACTER QUERY THAT WOULD NOT MATCH. `z` appears in neither the name, the description
+    # nor the owner's username -- so if the floor is gone and the term reaches the LIKE, the grid is
+    # EMPTY; with the floor, the term is ignored and the full grid comes back. The first version of
+    # this test searched `z` against a list called "Zebra", which returns one row either way.
+    short = client.get('/community/lists/', {'q': 'z'})
+    assert short.status_code == 200
+    assert len(short.context['game_lists']) == 1, 'a 1-char query reached the LIKE'
+
+    # At the floor it filters for real, which is what stops this passing on a page that ignores `q`
+    # altogether.
+    assert len(client.get('/community/lists/', {'q': 'ack'}).context['game_lists']) == 1
+    assert len(client.get('/community/lists/', {'q': 'qqq'}).context['game_lists']) == 0
+
+
+def test_game_list_share_is_still_declared_and_unwired():
+    """The twin of the bug the un-hide fixed. `game_list_create` was declared in 2019 with its only
+    call site in an unrouted module, so a grep found a hit and it had never once fired; that is now
+    wired. `game_list_share` is in exactly that state and was left there, because there is no share
+    affordance to wire it to yet.
+
+    Recorded rather than assumed, and INVERTED the day a share button ships -- which is the point:
+    without this, the next person greps, finds the declaration, and assumes it works.
+    """
+    from core.models import SiteEvent
+
+    assert any(value == 'game_list_share' for value, _ in SiteEvent._meta.get_field('event_type').choices), (
+        'the event type was removed; delete this guard with it')
+
+    wired = [p.relative_to(ROOT) for p in (ROOT / 'gamelists').rglob('*.py')
+             if 'game_list_share' in p.read_text(encoding='utf-8')]
+    assert not wired, f'game_list_share is wired now -- invert this test and check the analytics: {wired}'
+
+
 def test_the_chrome_leads_into_lists_from_both_places_that_matter():
     """INVERTED 2026-09. This asserted NO rail tab and NO footer link, because the two places a link
     survives a teardown are the two places one goes missing on a launch: neither is exercised by the
@@ -194,8 +270,11 @@ def test_the_chrome_leads_into_lists_from_both_places_that_matter():
     from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES
     assert _URL_NAME_TO_SLUG_OVERRIDES['list_detail'] == ('community', 'lists')
 
+    # COMMENTS STRIPPED, the way this file's other source-reading guards do it. Commenting the
+    # footer link out is the likeliest way it goes missing, and it leaves the string in the file.
     footer = (ROOT / 'templates' / 'partials' / 'footer.html').read_text(encoding='utf-8')
-    assert 'lists_browse' in footer, 'the footer sitemap does not reach Game Lists'
+    footer = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', footer, flags=re.S)
+    assert "url 'lists_browse'" in footer, 'the footer sitemap does not reach Game Lists'
 
 
 def test_nothing_advertises_lists_or_pays_to_build_a_spotlight():
@@ -234,10 +313,24 @@ def test_the_sitemap_advertises_lists_and_reads_the_rebuilt_model():
     assert GameListSitemap().items().model is RebuiltGameList, (
         'the sitemap still reads the legacy model, so every URL it emits is a 404')
 
-    # ...and it resolves through the rebuilt route for a real row.
     from gamelists.services import game_list_service as svc
     owner = ProfileFactory(is_linked=True, psn_username='sitemapper')
     published = svc.create_list(owner, name='Out in the world', is_public=True)
+    private = svc.create_list(owner, name='Not yours')
+    deleted = svc.create_list(owner, name='Gone', is_public=True)
+    svc.delete_list(deleted, owner)
+
+    # THE FILTER, which nothing pinned. The model assertion above is blind to it, and
+    # `GameListSitemap`'s own docstring weighs `.visible()` as a reasonable alternative -- but
+    # `.visible()` is `filter(is_deleted=False)`, which admits EVERY PRIVATE LIST ON THE SITE. That
+    # edit would have published them to Google with every assertion here still green.
+    advertised = set(GameListSitemap().items().values_list('id', flat=True))
+    assert published.id in advertised, 'a public list is not advertised'
+    assert private.id not in advertised, 'the sitemap advertises a PRIVATE list'
+    assert deleted.id not in advertised, 'the sitemap advertises a soft-deleted list'
+
+    # ...and the route is the rebuilt one. `location()` never consults `items()`, so this is a
+    # separate property rather than a stronger version of the above.
     assert GameListSitemap().location(published) == f'/community/lists/{published.id}/'
 
 
@@ -285,15 +378,26 @@ def test_no_url_conf_imports_a_view_it_no_longer_routes():
         assert not dead, f'{rel} imports {dead} but routes none of them'
 
 
-def test_the_data_is_untouched():
-    """The point of hiding rather than removing. Somebody's carefully ordered backlog is still there."""
+def test_the_legacy_rows_survive_and_are_unreachable(client):
+    """The point of hiding rather than removing: somebody's carefully ordered backlog is still there.
+
+    The second half INVERTED at the un-hide. It used to assert that
+    `reverse('list_detail', args=[legacy_id])` produced a URL, on the reasoning that unreachable
+    templates still referenced the names. Those templates became reachable, and what the assertion
+    then said out loud was "a legacy row's id maps to a rebuilt-app URL" -- precisely the sitemap
+    landmine, restated as a desired property. The two tables share a class name and nothing else.
+    """
     owner = ProfileFactory(is_linked=True)
     gl = GameList.objects.create(profile=owner, name='Still here', is_public=True, game_count=3)
 
-    assert GameList.objects.filter(pk=gl.pk).exists()
-    assert reverse('list_detail', args=[gl.id]) == f'/community/lists/{gl.id}/', (
-        'the URL names still resolve -- unreachable templates reference them, and the revamp needs them'
-    )
+    assert GameList.objects.filter(pk=gl.pk).exists(), 'a legacy row was destroyed'
+    # A LEGACY ID MUST NOT RENDER IN THE REBUILT APP. This used to assert the opposite -- that
+    # `reverse('list_detail', args=[legacy_id])` produced a URL -- on the reasoning that unreachable
+    # templates still referenced the names. Those templates became reachable, and what the assertion
+    # then said out loud was "a legacy row's id maps to a rebuilt-app URL": precisely the sitemap
+    # landmine, restated as a desired property. The two tables share a class name and nothing else.
+    assert client.get(f'/community/lists/{gl.id}/').status_code == 404, (
+        'a legacy list id renders in the rebuilt app')
 
 
 def test_no_profile_tab_leads_into_lists(client):

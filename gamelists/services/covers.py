@@ -48,10 +48,21 @@ def cover_games_for(concept_ids):
     # `concept__igdb_match__*` column makes Django treat the relation as deferred and traversed at
     # once, which it refuses ("cannot be both deferred and traversed"). The documented pairing in
     # CLAUDE.md is exactly these two, so follow it rather than inventing a narrower one.
+    # BOUNDED. `ids` is up to `MAX_ITEMS_RENDERED` concepts and a `Game` is one trophy list PER
+    # STACK, so an unbounded fetch materializes 400-1500 rows here, each dragging a joined Concept
+    # and IGDBMatch -- on a page that is anonymous, enumerable, and now advertised in a sitemap.
+    # The view's `[:N]` slice bounds the ROWS it renders and not this fan-out, which is the half the
+    # whale rule is actually about: the query shape stays O(1) while the bytes do not.
+    #
+    # The cap is generous rather than tight because the picker needs every stack of a concept to
+    # choose the best one, and cutting mid-concept would make the cover depend on row order. Four
+    # per concept covers PS3/PS4/PS5/Vita, which is every real case; beyond that the page is
+    # pathological and a slightly-wrong cover is the right trade against an unbounded read.
     rows = (
         Game.objects.filter(concept_id__in=ids)
         .select_related('concept', 'concept__igdb_match')
         .defer('concept__igdb_match__raw_response')
+        [:len(ids) * 4]
     )
 
     best = {}

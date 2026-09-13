@@ -189,6 +189,13 @@ class GameList(models.Model):
                          condition=Q(is_deleted=False, is_public=True)),
             models.Index(fields=['-created_at'], name='glst_public_new_idx',
                          condition=Q(is_deleted=False, is_public=True)),
+            # `GameListSitemap.get_latest_lastmod()` and `Meta.ordering`. Without it the sitemap
+            # index does a filtered scan plus a sort on every `/sitemap.xml` hit -- anonymous,
+            # uncached and crawler-driven, which is the shape `core/sitemaps.py`'s header blames for
+            # the May 2026 sitemap OOM. Same partial predicate as the two above, so it is only as
+            # wide as the rows a crawler may see.
+            models.Index(fields=['-updated_at'], name='glst_public_upd_idx',
+                         condition=Q(is_deleted=False, is_public=True)),
         ]
         constraints = [
             # A name is how you tell two of your own lists apart, so an EMPTY one is refused in the

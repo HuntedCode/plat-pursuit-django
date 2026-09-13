@@ -926,11 +926,43 @@
         }
 
         var remove = target.closest('[data-gl-remove]');
-        if (remove) { onRemove(remove); }
+        if (remove) { onRemove(remove); return; }
+
+        var del = target.closest('[data-gl-delete]');
+        if (del) { onDeleteList(del); }
     }
 
     // Covers BOTH paths into the panel -- the sort toolbar's swap and `refreshItems` -- because both
     // land on the same target with the same partial.
+    /**
+     * Delete the whole list.
+     *
+     * A native `confirm()` and not the site's dialog primitive: that one is for things you are
+     * composing, and this is a yes/no about a thing that already exists. Naming the list in the
+     * prompt matters more than the chrome does -- somebody with four lists open in four tabs should
+     * not have to guess which one they are about to lose.
+     *
+     * The service soft-deletes and is idempotent, so a double press is not an error. The redirect
+     * comes from the SERVER rather than being built here: the list is gone, so the page it was on is
+     * gone, and where to send somebody is a routing decision.
+     */
+    function onDeleteList(btn) {
+        if (btn.dataset.busy === '1') { return; }
+        var name = btn.dataset.listName || 'this list';
+        if (!window.confirm('Delete "' + name + '"? This cannot be undone from here.')) { return; }
+
+        btn.dataset.busy = '1';
+        postJson(btn.dataset.deleteUrl, new FormData())
+            .then(function (data) {
+                announce('List deleted.');
+                window.location.href = (data && data.redirect) || '/my-lists/';
+            })
+            .catch(function (err) {
+                toastError(err, 'That list could not be deleted.');
+                btn.dataset.busy = '';
+            });
+    }
+
     function onAfterSwap(e) {
         var target = (e.detail && e.detail.target) || e.target;
         if (!target || target.id !== 'gl-items-panel') { return; }

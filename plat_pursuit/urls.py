@@ -23,7 +23,7 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
-from gamelists.views import (AddConceptView, BrowseListsView, CreateListView,
+from gamelists.views import (AddConceptView, BrowseListsView, CreateListView, DeleteListView,
                             GameListDetailView, ListGameSearchView, MyListsView,
                             RemoveItemView, ReorderItemsView, ToggleFollowView,
                             ToggleLikeView, UpdateListView)
@@ -386,21 +386,16 @@ urlpatterns = [
     path('my-guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_guides'),
 
     # Game Lists (canonical paths under /community/lists/)
-    # ── Game Lists: HIDDEN pending a revamp ──────────────────────────────────────────────────────
-    # Every entry point is gone (sub-nav, footer, community hub, sitemap, and the add-to-list button on
-    # game cards), and these send anyone arriving on an old link or bookmark to the homepage instead.
+    # ── Game Lists: LIVE (2026-09) ────────────────────────────────────────────────────────────────
+    # Public browse, public detail, personal My Lists, and eight write endpoints. This block said
+    # "HIDDEN pending a revamp", "every entry point is gone" and "STAFF ONLY" for a commit after all
+    # three stopped being true -- four false sentences in the first place a reader looks to learn who
+    # can reach a route, while `gamelists/views.py`, `core/sitemaps.py`, `core/hub_subnav.py`,
+    # `templates/partials/footer.html` and `robots.txt` had all been updated around it.
     #
-    # TEMPORARY on purpose, so `permanent=False` (302). A 301 is cached by browsers indefinitely and
-    # would keep redirecting to the homepage long after the rebuilt system ships -- for exactly the
-    # people who used lists most, since they are the ones holding the bookmarks.
-    #
-    # The NAMES stay resolvable. Templates that are no longer reachable still contain
-    # `{% url 'list_detail' %}`, and the views, models, data and the rebuilt browse page are all intact:
-    # this is a curtain, not a demolition. Restoring it is putting these four lines back.
-    # BROWSE is rebuilt (2026-09) and now answers here for real -- but STAFF ONLY, because lists and
-    # the Challenges beta ship as one update and a routed page with no entry points is still a page
-    # somebody can find. The curtain moved from "redirects home" to "turns non-staff away"; the
-    # guarantee is stronger, not weaker. Removing `_DevelopmentGate` is the switch.
+    # The PRE-2026 paths below still 302 (not 301) to the homepage: a 301 is cached by browsers
+    # indefinitely and those bookmarks belong to the people who used lists most. `/…/edit/` is among
+    # them deliberately -- the rebuild edits in place and has no such address.
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
     path('community/lists/create/', CreateListView.as_view(), name='list_create'),
     path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
@@ -410,6 +405,10 @@ urlpatterns = [
     # Rename, description and publish are ONE endpoint because they are one service call.
     path('community/lists/<int:list_id>/update/', UpdateListView.as_view(), name='list_update'),
     path('community/lists/<int:list_id>/reorder/', ReorderItemsView.as_view(), name='list_reorder'),
+    # Routed 2026-09 when the staff gate came off. The service function had existed and been tested
+    # since the rebuild with nothing calling it -- invisible while only staff could make a list, and
+    # a hard stop at list four for every free hunter the moment they could.
+    path('community/lists/<int:list_id>/delete/', DeleteListView.as_view(), name='list_delete'),
     path('community/lists/<int:list_id>/like/', ToggleLikeView.as_view(), name='list_like'),
     path('community/lists/<int:list_id>/follow/', ToggleFollowView.as_view(), name='list_follow'),
     path('community/lists/<int:list_id>/add/', AddConceptView.as_view(), name='list_add_game'),
