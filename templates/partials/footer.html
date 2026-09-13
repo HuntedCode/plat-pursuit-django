@@ -13,16 +13,28 @@
                     <li><a href="{% url 'franchises_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Franchises</a></li>
                     <li><a href="{% url 'genres_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Genres &amp; Themes</a></li>
                     <li><a href="{% url 'companies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Companies</a></li>
-                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Hunters</a></li>
                 </ul>
             </nav>
 
-            {% comment %}Leaderboards -- their own hub since 2026-08, when Community was retired.
-            Profiles moved to the Browse column above with the rest of the catalogue.{% endcomment %}
+            {% comment %}Leaderboards -- their own hub since 2026-08.{% endcomment %}
             <nav aria-label="Leaderboard pages">
                 <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Leaderboards</h2>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badge Leaderboards</a></li>
+                </ul>
+            </nav>
+
+            {% comment %}Community -- the fifth hub, returned 2026-09. Hunters moved here out of
+            the Browse column above; the move was made in the navbar and the tab bar and MISSED this
+            surface, so for one commit the footer filed Hunters under a heading that said Browse
+            while the page it led to highlighted Community.
+
+            One entry for now, and that is honest rather than thin: Game Lists joins when it comes
+            off its development gate, and Challenges after it.{% endcomment %}
+            <nav aria-label="Community pages">
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Community</h2>
+                <ul class="space-y-1.5 text-sm">
+                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Hunters</a></li>
                 </ul>
             </nav>
 
@@ -60,9 +72,13 @@
             every viewer where the old slugged link was gated on the linked-profile
             fundraiser processor. {% endcomment %}
             <nav aria-label="Support pages">
-                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Support</h2>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Support Us</h2>
                 <ul class="space-y-1.5 text-sm">
-                    <li><a href="{% url 'support_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Support Hub</a></li>
+                    {% comment %}"Support", matching the sub-nav rail's first item rather than the
+                    "Support Hub" this said -- which named a concept the reader never sees. Both are
+                    the same open naming question (Tiers? Ways to Help?), and they should at least
+                    be wrong in the same words until it is answered.{% endcomment %}
+                    <li><a href="{% url 'support_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Support</a></li>
                     <li><a href="{% url 'support_roadmap' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Roadmap</a></li>
                     <li><a href="{% url 'support_fundraiser' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badge Art</a></li>
                     <li><a href="{% url 'subscription_management' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Membership</a></li>

@@ -123,7 +123,7 @@ BROWSE_HUB = HubSubnavConfig(
     # groupings. Order = group order (regroup-ready).
     items=(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
-        # SLUG deliberately not bare 'lists' (the hidden GameList system's guard pins that);
+        # SLUG deliberately not bare 'lists' (the gated GameList system's guard pins that);
         # display copy "Trophy Lists" per the IA doc's naming insurance.
         HubSubnavItem('trophy-lists', 'Trophy Lists', 'trophy_lists', 'list', group='Catalog'),
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
@@ -296,8 +296,11 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # Hunters moved to the Community hub in 2026-09, and that hub runs `items=()` -- so there is no
     # slug to light and these two overrides went with the move. The `/hunters/` prefix already puts
     # both pages in the right hub, which is all the navbar needs to highlight the right tab.
-    # Reviews archived 2026-05 and the Community hub retired 2026-08, so the notice page has no hub
-    # to sit in -- it renders without a sub-nav strip, which is right for a tombstone.
+    # Reviews archived 2026-05. The notice page matches the COMMUNITY hub by prefix (2026-09) --
+    # which is where it would have lived -- and still renders no sub-nav strip, because that hub is
+    # empty today. If the rail is ever populated, the tombstone gains one; see
+    # `test_the_retired_community_paths_render_no_strip`, which asserts the RENDERED page rather than
+    # the config so it keeps meaning this after that happens.
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
     # My Pursuit: nested sub-pages of the moved items. Shareables is plat-cards-only as of 2026-08,
     # so its one nested child is the cards browse; profile_card + platinum_grid are retired and their

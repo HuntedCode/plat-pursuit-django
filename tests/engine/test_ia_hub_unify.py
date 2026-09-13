@@ -41,24 +41,35 @@ def test_personal_pages_resolve_to_my_pursuit(path, slug):
 
 
 def test_other_hubs_unchanged():
-    # Community was retired 2026-08; Leaderboards is the hub that replaced it in the nav.
+    # Leaderboards became a hub of its own in 2026-08. (Community was retired then too, and
+    # returned in 2026-09 as a nav grouping -- see test_community_hub_returned.py.)
     assert resolve_hub_subnav(_req('/badges/'))['hub'].key == 'browse'
     assert resolve_hub_subnav(_req('/leaderboards/'))['hub'].key == 'leaderboards'
 
 
-def test_the_retired_community_paths_render_no_strip():
-    """RENAMED AND INVERTED, 2026-09. These paths now match the returned Community hub -- which is
-    correct, since that is where they would have lived -- but the property that matters is unchanged
-    and is what this asserts: a tombstone renders NO SUB-NAV STRIP. It gets that from the hub running
-    `items=()` rather than from matching no hub at all, and a reader lands on the right tab instead of
-    on a page with no chrome at all."""
-    """What is left under /community/ is redirects and the reviews tombstone. None of it should sprout
-    a sub-nav strip: a strip implies a section you are inside, and there is no longer one."""
+def test_the_retired_community_paths_render_no_strip(client):
+    """A tombstone renders NO SUB-NAV STRIP. A strip implies a section you are inside, and there is
+    no longer one.
+
+    RENAMED AND INVERTED 2026-09, and the first inversion got this wrong in a way worth recording.
+    The original asserted `resolve_hub_subnav(...) is None` -- an unconditional guarantee. I replaced
+    it with `hub.items == ()`, which is a CONFIG assertion wearing a RENDERING message: the tombstone
+    now renders no strip only because Community happens to be empty, and `hub_subnav.py` says out
+    loud that Game Lists will populate it. So the guard would have failed as a FALSE ALARM on a
+    planned, correct change, in a file about the personal-hub unify -- and the obvious way to make a
+    false alarm go away is to delete it, at which point a dead page silently sprouts a rail.
+
+    Asserted against the RENDERED PAGE instead. It still fires when the rail is populated -- verified
+    by populating it -- but that is the right kind of firing: at that moment somebody genuinely has
+    to decide whether a dead page should advertise a live section, and the failure says "the
+    tombstone rendered a sub-nav strip" rather than "items is not an empty tuple". One names the
+    decision; the other names a config detail and invites deletion.
+    """
     match = resolve_hub_subnav(_req('/community/reviews/'))
-    assert match['hub'].key == 'community'
-    assert match['hub'].items == (), 'a tombstone must render no strip'
-    assert hub_subnav(_req('/community/reviews/'))['hub_section'] == 'community'
-    assert not hub_subnav(_req('/community/reviews/'))['hub_subnav_items']
+    assert match['hub'].key == 'community', 'the tombstone should still land a reader on a hub'
+
+    body = client.get('/community/reviews/').content.decode()
+    assert 'pp-sub"' not in body and "pp-sub'" not in body, 'the tombstone rendered a sub-nav strip'
 
 
 def _grouped(ctx):
@@ -156,8 +167,12 @@ def test_support_landing_renders(client):
 # --- Profile chrome ---
 
 def test_hunters_is_chromed_as_a_community_surface():
-    """They moved out from under /community/ with the hub teardown -- hunters are another thing you
-    browse, alongside games and badges -- and were renamed Profiles -> Hunters (/hunters/) after."""
+    """Hunters is chromed as a COMMUNITY surface (2026-09).
+
+    It went to Browse in 2026-08 on the reasoning that "hunters are another thing you browse",
+    which held only while the Community hub was retired. With the hub back, you look for a
+    community member where the community is -- and `/hunters/` is unchanged, because this was
+    always a sub-nav move rather than a URL move."""
     them = ProfileFactory(is_linked=True)
     ctx = hub_subnav(_req(f'/hunters/{them.psn_username}/'))
     assert ctx['hub_section'] == 'community'

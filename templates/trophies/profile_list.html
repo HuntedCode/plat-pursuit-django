@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load humanize %}
-{% block title %}Browse Hunters{% endblock %}
+{% block title %}Hunters{% endblock %}
 {% block robots %}{% if request.GET %}noindex, follow{% else %}{{ block.super }}{% endif %}{% endblock %}
 
 {% comment %} BROWSE HUNTERS (/profiles/) -- rebuilt 2026-08, from scratch.
@@ -31,7 +31,7 @@ scroll and an outer border would grow with it forever.
                             <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
-                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Browse Hunters</h1>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Hunters</h1>
                     </div>
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         {% if request.GET.query %}

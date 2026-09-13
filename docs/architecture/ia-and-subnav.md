@@ -119,7 +119,8 @@ fifth tab comes back in the BAR instead, via a `.mobile-tabbar-item--wide` modif
 That is what closes the one real cost of the trade: below `md`, no tab highlights while you are in
 Support Us. From `md` up, it does again.
 
-(Four tabs, not five, for a signed-out reader below `md` — My Pursuit is auth-gated.)
+(The tab count runs **3 / 4 / 4 / 5** across anon-below-`md`, anon-from-`md`, auth-below-`md` and
+auth-from-`md` — My Pursuit is auth-gated and Support Us is width-gated.)
 
 Support Us is the right one to demote by frequency: a storefront, a roadmap, a fundraiser page and a
 membership manager are occasional visits, where lists and challenges are habitual. The cost is that

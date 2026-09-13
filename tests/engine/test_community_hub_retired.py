@@ -51,7 +51,7 @@ def test_the_code_behind_it_is_gone_not_orphaned():
     assert 'build_community_hub_context' not in views
 
 
-def test_no_hub_config_claims_the_community_prefix():
+def test_only_the_community_hub_claims_the_community_prefix():
     from core.hub_subnav import HUB_SUBNAV_CONFIG
 
     keys = {h.key for h in HUB_SUBNAV_CONFIG}
@@ -64,7 +64,9 @@ def test_no_hub_config_claims_the_community_prefix():
     # against is a SECOND hub quietly claiming it, which would make the match order decide the
     # chrome.
     owners = [h.key for h in HUB_SUBNAV_CONFIG for pre in h.prefixes if pre.startswith('/community/')]
-    assert owners == ['community'], owners
+    # A SET: `/community/lists/` is the documented next prefix to land here, and list-equality
+    # would have failed on that purely for being a second entry.
+    assert set(owners) == {'community'}, owners
 
 
 def test_nothing_in_the_chrome_or_the_sitemap_points_at_it():

@@ -55,6 +55,9 @@ def test_it_carries_no_rail_yet_and_that_is_deliberate():
 def test_hunters_is_chromed_as_community_everywhere_it_is_reachable():
     from plat_pursuit.context_processors import hub_subnav
 
+    # `/profiles/` is INSURANCE, not a live render path: every route under it is a RedirectView,
+    # and a 301 has no body, so no `/profiles/` request ever paints chrome. It is claimed so that
+    # a future non-redirect route there cannot land in the wrong hub by default.
     for path in ('/hunters/', '/hunters/somebody/', '/profiles/'):
         assert hub_subnav(_req(path))['hub_section'] == 'community', path
 
@@ -80,8 +83,35 @@ def test_the_hub_is_reachable_from_the_chrome(client):
     # templates and either can go missing on its own.
     assert '>Community</a>' in body, 'the desktop hub row has no Community button'
     assert 'aria-label="Community"' in body, 'the mobile tab bar has no Community tab'
-    # ...and both target Hunters, because `/community/` is a permanent redirect.
-    assert body.count('/hunters/') >= 2
+    # ...and each targets Hunters, checked on its OWN element. A bare `count('/hunters/') >= 2`
+    # was satisfied by any two of the three links on the page (nav, tab bar, footer), so
+    # re-pointing either nav control at the `/community/` redirect would have passed.
+    desktop = body[body.index('>Community</a>') - 600:body.index('>Community</a>')]
+    assert '/hunters/' in desktop, 'the desktop hub button does not point at Hunters'
+
+
+def test_the_footer_files_hunters_under_community(client):
+    """THE THIRD CHROME SURFACE, and the move missed it: for one commit the footer listed Hunters
+    under a heading that said Browse, while the page it led to highlighted Community.
+
+    The footer is where a nav change goes stale quietly, because nothing about editing the navbar
+    exercises it.
+    """
+    body = client.get('/games/').content.decode()
+
+    assert 'aria-label="Community pages"' in body, 'the footer has no Community column'
+
+    community = body[body.index('aria-label="Community pages"'):]
+    community = community[:community.index('</nav>')]
+    # THE VISIBLE HEADING TOO, not just the landmark. Asserting only `aria-label="Community pages"`
+    # let the <h2> a sighted reader actually reads say anything at all -- the same aria-versus-label
+    # split that shipped a tab saying "Support" that navigated to Hunters. Third time in this lane.
+    assert '>Community</h2>' in community, 'the column heading does not say Community'
+    assert 'Hunters' in community, 'Hunters is not filed under Community'
+
+    browse = body[body.index('aria-label="Browse pages"'):]
+    browse = browse[:browse.index('</nav>')]
+    assert 'Hunters' not in browse, 'Hunters is still filed under Browse'
 
 
 def test_the_mobile_tab_says_what_it_does(client):
@@ -101,16 +131,25 @@ def test_the_mobile_tab_says_what_it_does(client):
     assert '<span>Community</span>' in bar, 'the Community tab does not say Community'
     assert '<span>Support</span>' not in bar, 'a tab still carries the pre-swap label'
     # ...and it goes where it says. `/community/` is a permanent redirect, so the target is Hunters.
-    community = bar[bar.index('aria-label="Community"') - 400:bar.index('aria-label="Community"')]
-    assert '/hunters/' in community
+    # Sliced FORWARD from the tab's own opening tag rather than backward by a guessed 400 chars:
+    # a negative start index silently slices from the END of the string, which would have made
+    # this pass or fail for reasons unrelated to the href.
+    at = bar.index('aria-label="Community"')
+    tab = bar[bar.rindex('<a ', 0, at):at]
+    assert '/hunters/' in tab, 'the Community tab does not point at Hunters'
 
 
-def test_all_five_hubs_are_reachable_from_md_up(client):
+def test_every_hub_has_a_tab_and_the_fifth_returns_from_md(client):
     """The third part of the mobile trade, and the one that closes its only real cost: below `md` no
     tab highlights while you are in Support Us. From `md` there is room for five (~153px each at
     768px), so it comes back as a tab and the highlight with it."""
     body = client.get('/games/').content.decode()
+    # THE SERVED BUNDLE, not the source. `base.html` links only `output.css`, so reading
+    # `chrome.css` meant forgetting to rebuild left the fifth tab absent at every width with this
+    # test green. Both are checked: the source for the rule's shape, the bundle for delivery.
     css = (ROOT / 'static/css/components/chrome.css').read_text(encoding='utf-8')
+    served = (ROOT / 'staticfiles/css/output.css').read_text(encoding='utf-8')
+    assert 'mobile-tabbar-item--wide' in served, 'the rule never reached the served bundle'
 
     bar = body[body.index('mobile-tabbar-inner'):]
     bar = bar[:bar.index('</nav>')]
@@ -120,6 +159,12 @@ def test_all_five_hubs_are_reachable_from_md_up(client):
     assert 'class="mobile-tabbar-item mobile-tabbar-item--wide' in bar, (
         'there is no fifth tab at any width')
     assert '<span>Support Us</span>' in bar
+    # ...and the four unconditional ones are all still there. The name used to promise five hubs
+    # while checking only Support Us.
+    for label in ('Browse', 'Leaderboards', 'Community'):
+        assert f'aria-label="{label}"' in bar, label
+    # My Pursuit is auth-gated, so an anonymous client sees three plus the md+ fifth.
+    assert 'aria-label="My Pursuit' not in bar, 'the personal hub is not anon-visible'
 
     # Mobile-first: absent by default, shown from `md`. The reverse (present, hidden below) would
     # put a fifth item in the 375px bar for anyone whose CSS had not loaded.
