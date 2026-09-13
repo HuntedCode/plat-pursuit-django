@@ -120,11 +120,19 @@ loud, since the thing that stops people choosing is the fear of choosing wrong.
 | **Collection** | the default: a shelf | unordered; A-Z and date sorts, no drag |
 | **Ranked** | an order the author chose | `position`, 1-based numerals, drag to arrange |
 
-**Only the types that RENDER are declared.** `LIST_TYPE_CHOICES` holds these two and not the five
-more that [game-list-types.md](../design/game-list-types.md) plans, because a choice a template
-cannot draw means somebody picks "Tier" and gets a Collection with a different label. `choices` is
-not a database constraint, so `_check_list_type` in the service is what actually keeps the column
-honest — for the shell and the importer too.
+**Only the types that RENDER are declared.** `LIST_TYPE_CHOICES` holds these two, because a choice a
+template cannot draw means somebody picks "Tier" and gets a Collection with a different label.
+`choices` is not a database constraint, so `_check_list_type` in the service **and the
+`gamelist_list_type_valid` CheckConstraint** are what keep the column honest — for the shell and the
+importer too.
+
+**The planned type list shrank on 2026-09-13.** Progress and the Backlog tracker were cut (the whale
+rule, and the use case is really a user-created challenge — now in scope for the Challenges rebuild),
+and Tier became [its own system](../design/tier-lists.md) rather than a type, because a tier list has
+one template and N per-viewer responses and `list_type` is a presentation field. What remains as
+candidates is Top-N and Sectioned. See
+[game-list-types.md](../design/game-list-types.md#the-test-a-type-has-to-pass) for the test a type
+now has to pass.
 
 ### What Ranked adds
 
