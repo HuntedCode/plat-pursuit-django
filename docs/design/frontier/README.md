@@ -1,0 +1,77 @@
+# The Frontier: Game Layer Design
+
+> **Status: BRAINSTORM CAPTURE (2026-09-12).** Nothing here is built. Nothing here is
+> committed. This folder is the written record of an extended design conversation so the
+> reasoning survives, including the ideas we rejected and why.
+>
+> **Branch discipline:** all work on this feature lives on `feature/frontier`, branched
+> directly off `main`. The website's regular update cadence continues in parallel on its own
+> branches. Nothing here merges to `main` until the feature is real.
+
+---
+
+## What this is
+
+PlatPursuit's gamification spine (Badges, Contracts, Jobs, the Pursuer) shipped and works.
+What it lacks is a reason to visit on a Tuesday. The engine only fires when a user finishes a
+game somewhere else, which means the site's reward cadence is set by PSN, is roughly monthly,
+and delivers news the user already had.
+
+The Frontier is the proposed answer: a browser-based menu/idle/builder game layered on top of
+the existing character system, where **trophy hunting is the engine and the game is what the
+engine powers.**
+
+---
+
+## The four docs
+
+| Doc | What it holds |
+|-----|---------------|
+| [vision.md](vision.md) | The premise, the tone, the driving force, the theming approach, and the tests every future decision has to pass |
+| [systems.md](systems.md) | Mechanics: the three layers, the loop, resources, gating, the risk boundary, the social layer |
+| [content-model.md](content-model.md) | The map: eras, depth, branch types, gate types, the authoring model, and the pre-2008 trophy gap |
+| [decisions.md](decisions.md) | The decision log, **including rejected alternatives and why they were rejected** |
+| [open-questions.md](open-questions.md) | What is genuinely undecided |
+
+---
+
+## The shortest possible summary
+
+You play games on PlayStation. That builds your Pursuer, exactly as it does today. Your
+Pursuer is an **engine** that generates resources over time at a rate your level sets. You
+spend those resources in a **Village** you build on limited land, and the Village outfits your
+Pursuer for expeditions into **the Backlog**, a branching map of PlayStation history where you
+recover discs, cards, and artifacts to bring home.
+
+Three loops, one direction of authority: **trophies raise the ceiling, and nothing else can.**
+
+---
+
+## Gotchas and Pitfalls
+
+- **This is a menu game.** Not 3D, not isometric tiles, not a canvas world. Era atmosphere is
+  delivered through the interface itself (type, palette, chrome, motion), not through depicted
+  scenery. Every proposal should be checked against this before it gets costed.
+- **Trophy hunting only exists from late PS3 onward.** Roughly 2008. Any mechanic keyed to
+  platinum rarity, badge progress, or Contract completion silently does not work for PS1, PS2,
+  or early PS3 content. See [content-model.md](content-model.md#the-pre-2008-gap).
+- **Authoring is the differentiator, not a cost to minimize.** Generation is for coverage.
+  A person writes everything a player reads. This was corrected twice in the source
+  conversation; do not let it drift back.
+- **The IP line is real.** Naming a game is factual and fine. Building content derived from a
+  specific franchise's characters, creatures, or settings is not. See
+  [content-model.md](content-model.md#ip-boundaries).
+- **Nothing earned can ever be taken.** Trophies, badges, Pursuer level, buildings, and stored
+  resources are permanently safe. This constraint is load-bearing and shaped several designs.
+
+---
+
+## Related Docs
+
+- [Product Identity](../product-identity.md): the strategic frame. If this feature cannot be
+  explained as serving the pitch, it is the wrong feature.
+- [Gamification Plan](../gamification-plan.md): the phased rollout this would sit beyond.
+  The Frontier is arguably a correction to what Phases 2 and 3 should have been.
+- [Gamification Architecture](../../architecture/gamification.md): what actually shipped.
+- [Visual Identity](../visual-identity.md): the six adjectives. The game surface gets more
+  latitude than the site (see vision.md), but it still has to feel like ours.
