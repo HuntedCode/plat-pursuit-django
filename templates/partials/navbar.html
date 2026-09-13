@@ -170,9 +170,16 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                     lists and hunters are habitual.
 
                     Rendered at every width rather than `lg:hidden`, because a person who learns
-                    where something lives should find it in the same place on their desktop. The
-                    active state is carried here too, since no tab can show it below `lg`.{% endcomment %}
-                    <a href="{% url 'support_hub' %}"{% if hub_section == 'support' %} aria-current="page"{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support Us</a>
+                    where something lives should find it in the same place on their desktop.
+
+                    NO `aria-current` HERE. It carried one on the reasoning that "no tab can show it
+                    below `lg`" -- which the very next commit made false by returning Support Us as a
+                    fifth tab from `md`. From 768px up a screen reader then heard "current page" on
+                    two different links to the same destination in two different landmarks. The tab
+                    and the desktop button each carry it correctly wherever they render, and below
+                    `md` the hub's own sub-nav rail already says which of its pages you are
+                    on.{% endcomment %}
+                    <a href="{% url 'support_hub' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support Us</a>
                     <a href="{% url 'settings' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-2.82 1.17V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 2.82 1.17 2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V15z"/></svg>Settings</a>
                     {% comment %} What's New earns its place by the same test the Mod Center passes and the
                     admin dashboard does not: it has something to say without being visited. It is also the
@@ -208,6 +215,13 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                 <div class="pp-avmenu">
                     <a href="{% url 'account_login' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>Log in</a>
                     <a href="{% url 'account_signup' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Register</a>
+                    {% comment %}THE ANON MENU NEEDS SUPPORT US TOO, and did not have it. Below `md`
+                    the Support Us tab is `display: none`, the Premium pill is auth-gated, and this
+                    menu held only Log in and Register -- so a signed-out visitor on a phone had no
+                    route to the hub from the chrome at all. The only survivor was a footer link a
+                    full page away, labelled "Support Hub" rather than the name used everywhere else.
+                    That is the audience a fundraiser page most needs to reach.{% endcomment %}
+                    <a href="{% url 'support_hub' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>Support Us</a>
                 </div>
             </div>
         </div>

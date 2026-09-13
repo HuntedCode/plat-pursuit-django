@@ -153,6 +153,41 @@ def test_support_us_left_the_mobile_bar_for_the_dropdown(client):
     assert '>Support Us</a>' in panel, 'Support Us is not in the avatar dropdown'
 
 
+def test_a_signed_out_visitor_can_reach_support_us_from_the_chrome(client):
+    """Below `md` the Support Us TAB is `display: none`, the Premium pill is auth-gated, and the anon
+    avatar menu held only Log in and Register -- so a signed-out visitor on a phone had no route to
+    the hub from the chrome at all. The only survivor was a footer link a full page away, labelled
+    "Support Hub" rather than the name the chrome uses everywhere else.
+
+    That is the audience a fundraiser page most needs to reach.
+    """
+    body = client.get('/games/').content.decode()
+
+    panel = body[body.index('pp-avmenu'):]
+    panel = panel[:panel.index('</div>')]
+    assert 'Log in' in panel, 'this is not the anonymous menu'
+    assert '>Support Us</a>' in panel, 'a signed-out phone visitor cannot reach the hub'
+
+
+def test_support_us_is_marked_current_once_not_twice(client):
+    """The dropdown entry carried `aria-current` on the reasoning that "no tab can show it below
+    `lg`" -- which the next commit falsified by returning Support Us as a fifth tab from `md`. A
+    screen reader then heard "current page" on two links to the same destination in two different
+    landmarks."""
+    from tests.factories import ProfileFactory, UserFactory
+
+    user = UserFactory()
+    ProfileFactory(user=user, is_linked=True, psn_username='hunter')
+    client.force_login(user)
+
+    body = client.get('/support/').content.decode()
+
+    # The desktop hub button and the md+ tab each carry it; the dropdown entry must not.
+    panel = body[body.index('pp-avmenu'):]
+    panel = panel[:panel.index('</div>')]
+    assert 'aria-current' not in panel, 'the dropdown duplicates the current-page marker'
+
+
 def test_the_hub_is_relabelled_support_us():
     """"Support" alone reads as a help desk on most of the web, and this is the one place a confused
     reader would look for one."""
@@ -160,6 +195,39 @@ def test_the_hub_is_relabelled_support_us():
 
     hub = next(h for h in HUB_SUBNAV_CONFIG if h.key == 'support')
     assert hub.label == 'Support Us'
+
+
+def test_the_five_hub_row_still_fits_between_1024_and_1279():
+    """A fifth hub plus "Support" -> "Support Us" added roughly 136px to a row this stylesheet
+    documents as having about 80px to spare at the `lg` container step.
+
+    It did not degrade gracefully: `.pp-navhub` is `white-space: nowrap` so the items refuse to
+    shrink, while `.pp-nav__hubs` carries `min-width: 0` so the CONTAINER may be squeezed below its
+    contents -- the row overflowed and painted over the PSN search field. Dropping the icons in that
+    band returns ~110px, the same one-thing-at-a-time trade the career pills already make there.
+    """
+    css = (ROOT / 'static/css/components/chrome.css').read_text(encoding='utf-8')
+
+    band = css[css.index('@media (max-width: 1279px) {'):]
+    band = band[:band.index(chr(10) + '}')]
+    assert '.pp-nav__hubs .pp-navhub svg { display: none; }' in band, (
+        'the five-hub row has nothing giving it room below 1280')
+    # The 6px icon gap goes too, or the space is only half recovered.
+    assert '.pp-nav__hubs .pp-navhub { gap: 0; }' in band
+
+    # ...and the items still refuse to wrap, which is what makes the overflow ugly rather than tall.
+    assert 'white-space: nowrap' in css[css.index('.pp-navhub {'):css.index('.pp-navhub svg')]
+
+
+def test_the_avatar_menu_rows_meet_the_touch_floor():
+    """They were ~36px. It matters more than it did: Support Us left the mobile tab bar for this
+    menu, so below `md` these rows are the only route to a top-level hub, and the bar guarantees 56px
+    for the other four."""
+    css = (ROOT / 'static/css/components/chrome.css').read_text(encoding='utf-8')
+
+    rule = css[css.index('.pp-avmenu a, .pp-avmenu button {'):]
+    rule = rule[:rule.index('}')]
+    assert 'min-height: 44px' in rule, 'dropdown rows are below the 44px floor'
 
 
 def test_the_landing_page_did_not_come_back(client):

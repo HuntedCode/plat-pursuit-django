@@ -116,6 +116,21 @@
    that is about the reader's own work. Above 1280 the row has the space and both show. */
 @media (max-width: 1279px) {
     .pp-navhub__n ~ .pp-navhub__new { display: none; }
+
+    /* AND THE ICONS GO, in the same band and for the same reason. A fifth hub (Community) plus
+       "Support" becoming "Support Us" added roughly 136px to a row this file documents as having
+       about 80px to spare at the `lg` container step -- so signed in, between 1024 and 1279, the row
+       no longer fit.
+       It did not degrade gracefully either: `.pp-navhub` is `white-space: nowrap` so the items
+       refuse to shrink, while `.pp-nav__hubs` carries `min-width: 0` so the CONTAINER is allowed to
+       be squeezed below its contents. The row therefore overflowed its box and painted on top of the
+       PSN search field rather than compressing it, which is the opposite of what the `min-width: 0`
+       comment above promises.
+       Dropping five 16px icons and their 6px gaps returns ~110px, which puts the row back inside
+       roughly its pre-change budget. Labels alone are unambiguous, and this is the same
+       one-thing-at-a-time trade the pills above already make in this exact band. */
+    .pp-nav__hubs .pp-navhub svg { display: none; }
+    .pp-nav__hubs .pp-navhub { gap: 0; }
 }
 
 /* THE TAB BAR carries the same pair on the ICON rather than the label: four items across a 375px
@@ -489,8 +504,13 @@
 .pp-avbtn:disabled { opacity: 0.5; cursor: default; }
 
 .pp-avmenu { padding: 6px; border-top: 1px solid var(--pp-divider); }
+/* `min-height` for the 44px floor (design-system.md): 8px padding around a 19.7px line box landed
+   at ~36px. It matters more since 2026-09 than it did, because Support Us left the mobile tab bar
+   for this menu -- so below `md` these rows are the only route to a top-level hub, and the tab bar
+   guarantees 56px for the other four. */
 .pp-avmenu a, .pp-avmenu button {
-    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: var(--pp-radius-md);
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; min-height: 44px;
+    border-radius: var(--pp-radius-md);
     font-size: 0.82rem; color: var(--pp-text-dim); text-decoration: none; background: none; border: none; cursor: pointer; text-align: left;
     transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), transform var(--pp-dur-fast) var(--pp-ease);
 }
@@ -652,7 +672,10 @@
     border-top: 1px solid var(--pp-border);
     padding-bottom: env(safe-area-inset-bottom, 0);
 }
-.mobile-tabbar-inner { display: flex; align-items: stretch; justify-content: space-around; height: 56px; }
+/* NO `justify-content`: every child is `flex: 1`, so there is never free space to distribute and
+   `space-around` here did nothing. The even distribution comes from the children -- the header
+   comment in mobile_tabbar.html used to credit this declaration with it. */
+.mobile-tabbar-inner { display: flex; align-items: stretch; height: 56px; }
 .mobile-tabbar-item {
     position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
     min-width: 0; padding: 4px 2px; text-decoration: none; background: none; border: none; cursor: pointer;
