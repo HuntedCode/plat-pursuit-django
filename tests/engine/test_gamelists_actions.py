@@ -329,14 +329,19 @@ def test_the_search_does_not_fetch_the_igdb_blob(client):
     ('list_add_game', (1,)),
     ('list_remove_game', (1, 1)),
 ])
-def test_every_write_endpoint_refuses_an_ordinary_hunter(client, name, args):
-    """The development gate, on the endpoints as well as the pages -- a routed write with no gate is
-    how a system meant to be invisible starts accepting data.
+def test_every_write_endpoint_needs_an_account_and_a_readable_list(client, name, args):
+    """INVERTED 2026-09. This pinned the development gate: a signed-in hunter got a 302 like everyone
+    who was not staff. With the gate gone, what is left is the permission stack that was always
+    underneath it, and both halves still matter.
 
-    Tested with a LOGGED-IN, linked, non-staff hunter rather than an anonymous one. Anonymous proves
-    nothing here: `LoginRequiredMixin` redirects them too, so removing `_DevelopmentGate` entirely
-    left that version of this test green. Only a real hunter distinguishes "gated" from "merely
-    requires an account".
+    ANONYMOUS gets a redirect, from `LoginRequiredMixin`. A SIGNED-IN hunter gets past that and then
+    hits the real rule: every endpoint resolves its list through `readable_by()` and answers a
+    uniform 404 — never 403, never a service error — so an id alone can never confirm that a list
+    exists or whose it is. List 1 does not exist here, and the answer is indistinguishable from
+    somebody else's private list, which is the entire point.
+
+    Keeping the signed-in half is what makes this worth more than before: it is now the only thing
+    standing between a hand-crafted POST and somebody else's list.
     """
     assert client.post(reverse(name, args=args)).status_code == 302, 'anonymous is not refused'
 
@@ -345,8 +350,12 @@ def test_every_write_endpoint_refuses_an_ordinary_hunter(client, name, args):
     client.force_login(hunter)
 
     resp = client.post(reverse(name, args=args))
-    assert resp.status_code == 302, f'{name} is open to any signed-in hunter'
-    assert resp.url == '/', 'a non-staff hunter should be sent home, not to login'
+    assert resp.status_code == 404, f'{name} does not answer a 404 for an unreadable list'
+    # A UNIFORM 404 with no detail. The gated version asserted the redirect TARGET here (`/`, not
+    # login) because the distinction mattered then; what matters now is that the body reveals
+    # nothing -- a 403, or an error naming the list, would confirm it exists.
+    assert resp['Content-Type'] == 'application/json', f'{name} answered with a page, not JSON'
+    assert b'Should not exist' not in resp.content
     assert GameList.objects.count() == 0
 
 

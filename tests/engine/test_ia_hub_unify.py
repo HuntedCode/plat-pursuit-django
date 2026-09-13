@@ -47,29 +47,37 @@ def test_other_hubs_unchanged():
     assert resolve_hub_subnav(_req('/leaderboards/'))['hub'].key == 'leaderboards'
 
 
-def test_the_retired_community_paths_render_no_strip(client):
-    """A tombstone renders NO SUB-NAV STRIP. A strip implies a section you are inside, and there is
-    no longer one.
+def test_the_retired_community_paths_sit_in_the_hub_that_replaced_them(client):
+    """DECIDED 2026-09, by this guard firing exactly as it was built to.
 
-    RENAMED AND INVERTED 2026-09, and the first inversion got this wrong in a way worth recording.
-    The original asserted `resolve_hub_subnav(...) is None` -- an unconditional guarantee. I replaced
-    it with `hub.items == ()`, which is a CONFIG assertion wearing a RENDERING message: the tombstone
-    now renders no strip only because Community happens to be empty, and `hub_subnav.py` says out
-    loud that Game Lists will populate it. So the guard would have failed as a FALSE ALARM on a
-    planned, correct change, in a file about the personal-hub unify -- and the obvious way to make a
-    false alarm go away is to delete it, at which point a dead page silently sprouts a rail.
+    It asserted a tombstone renders no sub-nav strip, on the reasoning that "a strip implies a
+    section you are inside, and there is no longer one". That was true while Community was retired.
+    The moment Game Lists turned the rail on, this failed -- and the failure was the point: somebody
+    had to decide whether a dead page should show a live section's navigation.
 
-    Asserted against the RENDERED PAGE instead. It still fires when the rail is populated -- verified
-    by populating it -- but that is the right kind of firing: at that moment somebody genuinely has
-    to decide whether a dead page should advertise a live section, and the failure says "the
-    tombstone rendered a sub-nav strip" rather than "items is not an empty tuple". One names the
-    decision; the other names a config detail and invites deletion.
+    It should. The reviews tombstone genuinely sits in Community now, and a reader who lands on it
+    from an old link is better served by a rail offering Game Lists and Hunters than by a page with
+    no way out. The original reasoning has not been overturned so much as its premise has: there IS
+    a section to be inside now.
+
+    What this pins instead is that the tombstone stays a TOMBSTONE -- it resolves to the hub, it does
+    not become a page of its own, and `/community/` still redirects away.
+
+    The intermediate version of this guard is worth remembering. When Community first returned I
+    asserted `hub.items == ()`, which is a CONFIG assertion wearing a RENDERING message: it would
+    have failed on this same change with "items is not an empty tuple" -- a complaint about a detail,
+    in a file about something else, which invites deletion rather than thought. Rewriting it to read
+    the RENDERED PAGE is what made this failure legible enough to act on.
     """
     match = resolve_hub_subnav(_req('/community/reviews/'))
-    assert match['hub'].key == 'community', 'the tombstone should still land a reader on a hub'
+    assert match['hub'].key == 'community', 'the tombstone should land a reader on a hub'
+    # No item of its own: it is a notice, not a destination.
+    assert match['active_slug'] is None, 'the tombstone lit a rail item as though it were a page'
 
     body = client.get('/community/reviews/').content.decode()
-    assert 'pp-sub"' not in body and "pp-sub'" not in body, 'the tombstone rendered a sub-nav strip'
+    assert 'pp-sub' in body, 'the tombstone offers no way onward'
+    assert 'lists_browse' in body or '/community/lists/' in body, (
+        'the rail is there but does not reach the section it belongs to')
 
 
 def _grouped(ctx):
@@ -101,7 +109,7 @@ def test_my_pursuit_items_grouped_progress_tools():
     # the hub-less lobby).
     assert groups['Progress'] == ['career', 'collection', 'milestones', 'titles']
     # My Stats is hidden for 1.0 (staff-gated, off the rail). Profile is the dynamic extra.
-    assert groups['Tools'] == ['shareables', 'recap', 'rate_my_games']
+    assert groups['Tools'] == ['shareables', 'recap', 'rate_my_games', 'my_lists']
     assert resolve_hub_subnav(_req('/games/'))['hub'].key == 'browse'
 
 
@@ -176,8 +184,9 @@ def test_hunters_is_chromed_as_a_community_surface():
     them = ProfileFactory(is_linked=True)
     ctx = hub_subnav(_req(f'/hunters/{them.psn_username}/'))
     assert ctx['hub_section'] == 'community'
-    # No slug: the hub runs `items=()` until Game Lists gives it a second destination.
-    assert ctx['hub_subnav_active_slug'] is None
+    # The rail turned on in 2026-09, when Game Lists gave the hub a second destination -- this
+    # asserted None while it was empty.
+    assert ctx['hub_subnav_active_slug'] == 'profiles'
 
 
 def test_your_own_profile_is_chromed_like_anyone_elses():

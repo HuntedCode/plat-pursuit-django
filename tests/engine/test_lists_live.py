@@ -1,11 +1,19 @@
-"""Game Lists is hidden pending a revamp (2026-08).
+"""Game Lists is LIVE (2026-09).
 
-Hidden, not deleted: the views, models, templates and every row of user data are intact, and the rebuilt
-browse page is sitting there waiting. What this pins is that nothing on the site leads INTO it, because
-the ways a parked system leaks back are all quiet ones -- a footer link nobody re-checked, a sub-nav tab,
-a sitemap entry that keeps inviting crawlers, an API still accepting writes into a system with no door.
+This was `test_lists_hidden.py`, which pinned the 2026-08 teardown: nothing on the site led INTO the
+system, because the ways a parked feature leaks back are all quiet ones -- a footer link nobody
+re-checked, a sub-nav tab, a sitemap entry still inviting crawlers, an API still accepting writes into
+a system with no door.
 
-The paired `test_lists_browse.py` holds the rebuild's own assertions and is skipped alongside the system.
+Turning it on inverted about half of that and left the rest exactly as it was, which is why this is
+one file rather than a deletion and a rewrite. WHAT FLIPPED: the browse page answers for anybody, the
+sitemap advertises it, the chrome leads to it, and a hunter can create a list.
+
+WHAT DID NOT, and is arguably more important now: the LEGACY system stays dead. Its API is still
+unrouted, its rows are still untouched, `?tab=lists` still leads nowhere, `/community/lists/1/edit/`
+-- an address the rebuild deliberately does not have -- still redirects, and the shared game card
+still offers no quick-add. A live feature is exactly when somebody is most likely to wire a new page
+to an old view by reaching for a familiar name.
 """
 import re
 from pathlib import Path
@@ -22,14 +30,11 @@ pytestmark = pytest.mark.django_db
 
 ROOT = Path(__file__).resolve().parents[2]
 
-#: Rebuilt and now answering for real, but STAFF ONLY while the branch is open -- lists and the
-#: Challenges beta ship as one update. The curtain moved from "redirects home" to "turns non-staff
-#: away", which is a stronger guarantee than a redirect: a routed page with no entry points is still
-#: findable, a gated one is not.
-GATED_PAGES = [
-    '/community/lists/',
-    '/my-lists/',
-]
+#: Public as of 2026-09. `/community/lists/` renders for anyone.
+PUBLIC_PAGES = ['/community/lists/']
+#: Login-only, which is a DIFFERENT thing from gated: it redirects to login rather than refusing a
+#: hunter who is signed in.
+PERSONAL_PAGES = ['/my-lists/']
 
 PAGES = [
     '/community/lists/1/edit/',
@@ -53,27 +58,92 @@ def test_the_redirect_is_temporary_so_it_can_be_taken_back():
     assert client_status('/community/lists/1/edit/') == 302
 
 
-@pytest.mark.parametrize('url', GATED_PAGES)
-def test_a_rebuilt_page_is_reachable_by_staff_and_nobody_else(client, url):
-    """Both halves. Asserting only the refusal would pass with the page deleted, and asserting only
-    that staff get in would pass with the gate removed -- which is the thing that must not happen by
-    accident before the Challenges beta is ready."""
-    from tests.factories import UserFactory
+@pytest.mark.parametrize('url', PUBLIC_PAGES)
+def test_the_browse_page_answers_for_anybody(client, url):
+    """INVERTED 2026-09. It asserted an anonymous visitor and an ordinary hunter were both turned
+    away and only staff got in; all three now get the page.
 
+    The anonymous case is the one that matters, and not only as a formality: it is the reason the
+    browse queryset bounds its free-text `q` and its numeric filters at all. An unbounded LIKE on a
+    page anybody can reach is a different risk from one behind a staff gate.
+    """
+    assert client.get(url).status_code == 200, f'{url} is not public'
+
+    hunter = UserFactory()
+    ProfileFactory(user=hunter, is_linked=True, psn_username=f'hunter{hunter.pk}')
+    client.force_login(hunter)
+    assert client.get(url).status_code == 200, f'{url} does not render for an ordinary hunter'
+
+
+@pytest.mark.parametrize('url', PERSONAL_PAGES)
+def test_my_lists_is_personal_rather_than_gated(client, url):
+    """A DIFFERENT property, and it did not change. My Lists has always been login-only, and the
+    un-hide must not have made it public by removing a mixin next to the ones it meant to remove."""
     assert client.get(url).status_code == 302, f'{url} is open to anonymous visitors'
 
     hunter = UserFactory()
+    ProfileFactory(user=hunter, is_linked=True, psn_username=f'mine{hunter.pk}')
     client.force_login(hunter)
-    assert client.get(url).status_code == 302, f'{url} is open to ordinary hunters'
+    assert client.get(url).status_code == 200, f'{url} does not render for its owner'
 
-    staff = UserFactory()
-    staff.role = 'admin'
-    staff.save()
-    # A linked profile too: My Lists hangs entirely off one, and without it the page redirects to
-    # link_psn rather than rendering -- which is correct behaviour, not a gate failure.
-    ProfileFactory(user=staff, is_linked=True, psn_username=f'staff{staff.pk}')
-    client.force_login(staff)
-    assert client.get(url).status_code == 200, f'{url} does not render for staff'
+
+def test_no_view_still_carries_a_staff_gate():
+    """The switch was six mixin references plus the class. Leaving one behind would gate a single
+    surface while the rest opened -- the hardest half-shipped state to notice, because the feature
+    demonstrably works."""
+    source = (ROOT / 'gamelists' / 'views.py').read_text(encoding='utf-8')
+    # PROSE STRIPPED FIRST. The module docstring legitimately explains what the gate was and why it
+    # went, so a bare membership check failed on the history rather than on any live code -- the
+    # mirror of a comment SATISFYING an assertion, and just as misleading.
+    code = re.sub(r'"""(?:.|\n)*?"""', '', source)
+    code = re.sub(r'^\s*#.*$', '', code, flags=re.M)
+
+    assert '_DevelopmentGate' not in code, 'a development gate survived the un-hide'
+    assert 'StaffRequiredMixin' not in code, 'a staff mixin survived the un-hide'
+
+
+def test_a_public_list_carries_its_own_social_card(client):
+    """Until the un-hide the detail page set a `{% block title %}` and no `seo_description`, so every
+    list anybody posted anywhere previewed as the site-wide generic. It is the indexable, shareable
+    page in the whole feature -- the one thing a link to Game Lists is most likely to BE."""
+    from gamelists.services import game_list_service as svc
+
+    owner = ProfileFactory(is_linked=True, psn_username='author')
+    described = svc.create_list(owner, name='Hardest Platinums',
+                                description='Thirty that broke me.', is_public=True)
+
+    ctx = client.get(f'/community/lists/{described.id}/').context
+    # The author's own words win: they wrote them to say what the list is for.
+    assert ctx['seo_description'] == 'Thirty that broke me.'
+    assert 'Hardest Platinums' in ctx['seo_title'] and 'author' in ctx['seo_title']
+
+    # Without a description it is BUILT rather than left blank -- a bare "a game list" tells a reader
+    # deciding whether to click precisely nothing.
+    bare = svc.create_list(owner, name='No words', is_public=True)
+    bare_ctx = client.get(f'/community/lists/{bare.id}/').context
+    assert 'No words' in bare_ctx['seo_description']
+    assert 'author' in bare_ctx['seo_description']
+
+
+def test_creating_a_list_records_the_event_that_was_never_reachable(client):
+    """`game_list_create` has been declared in `core/models.py` since 2019 and had exactly one call
+    site -- in `api/game_list_views.py`, which is unrouted. So a grep found a hit and the event had
+    never once been recorded. Wired to the live create in 2026-09."""
+    from core.models import SiteEvent
+
+    hunter = UserFactory()
+    ProfileFactory(user=hunter, is_linked=True, psn_username='eventful')
+    client.force_login(hunter)
+
+    # A REAL User-Agent, or nothing is recorded and the test looks like a wiring bug.
+    # `track_site_event` drops bot traffic, and `is_bot_user_agent('')` is True -- an empty UA is
+    # classified as a bot, which is what the Django test client sends by default. Worth knowing
+    # before writing any other SiteEvent test.
+    client.post('/community/lists/create/', {'name': 'Tracked'},
+                HTTP_USER_AGENT='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+
+    assert SiteEvent.objects.filter(event_type='game_list_create').exists(), (
+        'creating a list recorded nothing')
 
 
 def client_status(url):
@@ -100,18 +170,32 @@ def test_the_api_no_longer_accepts_writes_into_a_system_with_no_door(client):
         assert client.post(url, {}).status_code == control, f'{url} still accepts writes'
 
 
-def test_nothing_in_the_chrome_points_at_lists():
-    """The footer and the sub-nav rails are the two places a link survives a teardown, because neither
-    is exercised by the page you were actually working on. (The Community rail this used to check was
-    itself retired in 2026-08, so the check now sweeps every configured hub.)"""
+def test_the_chrome_leads_into_lists_from_both_places_that_matter():
+    """INVERTED 2026-09. This asserted NO rail tab and NO footer link, because the two places a link
+    survives a teardown are the two places one goes missing on a launch: neither is exercised by the
+    page you were actually working on.
+
+    Where each one lands is the part worth pinning. Game Lists is public, so it goes in the Community
+    rail. My Lists is personal and login-gated, so it goes in My Pursuit -> Tools -- the same split
+    that keeps *Collection* in My Pursuit while *Badges* sits in Browse. Putting My Lists in Community
+    would be the easy mistake, and the un-hide checklist originally said to.
+    """
     from core.hub_subnav import HUB_SUBNAV_CONFIG
 
-    for hub in HUB_SUBNAV_CONFIG:
-        slugs = [i.slug for i in hub.items]
-        assert 'lists' not in slugs, f'the Lists tab is back in the {hub.key} sub-nav'
+    by_key = {hub.key: [i.slug for i in hub.items] for hub in HUB_SUBNAV_CONFIG}
+
+    assert 'lists' in by_key['community'], 'the public browse is not in the Community rail'
+    assert 'my_lists' in by_key['my_pursuit'], 'My Lists is not in My Pursuit'
+    assert 'my_lists' not in by_key['community'], 'a personal page is in the public hub'
+    assert 'lists' not in by_key['browse'], 'the community browse leaked into the catalogue hub'
+
+    # A detail page's URL name never matches its rail item's, and an item shipping without an
+    # override is SILENT -- the strip renders with nothing lit.
+    from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES
+    assert _URL_NAME_TO_SLUG_OVERRIDES['list_detail'] == ('community', 'lists')
 
     footer = (ROOT / 'templates' / 'partials' / 'footer.html').read_text(encoding='utf-8')
-    assert 'lists_browse' not in footer and 'my_lists' not in footer, 'a footer link survived'
+    assert 'lists_browse' in footer, 'the footer sitemap does not reach Game Lists'
 
 
 def test_nothing_advertises_lists_or_pays_to_build_a_spotlight():
@@ -129,16 +213,32 @@ def test_nothing_advertises_lists_or_pays_to_build_a_spotlight():
     assert not offenders, f'the lists spotlight came back in {offenders}'
 
 
-def test_the_sitemap_stops_inviting_crawlers_in():
-    """Both halves. Dropping the per-list ListSitemap was the obvious one; the browse page also sat in
-    the STATIC sitemap, still advertising `/community/lists/` -- which redirects to the homepage. A
-    sitemap entry that resolves to a redirect spends crawl budget to arrive somewhere it did not ask
-    for, and keeps signalling that a hidden system is live."""
-    from core.sitemaps import StaticViewSitemap
+def test_the_sitemap_advertises_lists_and_reads_the_rebuilt_model():
+    """INVERTED 2026-09, and the second half was a live landmine rather than a tidy-up.
+
+    `GameListSitemap` read the LEGACY `trophies.GameList` while `reverse('list_detail')` resolves to
+    the REBUILT app. The two tables share nothing but a class name, so uncommenting it unchanged
+    would have published several thousand legacy ids against new-app routes -- a sitemap of 404s,
+    handed to Google on the day lists turned on. Being commented out of the index is the only reason
+    that never shipped, which is exactly the kind of safety you cannot rely on twice.
+    """
+    from core.sitemaps import GameListSitemap, StaticViewSitemap
     from plat_pursuit.urls import sitemaps
 
-    assert 'lists' not in sitemaps
-    assert 'lists_browse' not in StaticViewSitemap().items()
+    assert 'lists' in sitemaps, 'the per-list sitemap is still disabled'
+    assert 'lists_browse' in StaticViewSitemap().items(), 'the browse index is not advertised'
+
+    # THE MODEL IT READS, asserted directly: `items()` returning nothing on an empty database would
+    # prove nothing either way.
+    from gamelists.models import GameList as RebuiltGameList
+    assert GameListSitemap().items().model is RebuiltGameList, (
+        'the sitemap still reads the legacy model, so every URL it emits is a 404')
+
+    # ...and it resolves through the rebuilt route for a real row.
+    from gamelists.services import game_list_service as svc
+    owner = ProfileFactory(is_linked=True, psn_username='sitemapper')
+    published = svc.create_list(owner, name='Out in the world', is_public=True)
+    assert GameListSitemap().location(published) == f'/community/lists/{published.id}/'
 
 
 def test_no_game_card_offers_to_add_to_a_list():
@@ -276,27 +376,27 @@ def test_no_profile_render_counts_a_parked_systems_rows(client):
     assert not listy, f'the profile still queries the parked list tables: {listy}'
 
 
-def test_the_create_endpoint_refuses_a_post_from_anyone_but_staff(client):
-    """The highest-consequence gate check in the branch, and it had no test.
+def test_the_create_endpoint_takes_a_hunters_post_but_not_an_anonymous_one(client):
+    """The only route that WRITES, and HALF of this inverted.
 
-    `GATED_PAGES` covers the two GET pages; `/community/lists/create/` is the only route that WRITES,
-    and no test asserted an anonymous or ordinary-hunter POST to it is turned away. The gate does
-    refuse it -- but "it does" and "we would notice if it stopped" are different properties, and only
-    the second one survives somebody reordering a mixin.
+    An ordinary hunter can create a list now; an anonymous visitor still cannot. The second half is
+    worth more after the un-hide than before it: while the whole feature was staff-only, an
+    anonymous POST was refused twice over, and now it is refused once.
     """
     from gamelists.models import GameList as RebuiltGameList
 
     url = '/community/lists/create/'
-    payload = {'name': 'Should not exist'}
 
-    assert client.post(url, payload).status_code == 302, 'anonymous POST was not refused'
+    assert client.post(url, {'name': 'Should not exist'}).status_code == 302, \
+        'anonymous POST was not refused'
+    assert RebuiltGameList.objects.count() == 0, 'a refused POST still created a list'
 
     hunter = UserFactory()
     ProfileFactory(user=hunter, is_linked=True, psn_username='ordinary')
     client.force_login(hunter)
-    assert client.post(url, payload).status_code == 302, 'an ordinary hunter can POST'
 
-    assert RebuiltGameList.objects.count() == 0, 'a refused POST still created a list'
+    assert client.post(url, {'name': 'Mine now'}).status_code == 302, 'a hunter cannot create'
+    assert RebuiltGameList.objects.filter(name='Mine now').exists(), 'the list was not created'
 
 
 def test_the_old_list_search_endpoint_is_gone():

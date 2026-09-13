@@ -1,5 +1,6 @@
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
+from gamelists.models import GameList as RebuiltGameList
 from trophies.models import Game, Profile, Badge, Checklist, GameList, Roadmap
 
 
@@ -20,6 +21,9 @@ class StaticViewSitemap(Sitemap):
             # Public, indexable and linked from the footer sitewide -- exactly the shape of omission
             # the closing audit above was about.
             'whats_new',
+            # Game Lists browse, added when the system came off its development gate (2026-09). The
+            # DETAIL pages come from `GameListSitemap`; this is the index they hang off.
+            'lists_browse',
         ]
 
     def location(self, item):
@@ -302,14 +306,31 @@ class RoadmapSitemap(Sitemap):
 
 
 class GameListSitemap(Sitemap):
+    """Public game lists.
+
+    RE-POINTED AT THE REBUILT MODEL (2026-09), and this was a live landmine rather than a tidy-up.
+    It read `trophies.GameList` -- the 2019-era system, whose rows still exist -- while
+    `reverse('list_detail')` resolves to the REBUILT view in the `gamelists` app. The two tables
+    share nothing but a class name, so every URL it emitted was a legacy id pointed at a new-app
+    route: a sitemap of 404s, several thousand of them, handed to Google on the day lists turned on.
+
+    It was commented out of the index in `plat_pursuit/urls.py` while lists were hidden, which is
+    the only reason this never shipped. Uncommenting without re-pointing was the trap.
+
+    `.visible()` rather than a hand-written pair of flags: it is the model's own floor and it mirrors
+    the partial index. `public()` would be the exact read, but it orders by `-id` here rather than by
+    either browse sort, so the index does not apply and the explicit filters say more plainly what a
+    crawler is allowed to see.
+    """
+
     changefreq = 'weekly'
     priority = 0.4
     limit = 5000
 
     def items(self):
         return (
-            GameList.objects
-            .filter(is_public=True, is_deleted=False)
+            RebuiltGameList.objects
+            .public()
             .only('id', 'updated_at')
             .order_by('-id')
         )
@@ -322,7 +343,7 @@ class GameListSitemap(Sitemap):
 
     def get_latest_lastmod(self):
         return (
-            GameList.objects.filter(is_public=True, is_deleted=False)
+            RebuiltGameList.objects.public()
             .order_by('-updated_at')
             .values_list('updated_at', flat=True)
             .first()

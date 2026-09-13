@@ -35,6 +35,10 @@ from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap,
     ListSitemap,
+    # `ListSitemap` above is TROPHY lists (the `Game` catalogue); this is the hunter-authored
+    # Game Lists system. Two different things whose names are one word apart, which is the same
+    # collision that made the sitemap a landmine in the first place.
+    GameListSitemap,
 )
 
 sitemaps = {
@@ -47,7 +51,11 @@ sitemaps = {
     # 'roadmaps' — withdrawn 2026-08-23 (SEO Lane 0): Roadmaps are hidden from the site with no
     # return promised, and a sitemap must not advertise pages nothing links to. The class stays
     # in core/sitemaps.py; re-register if the system returns.
-    # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
+    # Game Lists detail pages. Re-enabled 2026-09 when the system came off `_DevelopmentGate`,
+    # and ONLY after `GameListSitemap` was re-pointed from the legacy `trophies.GameList` to the
+    # rebuilt `gamelists.GameList` -- it reversed `list_detail`, which resolves to the new app, so
+    # enabling it unchanged would have published thousands of legacy ids against new-app routes.
+    'lists': GameListSitemap,
     # for the revamp, since nothing else about the system was deleted.
 }
 from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView,

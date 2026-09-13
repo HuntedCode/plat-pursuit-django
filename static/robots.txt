@@ -69,6 +69,27 @@ Disallow: /mod/
 Disallow: /guides/
 Disallow: /my-guides/
 
+# Game Lists (2026-09). The browse index and the public detail pages ARE crawlable and are in the
+# sitemap -- these are the parts of the feature that have nothing to offer a crawler:
+#
+#   /my-lists/       personal and login-only, so a crawler gets a redirect to login, every time
+#   .../search/      the adder's typeahead: bare JSON, no <html>, and an unbounded query space
+#   the write paths  create/update/reorder/like/follow/add/remove are POST-only, so a GET is a 405
+#
+# The write paths are listed individually rather than as a `/community/lists/*` wildcard, because
+# that pattern would also match the DETAIL pages -- `*` matches zero or more characters in robots
+# syntax, and there is no way to say "exactly one more segment". That is the same mistake the
+# /games/*/* rules made in 2026-08, when three sitemaps advertised pages this file was blocking.
+Disallow: /my-lists/
+Disallow: /community/lists/create/
+Disallow: /community/lists/*/search/
+Disallow: /community/lists/*/update/
+Disallow: /community/lists/*/reorder/
+Disallow: /community/lists/*/like/
+Disallow: /community/lists/*/follow/
+Disallow: /community/lists/*/add/
+Disallow: /community/lists/*/items/
+
 # Profile-scoped variants of canonical pages (/games/<np>/<user>/ etc.) are NOT
 # handled here any more (2026-08-23, SEO Lane 0). The old wildcard rules
 # (/games/*/*) ALSO matched the canonical pages themselves: in robots syntax `*`

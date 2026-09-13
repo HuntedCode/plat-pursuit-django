@@ -42,14 +42,19 @@ def test_the_hub_exists_and_owns_its_prefixes():
     assert set(hub.prefixes) == {'/community/', '/hunters/', '/profiles/'}
 
 
-def test_it_carries_no_rail_yet_and_that_is_deliberate():
-    """A single pill naming the page you are already on is not navigation -- the same reasoning that
-    emptied the Leaderboards rail. Hunters is the only member today; the rail turns on when Game
-    Lists comes off `_DevelopmentGate` and there is somewhere else to go."""
+def test_the_rail_turned_on_when_there_was_somewhere_else_to_go():
+    """It ran `items=()` from 2026-09-13 to the un-hide, on the reasoning that emptied the
+    Leaderboards rail: a single pill naming the page you are already on is not navigation. Game Lists
+    gave the hub a second destination and that reasoning expired.
+
+    My Lists is deliberately NOT here -- it is personal and login-gated, so it sits in My Pursuit ->
+    Tools. The public browse is what belongs to the community.
+    """
     from core.hub_subnav import HUB_SUBNAV_CONFIG
 
     hub = next(h for h in HUB_SUBNAV_CONFIG if h.key == 'community')
-    assert hub.items == ()
+    assert [i.slug for i in hub.items] == ['lists', 'profiles']
+    assert 'my_lists' not in [i.slug for i in hub.items], 'a personal page is in the public hub'
 
 
 def test_hunters_is_chromed_as_community_everywhere_it_is_reachable():

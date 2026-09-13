@@ -4,9 +4,9 @@ A hunter curates games into a named list, keeps it private or publishes it, and 
 and follow it. Rebuilt 2026-09 in a new `gamelists` app; the 2019-era system it replaces still exists
 under the same three class names in `trophies`.
 
-> **Status: behind a staff-only gate.** Every surface carries `_DevelopmentGate`, and removing that
-> mixin is the whole of "turn it on". See [Turning it on](#turning-it-on) — the switch is larger than
-> deleting the class.
+> **Status: live (2026-09).** `_DevelopmentGate` is gone and the guard file that pinned the
+> teardown is now `tests/engine/test_lists_live.py`. The switch was never just the mixin — see
+> [What turning it on actually took](#what-turning-it-on-actually-took).
 
 ---
 
@@ -352,44 +352,36 @@ redirects with a Django message rather than answering JSON.
 
 ---
 
-## Turning it on
+## What turning it on actually took
 
-Removing `_DevelopmentGate` is necessary and **not sufficient**. The full switch:
+Kept because the shape recurs: removing the gate was the smallest part, and two of these would have
+shipped a visible defect.
 
-1. Delete the class and its **six** mixin references in `gamelists/views.py`.
-2. **Invert `tests/engine/test_lists_hidden.py`** — it pins that anonymous and ordinary hunters are
-   refused, that no hub sub-nav or footer links here, and that the sitemap excludes it.
-3. **`core/sitemaps.py::GameListSitemap` is a landmine.** It imports `GameList` from
-   **`trophies.models`** and reverses `list_detail`, which now resolves to the rebuilt view — old-app
-   ids against a new-app route, i.e. a sitemap of 404s. It is commented out of the index in
-   `plat_pursuit/urls.py`, and uncommenting it is part of turning lists on. Re-point it first.
-4. Add `lists_browse` to `StaticViewSitemap`.
-5. **`static/robots.txt` has no lists rules**: `/my-lists/` is personal and login-only, the search
-   endpoint returns bare JSON, and the write endpoints sit under a crawlable prefix.
-6. **Build the Community hub.** DECIDED 2026-09 — see
-   [ia-and-subnav.md](../architecture/ia-and-subnav.md#community-decided-2026-09-not-yet-built). The hub returns
-   holding Hunters, Game Lists and (later) Challenges and the Hall of Fame, on the rule that
-   user-generated content is its own class regardless of intent. **The paths stay** — `/community/lists/`
-   becomes correct rather than incoherent, and `/my-lists/` is unchanged.
+1. **The gate.** One class and six mixin references in `gamelists/views.py`.
+2. **The guard file inverted**, `test_lists_hidden.py` → `test_lists_live.py`. About half of it
+   flipped; the other half is *more* valuable now, because it pins that the LEGACY system stays dead
+   — its API unrouted, its rows untouched, `?tab=lists` leading nowhere. A live feature is exactly
+   when somebody wires a new page to an old view by reaching for a familiar name.
+3. **`GameListSitemap` was a landmine.** It read the legacy `trophies.GameList` while
+   `reverse('list_detail')` resolves to the rebuilt app — the two tables share nothing but a class
+   name. Enabling it unchanged would have published thousands of legacy ids against new-app routes:
+   a sitemap of 404s, handed to Google on day one. Being commented out of the index is the only
+   reason that never shipped. Re-pointed, then enabled.
+4. **`lists_browse` added to `StaticViewSitemap`**, and robots rules for the parts a crawler has no
+   use for: `/my-lists/` (login-only), the typeahead (bare JSON), and the POST-only write paths.
+   Listed individually rather than as `/community/lists/*`, because that would also match the detail
+   pages — the same mistake the `/games/*/*` rules made in 2026-08.
+5. **The Community rail turned on.** Game Lists joins Hunters there; **My Lists goes to My Pursuit →
+   Tools**, because the private side of a public system is still personal. `test_nav_reachability`
+   then caught that `/my-lists/` was not under any My Pursuit prefix — a rail item whose URL sits
+   outside its own hub drops you out of the hub the moment you click it.
+6. **`seo_description` and `seo_title` on the detail page.** It is the indexable, shareable page in
+   the feature, and without them every list anybody posted previewed as the site-wide generic.
+7. **The `game_list_create` SiteEvent**, declared since 2019 with its only call site in an unrouted
+   module — so a grep found a hit and it had never once fired.
 
-   Concretely: a `COMMUNITY_HUB` in `core/hub_subnav.py` with prefixes `/community/` and `/hunters/`;
-   the `profiles` item MOVED there out of Browse (sub-nav only, `/hunters/` is unchanged); items for
-   `lists_browse` and `my_lists`; `SUBNAV_MAP` entries for `lists_browse`, `list_detail` and
-   `my_lists`; the Support Us tab swapped for Community in `mobile_tabbar.html` with Support Us moving
-   into the avatar dropdown; and the Support hub relabelled "Support Us".
-
-   **This ships WITH the un-hide, not before it,** and that is a constraint rather than a preference:
-   `HubSubnavItem` has `auth_required` and `membership_required` but no staff gate, so a Game Lists
-   entry added while `_DevelopmentGate` is on would show every visitor a link that 302s them. A
-   Community hub holding only Hunters in the meantime would be churn with no benefit.
-7. Give the detail page `seo_description` (and consider `seo_title`, which feeds the og/twitter
-   tags). It is the indexable, shareable page: today it sets its own `{% block title %}` but no
-   `seo_description`, so the social card falls back to the site-wide generic. Browse sets
-   `seo_description` and no `seo_title`, so neither page is complete here.
-8. Wire the `game_list_create` / `game_list_share` `SiteEvent` types. Both are declared in
-   `core/models.py`; `game_list_share` has no call site at all, and `game_list_create` has exactly
-   one — `api/game_list_views.py`, which is unrouted, so the call is unreachable rather than
-   missing. Do not be reassured by the grep hit.
+**`game_list_share` is still unwired**, because there is no share affordance yet. It is declared and
+dead, exactly as `game_list_create` was.
 
 ---
 

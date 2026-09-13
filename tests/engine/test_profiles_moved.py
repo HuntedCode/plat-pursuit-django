@@ -92,10 +92,11 @@ def test_hunters_is_a_community_surface_now():
     match = resolve_hub_subnav(req)
 
     assert match['hub'].key == 'community'
-    # NO active slug, because the hub runs `items=()`: a single pill naming the page you are already
-    # on is not navigation, which is the same reasoning that emptied the Leaderboards rail. The rail
-    # turns on when Game Lists comes off `_DevelopmentGate` and there is a second destination.
-    assert match['hub'].items == ()
+    # The rail turned ON in 2026-09, when Game Lists came off its gate and gave the hub a second
+    # destination. It ran `items=()` until then, on the reasoning that a single pill naming the
+    # page you are already on is not navigation.
+    assert [i.slug for i in match['hub'].items] == ['lists', 'profiles']
+    assert match['active_slug'] == 'profiles'
 
     # ...and Browse's Catalog lost exactly one entry. 'jobs' joined in 2026-08 (`/jobs/` is the public
     # jobs catalogue) and 'trophy-lists' after games on 2026-08-30 -- the slug is deliberately NOT

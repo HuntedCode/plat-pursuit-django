@@ -151,6 +151,13 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     prefixes=(
         '/collection/', '/career/', '/milestones/', '/titles/',
         '/profile-editor/', '/shareables/', '/recap/', '/rate-my-games/',
+        # `/my-lists/` (2026-09). The hub is resolved by PATH PREFIX, so a rail item whose URL sits
+        # outside its own hub's prefixes drops you out of the hub the moment you click it -- the
+        # rail vanishes, or worse, another hub's lights up. `test_nav_reachability` caught this the
+        # moment My Lists joined Tools. The URL is deliberately NOT `/career/lists/` or similar: it
+        # was frozen when the rebuilt pages shipped, and a hub is a nav grouping rather than a URL
+        # namespace -- `/recap/` and `/collection/` are here on the same footing.
+        '/my-lists/',
     ),
     # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
     # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
@@ -162,6 +169,12 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         HubSubnavItem('shareables', 'Plat Cards', 'my_shareables', 'image', auth_required=True, group='Tools'),
         HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True, group='Tools'),
         HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star', auth_required=True, group='Tools'),
+        # MY LISTS IS PERSONAL, so it sits here rather than in Community with the public browse.
+        # The private side of a public system is still personal and login-gated -- exactly as
+        # *Collection* stays in My Pursuit while *Badges* sits in Browse. A hub is a mode, not a
+        # feature's address. (The un-hide checklist originally put it in Community; the IA
+        # decision that followed put it here, and that decision wins.)
+        HubSubnavItem('my_lists', 'My Lists', 'my_lists', 'list', auth_required=True, group='Tools'),
     ),
 )
 
@@ -223,9 +236,13 @@ SUPPORT_HUB = HubSubnavConfig(
 # codebase already says by carrying an `all_ugc` restriction scope over comments, reviews, ratings and
 # lists. See docs/architecture/ia-and-subnav.md.
 #
-# `items=()` FOR NOW, deliberately, and it is the same reasoning that emptied the Leaderboards rail:
-# a single pill naming the page you are already on is not navigation. Hunters is the only member
-# today; Game Lists joins when it comes off `_DevelopmentGate`, and the rail turns on then.
+# THE RAIL TURNED ON in 2026-09, when Game Lists came off its development gate and gave the hub a
+# second destination. Until then it ran `items=()` on the reasoning that emptied the Leaderboards
+# rail -- a single pill naming the page you are already on is not navigation -- and that reasoning
+# expired the moment there were two places to go rather than one.
+#
+# My Lists is NOT here. It is personal and login-gated, so it sits in My Pursuit -> Tools; the public
+# browse is what belongs to the community. Challenges and the Hall of Fame join this rail next.
 #
 # NO LANDING PAGE, and it does not need one. `/community/` 301s permanently to `/leaderboards/` (live
 # since 2026-08 and therefore cached in browsers indefinitely, so it cannot be repointed) -- but a hub
@@ -239,7 +256,10 @@ COMMUNITY_HUB = HubSubnavConfig(
     # visitor landing on an old profile URL would otherwise lose the rail on the way through.
     # `/community/` is here for the Lists pages already served under it, which are staff-gated today.
     prefixes=('/community/', '/hunters/', '/profiles/'),
-    items=(),
+    items=(
+        HubSubnavItem('lists', 'Game Lists', 'lists_browse', 'list'),
+        HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user'),
+    ),
 )
 
 
@@ -293,9 +313,13 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'roadmap_edit_ctg': ('browse', 'trophy-lists'),
     'roadmap_detail': ('browse', 'trophy-lists'),
     'roadmap_detail_dlc': ('browse', 'trophy-lists'),
-    # Hunters moved to the Community hub in 2026-09, and that hub runs `items=()` -- so there is no
-    # slug to light and these two overrides went with the move. The `/hunters/` prefix already puts
-    # both pages in the right hub, which is all the navbar needs to highlight the right tab.
+    # Community. A detail page's URL name never matches its rail item's (`list_detail` vs
+    # `lists_browse`), and an item shipping without a line here is SILENT -- the strip still renders,
+    # just with nothing lit. That is the `job_detail` failure documented above, and it is why these
+    # three exist rather than being left to the prefix match.
+    'list_detail': ('community', 'lists'),
+    'profile_detail': ('community', 'profiles'),
+    'trophy_case': ('community', 'profiles'),
     # Reviews archived 2026-05. The notice page matches the COMMUNITY hub by prefix (2026-09) --
     # which is where it would have lived -- and still renders no sub-nav strip, because that hub is
     # empty today. If the rail is ever populated, the tombstone gains one; see

@@ -84,10 +84,14 @@ def test_nothing_in_the_chrome_or_the_sitemap_points_at_it():
 
 
 def test_what_remains_under_community_still_answers(client):
-    """The prefix is not dead -- the reviews tombstone and the hidden-lists redirects still live under
-    it, and they must keep working now that the hub above them has gone."""
-    assert client.get('/community/reviews/').status_code == 200
-    assert client.get('/community/lists/').status_code in (301, 302)
+    """The prefix is not dead. It was never dead — only the landing page was — and as of 2026-09 it
+    holds a live feature again: `/community/lists/` is the public Game Lists browse, and the reviews
+    tombstone still answers beside it.
+
+    This asserted the lists path REDIRECTED, which was true only while the system was gated.
+    """
+    assert client.get('/community/reviews/').status_code == 200, 'the tombstone stopped answering'
+    assert client.get('/community/lists/').status_code == 200, 'the lists browse is not live'
 
 
 def test_live_javascript_builds_no_stale_profile_links():

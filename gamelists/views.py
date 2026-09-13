@@ -4,10 +4,12 @@ THREE PAGES, NOT FIVE (settled with the owner before the rebuild): Browse, List 
 owner edits in place, and My Lists with create as a modal. The system this replaces had separate
 create and edit ADDRESSES, which meant three round trips to rename a list you were looking at.
 
-GATED WHILE THE BRANCH IS OPEN. Lists and the Challenges beta ship as ONE update, so these routes
-exist for tests and for a browser pass but are closed to everybody else until the commit that turns
-both on. `_DevelopmentGate` is one mixin and its removal is the switch -- see `test_lists_hidden`,
-which pins that nothing links here yet.
+LIVE SINCE 2026-09. `_DevelopmentGate` -- a `StaffRequiredMixin` subclass that sat on all six view
+classes -- is gone, and `test_lists_hidden.py` was inverted into `test_lists_live.py` in the same
+commit. Removing the mixin was necessary and not sufficient: the sitemap had to be re-pointed off
+the LEGACY `trophies.GameList` first (it reversed `list_detail`, which resolves to this app, so it
+would have published thousands of legacy ids against new-app routes), robots needed rules for the
+personal and POST-only paths, and the detail page needed its own `seo_description`.
 """
 from django.contrib import messages
 from django.core.cache import cache
@@ -23,12 +25,13 @@ from django.views.generic import DetailView, ListView, View
 from django_ratelimit.decorators import ratelimit
 
 from api.utils import safe_bool, safe_int
+from core.services.tracking import track_site_event
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED,
                               NAME_MAX_LENGTH, GameList, GameListFollow, GameListItem,
                               GameListLike, list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
-from trophies.mixins import HtmxListMixin, StaffRequiredMixin
+from trophies.mixins import HtmxListMixin
 from trophies.models import Concept
 
 #: How many covers the `.pp-gtile` mosaic composes around (`is-1` .. `is-4`).
@@ -46,7 +49,7 @@ MAX_GAME_COUNT_FILTER = 10_000
 
 #: Ceiling on any free-text search term before it reaches a LIKE. Shared by the browse filter and the
 #: adder's typeahead so the two cannot drift: an unbounded `q` is an unbounded pattern, and the
-#: browse page becomes anonymous the moment `_DevelopmentGate` comes off.
+#: browse page is ANONYMOUS as of 2026-09, which is what this bound is for.
 MAX_QUERY_LENGTH = 64
 
 
@@ -68,17 +71,7 @@ def _count_filter(raw):
     return value if value <= MAX_GAME_COUNT_FILTER else None
 
 
-class _DevelopmentGate(StaffRequiredMixin):
-    """Temporary. Lists turn on with the Challenges beta, in one commit, not before.
-
-    Staff-only rather than unrouted, because the alternative is testing a browse page through
-    RequestFactory and never exercising the HTMX and infinite-scroll paths that are most of what
-    makes it a browse page. Deleting this class and its mixin references is the whole of "turn it
-    on"; nothing else about these views is conditional.
-    """
-
-
-class BrowseListsView(_DevelopmentGate, HtmxListMixin, ListView):
+class BrowseListsView(HtmxListMixin, ListView):
     """Public lists from every hunter, newest or most-liked first."""
 
     model = GameList
@@ -120,7 +113,7 @@ class BrowseListsView(_DevelopmentGate, HtmxListMixin, ListView):
 
         # BOUNDED, like the typeahead in this same file. An unbounded `q` becomes an unbounded
         # LIKE pattern across three columns and a join to Profile, on the surface that becomes
-        # ANONYMOUS the moment `_DevelopmentGate` comes off. `_count_filter` below bounds the
+        # ANONYMOUS as of 2026-09. `_count_filter` below bounds the
         # numeric filters and none of that discipline had reached the text one.
         query = (self.request.GET.get('q') or '').strip()[:MAX_QUERY_LENGTH]
         if query:
@@ -224,7 +217,7 @@ class _LinkedProfileRequired:
         return super().dispatch(request, *args, **kwargs)
 
 
-class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
+class MyListsView(LoginRequiredMixin, _LinkedProfileRequired,
                   HtmxListMixin, ListView):
     """Your own lists, and the ones you follow.
 
@@ -334,7 +327,7 @@ class MyListsView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired,
         return context
 
 
-class CreateListView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, View):
+class CreateListView(LoginRequiredMixin, _LinkedProfileRequired, View):
     """The create modal's POST target.
 
     RATE LIMITED like every other write here, which it was not. The cap (3 free / 25 member) bounds
@@ -373,11 +366,16 @@ class CreateListView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequire
             messages.error(request, str(exc))
             return redirect('my_lists')
 
+        # DECLARED SINCE 2019 AND NEVER REACHABLE. The only call site was `api/game_list_views.py`,
+        # which is unrouted -- so a grep for `game_list_create` found a hit and the event had never
+        # once been recorded. Wired here, where the write actually happens.
+        track_site_event('game_list_create', game_list.id, request)
+
         messages.success(request, f'"{game_list.name}" is ready. Add some games to it.')
         return redirect('my_lists')
 
 
-class GameListDetailView(_DevelopmentGate, DetailView):
+class GameListDetailView(DetailView):
     """One list, and where its owner edits it IN PLACE.
 
     THREE SURFACES, NOT FIVE. The system this replaces had a separate `/edit/` address, so renaming a
@@ -593,6 +591,28 @@ class GameListDetailView(_DevelopmentGate, DetailView):
         context['name_max_length'] = NAME_MAX_LENGTH
         context['description_max_length'] = DESCRIPTION_MAX_LENGTH
         context['list_type_options'] = list_type_options()
+
+        # THE INDEXABLE, SHAREABLE PAGE, and until 2026-09 its social card fell back to the
+        # site-wide generic -- so every list anybody posted anywhere previewed as "PlatPursuit".
+        #
+        # The author's own description first, because they wrote it to say what the list is for.
+        # Failing that, a sentence built from what the page actually contains: a bare "A game list"
+        # is worse than nothing, since it tells a reader deciding whether to click precisely
+        # nothing. Bounded at 300 because `description` is capped there and og:description is
+        # truncated by every consumer well before it.
+        owner_name = game_list.owner.display_psn_username or game_list.owner.psn_username
+        if game_list.description:
+            context['seo_description'] = game_list.description
+        else:
+            context['seo_description'] = (
+                f'{game_list.name} — a game list of {game_list.game_count} '
+                f'{"game" if game_list.game_count == 1 else "games"} by {owner_name} on Platinum '
+                f'Pursuit.'
+            )
+        # `seo_title` feeds the og/twitter tags, which otherwise take the site-wide default even
+        # though `{% block title %}` is set -- the two are separate, which is why the browse page
+        # setting only a description was half a job too.
+        context['seo_title'] = f'{game_list.name} by {owner_name}'
         # THE OUT-OF-BAND CHROME, and only on a fragment request. Gated on the querystring alone,
         # `GET ...?chrome=1` in a browser rendered the FULL page -- which includes the position slot
         # and the sort control -- and then had the items partial render both AGAIN inside
@@ -607,7 +627,7 @@ class GameListDetailView(_DevelopmentGate, DetailView):
 # ── the write half ───────────────────────────────────────────────────────────────────────────────
 #
 # Plain Django views returning JSON rather than DRF, because these are page behaviour rather than a
-# public API: they are gated by the same `_DevelopmentGate` the pages are, they answer one template's
+# public API: they share the pages' permission stack, they answer one template's
 # fetches, and routing them through DRF would mean a second permission stack that has to agree with
 # the first. `PlatPursuit.API` is the client, so a non-2xx body reaches the caller as `.response`.
 #
@@ -615,7 +635,7 @@ class GameListDetailView(_DevelopmentGate, DetailView):
 # and do nothing else -- which is the entire point of having the service.
 
 
-class _ListActionView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, View):
+class _ListActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
     """POST-only, resolves the list through `readable_by`, and answers JSON.
 
     `readable_by` and not `get_object_or_404` on the bare table: a private list must 404 for anybody
@@ -808,7 +828,7 @@ class RemoveItemView(_ListActionView):
         return JsonResponse({'game_count': game_list.game_count})
 
 
-class ListGameSearchView(_DevelopmentGate, LoginRequiredMixin, _LinkedProfileRequired, View):
+class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
     """Typeahead for the adder: CONCEPTS, not trophy lists.
 
     Mirrors `SiteSuggestView`'s query shape rather than reusing it -- that view is the nav search,
