@@ -34,13 +34,16 @@ from gamelists.models import (
     FREE_MAX_LISTS,
     LIST_TYPE_COLLECTION,
     LIST_TYPES,
+    MAX_SECTIONS_PER_LIST,
     MEMBER_MAX_LISTS,
     NAME_MAX_LENGTH,
     NOTE_MAX_LENGTH,
+    SECTION_NAME_MAX_LENGTH,
     GameList,
     GameListFollow,
     GameListItem,
     GameListLike,
+    GameListSection,
 )
 from trophies.models import Profile
 from trophies.services.comment_service import CommentService
@@ -75,6 +78,29 @@ def max_lists_for(profile):
     is tiered.
     """
     return MEMBER_MAX_LISTS if profile.user_is_premium else FREE_MAX_LISTS
+
+
+def _refuse_if_not_member(profile):
+    """Sections are the membership perk (owner's call, 2026-09-13).
+
+    Everyone creates lists, adds games, ranks them, publishes and shares. Members get to ORGANISE
+    them. That is the same shape the tiering already uses -- `max_lists_for` above, and the shipped
+    `sync` perk of "everyone syncs, members sync more often" -- rather than a capability a free
+    hunter cannot reach at all.
+
+    WHAT THIS DOES NOT GATE, which is the part that is easy to get wrong:
+
+    - READING a sectioned list. Sections are the author's tool; nobody needs a membership to read a
+      list that has them, and a free hunter's view is identical to anyone else's.
+    - A LAPSED member's existing sections. Membership ending must not delete data or reshuffle a
+      list -- it keeps rendering exactly as it did. What they lose is making MORE, which is the same
+      line the list-size comment in `models.py` draws about taking a perk back.
+    - MOVING a game between sections they already have, DELETING one, or REORDERING them. Those are
+      arranging and removing your own content, not creating it -- the same split `update_list` draws
+      when it lets a restricted hunter un-publish but not publish.
+    """
+    if not profile.user_is_premium:
+        raise ListError('Sections are a member feature. Your lists and their games are unaffected.')
 
 
 # ── gates ────────────────────────────────────────────────────────────────────────────────────────
@@ -158,6 +184,21 @@ def _check_description(raw):
     text = _clean_text(raw, field='description', max_length=DESCRIPTION_MAX_LENGTH)
     _refuse_banned_words(text, field='description')
     return text
+
+
+def _check_section_name(raw):
+    """A section name is PUBLIC TEXT a hunter wrote, so it takes the same treatment a list name does.
+
+    Easy to miss, because a section feels structural rather than editorial -- but the header renders
+    on a public page under the author's byline, which is the whole definition of the `all_ugc` scope.
+    Skipping the banned-word check here would have left one user-writable public string in the
+    feature outside the filter, which is exactly the hole this service exists to close.
+    """
+    name = _clean_text(raw, field='section name', max_length=SECTION_NAME_MAX_LENGTH)
+    if not name:
+        raise ListError('A section needs a name.')
+    _refuse_banned_words(name, field='section name')
+    return name
 
 
 def _check_list_type(raw):
@@ -411,6 +452,135 @@ def reorder(game_list, profile, item_ids):
         items[item_id].position = position
     GameListItem.objects.bulk_update(items.values(), ['position'])
     GameList.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
+
+
+# ── sections ─────────────────────────────────────────────────────────────────────────────────────
+
+@transaction.atomic
+def create_section(game_list, profile, *, name):
+    """Add a section to the end of the list."""
+    _require_owner(game_list, profile)
+    _refuse_if_unlinked(profile)
+    _refuse_if_restricted(profile)
+    _refuse_if_not_member(profile)
+
+    name = _check_section_name(name)
+    locked = _lock_list(game_list)
+
+    # Same lock-then-count shape `create_list` uses, and for the same reason: `@transaction.atomic`
+    # alone does not stop two requests both counting 19 and both inserting.
+    if GameListSection.objects.filter(game_list=locked).count() >= MAX_SECTIONS_PER_LIST:
+        raise ListError(
+            f'A list can have {MAX_SECTIONS_PER_LIST} sections. '
+            'Delete one to make room.'
+        )
+
+    highest = GameListSection.objects.filter(game_list=locked).aggregate(
+        top=models.Max('position'))['top']
+    return GameListSection.objects.create(
+        game_list=locked, name=name, position=0 if highest is None else highest + 1)
+
+
+@transaction.atomic
+def rename_section(section, profile, *, name):
+    """Rename one. Gated exactly like creating one: it is the same act of writing public text."""
+    _require_owner(section.game_list, profile)
+    _refuse_if_unlinked(profile)
+    _refuse_if_restricted(profile)
+    _refuse_if_not_member(profile)
+
+    section.name = _check_section_name(name)
+    section.save(update_fields=['name'])
+    return section
+
+
+@transaction.atomic
+def delete_section(section, profile):
+    """Remove a section and ORPHAN its games rather than deleting them.
+
+    `GameListItem.section` is SET_NULL, so the items fall back to the ungrouped bucket and stay on
+    the list. A cascade here would destroy hand-curated entries because of a structural change the
+    hunter made about the HEADER -- the same trap `Concept.absorb()`'s list branch documents.
+
+    UNGATED by membership. Removing your own content is the opposite of the act the perk covers, and
+    a lapsed member who cannot tidy up is being punished rather than up-sold.
+    """
+    _require_owner(section.game_list, profile)
+
+    locked = _lock_list(section.game_list)
+    position = section.position
+    section.delete()
+    # Dense, like everything else that orders here.
+    GameListSection.objects.filter(game_list=locked, position__gt=position).update(
+        position=models.F('position') - 1)
+    GameList.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
+
+
+@transaction.atomic
+def reorder_sections(game_list, profile, section_ids):
+    """Set the section order to exactly `section_ids`.
+
+    Refuses a partial ordering, the way `reorder` does for items and for the same reason: a subset
+    means the client and the server disagree about what is on the list. Ungated by membership --
+    arranging what you already have is not creating it.
+    """
+    _require_owner(game_list, profile)
+
+    locked = _lock_list(game_list)
+    try:
+        wanted = [int(i) for i in section_ids]
+    except (TypeError, ValueError):
+        raise ListError('That order is not valid. Reload and try again.')
+
+    sections = {s.id: s for s in GameListSection.objects.filter(game_list=locked)}
+    if sorted(wanted) != sorted(sections):
+        raise ListError('That order does not match the list. Reload and try again.')
+
+    for position, section_id in enumerate(wanted):
+        sections[section_id].position = position
+    GameListSection.objects.bulk_update(sections.values(), ['position'])
+    GameList.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
+
+
+@transaction.atomic
+def assign_item(game_list, profile, item, section):
+    """Move one game into a section, or out of every section when `section` is None.
+
+    UNGATED by membership, deliberately: this is arranging games you already own between headers you
+    already have. A lapsed member can still tidy their list; what they cannot do is make another
+    header.
+
+    The section must belong to THIS list. Without that check an item could be filed under another
+    hunter's section id -- it would render nowhere and leak the existence of a section on a list the
+    caller may not be able to see.
+    """
+    _require_owner(game_list, profile)
+
+    locked = _lock_list(game_list)
+    fresh = _lock_item(item, locked)
+
+    if section is not None and section.game_list_id != locked.pk:
+        raise ListError('That section is not on this list.')
+
+    fresh.section = section
+    fresh.save(update_fields=['section'])
+    GameList.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
+    return fresh
+
+
+@transaction.atomic
+def set_section_numbering(game_list, profile, *, restart):
+    """Continue 1..N through the list, or restart at 1 in each section.
+
+    A display choice, so it is ungated by membership for the same reason `list_type` is ungated by
+    restriction: choosing between two renderings of your own rows submits no content. A lapsed
+    member whose list is already sectioned can still choose how it reads.
+    """
+    _require_owner(game_list, profile)
+
+    game_list.sections_restart_numbering = bool(restart)
+    game_list.save(update_fields=['sections_restart_numbering', 'updated_at'])
+    return game_list
 
 
 # ── social ───────────────────────────────────────────────────────────────────────────────────────

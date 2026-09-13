@@ -14,11 +14,13 @@ from gamelists.models import (
     FREE_MAX_LISTS,
     LIST_TYPE_COLLECTION,
     LIST_TYPE_RANKED,
+    MAX_SECTIONS_PER_LIST,
     MEMBER_MAX_LISTS,
     GameList,
     GameListFollow,
     GameListItem,
     GameListLike,
+    GameListSection,
 )
 from gamelists.services import game_list_service as svc
 from tests.factories import ConceptFactory, ProfileFactory
@@ -727,3 +729,243 @@ def test_switching_type_is_not_smuggled_publishing():
     game_list.refresh_from_db()
     assert game_list.is_public is False, 'a type switch published the list'
 
+
+# ── sections ─────────────────────────────────────────────────────────────────────────────────────
+
+def test_sections_are_a_member_feature():
+    """The perk, and the whole reason the gate exists. A free hunter keeps every other capability --
+    they create lists, add games, rank them, publish and share."""
+    free = _hunter(psn='free')
+    game_list = svc.create_list(free, name='Mine')
+
+    with pytest.raises(svc.ListError) as refused:
+        svc.create_section(game_list, free, name='Playing')
+    assert 'member' in str(refused.value).lower()
+    assert GameListSection.objects.count() == 0, 'the refusal still wrote a row'
+
+    # ...and the same hunter can do everything else, which is what makes this a perk rather than a
+    # wall: a gate that also blocked the free path would be a different product decision.
+    concept = ConceptFactory()
+    svc.add_concept(game_list, free, concept)
+    svc.update_list(game_list, free, name='Renamed', is_public=True)
+    assert game_list.items.count() == 1
+
+
+def test_a_member_can_section_a_list():
+    member = _hunter(psn='member', premium=True)
+    game_list = svc.create_list(member, name='Backlog')
+
+    playing = svc.create_section(game_list, member, name='Playing')
+    someday = svc.create_section(game_list, member, name='Someday')
+
+    assert [s.name for s in game_list.sections.all()] == ['Playing', 'Someday']
+    assert [s.position for s in game_list.sections.all()] == [0, 1], 'positions are not dense'
+    # An EMPTY section is a legitimate state -- you make "Someday" and then drag into it. A CharField
+    # key on the item could not have expressed this, which is why sections have their own table.
+    assert someday.items.count() == 0
+
+
+def test_a_lapsed_member_keeps_their_sections_and_can_still_arrange_them():
+    """THE RULE MOST LIKELY TO BE GOT WRONG. Membership ending must not delete data or reshuffle a
+    list -- it keeps rendering exactly as it did. What they lose is making MORE.
+
+    Anything else is a takeback, which is the same argument `models.py` makes about list size."""
+    member = _hunter(psn='lapsing', premium=True)
+    game_list = svc.create_list(member, name='Backlog')
+    finished = svc.create_section(game_list, member, name='Finished')
+    playing = svc.create_section(game_list, member, name='Playing')
+    item = svc.add_concept(game_list, member, ConceptFactory())
+    svc.assign_item(game_list, member, item, finished)
+
+    member.user_is_premium = False
+    member.save(update_fields=['user_is_premium'])
+
+    # The data is untouched and the list still reads the same.
+    assert game_list.sections.count() == 2
+    item.refresh_from_db()
+    assert item.section_id == finished.id
+
+    # ...and they can still ARRANGE what they have: move a game, reorder, delete, choose numbering.
+    svc.assign_item(game_list, member, item, playing)
+    svc.reorder_sections(game_list, member, [playing.id, finished.id])
+    svc.set_section_numbering(game_list, member, restart=True)
+    svc.delete_section(finished, member)
+
+    # Only CREATING more is closed.
+    with pytest.raises(svc.ListError):
+        svc.create_section(game_list, member, name='Another')
+    with pytest.raises(svc.ListError):
+        svc.rename_section(playing, member, name='Renamed')
+
+
+def test_deleting_a_section_orphans_its_games_rather_than_deleting_them():
+    """A cascade here would destroy hand-curated entries because of a structural change the hunter
+    made about a HEADER. Same trap `Concept.absorb()`'s list branch documents."""
+    member = _hunter(psn='tidy', premium=True)
+    game_list = svc.create_list(member, name='Backlog')
+    section = svc.create_section(game_list, member, name='Doomed')
+    items = [svc.add_concept(game_list, member, ConceptFactory()) for _ in range(3)]
+    for item in items:
+        svc.assign_item(game_list, member, item, section)
+
+    svc.delete_section(section, member)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 3, 'games were deleted'
+    assert not GameListItem.objects.filter(section__isnull=False).exists(), 'items kept a dead FK'
+    game_list.refresh_from_db()
+    assert game_list.game_count == 3
+
+
+def test_section_positions_stay_dense_when_one_is_deleted():
+    member = _hunter(psn='dense', premium=True)
+    game_list = svc.create_list(member, name='Ordered')
+    made = [svc.create_section(game_list, member, name=f'S{n}') for n in range(4)]
+
+    svc.delete_section(made[1], member)
+
+    assert list(game_list.sections.values_list('position', flat=True)) == [0, 1, 2]
+
+
+def test_item_positions_are_untouched_by_sections():
+    """THE INVARIANT SECTIONS WERE BUILT AROUND. `position` stays global and dense, because
+    `attach_cover_games` bounds the browse mosaic with `position__lt=4` and `reorder` refuses partial
+    orderings -- so per-section ordering would have been a rewrite rather than a tweak.
+
+    Assigning games to sections in an order that disagrees with their positions must change nothing.
+    """
+    member = _hunter(psn='invariant', premium=True)
+    game_list = svc.create_list(member, name='Ranked', list_type=LIST_TYPE_RANKED)
+    items = [svc.add_concept(game_list, member, ConceptFactory()) for _ in range(4)]
+    first = svc.create_section(game_list, member, name='First')
+    second = svc.create_section(game_list, member, name='Second')
+
+    # Deliberately interleaved: 0 and 2 into one section, 1 and 3 into the other.
+    svc.assign_item(game_list, member, items[0], first)
+    svc.assign_item(game_list, member, items[2], first)
+    svc.assign_item(game_list, member, items[1], second)
+    svc.assign_item(game_list, member, items[3], second)
+
+    positions = list(GameListItem.objects.filter(game_list=game_list)
+                     .order_by('position').values_list('position', flat=True))
+    assert positions == [0, 1, 2, 3], 'sectioning moved item positions'
+
+    # ...and `reorder` still works on the whole list, unaware that sections exist.
+    svc.reorder(game_list, member, [items[3].id, items[2].id, items[1].id, items[0].id])
+    assert list(GameListItem.objects.filter(game_list=game_list).order_by('position')
+                .values_list('id', flat=True)) == [items[3].id, items[2].id, items[1].id, items[0].id]
+
+
+def test_a_game_cannot_be_filed_under_another_lists_section():
+    """Without this an item takes a section id from a list the caller may not even be able to see:
+    it would render nowhere, and the refusal (or its absence) would confirm that section exists."""
+    member = _hunter(psn='mine', premium=True)
+    stranger = _hunter(psn='theirs', premium=True)
+    mine = svc.create_list(member, name='Mine')
+    theirs = svc.create_list(stranger, name='Theirs')
+    their_section = svc.create_section(theirs, stranger, name='Elsewhere')
+    item = svc.add_concept(mine, member, ConceptFactory())
+
+    with pytest.raises(svc.ListError):
+        svc.assign_item(mine, member, item, their_section)
+
+    item.refresh_from_db()
+    assert item.section_id is None
+
+
+def test_a_section_name_is_public_text_and_is_treated_as_such():
+    """Easy to miss, because a section feels structural rather than editorial -- but the header
+    renders on a public page under the author's byline, which is the definition of `all_ugc`."""
+    member = _hunter(psn='writer', premium=True)
+    game_list = svc.create_list(member, name='Mine')
+
+    with pytest.raises(svc.ListError):
+        svc.create_section(game_list, member, name='   ')
+    with pytest.raises(svc.ListError):
+        svc.create_section(game_list, member, name='x' * 200)
+
+    # Markup is sanitized to a fixpoint, exactly as a list name is.
+    section = svc.create_section(game_list, member, name='<b>Bold</b> plans')
+    assert '<' not in section.name and '>' not in section.name
+
+    # AND THE BANNED-WORD FILTER, which is the half a section is most likely to slip past: the name
+    # reads as structural, so it is the one public string somebody would think of as a label rather
+    # than as writing. Both paths, because rename is a second door into the same field.
+    from django.core.cache import cache
+    from trophies.models import BannedWord
+    BannedWord.objects.create(word='forbidden', is_active=True)
+    cache.delete('banned_words:active')
+
+    with pytest.raises(svc.ListError, match='not allowed'):
+        svc.create_section(game_list, member, name='A forbidden section')
+    with pytest.raises(svc.ListError, match='not allowed'):
+        svc.rename_section(section, member, name='Still forbidden')
+
+    # ...and a restricted hunter cannot write one, member or not.
+    _restrict(member)
+    with pytest.raises(svc.ListError):
+        svc.create_section(game_list, member, name='After the ban')
+
+
+def test_sections_are_capped_per_list():
+    """Unlike list SIZE, which is uncapped on purpose. A section is a rendered header with its own
+    row, so a hundred of them is a page nobody can read."""
+    member = _hunter(psn='prolific', premium=True)
+    game_list = svc.create_list(member, name='Many')
+    for n in range(MAX_SECTIONS_PER_LIST):
+        svc.create_section(game_list, member, name=f'S{n}')
+
+    with pytest.raises(svc.ListError) as refused:
+        svc.create_section(game_list, member, name='One too many')
+    assert str(MAX_SECTIONS_PER_LIST) in str(refused.value)
+    assert GameListSection.objects.filter(game_list=game_list).count() == MAX_SECTIONS_PER_LIST
+
+
+def test_reordering_sections_refuses_a_partial_order():
+    """Same rule as item `reorder`, and for the same reason: a subset means the client and the server
+    disagree about what is on the list, and applying it would silently drop the rest."""
+    member = _hunter(psn='orderly', premium=True)
+    game_list = svc.create_list(member, name='Ordered')
+    made = [svc.create_section(game_list, member, name=f'S{n}') for n in range(3)]
+
+    with pytest.raises(svc.ListError):
+        svc.reorder_sections(game_list, member, [made[0].id, made[1].id])
+
+    assert list(game_list.sections.values_list('position', flat=True)) == [0, 1, 2]
+
+
+def test_the_numbering_toggle_stores_a_choice_and_nothing_else():
+    """It is a DISPLAY choice: both modes are render-time derivations of a global `position`, which
+    is why it cost a boolean rather than a migration."""
+    member = _hunter(psn='numberer', premium=True)
+    game_list = svc.create_list(member, name='Ranked', list_type=LIST_TYPE_RANKED)
+    items = [svc.add_concept(game_list, member, ConceptFactory()) for _ in range(3)]
+
+    assert game_list.sections_restart_numbering is False, 'continue-through is the default'
+    svc.set_section_numbering(game_list, member, restart=True)
+
+    game_list.refresh_from_db()
+    assert game_list.sections_restart_numbering is True
+    # Nothing moved.
+    assert list(GameListItem.objects.filter(game_list=game_list).order_by('position')
+                .values_list('id', flat=True)) == [i.id for i in items]
+
+
+def test_only_the_owner_can_touch_a_section():
+    member = _hunter(psn='owner2', premium=True)
+    stranger = _hunter(psn='stranger2', premium=True)
+    game_list = svc.create_list(member, name='Mine', is_public=True)
+    section = svc.create_section(game_list, member, name='Mine too')
+    item = svc.add_concept(game_list, member, ConceptFactory())
+
+    for call in (
+        lambda: svc.create_section(game_list, stranger, name='Theirs'),
+        lambda: svc.rename_section(section, stranger, name='Theirs'),
+        lambda: svc.delete_section(section, stranger),
+        lambda: svc.reorder_sections(game_list, stranger, [section.id]),
+        lambda: svc.assign_item(game_list, stranger, item, section),
+        lambda: svc.set_section_numbering(game_list, stranger, restart=True),
+    ):
+        with pytest.raises(svc.ListError):
+            call()
+
+    assert GameListSection.objects.filter(game_list=game_list).count() == 1

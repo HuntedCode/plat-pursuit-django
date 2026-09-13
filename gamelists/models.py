@@ -99,6 +99,17 @@ def list_type_options():
 NAME_MAX_LENGTH = 60
 DESCRIPTION_MAX_LENGTH = 300
 NOTE_MAX_LENGTH = 200
+#: A section name is a HEADER above a row of cards, not a title -- it sits in a line with a count and
+#: the owner's controls, and at 375px that line is ~343px wide. 40 is a comfortable "Currently
+#: playing"; 60 (the list's own ceiling) would push the controls onto a second line.
+SECTION_NAME_MAX_LENGTH = 40
+
+#: How many sections a list may hold. Unlike list SIZE -- which is uncapped on purpose, because the
+#: system this replaced gave members unlimited games and a ceiling would take a perk back -- a
+#: section is a rendered header with its own row, so a hundred of them is a page nobody can read.
+#: Twenty covers every real shape: Finished/Playing/Someday is three, a tier list is five to seven,
+#: one per platform is about six.
+MAX_SECTIONS_PER_LIST = 20
 
 
 class GameListQuerySet(models.QuerySet):
@@ -162,6 +173,22 @@ class GameList(models.Model):
         default=False,
         help_text='Opt-IN. A list is private until its author decides otherwise.',
     )
+    #: How a SECTIONED RANKED list numbers itself, and nothing else reads it: a Collection has no
+    #: numerals and an unsectioned Ranked list has only one run.
+    #:
+    #: It is a display choice rather than a data one, which is the whole reason `position` stays
+    #: global and dense -- see `GameListItem.position`. Continue-through is `position + 1`, exactly
+    #: what an unsectioned ranked list already renders; restart-per-section is the item's index
+    #: within its section, computed at render. Neither stores anything.
+    #:
+    #: Defaults to continue-through because that is what a ranked list already MEANS: adding
+    #: sections to one should group it, not renumber it underneath the author.
+    sections_restart_numbering = models.BooleanField(
+        default=False,
+        help_text='Sectioned ranked lists only: restart numbering at 1 in each section, rather '
+                  'than running 1..N through the whole list.',
+    )
+
     #: Denormalized, maintained by the service with F() expressions. Never written by hand: the
     #: counts are what the browse grid sorts on, so a drifted count silently reorders the page.
     game_count = models.PositiveIntegerField(default=0)
@@ -225,6 +252,50 @@ class GameList(models.Model):
             raise ValidationError({'name': 'A list needs a name.'})
 
 
+class GameListSection(models.Model):
+    """An author-named group of games within one list.
+
+    ITS OWN TABLE RATHER THAN A KEY ON THE ITEM. The first sketch was a `GameListItem.group`
+    CharField, and that only works if sections sort alphabetically and cannot exist while empty. Both
+    fail the first real use: "Finished / Playing / Someday" wants that order and not alphabetical,
+    and a hunter creates "Someday" empty and then drags into it. A CharField can express neither.
+
+    NOT A LIST TYPE. Sections compose with `list_type` rather than being one of its values -- a
+    Collection can have them and so can a Ranked list. See docs/design/list-sections.md; the short
+    version is that `list_type` picks a PRESENTATION and sectioning is structure any presentation can
+    carry, so making it a type would have meant `sectioned` plus `sectioned-ranked` and a
+    combinatorial table.
+
+    MEMBERS ONLY to create or rename, and that gate lives in the service. A lapsed member keeps every
+    section they made and the list renders exactly as it did -- what they lose is making more. The
+    alternative is a takeback, which is the same argument the list-size comment makes above.
+    """
+
+    game_list = models.ForeignKey(GameList, on_delete=models.CASCADE, related_name='sections')
+    name = models.CharField(max_length=SECTION_NAME_MAX_LENGTH)
+    #: 0-indexed and dense, like `GameListItem.position` and for a weaker reason: nothing bounds a
+    #: prefetch on it, so a gap is untidy rather than broken. The service compacts anyway, because
+    #: two orderings in one feature that behave differently is a trap for whoever reads one and
+    #: assumes the other.
+    position = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['position']
+        constraints = [
+            # Same reasoning as the list's own blank-name check: the admin, the shell and the
+            # importer all write around the service, and an unnamed section is a header with nothing
+            # in it. Two sections MAY share a name -- that is the author's problem, not a data one.
+            models.CheckConstraint(condition=~Q(name=''), name='gamelistsection_name_not_blank'),
+        ]
+        indexes = [
+            models.Index(fields=['game_list', 'position'], name='glstsec_position_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.name} in {self.game_list.name}'
+
+
 class GameListItem(models.Model):
     """One game on a list.
 
@@ -239,11 +310,27 @@ class GameListItem(models.Model):
 
     game_list = models.ForeignKey(GameList, on_delete=models.CASCADE, related_name='items')
     concept = models.ForeignKey(Concept, on_delete=models.CASCADE, related_name='list_entries')
+    #: Null means UNGROUPED, which is a real state rather than an error: a list that gains sections
+    #: has every item unassigned, and forcing assignment before the page could render would make
+    #: adding sections feel like a migration. Ungrouped items render in their own bucket at the top.
+    #:
+    #: `SET_NULL` and not CASCADE. Deleting a section must orphan its games, never delete them --
+    #: the same reasoning `Concept.absorb()`'s list branch documents, where a cascade would destroy
+    #: hand-curated entries because of a structural change the hunter never saw.
+    section = models.ForeignKey('GameListSection', on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='items')
     note = models.CharField(max_length=NOTE_MAX_LENGTH, blank=True, default='')
 
     #: 0-indexed and DENSE. The service re-compacts on removal, and that contract is load-bearing
     #: rather than tidy: the browse tile's cover prefetch bounds itself with `position__lt=4`, which
     #: silently returns fewer covers than it should the moment a gap appears.
+    #:
+    #: GLOBAL, AND SECTIONS DID NOT CHANGE THAT. Per-section ordering is the obvious shape and it
+    #: breaks the invariant above, and `reorder` with it -- that function refuses a partial ordering
+    #: by design, so a per-section payload would be a rewrite rather than a tweak. Keeping this
+    #: global makes a section a grouping OVERLAY, and makes both numbering modes render-time
+    #: derivations of it: continue-through is `position + 1`, restart-per-section is the index within
+    #: the section. Neither stores anything, so the toggle cost a boolean rather than a migration.
     position = models.PositiveIntegerField(default=0)
     added_at = models.DateTimeField(auto_now_add=True)
 
