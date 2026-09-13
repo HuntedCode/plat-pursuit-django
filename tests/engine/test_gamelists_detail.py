@@ -2118,6 +2118,46 @@ def test_drag_waits_for_the_slice_that_can_cross_a_section(client):
     assert client.get(_url(plain)).context['can_reorder'] is True
 
 
+def test_a_sectioned_page_does_not_scale_with_its_sections(client):
+    """The whale rule, on the axis sections added. `test_the_page_does_not_scale_with_the_list`
+    covers items; nothing covered headers, and a per-section queryset is the obvious way to write
+    this feature.
+
+    Sections cost ONE query total: the headers are fetched once and the grouping happens in Python
+    over rows already in hand. Both sides are bounded -- 200 items, 20 sections -- which is the
+    bounded-slice form CLAUDE.md permits rather than the per-row iteration it bans.
+
+    WARMED UP FIRST, because the opening request of a test pays for session load and permission
+    caching. Measured without it, the bigger list came out CHEAPER (11 against 15), which reads as
+    the opposite of a regression and would have hidden a real one.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    owner = _member(client, psn='flat')
+    small = _ranked(owner, 0)
+    big = _ranked(owner, 0)
+    for game_list, n_sections, n_items in ((small, 2, 6), (big, 12, 24)):
+        sections = [svc.create_section(game_list, owner, name=f'S{i}') for i in range(n_sections)]
+        for i in range(n_items):
+            concept = ConceptFactory(unified_title=f'G{i:03d}')
+            GameFactory(concept=concept, title_platform=['PS5'])
+            item = svc.add_concept(game_list, owner, concept)
+            svc.assign_item(game_list, owner, item, sections[i % len(sections)])
+
+    client.get(_url(small))
+    client.get(_url(big))
+
+    with CaptureQueriesContext(connection) as few:
+        client.get(_url(small))
+    with CaptureQueriesContext(connection) as many:
+        client.get(_url(big))
+
+    assert len(many.captured_queries) == len(few.captured_queries), (
+        f'{len(few.captured_queries)} queries with 2 sections, '
+        f'{len(many.captured_queries)} with 12')
+
+
 def test_a_free_hunter_sees_a_sectioned_list_exactly_as_anyone_does(client):
     """Sections are the AUTHOR's tool. Nobody needs a membership to read a list that has them, and a
     reader's view must not differ -- the gate is on making them, not on seeing them."""
