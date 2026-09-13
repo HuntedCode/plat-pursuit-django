@@ -68,6 +68,11 @@ Three loops, one direction of authority: **trophies raise the ceiling, and nothi
   [content-model.md](content-model.md#ip-boundaries).
 - **Nothing earned can ever be taken.** Trophies, badges, Pursuer level, buildings, and stored
   resources are permanently safe. This constraint is load-bearing and shaped several designs.
+- **Only the player first-clears.** Companions farm consumables and collectibles; the player
+  finds capacity and access (companions, slots, zones, key unlocks). If anything that expands
+  farming capacity can itself be farmed, the system bootstraps and the player becomes optional.
+- **Casual means slow-income hunter, not non-hunter.** The accessibility answer is depth *under*
+  the level ceiling, never a separate casual mode. Level is a ceiling, not a pace.
 
 ---
 

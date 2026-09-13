@@ -85,6 +85,14 @@ stopwatch.
 
 ## The Village
 
+**In fiction:** a settlement you founded at a stable point in the Backlog. The universe of
+gaming history is vast and shifting; your base is the one place in it that holds still, because
+you made it hold still. You go out, you come back, it has grown.
+
+Registers do not mix. There is **one fictional layer**, and the real world never pokes through
+it. A framing where the base was the player's actual game room was rejected for exactly this
+reason ([R17](decisions.md#r17)).
+
 A menu builder. Buildings are rows and cards with levels and upgrade buttons, not tiles on a
 map. Tribal Wars is the proof this works: its village screen is a list, and almost none of its
 grip came from art.
@@ -114,6 +122,24 @@ The decision that remains is **build order**, and it still matters because it co
 **Nothing is ever demolished.** The base is purely additive, and it is a record of everything
 you have done.
 
+### The Hall gates the tiers
+
+Borrowed from CoC and Tribal Wars. A main building (working name **Town Hall**) sets the cap
+for everything else. You start with the Hall at level one and nothing else. You can build a few
+resource buildings and depots and raise them to the tier cap, and then further progress needs
+the Hall upgraded, which lifts the cap again.
+
+This reconciles cleanly with sequence-scarcity: **the Hall tier creates waves, and inside each
+wave you still choose build order.** Bounded, recurring, no permanent lockout.
+
+**On maxing out.** A dedicated player will eventually cap everything and wait for an expansion.
+CoC has this and its players treat it as an achievement rather than a failure. Our position is
+better than theirs for one reason: **the village is not the endgame, the Frontier is.** A maxed
+village in CoC means nothing left to do; a maxed village here means a fully tuned engine for
+the actual game. That is graduating, not stalling. Mitigate with long timers and large
+prerequisites at the top tiers, and see the soft-gating rule in
+[content-model.md](content-model.md#soft-gating-gate-on-a-thing-not-a-number).
+
 ### What buildings do
 
 Categories, not a final list:
@@ -132,22 +158,56 @@ Categories, not a final list:
 The Catalogue Office matters more than it looks: it is a **building that points back at
 hunting**. The village should keep sending the player to their console.
 
-### Customization surfaces
+### Customization is a separate layer from buildings
 
-The constraint: in a menu builder, customization has to survive being a row. A name, a color,
-an icon, a small treatment, an image. And it has to be **visible to a visitor**, or it is a
-setting rather than customization.
+> **Buildings are function. Cosmetics are identity. They never touch.**
+
+Buildings stay **generic and functional** (thematic, but not era-specific), so the base screen
+is always legible and a new building is cheap to add. Everything expressive lives in its own
+layer with its own economy.
+
+An earlier draft skinned each building by the era its materials came from. It was rejected as a
+guaranteed UI mash-up: five visual languages on one screen reads as broken rather than as
+characterful. See [R18](decisions.md#r18).
+
+#### The rule that keeps a large cosmetic library coherent
+
+> **Items are *what* you own. The theme is *how* everything renders.**
+
+A decor item is not "a brass lamp," it is "a lamp" that draws in whatever theme is currently
+active. Consequences:
+
+- Hundreds of items can ship with zero risk of the screen fighting itself
+- Swapping your base theme re-renders your whole collection coherently, which is a satisfying
+  moment in itself
+- **Two independent authoring pipelines that multiply.** A new item is a name, a description,
+  an icon, and a slot. A new theme is a token set. Ten themes and a hundred items is a thousand
+  looks, and neither pipeline blocks the other
+
+#### The surfaces
+
+Constraint: in a menu builder, customization has to survive being a row, and it has to be
+**visible to a visitor** or it is a setting rather than customization.
 
 | Surface | Notes |
 |---------|-------|
-| **Village name and motto** | Free to build, infinite expression, first thing a visitor reads |
-| **Crest / sigil** | Shape + field color + symbol, composed from SVG parts. A few dozen parts yield thousands of crests. Best value on the list |
-| **Building names** | User-written. Costs nothing, produces the most personal results |
-| **Theme treatments** | The authored Horror/Fantasy/Noir styling applied per building. The scaling surface |
-| **Dedications** | Pin a platinumed game's cover to a building. Uses art already displayed site-wide, costs zero new assets |
-| **Display slots** | A fixed number of featured positions. Same pattern as existing profile showcases |
-| **Village-wide ambience** | A season or time-of-day treatment that recolors everything |
+| **Base theme** | The era skins, as pure cosmetics. **One active at a time**, governing everything else. Unlocked by exploring that era, then chosen by the player, so it is a goal driven by play rather than an automatic side effect |
+| **Name, motto, building names** | Free, infinite, the most personal results. First thing a visitor reads |
+| **Crest / sigil** | Shape + field color + symbol from SVG parts. A few dozen parts yield thousands of crests. Best value on the list |
+| **Decor** | The flavor rows: a name, a description, no stats. Where found objects live |
+| **Display arrangement** | Which finds are featured, how exhibits are grouped |
+| **Inhabitants** | Who lives here and what they are called |
+| **Arrival flavor** | Variants on the return screen and the character's status line |
+| **Dedications** | Pin a platinumed game's cover to a building. Uses art already displayed site-wide |
 | **Existing character surfaces** | Frames, titles, marks, backgrounds, nameplate styling. All already modeled |
+
+**Acquisition:** found in the Frontier, bought with Coins, earned from completed exhibits,
+awarded by community goals, and time-limited from events.
+
+**Build in a provenance bias.** Found items should carry where they came from in their own
+description ("recovered from the deep disc-era vaults"). It is worth more than any stat, and it
+is why a found lamp beats a bought lamp emotionally. Bought items are the reliable path; found
+items are the ones people talk about.
 
 **"Plot layout" is not a customization surface.** There is no map, so arrangement has nowhere
 to live. What that phrase was reaching for is *which buildings you have at all*, which is the
@@ -198,6 +258,12 @@ teeth; neither replaces the other.
 
 Gear slots (illustrative): weapon, armour, trinket, charm, banner, supply.
 
+**Gear is a wardrobe, not a ladder.** It is the only track with a *functional* payoff, which
+risks making every other track feel like fluff. The guard is that pieces suit particular eras,
+themes, or zone types rather than forming a single ascending line of "better." Then a player
+wants *many* pieces rather than only the best piece, and gear stays a collection instead of a
+stat check. Two sources: crafted at the Workshop, found in the Frontier.
+
 ### Loot
 
 RNG loot tables are appropriate **here** and nowhere else. The rule:
@@ -212,7 +278,50 @@ gacha and the tone is gone.
 
 ## Collection
 
-Two collectible tracks, both built from real games:
+This is a game built primarily for collectors, so there are several tracks. **Multiple tracks
+only work if each one is a different pleasure.** If they all reduce to "find thing, tick list,
+complete set," they blur into one long checklist and none of them feels special. Protect the
+differences deliberately:
+
+| Track | The question it answers | Rhythm |
+|-------|-------------------------|--------|
+| **Cards** | "How much of gaming have I seen?" | Frequent, high volume, packs, duplicates, trading. The social one |
+| **Discs** | "What have I actually *found*?" | Rare, deliberate, zone-specific. The white-whale hunt |
+| **Items / decor** | "Who am I?" | Broad, mixed sources, expressive. Changes your base, visible to visitors |
+| **Gear** | "What can I take on?" | Functional, situational, a wardrobe rather than a ladder |
+| **Companions** | "Who is with me?" | Slow, each one a character with their own progression |
+| **Badges** | "What have I really done?" | Slow, real, PSN-only. The moat, untouched by the game |
+
+### The Compendium
+
+The master list of everything collectible, with where and how each is found. It is both the
+motivational surface and, incidentally, the content roadmap: every entry added is visible,
+countable content, and players notice the number move.
+
+**Tier the reveal.** Showing four hundred entries on day one is overwhelming and kills
+discovery:
+
+| Tier | Shown |
+|------|-------|
+| **Known** | Found. Full entry, full description, provenance |
+| **Rumored** | Silhouette, a name or partial name, and a hint about where it turns up. **This tier does the real work** |
+| **Hidden** | Not shown at all. Preserves genuine surprise |
+
+**How specific to be.** Location general, gates explicit, odds never. The reasoning is specific
+to this game and is *not* hand-holding:
+
+> **In a normal game the player's wasted time is in-game. In ours it is real evenings on a
+> PS5.**
+
+Someone who grinds the wrong zone for two weeks because an entry was coy has not discovered
+anything, they have lost part of their life. So: point them at the right country, not the right
+rock ("turns up in the deeper disc-era vaults"), state gate requirements plainly ("requires Mind
+90", which turns confusion into a goal), and never publish drop rates. Monster Hunter runs
+exactly this policy.
+
+### The two game-derived tracks
+
+Both built from real games:
 
 **Cards.** One per game, drawn from IGDB, so the set is effectively infinite at zero authoring
 cost for the base data. Rarity keys off **actual platinum rarity**, so scarcity has an honest
@@ -248,6 +357,82 @@ The verbs are **find, shelve, curate, show off**.
 
 > Note: card rarity cannot key to platinum rarity for pre-2008 games. See
 > [content-model.md](content-model.md#the-pre-2008-gap).
+
+---
+
+## Companions and expeditions
+
+Inhabitants who move into the base as it grows **are** the expeditionary force. That closes a
+loop that was otherwise loose:
+
+> Base grows → more inhabitants → more parallel expeditions → more finds → base grows
+
+It also gives the Rig/Staging building an obvious job (housing and dispatch capacity), and it
+means village growth directly increases Frontier throughput.
+
+### The hard line: only the player first-clears
+
+> **The player *explores*. Companions *run*.**
+>
+> Exploration is first-clear, progression, gated by level. Expeditions are farming and economy,
+> and only reach places you have already been.
+
+This does a great deal of work:
+
+- The player is always the protagonist. Companions never steal the moment
+- **Progression is personal; expeditions are only economy.** Same shape as the level/gear split
+- You cannot idle your way into new content
+- Exploration and farming stop competing, because they are different activities
+
+### The generalization
+
+> **Companions farm consumables and collectibles. The player finds capacity and access.**
+
+Anything that expands your ability to farm has to come from you: companions, expedition slots,
+new zones, key unlocks. Otherwise the system bootstraps itself, compounds without you, and the
+player becomes optional. The deepest prestige collectibles belong on that list too, so "I found
+this" keeps its weight.
+
+### Slots, cooldowns, and rotation
+
+**Fewer expedition slots than companions.** This is the scarcity model that works, and it is
+everything finite plots was not: the decision **recurs every session** rather than locking you
+out once, nothing is permanently lost, and collecting more companions always helps without ever
+trivializing the cap.
+
+Two cooldowns, which are not redundant because they are **two different growth levers**:
+
+| Cooldown | Purpose | Improved by |
+|----------|---------|-------------|
+| **Slot re-supply** | Paces total throughput | Building upgrades |
+| **Companion rest** | Forces rotation through your bench | Collecting more companions |
+
+### Companions are a choice, not a stat
+
+Each brings unique benefits and drawbacks: one finds rares more often, one clears faster, one
+returns extra materials. Combined with Compendium hints this makes farming **directed**: "this
+drops in the deep disc-era vaults, and she finds more rares, so that is the run."
+
+**Drawbacks must be tradeoffs, not punishments.** "Finds 20% more rare gear, moves 30% slower"
+is a choice. "Sometimes loses part of your haul" violates the nothing-earned-is-lost rule and
+will feel bad no matter how small the chance.
+
+**Companions are worse than the player at finding rares, and slower.** That is deliberate: it
+creates the central allocation tension, because there is only one of you and your own runs have
+two competing uses.
+
+> **Push forward into new areas, or go get that specific thing myself.**
+
+### Progression, gear, failure
+
+- **Companions have their own progression.** Levels or affinity that grow with use.
+- **Companion gear: one slot each**, Diablo-follower style. Contained (one item type, one slot,
+  not a second inventory) and it gives found gear a second home when a piece is not right for
+  you. **Sequence it as v1.x**, not first slice: the loop proves out without it and it doubles
+  the gear authoring surface on day one.
+- **Expeditions can fail.** Specifics deferred to implementation. The boundary now: a failure
+  costs **the run** (time, supplies, opportunity), never the haul already banked and never the
+  companion. A failed run can still grant the companion some experience.
 
 ---
 

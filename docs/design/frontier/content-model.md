@@ -94,6 +94,19 @@ Nobody is ever hard-blocked from progressing because they dislike a genre. Speci
 get things generalists never see. This preserves the long-standing rule that PlatPursuit
 should pull players toward a **direction**, never assign them a specific game.
 
+### Soft-gating: gate on a thing, not a number
+
+Where a gate would otherwise read as a wall with the player's name on it, gate on a **material**
+instead of on a stat.
+
+"Hall 8 requires a material found only past a Pursuer 200 zone" and "Hall 8 requires Pursuer
+200" have a similar effect and read completely differently. One is a refusal; the other is a
+reason to go somewhere. It also feeds the discovery loop rather than bypassing it.
+
+This is the preferred form for **village progression** specifically. A direct Pursuer-level gate
+on the top Hall tiers was considered and rejected: it tells slow-income players they are not
+wanted. See [decisions.md](decisions.md#r19).
+
 ### Gated does not mean empty
 
 A gate with nothing to do behind it is a wall. While level-gated, a player should always have:

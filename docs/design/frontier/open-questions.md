@@ -57,21 +57,21 @@ retrofitted.
 
 ## Blocks fiction and naming
 
-### Is the base *yours* or *the Pursuer's*?
-Not semantics. If it is a place your character operates from, it can carry fiction, geography,
-and inhabitants. If it is a visualization of your own trophy history, it has to stay honest to
-your data and can invent very little. Leaning toward the former, but undecided.
-
 ### Names
-All working titles:
+The hardest open question so far. All working titles:
 
 | Working name | Notes |
 |--------------|-------|
-| **The Backlog** | For the Frontier. Strongest candidate. Every hunter has one and making it a place is exactly the right charm |
-| **Village** | Placeholder. "Village" implies civilians and settlement, which is slightly off for a solitary hunter identity. Alternatives: hall, outpost, archive, reach, estate |
+| **The Backlog** | For the Frontier. Strongest candidate. Every hunter has one and making it a place is exactly the right charm. Note the meaning is a *universe of gaming history*, not the player's literal unplayed pile |
+| **Village** | Placeholder, and it does not survive the theming. Implies civilians and settlement. Candidates raised: **the Reach** (warm, suggests the edge of somewhere vast), **Basecamp** (plain, expedition-native), **Checkpoint** or **Save State** (gaming-native, means both "preserved" and "the place you return to"), **the Anchor** (a fixed point in a shifting universe, which is literally the fiction) |
+| **Town Hall** | Placeholder for the tier-gating main building |
+| **Compendium** | For the master collectible list. Alternatives: Catalog (warmer, but Sony uses "Game Catalog" for a PS Plus tier), Index, Registry, Almanac |
 | **Frontier** | Placeholder for the whole game layer, currently doubling as the branch name |
 | **Coins** | Placeholder for the soft currency |
 | The five resources | Currently just the discipline names. May want their own material names |
+
+### Does the base have its own level, separate from Pursuer level?
+Probably yes, via the Hall tier, but whether that is surfaced as a number is undecided.
 
 ### What is the Pursuer's verb?
 The character now *does* something, which was the original gap. But the fiction of what they
@@ -95,10 +95,15 @@ a weaker "place worth visiting" than one linked from a profile.
 
 ## Smaller, but worth recording
 
-- **Is a build reversible?** Permanent build orders create real stakes and real regret, which
-  is great for a game and rough on someone who specialized before understanding the system.
-  Respec costs are the usual answer and also the usual place a product starts feeling grabby.
-- **Does the Village have its own level, separate from Pursuer level?**
+- **Do companion affinities map to the five disciplines?** Decided NOT to map them to jobs or
+  disciplines, because it would constrain where each companion can go and that is less fun.
+  What their affinities *are* instead is still open.
+- **What exactly does expedition failure look like?** The boundary is set (costs the run, never
+  the haul, never the companion) but the mechanics are deferred to implementation.
+- **How many expedition slots at each Hall tier, and what are the cooldown lengths?** Pure
+  tuning, but it sets the daily rhythm and should be prototyped early.
+- ~~**Is a build reversible?**~~ RESOLVED: nothing is ever demolished and every building is
+  eventually available, so there is nothing to respec.
 - **What happens to a village when a user stops hunting entirely?** Current thinking is it
   keeps generating at the frozen rate, which makes it a soft on-ramp back. Unverified.
 - **Do PSN trophies exist for the game layer itself?** (Meta, probably a no, but it has come

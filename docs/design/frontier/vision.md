@@ -179,6 +179,42 @@ Legitimate material:
 
 ---
 
+## Who this has to work for
+
+The worry that prompted this section: does the game exclude casual players, and should we make
+space for people outside the trophy-hunting niche without losing our identity?
+
+The reframe that makes it tractable:
+
+> **Casual does not mean non-hunter. It means slow-income hunter. And that is most of the
+> market.**
+
+Someone with 500 trophies and three platinums is casual by hunter standards, has a real
+character on day one thanks to retroactive credit, and is a completely legitimate user. We are
+not designing for people outside the niche, we are designing for the wide bottom of it.
+
+Which turns a vague worry into a concrete design question:
+
+> **What does a player do when their Pursuer level stops moving?**
+
+The two-layer design already answers it, but only if we are deliberate about four things:
+
+1. **Level is a ceiling, not a pace.** Village build-out, farming, companion rotation, and
+   collecting all happen *under* the ceiling and are driven by in-game activity, not by new
+   platinums.
+2. **Make the space under the ceiling deep.** A player who never gains another level should
+   still have months of things to do. This is the entire accessibility answer and it dilutes
+   nothing.
+3. **Keep the collection tracks level-agnostic.** A casual player can be a serious collector in
+   the zones they can reach, which is a complete and satisfying game.
+4. **Zones must be wide at every band, not only deep.** If every meaningful thing requires the
+   next level, casual players stall. This is the failure mode to design against.
+
+**The trap to avoid: do not build a casual mode.** Same game for everyone, just deep enough at
+every band that a slow ceiling never means an empty screen.
+
+---
+
 ## The tests
 
 Applied to any future proposal, in this order:

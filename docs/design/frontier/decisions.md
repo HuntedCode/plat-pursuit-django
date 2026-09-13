@@ -132,6 +132,66 @@ is entirely text and is genuinely atmospheric.
 Accrual, expedition, production, community goal, and a daily rotating element, so something is
 always ripe when the page opens. **Re-dispatch is the strongest single daily hook.**
 
+### D29. One fictional layer, no reality poking through
+The base is an in-fiction settlement founded at a stable point in the Backlog. The Backlog is a
+universe of gaming history, not the player's literal pile of unplayed games. See [R17](#r17).
+
+### D30. Buildings are generic; cosmetics are a separate layer
+Buildings are functional and uniform. Everything expressive lives in its own layer with its own
+economy. **Items are what you own; the theme is how everything renders**, which lets a large
+cosmetic library ship without the screen fighting itself. See [R18](#r18).
+
+### D31. The Hall gates the tiers
+A main building sets the cap for everything else. Its tiers create **waves**, and inside each
+wave the player still chooses build order.
+
+### D32. Soft-gate on materials, not on Pursuer level
+For village progression specifically. Gate on a thing found past a level-gated zone rather than
+on the level itself. Same effect, completely different feel, and it feeds discovery. See
+[R19](#r19).
+
+### D33. The player explores; companions run
+Only the player can first-clear. Expeditions only reach places already cleared. Generalized:
+**companions farm consumables and collectibles, the player finds capacity and access.** Anything
+that expands your ability to farm (companions, slots, zones, key unlocks, the deepest prestige
+collectibles) must come from the player, or the system bootstraps itself and the player becomes
+optional.
+
+### D34. Fewer expedition slots than companions, with two cooldowns
+The scarcity model that works, because the decision **recurs** rather than locking you out.
+Slot re-supply cooldown paces throughput and is improved by **buildings**; companion rest
+cooldown forces rotation and is improved by **collecting companions**. Two growth paths, two
+levers.
+
+### D35. Companions are choices with tradeoffs, and are worse than the player
+Each has unique benefits and drawbacks, which makes farming directed rather than idle.
+**Drawbacks are tradeoffs, never punishments** (slower or lower yield, never losing a haul).
+Companions are deliberately slower and worse at finding rares, which creates the central
+allocation tension: push forward into new areas, or go get that specific thing yourself.
+
+### D36. Companions have their own progression; gear is one slot and is v1.x
+Levels or affinity that grow with use. One gear slot each, Diablo-follower style, sequenced
+after the first slice.
+
+### D37. Expeditions can fail, but failure costs only the run
+Time, supplies, and opportunity. Never the haul already banked, never the companion. Specifics
+deferred to implementation.
+
+### D38. Compendium reveal is tiered; location general, gates explicit, odds never
+Known / Rumored / Hidden. The rumored tier does the motivational work. Being specific about
+place and gate is **not** hand-holding here, because in this game the player's wasted time is
+real evenings on a console rather than in-game time.
+
+### D39. Collection tracks must each be a different pleasure
+Cards (volume, social), discs (rare, deliberate), items (expressive), gear (functional
+wardrobe), companions (characters), badges (real work). If they all reduce to the same verb they
+blur into one checklist.
+
+### D40. Casual means slow-income hunter, and the answer is depth under the ceiling
+Level is a ceiling, not a pace. Keep collection tracks level-agnostic, make zones wide at every
+band, and never build a separate casual mode. Full reasoning in
+[vision.md](vision.md#who-this-has-to-work-for).
+
 ---
 
 ## Rejected
@@ -255,6 +315,32 @@ made after [R11](#r11), which is why the principle is now written as a rule:
 **Why:** a museum is a display case, and display cases are passive. The village has to be the
 main daily draw, which means dispatch, production, decisions, and return moments. Display is
 one wing of it, not the building.
+
+### R17. The base as the player's real game room ("your setup")
+A framing where the home base was a real-world gaming space (desk, shelves, CRT, couch) and the
+Backlog was what you dove into through the screen.
+
+**Why:** it does a lot of clever work (display and operations in one place, deeply nostalgic,
+"come see my setup" is a real joy) but it **breaks the fiction**. The Backlog is meant to be a
+universe of gaming history that the character explores, not the player's literal pile of
+unplayed games. Injecting reality kills the vibe and pulls the player out of the world. One
+fictional layer only.
+
+### R18. Buildings skinned by the era their materials came from
+Each building wearing the visual treatment of the era it was salvaged from, making the base a
+visible patchwork of where you have been.
+
+**Why:** five UI languages on one screen reads as broken, not as characterful. Also required
+era-tagged salvage, which is a **second resource axis** on top of the five disciplines and a
+real complexity cost for a support layer. Replaced by
+[D30](#d30-buildings-are-generic-cosmetics-are-a-separate-layer): generic buildings plus one
+active base theme governing all rendering.
+
+### R19. Gating the top Hall tiers directly on Pursuer level
+**Why:** it tells players who are new to trophy hunting, or who do not have much time to play,
+that they are not wanted. Replaced by
+[D32](#d32-soft-gate-on-materials-not-on-pursuer-level), which achieves a similar pacing effect
+while reading as a reason to explore rather than a refusal.
 
 ---
 
