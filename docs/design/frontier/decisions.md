@@ -105,6 +105,33 @@ Real work pays deterministically. Packs and drops are earned, never purchasable 
 ### D22. Parallel development on `feature/frontier`
 Branched directly off `main`. Regular site updates continue on their own branches.
 
+### D23. The village is a hub town and home base, not the main progression driver
+The Frontier carries progression. The village is where you collect, outfit, decide, dispatch,
+display, and return to. It also has to carry the **pride of a home you built**, not the
+efficiency of a facility you operate.
+
+### D24. Scarcity of sequence, not scarcity of selection
+Every building is eventually available. The decision is **build order**, which compounds.
+Replaces the earlier finite-plots model. See [R14](#r14).
+
+### D25. Nothing is ever demolished
+The base is purely additive and is a record of everything the player has done.
+
+### D26. Nothing in the past is broken
+Finds go straight to the shelf. No repair, no restoration bench, no damaged-goods state. The
+resource sink is **display** (cases, frames, plaques, exhibit space), and **materials** are a
+separate mundane loot category that feeds gear crafting. See [R15](#r15).
+
+### D27. Atmosphere lives in copy and state, not pixels
+The three tools available to a menu game are: what the page says, what changed since last time,
+and what the character is currently doing. Home-feeling is built from a growing list, flavor
+rows with no stats, character status text, and the offline-summary return screen. A Dark Room
+is entirely text and is genuinely atmospheric.
+
+### D28. Parallel timers of different lengths
+Accrual, expedition, production, community goal, and a daily rotating element, so something is
+always ripe when the page opens. **Re-dispatch is the strongest single daily hook.**
+
 ---
 
 ## Rejected
@@ -205,6 +232,29 @@ nominative use). Building creative content derived from a franchise's characters
 in a product with paid memberships is not. The risk is not a letter; it is building a content
 pipeline on that pattern and having to rip it out once it is load-bearing. Replaced by
 [D15](#d15-franchise-gates-the-door-archetype-furnishes-the-room).
+
+### R14. Finite plots in the village
+More buildings available than room to place them, forcing permanent exclusions.
+
+**Why:** it was correct while the village *was* the game and had to carry every decision
+itself. Once the Frontier became the progression driver, the village is support infrastructure,
+and permanently locking a player out of a support building just feels bad. The genre agrees:
+CoC and Tribal Wars both let a player build everything in their main base eventually. Replaced
+by [D24](#d24-scarcity-of-sequence-not-scarcity-of-selection).
+
+### R15. Restoration as a crafting mechanic
+Finds come back damaged (scratched discs, corrupted saves, torn manuals) and are repaired at a
+bench before they can be shelved.
+
+**Why:** it is the decay framing in a different costume. Repair implies the past is degraded,
+and nostalgia requires the past to be **good**. This was the second time the same mistake was
+made after [R11](#r11), which is why the principle is now written as a rule:
+*nothing in the past is broken, the only thing missing is that you don't have it yet.*
+
+### R16. Framing the village purely as a museum
+**Why:** a museum is a display case, and display cases are passive. The village has to be the
+main daily draw, which means dispatch, production, decisions, and return moments. Display is
+one wing of it, not the building.
 
 ---
 

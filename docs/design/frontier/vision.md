@@ -91,6 +91,13 @@ white whale. The deep strata are not a graveyard, they are where the treasures a
 reference point is Astro Bot: it features many games that have seen their last light of day
 and it **celebrates** every one of them.
 
+The corollary, which took two attempts to learn (decay first, then a restoration mechanic):
+
+> **Nothing in the past is broken. The only thing missing is that you don't have it yet.**
+
+Any mechanic that has the player repairing, restoring, or rescuing a game is the decay framing
+in a new costume. Finds arrive whole and go straight to the shelf.
+
 **Where decay still earns a place** (as an event type, never the ambient mood):
 
 - **Timed events** when a game genuinely is about to become unobtainable. Real urgency, rare,

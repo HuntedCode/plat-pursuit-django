@@ -89,34 +89,48 @@ A menu builder. Buildings are rows and cards with levels and upgrade buttons, no
 map. Tribal Wars is the proof this works: its village screen is a list, and almost none of its
 grip came from art.
 
-### Scarcity is the whole game
+### It is a hub town, not a museum and not the main progression driver
 
-**Finite plots.** More buildings available than plots to put them on. Every screen exists to
-make the player choose. This was the single thing missing from the first rejected mockup.
+The Frontier carries progression. The village is the **home base and support layer**: where you
+collect, outfit, decide, dispatch, display, and come back to. Display is one wing of it, not
+the point of it.
 
-Sources of decision pressure:
+### Scarcity of sequence, not scarcity of selection
 
-- Limited plots, so composition is a real choice
-- Costs in five separate resources, so a Heart-poor Combat hunter genuinely cannot build
-  everything
-- Buildings gated behind other buildings
-- Upgrade paths that exclude each other
+**You will eventually have every building.** Permanent exclusion on a support system feels bad,
+and the genre agrees: CoC and Tribal Wars both let a player build everything in time.
+
+An earlier draft used finite plots. That was correct when the village *was* the game and had to
+carry every decision itself. It is wrong now. See [decisions.md](decisions.md#r14).
+
+The decision that remains is **build order**, and it still matters because it compounds:
+
+- Depot first means you stop wasting capped resources sooner
+- Rig first means more expeditions running while everything else lags
+- Workshop first means better gear earlier, so deeper runs sooner
+- Costs in five competing resources mean your character's shape decides what is cheap for *you*
+- Depth versus breadth: one building at Lv. 10, or five at Lv. 3
+
+**Nothing is ever demolished.** The base is purely additive, and it is a record of everything
+you have done.
 
 ### What buildings do
 
 Categories, not a final list:
 
-| Kind | Example role |
-|------|--------------|
-| **Crafting** | Forge produces gear components for expeditions |
-| **Capacity** | Archive raises storage caps across all five stores |
-| **Conversion** | Workshop turns surplus from a full store into Coins |
-| **Display** | Visitors' Hall shows featured badges and the disc shelf to anyone who visits |
-| **Social** | Almshouse doubles contribution to community goals |
-| **Direction** | Cartographer's Office suggests a Contract a week from a district you have neglected |
+| Building | Job |
+|----------|-----|
+| **Depot** | Storage capacity across the five stores |
+| **Workshop** | Gear and display cases, built from materials |
+| **Rig / Staging** | How many expeditions run at once, and how far they reach |
+| **Catalogue Office** | What is missing, where to go next, expedition planning |
+| **Signal Tower** | Reveals map, surfaces community goals and events |
+| **Exchange** | Trade duplicates with other hunters |
+| **Lodge** | Visitors, guestbook, social |
+| **Stacks** | The collection display |
 
-That last category matters more than it looks: **buildings that point back at hunting**. The
-Village should keep sending the player to their console.
+The Catalogue Office matters more than it looks: it is a **building that points back at
+hunting**. The village should keep sending the player to their console.
 
 ### Customization surfaces
 
@@ -141,6 +155,20 @@ core loop.
 
 **First two to build:** crest and naming. Nearly free, immediately visible to visitors, and
 they make a village feel owned before a single building is upgraded.
+
+### Making it feel like home, in a menu
+
+The base should carry the pride of a home you built, not the efficiency of a facility you
+operate. **In a menu game that feeling lives in copy and state, not pixels.** A Dark Room is
+entirely text and is genuinely atmospheric. Three tools: what the page says, what changed since
+last time, and what your character is currently doing.
+
+| Feeling | How it is built |
+|---------|-----------------|
+| **Permanence** | A building list that only ever grows, plus a visible history log of every addition |
+| **Non-functional space** | **Flavor rows.** List entries with a name and a description and no stats, that exist purely to be yours. The menu equivalent of a decorative room, and the best Coins sink available |
+| **Your Pursuer lives here** | A single line of **status text** that changes with state. "Rellik is at the bench." "Rellik is sorting the shelves." The difference between `Expedition: idle` and a character who is home |
+| **The return moment** | A **screen state**. Opening the page tells you what happened while you were gone: what finished, what is waiting, who visited. The genre calls this the offline summary and it is one of the most satisfying things in it |
 
 ---
 
@@ -197,6 +225,27 @@ purest expression of the celebration premise: the whole feeling is "oh, I rememb
 The disc shelf is also what gives the Village a payload for the "place worth visiting" driving
 force. People come to see your shelf.
 
+### Finds are never broken
+
+> **Nothing in the past is broken. The only thing missing is that you don't have it yet.**
+
+A find goes **straight to the shelf**. No repair bench, no restoration timer, no damaged-goods
+state. Repair implies the past is degraded, which is the decay framing wearing a different
+costume, and it undercuts the nostalgia the whole premise runs on. See
+[decisions.md](decisions.md#r15).
+
+The resource sink moves to **display, not repair**:
+
+- **Cases, shelves, frames, plaques, exhibit space** are what you spend on. You are honoring
+  the thing, not fixing it. "My shelf is full, I need a bigger case" is a good problem
+- **Materials** are a separate and mundane loot category (scrap, components) that feeds the
+  Workshop for gear. Treasures get displayed; materials get spent
+- **Exhibits** are the curation layer. Group finds into themed displays: a full series run, a
+  single year, one studio's output. Completing an exhibit pays, and exhibits are what visitors
+  come to see
+
+The verbs are **find, shelve, curate, show off**.
+
 > Note: card rarity cannot key to platinum rarity for pre-2008 games. See
 > [content-model.md](content-model.md#the-pre-2008-gap).
 
@@ -249,14 +298,24 @@ village with horror dedications).
 
 The point of the whole exercise:
 
-| Clock | Frequency | Source |
-|-------|-----------|--------|
-| Collect | Daily | Idle accrual, storage filling |
-| Expedition ends | Hours | Frontier run completing |
-| Community goal | Weekly | Moves without you |
-| Platinum | Monthly | Raises the engine |
+The point of the whole exercise is that **several things are always mid-flight, and one of them
+just finished.** That is the Farmville harvest principle, and the way to guarantee it is
+parallel timers of different lengths, so something is always ripe when the page opens.
 
-Today there is one clock. This adds three faster ones without replacing it.
+| Clock | Frequency | What is waiting |
+|-------|-----------|-----------------|
+| Resource accrual | Continuous, caps out | Stores to collect |
+| Expedition | Hours | A run came back and needs re-dispatching |
+| Workshop production | Hours to a day | Gear or a case finished |
+| Community goal | Weekly | The bar moved without you |
+| Rotating offer / visitor | Daily | Something new appeared |
+| Platinum | Monthly | The engine got faster |
+
+Today there is one clock. This adds five faster ones without replacing it.
+
+**The strongest single hook is re-dispatch.** An expedition that ended needs the player to send
+the next one, and an idle slot is wasted time. That is a real, self-imposed reason to open the
+site tomorrow, and it costs the player nothing they earned.
 
 ---
 

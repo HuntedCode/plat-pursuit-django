@@ -49,9 +49,14 @@ Three loops, one direction of authority: **trophies raise the ceiling, and nothi
 
 ## Gotchas and Pitfalls
 
-- **This is a menu game.** Not 3D, not isometric tiles, not a canvas world. Era atmosphere is
-  delivered through the interface itself (type, palette, chrome, motion), not through depicted
-  scenery. Every proposal should be checked against this before it gets costed.
+- **This is a menu game.** Not 3D, not isometric tiles, not a canvas world, and not a place
+  with depicted rooms or physical space. This is the constraint that drifts most often (it was
+  re-stated three times in the source conversation), so check every proposal against it before
+  costing it. **Atmosphere lives in copy and state, not pixels:** what the page says, what
+  changed since last time, and what the character is currently doing.
+- **Nothing in the past is broken.** No repair, restoration, rescue, or damaged-goods mechanic.
+  Two separate proposals died on this (decay as premise, restoration as crafting). Nostalgia
+  requires the past to be good; the only thing missing is that the player doesn't have it yet.
 - **Trophy hunting only exists from late PS3 onward.** Roughly 2008. Any mechanic keyed to
   platinum rarity, badge progress, or Contract completion silently does not work for PS1, PS2,
   or early PS3 content. See [content-model.md](content-model.md#the-pre-2008-gap).
