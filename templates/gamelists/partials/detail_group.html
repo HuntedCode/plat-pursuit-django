@@ -20,13 +20,11 @@ since the group is already in hand.
 section it is rather than "list, 12 items" four times down the page.{% endcomment %}
 <div class="gl-section__head">
     <h2 class="gl-section__name" id="gl-section-{{ section.id }}">{{ section.name }}</h2>
-    {% comment %}OMITTED ON A TRUNCATED RENDER, because it would be a lie. `items` here is the
-    bucket built from the MAX_ITEMS_RENDERED slice, so a section holding 300 games on a
-    400-game list reads "12". The truncation line already tells the reader the page is
-    partial; a confident wrong number beside each header does not.{% endcomment %}
-    {% if not items_truncated %}
+    {% comment %}ALWAYS THE REAL NUMBER now that a list cannot outgrow one render. This was omitted
+    on a truncated page, because `items` was the bucket built from a slice and a section holding 300
+    games on a 400-game list read "12" -- a confident wrong number beside every header. The size cap
+    equalling the render bound is what retires that branch.{% endcomment %}
     <span class="gl-section__count">{{ items|length|intcomma }}</span>
-    {% endif %}
 
     {% if is_owner %}
     {% comment %}OWNER CONTROLS, quiet until the header is hovered or something inside it takes
@@ -73,13 +71,11 @@ NO CONTROLS: it is not a section, it is the absence of one, so there is nothing 
 delete. It is still a drop TARGET, which is how a card gets un-filed.{% endcomment %}
 <div class="gl-section__head gl-section__head--loose">
     <h2 class="gl-section__name gl-section__name--muted" id="gl-section-none">Not in a section</h2>
-    {% comment %}OMITTED ON A TRUNCATED RENDER, because it would be a lie. `items` here is the
-    bucket built from the MAX_ITEMS_RENDERED slice, so a section holding 300 games on a
-    400-game list reads "12". The truncation line already tells the reader the page is
-    partial; a confident wrong number beside each header does not.{% endcomment %}
-    {% if not items_truncated %}
+    {% comment %}ALWAYS THE REAL NUMBER now that a list cannot outgrow one render. This was omitted
+    on a truncated page, because `items` was the bucket built from a slice and a section holding 300
+    games on a 400-game list read "12" -- a confident wrong number beside every header. The size cap
+    equalling the render bound is what retires that branch.{% endcomment %}
     <span class="gl-section__count">{{ items|length|intcomma }}</span>
-    {% endif %}
 </div>
 {% endif %}
 

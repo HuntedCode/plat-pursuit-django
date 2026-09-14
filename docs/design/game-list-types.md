@@ -50,9 +50,10 @@ forgot would silently show the wrong one.
 **Progress and the Backlog tracker: cut** (owner's call, 2026-09-13). Two reasons, and the second is
 the stronger one:
 
-1. **The whale rule points straight at them.** Per-viewer progress over an *uncapped* list is exactly
-   the page CLAUDE.md warns about — a 5,000-game progress list read by a 250,000-trophy hunter. Lists
-   have no size cap on purpose, so the feature and the safety rule pull against each other.
+1. **The whale rule points straight at them.** Per-viewer progress over a long list is exactly the
+   page CLAUDE.md warns about — a progress list read by a 250,000-trophy hunter. (Lists were uncapped
+   when this was decided, which sharpened it considerably; they gained a flat 200-game cap on
+   2026-09-14. The reasoning stands on its own without that, but it was the stronger version.)
 2. **The use case is really a user-created challenge**, and Challenges is being rebuilt. "Beat all 30
    of these, here is your standing" wants a start date, evaluation and a payout — everything the
    table below says makes something a Challenge. Building it here would have meant building a second,

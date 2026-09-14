@@ -28,8 +28,9 @@ from api.utils import safe_bool, safe_int
 from core.previews import previewing
 from core.services.tracking import track_site_event
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED,
-                              NAME_MAX_LENGTH, SECTION_NAME_MAX_LENGTH, GameList, GameListFollow,
-                              GameListItem, GameListLike, GameListSection, list_type_options)
+                              MAX_ITEMS_PER_LIST, NAME_MAX_LENGTH, SECTION_NAME_MAX_LENGTH,
+                              GameList, GameListFollow, GameListItem, GameListLike, GameListSection,
+                              list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
 from trophies.mixins import HtmxListMixin
@@ -38,10 +39,17 @@ from trophies.models import Concept
 #: How many covers the `.pp-gtile` mosaic composes around (`is-1` .. `is-4`).
 LIST_TILE_COVERS = 4
 
-#: How many entries a list page renders at once. Not a cap on the list -- lists are uncapped, which
-#: is deliberate -- but a bound on one render, so a very long list is slow to page through rather
-#: than able to exhaust a worker. Real pagination here is a follow-up; this is the floor under it.
-MAX_ITEMS_RENDERED = 200
+#: How many entries a list page renders at once. DERIVED from the size cap rather than written out
+#: again, because the two being equal is the design: a list cannot exceed what one page shows, so no
+#: list is ever truncated, every list is fully reorderable, and section counts are always the real
+#: ones. See `MAX_ITEMS_PER_LIST` for the argument.
+#:
+#: DECOUPLING THESE RE-CREATES A BUG FAMILY, so do it deliberately or not at all. When a list could
+#: outgrow one render, the page carried a truncation notice, `can_reorder` carried a clause for it,
+#: the section counts had to be omitted rather than shown wrong, and two defects came out of exactly
+#: those branches. Raising the ceiling is fine -- raise BOTH, here, and they stay equal. Genuine
+#: pagination is the other way to break the tie, and that is a real project rather than a constant.
+MAX_ITEMS_RENDERED = MAX_ITEMS_PER_LIST
 
 #: Ceiling for the game-count filter. Anything above it is treated as "no filter" rather than passed
 #: to the database: a 40-digit number compared against a PositiveIntegerField is backend-dependent
@@ -590,27 +598,26 @@ class GameListDetailView(DetailView):
         # every concept -- several per concept once stacks are counted -- which is the largest
         # allocation on the page and invisible to a query-COUNT test, because the shape stays O(1)
         # while the bytes do not. CLAUDE.md's whale rule names exactly this: an explicit `[:N]` slice
-        # is the acceptable form. The overflow is surfaced rather than silently dropped.
-        # ONE EXTRA ROW, and truncation read from the ROWS rather than from `game_count`.
+        # is the acceptable form.
         #
-        # `game_count > len(items)` looked equivalent and was not, because that counter drifts HIGH
-        # and nothing repairs it: `GameListItem.concept` is CASCADE, so deleting a Concept removes
-        # rows with no service involvement and `_recount` (whose docstring says so) only ever runs
-        # from add and remove. A six-game ranked list that lost one concept then reported itself
-        # truncated forever -- which cost a wrong sentence before Ranked, and costs the owner their
-        # drag handles now, permanently, with the page explaining that the list is too long to
-        # reorder. No user action clears it.
+        # THE SLICE IS A BACKSTOP, NOT A PAGE. `MAX_ITEMS_RENDERED` equals `MAX_ITEMS_PER_LIST`, and
+        # `add_concept` enforces that cap, so no list the service built can reach it -- this bounds a
+        # row somebody put there another way (a shell write, a future importer) rather than a state
+        # the product produces.
         #
-        # Fetching `MAX_ITEMS_RENDERED + 1` answers "is there more?" from the data itself, is correct
-        # in both drift directions, and costs one row.
+        # THE TRUNCATION FLAG IS GONE, with the `+ 1` fetch that fed it. While a list could outgrow
+        # one render, the page carried a "showing the first N" notice, `can_reorder` carried a clause
+        # for it, and the section counts had to be omitted rather than shown wrong -- and two real
+        # defects came out of those branches: `can_arrange` silently inheriting the truncation clause
+        # (sections creatable and permanently unusable on long lists), and the counts lying. Capping
+        # the list at the render bound does not improve that state, it deletes it. If the ceiling is
+        # ever raised, raise BOTH constants together or this comes back.
         items = list(
             game_list.items
             .select_related('concept', 'concept__igdb_match')
             .defer('concept__igdb_match__raw_response')
-            .order_by(*order)[:MAX_ITEMS_RENDERED + 1]
+            .order_by(*order)[:MAX_ITEMS_RENDERED]
         )
-        context['items_truncated'] = len(items) > MAX_ITEMS_RENDERED
-        del items[MAX_ITEMS_RENDERED:]
         context['items_shown'] = len(items)
         # One batched query for every cover on the page, not one per row -- the same helper the
         # browse tiles use, for the same reason.
@@ -674,11 +681,6 @@ class GameListDetailView(DetailView):
         # The clamp is the real guard and `test_a_collection_cannot_reach_the_rank_sort_by_url`
         # pins it.
         #
-        # `not items_truncated` -- `svc.reorder` refuses a partial ordering by design (a subset means
-        # the client and the server disagree about what is on the list, and applying it would drop
-        # the rest), so past `MAX_ITEMS_RENDERED` the page cannot post a complete one. Offering a
-        # handle there would give every drag a refusal. `ReorderItemsView`'s own docstring asks
-        # callers to withhold the affordance rather than build one whose every use fails.
         # `is_linked` for the same reason `can_act` below carries it: `ReorderItemsView` is behind
         # `_LinkedProfileRequired`, which answers a JSON caller with an HTML redirect. The page and
         # the endpoint have to agree about who can act.
@@ -696,15 +698,14 @@ class GameListDetailView(DetailView):
         # ungrouped bucket the grouping keeps and the drag these flags offer are the same permission,
         # so it has one definition rather than two that must stay identical forever.
         #
-        # `not items_truncated` belongs to REORDERING ALONE. `svc.reorder` refuses a partial ordering
-        # by design, so past `MAX_ITEMS_RENDERED` the page cannot post a complete one and every drag
-        # would be a refusal. `svc.assign_item` has no such requirement -- it takes one item and one
-        # section and is correct however many rows rendered. Sharing the clause made sections
-        # creatable and permanently unusable on exactly the 400-game backlogs they are for: the
-        # headers appeared, `can_manage_sections` has no truncation clause, and nothing could ever be
-        # filed under them.
-        context['can_reorder'] = (
-            arrangeable and sort == 'rank' and not context['items_truncated'])
+        # A `not items_truncated` clause stood here and is gone with the state it described. It was
+        # right while a list could outgrow one render -- `svc.reorder` refuses a partial ordering, so
+        # the page could not post a complete one -- and it is now unreachable, because the size cap IS
+        # the render bound. A condition that cannot change an outcome reads as a safety net and is
+        # only somewhere for a future reader to get lost, which is the same argument that removed the
+        # `is_ranked` clause below. It also caused a defect while it lived: shared with `can_arrange`,
+        # it made sections creatable and permanently unusable on the longest lists.
+        context['can_reorder'] = arrangeable and sort == 'rank'
         # Filing needs somewhere to file TO, so a list with no sections offers it only when ordering
         # is already on the table. Without the `or`, a sectioned Collection would render headers
         # nothing could be moved into -- which is every sectioned Collection, since a list that has
@@ -1303,10 +1304,12 @@ class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
         # BOUNDED TO THE PAGE OF RESULTS, which is the same idiom `api/rating_views.py` uses for its
         # prefill rows and for the same reason. This read every `concept_id` on the list into a Python
         # set on EVERY KEYSTROKE -- `list(qs.values_list(...))` followed by Python membership, the
-        # third anti-pattern in CLAUDE.md's whale rule -- on a system with no cap on list size, whose
-        # own comment upstairs says one account can build a 50,000-item list. The cache above covers
-        # the catalogue half of the answer and deliberately not this half, so it ran unprotected at
-        # 120 requests a minute per hunter.
+        # third anti-pattern in CLAUDE.md's whale rule. The cache above covers the catalogue half of
+        # the answer and deliberately not this half, so it ran unprotected at 120 requests a minute
+        # per hunter, against a list that was uncapped when this was written. `MAX_ITEMS_PER_LIST`
+        # has since bounded the damage at 200 rows -- which is a reason to keep the bound rather than
+        # to drop it: reading two hundred to answer a question about twelve is still the wrong shape,
+        # and the cap is a product decision that could move.
         #
         # The answer only ever needs membership for the twelve ids being rendered, and asking the
         # database that question returns at most twelve rows. The `WHERE concept_id IN (...)` is

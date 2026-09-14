@@ -430,29 +430,6 @@ def test_only_the_owner_gets_handles(client):
     assert 'data-gl-reorder' not in body
 
 
-def test_a_truncated_ranked_list_withholds_the_handles_and_says_why(client, monkeypatch):
-    """`reorder` refuses a partial order by design, so a page that cannot render the whole list
-    cannot post a valid one. Offering a handle here would fail on every single use.
-
-    Patching the ceiling rather than building 201 lists: the boundary is what is under test, and the
-    fixture cost of the real number would push this test into minutes.
-    """
-    from gamelists import views as gl_views
-    monkeypatch.setattr(gl_views, 'MAX_ITEMS_RENDERED', 2)
-
-    owner = _staff(client)
-    game_list = _ranked(owner, 3)
-
-    resp = client.get(_url(game_list))
-    body = resp.content.decode()
-
-    assert resp.context['items_truncated'] is True
-    assert resp.context['can_reorder'] is False
-    assert 'data-gl-grab' not in body
-    assert 'Reordering needs the whole list on screen' in body, \
-        'their absence must be explained, or it reads as a bug on the one type built for ordering'
-
-
 def test_the_handles_and_the_endpoint_are_there_when_they_can_work(client):
     """The positive case, so every refusal above is a real narrowing rather than a feature that never
     renders at all."""
@@ -978,36 +955,6 @@ def test_a_ranked_entry_announces_its_rank(client):
     assert 'Number 1:' not in client.get(_url(plain)).content.decode()
 
 
-def test_truncation_is_read_from_the_rows_not_the_drifting_counter(client, monkeypatch):
-    """`game_count` drifts HIGH and nothing repairs it -- `GameListItem.concept` is CASCADE, so
-    deleting a Concept removes rows without the service. Deriving truncation from that counter meant
-    one deleted concept permanently withdrew the drag handles from a six-game ranked list, and
-    printed "Reordering needs the whole list on screen" as the reason.
-
-    THIS TEST COULD NOT FAIL AS FIRST WRITTEN. It took `monkeypatch` and never used it, so the
-    ceiling stayed at 200 -- and with three rows and a counter of three, the correct implementation
-    (`len(items) > 200`) and the bug it exists to catch (`game_count > len(items)`) BOTH produce
-    False. It described the drift precisely and then asserted against a number the drift could never
-    reach. The patch below is what makes the two implementations disagree: 3 > 2 is True, 2 > 2 is
-    not.
-    """
-    from gamelists import views as gl_views
-    monkeypatch.setattr(gl_views, 'MAX_ITEMS_RENDERED', 2)
-
-    owner = _staff(client)
-    game_list = _ranked(owner, 3)
-
-    # Exactly the drift the service documents: rows gone, counter untouched.
-    game_list.items.first().delete()
-    assert game_list.game_count == 3, 'the premise: the counter still says three'
-
-    resp = client.get(_url(game_list))
-
-    assert resp.context['items_truncated'] is False, \
-        'two rows under a ceiling of two is not truncated -- only the stale counter says otherwise'
-    assert resp.context['can_reorder'] is True, 'counter drift must not withdraw the handles'
-
-
 def test_a_collection_cannot_reach_the_rank_sort_by_url(client):
     """`?sort=rank` on an unordered list must fall back rather than answering 200 with insertion
     order dressed up as a curated sequence."""
@@ -1150,27 +1097,6 @@ def test_an_unlinked_viewer_is_not_offered_actions_the_endpoints_would_refuse(cl
     assert 'data-gl-like' not in body
     assert 'data-gl-follow' not in body
 
-
-def test_a_very_long_list_renders_a_bounded_page(client):
-    """Query COUNT was already O(1) and would stay O(1) at half a million rows -- the failure mode
-    is rows and bytes. List size is uncapped by design, so this number is attacker-controlled."""
-    from gamelists.views import MAX_ITEMS_RENDERED
-
-    owner = _staff(client)
-    game_list = _list(owner, 0)
-    for n in range(MAX_ITEMS_RENDERED + 5):
-        concept = ConceptFactory(unified_title=f'Bulk {n:04d}')
-        svc.add_concept(game_list, owner, concept)
-
-    resp = client.get(_url(game_list))
-
-    assert len(resp.context['items']) == MAX_ITEMS_RENDERED
-    assert resp.context['items_truncated'] is True
-    assert 'Showing the first' in resp.content.decode()
-
-
-
-# -- the owner's edit controls -------------------------------------------------------------------
 
 def test_the_owner_gets_the_adder_and_a_visitor_never_does(client):
     """The adder is an OWNER control, not a social one. `can_act` gates likes and follows; a visitor
@@ -1376,22 +1302,6 @@ def test_no_gl_class_is_used_without_a_rule():
     assert used, 'found no gl-* classes at all -- the scan is broken, not the CSS'
     orphaned = sorted(name for name in used if f'.{name}' not in built)
     assert not orphaned, f'gl-* classes with no rule in the built CSS: {orphaned}'
-
-
-def test_the_truncation_line_re_renders_with_the_games(client):
-    """It sat outside `#gl-items-panel`, so every add and remove left it quoting a stale count next
-    to a header tally that HAD just been updated."""
-    from gamelists.views import MAX_ITEMS_RENDERED
-
-    owner = _staff(client)
-    game_list = _list(owner, 0)
-    for n in range(MAX_ITEMS_RENDERED + 3):
-        svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'Bulk {n:04d}'))
-
-    # The partial alone -- what an add or remove actually re-renders -- must carry the sentence.
-    swapped = client.get(_url(game_list), HTTP_HX_REQUEST='true').content.decode()
-
-    assert 'Showing the first' in swapped
 
 
 def test_the_writes_refuse_a_redirected_html_page(client):
@@ -2644,40 +2554,6 @@ def test_the_section_controls_are_real_touch_targets_and_do_not_stick(client):
     assert 'min-height: 44px' in field
 
 
-def test_sections_stay_usable_on_a_list_too_long_to_render_whole(client, monkeypatch):
-    """`not items_truncated` belongs to REORDERING ALONE, and sharing it made sections creatable and
-    permanently unusable on exactly the lists they are for.
-
-    `svc.reorder` refuses a partial ordering, so past `MAX_ITEMS_RENDERED` the page cannot post a
-    complete one -- that is the whole reason the clause exists. `svc.assign_item` takes one item and
-    one section and is correct however many rows rendered. With the clause shared, a member curating a
-    400-game backlog could create "Playing / Finished / Someday" (`can_manage_sections` has no
-    truncation clause) and then file nothing under any of them: no `data-gl-arrange`, no
-    `data-item-id`, and no non-drag path to the endpoint. On a sectioned COLLECTION the affordance
-    vanished with no message at all, because the explanatory line is gated on `is_ranked`.
-    """
-    from gamelists import views as gl_views
-    monkeypatch.setattr(gl_views, 'MAX_ITEMS_RENDERED', 2)
-
-    owner = _member(client, psn='backlogger')
-    game_list = _ranked(owner, 4)
-    svc.create_section(game_list, owner, name='Playing')
-
-    resp = client.get(_url(game_list))
-
-    assert resp.context['items_truncated'] is True, 'the fixture stopped testing what it claims'
-    assert resp.context['can_reorder'] is False, 'a partial page cannot post a complete order'
-    assert resp.context['can_arrange'] is True, 'sections are unusable on the lists that need them'
-
-    body = resp.content.decode()
-    assert 'data-gl-arrange' in body
-    assert 'data-assign-url' in body, 'nothing to post a filing to'
-    # ...and still no ordering hooks, because that half genuinely cannot work here.
-    assert 'data-gl-reorder' not in body
-
-
-# -- the re-audit round ---------------------------------------------------------------------------
-
 def test_an_empty_grid_is_actually_empty_so_the_drop_box_can_render(client):
     """THE FIX THAT DID NOTHING. The empty-section box is a `::before` gated on `:empty`, and `:empty`
     (Selectors 3, which is what every shipping engine implements) does NOT match an element holding a
@@ -3200,3 +3076,135 @@ def test_one_hunters_list_never_marks_anothers_results(client):
                                {'q': 'Shared'}).json()['results']
     assert [r['title'] for r in theirs_marked] == ['Shared Title'], 'the cache stopped working'
     assert theirs_marked[0]['already_added'] is False, "one hunter's list leaked into another's"
+
+
+# -- the size cap ----------------------------------------------------------------------------------
+
+def test_a_list_stops_accepting_games_at_the_cap(client, monkeypatch):
+    """Owner's call, 2026-09-14. Lists were uncapped because the system this replaced gave members
+    unlimited games per list, and that argument belonged to the old membership system.
+
+    Patched down rather than building 201 games: the boundary is what is under test, and the real
+    number would push this into minutes."""
+    from gamelists.services import game_list_service as service
+
+    # `service.MAX_ITEMS_PER_LIST`, not the model's: the service imports the name, so that binding is
+    # what `add_concept` actually reads. `monkeypatch` restores it even when an assertion raises.
+    monkey = 3
+    monkeypatch.setattr(service, 'MAX_ITEMS_PER_LIST', monkey)
+    owner = _staff(client)
+    game_list = _list(owner, 0)
+    for n in range(monkey):
+        svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'Fits {n}'))
+
+    with pytest.raises(svc.ListError) as refusal:
+        svc.add_concept(game_list, owner, ConceptFactory(unified_title='One too many'))
+
+    # The message NAMES the cap and offers the way out, rather than saying "no".
+    assert str(monkey) in str(refusal.value)
+    assert 'another list' in str(refusal.value).lower()
+    assert game_list.items.count() == monkey
+
+
+def test_the_cap_counts_rows_rather_than_the_drifting_counter(client, monkeypatch):
+    """`game_count` drifts HIGH and nothing repairs it: `GameListItem.concept` is CASCADE, so
+    deleting a Concept removes rows with no service involvement and `_recount` only runs from add and
+    remove. Capping on that counter would lock a hunter out of a list that has room, permanently,
+    with no action that clears it.
+
+    This is the same trap the truncation flag fell into before it was deleted, which is why the
+    lesson outlived the code that taught it."""
+    from gamelists.services import game_list_service as service
+
+    monkeypatch.setattr(service, 'MAX_ITEMS_PER_LIST', 3)
+    owner = _staff(client)
+    game_list = _list(owner, 0)
+    for n in range(3):
+        svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'Fits {n}'))
+
+    # Exactly the drift: a row vanishes without the service, so the counter now overstates.
+    game_list.items.first().delete()
+    game_list.refresh_from_db()
+    assert game_list.game_count == 3, 'the premise: the counter still says three'
+    assert game_list.items.count() == 2
+
+    # Two rows under a cap of three has room, and only the stale counter says otherwise.
+    svc.add_concept(game_list, owner, ConceptFactory(unified_title='Room for this'))
+    assert game_list.items.count() == 3
+
+
+def test_a_list_already_over_the_cap_keeps_every_row(client, monkeypatch):
+    """Enforced on the way IN and never by deletion. A cap that removes somebody's games is the one
+    version of this worth regretting, and "no list is over 200 today" is a fact about today rather
+    than a guarantee about the shell, the admin or the importer."""
+    from gamelists.services import game_list_service as service
+
+    owner = _staff(client)
+    game_list = _list(owner, 5)
+
+    # The cap arrives AFTER the list already exceeded it, which is the only way this state occurs.
+    monkeypatch.setattr(service, 'MAX_ITEMS_PER_LIST', 2)
+    assert game_list.items.count() == 5
+
+    resp = client.get(_url(game_list))
+    assert len(resp.context['items']) == 5, 'an over-cap list lost rows on render'
+
+    with pytest.raises(svc.ListError):
+        svc.add_concept(game_list, owner, ConceptFactory(unified_title='Nope'))
+    assert game_list.items.count() == 5, 'a refused add removed something'
+
+    # ...and they can still take one OUT, which is how they get back under.
+    svc.remove_concept(game_list, owner, game_list.items.first())
+    assert game_list.items.count() == 4
+
+
+def test_the_cap_and_the_render_bound_are_the_same_number(client):
+    """THE WHOLE DESIGN, in one assertion. A list cannot exceed what one page shows, so no list is
+    ever truncated, every list is fully reorderable, and section counts are always the real ones.
+
+    Decoupling them re-creates a bug family: while a list could outgrow one render, the page carried
+    a truncation notice, `can_reorder` carried a clause for it, the section counts had to be omitted
+    rather than shown wrong, and two real defects came out of exactly those branches."""
+    from gamelists.models import MAX_ITEMS_PER_LIST
+    from gamelists.views import MAX_ITEMS_RENDERED
+
+    assert MAX_ITEMS_RENDERED == MAX_ITEMS_PER_LIST == 200
+
+    # DERIVED, not retyped. Two literals that happen to match today are two literals that drift.
+    source = _read('gamelists/views.py')
+    assert 'MAX_ITEMS_RENDERED = MAX_ITEMS_PER_LIST' in source
+
+
+def test_nothing_still_apologises_for_a_truncated_page(client):
+    """The state is gone, so its explanations must go with it -- copy that describes something the
+    product can no longer do is worse than no copy, because a reader trusts it."""
+    owner = _staff(client)
+    game_list = _ranked(owner, 3)
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'Showing the first' not in body
+    assert 'Reordering needs the whole list on screen' not in body
+
+    # THE CONTEXT KEY, not the bare word. `_decommented` strips JS comments and not Python ones, so a
+    # bare search matched the comment that explains why the flag was removed -- a comment is a claim,
+    # and here it was failing a test over prose that is worth keeping. The flag itself is what must
+    # not exist, and `context['...']` is how it would.
+    views = _read('gamelists/views.py')
+    assert "context['items_truncated']" not in views, 'the flag survived the state it described'
+    assert 'MAX_ITEMS_RENDERED + 1' not in views, 'the extra row that fed the flag is still fetched'
+    for template in ('templates/gamelists/partials/detail_items.html',
+                     'templates/gamelists/partials/detail_group.html'):
+        assert 'items_truncated' not in _read(template), template
+
+
+def test_the_section_counts_are_the_real_ones_again(client):
+    """They were omitted on a truncated render because `items` was a bucket built from a slice, so a
+    section holding 300 games on a 400-game list read "12". With the cap equalling the render bound
+    the bucket IS the section, so the number is simply true."""
+    owner, game_list, _items, first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    head = body[body.index(f'id="gl-section-{first.id}"'):]
+    head = head[:head.index('</div>')]
+    assert '<span class="gl-section__count">2</span>' in head

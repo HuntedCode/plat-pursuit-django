@@ -40,16 +40,39 @@ from trophies.models import Concept, Profile
 #: hunter cannot reach. Read ONLY by `game_list_service.max_lists_for`, so the tier rule has exactly
 #: one enforcement point.
 #:
-#: THERE IS NO CAP ON LIST SIZE, and that absence is deliberate. The system this replaces gave
-#: members unlimited games per list, so any ceiling here would take a perk back rather than add one
-#: -- and the per-list importer could then refuse to bring a member's own data across. The first cut
-#: shipped a flat 100-item cap for everybody and described it as a perk; it was a reduction.
 FREE_MAX_LISTS = 3
 # 25, not 10: once lists come in several TYPES (collection, ranked, progress, tier), a hunter using
 # the feature properly holds far more than ten -- a backlog tracker, a couple of ranked top-tens, a
 # tier list per franchise. The free cap stays at 3 deliberately, as spam control rather than as a
 # tease; three is enough to see what lists are for.
 MEMBER_MAX_LISTS = 25
+
+#: HOW MANY GAMES ONE LIST HOLDS, and it is 200 because that is what one page renders. Owner's call,
+#: 2026-09-14, overturning the "no cap" position recorded here since the rebuild.
+#:
+#: The old reasoning was that the legacy system gave members unlimited games per list, so any ceiling
+#: would take a perk back. That argument belonged to the membership system this one replaced, and the
+#: owner's word is that no real list ever approached 200 anyway -- so the ceiling costs nobody
+#: anything and closes the one surface on the feature with no bound at all.
+#:
+#: EQUAL TO `views.MAX_ITEMS_RENDERED`, ON PURPOSE, and that equality is the whole design rather than
+#: a coincidence to tidy up later. A list longer than one render was a genuinely half-broken thing:
+#: it truncated, its section counts were computed from the slice and therefore lied, and it could not
+#: be reordered AT ALL (`reorder` refuses a partial ordering by design, so the page had to explain
+#: why its own defining feature was unavailable). Making the cap the render bound does not improve
+#: that state, it removes it -- and with it a bug family that cost two real defects in one session:
+#: `can_arrange` silently inheriting the truncation clause, and the section counts quietly lying.
+#:
+#: FLAT, NOT TIERED, which is the other half of the decision. This is abuse prevention, and abuse
+#: prevention must not be purchasable -- a spam limit somebody can pay to raise is not a spam limit.
+#: The tiering lives on list COUNT above, where it says the honest thing: members get more LISTS.
+#: Keeping this flat is also what keeps `cap == render bound` true for everybody.
+#:
+#: Read ONLY by `game_list_service.add_concept`, so there is one enforcement point and the shell and
+#: the importer are bound by it too. Enforced on the way IN and never by deletion: a list that is
+#: somehow already over the cap keeps every row it has and simply cannot take more. A cap that
+#: removes somebody's games is the one version of this worth regretting.
+MAX_ITEMS_PER_LIST = 200
 
 #: What a list IS, which here means only how it presents. The rows are identical either way -- a
 #: Ranked list is a Collection whose `position` is meant rather than incidental -- so the type is one
@@ -104,9 +127,9 @@ NOTE_MAX_LENGTH = 200
 #: playing"; 60 (the list's own ceiling) would push the controls onto a second line.
 SECTION_NAME_MAX_LENGTH = 40
 
-#: How many sections a list may hold. Unlike list SIZE -- which is uncapped on purpose, because the
-#: system this replaced gave members unlimited games and a ceiling would take a perk back -- a
-#: section is a rendered header with its own row, so a hundred of them is a page nobody can read.
+#: How many sections a list may hold. A section is a rendered header with its own row, so a hundred
+#: of them is a page nobody can read. Capped for the same reason list SIZE is (`MAX_ITEMS_PER_LIST`)
+#: and, like it, flat for everyone rather than tiered.
 #: Twenty covers every real shape: Finished/Playing/Someday is three, a tier list is five to seven,
 #: one per platform is about six.
 MAX_SECTIONS_PER_LIST = 20

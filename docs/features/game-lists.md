@@ -108,9 +108,33 @@ what is in the table, and admin, undelete and `count()` all then need a second m
 
 ### Caps
 
-**3 lists free, 25 for members. No cap on list size.** That absence is deliberate — the legacy system
-gave members unlimited games per list, so a ceiling would take a perk back and could make the importer
-refuse a member's own data. Enforced in exactly one place, `max_lists_for`.
+**3 lists free, 25 for members** (`max_lists_for`), and **200 games per list, flat**
+(`MAX_ITEMS_PER_LIST`, enforced in `add_concept`). One enforcement point each, so the shell, the
+admin and the future importer are bound by them too.
+
+The size cap arrived 2026-09-14 and overturned a "no cap" position held since the rebuild. The old
+argument was that the legacy system gave members unlimited games per list, so a ceiling would take a
+perk back — an argument about the membership system this one replaced, and no real list ever
+approached 200 anyway.
+
+**200 because that is what one page renders**, and the equality is the design rather than a
+coincidence. A list longer than one render was genuinely half-broken: it truncated, its section
+counts were computed from the slice and therefore lied, and it **could not be reordered at all**
+(`reorder` refuses a partial ordering, so the page had to explain why the Ranked type's defining
+feature was unavailable). Capping at the render bound does not improve that state, it deletes it —
+along with the truncation notice, the `can_reorder` clause, the count-omission branch and their
+tests. That is not housekeeping: two real defects came out of those branches, `can_arrange` silently
+inheriting the truncation clause and the counts lying.
+
+**Flat, not tiered.** The size cap is abuse prevention, and abuse prevention must not be purchasable
+— a spam limit somebody can pay to raise is not a spam limit. The tiering stays on list *count*,
+where it says the honest thing: members get more lists. Keeping it flat is also what keeps
+`cap == render bound` true for everybody.
+
+**Enforced on the way in, never by deletion.** A list somehow already over the cap keeps every row
+and simply cannot take more. Counted from the **rows**, not from `game_count`, which drifts high when
+a Concept is deleted (CASCADE, no service involved) — capping on the counter would lock a hunter out
+of a list that has room, permanently, with nothing that clears it.
 
 ---
 
@@ -477,6 +501,9 @@ runs the raw `section` through `safe_int` before that filter, because `filter(pk
 
 - **Import from the right module.** Three class names exist twice, and `trophies/views/__init__.py`
   re-exports three view names the URLconf now takes from `gamelists.views`.
+- **Raising the ceiling means raising BOTH constants.** `MAX_ITEMS_RENDERED` is *derived* from
+  `MAX_ITEMS_PER_LIST` for that reason. Decoupling them re-creates the truncation bug family; genuine
+  pagination is the other way to break the tie, and that is a project rather than a constant.
 - **`position` must stay dense.** A gap silently renders a short mosaic. Deleting a `Concept`
   cascades items away and leaves **both** a gap and a stale `game_count` — `_recount` does not
   self-heal that, despite once claiming to. No `post_delete` receiver exists yet.
@@ -507,8 +534,9 @@ runs the raw `section` through `safe_int` before that filter, because `filter(pk
   design, so past `MAX_ITEMS_RENDERED` the page cannot post a complete one and `can_reorder` goes
   false. The handles vanishing without explanation would read as a bug on the one type built for
   ordering, so the truncation line adds a sentence for the owner.
-- **The detail page renders at most 200 items** (`MAX_ITEMS_RENDERED`) and says so. Real pagination is
-  a follow-up.
+- **The detail page renders at most 200 items** (`MAX_ITEMS_RENDERED`) and no longer needs to say so,
+  because a list cannot hold more than that. The slice survives as a backstop against a row put there
+  outside the service, not as a page boundary.
 - **`#gl-items` does not exist on a sectioned list.** A sectioned list renders a grid per group, so
   anything reaching for that id gets `null` there. Both refresh helpers used it as their
   swap-happened sentinel (`node before !== node after`), which on a sectioned list compared

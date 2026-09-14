@@ -78,30 +78,6 @@ gives it something to close, which is the fix and not a coincidence: the swap se
 missing wrapper turned out to be the same element.{% endcomment %}
 </div>
 
-{% if items_truncated %}
-{% comment %}Surfaced rather than silently dropped. Lists are uncapped by design, so a very long one
-is real -- but one render is bounded, and a reader is owed the difference between "that is the whole
-list" and "that is as much as this page shows".
-
-INSIDE the partial, so it re-renders with the grid. Outside it, every add and remove left this
-sentence quoting a stale count next to a header tally that had just been updated.{% endcomment %}
-{% comment %}NO TOTAL. It read "the first N of {{ game_list.game_count }}" -- the same
-denormalized counter this render stopped trusting when truncation moved onto the rows, and one that
-drifts HIGH when a Concept is deleted. Quoting it here would have reported "the first 200 of 512" for
-a list with 205 rows, in the one place the change was specifically hardening.{% endcomment %}
-<p class="text-xs text-base-content/50 mt-3 text-center">
-    Showing the first {{ items_shown|intcomma }} games; this list is longer than one page shows.
-    {% if is_owner and is_ranked %}
-    {% comment %}SAID OUT LOUD, to the owner only. The handles are absent here because a page that
-    cannot show the whole list cannot post a complete order, and `reorder` refuses a partial one by
-    design. Without this sentence their absence reads as a bug on the one list type whose whole
-    purpose is ordering -- and the fix a hunter would reach for (reload, try another browser) cannot
-    work.{% endcomment %}
-    Reordering needs the whole list on screen, so it is unavailable here.
-    {% endif %}
-</p>
-{% endif %}
-
 {% if oob_chrome %}
 {% comment %}OUT-OF-BAND CHROME, sent only when the caller asks for it (`?chrome=1`).
 

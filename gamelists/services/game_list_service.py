@@ -34,6 +34,7 @@ from gamelists.models import (
     FREE_MAX_LISTS,
     LIST_TYPE_COLLECTION,
     LIST_TYPES,
+    MAX_ITEMS_PER_LIST,
     MAX_SECTIONS_PER_LIST,
     MEMBER_MAX_LISTS,
     NAME_MAX_LENGTH,
@@ -70,12 +71,13 @@ SUGGESTED_NAMES = (
 
 
 def max_lists_for(profile):
-    """The cap, in one place. Everyone gets lists; members get more of them.
+    """The cap on how many lists, in one place. Everyone gets lists; members get more of them.
 
-    There is deliberately no matching `max_items_for`. The system this replaces gave members
-    unlimited games per list, so capping list SIZE would take a perk back rather than add one --
-    and the importer would then be unable to bring a member's own data across. Only the list COUNT
-    is tiered.
+    There is deliberately no matching `max_items_for`, and the reason CHANGED on 2026-09-14 while the
+    conclusion did not. It used to be that capping size would take a perk back from members; lists
+    are now capped at `MAX_ITEMS_PER_LIST` for everybody. What stays true is that the SIZE cap is not
+    tiered: it is abuse prevention, and a spam limit somebody can pay to raise is not a spam limit.
+    Only the list COUNT is a perk, which is the honest thing to sell -- members get more lists.
     """
     return MEMBER_MAX_LISTS if profile.user_is_premium else FREE_MAX_LISTS
 
@@ -394,7 +396,11 @@ def delete_list(game_list, profile):
 
 @transaction.atomic
 def add_concept(game_list, profile, concept, *, note=''):
-    """Append a game. No size cap: members always had unlimited, and free hunters keep it too."""
+    """Append a game, up to `MAX_ITEMS_PER_LIST`.
+
+    THE ONE ENFORCEMENT POINT for the size cap, so the shell, the admin and the future importer are
+    all bound by it rather than only the page. `max_lists_for` above owns the other cap the same way.
+    """
     _require_owner(game_list, profile)
     _refuse_if_unlinked(profile)
     _refuse_if_restricted(profile)
@@ -405,6 +411,17 @@ def add_concept(game_list, profile, concept, *, note=''):
     locked = _lock_list(game_list)
     if GameListItem.objects.filter(game_list=locked, concept=concept).exists():
         raise ListError('That game is already on this list.')
+
+    # COUNTED UNDER THE LOCK, the same shape `create_list` and `create_section` use and for the same
+    # reason: `@transaction.atomic` alone does not stop two requests both counting 199 and both
+    # inserting. Counted from the ROWS rather than from `game_count`, which drifts HIGH when a
+    # Concept is deleted (CASCADE, no service involved) -- trusting it would lock a hunter out of a
+    # list that has room, permanently, with no action that clears it.
+    if GameListItem.objects.filter(game_list=locked).count() >= MAX_ITEMS_PER_LIST:
+        raise ListError(
+            f'A list holds {MAX_ITEMS_PER_LIST} games. '
+            'Remove one to make room, or start another list.'
+        )
 
     highest = GameListItem.objects.filter(game_list=locked).aggregate(
         top=models.Max('position'))['top']
