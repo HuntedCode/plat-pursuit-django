@@ -30,6 +30,7 @@ engine powers.**
 | [vision.md](vision.md) | The premise, the tone, the driving force, the theming approach, and the tests every future decision has to pass |
 | [systems.md](systems.md) | Mechanics: the three layers, the loop, resources, gating, the risk boundary, the social layer |
 | [content-model.md](content-model.md) | The map: eras, depth, branch types, gate types, the authoring model, and the pre-2008 trophy gap |
+| [gear.md](gear.md) | The only power axis: the gear treadmill, the set layer (passives, signatures, milestones), the 100-signatures problem, and theming |
 | [decisions.md](decisions.md) | The decision log, **including rejected alternatives and why they were rejected** |
 | [open-questions.md](open-questions.md) | What is genuinely undecided |
 
@@ -37,13 +38,14 @@ engine powers.**
 
 ## The shortest possible summary
 
-You play games on PlayStation. That builds your Pursuer, exactly as it does today. Your
-Pursuer is an **engine** that generates resources over time at a rate your level sets. You
-spend those resources in a **Village** you build on limited land, and the Village outfits your
-Pursuer for expeditions into **the Backlog**, a branching map of PlayStation history where you
-recover discs, cards, and artifacts to bring home.
+You play games on PlayStation. That builds your Pursuer, exactly as it does today, and your
+Pursuer's level decides **how much of the map is open to you**. You build a **base** that
+generates resources and outfits you, then run expeditions into **the Backlog**, a branching
+universe of gaming history, where you find gear, discs, cards, and artifacts to bring home.
 
-Three loops, one direction of authority: **trophies raise the ceiling, and nothing else can.**
+Three inputs, three distinct roles:
+
+> **Trophies buy access. The base runs the economy. Gear provides power.**
 
 ---
 
@@ -71,6 +73,9 @@ Three loops, one direction of authority: **trophies raise the ceiling, and nothi
 - **Only the player first-clears.** Companions farm consumables and collectibles; the player
   finds capacity and access (companions, slots, zones, key unlocks). If anything that expands
   farming capacity can itself be farmed, the system bootstraps and the player becomes optional.
+- **Gear is the only power axis, and nothing else may become one.** Level buys access; the base
+  runs the economy. A change that lets level or the base confer power collapses the separation
+  the whole design rests on.
 - **Casual means slow-income hunter, not non-hunter.** The accessibility answer is depth *under*
   the level ceiling, never a separate casual mode. Level is a ceiling, not a pace.
 

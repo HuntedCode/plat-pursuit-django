@@ -42,6 +42,11 @@ the physical release, IGDB rating or significance, or curated "landmark" status.
 ### How many eras at launch, and how deep?
 Related to scope. A launch with one era is testable; a launch with five is a world.
 
+### Gear specifics, deferred to system design
+The model is settled ([gear.md](gear.md)) but these are open: how many slots, the actual effect
+archetypes and families, tier and rarity structure, upgrade material costs, what proportion of
+sets carry signatures, and the equipment vocabulary per era and genre.
+
 ### What are the enemies, concretely?
 Decided: original, not franchise-derived, not generic fantasy, drawing on era atmosphere and
 genre archetype. Not decided: what that actually looks like on a menu screen, or how many are

@@ -19,25 +19,42 @@ needs a second system with its own cadence.
 A new way of displaying job levels is a chart. The second layer has to contain decisions,
 scarcity, and uncertainty that the character sheet does not.
 
-### D3. The character is a rate, not a bank
-Trophy history sets your **generation rate**, not a stock of resources. This is the single
-most load-bearing decision in the document. It simultaneously solves:
+### D3. Trophies buy access, and nothing else  *(REVISED 2026-09-14)*
+> **Trophies buy access. The village runs the economy. Gear provides power.**
 
-- **The veteran dump.** A user with ten years of history cannot consume the whole game in one
-  sitting, because there is nothing to consume. They get a better engine.
-- **The fairness question.** They *are* genuinely more powerful from minute one, which honors
-  the existing "same work, same reward, regardless of when the work was done" principle in
-  [gamification-plan.md](../gamification-plan.md).
-- **The empty-day problem.** Generation does not depend on having platinumed something.
+Three inputs, three distinct roles, no overlap.
+
+**Superseded:** this decision originally read "the character is a rate, not a bank," with
+Pursuer level setting the resource generation rate. That was dropped once gear became the power
+axis: a permanent rate advantage for veterans was both unnecessary and harder to tune. **A
+ten-year veteran and a brand-new player now build their village at the same speed.**
+
+What the original decision was protecting still holds, and holds better:
+
+- **The veteran dump.** They arrive with unlocked zones and no village, no gear, no resources.
+  There is nothing to consume.
+- **The fairness question.** Their history buys them more of the map, earlier, which honors the
+  "same work, same reward, regardless of when" principle in
+  [gamification-plan.md](../gamification-plan.md) without handing them a permanent multiplier.
+- **The empty-day problem.** Generation is the village's job and never depended on platinuming
+  something.
+
+**Honest caveat:** access indirectly raises the power ceiling, since deeper zones drop better
+gear. The playing field is not perfectly flat and should not be described as if it were.
 
 ### D4. Idle accrual, with storage caps
 Resources accrue on wall-clock time and stop when stores fill. No active grinding is required,
 which also means no one can out-click a hunter.
 
-### D5. Village upgrades never raise the base generation rate
-They expand capacity, variety, and what can be built. If they raised the rate, the village
-would compound on itself and eventually make trophy hunting irrelevant to the player's own
-game.
+### D5. The village IS the generator  *(REVERSED 2026-09-14)*
+Village buildings and their levels set the resource rate, with some gathering from the Frontier.
+
+**This reverses the original decision**, which forbade village upgrades from raising the base
+rate. That rule existed only because the *character* set the rate, and compounding would have
+made trophy hunting irrelevant. Once [D3](#d3-trophies-buy-access-and-nothing-else-revised-2026-09-14)
+removed the character from the equation, village upgrades raising output became the entire
+point. The compounding worry is now an ordinary economy-balancing problem, not a threat to the
+trophy hook, because the hook is access rather than rate.
 
 ### D6. Timers may generate, never gate
 An expedition that produces something while you are away is a gift. A progress bar between you
@@ -192,6 +209,41 @@ Level is a ceiling, not a pace. Keep collection tracks level-agnostic, make zone
 band, and never build a separate casual mode. Full reasoning in
 [vision.md](vision.md#who-this-has-to-work-for).
 
+### D41. Gear is the only power axis, and it is a real ladder
+Because level buys access and the village runs the economy, gear is the sole differentiator of
+how fast two players clear. It gets a genuine ascending power line. The anti-stomp protection
+comes from gear being **earned in-game**, not from gear being weak. Full system in
+[gear.md](gear.md).
+
+### D42. Base power is the treadmill; collection lives in the set layer
+Gear items are essentially a power number with a tier-capped upgrade path. All permanence lives
+in sets, not items. Old items salvage; the Compendium keeps the find forever.
+
+### D43. Upgrade ceilings are capped by tier
+Without a ceiling, one early set carries a player forever and every subsequent drop is noise.
+See [R20](#r20).
+
+### D44. Permanent passives come from every collection track
+Completing any set grants a tiny, permanent, always-on, stacking bonus, themed to its track
+(cards feed find rates, discs feed storage and yield, items feed Coins, gear feeds combat). This
+is what stops non-gear tracks being purely decorative. **They must be genuinely tiny**, because
+they stack forever.
+
+### D45. Signatures come from gear sets only, one active at a time
+The build-identity layer, independent of what is currently worn. **Situational, never ranked**:
+if one is flatly strongest the choice is fake. Plus milestone bonuses across sets.
+
+### D46. New sets add new conditions, not bigger numbers
+The rule that makes an indefinitely growing set catalog possible without power creep. Roughly 15
+effect archetypes across 6 families, varied by condition (era, genre, theme, zone type,
+companion pairing). Not every set needs a signature; roughly one in four.
+
+### D47. Gear is the one place standard RPG equipping is on-theme
+Equipping gear is a universal video-game language and the premise is a celebration of video
+games. The refinement: **video-game equipment, not fantasy equipment.** Power-ups, mods,
+gadgets, chips, loadouts, perks. Not swords and plate. Each era and genre has its own equipment
+idiom, which makes the gear collection a tour of gaming's equipment vocabulary.
+
 ---
 
 ## Rejected
@@ -341,6 +393,27 @@ active base theme governing all rendering.
 that they are not wanted. Replaced by
 [D32](#d32-soft-gate-on-materials-not-on-pursuer-level), which achieves a similar pacing effect
 while reading as a reason to explore rather than a refusal.
+
+### R20. Gear as a purely horizontal wardrobe, and unlimited upgrades
+Two related proposals, rejected in sequence.
+
+**Horizontal wardrobe** (no ascending power line, only situational pieces). **Why:** gear is the
+*only* power axis in this design, so removing verticality leaves nothing that makes a player
+feel stronger. The argument for it was that other collection tracks would become decoration, but
+that is fine: they are collection tracks, and gear being the power track is a clean separation.
+
+**Unlimited upgrades** (any piece upgradeable to current power forever). **Why:** it kills the
+loot loop outright. A player finds a decent set early and every subsequent drop is noise.
+Replaced by tier-capped ceilings plus the set layer.
+
+### R21. Trait extraction and socketing
+Salvaging a set piece to extract its trait into a permanent library, then socketing traits into
+current gear.
+
+**Why:** it solved the problem correctly but cost a whole extra system (extraction, a trait
+inventory, socketing, and the UI for all three). The set layer achieves the same thing more
+simply: completion unlocks a permanent passive and a selectable signature, and gear items stay a
+clean power treadmill with no sockets at all.
 
 ---
 

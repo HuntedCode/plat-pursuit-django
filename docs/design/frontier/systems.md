@@ -15,17 +15,17 @@
             |
             v
    ┌────────────────────┐
-   │   THE PURSUER      │              the engine
-   │  Level, 24 Jobs,   │              raised by trophies ONLY
+   │   THE PURSUER      │              raised by trophies ONLY
+   │  Level, 24 Jobs,   │              buys ACCESS, nothing else
    │   5 Disciplines    │
    └─────────┬──────────┘
              |
-    resource rate     zone access
-             |               |
-             v               v
+        zone access
+             |
+             v
       ┌────────────┐   ┌────────────┐
-      │  VILLAGE   │──>│  FRONTIER  │   gear, consumables
-      │            │<──│            │   loot, materials, cards
+      │    BASE    │──>│  FRONTIER  │   resources, gear, companions
+      │ (economy)  │<──│  (power)   │   loot, materials, cards, salvage
       └────────────┘   └────────────┘
              |               |
              └───────┬───────┘
@@ -34,16 +34,15 @@
      visiting, trading, community goals
 ```
 
-The Pursuer powers both systems. The Village and Frontier feed each other. Everything above
-the Pursuer is one-way: the game can never reach up and change your trophy record.
+> **Trophies buy access. The base runs the economy. Gear provides power.**
 
-### Why the Pursuer is a rate and not a balance
+Three inputs, three distinct roles, no overlap. The Base and Frontier feed each other.
+Everything above the Pursuer is one-way: the game can never reach up and change your trophy
+record.
 
-This was the resolution to the veteran-onboarding problem (see
-[decisions.md](decisions.md#d3)). A user arriving with ten years of PSN history gets a
-**bigger engine**, not a full warehouse. They are meaningfully more powerful from their first
-minute, which honors the existing "same work, same reward, regardless of when" principle, and
-they still have to run the engine like everyone else. There is nothing to dump.
+**Nothing else may become a power axis.** If a change lets Pursuer level or the base confer
+power directly, the separation the whole design rests on collapses. See
+[gear.md](gear.md).
 
 ---
 
@@ -54,16 +53,29 @@ Heart, Finesse.
 
 | Property | Behavior |
 |----------|----------|
-| **Generation** | Idle accrual over wall-clock time. Rate is set by Pursuer level |
-| **Which resources** | Determined by the shape of your character. A Combat hunter generates Combat fastest |
+| **Generation** | Idle accrual over wall-clock time. **The village is the generator**, with some gathering from the Frontier |
+| **Rate** | Set by village buildings and their levels. **Pursuer level does not affect it** |
 | **Storage cap** | Stores fill and stop accruing. This is the honest "come back" pressure |
-| **Village effect on rate** | **None.** Buildings expand capacity, variety, and what you can build, never the base rate |
-
-That last row is load-bearing. If village upgrades boosted generation, the village would
-compound on itself and eventually dwarf the character multiplier, at which point trophy
-hunting stops mattering to the player's own game.
 
 There is also a soft currency (working name: Coins) for cosmetics and non-discipline costs.
+
+### Pursuer level buys access, and nothing else
+
+> **Trophies buy access. The village runs the economy. Gear provides power.**
+
+Three inputs, three distinct roles, no overlap. An earlier draft had Pursuer level setting the
+resource generation rate, which meant a veteran generated faster than everyone else forever.
+That is now gone: **a ten-year veteran and a brand-new player build their village at the same
+speed.** The veteran's only advantage is that more of the map is open to them earlier.
+
+This still solves the veteran-dump problem, arguably better than the rate model did. They
+arrive with unlocked zones and no village, no gear, and no resources, so there is nothing to
+consume.
+
+**One honest caveat.** Access indirectly raises the power ceiling, because deeper zones drop
+better gear. Hunt more, reach further, farm stronger pieces. That is a normal and fine chain,
+and a newcomer has a clear path to the same place, but the playing field is not perfectly flat
+and we should not describe it as if it were.
 
 ### On time
 
@@ -258,11 +270,12 @@ teeth; neither replaces the other.
 
 Gear slots (illustrative): weapon, armour, trinket, charm, banner, supply.
 
-**Gear is a wardrobe, not a ladder.** It is the only track with a *functional* payoff, which
-risks making every other track feel like fluff. The guard is that pieces suit particular eras,
-themes, or zone types rather than forming a single ascending line of "better." Then a player
-wants *many* pieces rather than only the best piece, and gear stays a collection instead of a
-stat check. Two sources: crafted at the Workshop, found in the Frontier.
+**Gear is the only power axis in the whole design**, which makes it load-bearing. It gets a
+genuine ascending power line; the anti-stomp protection comes from gear being earned in-game,
+not from gear being weak. All permanence lives in the **set layer** rather than on items.
+
+Full system, including the set layer, signature bonuses, acquisition pacing, and theming:
+**[gear.md](gear.md)**.
 
 ### Loot
 
@@ -288,7 +301,7 @@ differences deliberately:
 | **Cards** | "How much of gaming have I seen?" | Frequent, high volume, packs, duplicates, trading. The social one |
 | **Discs** | "What have I actually *found*?" | Rare, deliberate, zone-specific. The white-whale hunt |
 | **Items / decor** | "Who am I?" | Broad, mixed sources, expressive. Changes your base, visible to visitors |
-| **Gear** | "What can I take on?" | Functional, situational, a wardrobe rather than a ladder |
+| **Gear** | "What can I take on?" | Functional. A real power ladder, with all permanence in the set layer. See [gear.md](gear.md) |
 | **Companions** | "Who is with me?" | Slow, each one a character with their own progression |
 | **Badges** | "What have I really done?" | Slow, real, PSN-only. The moat, untouched by the game |
 
@@ -506,8 +519,11 @@ site tomorrow, and it costs the player nothing they earned.
 
 ## Gotchas and Pitfalls
 
-- **Village upgrades must never raise the base generation rate.** Compounding growth there
-  eventually makes trophy hunting irrelevant to the player's own game.
+- **Guard the three-way separation.** Trophies buy access, the base runs the economy, gear
+  provides power. Any change that lets level or the base confer power collapses it. (Note: an
+  earlier draft had Pursuer level setting the resource rate and forbade the base from raising
+  it. Both were reversed on 2026-09-14. Treat any doc text implying a level-driven rate as
+  stale.)
 - **Cap the daily take if any active conversion is added.** If more clicking always means more
   progress, the cheap loop out-competes the expensive one and someone who visits obsessively
   beats someone who actually hunts. Idle-only accrual sidesteps this entirely, which is one
