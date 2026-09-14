@@ -1063,6 +1063,28 @@
     box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 22%, transparent);
 }
 
+/* ON A PHONE THE ADDER TAKES ITS OWN ROW, beneath the title and the sort. Owner's call: with all
+   three controls competing for one line, the adder is squeezed to a few characters and the row reads
+   as three equal fragments rather than a label, a view control and an action.
+ *
+ * `order` ALONE DOES IT, because two things are already true: the shared bar wraps, and
+ * `.pp-gbrowse__sort` is given `flex: 1 1 auto` below 768 by `game-browse.css`, so once the adder
+ * leaves row one the sort grows to fill it. Nothing here needs to restate either.
+ *
+ * 519/520 is this file's own boundary -- the arrange bar and the lockup already stack there -- rather
+ * than a third number. It is also where the layout actually gives out: title (~70px) + sort (~120px)
+ * + the adder's 320px basis and two gaps needs ~526px, so above this they genuinely fit.
+ *
+ * ONE TRADE, stated rather than hidden: this moves the adder visually AFTER the sort while leaving it
+ * BEFORE in the DOM, so a keyboard user on a narrow viewport tabs to the adder (row two) before the
+ * sort (row one). The two are independent controls -- neither's meaning depends on the other's
+ * position -- so operability is preserved, which is the bar WCAG 2.4.3 actually sets. The only
+ * mismatch-free alternative is reordering the DOM, which would move the adder behind the sort on
+ * DESKTOP too, undoing the prominence it was just given. */
+@media (max-width: 519px) {
+    .gl-toolbar .gl-adder { order: 1; flex: 1 1 100%; }
+}
+
 /* An OVERLAY, like `.pp-navsearch__panel` and `.gd-lb__suggest`. In flow it pushed the whole grid
    down by up to 336px on every debounced keystroke that changed the result count -- on a 375px phone
    that left about one tile row visible, which contradicts the reason the adder sits above the games

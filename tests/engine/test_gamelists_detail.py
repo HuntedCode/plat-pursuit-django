@@ -3208,3 +3208,39 @@ def test_the_section_counts_are_the_real_ones_again(client):
     head = body[body.index(f'id="gl-section-{first.id}"'):]
     head = head[:head.index('</div>')]
     assert '<span class="gl-section__count">2</span>' in head
+
+
+def test_the_adder_takes_its_own_row_on_a_phone(client):
+    """Owner's call: with the title, the adder and the sort competing for one line at 375px, the adder
+    is squeezed to a few characters and the row reads as three equal fragments rather than a label, a
+    view control and an action. It drops beneath them instead.
+
+    `order` alone does it, because the shared bar already wraps and `game-browse.css` already gives
+    `.pp-gbrowse__sort` `flex: 1 1 auto` below 768 -- so once the adder leaves row one, the sort grows
+    to fill it. Restating either here would be a second copy that drifts."""
+    css = _read('static/css/components/gamelists.css')
+
+    rule = css[css.index('@media (max-width: 519px) {', css.index('.gl-adder input:focus')):]
+    rule = rule[:rule.index('}\n}') + 3]
+    assert 'order: 1' in rule, 'the adder does not move below the sort'
+    assert 'flex: 1 1 100%' in rule, 'it does not take the full row it moved to'
+
+
+def test_the_phone_layout_cannot_reach_the_browse_toolbars(client):
+    """`.pp-gbrowse__bar` is shared with twelve browse surfaces. An unscoped rule here would reorder
+    the search field on Browse Games, Companies and the rest -- pages this branch has no business
+    touching."""
+    css = _read('static/css/components/gamelists.css')
+    start = css.index('@media (max-width: 519px) {', css.index('.gl-adder input:focus'))
+    rule = css[start:start + 200]
+
+    assert '.gl-toolbar ' in rule, 'the rule is not scoped to this page'
+
+    # ...and the hook is actually rendered, which is the half a CSS-only assertion cannot see.
+    owner = _staff(client)
+    body = client.get(_url(_list(owner, 2))).content.decode()
+    assert 'pp-gbrowse__toolbar gl-toolbar' in body
+
+    # The shared stylesheet stays untouched: this branch must not have edited it to get here.
+    shared = _read('static/css/components/game-browse.css')
+    assert 'gl-adder' not in shared and 'gl-toolbar' not in shared
