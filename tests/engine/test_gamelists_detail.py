@@ -3108,3 +3108,95 @@ def test_the_preview_shows_the_cta_a_free_owner_would_get(client):
 
     assert 'gl-lockup' in body
     assert 'Group this list into sections' in body
+
+
+# -- the adder typeahead ---------------------------------------------------------------------------
+
+def test_the_typeahead_reads_only_the_results_it_is_about(client):
+    """CLAUDE.md's whale rule, on the one surface here with no cap at all.
+
+    This read every `concept_id` on the list into a Python set on EVERY KEYSTROKE:
+    `list(qs.values_list(...))` followed by Python membership, the third anti-pattern the rule names.
+    Lists are uncapped by design and the view's own comment says one account can build a 50,000-item
+    list, so the cost scaled with the hunter's list while the cache above protected only the
+    catalogue half of the answer.
+
+    ASSERTED ON ROWS FETCHED, not on query count -- both implementations issue exactly one query, so
+    counting them cannot tell them apart. What differs is how much that one query returns, which is
+    the whole defect."""
+    owner = _staff(client)
+    game_list = _list(owner, 0)
+
+    # One game the search will match, and a pile that it will not. The pile is what an unbounded read
+    # drags back; a bounded one never sees it.
+    wanted = ConceptFactory(unified_title='Findable Quest')
+    GameFactory(concept=wanted, title_platform=['PS5'])
+    svc.add_concept(game_list, owner, wanted)
+    for n in range(30):
+        other = ConceptFactory(unified_title=f'Unrelated {n:03d}')
+        GameFactory(concept=other, title_platform=['PS5'])
+        svc.add_concept(game_list, owner, other)
+
+    url = reverse('list_game_search', args=[game_list.id])
+    client.get(url, {'q': 'Findable'})  # warm the catalogue cache, which is a separate concern
+
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(url, {'q': 'Findable'})
+
+    assert resp.status_code == 200
+    results = resp.json()['results']
+    assert [r['title'] for r in results] == ['Findable Quest']
+    assert results[0]['already_added'] is True, 'the answer itself is wrong'
+
+    # THE MEMBERSHIP QUERY, found by its shape rather than by position so a re-ordering of the view
+    # does not silently retarget this.
+    member_reads = [q for q in ctx.captured_queries
+                    if 'gamelists_gamelistitem' in q['sql'] and 'concept_id' in q['sql']]
+    assert len(member_reads) == 1, f'expected one membership read, got {len(member_reads)}'
+    # Bounded BY THE RESULTS: the id of the one row being rendered appears in the WHERE clause, so
+    # the database returns at most that many rows rather than all thirty-one.
+    assert 'IN (' in member_reads[0]['sql'], \
+        'the membership check reads the whole list rather than the page of results'
+
+
+def test_the_typeahead_answer_does_not_change_with_the_bound(client):
+    """The bound is a performance change and must not be a behaviour change. Two games on the list,
+    two matches in the results, one of each state."""
+    owner = _staff(client)
+    game_list = _list(owner, 0)
+
+    on_list = ConceptFactory(unified_title='Zebra Alpha')
+    GameFactory(concept=on_list, title_platform=['PS5'])
+    svc.add_concept(game_list, owner, on_list)
+
+    off_list = ConceptFactory(unified_title='Zebra Bravo')
+    GameFactory(concept=off_list, title_platform=['PS5'])
+
+    resp = client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'Zebra'})
+
+    marks = {r['title']: r['already_added'] for r in resp.json()['results']}
+    assert marks == {'Zebra Alpha': True, 'Zebra Bravo': False}
+
+
+def test_one_hunters_list_never_marks_anothers_results(client):
+    """The catalogue half is cached on the query alone and is the same for everybody; the membership
+    half is per-list and applied AFTER the cache. Bounding it must not have moved it inside."""
+    first = _staff(client, psn='first')
+    theirs = _list(first, 0)
+    shared_game = ConceptFactory(unified_title='Shared Title')
+    GameFactory(concept=shared_game, title_platform=['PS5'])
+    svc.add_concept(theirs, first, shared_game)
+
+    mine_marked = client.get(reverse('list_game_search', args=[theirs.id]),
+                             {'q': 'Shared'}).json()['results']
+    assert mine_marked[0]['already_added'] is True
+
+    client.logout()
+    second = _staff(client, psn='second')
+    empty = _list(second, 0)
+
+    # Same query, so the catalogue cache is warm from the request above.
+    theirs_marked = client.get(reverse('list_game_search', args=[empty.id]),
+                               {'q': 'Shared'}).json()['results']
+    assert [r['title'] for r in theirs_marked] == ['Shared Title'], 'the cache stopped working'
+    assert theirs_marked[0]['already_added'] is False, "one hunter's list leaked into another's"

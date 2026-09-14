@@ -488,6 +488,16 @@ runs the raw `section` through `safe_int` before that filter, because `filter(pk
 - **The adder's typeahead is a sequential scan.** Django compiles `__icontains` to
   `UPPER(col::text) LIKE …`, which the `gin_trgm_ops` index on the raw column cannot serve. Bounded,
   cached and rate-limited; the index question is shared catalogue work and belongs in its own lane.
+  Worth knowing before anyone goes looking for a better example to copy: **all six search views on
+  the site share this shape**, so there is no good one to replicate. Fixing it means deciding whether
+  `trophies_concept` gains an expression index on `UPPER(unified_title::text)`, with EXPLAIN output
+  from production.
+- **Its `already_added` check is bounded to the page of results**, the same idiom
+  `api/rating_views.py` uses for its prefill rows. It read every `concept_id` on the list into a
+  Python set on every keystroke — the third anti-pattern in CLAUDE.md's whale rule — on a system with
+  no cap on list size, and the query cache above deliberately does not cover this half. Note that
+  **query counting cannot catch a regression here**: both shapes issue exactly one query, and what
+  differs is how many rows it returns, so the test asserts on the `IN (…)` bound instead.
 - **Wire the drag on `htmx:afterSettle`, not `afterSwap`.** htmx copies the OLD node's attributes
   onto the new one before insertion and restores the real ones on settle, so during `afterSwap` an
   id'd swapped element reads as whatever the previous content was. Sorting a ranked list A-Z and back

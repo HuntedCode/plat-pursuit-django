@@ -1241,7 +1241,9 @@ class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
 
     What this view CAN do is stop being the dangerous consumer of that shape, by taking the three
     protections `SiteSuggestView` has and this copied none of: a rate limit, a short cache keyed on
-    the normalized query, and an upper bound on `q`. `MIN_QUERY` is 3 rather than 2 because pg_trgm
+    the normalized query, and an upper bound on `q`. A fourth, which is this view's own and which the
+    cache deliberately does not cover: the `already_added` membership check is bounded to the twelve
+    ids being rendered rather than reading the whole list (see below). `MIN_QUERY` is 3 rather than 2 because pg_trgm
     extracts no trigrams from a two-character pattern, so a 2-char query is a guaranteed full pass
     even once the index question is settled.
 
@@ -1298,8 +1300,22 @@ class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
             ]
             cache.set(cache_key, cached, self.CACHE_TTL)
 
+        # BOUNDED TO THE PAGE OF RESULTS, which is the same idiom `api/rating_views.py` uses for its
+        # prefill rows and for the same reason. This read every `concept_id` on the list into a Python
+        # set on EVERY KEYSTROKE -- `list(qs.values_list(...))` followed by Python membership, the
+        # third anti-pattern in CLAUDE.md's whale rule -- on a system with no cap on list size, whose
+        # own comment upstairs says one account can build a 50,000-item list. The cache above covers
+        # the catalogue half of the answer and deliberately not this half, so it ran unprotected at
+        # 120 requests a minute per hunter.
+        #
+        # The answer only ever needs membership for the twelve ids being rendered, and asking the
+        # database that question returns at most twelve rows. The `WHERE concept_id IN (...)` is
+        # served by the `unique(game_list, concept)` index, so it is a bounded indexed seek rather
+        # than a scan of the hunter's list.
         already = set(
-            GameListItem.objects.filter(game_list=game_list).values_list('concept_id', flat=True)
+            GameListItem.objects
+            .filter(game_list=game_list, concept_id__in=[row['concept_id'] for row in cached])
+            .values_list('concept_id', flat=True)
         )
         # Marked rather than filtered out: a hunter searching for something already on the list
         # should be told it is there, not left wondering why it does not appear.
