@@ -669,7 +669,14 @@
     background: color-mix(in oklab, var(--pp-warning) 13%, transparent);
 }
 .gl-lockup__icon svg { width: 17px; height: 17px; }
-.gl-lockup__body { flex: 1 1 auto; min-width: 0; }
+/* `flex: 1 1 0`, NOT `1 1 auto`. Flex line-breaking uses each item's hypothetical main size, and
+   `basis: auto` resolves to MAX-CONTENT -- roughly 600px for this hint -- which `min-width: 0` does
+   not reduce, because that is a lower clamp and not a basis. So at 375px the body did not fit beside
+   the 34px icon and broke to its own line, leaving the icon alone on a blank row: three rows where
+   two were designed, and ~46px of dead height on the block whose own comment says the icon "costs
+   34px". A zero basis makes the body take the space that is left rather than ask for what it wants.
+   `.gl-positions__hint` and `.gl-actions__note` in this file already do it this way. */
+.gl-lockup__body { flex: 1 1 0; min-width: 0; }
 .gl-lockup__title { margin: 0; font-size: 0.82rem; font-weight: 700; color: var(--pp-text); }
 .gl-lockup__hint {
     margin: 2px 0 0;
@@ -710,6 +717,13 @@
     transition: opacity 0.16s ease, color 0.16s ease, background 0.16s ease;
 }
 .gl-section__act svg { width: 14px; height: 14px; }
+/* THE TWO TARGETS MUST NOT OVERLAP. The visible buttons are 28px with a 10px gap, so their centres
+   sit 38px apart while each `::before` is 44px wide -- a 6px overlap, won by whichever paints last.
+   That is Delete, so a thumb landing just right of the PENCIL opened "delete this section". Eight
+   more pixels puts the centres 46px apart and the boxes side by side with room to spare. The confirm
+   dialog was the only thing standing between that mis-tap and a deleted header. */
+.gl-section__act + .gl-section__act { margin-left: 8px; }
+
 .gl-section__head:hover .gl-section__act,
 .gl-section__head:focus-within .gl-section__act { opacity: 1; }
 /* THE 44px TOUCH TARGET, drawn at 28px. The same transparent-::before trick `.gl-item__grab` uses,
@@ -986,7 +1000,9 @@
     color: var(--pp-text-dim);
 }
 .gl-preview > svg { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--pp-warning); }
-.gl-preview__body { flex: 1 1 auto; min-width: 0; }
+/* `1 1 0` for the reason the lockup's body carries: `basis: auto` is max-content, and this
+   sentence's max-content is ~800px, so it broke to its own line and left the eye glyph alone. */
+.gl-preview__body { flex: 1 1 0; min-width: 0; }
 .gl-preview__body strong { color: var(--pp-text); font-weight: 700; }
 .gl-preview__exit {
     flex: none;
@@ -995,7 +1011,14 @@
     font-weight: 700;
     color: var(--pp-primary);
 }
-.gl-preview__exit:hover { text-decoration: underline; }
+/* Guarded, like every other hover in this file: unguarded, the underline STICKS after a tap on
+   touch until something else is tapped. */
+@media (hover: hover) {
+    .gl-preview__exit:hover { text-decoration: underline; }
+}
+.gl-preview__exit:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: var(--pp-radius-sm);
+}
 /* Below 520px the ribbon's three parts leave the sentence about four words a line, so the exit link
    drops beneath the text rather than being squeezed -- the reference standard's instruction for
    exactly this, and the same 519/520 boundary the position bar already uses. */
@@ -1020,11 +1043,19 @@
  * The accent lives at REST here, which is the one place this page spends it outside the arrange bar.
  * A field that only lights up on focus cannot be the thing your eye lands on before you have touched
  * anything. */
-.gl-adder {
-    /* Takes the bar's slack. `.pp-gbrowse__bar > .pp-bgal__search` sets `1 1 200px`; at 200px this
-       sat roughly level with the sort select and read as its twin. The larger basis makes it the
-       widest thing in the row wherever there is room, and the bar's `flex-wrap` still drops it to
-       its own full-width line on a phone. */
+/* QUALIFIED WITH `.gl-toolbar`, AND THAT IS THE WHOLE POINT OF THE SELECTOR. Unqualified this rule
+   never applied: `game-browse.css` sets `.pp-gbrowse__bar > .pp-bgal__search { flex: 1 1 200px }`,
+   which is (0,2,0) against this rule's (0,1,0), and specificity beats source order. So the adder kept
+   the shared 200px basis and went on sitting level with the sort -- exactly the "reads as its twin"
+   state this was written to fix -- for as long as the rule existed.
+   It hid well: below 520 the phone rule (already two classes) wins, and above ~768 the sort stops
+   growing so the adder takes the slack anyway. Only 520-767 showed it, which is no viewport anybody
+   was looking at. The test asserted the DECLARATION was in the file, which was true and proved
+   nothing about the cascade. */
+.gl-toolbar .gl-adder {
+    /* Takes the bar's slack. At the shared 200px basis this sat roughly level with the sort select;
+       the larger basis makes it the widest thing in the row wherever there is room, and the bar's
+       `flex-wrap` still drops it to its own full-width line on a phone. */
     flex: 1 1 320px;
 }
 .gl-adder > svg {
@@ -1071,9 +1102,13 @@
  * `.pp-gbrowse__sort` is given `flex: 1 1 auto` below 768 by `game-browse.css`, so once the adder
  * leaves row one the sort grows to fill it. Nothing here needs to restate either.
  *
- * 519/520 is this file's own boundary -- the arrange bar and the lockup already stack there -- rather
- * than a third number. It is also where the layout actually gives out: title (~70px) + sort (~120px)
- * + the adder's 320px basis and two gaps needs ~526px, so above this they genuinely fit.
+ * 599/600, AND NOT THIS FILE'S USUAL 519/520, because the arithmetic that chose 519 was measured
+ * against the wrong box. The flex container is the toolbar card's CONTENT box, which is the viewport
+ * less 32px of page gutter and 28px of card padding -- so the ~531px this row needs (title ~64 +
+ * sort ~131 + the adder's 320px basis + two 8px gaps) wants a ~591px VIEWPORT, not a 526px one.
+ * At 519/520 the band from 520 to ~585 would have put the adder back on row one and left the sort
+ * alone on row two as a 460px-wide select reading "A-Z". That was invisible only because the basis
+ * above was losing the cascade; fixing one without the other would have shipped it.
  *
  * ONE TRADE, stated rather than hidden: this moves the adder visually AFTER the sort while leaving it
  * BEFORE in the DOM, so a keyboard user on a narrow viewport tabs to the adder (row two) before the
@@ -1081,7 +1116,7 @@
  * position -- so operability is preserved, which is the bar WCAG 2.4.3 actually sets. The only
  * mismatch-free alternative is reordering the DOM, which would move the adder behind the sort on
  * DESKTOP too, undoing the prominence it was just given. */
-@media (max-width: 519px) {
+@media (max-width: 599px) {
     .gl-toolbar .gl-adder { order: 1; flex: 1 1 100%; }
 }
 

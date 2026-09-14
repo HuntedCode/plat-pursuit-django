@@ -418,10 +418,14 @@ def add_concept(game_list, profile, concept, *, note=''):
     # Concept is deleted (CASCADE, no service involved) -- trusting it would lock a hunter out of a
     # list that has room, permanently, with no action that clears it.
     if GameListItem.objects.filter(game_list=locked).count() >= MAX_ITEMS_PER_LIST:
-        raise ListError(
-            f'A list holds {MAX_ITEMS_PER_LIST} games. '
-            'Remove one to make room, or start another list.'
-        )
+        # THE REMEDY IS CHECKED BEFORE IT IS OFFERED. "or start another list" is good advice to a
+        # member with room and a dead end to a free hunter already holding three, who would follow it
+        # into a second refusal -- the same defect `DeleteListView`'s docstring records, where a cap
+        # message named a way out that did not exist. One extra query, on a refusal path.
+        remedy = 'Remove one to make room.'
+        if GameList.objects.owned_by(profile).count() < max_lists_for(profile):
+            remedy = 'Remove one to make room, or start another list.'
+        raise ListError(f'A list holds {MAX_ITEMS_PER_LIST} games. {remedy}')
 
     highest = GameListItem.objects.filter(game_list=locked).aggregate(
         top=models.Max('position'))['top']

@@ -414,9 +414,13 @@ for the full picture; the model facts that matter elsewhere:
   the two browse sorts (`Meta.ordering` matches neither), and `visible()` and `readable_by()` are
   not. See [game-lists.md](../features/game-lists.md#visibility) for the table.
 
-**Caps: 3 lists free, 25 for members. There is no cap on list SIZE**, and that absence is deliberate
-— the legacy system gave members unlimited games per list, so any ceiling would take a perk back and
-could make the importer refuse a member's own data.
+**Caps: 3 lists free, 25 for members** (`max_lists_for`), and **200 games per list, flat**
+(`MAX_ITEMS_PER_LIST`, enforced in `add_concept`). The size cap arrived 2026-09-14 and reversed the
+"no cap on list SIZE" position this paragraph used to state — that argument was about the membership
+system this one replaced. 200 because it equals `views.MAX_ITEMS_RENDERED`, so no list can outgrow
+one render; flat because a size cap is abuse prevention and abuse prevention must not be purchasable.
+**Anyone writing the importer**: route it through `add_concept` or it is not bound by the cap. See
+[game-lists.md](../features/game-lists.md#caps).
 
 ### gamelists.GameListItem
 

@@ -3138,16 +3138,26 @@ def test_a_list_already_over_the_cap_keeps_every_row(client, monkeypatch):
     version of this worth regretting, and "no list is over 200 today" is a fact about today rather
     than a guarantee about the shell, the admin or the importer."""
     from gamelists.services import game_list_service as service
+    from gamelists import views as gl_views
 
     owner = _staff(client)
     game_list = _list(owner, 5)
 
     # The cap arrives AFTER the list already exceeded it, which is the only way this state occurs.
+    # BOTH constants, because the render reads its own. Patching only the service's left
+    # `MAX_ITEMS_RENDERED` at 200, so "5 rows still render" was true for a list of five no matter what
+    # the cap said -- the render half of this test could not fail. They are the same number in
+    # production, so patching them apart is the test's job.
     monkeypatch.setattr(service, 'MAX_ITEMS_PER_LIST', 2)
+    monkeypatch.setattr(gl_views, 'MAX_ITEMS_RENDERED', 2)
     assert game_list.items.count() == 5
 
     resp = client.get(_url(game_list))
-    assert len(resp.context['items']) == 5, 'an over-cap list lost rows on render'
+    # THE SLICE IS WHAT DEFENDS THE RENDER, and this is where that is asserted: an over-cap list is
+    # bounded on the page rather than rendered whole. The rows themselves are untouched, which the
+    # database assertions below prove.
+    assert len(resp.context['items']) == 2, 'the render bound stopped applying'
+    assert game_list.items.count() == 5, 'the render bound deleted rows'
 
     with pytest.raises(svc.ListError):
         svc.add_concept(game_list, owner, ConceptFactory(unified_title='Nope'))
@@ -3220,7 +3230,9 @@ def test_the_adder_takes_its_own_row_on_a_phone(client):
     to fill it. Restating either here would be a second copy that drifts."""
     css = _read('static/css/components/gamelists.css')
 
-    rule = css[css.index('@media (max-width: 519px) {', css.index('.gl-adder input:focus')):]
+    # 599, not this file's usual 519: the row needs a ~591px VIEWPORT once the gutter and the
+    # card padding are taken off, which is the arithmetic the first version got wrong.
+    rule = css[css.index('@media (max-width: 599px) {', css.index('.gl-adder input:focus')):]
     rule = rule[:rule.index('}\n}') + 3]
     assert 'order: 1' in rule, 'the adder does not move below the sort'
     assert 'flex: 1 1 100%' in rule, 'it does not take the full row it moved to'
@@ -3231,7 +3243,7 @@ def test_the_phone_layout_cannot_reach_the_browse_toolbars(client):
     the search field on Browse Games, Companies and the rest -- pages this branch has no business
     touching."""
     css = _read('static/css/components/gamelists.css')
-    start = css.index('@media (max-width: 519px) {', css.index('.gl-adder input:focus'))
+    start = css.index('@media (max-width: 599px) {', css.index('.gl-adder input:focus'))
     rule = css[start:start + 200]
 
     assert '.gl-toolbar ' in rule, 'the rule is not scoped to this page'
@@ -3244,3 +3256,186 @@ def test_the_phone_layout_cannot_reach_the_browse_toolbars(client):
     # The shared stylesheet stays untouched: this branch must not have edited it to get here.
     shared = _read('static/css/components/game-browse.css')
     assert 'gl-adder' not in shared and 'gl-toolbar' not in shared
+
+
+def test_the_preview_survives_every_refresh_this_page_makes(client):
+    """A DOOR THAT OPENS HALF A THING IS NOT A PREVIEW -- `core/previews.py` says so in its own
+    docstring, and this broke exactly that way.
+
+    Every htmx path here rebuilds its querystring from scratch: `refreshItems` from the sort form's
+    `hx-get`, `refreshAfterTypeChange` from `window.location.pathname` (which it also rewrites with
+    `replaceState`). So the parameter was dropped on the first add, remove, sort or section change,
+    the server computed the MEMBER's answer, and the out-of-band chrome swap restored the section
+    controls underneath a banner still announcing the non-member render."""
+    owner = _member(client, psn='member')
+    game_list = _ranked(owner, 3)
+    svc.create_section(game_list, owner, name='Playing')
+
+    # The htmx paths that actually re-render the chrome, asked for the way the client asks.
+    for params in ({'preview': 'lists-free', 'chrome': '1'},
+                   {'preview': 'lists-free', 'sort': 'name'},
+                   {'preview': 'lists-free'}):
+        resp = client.get(_url(game_list), params, HTTP_HX_REQUEST='true')
+        assert resp.context['free_preview'] is True, params
+        assert resp.context['can_manage_sections'] is False, params
+        assert 'data-gl-section-add' not in resp.content.decode(), params
+
+
+def test_the_client_carries_the_preview_through_its_own_requests(client):
+    """The server half is only half. These are the three places the parameter is re-attached, and the
+    hook it is read from."""
+    owner = _member(client, psn='member')
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list) + '?preview=lists-free').content.decode()
+    # ON THE PANEL, which is htmx's swap target and keeps its own attributes -- not on swapped
+    # content, and not read from `window.location`, which `replaceState` rewrites.
+    assert 'id="gl-items-panel" data-preview="lists-free"' in body
+    # The sort form is submitted by htmx directly, so it carries a field rather than a JS hook.
+    assert '<input type="hidden" name="preview" value="lists-free" />' in body
+
+    # ...and a member NOT previewing gets neither, so nothing leaks into the normal render.
+    plain = client.get(_url(game_list)).content.decode()
+    assert 'data-preview' not in plain
+    assert 'name="preview"' not in plain
+
+    js = _decommented(_read('static/js/list-detail.js'))
+    assert 'function previewParam(' in js
+    refresh = js[js.index('function refreshItems('):js.index('function itemsRoot(')]
+    assert 'previewParam()' in refresh, 'an add or remove drops the preview'
+    # `var TOGGLES`, not the comment banner that used to separate them -- `_decommented` strips
+    # exactly that banner before this runs, so the anchor could never be found.
+    retype = js[js.index('function refreshAfterTypeChange('):js.index('var TOGGLES')]
+    assert 'previewParam()' in retype, 'a type change drops the preview'
+    # `replaceState` must not strip it back out of the address bar either -- and this asserts what
+    # `cleaned` is BUILT FROM, not merely that a variable by that name reaches `replaceState`. The
+    # first version checked the name, so blanking the composition left it passing.
+    assert "path + (preview ? '?' + preview : '')" in retype, \
+        'a type change rewrites the address bar without the preview, so a reload leaves it'
+
+
+def test_the_cap_refusal_does_not_name_a_remedy_the_other_cap_refuses(client):
+    """"or start another list" is good advice to a member with room and a dead end to a free hunter
+    already holding three, who would follow it into a second refusal. The same defect class
+    `DeleteListView` was written about: a cap message naming a way out that did not exist."""
+    from gamelists.services import game_list_service as service
+    from gamelists.models import FREE_MAX_LISTS
+
+    monkeypatch_cap = 2
+    owner = _staff(client, psn='free')
+
+    full = _list(owner, 0, name='Full one')
+    # Fill the remaining list allowance, so "start another list" is genuinely unavailable.
+    for n in range(FREE_MAX_LISTS - 1):
+        _list(owner, 0, name=f'Spare {n}')
+
+    import pytest as _pytest
+    with _pytest.MonkeyPatch.context() as mp:
+        mp.setattr(service, 'MAX_ITEMS_PER_LIST', monkeypatch_cap)
+        for n in range(monkeypatch_cap):
+            svc.add_concept(full, owner, ConceptFactory(unified_title=f'Fits {n}'))
+
+        with _pytest.raises(svc.ListError) as refusal:
+            svc.add_concept(full, owner, ConceptFactory(unified_title='Over'))
+        assert 'another list' not in str(refusal.value), \
+            'the refusal sends a capped-out hunter into a second refusal'
+        assert 'Remove one' in str(refusal.value)
+
+        # ...and a hunter WITH room is still told the useful thing.
+        roomy = _member_with_room(client)
+        roomy_list = svc.create_list(roomy, name='Theirs')
+        for n in range(monkeypatch_cap):
+            svc.add_concept(roomy_list, roomy, ConceptFactory(unified_title=f'R{n}'))
+        with _pytest.raises(svc.ListError) as second:
+            svc.add_concept(roomy_list, roomy, ConceptFactory(unified_title='Over'))
+        assert 'another list' in str(second.value)
+
+
+def _member_with_room(client):
+    """A member with one list, so the list-count cap is nowhere near."""
+    profile = ProfileFactory(is_linked=True, psn_username='roomy')
+    profile.user_is_premium = True
+    profile.save(update_fields=['user_is_premium'])
+    return profile
+
+
+def test_the_deletion_sweep_left_nothing_dangling(client):
+    """The cap commit removed a context flag, a template block, a `can_reorder` clause and a
+    section-count branch. Deletion sweeps are where a dangling reference survives, so this names the
+    specific leftovers an audit found rather than trusting a grep done once."""
+    views = _read('gamelists/views.py')
+    assert "context['items_shown']" not in views, 'a context key with no reader'
+
+    items = _read('templates/gamelists/partials/detail_items.html')
+    assert '{% load humanize %}' not in items, 'a load tag with no filter left to serve'
+
+    detail = _read('templates/gamelists/detail.html')
+    assert 'The truncation line used to sit HERE' not in detail, \
+        'a comment pointing at a block that exists nowhere'
+
+    # THE POSITIVE, because the negative could not survive its own fix: correcting these documents
+    # meant QUOTING the reverted claim to say it was reverted, which a "this phrase must not appear"
+    # grep then failed on. Asserting that each one names the cap is the version that fails when a
+    # document silently goes back to describing an uncapped system.
+    for path in ('gamelists/models.py', 'docs/architecture/data-model.md',
+                 'docs/features/game-lists.md'):
+        assert 'MAX_ITEMS_PER_LIST' in _read(path), f'{path} does not mention the cap at all'
+
+
+def test_the_adder_actually_wins_the_cascade(client):
+    """THE DEFECT THIS TEST EXISTS FOR, and the one its predecessor could not see.
+
+    `game-browse.css` sets `.pp-gbrowse__bar > .pp-bgal__search { flex: 1 1 200px }` -- specificity
+    (0,2,0). The prominence rule was a bare `.gl-adder` at (0,1,0), so it LOST, and the adder kept the
+    shared basis for as long as the rule existed. Specificity beats source order, and the old
+    assertion ("the declaration is in the file") was true the whole time.
+
+    Asserted against the COMPILED bundle, because that is where the question lives. Two conditions
+    together are sufficient: the winning rule is at least as specific (two classes), and it comes
+    later in the sheet (so an equal-specificity tie breaks our way)."""
+    css = _read('staticfiles/css/output.css')
+
+    shared = css.index('.pp-gbrowse__bar>.pp-bgal__search{flex:200px}')
+    ours = css.index('.gl-toolbar .gl-adder{flex:320px}')
+
+    assert ours > shared, 'the adder rule is compiled BEFORE the shared one and loses the tie'
+    # Two classes, matching the shared selector rather than being outranked by it. A single-class
+    # selector here is the bug, whatever its source position.
+    assert '.gl-toolbar .gl-adder{flex:320px}' in css, 'the rule lost its qualifying class'
+
+
+def test_the_two_wrapping_bodies_take_the_space_that_is_left(client):
+    """`flex-basis: auto` resolves to MAX-CONTENT for flex line-breaking, and `min-width: 0` does not
+    reduce it -- it is a lower clamp, not a basis. So both of these asked for ~600-800px, did not fit
+    beside their icon at 375px, and broke to their own line: three rows where two were designed, with
+    the icon stranded alone on the first."""
+    css = _read('static/css/components/gamelists.css')
+
+    for rule in ('.gl-lockup__body { flex: 1 1 0; min-width: 0; }',
+                 '.gl-preview__body { flex: 1 1 0; min-width: 0; }'):
+        assert rule in css, rule
+    assert '.gl-lockup__body { flex: 1 1 auto' not in css
+    assert '.gl-preview__body { flex: 1 1 auto' not in css
+
+
+def test_the_section_controls_hit_areas_do_not_overlap(client):
+    """The visible buttons are 28px with a 10px gap, so their centres sit 38px apart while each 44px
+    `::before` is 44 wide -- 6px of overlap, won by whichever paints last. That is DELETE, so a thumb
+    landing just right of the pencil opened "delete this section"."""
+    css = _read('static/css/components/gamelists.css')
+
+    assert '.gl-section__act + .gl-section__act { margin-left: 8px; }' in css, \
+        'the two 44px targets overlap again, and the overlap belongs to Delete'
+
+
+def test_the_phone_reorder_is_withheld_where_nothing_competes(client):
+    """The sort form renders only `{% if items %}`, so an empty list's bar holds just the title and
+    the adder -- which fit one line at 375px. Reordering there strands "Games" alone on a row above
+    the adder, on the one page state where the adder is the entire point."""
+    owner = _staff(client)
+
+    empty = client.get(_url(_list(owner, 0))).content.decode()
+    assert 'gl-toolbar' not in empty, 'an empty list spends a row on a reorder with nothing to reorder'
+
+    populated = client.get(_url(_list(owner, 2, name='Has games'))).content.decode()
+    assert 'pp-gbrowse__toolbar gl-toolbar' in populated

@@ -1694,7 +1694,7 @@ class Concept(models.Model):
         # SET-BASED, because this runs inside `Game.add_concept()` and therefore inside SYNC. The
         # first version materialized every row of every touched list and issued one `save()` per
         # shifted item: removing position 0 of a 50,000-item list was ~50,000 UPDATE statements in
-        # the sync path, and list size is uncapped and attacker-controlled. Exactly the shape
+        # the sync path, and a list can hold up to `gamelists.MAX_ITEMS_PER_LIST` rows. Exactly the shape
         # CLAUDE.md's whale rule forbids, in the worst place to put it.
         #
         # One shift per colliding list -- the same single-decrement `remove_concept` already uses --

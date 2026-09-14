@@ -429,7 +429,8 @@ take their own content down, which is what restriction exists to encourage.
 
 The adder searches **concepts**, so a game appears once rather than once per platform stack. After a
 write the item panel is re-rendered from the server rather than spliced client-side, which keeps sort
-position, the empty state and the truncation line server-owned.
+position and the empty state server-owned. (It kept the truncation line server-owned too, until the
+size cap made truncation impossible and the line was deleted.)
 
 ### Cover art
 
@@ -530,10 +531,6 @@ runs the raw `section` through `safe_int` before that filter, because `filter(pk
   id'd swapped element reads as whatever the previous content was. Sorting a ranked list A-Z and back
   left every grip inert; the reverse wired a grid that must not be draggable *and* marked it handled
   so settle could not undo it.
-- **A truncated list cannot be reordered**, and says so. `reorder` refuses a partial ordering by
-  design, so past `MAX_ITEMS_RENDERED` the page cannot post a complete one and `can_reorder` goes
-  false. The handles vanishing without explanation would read as a bug on the one type built for
-  ordering, so the truncation line adds a sentence for the owner.
 - **The detail page renders at most 200 items** (`MAX_ITEMS_RENDERED`) and no longer needs to say so,
   because a list cannot hold more than that. The slice survives as a backstop against a row put there
   outside the service, not as a page boundary.

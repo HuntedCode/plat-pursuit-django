@@ -243,6 +243,8 @@
         // capability until a reload. The SORT is kept across it, unlike `refreshAfterTypeChange`:
         // a section change does not invalidate the sort the hunter is reading the list in.
         if (withChrome) { params.push('chrome=1'); }
+        var preview = previewParam();
+        if (preview) { params.push(preview); }
         var url = base + (params.length ? '?' + params.join('&') : '');
         // No `hx-push-url` here on purpose: this is a content update, not navigation. Pushing would
         // make Back step through every add and remove.
@@ -285,6 +287,23 @@
     }
 
     /**
+     * The team-preview parameter, re-attached to every request this file builds.
+     *
+     * Read from the PANEL, which is htmx's swap target and keeps its own attributes, rather than from
+     * `window.location` -- `refreshAfterTypeChange` rewrites the address bar with `replaceState`, so
+     * the location is the one source guaranteed to have lost it by the time it is needed.
+     *
+     * Without this the preview ended at the first add, remove, sort or section change: the server saw
+     * no parameter, computed the member's answer, and the out-of-band chrome swap restored the
+     * section controls underneath a banner still saying "Previewing as a non-member".
+     */
+    function previewParam() {
+        var panel = document.getElementById('gl-items-panel');
+        var slug = panel && panel.dataset.preview;
+        return slug ? 'preview=' + encodeURIComponent(slug) : '';
+    }
+
+    /**
       * Re-render everything a type switch changed, in one request, without leaving the page.
       *
       * `?chrome=1` asks the items partial to append out-of-band copies of the sort <select> and the
@@ -298,8 +317,13 @@
       */
     function refreshAfterTypeChange() {
         var path = window.location.pathname;
+        // THE PREVIEW SURVIVES THE CLEAN-UP. This strips the sort from the address bar on purpose (the
+        // new type has its own default), and it used to strip the preview with it -- so a reload
+        // landed on the member's render while the banner still claimed otherwise.
+        var preview = previewParam();
+        var cleaned = path + (preview ? '?' + preview : '');
         if (window.history && window.history.replaceState) {
-            window.history.replaceState({}, '', path);
+            window.history.replaceState({}, '', cleaned);
         }
         // The same guard `refreshItems` documents at length, and for the same reason: htmx resolves
         // its ajax promise for EVERY status and maps 4xx/5xx to `swap: false`. Without this a 500
@@ -307,7 +331,7 @@
         // ranked, a sort control still offering "List order", and no sign anywhere.
         var mine = ++refreshSeq;
         var before = itemsRoot();
-        return window.htmx.ajax('GET', path + '?chrome=1',
+        return window.htmx.ajax('GET', path + '?chrome=1' + (preview ? '&' + preview : ''),
                                 { target: '#gl-items-panel', swap: 'innerHTML' })
             .then(function () {
                 if (mine !== refreshSeq) { return; }
@@ -1573,7 +1597,8 @@
      * Decide whether the bar is on screen, from the three things that actually govern it.
      *
      * 1. The SERVER allows reordering here (`data-gl-reorder` on the live grid) -- owner, ranked,
-     *    real sequence, whole list rendered.
+     *    real sequence. ("...and short enough to render whole" stood here too, and went when the size
+     *    cap made a truncated list impossible.)
      * 2. The editor is open. That is the deliberate-entry half; without it the handles are live on a
      *    page nobody said they were editing, which is what made dragging feel accidental.
      *

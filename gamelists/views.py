@@ -592,9 +592,9 @@ class GameListDetailView(DetailView):
         # The flatness test could not see it (it counts gamelists_ and trophies_game tables), which
         # is the same blind spot an audit flagged on the browse page; the raw_response guard caught
         # it instead.
-        # BOUNDED. There is no cap on list SIZE (members always had unlimited, and removing that
-        # was a perk takeback), so the row count here is attacker-controlled: one account can build a
-        # 50,000-item list and hand out the URL. `cover_games_for` then fetches every Game row for
+        # BOUNDED. `MAX_ITEMS_PER_LIST` caps the list itself as of 2026-09-14, so this is no longer
+        # the only thing standing between a public URL and an unbounded render -- but the slice stays,
+        # because a cap enforced in a service binds callers of that service and not a shell. `cover_games_for` then fetches every Game row for
         # every concept -- several per concept once stacks are counted -- which is the largest
         # allocation on the page and invisible to a query-COUNT test, because the shape stays O(1)
         # while the bytes do not. CLAUDE.md's whale rule names exactly this: an explicit `[:N]` slice
@@ -618,7 +618,6 @@ class GameListDetailView(DetailView):
             .defer('concept__igdb_match__raw_response')
             .order_by(*order)[:MAX_ITEMS_RENDERED]
         )
-        context['items_shown'] = len(items)
         # One batched query for every cover on the page, not one per row -- the same helper the
         # browse tiles use, for the same reason.
         covers = cover_games_for([item.concept_id for item in items])

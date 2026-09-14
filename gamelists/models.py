@@ -68,10 +68,19 @@ MEMBER_MAX_LISTS = 25
 #: The tiering lives on list COUNT above, where it says the honest thing: members get more LISTS.
 #: Keeping this flat is also what keeps `cap == render bound` true for everybody.
 #:
-#: Read ONLY by `game_list_service.add_concept`, so there is one enforcement point and the shell and
-#: the importer are bound by it too. Enforced on the way IN and never by deletion: a list that is
-#: somehow already over the cap keeps every row it has and simply cannot take more. A cap that
-#: removes somebody's games is the one version of this worth regretting.
+#: Read ONLY by `game_list_service.add_concept`, so the product has exactly one enforcement point.
+#: WHAT THAT DOES AND DOES NOT BUY, because the first version of this comment overclaimed it: a check
+#: in a service binds callers OF THAT SERVICE. It does not bind a shell doing `bulk_create`, and there
+#: is no CheckConstraint behind it (a cap on a row COUNT is not something a table constraint can
+#: express). A future importer is bound only if it goes through `add_concept`, which is a thing to
+#: make sure of rather than a thing to assume.
+#:
+#: Which is why the render carries its own bound: `views.MAX_ITEMS_RENDERED` slices regardless, so a
+#: row that arrived another way cannot turn a public page into an unbounded render.
+#:
+#: Enforced on the way IN and never by deletion: a list that is somehow already over the cap keeps
+#: every row it has and simply cannot take more. A cap that removes somebody's games is the one
+#: version of this worth regretting.
 MAX_ITEMS_PER_LIST = 200
 
 #: What a list IS, which here means only how it presents. The rows are identical either way -- a
