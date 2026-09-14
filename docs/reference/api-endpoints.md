@@ -148,6 +148,7 @@ User-submitted data quality flags (delisted, shovelware, VR-only, buggy trophies
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | POST | `/api/v1/games/<game_id>/flag/` | Login | Submit a community flag report against a game |
+| POST | `/api/v1/games/<game_id>/flag/versions/` | Login | Submit ONE flag across several versions of that game (the Game page's selector). Body carries `game_ids`; ids are intersected server-side against the anchor's own versions. Shares one 5/min bucket with the endpoint above; a tripped limit is a 403 with `detail` |
 
 ### Contract Modals (HTML fragments)
 

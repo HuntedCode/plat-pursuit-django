@@ -245,6 +245,12 @@ class GamePageView(ConceptContextMixin, TemplateView):
         view_param = self.request.GET.get('view')
         context['initial_view'] = view_param if view_param in ('lists', 'ratings', 'about') else 'lists'
         context['viewer_profile'] = viewer
+        # The bulk flag endpoint's per-request cap, handed to the template so the report modal can
+        # stop a reader BEFORE a doomed round trip. A concept with more lists than this is rare, but
+        # without it "All" then "Submit" is an opaque 400 with nothing having said there was a limit.
+        from trophies.services.game_flag_service import GameFlagService
+
+        context['flag_max_versions'] = GameFlagService.MAX_BULK_VERSIONS
         context['switcher_entries'] = [
             {
                 'game': g,

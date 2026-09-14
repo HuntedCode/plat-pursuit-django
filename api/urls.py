@@ -36,7 +36,7 @@ from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimSta
 from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
 from .game_player_views import GamePlayersAPIView
-from .game_flag_views import GameFlagView
+from .game_flag_views import GameFlagView, GameFlagVersionsView
 from .rating_views import GroupRatingView, WizardQueueView, TrophyListView, BlurbReportView
 from .roadmap_views import (
     RoadmapPublishView, RoadmapImageUploadView, RoadmapPreviewView,
@@ -139,6 +139,10 @@ urlpatterns = [
 
     # Game flags (community data quality reports)
     path('games/<int:game_id>/flag/', GameFlagView.as_view(), name='game-flag'),
+    # Concept-level: one flag across several versions of the same game (the Game page's selector).
+    # Anchored on a game id so the endpoint can bound WHICH versions are legal without trusting the
+    # client's list -- see GameFlagVersionsView.
+    path('games/<int:game_id>/flag/versions/', GameFlagVersionsView.as_view(), name='game-flag-versions'),
 
     # Game background search (shared by share card + banner picker)
     path('game-backgrounds/', GameBackgroundSearchView.as_view(), name='game-background-search'),
