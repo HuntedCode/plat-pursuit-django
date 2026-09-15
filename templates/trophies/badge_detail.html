@@ -87,14 +87,20 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                             {% if g.state == 'holo' %}<span class="text-secondary">&#10022; Holographic{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
                             {% elif g.state == 'earned' %}<span class="text-success">&#10003; Earned{% if g.earned_at %} &middot; {{ g.earned_at|date:"M j, Y" }}{% endif %}</span>
                             {% elif g.state == 'in_progress' %}<span class="text-primary">In progress</span>
+                            {% elif g.is_unearnable %}<span class="text-base-content/50 font-medium">No longer earnable</span>
                             {% else %}<span class="text-base-content/50 font-medium">Not yet earned</span>{% endif %}
                         </div>
 
+                        {% comment %} An unearnable edition renders no progress bar. With zero gating stages
+                        the track had no segments at all, and its `aria-label` announced "0 of 0 stages" --
+                        a progressbar describing a chase the paragraph below it says is over. {% endcomment %}
+                        {% if not g.is_unearnable %}
                         <div class="lg:flex-1 lg:min-w-[140px] w-full">
                             <div class="pp-horizon pp-horizon--segmented" role="progressbar" aria-valuenow="{{ g.progress_pct }}" aria-valuemin="0" aria-valuemax="100" aria-label="{{ g.stages_cleared }} of {{ g.gating_count }} stages" style="--horizon-h: 8px;">
                                 {% for on in g.segments %}<span class="pp-horizon__seg"{% if on %} data-state="done"{% endif %}></span>{% endfor %}
                             </div>
                         </div>
+                        {% endif %}
 
                         <div class="flex items-center justify-center lg:justify-end gap-5 md:gap-6 shrink-0 flex-wrap">
                             <div class="text-center leading-tight">
@@ -240,10 +246,34 @@ Collection. No extra wrapper container: a nested one would double the horizontal
         {% for g in detail.groups %}
         <div id="bd2-journey-{{ g.platform_group.key }}" class="bd2-panel{% if g.platform_group.key != active_group_key %} is-hidden{% endif %}"
              role="tabpanel" aria-labelledby="bd2-tab-{{ g.platform_group.key }}" data-bd2-view="{{ g.platform_group.key }}">
-            {% if g.stages %}
+            {% comment %} An edition with nothing left to gate cannot be earned by anyone. Said ONCE, at the
+            top, before any of the furniture below it -- the medallion is grey, the stage count is gone and
+            every stage has fallen into the retired section, and without this the reader is left to infer
+            why from three separate absences. {% endcomment %}
+            {% if g.is_unearnable %}
+            <div class="bd-dead" role="note">
+                <span class="bd-dead__ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>
+                </span>
+                <div class="bd-dead__body">
+                    <p class="bd-dead__title">This badge can no longer be earned on {{ g.platform_group.name }}</p>
+                    <p class="bd-dead__text">
+                        Every game it asks for has become unobtainable, so there is no longer a way to finish it.
+                        {% if target_profile %}Any points you earned for the stages below are yours and stay on your total.{% else %}Points already earned for its stages stay with the hunters who earned them.{% endif %}
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if g.stages or g.retired_stages %}
             {% comment %} Requirements preview: the compact stage-tile checklist (checked when cleared), each
-            tile jumping to its stage in the journey below. {% endcomment %}
+            tile jumping to its stage in the journey below. Skipped entirely on an unearnable edition -- its
+            tile grid loops `g.stages`, which is empty there, so it rendered as a gap under a headline that
+            repeated what the banner directly above had already said. {% endcomment %}
+            {% if not g.is_unearnable %}
             {% include 'trophies/partials/badge_detail/bd2_requirements.html' with g=g %}
+            {% endif %}
+            {% if g.stages %}
             {% comment %} Bulk expand/collapse for this group's stage ladder (one per journey panel). {% endcomment %}
             <div class="flex justify-end mt-2 mb-1">
                 {% comment %} No aria-label -- the toggling "Expand all" / "Collapse all" text IS the accessible
@@ -258,6 +288,33 @@ Collection. No extra wrapper container: a nested one would double the horizontal
                 {% include 'trophies/partials/badge_detail/bd2_stage.html' with group_key=g.platform_group.key %}
                 {% endfor %}
             </div>
+            {% endif %}
+
+            {% comment %} Retired stages: in scope for this edition but no longer gating, because everything
+            they ask for here is unobtainable. Kept on the page because clearing one still PAID -- dropping
+            them would erase work the hunter was credited for -- but below the ladder and clearly fenced, so
+            they cannot be mistaken for something still standing between them and the badge. {% endcomment %}
+            {% if g.retired_stages %}
+            <section class="bd-retired mt-5">
+                <div class="bd-retired__head">
+                    <span class="bd-retired__ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"></line></svg>
+                    </span>
+                    <div>
+                        <h3 class="bd-retired__title">No longer obtainable &middot; {{ g.retired_stages|length }} stage{{ g.retired_stages|length|pluralize }}</h3>
+                        <p class="bd-retired__note">
+                            These don&rsquo;t count toward the badge. There&rsquo;s no way left to get them on
+                            {{ g.platform_group.name }}, but if you cleared one while you still could, it kept its points.
+                        </p>
+                    </div>
+                </div>
+                <div class="bd-stages bd-stages--retired">
+                    {% for s in g.retired_stages %}
+                    {% include 'trophies/partials/badge_detail/bd2_stage.html' with retired=True %}
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
             {% else %}
             <p class="text-base-content/50 text-center py-6">No stages are defined for this badge yet.</p>
             {% endif %}
