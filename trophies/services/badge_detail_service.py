@@ -11,7 +11,10 @@ from typing import Optional
 
 
 from trophies.models import UserGroupBadge, SeriesBadgeStanding, Game, ProfileGame
-from trophies.services.badge_orchestrator import build_catalog, evaluate_with_catalog
+from trophies.services.badge_engine import GroupInput, _gates as engine_gates, _qualifies as engine_qualifies
+from trophies.services.badge_orchestrator import (
+    build_catalog, evaluate_with_catalog, _bundle_state, _catalog_game_state,
+)
 from trophies.services.badge_xp import compute_series_standings, edition_display_state, XP_PER_STAGE, XP_BADGE_COMPLETION_BONUS
 from trophies.services.badge_rarity import group_rarity
 from trophies.services.rarity import community_size
@@ -51,7 +54,16 @@ class GroupView:
     avg_difficulty: Optional[float]
     avg_hours: Optional[float]
     xp_on_offer: int
-    stages: list                 # the group's stage journey (list of stage dicts) -- see _group_journey
+    stages: list                 # the REQUIRED stage ladder, numbered 1..N -- see _group_journey
+    #: In scope for this edition but no longer gating: every game of theirs on this edition's platforms is
+    #: unobtainable (or delisted where the group excludes them). They do not count toward completion and
+    #: carry no stage number, but they still PAY whoever cleared them, so they are shown in their own
+    #: labelled section below the ladder rather than dropped.
+    retired_stages: list
+    #: Nothing left to gate -- the badge cannot be earned by anyone any more. Held rows are revoked and the
+    #: page has to say so, because every "0 of 0 stages / N Points on offer" figure around it otherwise
+    #: reads as a live chase.
+    is_unearnable: bool
     user_stats: Optional[dict]   # the viewer's per-group My Stats (haul/play/games/stages); None for anon
     frame: dict                  # medallion frame dict for components/badge_medallion.html
 
@@ -93,37 +105,39 @@ def _contract_map(concept_ids) -> dict:
     return out
 
 
-def _group_stats(gb, result, catalog, ratings_map) -> dict:
-    """Facts for THIS group's badge: the games that route to its platforms, their community difficulty/hours
-    (cached per concept), and the XP on offer for this group. A concept counts when it has a game whose
-    platforms intersect the group's -- so Legacy HD and Ultra HD get different games / ratings / XP."""
-    platforms = set(gb.platform_group.platforms)
+def _group_stats(journey, ratings_map) -> dict:
+    """Facts for THIS group's badge: how many games it puts on screen and their community difficulty/hours.
+
+    Derived from the JOURNEY rather than re-walking the catalogue with a platform filter, so the headline
+    numbers describe the cards a reader can actually see. The two came apart when the ladder stopped
+    filtering by platform: "4 games" sat above a ladder showing 7, and the difficulty average described a
+    different set than the one on screen.
+    """
     concepts = set()
-    for st in catalog['stages']:
-        for c in st.concepts.all():
-            if any(set(g.title_platform or []) & platforms for g in c.games.all()):
-                concepts.add(c)
-        for b in st.concept_bundles.all():
-            for c in b.concepts.all():
-                if any(set(g.title_platform or []) & platforms for g in c.games.all()):
-                    concepts.add(c)
+    for s in journey:
+        for e in (s['obtainable_games'] + s['delisted_games']):
+            if e['game'].concept_id:
+                concepts.add(e['game'].concept_id)
+        for bundle in s['bundles']:
+            for member in bundle['members']:
+                concepts.add(member['concept'].id)
 
     diffs, hours = [], []
-    for c in concepts:
-        avg = ratings_map.get(c.id)
+    for cid in concepts:
+        avg = ratings_map.get(cid)
         if avg:
             if avg.get('avg_difficulty'):
                 diffs.append(avg['avg_difficulty'])
             if avg.get('avg_hours'):
                 hours.append(avg['avg_hours'])
 
-    stage_count = sum(1 for st in catalog['stages'] if st.stage_number > 0)
-    gating = result.gating_count if result else (gb.required_stages or stage_count)
     return {
         'games_count': len(concepts),
         'avg_difficulty': round(sum(diffs) / len(diffs), 1) if diffs else None,
         'avg_hours': round(sum(hours) / len(hours), 1) if hours else None,
-        'xp_on_offer': gating * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS,
+        # `xp_on_offer` moved to `_group_view`: it is priced off the IN-SCOPE stage count, which is exactly
+        # what the journey produces (required + retired), and pricing it off `gating_count` under-reported
+        # every badge holding a stage that stopped gating -- XP pays for those, the offer did not say so.
     }
 
 
@@ -189,9 +203,18 @@ def _game_entry(game, profile_games, ratings_map, contract_map) -> dict:
     }
 
 
-def _stage_bundles(st, platforms, games_map, profile_games, ratings_map, contract_map) -> list:
+def _stage_bundles(st, games_map, profile_games, ratings_map, contract_map) -> list:
     """Episodic bundles on a stage: a grouped set of concepts that TOGETHER satisfy the stage. Each member is a
-    concept + its qualifying games for this group; member 'done' = a whole-game 100% on any of its games."""
+    concept + ALL of its games; member 'done' = a whole-game 100% on any of them.
+
+    Deliberately NOT filtered to this group's platforms (owner's call, 2026-09). Satisfaction is
+    cross-platform now, so hiding the other versions produced the worst of both worlds: a bundle could be
+    satisfied by lists the page refused to show, leaving a ticked bundle whose visible members all read
+    unfinished. Showing every version is the honest picture; each card carries its own platform chips.
+
+    Takes no `platforms`: nothing in here is platform-scoped any more. The GATING decision is the engine's
+    (`_stage_units` + `engine_gates`), not this function's.
+    """
     bundles = []
     for b in st.concept_bundles.all():
         members, completed = [], 0
@@ -199,7 +222,7 @@ def _stage_bundles(st, platforms, games_map, profile_games, ratings_map, contrac
             entries = [
                 _game_entry(games_map[cg.id], profile_games, ratings_map, contract_map)
                 for cg in concept.games.all()
-                if cg.id in games_map and (set(games_map[cg.id].title_platform or []) & platforms)
+                if cg.id in games_map
             ]
             if not entries:
                 continue
@@ -215,68 +238,154 @@ def _stage_bundles(st, platforms, games_map, profile_games, ratings_map, contrac
     return bundles
 
 
-def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map) -> list:
-    """The stage spine for THIS group: each stage that has a game routing to the group's platforms, with the
-    qualifying games split obtainable vs delisted, plus per-game completion. Stage completion comes from the
-    engine's per-stage result (base_satisfied). The first not-complete gating stage is flagged 'is_next'."""
+def _display_playable(game, platforms, exclude_delisted) -> bool:
+    """Does this game go in the stage's main grid, or in the collapsed "unobtainable / delisted" list?
+
+    A DISPLAY question, not the gating one. The delisted policy belongs to an EDITION, so it is applied
+    only to games on that edition's platforms: a PS3 list that is alive on PS3 must not be filed under
+    "unobtainable" on the Ultra HD page just because Ultra HD excludes delisted titles. Doing that put the
+    game that satisfied a stage cross-platform inside a collapsed <details> while the grid above it showed
+    only untouched cards -- the exact "ticked stage, nothing done" "bug this change set out to fix, one
+    bucket deeper.
+    """
+    if not game.is_obtainable:
+        return False
+    on_edition = bool(set(game.title_platform or []) & platforms)
+    return not (game.is_delisted and exclude_delisted and on_edition)
+
+
+def _stage_units(st, games_map) -> list:
+    """The exact `GameState` list the ENGINE evaluates for this stage -- plain games plus one synthetic
+    unit per ConceptBundle, built by the orchestrator's own helpers.
+
+    This exists so the page can answer "is this stage in scope / does it gate" by calling the engine's own
+    predicates instead of re-deriving them. A signed-in viewer gets a `StageResult` and needs none of this;
+    an ANONYMOUS visitor gets no evaluation at all, and the first attempt at filling that gap was a
+    hand-written mirror of `_gates` + `_qualifies` + `_bundle_state`. It drifted on three separate bundle
+    shapes -- a member with a delisted sibling, a member with no games, and members sharing no platform --
+    and its own pinning test used no bundles at all, so nothing saw it. Two implementations of one rule is
+    the bug; this removes the second one rather than testing it harder.
+
+    Costs no queries: everything it walks is prefetched once by `build_catalog`.
+    """
+    units = []
+    for c in st.concepts.all():
+        for cg in c.games.all():
+            game = games_map.get(cg.id)
+            if game is not None:
+                units.append(_catalog_game_state(game))
+    for b in st.concept_bundles.all():
+        bundle = _bundle_state(b, _catalog_game_state)
+        if bundle is not None:
+            units.append(bundle)
+    return units
+
+
+def _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map) -> tuple:
+    """The stage spine for THIS group, split into `(required, retired)`.
+
+    IN SCOPE (the stage appears at all) is platform-based: a stage with no game on this group's platforms
+    credits this badge nothing and is not shown here. Once in scope, EVERY game in the stage is listed
+    regardless of platform (owner's call, 2026-09) -- satisfaction is cross-platform, so hiding the other
+    versions left a ticked stage whose visible games were all untouched, which reads as a rendering bug.
+
+    REQUIRED vs RETIRED is the gating question. A retired stage is in scope but no longer gates: its games
+    on this group's platforms are unobtainable (or delisted where the group excludes them). It cannot be
+    required of anyone any more, but it still PAYS whoever cleared it, so it is shown -- below the required
+    ladder, in its own labelled section, and without a stage number, because a number reads as "step N of
+    this badge" and these are explicitly not steps.
+
+    Required stages carry `display_number`: a fresh 1..N over the REQUIRED ladder only, never `stage_number`.
+    Authored numbers have gaps (a stage can be retired, renumbered, or authored out of order), and a badge
+    that reads "Stage 1, Stage 2, Stage 5" invites the reader to hunt for the missing ones.
+    """
     platforms = set(gb.platform_group.platforms)
     exclude_delisted = gb.platform_group.exclude_delisted
     stage_results = {sr.stage_number: sr for sr in (result.stages if result else [])}
+    group_input = GroupInput(frozenset(platforms), exclude_delisted)
 
-    out = []
+    required, retired = [], []
     for st in sorted(catalog['stages'], key=lambda s: s.stage_number):
         if st.stage_number <= 0:
             continue                          # stage 0 = tangential; not part of the journey
+        # SCOPE and GATING come from the engine's own predicates over the engine's own units, so the page
+        # and the evaluation can never disagree -- including on bundles, whose synthetic platforms are the
+        # INTERSECTION of their members' (a bundle needs every member, so it is completable only where all
+        # of them run).
+        units = _stage_units(st, games_map)
+        qualifying = [u for u in units if engine_qualifies(u, group_input)]
+        if not qualifying:
+            continue                          # nothing on this group's platforms -> credits it nothing
+        gates = any(engine_gates(u, group_input) for u in qualifying)
+
         obtainable, delisted = [], []
         for c in st.concepts.all():
             for cg in c.games.all():
                 game = games_map.get(cg.id)
-                if not game or not (set(game.title_platform or []) & platforms):
-                    continue                  # routes to a different platform group
+                if not game:
+                    continue
                 entry = _game_entry(game, profile_games, ratings_map, contract_map)
-                gates = game.is_obtainable and not (game.is_delisted and exclude_delisted)
-                (obtainable if gates else delisted).append(entry)
-        bundles = _stage_bundles(st, platforms, games_map, profile_games, ratings_map, contract_map)
-        if not (obtainable or delisted or bundles):
-            continue                          # nothing routes to this group in this stage -> not shown
+                bucket = obtainable if _display_playable(game, platforms, exclude_delisted) else delisted
+                bucket.append(entry)
+        bundles = _stage_bundles(st, games_map, profile_games, ratings_map, contract_map)
         sr = stage_results.get(st.stage_number)
         any_progress = any(e['pgame'] and e['pgame'].progress for e in (obtainable + delisted))
         state = 'complete' if (sr and sr.base_satisfied) else ('partial' if any_progress else 'todo')
-        out.append({
+        entry = {
             'stage': st, 'obtainable_games': obtainable, 'delisted_games': delisted,
             'bundles': bundles, 'completion_state': state, 'is_next': False,
-        })
+            'display_number': None,
+            # Counted HERE, not in the template. `{{ a|length|add:b|length }}` is not valid Django -- a
+            # filter argument cannot itself be filtered -- and it silently evaluated to 0, so every stage
+            # header on the page read "0 games". Template arithmetic that fails quietly is exactly the kind
+            # this belongs out of.
+            'games_shown': len(obtainable) + len(delisted),
+            # The stage's HOLO bar: a game in it at 100% including DLC, which is a real reward (it is what
+            # makes the badge holographic) and was invisible here -- a platted stage and a 100%'d one
+            # rendered identically, so the page asked for something it never acknowledged.
+            # `completion_state` deliberately stays three-valued: base completion is what earns the badge,
+            # and everything downstream keying on 'complete' should keep meaning exactly that.
+            'is_mastered': bool(sr and sr.holo_satisfied),
+        }
+        (required if gates else retired).append(entry)
+
+    for i, s in enumerate(required, start=1):
+        s['display_number'] = i
+    out = required
 
     # "Up next" is a suggestion grounded in the viewer's OWN progress, so only mark it when a profile is on
     # display (result present). Anon has no known progress -> no up-next (every stage would falsely be "next").
     if result:
-        for s in out:                         # mark the first unfinished stage as "up next"
+        for s in out:                         # mark the first unfinished REQUIRED stage as "up next"
             if s['completion_state'] != 'complete':
                 s['is_next'] = True
                 break
-    return out
+    return required, retired
 
 
-def _group_user_stats(gb, catalog, profile_games, journey, target_profile) -> Optional[dict]:
+def _group_user_stats(profile_games, journey, target_profile) -> Optional[dict]:
     """The viewer's My Stats for THIS group's badge: trophy haul, play time, games platted / 100%'d, the
     stage-progress split (platted vs 100%'d), and the first-played / last-trophy span. Everything is read from
-    DENORMALIZED ProfileGame fields over the group's OWN games (a bounded set -- so this is whale-safe, NOT a
-    scan of the viewer's whole library). Returns None ONLY for anon (no profile on display); a signed-in viewer
+    DENORMALIZED ProfileGame fields over the games the JOURNEY lists (a bounded set -- so this is whale-safe,
+    NOT a scan of the viewer's whole library). Returns None ONLY for anon (no profile on display); a signed-in viewer
     who owns none of this badge's games gets an all-zeros dict, so the My Stats panel always renders."""
     if target_profile is None:
         return None
-    platforms = set(gb.platform_group.platforms)
-    game_ids = set()
-    for st in catalog['stages']:
-        for c in st.concepts.all():
-            for g in c.games.all():
-                if set(g.title_platform or []) & platforms:
-                    game_ids.add(g.id)
-        for b in st.concept_bundles.all():
-            for c in b.concepts.all():
-                for g in c.games.all():
-                    if set(g.title_platform or []) & platforms:
-                        game_ids.add(g.id)
+    # Over the games the JOURNEY shows, not a platform-filtered re-derivation. Those came apart when
+    # satisfaction went cross-platform: a hunter who cleared every stage on PS3 held a mastered Ultra HD
+    # badge whose My Stats panel read "0 of 2 platted, 0 games played, 0 trophies, 0 hours" -- the hero and
+    # the panel one tap apart, describing the same badge, disagreeing completely. Reading the journey also
+    # means the two can no longer drift: whatever is listed is what is counted.
+    game_ids = {
+        e['game'].id
+        for s in journey
+        for e in (s['obtainable_games'] + s['delisted_games'])
+    }
+    for s in journey:
+        for bundle in s['bundles']:
+            for member in bundle['members']:
+                for e in member['games']:
+                    game_ids.add(e['game'].id)
 
     pgs = [profile_games[gid] for gid in game_ids if gid in profile_games]
     haul = {'bronze': 0, 'silver': 0, 'gold': 0, 'platinum': 0}
@@ -320,8 +429,19 @@ def _group_user_stats(gb, catalog, profile_games, journey, target_profile) -> Op
 def _group_view(gb, result, hold, target_profile, series, catalog, games_map, profile_games,
                 ratings_map, contract_map, participants) -> GroupView:
     is_holo = bool(hold and hold.is_holo)
-    stage_count = sum(1 for st in catalog['stages'] if st.stage_number > 0)
-    gating = result.gating_count if result else (gb.required_stages or stage_count)
+    # `gb.required_stages` straight, with NO `or stage_count`. That fallback treated a correctly-computed
+    # ZERO as "not computed yet" and substituted the full stage count, so an unearnable badge advertised a
+    # complete chase to anonymous visitors while a signed-in viewer on the same page saw the real 0. The
+    # column is a maintained denorm now (recompute_required_stages), so it is the answer, including when it
+    # is zero.
+    journey, retired = _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map)
+    # ANON reads the LADDER, not the `required_stages` denorm. That column is written only by
+    # `evaluate_badges`, so a freshly-authored badge sits at its `default=0` until the nightly -- and with
+    # the falsy-zero fallback gone, anon was being shown "This badge can no longer be earned. Every game it
+    # asks for has become unobtainable" directly above two numbered, fully obtainable stages. Not merely
+    # stale: an affirmative false claim, to every visitor and every crawler, after every authoring session.
+    # `len(journey)` is the same number the engine gives a signed-in viewer, computed from the same units.
+    gating = result.gating_count if result else len(journey)
     cleared = result.base_satisfied_count if result else 0
     holo_cnt = result.holo_satisfied_count if result else 0
     # Per-edition state via the shared helper (badge_xp.edition_display_state), so this LIVE view and the
@@ -332,8 +452,16 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
     state = ('holo' if is_holo else 'earned') if hold else ('in_progress' if base_state == 'in_progress' else 'none')
     # A live earners position only exists while the viewer currently holds the badge.
     rank = lb.earners_rank(target_profile.id, gb.id) if (hold and target_profile) else None
-    stats = _group_stats(gb, result, catalog, ratings_map)
-    journey = _group_journey(gb, result, catalog, games_map, profile_games, ratings_map, contract_map)
+    # Over the JOURNEY, so the headline figures describe the games actually on screen. Re-deriving a
+    # platform-filtered set here left "4 games" and a difficulty average sitting above a ladder showing 7
+    # cards -- the same hero-vs-panel disagreement this change fixed for My Stats, one tile to the left.
+    stats = _group_stats(journey + retired, ratings_map)
+    # Priced off every IN-SCOPE stage, and zero when nothing gates. "On offer" is what the badge is WORTH,
+    # not what this viewer can still reach: a retired stage is counted, because a hunter who cleared it
+    # while it was alive was paid for it. Deliberately more than `gating_count * XP_PER_STAGE`, which
+    # under-reported, and deliberately NOT a promise that every point is still obtainable today.
+    xp_on_offer = (0 if gating == 0
+                   else (len(journey) + len(retired)) * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS)
     # Rarity is derived LIVE from the maintained earned_count over the whole COMMUNITY -- no stored
     # fields, no cron (the gb.rarity_* columns are dead scaffolding). Note this is NOT `participants`:
     # that is the series' pursuer base, which still drives series_size / the series rank's "of N".
@@ -348,9 +476,13 @@ def _group_view(gb, result, hold, target_profile, series, catalog, games_map, pr
         progress_pct=progress_pct,
         segments=[i < cleared for i in range(gating)],
         games_count=stats['games_count'], avg_difficulty=stats['avg_difficulty'],
-        avg_hours=stats['avg_hours'], xp_on_offer=stats['xp_on_offer'],
+        avg_hours=stats['avg_hours'], xp_on_offer=xp_on_offer,
         stages=journey,
-        user_stats=_group_user_stats(gb, catalog, profile_games, journey, target_profile),
+        retired_stages=retired,
+        is_unearnable=(gating == 0),
+        # BOTH ladders: a retired stage's games are shown on the page and its clear paid XP, so leaving
+        # them out would reproduce the same "panel disagrees with the page" bug one level down.
+        user_stats=_group_user_stats(profile_games, journey + retired, target_profile),
         frame={},
     )
     gv.frame = _medallion_frame(gv, series, target_profile)

@@ -1395,3 +1395,35 @@ adoption that makes no billing change. Full reasoning in the `migrate_legacy_tie
       `premium_yearly`, `premium_supporter` in `notifications/models.py`). They select nobody after
       the migration, but there is no ladder-slug replacement, so removing them loses per-tier
       announcement targeting outright rather than migrating it.
+
+## 2026-09-15 — Cross-platform stage satisfaction (branch `feature/badges/cross-platform-stages`)
+
+Badge evaluation changed in three ways: stage satisfaction now crosses platforms (gating still does not),
+a stage that stopped gating still pays XP, and a badge with nothing left to gate is revoked but keeps
+paying. See [badge-system.md](../architecture/badge-system.md) for the rules.
+
+- [ ] **`evaluate_badges --all` is MANDATORY immediately after deploy, not a follow-up.** Badge detail
+      computes series XP LIVE from the engine while every board reads the stored standings, so between
+      deploy and the end of the sweep the same hunter's points differ depending on which page they open.
+      `SeriesEditionStanding` rows are only rewritten for series a recompute actually evaluates, so nothing
+      self-heals until the sweep reaches them.
+- [ ] **Expect a large mass-AWARD and a one-time `earners_rank` reshuffle.** Satisfaction only ever widens
+      (the new set is a superset of the old), so nothing is revoked by the satisfaction change itself. But
+      `base_date` is now the earliest date across ALL of a stage's games, so any held badge whose stages
+      were cleared earlier on the other platform gets `earned_at` rewritten BACKWARDS, moving it up the
+      earners board. One run, then stable. Tell people before it happens: a catalogue-wide rank shuffle with
+      no announcement reads as an incident.
+- [ ] **Badges revoked by the rule-3 path lose their series TITLE but keep their points.** A hunter whose
+      badge went fully unobtainable is no longer a holder (`revoke_series_title_if_orphaned` runs) while
+      their XP and their seat on the series board survive. Deliberate, and worth a release-notes line —
+      "you keep what you earned" is the whole point and nobody will infer it from a vanished medallion.
+- [ ] **Re-derive the "1,000,000 Club" target before quoting it anywhere.** `test_million_club_calibration`
+      still passes because it models 400 independent badges, and that arithmetic did not change. The EFFORT
+      did: one playthrough now earns both editions' stages, so for a catalogue that is mostly two-edition
+      series, 1M is closer to ~40% of the work than the ~80% the constant's comment claims. Not a code fix
+      — a number to decide on.
+- [ ] **`required_stages` must be current before anyone trusts an anonymous badge page.** The falsy-zero
+      fallback (`gb.required_stages or stage_count`) is gone, so an anonymous visitor now sees the stored
+      denorm verbatim, including a legitimate 0. A badge whose `recompute_required_stages` has not run
+      since its stages were authored will read as having no requirements. The nightly covers it; a
+      same-day authoring session does not.

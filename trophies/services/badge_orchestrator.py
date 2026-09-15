@@ -249,18 +249,32 @@ def evaluate_profile(profile, group_badges=None):
 def _bundle_state(bundle, game_state_fn):
     """Collapse a ConceptBundle (episodic set) into one synthetic qualifying 'game' for the engine. The bundle
     is base/full complete only when EVERY member concept has a base/full-complete game; its date is the
-    'tipper' (the last member to complete). Platforms/obtainable/delisted aggregate over members so the engine
-    routes + gates it like any other qualifier."""
+    'tipper' (the last member to complete). Obtainable/delisted aggregate over members so the engine routes +
+    gates it like any other qualifier.
+
+    PLATFORMS ARE THE INTERSECTION, not the union. The bundle is satisfied only when EVERY member is
+    complete, so the platforms it can actually be completed on are the ones every member runs on. A union
+    said otherwise and produced a badge nobody could ever earn: a bundle with a PS3-only member and a
+    PS5-only member reported platforms {PS3, PS5}, so it QUALIFIED for Ultra HD, GATED it, and could never
+    be satisfied by an Ultra HD hunter -- a permanent "0 / N" chase on the Collection wall with no path to
+    completion. That directly violates the engine's own rule, stated in badge_engine's docstring: a badge
+    must not demand work that cannot be done on its own platforms.
+
+    An empty intersection (members share no platform) means the bundle is completable nowhere and falls out
+    of scope for every group, which is the correct reading of an unsatisfiable qualifier.
+    """
     members = list(bundle.concepts.all())
     if not members:
         return None
-    platforms, any_delisted = set(), False
+    platforms, any_delisted = None, False
     base_all, full_all, obtainable_all = True, True, True
     member_dates = []
     for c in members:
         states = [game_state_fn(g) for g in c.games.all()]
+        member_platforms = set()
         for s in states:
-            platforms |= set(s.platforms)
+            member_platforms |= set(s.platforms)
+        platforms = member_platforms if platforms is None else (platforms & member_platforms)
         if not any(s.is_obtainable for s in states):
             obtainable_all = False
         if any(s.is_delisted for s in states):
@@ -278,7 +292,7 @@ def _bundle_state(bundle, game_state_fn):
         bundle_date = max(member_dates)
     return GameState(
         game_id=-bundle.id,               # synthetic; game_id is identity-only in the engine
-        platforms=frozenset(platforms),
+        platforms=frozenset(platforms or ()),
         is_obtainable=obtainable_all,
         is_delisted=any_delisted,
         base_complete=base_all,

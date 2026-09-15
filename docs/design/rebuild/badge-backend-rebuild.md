@@ -1,5 +1,8 @@
 # Badge Backend Rebuild — Architecture Review & Target Design
 
+> **Superseded 2026-09.** This design record describes the rules as first shipped. Satisfaction and XP have since changed; `docs/architecture/badge-system.md` is the current source of truth.
+
+
 Status: **proposal / under discussion** (2026-08). This is the review we align on before writing the new
 engine. It captures the current-state debt, the target "sealed subsystem" design, and the migration plan.
 
@@ -124,13 +127,16 @@ Per grouping badge (`series_slug` + `platform_group`), for each `Stage` of the s
 - **Gates** (stage is *required*): qualifying game that is `is_obtainable` **and** (group includes delisted, or
   `not is_delisted`).
 - **Satisfies** (counts if the user earned it): *any* qualifying game the user reached a bar on.
+  **Superseded 2026-09:** satisfaction reads EVERY game in the stage, on any platform, not just the
+  qualifying ones. Gating is unchanged. See badge-system.md.
 - **Base bar (per game) = the default trophy group at 100%** (`ProfileTrophyGroup.progress == 100`, floored,
   the base list). This IS the platinum for plat games and the main list for no-plat games — DLC-independent —
   so the engine reads a single `base_complete` boolean with **no platinum-specific branching**, and it fixes
   the old wart where no-plat games needed DLC to earn base. (`ProfileTrophyGroup` is a denormalized, indexed
   per-group completion written every sync, so this is a cheap bounded lookup, not a trophy aggregation.)
 - **Holo bar (per game) = the whole game at 100%** incl DLC (`ProfileGame.progress == 100`) -> `full_complete`.
-- **Base** = every gating stage has a qualifying game at `base_complete`. **Holo** = ...at `full_complete`
+- **Base** = every gating stage has a game at `base_complete` (any platform, since 2026-09).
+  **Holo** = ...at `full_complete`
   (live, cosmetic, no XP — flips both ways, no maintenance). The base->holo gap is exactly "did the DLC too."
 - `ConceptBundle` keeps its "all members at 100% = synthesized platinum" semantics.
 
@@ -190,20 +196,22 @@ only temporarily") — that's the intended trade of permanence for current-meani
 Tiers are gone, so the old `completed_concepts × tier_xp (250/75/250/75) + 3000 bonus` doesn't map. Kept
 **simple and distinct from the jobs/contracts economy** (per the "don't build a second economy" rule):
 
-- **Flat XP per gating stage cleared** (a progression drip as you work a group) **+ a flat badge-completion
+- **Flat XP per IN-SCOPE stage cleared** (2026-09: gating or not -- a stage that stopped gating still
+  pays whoever cleared it) **+ a flat badge-completion
   bonus** when the base badge is earned. **No holo XP** — holo is live/cosmetic, and attaching XP would make
   totals blink on and off as it flips.
 
 **Built to change later without replumbing.** The formula lives in **one pure function**,
 `compute_badge_xp(DesiredState) -> (total, per_series_breakdown)`, reading **named constants**
-(`XP_PER_STAGE`, `XP_BADGE_COMPLETION_BONUS`). Because it's handed the full `DesiredState` — every gating stage,
+(`XP_PER_STAGE`, `XP_BADGE_COMPLETION_BONUS`). Because it's handed the full `DesiredState` — every stage,
 every earned badge, group + completion facts — any future formula (group weighting, stage-count curves, rarity
 bonuses) is a **single-function edit with all inputs already present**, not a new data path. We deliberately do
 NOT build a speculative plugin/registry now (YAGNI); centralization plus a rich input is what makes it cheap to
 evolve.
 
 **Implemented (Phase 4, Lane A + B).** `services/badge_xp.py`: `compute_series_standings({series_slug:
-[GroupBadgeResult]})` is pure -- per series it computes XP (per group badge via `base_satisfied_count`, summed)
+[GroupBadgeResult]})` is pure -- per series it computes XP (per group badge via `xp_stage_count`, summed;
+`base_satisfied_count` is the PROGRESS numerator and must not be used for points)
 AND progress (the furthest-along `base_satisfied/gating` fraction, basis points). `recompute_standing` upserts,
 from scratch off the DesiredState on every write, two sealed stores: `ProfileBadgeStanding` (`total_xp` indexed
 = global board) and `SeriesBadgeStanding` (one row per (profile, series) while they have progress; indexed

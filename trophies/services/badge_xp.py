@@ -42,9 +42,19 @@ class SeriesStanding:
 
 
 def _group_badge_xp(result) -> int:
-    """XP for ONE group badge from its GroupBadgeResult. base_satisfied_count is the number of GATING stages
-    the profile cleared; the bonus lands once the whole base badge is earned. Holo contributes nothing."""
-    xp = result.base_satisfied_count * XP_PER_STAGE
+    """XP for ONE group badge from its GroupBadgeResult. Holo contributes nothing.
+
+    `xp_stage_count`, NOT `base_satisfied_count`. The two are the same number until a stage stops gating --
+    its qualifying games went unobtainable, or delisted in an exclude-delisted group -- at which point the
+    stage leaves the progress fraction but keeps paying whoever cleared it. Points are for work done; a
+    storefront closing years later is not the hunter's doing, and taking the drip back would mean a total
+    that silently falls without them touching anything.
+
+    The corollary: a badge with NO gating stages left is unearnable and gets revoked (the engine returns
+    base_earned=False), yet still pays its stage XP. Only the COMPLETION BONUS is withheld, because that
+    one is for finishing the badge and the badge can no longer be finished.
+    """
+    xp = result.xp_stage_count * XP_PER_STAGE
     if result.base_earned:
         xp += XP_BADGE_COMPLETION_BONUS
     return xp
@@ -107,8 +117,14 @@ def _advanced_at(result) -> object:
     """
     if result.base_earned:
         return result.earned_date
+    # Every cleared IN-SCOPE stage, not just the gating ones. This is the tiebreak on a points ordering
+    # (SERIES_BOARD_KEYS is xp DESC, advanced_at ASC), and points have counted non-gating stages since
+    # 2026-09 -- so a gating-only date is measuring something the board does not rank on. It produced two
+    # wrong answers: a hunter tied on XP could rank ahead on a date from years before they reached that
+    # total, and a hunter whose points are ENTIRELY non-gating got no date at all and lost every tiebreak
+    # permanently under NULLS LAST. Reads `base_satisfied` alone, exactly as `xp_stage_count` does.
     dates = [s.base_date for s in result.stages
-             if s.gates and s.base_satisfied and s.base_date is not None]
+             if s.base_satisfied and s.base_date is not None]
     return max(dates) if dates else None
 
 
@@ -122,8 +138,8 @@ def monthly_xp(results, tz=None) -> dict:
     """Pure. XP bucketed by the LOCAL month it was earned in: {(year, month): xp}.
 
     There is no badge-XP ledger and there does not need to be one -- the engine already carries the dates.
-    Each gating stage that has been cleared knows WHEN (`StageResult.base_date`, the earliest date a
-    qualifying game met the base bar) and each earned badge knows when its bar fell
+    Each cleared stage knows WHEN (`StageResult.base_date`, the earliest date any of its games met the base
+    bar) and each earned badge knows when its bar fell
     (`GroupBadgeResult.earned_date`). So the same two components `_group_badge_xp` SUMS are simply bucketed
     here instead. That coupling is deliberate and load-bearing: any change to how XP is scored has to move
     both, and `test_badge_monthly_xp` pins that these buckets reconcile against the standing total.
@@ -149,10 +165,13 @@ def monthly_xp(results, tz=None) -> dict:
         return localized.year, localized.month
 
     for res in results:
-        if res.gating_count == 0:
-            continue                       # not earnable in this group; contributes no XP at all
+        # NO `gating_count == 0` skip. An unearnable edition still pays for the stages that were cleared
+        # (see _group_badge_xp), and skipping it here would put the buckets below the standing total --
+        # breaking the reconciliation this module's docstring promises.
         for stage in res.stages:
-            if stage.gates and stage.base_satisfied:
+            # `base_satisfied` alone, not `gates and base_satisfied`: a stage that stopped gating still
+            # pays. Out-of-scope stages already report base_satisfied=False, so this needs no scope test.
+            if stage.base_satisfied:
                 key = _key(stage.base_date)
                 if key:
                     buckets[key] += XP_PER_STAGE
@@ -291,18 +310,21 @@ def recompute_standing(profile_id, desired: dict, group_badges) -> None:
             xp = _group_badge_xp(r)
             if xp:
                 group_xp[gb.series.series_slug][gb.platform_group.key] = xp
-            # STARTED, which is `base_satisfied_count > 0` alone: it counts the gating stages cleared,
-            # so it is structurally <= `gating_count` and an unearnable edition (`gating_count == 0`)
-            # cannot report one. Not the same gate as `group_prog` above, which keys on `gating_count`
-            # precisely because it wants the editions this one leaves out.
+            # STARTED **or** PAID. `base_satisfied_count` counts gating stages cleared; `xp_stage_count`
+            # counts every in-scope stage cleared. Those coincided until 2026-09 -- the comment that used
+            # to sit here said so, and used it to justify gating on membership alone -- and rule 2 broke
+            # it: a stage that stopped gating still pays, so a hunter can hold points in an edition with
+            # no gating stage cleared (guaranteed, in fact, for every edition that goes fully unearnable).
             #
-            # MEMBERSHIP, deliberately not points -- and no test can currently tell the two apart, so it
-            # is written down here instead. Under today's constants a cleared stage always pays
-            # (`XP_PER_STAGE = 500`), so `base_satisfied_count > 0` and `xp > 0` coincide exactly. Gate it
-            # on `xp` and nothing breaks until the day a stage is worth 0, at which point a visibly
-            # chasing hunter silently vanishes from the board -- which is the failure this board was
-            # rebuilt to fix, reintroduced by a simplification that looked equivalent.
-            if r.base_satisfied_count > 0:
+            # Gating on membership alone then put that hunter on the Badge Points edition board (which
+            # reads ProfileEditionStanding, summed from the xp>0-gated `group_xp` blob) while
+            # `series_edition_rank` said they were not chasing it at all. Two boards, one click apart,
+            # opposite answers about the same person. Both conditions, so the two agree by inclusion --
+            # and `sum(SeriesEditionStanding.xp)` matches `SeriesBadgeStanding.xp` again.
+            #
+            # Still not gated on `xp` itself: a stage worth 0 points must not erase a visibly chasing
+            # hunter, which is the failure this board was rebuilt to fix.
+            if r.base_satisfied_count > 0 or r.xp_stage_count > 0:
                 edition_rows.append(SeriesEditionStanding(
                     profile_id=profile_id, series_slug=gb.series.series_slug,
                     platform_group_key=gb.platform_group.key,
