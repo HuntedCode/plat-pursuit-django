@@ -103,3 +103,35 @@ def test_both_consumers_still_reference_the_shared_keyframe(consumer, selector):
     rule = re.search(re.escape(selector) + r'\s*\{([^}]*)\}', css)
     assert rule, f'{selector} is gone from {consumer}; if that is intended, retire this parametrisation'
     assert 'ppRevealIn' in rule.group(1), f'{selector} no longer plays the shared settle-in'
+
+
+# ── grid/flex items that opt out of clipping must also opt out of their content-based minimum ──────
+
+def test_a_visible_overflow_dialog_declares_min_width_zero():
+    """`.nc__dialog` sets `overflow: visible` so the discipline popovers are not clipped at its edge.
+    That single declaration re-arms the automatic minimum size: a GRID ITEM (`.pp-detail-modal` is
+    `display: grid`) with visible overflow takes its CONTENT-BASED minimum in both axes, so
+    `width: min(880px, 100%)` is computed and then floored by the widest thing inside it.
+
+    The symptom is not subtle and gives no console error: on a 375px phone the dialog rendered wider
+    than the screen, with the filter chips, the contract rows and the "Open the board" button off the
+    right edge -- and an overflowing centred grid item cannot be scrolled to, so they were simply gone.
+
+    Pinned rather than trusted to memory because the two declarations look unrelated. Anyone tidying
+    `min-width: 0` as redundant re-breaks the modal on every phone, and nothing else would notice.
+    """
+    css = (COMPONENTS / 'elements.css').read_text(encoding='utf-8')
+    block = re.search(r'\.pp-howto \.nc__dialog \{(.*?)\}', css, re.S)
+    assert block, '.pp-howto .nc__dialog rule is gone -- if it moved, move this guard with it'
+    # COMMENTS STRIPPED FIRST. The rule carries a long comment explaining `min-width: 0`, so a bare
+    # search over the block matched the explanation and passed with the declaration deleted -- proven
+    # by mutation. Assert on what the browser reads, never on the prose next to it.
+    body = re.sub(r'/\*.*?\*/', '', block.group(1), flags=re.S)
+
+    assert 'overflow: visible' in body, (
+        'the rule no longer opts out of clipping; if that is deliberate, this guard can go'
+    )
+    assert re.search(r'min-width:\s*0', body), (
+        'a visible-overflow grid item without `min-width: 0` takes its content-based minimum and '
+        'renders wider than a phone screen'
+    )

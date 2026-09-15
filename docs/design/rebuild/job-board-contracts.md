@@ -423,6 +423,18 @@ count to see the `9+` cap, `&n=0` leaves the New pill on its own. Writes nothing
 door -- they all go through `core/previews.py` now, because this was the third copy of the same four
 lines and the first two had already drifted once.
 
+**Previewing the new-contracts modal.** `?preview=new-contracts` on `/career/` (staff/moderator).
+It ignores EVERY gate — the announced-and-posted filter, the 14-day window, and your own
+`contracts_seen` marker — so it renders on a database that has never announced anything, which is
+what a dev box is. Those gates all protect a reader, and a preview has none: it is staff-only, writes
+no state and spends no marker, so the modal can be reopened as often as you like.
+
+The cost, deliberately accepted: on production the count reads the whole announced catalogue rather
+than one wave, because the window is off. What is being inspected is the ordering and the row shapes,
+not the number. A variant that fell back to a hunter-shaped query when a real recent wave existed was
+tried and reverted — a single contract announced in the last fortnight was enough to shrink the
+preview to one row, which is useless for the layout work the door exists for.
+
 **Gotchas**
 
 - **The count is a second definition of "claimable" and must not drift.** The badge and the board
@@ -463,7 +475,7 @@ person the modal exists for.
 |---|---|
 | First visit | no marker → the last `NEW_CONTRACT_WINDOW_DAYS` of announcements, not the archive |
 | The stamp stored | the newest `announced_at` **among the rows actually rendered**, not over the whole filtered set. Above `MAX_LIST` the two differ, and the global max would mark contracts seen that were never shown |
-| Who reaches it | `announcement_posted` **and** `announced_at` (and `is_live` still true — the stamp is never cleared, so un-publishing is the only thing that withdraws an announced contract). The flag is what excludes a `--baseline`d backlog; `went_live_at` needs no filter of its own, since the announcer only ever sees contracts that have one |
+| Who reaches it | `announcement_posted` **and** `announced_at` (and `is_live` still true — the stamp is never cleared, so un-publishing is the only thing that withdraws an announced contract). The flag is what excludes a `--baseline`d backlog; `went_live_at` needs no filter of its own, since the announcer only ever sees contracts that have one. The staff PREVIEW is the one exception and ignores this gate along with the marker and the window — see below |
 | Order | `_ORDER` = `status_order`, `-sort_progress`, `-announced_at`, `-went_live_at`, `name` — the board's own default, annotated in SQL by `annotated_contracts`. Sorting the slice in Python could never promote a claimable or nearly-finished contract from outside the first page into it |
 | Heroes | the first `MAX_HEROES` (6) of that order, so the covers are what this hunter is furthest along on. The server renders all six; CSS shows **2 / 4 / 6** by breakpoint, so the count follows the screen with no second render path |
 | Hero art | `_hero_covers()` — ONE query for all six (DISTINCT ON over the member-game gate), not the announcer's per-contract `cover_url_for`. Same gate, same `display_image_url` chain, same most-played tie-break |
