@@ -122,19 +122,15 @@ art lands.
 
 ## Gotchas and Pitfalls
 
-**Two live features still write the legacy `Badge` table, and one of them is a payment flow.**
-`fundraiser/services/donation_service.py` credits a donor with
-`Badge.objects.filter(series_slug=...).update(funded_by=...)` when an artwork donation completes, and the
-fundraiser's badge picker reads `Badge.objects.live().filter(tier=1)`. But the medallion renders
-`GroupBadge.effective_funded_by`, which resolves `funded_by_override or series.funded_by` -- neither of
-which the fundraiser touches. **A donor who funds artwork today is credited on a row nothing displays.**
-`art_reveal.ArtRevealItem.release()` similarly writes `Badge.badge_image`. Repointing both onto
-`BadgeSeries` is outstanding work, and it is what actually retires the tier model; `BadgeAdmin` cannot be
-deleted until then (see below).
-
-**`BadgeAdmin` is retained deliberately.** `art_reveal.ArtRevealItem` has a live FK to `Badge`, and its
-inline's `autocomplete_fields` requires a registered admin for the model. Deleting the registration fails
-the ENTIRE admin site's system check with `admin.E039`, not just art_reveal.
+**The two art write paths have been repointed; `BadgeAdmin` is gone with them.** The fundraiser
+(`donation_service.complete_badge_claim`) and `art_reveal.ArtRevealItem.release()` both used to write the
+legacy `Badge` table -- `funded_by` and `badge_image` on a row nothing renders, so a donor who funded
+artwork was credited invisibly. Both now write `BadgeSeries`, which is what `GroupBadge.art_layers()` and
+`effective_funded_by` actually resolve through. `BadgeAdmin` was retained only because `art_reveal`'s
+inline autocompleted against `Badge` and dropping the registration fails the ENTIRE admin site's system
+check with `admin.E039`, not just art_reveal; that inline points at `BadgeSeries` now, so the registration
+went too. Legacy `Badge` / `UserBadge` rows are still READ in several places (titles, job-board coverage,
+company pages) and are retained for rollback and audit.
 
 **Scope by SERIES, never by badge.** `recompute_standing` REPLACES a series' standing from only the
 editions it is handed. Evaluate one edition of a two-edition series and the other's XP silently becomes
@@ -168,6 +164,35 @@ transaction, so unclamped drift aborted the whole evaluation, not just the count
 **`is_live` gates evaluation AND every figure.** A dormant edition is invisible to XP, to `badges_held`,
 to the digest and to the community stats. Counting held rows without that filter made a curator's
 smoke-test badge show up in a real hunter's totals.
+
+## Curator authoring in admin
+
+Two affordances exist on the admin side because the models are shaped for the engine, not for the person
+filling them in.
+
+**The subject pickers are scoped by field.** `Franchise` holds IGDB franchises AND IGDB collections in
+one table (separate ID namespaces, one model), so an unscoped autocomplete offers "Resident Evil" twice
+with nothing to tell the rows apart, and `BadgeSeries.franchise` / `.collection` get filled in
+interchangeably. The scope is `limit_choices_to` on the model fields, NOT an admin hook: Django applies it
+in `AutocompleteJsonView` *and* in form validation, so it covers what the picker offers and what a posted
+id is allowed to be. The previous admin-side version keyed on the request's `model_name == 'badge'` and
+silently stopped filtering the moment the rebuild renamed the model to `badgeseries` -- a filter that
+fails open, with no error, is the reason this lives on the field now. Other `Franchise` autocompletes
+(e.g. `ConceptFranchise.franchise`) still see both types deliberately; IGDB lists both kinds of link.
+
+**Stages duplicate onto a new slug.** `Stage` joins to a series by a bare `series_slug` string, so a
+franchise badge that mirrors a series badge means re-entering the same concept picks stage by stage.
+`StageAdmin`'s "Duplicate selected stages under a new series slug" action copies a selection wholesale:
+number, title, icon, required tiers, the online flag, the standalone concepts, and each `ConceptBundle`
+with its own members. The originals are untouched, the whole run is one transaction (a committed stage
+with no concepts reads to the engine as instantly satisfied, not as broken), and a stage number already
+present on the target slug is SKIPPED and named in the message rather than renumbered -- renumbering would
+quietly produce a stage list that is not the one the curator copied. The slug is re-slugified on the way
+in, because `SlugField` accepts uppercase and `FromSoft` would save fine and then join to nothing.
+
+`stage_icon` is copied and then re-derived: it is a denorm of the first concept's cover, maintained by
+`auto_populate_stage_icon`, and setting the copy's concepts fires that signal. The copy is what preserves
+a hand-set icon on a stage with no concepts to re-derive from, the one case the signal never touches.
 
 ## Management Commands
 
