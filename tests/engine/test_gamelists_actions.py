@@ -1661,3 +1661,55 @@ def test_creating_from_the_popover_records_the_event(client):
     block = block[:block.index('class ListGameSearchView')]
     assert "track_site_event('game_list_create'" in block, \
         'the busier creation path does not record the event'
+
+
+def test_the_add_button_leaves_the_cover_art_on_touch(client):
+    """Owner's call: a plus sitting permanently on every cover is noise on a catalogue you scan BY
+    the cover -- the same argument the card's template makes about the scrim it removed. With no
+    hover to reveal it, a touch device cannot have the desktop treatment, so the button moves into
+    the text strip rather than being softened on the image."""
+    css = _read('static/css/components/quick-add.css')
+
+    touch = css[css.index('@media (hover: none) {'):]
+    touch = touch[:touch.index('\n}', touch.index('.pp-gcard__add:active')) + 2]
+
+    # OFF the cover: the top anchor is released and it is placed from the bottom instead.
+    assert 'top: auto;' in touch, 'it is still anchored to the top of the cover'
+    assert 'bottom: 32px;' in touch
+    # ...and the title makes room, or a two-line name runs underneath it.
+    assert '.pp-gcard-wrap .pp-gcard__title { padding-right: 36px; }' in touch
+
+
+def test_the_add_button_arrives_with_its_card(client):
+    """The stagger animates `.pp-gcard`, and the button is its SIBLING -- so on touch, where it is
+    visible at rest, it hung motionless while the card sprang up underneath it.
+
+    Coupled in CSS rather than by editing four reveal callbacks: `staggerReveal` marks the card
+    `.is-revealed` a frame after it starts, and a general-sibling selector reaches the button."""
+    css = _read('static/css/components/quick-add.css')
+
+    assert '.pp-reveal .pp-gcard-wrap .pp-gcard__add { opacity: 0; }' in css
+    assert '.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add' in css
+
+    # ON A HOVER DEVICE IT MUST STAY HIDDEN. The reveal rule would otherwise un-hide a button whose
+    # whole treatment there is "quiet until you hover", and the later block is what holds that.
+    guard = css.index('@media (prefers-reduced-motion: no-preference) and (hover: hover)')
+    reveal = css.index('.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add')
+    assert guard > reveal, 'the hover guard comes first, so the reveal rule wins and the button shows'
+
+
+def test_the_long_press_route_was_not_taken(client):
+    """Recorded because it was considered and rejected, and the reasons outlive the decision: a
+    long-press would seize the browser's own long-press on a link across the main catalogue, it
+    cannot be discovered, and it leaves a screen-reader user on a phone with no way in at all.
+
+    The button being a real, permanent control in the strip IS the alternative."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    assert 'touchstart' not in js and 'contextmenu' not in js, \
+        'a long-press handler appeared without the discoverability and AT answers'
+
+    # The control a screen reader reaches is a button with a name, on every grid card.
+    card = _read('templates/trophies/partials/game_list/game_cards.html')
+    assert '<button type="button" class="pp-gcard__add" data-quick-add' in card
+    assert 'aria-label="Add ' in card

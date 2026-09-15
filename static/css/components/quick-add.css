@@ -44,10 +44,66 @@
 }
 .pp-gcard-wrap:hover .pp-gcard__add,
 .pp-gcard__add:focus-visible { opacity: 1; }
-/* Always visible on touch: there is no hover to reveal it, and a control nobody can summon does not
-   exist. */
+/* ── ON TOUCH IT LEAVES THE ART ──────────────────────────────────────────────────────────────────
+ *
+ * Owner's call: a plus sitting permanently on every cover is noise on a catalogue you scan BY the
+ * cover -- the same argument this card's own template makes about the scrim it removed, where
+ * protecting the text hid the art. With no hover to reveal it, a touch device cannot have the
+ * desktop treatment, so the button moves into the text strip instead of being softened on the image.
+ *
+ * STILL A SIBLING of the anchor, because the title row is INSIDE it and a `<button>` in a link is
+ * the invalid HTML this whole wrapper exists to avoid. So it is positioned into the strip rather
+ * than placed in it.
+ *
+ * THE OFFSET IS THE STRIP'S OWN ARITHMETIC, from `game-card.css`: 9px body padding-bottom, a ~15px
+ * facts line, and the body's 6px gap put the title block's baseline 30px up; the title is a stable
+ * 2.5em (31px) because `min-height` holds it at two lines whether the name wraps or not. Centring a
+ * 28px control on that block lands at 32px. Spelled out rather than nudged, so the next person to
+ * change the card's padding knows what moved.
+ *
+ * Long-press was the other candidate and was not taken: it would seize the browser's own long-press
+ * on a link (open in new tab, copy link, the iOS preview) across the main catalogue, it cannot be
+ * discovered, and it leaves a screen-reader user on a phone with no way in at all. */
 @media (hover: none) {
-    .pp-gcard__add { opacity: 1; }
+    .pp-gcard__add {
+        opacity: 1;
+        top: auto;
+        bottom: 32px;
+        right: 7px;
+        /* On the card's own surface now, not floating over an image, so it drops the scrim-ish
+           backdrop and reads as one more control in the strip. */
+        background: transparent;
+        border-color: transparent;
+        color: var(--pp-text-mute);
+    }
+    /* Room for it, or a two-line title runs underneath. 28px of control plus the 7px inset. */
+    .pp-gcard-wrap .pp-gcard__title { padding-right: 36px; }
+    .pp-gcard__add:active { color: var(--pp-primary); }
+}
+
+/* ── IT ARRIVES WITH THE CARD ────────────────────────────────────────────────────────────────────
+ *
+ * The stagger animates `.pp-gcard`, and the button is its SIBLING now -- so on touch, where it is
+ * visible at rest, it hung motionless while the card sprang up underneath it. Owner noticed.
+ *
+ * Done in CSS rather than by touching four reveal callbacks: `staggerReveal` marks the card
+ * `.is-revealed` a frame after it starts, and a general-sibling selector reaches the button from
+ * there. The small delay lets the card land first, the same courtesy the progress bar already gets.
+ *
+ * `.pp-reveal` is added by the JS only when it will actually observe, so a page with no reveal never
+ * hides the button. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-gcard-wrap .pp-gcard__add { opacity: 0; }
+    .pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add {
+        opacity: 1;
+        transition: opacity 0.32s ease 0.12s;
+    }
+}
+/* ...and on a hover device it stays hover-gated, so the rule above must not un-hide it. */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+    .pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add { opacity: 0; }
+    .pp-gcard-wrap:hover .pp-gcard__add,
+    .pp-gcard__add:focus-visible { opacity: 1; }
 }
 /* Guarded, or the lit state STICKS after a tap until something else is tapped. */
 @media (hover: hover) {
