@@ -269,6 +269,8 @@ They are recomputed from scratch each time, so no incremental writer exists to d
 
 - **A board's membership rule belongs in the row function, not only on the count that pages it.** An
   edition standing survives on zero points when the hunter has trophies but no cleared gating stage there,
+  and (since 2026-09) a row is also written for an edition the hunter holds POINTS in without having
+  cleared a gating stage -- a stage that stopped gating still pays, so the two conditions came apart,
   so an unfiltered read would hand the last page rows the count never promised.
 
 - **A per-entity board needs no denormalized count.** `BadgeSeries.entrants` and `Job.entrants` existed

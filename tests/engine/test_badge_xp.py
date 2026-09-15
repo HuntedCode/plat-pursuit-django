@@ -8,12 +8,19 @@ from trophies.services.badge_xp import (
 )
 
 
-def _res(base_satisfied_count, base_earned, gating_count=None):
+def _res(base_satisfied_count, base_earned, gating_count=None, xp_stage_count=None):
+    """A GroupBadgeResult.
+
+    `xp_stage_count` defaults to `base_satisfied_count` because most scenarios here are all-gating, where
+    the two are the same number. Pass it explicitly to model the case they diverge on: a stage that is in
+    scope but no longer gates still pays XP while sitting outside the progress fraction.
+    """
     gc = base_satisfied_count if gating_count is None else gating_count
+    xp_stages = base_satisfied_count if xp_stage_count is None else xp_stage_count
     return GroupBadgeResult(
         base_earned=base_earned, holo=False, gating_count=gc,
         base_satisfied_count=base_satisfied_count, holo_satisfied_count=0,
-        earned_date=None, stages=[],
+        earned_date=None, stages=[], xp_stage_count=xp_stages,
     )
 
 
@@ -22,6 +29,73 @@ def _res(base_satisfied_count, base_earned, gating_count=None):
 def test_stage_xp_plus_completion_bonus():
     total, per = compute_badge_xp({'gow': [_res(3, True)]})
     assert per['gow'] == 3 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS
+    assert total == per['gow']
+
+
+def test_the_tiebreak_date_follows_the_points_it_breaks_ties_on():
+    """`advanced_at` is the tiebreak on an XP ordering (SERIES_BOARD_KEYS = xp DESC, advanced_at ASC), so it
+    has to read the same set XP does: every cleared IN-SCOPE stage, not just the gating ones.
+
+    Gating-only produced two wrong answers. A hunter whose points come from stages that later stopped
+    gating was dated by an older gating clear and ranked ahead of someone who reached the same total more
+    recently; and a hunter whose points are ENTIRELY non-gating got no date at all, sorting last in their
+    tier forever under NULLS LAST. That second case is not exotic -- it is every hunter on a badge that
+    went fully unearnable, which rule 3 makes a first-class state.
+    """
+    import datetime as dt
+    from trophies.services.badge_engine import GroupBadgeResult, StageResult
+    from trophies.services.badge_xp import _advanced_at
+
+    old, recent = dt.date(2020, 1, 1), dt.date(2026, 6, 1)
+    result = GroupBadgeResult(
+        base_earned=False, holo=False, gating_count=1, base_satisfied_count=1,
+        holo_satisfied_count=0, earned_date=None,
+        stages=[
+            StageResult(1, True, True, False, old),        # gating, cleared long ago
+            StageResult(2, False, True, False, recent),    # in scope, stopped gating, cleared recently
+        ],
+        xp_stage_count=2,
+    )
+
+    assert _advanced_at(result) == recent, (
+        'the date came from the gating subset -- it does not match the points it ranks'
+    )
+
+
+def test_a_hunter_whose_points_are_all_non_gating_still_gets_a_date():
+    """The degenerate case, and the one that silently cost rank: no gating stage cleared at all."""
+    import datetime as dt
+    from trophies.services.badge_engine import GroupBadgeResult, StageResult
+    from trophies.services.badge_xp import _advanced_at
+
+    when = dt.date(2015, 5, 5)
+    result = GroupBadgeResult(
+        base_earned=False, holo=False, gating_count=0, base_satisfied_count=0,
+        holo_satisfied_count=0, earned_date=None,
+        stages=[StageResult(1, False, True, False, when)],
+        xp_stage_count=1,
+    )
+
+    assert _advanced_at(result) == when, 'a row with points got a NULL tiebreak and sorts last forever'
+
+
+def test_xp_reads_the_in_scope_count_not_the_gating_one():
+    """The two counters are different fields and `_group_badge_xp` must read `xp_stage_count`.
+
+    Lives HERE, in the file that owns `_group_badge_xp`, because that was the gap: every other scenario
+    in this file leaves `xp_stage_count` at its default (== `base_satisfied_count`), so rewiring the
+    function to the gating counter left this whole file green and was caught only by a different file.
+
+    The shape: 3 stages in scope and cleared, but only 1 still gates (the other two went unobtainable).
+    Progress is 1 of 1; XP is 3 stages' worth.
+    """
+    res = _res(base_satisfied_count=1, base_earned=True, gating_count=1, xp_stage_count=3)
+    total, per = compute_badge_xp({'gow': [res]})
+
+    assert per['gow'] == 3 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS
+    assert per['gow'] != 1 * XP_PER_STAGE + XP_BADGE_COMPLETION_BONUS, (
+        'XP was scored off the gating counter'
+    )
     assert total == per['gow']
 
 
@@ -52,7 +126,9 @@ def test_edition_display_state():
 
 def test_holo_does_not_change_xp():
     plain = compute_badge_xp({'gow': [_res(3, True)]})[0]
-    holo_res = GroupBadgeResult(True, True, 3, 3, 3, None, [])
+    # xp_stage_count is the LAST positional field; pass it, or this scores the bonus alone and the
+    # comparison passes for the wrong reason.
+    holo_res = GroupBadgeResult(True, True, 3, 3, 3, None, [], 3)
     assert compute_badge_xp({'gow': [holo_res]})[0] == plain
 
 
@@ -146,23 +222,13 @@ def test_standing_materializes_per_edition_group_progress():
     (edition_display_state), so storing the zero row changes the denominator, never the state."""
     from trophies.services.badge_apply import evaluate_and_apply
     from trophies.models import SeriesBadgeStanding
-    from tests.factories import (
-        ProfileFactory, BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
-        PlatformGroupFactory, GroupBadgeFactory,
-    )
-    series = BadgeSeriesFactory(series_slug='gow')
-    ultra = GroupBadgeFactory(series=series, is_live=True,
-                              platform_group=PlatformGroupFactory(key='ultra-hd', name='Ultra', platforms=['PS4', 'PS5']))
-    legacy = GroupBadgeFactory(series=series, is_live=True,
-                               platform_group=PlatformGroupFactory(key='legacy-hd', name='Legacy', platforms=['PS3']))
-    games = {}   # each stage has a PS5 game (gates Ultra HD) + a PS3 game (gates Legacy HD)
-    for i in (1, 2):
-        st = StageFactory(series_slug='gow', stage_number=i)
-        c = ConceptFactory(); st.concepts.add(c)
-        games[('ps5', i)] = GameFactory(concept=c, title_platform=['PS5'])
-        games[('ps3', i)] = GameFactory(concept=c, title_platform=['PS3'])
+    from tests.factories import ProfileFactory
+
+    # DISJOINT stages per edition. With the shared-stage shape the PS5 clear would credit Legacy HD too
+    # (satisfaction is cross-platform), and this test needs an edition that is genuinely untouched.
+    ultra, legacy, games = _split_edition_series('gow')
     p = ProfileFactory()
-    _complete(p, games[('ps5', 1)])              # Ultra HD 1/2 ; Legacy HD 0/2 (no PS3 game completed)
+    _complete(p, games[('ps5', 1)])              # Ultra HD 1/2 ; Legacy HD 0/2 (its stages are PS3-only)
     evaluate_and_apply(p, [ultra, legacy])
 
     sbs = SeriesBadgeStanding.objects.get(profile=p, series_slug='gow')
@@ -297,11 +363,13 @@ def test_an_unearnable_edition_can_never_report_cleared_stages():
 # ------------------------------------------------------------------ the per-edition board store ----------
 
 def _two_edition_series(slug='dual'):
-    """One series offered in two editions, each gated by its own platform's copy of every stage.
+    """One series offered in two editions, where EVERY stage carries both a PS5 and a PS3 copy.
 
-    Returns `(ultra, legacy, games)` where `games[(plat, stage_no)]` is the game a hunter completes to
-    clear that stage in that edition. This is the shape `SeriesEditionStanding` exists for: the same
-    series, two independent chases, each with its own points and its own dates.
+    Returns `(ultra, legacy, games)` where `games[(plat, stage_no)]` is that stage's copy on that platform.
+
+    NOT two independent chases any more. Since satisfaction went cross-platform (2026-09) clearing either
+    copy clears the stage for BOTH editions, which is exactly what this shape is now good for testing. For
+    editions that CAN be touched independently, use `_split_edition_series` below.
     """
     from tests.factories import (
         BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
@@ -319,6 +387,38 @@ def _two_edition_series(slug='dual'):
         st.concepts.add(c)
         games[('ps5', i)] = GameFactory(concept=c, title_platform=['PS5'])
         games[('ps3', i)] = GameFactory(concept=c, title_platform=['PS3'])
+    return ultra, legacy, games
+
+
+def _split_edition_series(slug='split'):
+    """One series whose editions have DISJOINT stages: 1-2 are PS5-only, 3-4 are PS3-only.
+
+    Exists because cross-platform satisfaction made "an edition the hunter has not touched" unexpressible
+    in `_two_edition_series` -- clearing the PS5 copy now credits Legacy HD too, so every test about one
+    edition being untouched, pruned, or dated separately needs stages that genuinely belong to one edition.
+
+    Not a contrivance: a series with PS5-exclusive entries alongside PS3-era ones looks exactly like this,
+    and it is the only shape under which the two editions are still independent chases.
+
+    Returns `(ultra, legacy, games)` with keys ('ps5', 1), ('ps5', 2), ('ps3', 3), ('ps3', 4). Each edition
+    gates 2 stages; the other edition's stages are out of scope for it entirely.
+    """
+    from tests.factories import (
+        BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
+        PlatformGroupFactory, GroupBadgeFactory,
+    )
+    series = BadgeSeriesFactory(series_slug=slug)
+    ultra = GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        key='ultra-hd', name='Ultra', platforms=['PS4', 'PS5']))
+    legacy = GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        key='legacy-hd', name='Legacy', platforms=['PS3']))
+    games = {}
+    for plat, platform, numbers in (('ps5', 'PS5', (1, 2)), ('ps3', 'PS3', (3, 4))):
+        for i in numbers:
+            st = StageFactory(series_slug=slug, stage_number=i)
+            c = ConceptFactory()
+            st.concepts.add(c)
+            games[(plat, i)] = GameFactory(concept=c, title_platform=[platform])
     return ultra, legacy, games
 
 
@@ -346,9 +446,9 @@ def test_only_a_STARTED_edition_gets_a_board_row():
     from trophies.models import SeriesBadgeStanding, SeriesEditionStanding
     from tests.factories import ProfileFactory
 
-    ultra, legacy, games = _two_edition_series()
+    ultra, legacy, games = _split_edition_series('dual')
     p = ProfileFactory()
-    _complete(p, games[('ps5', 1)])                  # Ultra HD 1/2 ; Legacy HD untouched
+    _complete(p, games[('ps5', 1)])                  # Ultra HD 1/2 ; Legacy HD untouched (PS3-only stages)
     evaluate_and_apply(p, [ultra, legacy])
 
     sbs = SeriesBadgeStanding.objects.get(profile=p, series_slug='dual')
@@ -418,11 +518,11 @@ def test_each_edition_row_carries_its_OWN_advance_date():
     from trophies.models import SeriesBadgeStanding, SeriesEditionStanding
     from tests.factories import ProfileFactory
 
-    ultra, legacy, games = _two_edition_series()
+    ultra, legacy, games = _split_edition_series('dual')
     old = tz.make_aware(dt.datetime(2024, 3, 4))
     recent = tz.make_aware(dt.datetime(2026, 7, 8))
     p = ProfileFactory()
-    _complete_on(p, games[('ps3', 1)], old)          # Legacy HD 1/2, long ago
+    _complete_on(p, games[('ps3', 3)], old)          # Legacy HD 1/2, long ago
     _complete_on(p, games[('ps5', 1)], recent)       # Ultra HD  2/2 (both PS5 copies)...
     _complete_on(p, games[('ps5', 2)], recent)
     evaluate_and_apply(p, [ultra, legacy])
@@ -449,16 +549,16 @@ def test_an_edition_that_stops_being_started_loses_its_row():
     from trophies.models import ProfileGame, ProfileTrophyGroup, SeriesEditionStanding
     from tests.factories import ProfileFactory
 
-    ultra, legacy, games = _two_edition_series()
+    ultra, legacy, games = _split_edition_series()
     p = ProfileFactory()
     _complete(p, games[('ps5', 1)])
-    _complete(p, games[('ps3', 1)])
+    _complete(p, games[('ps3', 3)])
     evaluate_and_apply(p, [ultra, legacy])
     assert SeriesEditionStanding.objects.filter(profile=p).count() == 2
 
     # The PS3 completion regresses; the PS5 one stands.
-    ProfileTrophyGroup.objects.filter(profile=p, trophy_group__game=games[('ps3', 1)]).update(progress=0)
-    ProfileGame.objects.filter(profile=p, game=games[('ps3', 1)]).update(progress=0)
+    ProfileTrophyGroup.objects.filter(profile=p, trophy_group__game=games[('ps3', 3)]).update(progress=0)
+    ProfileGame.objects.filter(profile=p, game=games[('ps3', 3)]).update(progress=0)
     evaluate_and_apply(p, [ultra, legacy])
 
     assert list(SeriesEditionStanding.objects.filter(profile=p)
@@ -511,11 +611,11 @@ def test_a_scoped_recompute_leaves_another_series_edition_rows_alone():
     from trophies.models import SeriesEditionStanding
     from tests.factories import ProfileFactory
 
-    a_ultra, a_legacy, a_games = _two_edition_series('scoped-a')
-    b_ultra, b_legacy, b_games = _two_edition_series('scoped-b')
+    a_ultra, a_legacy, a_games = _split_edition_series('scoped-a')
+    b_ultra, b_legacy, b_games = _split_edition_series('scoped-b')
     p = ProfileFactory()
     _complete(p, a_games[('ps5', 1)])
-    _complete(p, b_games[('ps3', 1)])
+    _complete(p, b_games[('ps3', 3)])
     evaluate_and_apply(p, [a_ultra, a_legacy, b_ultra, b_legacy])
     assert SeriesEditionStanding.objects.filter(profile=p).count() == 2
 
@@ -551,8 +651,8 @@ def test_a_dormant_series_keeps_its_edition_rows_when_the_profile_total_hits_zer
     from trophies.models import GroupBadge, SeriesBadgeStanding, SeriesEditionStanding
     from tests.factories import ProfileFactory
 
-    dormant_u, dormant_l, dormant_games = _two_edition_series('dormant')
-    live_u, live_l, _live_games = _two_edition_series('still-live')
+    dormant_u, dormant_l, dormant_games = _split_edition_series('dormant')
+    live_u, live_l, _live_games = _split_edition_series('still-live')
     p = ProfileFactory()
     _complete(p, dormant_games[('ps5', 1)])            # points, in the series about to go dormant
     evaluate_and_apply(p, [dormant_u, dormant_l])
@@ -571,6 +671,52 @@ def test_a_dormant_series_keeps_its_edition_rows_when_the_profile_total_hits_zer
     )
 
 @pytest.mark.django_db
+def test_an_edition_with_points_but_no_gating_clear_still_gets_a_board_row():
+    """The two edition stores must agree about who is on them.
+
+    `ProfileEditionStanding` (the Badge Points edition filter) is summed from the `xp > 0`-gated `group_xp`
+    blob, while `SeriesEditionStanding` (the badge's own Ranks panel) used to gate on `base_satisfied_count
+    > 0`. Those coincided until a stage that stopped gating began paying XP -- after which a hunter could
+    be seated on one board with points and reported by the other as not chasing the edition at all.
+
+    Shape: Ultra HD's only stage is in scope (it holds a PS4 game) but does not gate it (that game is
+    unobtainable), and the hunter cleared it on PS3. Points, zero gating stages cleared.
+    """
+    from trophies.services.badge_apply import evaluate_and_apply
+    from trophies.models import SeriesBadgeStanding, SeriesEditionStanding
+    from tests.factories import (
+        ProfileFactory, BadgeSeriesFactory, StageFactory, ConceptFactory, GameFactory,
+        PlatformGroupFactory, GroupBadgeFactory,
+    )
+
+    series = BadgeSeriesFactory(series_slug='xponly')
+    ultra = GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        key='ultra-hd', name='Ultra', platforms=['PS4', 'PS5']))
+    legacy = GroupBadgeFactory(series=series, is_live=True, platform_group=PlatformGroupFactory(
+        key='legacy-hd', name='Legacy', platforms=['PS3']))
+    st = StageFactory(series_slug='xponly', stage_number=1)
+    concept = ConceptFactory()
+    st.concepts.add(concept)
+    GameFactory(concept=concept, title_platform=['PS4'], is_obtainable=False)   # in scope, cannot gate
+    ps3 = GameFactory(concept=concept, title_platform=['PS3'], is_obtainable=True)
+
+    p = ProfileFactory()
+    _complete(p, ps3)
+    evaluate_and_apply(p, [ultra, legacy])
+
+    rows = {r.platform_group_key: r for r in SeriesEditionStanding.objects.filter(profile=p)}
+    assert 'ultra-hd' in rows, (
+        'an edition the hunter holds points in reports them as not chasing it'
+    )
+    assert rows['ultra-hd'].stages_cleared == 0 and rows['ultra-hd'].gating_count == 0
+    assert rows['ultra-hd'].xp > 0
+
+    # ...and the per-edition rows now add up to the series total again.
+    sbs = SeriesBadgeStanding.objects.get(profile=p, series_slug='xponly')
+    assert sum(r.xp for r in rows.values()) == sbs.xp
+
+
+@pytest.mark.django_db
 def test_the_edition_rows_mirror_the_profile_fields_the_board_filters_on():
     """`country_code` and `is_linked` are board PREDICATES, and a predicate on another table cannot go in
     this table's indexes. Stamped by the recompute like every other standing store -- `signals
@@ -580,7 +726,7 @@ def test_the_edition_rows_mirror_the_profile_fields_the_board_filters_on():
     from trophies.models import SeriesEditionStanding
     from tests.factories import ProfileFactory
 
-    ultra, legacy, games = _two_edition_series()
+    ultra, legacy, games = _split_edition_series()
     p = ProfileFactory(country_code='CA', is_linked=True)
     _complete(p, games[('ps5', 1)])
     evaluate_and_apply(p, [ultra, legacy])

@@ -36,12 +36,27 @@ takes #1.
 **`is_holo`** is a live cosmetic flag (100% including DLC on every gating stage). It flips both ways and
 is worth no XP.
 
-### Gating vs satisfaction
+### Scope, gating, satisfaction
 
-A stage is **satisfied** if the hunter completed ANY qualifying game in it. A stage **gates** an edition
-only if it holds a game that is obtainable within that edition's platform group. So a stage whose only
-game is PS3-exclusive gates Legacy HD but not Ultra HD, and the same series can require different work in
-each edition without any per-edition stage authoring.
+Three different questions, three different answers — this is the part of the engine most often misread.
+
+| Question | Reads | Rule |
+|---|---|---|
+| Is the stage **in scope** for this edition? | platforms | it holds at least one game on the edition's platforms |
+| Does it **gate** (become required)? | the edition's own games | one of THOSE is obtainable, and not delisted-in-an-excluding-group |
+| Is it **satisfied**? | **every game in the stage** | the hunter completed any of them, on any platform |
+
+**Satisfaction is cross-platform; gating is not.** Clear a stage on PS5 and it counts for Legacy HD too —
+one stage is one *work*, and a cross-gen hunter should not have to buy and replay the same game once per
+edition. But an alive PS3 list can never make a stage *required* of Ultra HD, because a badge must not
+demand work that cannot be done on its own platforms.
+
+A stage with nothing on the edition's platforms is **out of scope**: not gating, not satisfiable, and
+paying no XP there. That is the one limit on cross-platform credit.
+
+> **Changed 2026-09** (owner's call). Satisfaction used to be scoped to qualifying games the way gating
+> still is, so each edition had to be cleared on its own platform. The per-edition *independence* that
+> created is gone: two editions are separate chases now only when their stages don't overlap platforms.
 
 `completion_policy` is `all` (every gating stage) or `min_count` (megamix: `min_required` of them).
 
@@ -73,9 +88,25 @@ each edition without any per-edition stage authoring.
 
 Flat and deliberately simple, all constants in `badge_xp.py`:
 
-- `XP_PER_STAGE = 500` per gating stage cleared
+- `XP_PER_STAGE = 500` per **in-scope** stage cleared — gating or not (see below)
 - `XP_BADGE_COMPLETION_BONUS = 600` once, when the base badge is earned
 - Holo is worth nothing
+- Stage 0 pays nothing, ever. It is tangential by definition, and paying for it would make optional work
+  feel mandatory.
+
+**XP and requirements came apart in 2026-09.** A stage that stopped gating — its qualifying games went
+unobtainable, or delisted in an excluding group — still pays whoever cleared it while it was alive. Points
+are for work done, and clawing them back because a storefront closed punishes the hunter for someone
+else's decision. The engine carries two counts for this reason, and they must not be confused:
+
+| Field | Counts | Feeds |
+|---|---|---|
+| `base_satisfied_count` | **gating** stages cleared | the progress fraction ("3 of 5"), which must never exceed its denominator |
+| `xp_stage_count` | every **in-scope** stage cleared | XP |
+
+The corollary: a badge with no gating stages left is **revoked** (unearnable, so the hold is deleted) and
+still pays its stage XP. Only the completion bonus is withheld — that one is for finishing a badge that
+can no longer be finished.
 
 XP accrues **per group badge**, so a two-edition series is worth twice a one-edition series. It sums into
 `SeriesBadgeStanding` (per series) and `ProfileBadgeStanding` (grand total), with `ProfileEditionStanding`
@@ -135,6 +166,16 @@ company pages) and are retained for rollback and audit.
 **Scope by SERIES, never by badge.** `recompute_standing` REPLACES a series' standing from only the
 editions it is handed. Evaluate one edition of a two-edition series and the other's XP silently becomes
 zero. Every entry point resolves to series, then to all live editions of them.
+
+**`base_satisfied_count` is NOT the XP numerator.** It counts gating stages, so it is the progress
+fraction's numerator and is structurally `<= gating_count`. XP reads `xp_stage_count`, which counts every
+in-scope stage cleared. Wiring XP to `base_satisfied_count` silently stops paying for stages that went
+unobtainable; wiring progress to `xp_stage_count` produces bars over 100%.
+
+**Cross-platform satisfaction means an edition can be 'started' by work on another platform.** Any test or
+fixture that needs two INDEPENDENT editions must give them stages that do not overlap platforms — the
+shared-stage shape no longer produces an untouched edition. See `_split_edition_series` in
+`tests/engine/test_badge_xp.py`.
 
 **Bundled games are not in `Stage.concepts`.** A concept is either a direct stage member or a
 `ConceptBundle` member on that stage, never both. Any query that finds "the series a game belongs to"
