@@ -52,6 +52,31 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # JS lint. Runs BEFORE the Python suite because it takes seconds and answers a question the
+      # suite structurally cannot: `game-flag.js` once shipped with a variable used in four places
+      # and declared in none -- valid JavaScript, so the build, collectstatic and every Django test
+      # passed while a button silently did nothing in the browser. See eslint.config.mjs.
+      # NO `cache: npm`. It keys the cache on a lockfile and HARD FAILS without one -- "Dependencies
+      # lock file is not found" -- which is the same package-lock.json-is-gitignored constraint that
+      # rules out `npm ci` below, in a place that looks unrelated. Three devDependencies install in
+      # seconds anyway; there is nothing here worth caching.
+      #
+      # Node 22 (LTS), matching local. 20 is deprecated on GitHub's runners as of 2025-09.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # `npm install`, not `npm ci`: package-lock.json is gitignored in this repo (npm is a local
+      # tool here -- Tailwind runs through npx), so there is no lockfile for `ci` to read. The
+      # determinism `ci` would give comes from EXACT versions in package.json instead: without them
+      # a future eslint patch could add a rule and turn CI red with no code change. If the lockfile
+      # is ever committed, switch this back.
+      - name: Install JS dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint JS
+        run: npm run lint
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

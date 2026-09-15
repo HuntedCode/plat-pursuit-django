@@ -1305,6 +1305,15 @@
    in components/, and they earn it because the art has to disappear, not merely shrink. Below
    620px it goes entirely: on a landscape phone the list is the content. */
 @media (max-height: 800px) and (max-width: 1023px) { .nc__hero-art { max-height: 18vh; } }
+/* A PHONE GETS SMALLER COVERS THAN A LAPTOP, at any height. The two height queries above and below
+   left a gap: a 390x844 phone (iPhone 12-15) is TALLER than 800px, so it kept the 24vh covers AND
+   the full three-row filter, which by arithmetic is the tightest chrome budget left on this modal
+   (~688px against ~679px available) -- and the failure mode is the footer buttons ending up off
+   screen with `overflow: visible` offering no scrollbar to reach them.
+   Width-based rather than a third height band: the covers are small on a phone because the DIALOG is
+   narrow there, which is true at every height. Computed, not observed -- the arithmetic says it was
+   marginally over, and 18vh puts it comfortably clear. */
+@media (max-width: 767px) { .nc__hero-art { max-height: 18vh; } }
 @media (max-height: 620px) {
     .nc__heroes, .nc__more { display: none; }
     .nc__list { min-height: 56px; }

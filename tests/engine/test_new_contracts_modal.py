@@ -1260,6 +1260,26 @@ def test_a_small_phone_drops_the_filter_rather_than_the_covers():
     )
 
 
+def test_a_phone_gets_smaller_covers_than_a_laptop_at_any_height():
+    """The two height queries left a gap. A 390x844 phone (iPhone 12-15) is TALLER than the 800px
+    band, so it kept the full 24vh covers AND the three-row filter -- by arithmetic the tightest
+    chrome budget left on this modal (~688px against ~679px available), and the failure mode is the
+    footer buttons off screen with `overflow: visible` offering no scrollbar to reach them.
+
+    Width-based rather than a third height band: the covers are small on a phone because the DIALOG
+    is narrow there, which is true at every height.
+
+    Guarded because deleting the rule survived the whole suite when it was added -- the same gap an
+    audit found on the row-stacking rule below.
+    """
+    css = _elements_css()
+    assert re.search(
+        r'@media \(max-width: 767px\) \{[^}]*\.nc__hero-art\s*\{[^}]*max-height:\s*18vh', css), (
+        'the phone-width cover trim is gone -- a tall narrow phone keeps 24vh art and can push the '
+        'footer buttons off screen'
+    )
+
+
 def test_a_narrow_screen_stacks_the_row_so_the_title_gets_a_line():
     """One line put the contract name in a shrinking middle column between the job icons and a chip
     as wide as "Ready to claim", so anything longer than a few words ellipsised away -- and the name

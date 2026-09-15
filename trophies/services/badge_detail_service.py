@@ -407,14 +407,33 @@ def _group_user_stats(profile_games, journey, target_profile) -> Optional[dict]:
         if pg.most_recent_trophy_date and (last_trophy is None or pg.most_recent_trophy_date > last_trophy):
             last_trophy = pg.most_recent_trophy_date
 
-    # Stage split: a gating stage counts as platted / 100%'d when ANY of its games clears that bar.
+    # Stage split: a stage counts as platted / 100%'d when ANY of its games clears that bar.
+    #
+    # BUNDLES COUNT TOO. This walked only the loose games, so a stage whose qualifier is a
+    # ConceptBundle -- an episodic set, where the stage is satisfied only by finishing EVERY member --
+    # could never be reported here at all. A hunter who had done exactly that read "0 of 3 platted" on
+    # a badge the hero said they had finished, which is the same hero-vs-panel contradiction the
+    # journey rewrite fixed one level up.
+    #
+    # A bundle is one STAGE qualifier, so it contributes at most one stage either way: platted when
+    # every member has a platted game, 100%'d when every member has one at 100% -- the same "every
+    # member" rule `_bundle_state` applies for satisfaction, rather than a looser "any member".
     stages_platted = stages_hundred = 0
     for s in journey:
         entries = s['obtainable_games'] + s['delisted_games']
-        if any(e['pgame'] and e['pgame'].has_plat for e in entries):
-            stages_platted += 1
-        if any(e['pgame'] and e['pgame'].progress == 100 for e in entries):
-            stages_hundred += 1
+        platted = any(e['pgame'] and e['pgame'].has_plat for e in entries)
+        hundred = any(e['pgame'] and e['pgame'].progress == 100 for e in entries)
+        for bundle in s['bundles']:
+            members = bundle['members']
+            if members and all(
+                    any(e['pgame'] and e['pgame'].has_plat for e in m['games']) for m in members):
+                platted = True
+            if members and all(
+                    any(e['pgame'] and e['pgame'].progress == 100 for e in m['games'])
+                    for m in members):
+                hundred = True
+        stages_platted += 1 if platted else 0
+        stages_hundred += 1 if hundred else 0
 
     return {
         'haul': haul, 'trophies_total': trophies_total,
