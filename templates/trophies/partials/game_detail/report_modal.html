@@ -1,14 +1,32 @@
 {% comment %}
 Report-an-issue modal (rebuilt from the old DaisyUI JS-injected one). SSR here, gated on a linked
-viewer; game-flag.js wires open / counter / "other"-required / submit. Behaviour contract unchanged:
-POST /api/v1/games/<id>/flag/ with {flag_type, details}. flag_type option VALUES must stay as-is.
+viewer; game-flag.js wires open / counter / "other"-required / submit. flag_type option VALUES must
+stay as-is.
+
+TWO submit shapes, chosen by whether the includer passed `flag_versions`:
+
+- Without it (List detail): POST /api/v1/games/<id>/flag/ with {flag_type, details}. The original
+  contract, unchanged -- that page IS one trophy list, so there is nothing to choose.
+- With it (the Game page, which passes `switcher_entries`): a version selector renders and the
+  submit goes to .../flag/versions/ with {game_ids, flag_type, details}. The Game page is
+  concept-level, and before this its Report button filed silently against the HOST list -- whichever
+  version won platform priority -- rather than anything the reader picked.
+
+`flag_versions` is the switcher's own entry list, reused verbatim: same names (Game.display_list_names),
+same platform/region chips, same viewer progress. The selector and the switcher cannot disagree about
+what the versions are, because they are the same list.
 {% endcomment %}
 <dialog id="game-flag-modal" class="gd-modal gd-modal--report pp-dismissable" data-game-id="{{ game.id }}" aria-label="Report an issue with this game">
     <div class="gd-modal__head">
         <h3>Report an issue</h3>
         <button type="button" class="gd-modal__close" data-gd-modal-close aria-label="Close">&times;</button>
     </div>
-    <form id="game-flag-form" class="gd-modal__body gd-report">
+    <form id="game-flag-form" class="gd-modal__body gd-report"{% if flag_versions %} data-flag-bulk data-flag-max="{{ flag_max_versions }}"{% endif %}>
+
+        {% comment %}The type field comes FIRST in source order, so it is first in the tab
+        order too: versions arrive pre-checked and are often left alone, while the issue type
+        always has to be chosen. Tabbing through two tool buttons and N checkboxes to reach the
+        one required field was the wrong default.{% endcomment %}
         <div class="gd-report__field">
             <label class="gd-report__label" for="flag-type">What&rsquo;s wrong?</label>
             <select id="flag-type" name="flag_type" class="gd-report__select" required>
@@ -45,6 +63,41 @@ POST /api/v1/games/<id>/flag/ with {flag_type, details}. flag_type option VALUES
             </select>
         </div>
 
+
+        {% if flag_versions %}
+        <div class="gd-report__field">
+            <div class="gd-report__vhead">
+                {% comment %}A span, not a <label>: this names the GROUP (via the role="group"
+                aria-labelledby below), and a <label> with no `for` labels nothing.{% endcomment %}
+                <span class="gd-report__label" id="flag-versions-label">Which versions?</span>
+                {% if flag_versions|length > 1 %}
+                    {% comment %}Two buttons, not a tri-state "all" checkbox: a checkbox that is
+                    itself checkable reads as a version row in a list of version rows.{% endcomment %}
+                    <span class="gd-report__vtools">
+                        <button type="button" class="gd-report__vtool" data-flag-all>All</button>
+                        <button type="button" class="gd-report__vtool" data-flag-none>None</button>
+                    </span>
+                {% endif %}
+            </div>
+            <div class="gd-report__versions" role="group" aria-labelledby="flag-versions-label">
+                {% for entry in flag_versions %}
+                    <label class="gd-report__version">
+                        <input type="checkbox" name="game_ids" value="{{ entry.game.id }}"
+                               class="gd-report__vbox"{% if entry.is_selected %} checked{% endif %} />
+                        <span class="gd-report__vbody">
+                            <span class="gd-report__vname">{{ entry.name }}</span>
+                            <span class="gd-report__vmeta">
+                                {% for plat in entry.game.title_platform %}<span class="gd-report__vplat">{{ plat }}</span>{% endfor %}
+                                {% if entry.game.is_regional and entry.game.region %}{% for r in entry.game.region %}<span class="gd-report__vregion">{{ r }}</span>{% endfor %}{% endif %}
+                            </span>
+                        </span>
+                    </label>
+                {% endfor %}
+            </div>
+            <span class="gd-report__vcount" id="flag-vcount" data-flag-vcount aria-live="polite"></span>
+        </div>
+        {% endif %}
+
         <div class="gd-report__field">
             <label class="gd-report__label" for="flag-details" data-flag-details-label>Additional details (optional)</label>
             <textarea id="flag-details" name="details" class="gd-report__textarea" maxlength="500"
@@ -54,12 +107,13 @@ POST /api/v1/games/<id>/flag/ with {flag_type, details}. flag_type option VALUES
 
         <p class="gd-report__note">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-            Reports are reviewed by our team and help keep game data accurate. Thanks for contributing.
+            {% if flag_versions %}Each version you pick is reported separately for our team to review.{% else %}Reports are reviewed by our team and help keep game data accurate. Thanks for contributing.{% endif %}
         </p>
 
         <div class="gd-report__actions">
             <button type="button" class="gd-btn gd-btn--ghost" data-gd-modal-close>Cancel</button>
-            <button type="submit" class="gd-btn gd-btn--primary" data-flag-submit>Submit report</button>
+            <button type="submit" class="gd-btn gd-btn--primary" data-flag-submit
+                    {% if flag_versions %}aria-describedby="flag-vcount"{% endif %}>Submit report</button>
         </div>
     </form>
 </dialog>

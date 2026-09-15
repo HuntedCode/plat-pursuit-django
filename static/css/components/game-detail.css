@@ -408,6 +408,19 @@
    Report-an-issue modal form (rebuilt from the old DaisyUI one)
    ============================================================ */
 .gd-modal--report { width: min(94vw, 460px); max-width: 460px; }
+/* The SAME fix `.gd-modal--qr` documents 1000 lines down, for the same reason and now the same
+   trigger. The version selector added ~216px to a form that already ran close to `.gd-modal__body`'s
+   70vh, and at 375x667 with six trophy lists the Cancel/Submit row sat below the visible area -- made
+   worse mid-form, because the software keyboard the details textarea opens does not shrink `vh`.
+   Cap the DIALOG, let the body take what is left, and pin the actions so the button can never be the
+   part off screen. Applied unconditionally rather than only to the bulk shape: the single-list modal
+   is shorter and unaffected, and one height model beats two that differ by an include parameter. */
+.gd-modal--report { max-height: 92vh; }
+.gd-modal--report[open] { display: flex; flex-direction: column; }
+.gd-modal--report .gd-modal__head { flex: none; }
+/* `min-height: 0` so the body can shrink below its content height and scroll -- a flex item defaults
+   to `min-height: auto`, which refuses to. */
+.gd-modal--report .gd-modal__body { max-height: none; flex: 1 1 auto; min-height: 0; }
 .gd-report { gap: 13px; }
 .gd-report__field { display: flex; flex-direction: column; gap: 5px; }
 .gd-report__label { font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim); }
@@ -435,7 +448,92 @@
     background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--pp-primary) 20%, var(--pp-border));
 }
 .gd-report__note svg { width: 15px; height: 15px; flex: none; color: var(--pp-primary); margin-top: 1px; }
-.gd-report__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+/* Paired with the JS's `aria-disabled` (not `disabled`, which drops the button out of the tab order
+   and hides its reason from screen readers). This carries the LOOK; `aria-disabled` carries the
+   semantics and the submit handler carries the refusal. */
+.gd-report [data-flag-submit].is-inert {
+    opacity: 0.5; cursor: not-allowed;
+}
+.gd-report [data-flag-submit].is-inert:active { transform: none; }
+
+/* Sticky, not merely last: the body is the scrollport now, so without this the actions scroll away
+   exactly when the form is tall enough to need them. The background is opaque because content
+   scrolls UNDER it. */
+.gd-report__actions {
+    display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px;
+    position: sticky; bottom: -12px; padding: 8px 0 0; background: var(--pp-bg-1);
+}
+
+/* ---- Version selector (concept-level modal only: the Game page passes flag_versions) ----
+   A scrolling list rather than a taller modal: the widest concepts run ~8-10 trophy lists, and a
+   dialog that outgrows a 375px viewport puts its own submit button off-screen. The cap is in `rem`
+   so it tracks text size, and sits just above a whole row to show the list IS scrollable. */
+.gd-report__vhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gd-report__vtools { display: flex; gap: 4px; }
+/* 0.72rem + 6px/10px padding puts the hit box near 28x40 rather than the 19x34 it started at.
+   Still under the 44px the design system asks for -- these are secondary controls next to a list of
+   full-width rows -- but "None" clears the whole selection with no undo, so a mis-tap on a phone is
+   not a free mistake. */
+.gd-report__vtool {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; color: var(--pp-text-dim);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-sm);
+    padding: 6px 10px; cursor: pointer; line-height: 1;
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease),
+                background-color var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-report__vtool:active { transform: scale(0.96); }
+.gd-report__vtool:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.gd-report__vtool:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.gd-report__versions {
+    display: flex; flex-direction: column; gap: 4px;
+    /* `contain` so a flick past the end of this list does not chain into the modal body and move
+       the form under the reader's finger. Same shape, same fix as .bi-req__list. */
+    max-height: 13.5rem; overflow-y: auto; overscroll-behavior: contain; padding: 4px;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+}
+.gd-report__version {
+    display: flex; align-items: flex-start; gap: 9px; cursor: pointer;
+    padding: 7px 8px; border-radius: var(--pp-radius-sm); border: 1px solid transparent;
+    transition: background-color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease);
+}
+.gd-report__version:hover { background: color-mix(in oklab, var(--pp-primary) 7%, transparent); }
+/* The ROW carries the selected tint, not just the box: at a glance the reader is scanning which
+   lines are on, and a 14px tick is not that glance. */
+.gd-report__version:has(.gd-report__vbox:checked) {
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    border-color: color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border));
+}
+.gd-report__version:has(.gd-report__vbox:focus-visible) { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+.gd-report__vbox { width: 15px; height: 15px; margin-top: 2px; flex: none; accent-color: var(--pp-primary); cursor: pointer; }
+.gd-report__vbody { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+/* `overflow-wrap` because `overflow-y: auto` computes overflow-x to `auto` too: one unbroken long
+   token in a list name would otherwise give this column a horizontal scrollbar. */
+.gd-report__vname { font-size: 0.8rem; font-weight: 600; color: var(--pp-text); line-height: 1.3; overflow-wrap: anywhere; }
+.gd-report__vmeta { display: flex; flex-wrap: wrap; gap: 4px; }
+.gd-report__vplat, .gd-report__vregion {
+    font-size: 0.6rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 1px 5px; border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-3); color: var(--pp-text-dim); border: 1px solid var(--pp-border);
+}
+/* Secondary tint, matching .gp-lchip__region on the switcher these rows are copied from -- and for
+   the switcher's own stated reason: stacks that differ by REGION ALONE (same platform) read as
+   duplicate rows without it. That matters more here than there, because here picking the wrong row
+   files a report against the wrong trophy list. The dim/mute pair it replaced was a 0.06 lightness
+   step at 9.6px, which also put the region chip under 4.5:1 on --pp-bg-3. */
+.gd-report__vregion {
+    color: var(--pp-secondary);
+    border-color: color-mix(in oklab, var(--pp-secondary) 40%, var(--pp-border));
+}
+/* 0.75rem/12px, not the 0.68rem the char counter uses: this line carries a REQUIRED ACTION ("Pick at
+   least one version"), and the design system reserves sub-12px for decorative/supplementary text. */
+.gd-report__vcount { align-self: flex-end; font-size: 0.75rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+
+/* The Game page hero's Report button goes full-width under the screenshots rather than floating at
+   its intrinsic size -- matching .gd-shots, which is also 100%. At `lg:` the extras column is a
+   narrow rail (a minmax(180px, 250px) track); below that the hero grid is a single 1fr column and
+   the button spans it. Full-width is right in both cases, which is why this is not scoped to a
+   breakpoint. */
+.gp-report { width: 100%; justify-content: center; }
 
 /* ============================================================
    Premium polish: tactile press + keyboard focus (Google/Apple lens)

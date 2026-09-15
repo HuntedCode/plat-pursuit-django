@@ -8,6 +8,12 @@ from trophies.models import GameFlag
 logger = logging.getLogger(__name__)
 
 
+class GameFlagSubmissionError(Exception):
+    """A bulk submission was refused mid-loop. Raised rather than returned so `submit_flags`'
+    `transaction.atomic` rolls the partial batch back -- a returned error would leave the rows
+    filed before the refusal committed."""
+
+
 class GameFlagService:
     """Handles community game flag submission and staff review logic."""
 
@@ -47,6 +53,35 @@ class GameFlagService:
     #: Built from the map above rather than typed out again, so adding a flag type cannot forget it.
     WATCHED_FIELDS = sorted({f for f, _ in FIELD_ACTIONS.values()} | set(SHOVELWARE_FIELDS))
 
+    #: Most versions any one bulk submission may carry. Sized well above a real trophy-list set
+    #: (the widest concepts on the site run ~8-10 lists across platforms and regions) and well
+    #: below "a script found the endpoint". The per-user rate limit counts REQUESTS, so without a
+    #: per-request cap one request could file arbitrarily many rows.
+    MAX_BULK_VERSIONS = 25
+
+    #: Shared with the API layer, which re-checks both BEFORE doing the peer query so an oversized
+    #: or empty payload is refused without touching the DB. One definition so the two cannot drift
+    #: into telling the reporter two different things.
+    ERR_NO_VERSIONS = 'Select at least one version to report.'
+    ERR_TOO_MANY = f'You can report at most {MAX_BULK_VERSIONS} versions at once.'
+
+    @staticmethod
+    def _clean_details(details):
+        """Coerce to a string, THEN cap at 500.
+
+        `(details or '')[:500]` assumed a string. Slicing a list is a no-op that returns the list,
+        and `TextField.to_python` then `str()`s it on save -- so `{"details": ["A" * 20000]}` stored
+        20 KB per row, past a cap that looked like it was enforcing 500. A dict was worse: slicing
+        one raises TypeError inside the transaction, surfacing as a 500 on what should be a 400.
+        `max_length=500` is a form-level hint on a TextField, not a DB constraint, so this slice is
+        the only thing standing between a payload and the column.
+        """
+        if details is None:
+            return ''
+        if not isinstance(details, str):
+            details = str(details)
+        return details[:500]
+
     @staticmethod
     @transaction.atomic
     def submit_flag(game, reporter, flag_type, details=''):
@@ -81,13 +116,71 @@ class GameFlagService:
             game=game,
             reporter=reporter,
             flag_type=flag_type,
-            details=(details or '')[:500],
+            details=GameFlagService._clean_details(details),
         )
         logger.info(
             'GameFlag created: type=%s game=%s reporter=%s',
             flag_type, game.pk, reporter.pk,
         )
         return flag, None
+
+    @staticmethod
+    @transaction.atomic
+    def submit_flags(games, reporter, flag_type, details=''):
+        """Submit the SAME flag against several versions of one game. One transaction.
+
+        Returns ``(created_count, duplicate_count, error_string_or_None)``.
+
+        `duplicate_count` is versions the reporter already had a pending flag of this type on.
+        `submit_flag` returns those silently -- correct for it, wrong to report as new work here,
+        because "Reported 5 versions" for a submission that filed nothing is the one message this
+        screen can send that is actually false. The count comes from a single pre-query over the
+        set rather than from `submit_flag`'s return, which cannot distinguish the two cases without
+        a signature change that would ripple to its other caller.
+
+        COST: 1 + 3N queries (N <= MAX_BULK_VERSIONS), because `submit_flag` re-runs the restriction
+        check and an existence lookup per row. Both are hoistable and deliberately not hoisted:
+        `submit_flag` is the single writer of GameFlag rows AND the place the reporting restriction
+        is enforced, so a loop that skipped past it to save queries would be a second writer with
+        the restriction optional. Bounded at 25 on a rare, deliberate user action, this is the
+        cheaper side of that trade -- it is NOT the profile-scoped aggregation the whale rule is
+        about, and must not grow into one.
+        """
+        # Dedup by pk BEFORE counting anything. `created` counts list elements not already pending,
+        # so the same Game passed twice reported 2 created against 1 row written -- the API builds a
+        # set and never hits it, but this is a public service method with its own contract to keep.
+        games = list({g.pk: g for g in games}.values())
+        if not games:
+            return 0, 0, GameFlagService.ERR_NO_VERSIONS
+        if len(games) > GameFlagService.MAX_BULK_VERSIONS:
+            return 0, 0, GameFlagService.ERR_TOO_MANY
+        if flag_type not in GameFlagService.VALID_FLAG_TYPES:
+            return 0, 0, 'Invalid flag type.'
+
+        already = set(
+            GameFlag.objects.filter(
+                game__in=games, reporter=reporter, flag_type=flag_type, status='pending',
+            ).values_list('game_id', flat=True)
+        )
+
+        created = 0
+        for game in games:
+            # Through `submit_flag`, never straight to `objects.create`: it is the single writer of
+            # GameFlag rows and it is where the reporting restriction is enforced. A loop that
+            # inlined the create would be a second writer that routes around the restriction.
+            _flag, error = GameFlagService.submit_flag(game, reporter, flag_type, details)
+            if error:
+                # Atomic: the first refusal (a restriction, most likely) rolls the whole batch back
+                # rather than filing a partial set the reporter cannot see or amend.
+                raise GameFlagSubmissionError(error)
+            if game.pk not in already:
+                created += 1
+
+        logger.info(
+            'GameFlags created in bulk: type=%s reporter=%s created=%s duplicate=%s',
+            flag_type, reporter.pk, created, len(already),
+        )
+        return created, len(already), None
 
     @staticmethod
     @transaction.atomic
