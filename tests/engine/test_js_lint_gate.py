@@ -62,49 +62,67 @@ def test_ci_actually_runs_the_lint():
     ci = WORKFLOW.read_text(encoding='utf-8')
 
     assert 'actions/setup-node' in ci, 'CI has no node, so it cannot lint'
-    assert re.search(r'run:\s*npm install', ci), 'CI never installs the JS dependencies'
+    # Either installer satisfies THIS test -- it only asks that dependencies arrive at all.
+    # `test_ci_installs_from_the_lockfile` is the one that insists on `npm ci` specifically.
+    assert re.search(r'run:\s*npm (ci|install)\b', ci), 'CI never installs the JS dependencies'
     assert re.search(r'run:\s*npm run lint', ci), 'CI never runs the lint'
 
 
-def test_ci_does_not_ask_npm_for_anything_that_needs_a_lockfile():
-    """`package-lock.json` is gitignored in this repo, and TWO separate workflow features quietly
-    require one. `npm ci` refuses outright. `cache: npm` on actions/setup-node hard fails with
-    "Dependencies lock file is not found" -- which is the one that actually broke CI, because it
-    reads as an unrelated performance option sitting three lines above the install step that had
-    already been written around the same constraint.
+def test_the_lockfile_is_committed():
+    """It was gitignored, and CI therefore re-resolved the whole transitive dependency tree from the
+    network on every run and executed its install scripts -- so a patch release anywhere in that tree
+    landed on the runner unreviewed. Nothing npm-installed here reaches production unreviewed (the
+    Tailwind output is committed, and the runtime JS libraries are vendored), so the argument for
+    committing it was never build reproducibility. It was that CI executes third-party code.
 
-    Pinned as one rule so the constraint is stated once, in the place a future edit would trip it.
-    If the lockfile is ever committed, delete this test and use `npm ci` + caching -- both are
-    better, and this only exists because the lockfile is not there.
+    Deleting the file or re-ignoring it silently restores that exposure, and `npm ci` would start
+    failing for a reason that reads as unrelated -- hence a test rather than a comment.
     """
-    gitignore = (ROOT / '.gitignore').read_text(encoding='utf-8')
-    if 'package-lock.json' not in gitignore:
-        pytest.skip('lockfile is committed now -- npm ci and cache: npm are both available again')
+    lock = ROOT / 'package-lock.json'
+    assert lock.exists(), 'package-lock.json is gone'
 
-    # COMMENTS STRIPPED FIRST. The workflow explains both traps in prose right beside the
-    # settings, so a search over the raw file matches the EXPLANATION and fails on a correct
-    # file -- which is what the first version of this test did. Assert on what the runner reads.
+    gitignore = (ROOT / '.gitignore').read_text(encoding='utf-8')
+    assert not re.search(r'^\s*package-lock\.json\s*$', gitignore, re.M), (
+        'package-lock.json is ignored again -- CI would resolve dependencies fresh on every run'
+    )
+
+
+def test_ci_installs_from_the_lockfile():
+    """`npm ci`, not `npm install`. `install` re-resolves and will happily drift from the lockfile;
+    `ci` installs exactly what is locked and REFUSES if package.json and the lockfile disagree. That
+    refusal is the feature -- it is what makes the integrity hashes mean anything.
+
+    Comments stripped first: the workflow explains this in prose right beside the settings, so a
+    search over the raw file matches the explanation rather than the step. That is not hypothetical
+    -- an earlier version of this test did exactly that and failed on a correct file.
+    """
     ci = '\n'.join(
         line for line in WORKFLOW.read_text(encoding='utf-8').splitlines()
         if not line.lstrip().startswith('#')
     )
 
-    assert not re.search(r'run:\s*npm ci\b', ci), (
-        'npm ci needs a lockfile and package-lock.json is gitignored -- use `npm install`'
+    assert re.search(r'run:\s*npm ci\b', ci), (
+        'CI no longer installs from the lockfile, so the pinning it provides is not being used'
     )
-    assert not re.search(r'cache:\s*npm', ci), (
-        "`cache: npm` keys on a lockfile and fails the run without one: "
-        '"Dependencies lock file is not found"'
+    assert not re.search(r'run:\s*npm install\b', ci), (
+        '`npm install` re-resolves and can drift from the lockfile -- use `npm ci`'
     )
 
 
 @pytest.mark.parametrize('dep', ['eslint', '@eslint/js', 'globals'])
-def test_the_lint_dependencies_are_pinned_exactly(dep):
-    """`package-lock.json` is gitignored here, so package.json is the ONLY pin. With a caret range a
-    future eslint patch could add a rule and turn CI red with no code change -- a lint gate that goes
-    red on its own is a lint gate somebody disables."""
+def test_the_lint_dependencies_are_locked(dep):
+    """package.json may carry a caret range now -- the LOCKFILE is the pin, which is the whole reason
+    it is committed. This asserts the two agree that the dependency exists at all; `npm ci` enforces
+    the stronger version-level agreement on every run and refuses if they diverge.
+
+    (This replaced a test requiring EXACT versions in package.json. That was the right rule while
+    package.json was the only pin, and became a worse one the moment the lockfile arrived -- exact
+    ranges there would fight `npm update` for no benefit the lockfile does not already give.)
+    """
     deps = json.loads(PACKAGE.read_text(encoding='utf-8'))['devDependencies']
     assert dep in deps, f'{dep} is no longer a devDependency'
-    assert re.fullmatch(r'\d+\.\d+\.\d+', deps[dep]), (
-        f'{dep} is pinned as {deps[dep]!r}; with no lockfile committed this must be an exact version'
+
+    lock = json.loads((ROOT / 'package-lock.json').read_text(encoding='utf-8'))
+    assert f'node_modules/{dep}' in lock['packages'], (
+        f'{dep} is in package.json but not the lockfile -- run `npm install` and commit the result'
     )
