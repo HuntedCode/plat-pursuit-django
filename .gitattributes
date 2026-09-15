@@ -3,6 +3,12 @@
 # by a CRLF round-trip on a Windows checkout once already; this prevents
 # that class of mistake from recurring on any future binary.
 
+# Generated dependency lockfile. Committed for INTEGRITY, not for diffing: without it CI
+# re-resolves the whole transitive tree from the network on every run and executes install
+# scripts, and a lockfile is what pins exact tarballs with integrity hashes. Marked generated
+# so 85 KB of churn collapses in review instead of burying the change it travels with.
+package-lock.json linguist-generated=true
+
 # Fonts
 *.ttf binary
 *.otf binary

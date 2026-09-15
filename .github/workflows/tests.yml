@@ -56,23 +56,20 @@ jobs:
       # suite structurally cannot: `game-flag.js` once shipped with a variable used in four places
       # and declared in none -- valid JavaScript, so the build, collectstatic and every Django test
       # passed while a button silently did nothing in the browser. See eslint.config.mjs.
-      # NO `cache: npm`. It keys the cache on a lockfile and HARD FAILS without one -- "Dependencies
-      # lock file is not found" -- which is the same package-lock.json-is-gitignored constraint that
-      # rules out `npm ci` below, in a place that looks unrelated. Three devDependencies install in
-      # seconds anyway; there is nothing here worth caching.
-      #
       # Node 22 (LTS), matching local. 20 is deprecated on GitHub's runners as of 2025-09.
+      # `cache: npm` keys on package-lock.json, which is committed -- it hard fails without one.
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
 
-      # `npm install`, not `npm ci`: package-lock.json is gitignored in this repo (npm is a local
-      # tool here -- Tailwind runs through npx), so there is no lockfile for `ci` to read. The
-      # determinism `ci` would give comes from EXACT versions in package.json instead: without them
-      # a future eslint patch could add a rule and turn CI red with no code change. If the lockfile
-      # is ever committed, switch this back.
+      # `npm ci`, which installs EXACTLY the locked tree and refuses if package.json and the lockfile
+      # disagree. That refusal is the point: CI used to re-resolve the whole transitive dependency
+      # graph from the network on every run and execute its install scripts, so a patch release
+      # anywhere in the tree landed on the runner unreviewed. The lockfile pins exact tarballs with
+      # integrity hashes; `ci` is what honours them.
       - name: Install JS dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Lint JS
         run: npm run lint
