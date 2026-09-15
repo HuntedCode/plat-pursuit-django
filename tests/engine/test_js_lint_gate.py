@@ -66,6 +66,38 @@ def test_ci_actually_runs_the_lint():
     assert re.search(r'run:\s*npm run lint', ci), 'CI never runs the lint'
 
 
+def test_ci_does_not_ask_npm_for_anything_that_needs_a_lockfile():
+    """`package-lock.json` is gitignored in this repo, and TWO separate workflow features quietly
+    require one. `npm ci` refuses outright. `cache: npm` on actions/setup-node hard fails with
+    "Dependencies lock file is not found" -- which is the one that actually broke CI, because it
+    reads as an unrelated performance option sitting three lines above the install step that had
+    already been written around the same constraint.
+
+    Pinned as one rule so the constraint is stated once, in the place a future edit would trip it.
+    If the lockfile is ever committed, delete this test and use `npm ci` + caching -- both are
+    better, and this only exists because the lockfile is not there.
+    """
+    gitignore = (ROOT / '.gitignore').read_text(encoding='utf-8')
+    if 'package-lock.json' not in gitignore:
+        pytest.skip('lockfile is committed now -- npm ci and cache: npm are both available again')
+
+    # COMMENTS STRIPPED FIRST. The workflow explains both traps in prose right beside the
+    # settings, so a search over the raw file matches the EXPLANATION and fails on a correct
+    # file -- which is what the first version of this test did. Assert on what the runner reads.
+    ci = '\n'.join(
+        line for line in WORKFLOW.read_text(encoding='utf-8').splitlines()
+        if not line.lstrip().startswith('#')
+    )
+
+    assert not re.search(r'run:\s*npm ci\b', ci), (
+        'npm ci needs a lockfile and package-lock.json is gitignored -- use `npm install`'
+    )
+    assert not re.search(r'cache:\s*npm', ci), (
+        "`cache: npm` keys on a lockfile and fails the run without one: "
+        '"Dependencies lock file is not found"'
+    )
+
+
 @pytest.mark.parametrize('dep', ['eslint', '@eslint/js', 'globals'])
 def test_the_lint_dependencies_are_pinned_exactly(dep):
     """`package-lock.json` is gitignored here, so package.json is the ONLY pin. With a caret range a
