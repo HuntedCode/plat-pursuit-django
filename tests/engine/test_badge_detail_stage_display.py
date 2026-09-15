@@ -588,3 +588,106 @@ def test_the_anon_ladder_matches_the_engine_on_bundles_too():
            [s['stage'].stage_number for s in signed_in.retired_stages]
     assert [s['stage'].stage_number for s in signed_in.stages] == [1, 4]
     assert [s['stage'].stage_number for s in signed_in.retired_stages] == [3]
+
+
+# ── My Stats counts bundle stages ────────────────────────────────────────────────────────────────
+
+def _bundle_only_stage(slug, number, title, platforms=('PS5', 'PS5')):
+    """A stage whose only qualifier is a ConceptBundle of N members, one game each. The stage is
+    satisfied only when EVERY member is finished -- the episodic shape."""
+    from trophies.models import ConceptBundle
+
+    st = StageFactory(series_slug=slug, stage_number=number, title=title)
+    bundle = ConceptBundle.objects.create(stage=st, label=title)
+    concepts, games = [], []
+    for plat in platforms:
+        c = ConceptFactory()
+        games.append(GameFactory(concept=c, title_platform=[plat], is_obtainable=True))
+        concepts.append(c)
+    bundle.concepts.set(concepts)
+    return st, games
+
+
+def _platted(profile, game):
+    """A platinum without 100%: `has_plat` set, whole game short of it."""
+    ProfileGame.objects.update_or_create(
+        profile=profile, game=game, defaults={'progress': 68, 'has_plat': True})
+
+
+def test_my_stats_counts_a_bundle_stage_the_hunter_finished():
+    """The stage split walked only the loose games, so a stage whose qualifier is a ConceptBundle
+    could never be reported at all -- a hunter who had finished an episodic set read "0 of 1 platted"
+    on a badge the hero said they had done. Same hero-vs-panel contradiction the journey rewrite
+    fixed one level up."""
+    series = BadgeSeriesFactory(series_slug='bstat1')
+    _st, games = _bundle_only_stage('bstat1', 1, 'Episodic')
+    GroupBadgeFactory(series=series, platform_group=_ultra(), is_live=True)
+    profile = ProfileFactory()
+    for g in games:
+        _platted(profile, g)
+
+    g = _view(series, profile)
+
+    assert g.user_stats['stages_platted'] == 1, 'a finished bundle stage counted for nothing'
+
+
+def test_a_part_finished_bundle_does_not_count():
+    """EVERY member, not any -- the same rule `_bundle_state` applies for satisfaction. Counting a
+    bundle as done on one member would report progress the badge itself does not credit."""
+    series = BadgeSeriesFactory(series_slug='bstat2')
+    _st, games = _bundle_only_stage('bstat2', 1, 'Episodic')
+    GroupBadgeFactory(series=series, platform_group=_ultra(), is_live=True)
+    profile = ProfileFactory()
+    _platted(profile, games[0])          # one of two
+
+    g = _view(series, profile)
+
+    assert g.user_stats['stages_platted'] == 0
+
+
+def test_a_bundle_stage_counts_once_not_once_per_member():
+    """A bundle is ONE stage qualifier. Counting per member would push `stages_platted` past
+    `gating_count` and overfill the My Stats bar it feeds."""
+    series = BadgeSeriesFactory(series_slug='bstat3')
+    _st, games = _bundle_only_stage('bstat3', 1, 'Episodic', platforms=('PS5', 'PS5', 'PS5'))
+    GroupBadgeFactory(series=series, platform_group=_ultra(), is_live=True)
+    profile = ProfileFactory()
+    for g_ in games:
+        _platted(profile, g_)
+
+    g = _view(series, profile)
+
+    assert g.user_stats['stages_platted'] == 1
+    assert g.user_stats['stages_platted'] <= g.gating_count
+
+
+def test_a_hundred_percent_bundle_counts_for_the_hundred_bar_too():
+    series = BadgeSeriesFactory(series_slug='bstat4')
+    _st, games = _bundle_only_stage('bstat4', 1, 'Episodic')
+    GroupBadgeFactory(series=series, platform_group=_ultra(), is_live=True)
+    profile = ProfileFactory()
+    for g_ in games:
+        _hundred(profile, g_)
+
+    g = _view(series, profile)
+
+    assert g.user_stats['stages_platted'] == 0, 'progress=100 alone is not a platinum'
+    assert g.user_stats['stages_hundred'] == 1
+
+
+def test_a_loose_game_and_a_bundle_on_one_stage_still_count_one_stage():
+    """Mixed qualifiers: either path satisfying the stage counts it once, never twice."""
+    series = BadgeSeriesFactory(series_slug='bstat5')
+    st, bundle_games = _bundle_only_stage('bstat5', 1, 'Mixed')
+    loose = ConceptFactory()
+    st.concepts.add(loose)
+    loose_game = GameFactory(concept=loose, title_platform=['PS5'], is_obtainable=True)
+    GroupBadgeFactory(series=series, platform_group=_ultra(), is_live=True)
+    profile = ProfileFactory()
+    _platted(profile, loose_game)
+    for g_ in bundle_games:
+        _platted(profile, g_)
+
+    g = _view(series, profile)
+
+    assert g.user_stats['stages_platted'] == 1

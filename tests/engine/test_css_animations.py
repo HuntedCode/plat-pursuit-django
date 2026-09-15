@@ -135,3 +135,44 @@ def test_a_visible_overflow_dialog_declares_min_width_zero():
         'a visible-overflow grid item without `min-width: 0` takes its content-based minimum and '
         'renders wider than a phone screen'
     )
+
+
+# ── color-mix interpolation space ────────────────────────────────────────────────────────────────
+
+_OKLCH_MIX = re.compile(r'color-mix\(\s*in\s+oklch\s*,(?P<args>[^()]*(?:\([^()]*\)[^()]*)*)\)')
+
+
+def _second_colour(args: str) -> str:
+    """The colour after the comma in `color-mix(in oklch, <c1> <pct>, <c2>)`, lowercased."""
+    parts = args.split(',')
+    return parts[-1].strip().lower() if len(parts) >= 2 else ''
+
+
+@pytest.mark.parametrize('name', sorted(p.name for p in COMPONENTS.glob('*.css')))
+def test_oklch_color_mix_only_ever_meets_transparent(name):
+    """`color-mix(in oklch, ...)` against an OPAQUE colour walks the shorter HUE ARC, and our accent
+    hues sit 90-230 degrees from the blue-grey surface tokens -- so the arc runs through whatever is
+    between them. It is silent: valid CSS, no warning, a colour nobody chose.
+
+    Three shipped instances, all found only by computing them:
+      .bd-dead          warning -> bg-2   ran through cyan  -> a TEAL "unearnable" banner
+      .bd-qual.is-done  success -> border ran through cyan  -> a BLUE "bundle finished" border
+      .bd-gcard__plat   error   -> mute   ran through magenta -> PINK "No plat" text
+
+    Mixing with `transparent` is safe and is why most of these are fine: transparent's hue is
+    powerless, so there is no arc to walk and oklch adopts the source hue. That is the rule this pins
+    -- in oklch, the second colour must be `transparent`; anywhere else, use `in oklab`, which
+    interpolates a/b rectangularly and goes straight there.
+
+    Parametrized per file so a failure names the stylesheet, and swept over all of components/
+    because the next one will be in whichever file nobody is thinking about.
+    """
+    css = (COMPONENTS / name).read_text(encoding='utf-8')
+    offenders = [
+        m.group(0) for m in _OKLCH_MIX.finditer(css)
+        if 'transparent' not in _second_colour(m.group('args'))
+    ]
+    assert not offenders, (
+        f'{name}: color-mix(in oklch, ...) against an opaque colour interpolates hue the long way '
+        f'round. Use `in oklab`:\n  ' + '\n  '.join(offenders)
+    )

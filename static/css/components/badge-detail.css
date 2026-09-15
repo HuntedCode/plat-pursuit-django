@@ -308,7 +308,7 @@
 .bd-band__cta svg, .bd-band__stats-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 .bd-band__cta-arrow { width: 13px; height: 13px; color: var(--pp-text-mute); transition: transform var(--pp-dur) var(--pp-ease); }
 @media (hover: hover) {
-    .bd-band__cta:hover, .bd-band__stats-btn:hover { border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent); color: var(--pp-text); background: color-mix(in oklch, var(--pp-primary) 6%, var(--pp-bg-2)); }
+    .bd-band__cta:hover, .bd-band__stats-btn:hover { border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent); color: var(--pp-text); background: color-mix(in oklab, var(--pp-primary) 6%, var(--pp-bg-2)); }
     .bd-band__cta:hover .bd-band__cta-arrow { transform: translateX(2px); color: var(--pp-primary); }
 }
 
@@ -356,7 +356,10 @@
 .bd-gcard__pct.is-done { color: var(--pp-success); }
 .bd-gcard__plat { display: inline-flex; align-items: center; gap: 3px; }
 .bd-gcard__plat.is-earned { color: var(--pp-warning); }
-.bd-gcard__plat.is-none { color: color-mix(in oklch, var(--pp-error) 70%, var(--pp-text-mute)); }
+/* `in oklab` wherever the second colour is OPAQUE -- see the note on .bd-dead. oklch walks the
+   SHORTER HUE ARC, and error (h 22) to text-mute (h 256) takes it backwards through magenta: this
+   rendered rgb(219,112,177), a clear pink, where oklab gives rgb(230,114,117). */
+.bd-gcard__plat.is-none { color: color-mix(in oklab, var(--pp-error) 70%, var(--pp-text-mute)); }
 .bd-gcard__rt { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; }
 .bd-gcard__rt--good { color: var(--pp-success); }
 .bd-gcard__rt--mid { color: var(--pp-warning); }
@@ -527,7 +530,10 @@
     margin: 0 14px 4px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
     background: color-mix(in oklch, var(--pp-bg-1) 55%, transparent);
 }
-.bd-qual.is-done { border-color: color-mix(in oklch, var(--pp-success) 30%, var(--pp-border)); }
+/* Same trap, and the most visible instance: success (h 162) to border (h 254) is a 92-degree arc
+   through cyan, so a SATISFIED bundle's "done" border rendered rgb(63,112,132) -- steel blue, on the
+   one element whose whole job is to say "green, finished". oklab gives rgb(72,115,105). */
+.bd-qual.is-done { border-color: color-mix(in oklab, var(--pp-success) 30%, var(--pp-border)); }
 .bd-qual__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 12px; }
 .bd-qual__mark { display: grid; place-items: center; width: 17px; height: 17px; flex-shrink: 0; color: var(--pp-text-mute); }
 .bd-qual.is-done .bd-qual__mark { color: var(--pp-success); }
@@ -591,12 +597,16 @@
 }
 .bd-node--next {
     border-color: var(--pp-primary); color: var(--pp-primary);
-    background: color-mix(in oklch, var(--pp-primary) 12%, var(--pp-bg-2));
+    /* oklab: barely distinguishable at 12% (rgb 45,60,74 vs 42,62,70), corrected anyway so the rule
+       "oklch only over transparent" holds everywhere in this file without exemptions. */
+    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
     --pulse-col: var(--pp-primary); animation: bd-node-pulse 2.2s var(--pp-ease) infinite;
 }
 .bd-node--bonus {
     border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent);
-    background: color-mix(in oklch, var(--pp-accent) 8%, var(--pp-bg-2));
+    /* oklab: this one DID drift -- rgb(44,51,66), a cool blue-grey, for a tint meant to be warm
+       amber. oklab gives rgb(53,50,53). Subtle at 8%, but in the wrong direction. */
+    background: color-mix(in oklab, var(--pp-accent) 8%, var(--pp-bg-2));
 }
 /* Pulse colour comes from a hoisted var (never color-mix inside a keyframe). */
 @keyframes bd-node-pulse {
