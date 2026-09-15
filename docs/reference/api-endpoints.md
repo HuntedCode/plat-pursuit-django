@@ -134,6 +134,8 @@ that has to agree with the first. They are listed in
 | `/community/lists/<id>/sections/<s>/rename/` | `list_section_rename` | POST — **members only** |
 | `/community/lists/<id>/sections/<s>/delete/` | `list_section_delete` | POST |
 | `/community/lists/<id>/search/` | `list_game_search` | GET |
+| `/community/lists/for-game/<concept_id>/` | `lists_for_concept` | GET — where can this game go (quick-add) |
+| `/community/lists/new-with-game/<concept_id>/` | `list_create_with_concept` | POST — create a list and file the game, atomically |
 
 A cross-section drag posts to `list_reorder` **or** `list_item_assign` depending on whether the page
 is showing the list's real sequence — see

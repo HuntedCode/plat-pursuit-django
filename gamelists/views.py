@@ -14,6 +14,7 @@ personal and POST-only paths, and the detail page needed its own `seo_descriptio
 from django.contrib import messages
 from django.core.cache import cache
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.http import JsonResponse
@@ -1138,6 +1139,11 @@ class AddConceptView(_ListActionView):
             'item_id': item.pk,
             'game_count': game_list.game_count,
             'title': concept.unified_title,
+            # THE ROUTE, not the id alone. The quick-add popover flips a row from "add" to "remove"
+            # the moment this returns, and it was deriving that path by rewriting the add URL --
+            # hand-assembling a route, which this project has been bitten by often enough that the
+            # list card's own comment warns about it. The server owns URL shapes; it can say one.
+            'remove_url': reverse_lazy('list_remove_game', args=[game_list.id, item.pk]),
         })
 
 
@@ -1222,6 +1228,129 @@ class AssignItemView(_ListActionView):
         except svc.ListError as exc:
             return self.fail(exc)
         return JsonResponse({'section': section.id if section else None})
+
+
+class MyListsForConceptView(LoginRequiredMixin, _LinkedProfileRequired, View):
+    """Everything the quick-add popover needs about ONE game, in one request.
+
+    NOT PER-LIST, which is why it does not extend `_ListActionView`: the question is "where can this
+    game go", and the answer spans every list the hunter owns. `owned_by` is the indexed read for
+    that (it matches the `(owner, -updated_at)` partial index), and `Meta.ordering` supplies the
+    most-recently-touched-first order a picker wants.
+
+    WHAT EACH ROW CARRIES, and why each field is here rather than derived on the client:
+
+    - `has_concept` decides the row's icon and what a tap does.
+    - `remove_url` is what makes REMOVE reuse `list_remove_game` instead of needing a
+      remove-by-concept endpoint. The popover knows a concept; that route wants an item; this is the
+      one place that already has both in hand. It is the ROUTE rather than the bare id because the
+      server owns URL shapes -- an earlier cut sent `item_id` and had the client assemble the path,
+      which is the thing this feature was corrected for once already.
+    - `is_full` is computed here because the cap lives in the service and the client must not carry
+      a second copy of a product rule. A full list renders disabled rather than absent: "no room"
+      and "not a list" are different answers and a picker that hides the first is lying.
+
+    BOUNDED BY CONSTRUCTION. A hunter holds at most `MEMBER_MAX_LISTS` (25) lists, so this is a
+    small indexed read plus one `IN` over their items -- the same bounded-membership shape
+    `ListGameSearchView` uses, for the same reason, rather than reading every row of every list.
+    """
+
+    @method_decorator(ratelimit(key='user', rate='120/m', method='GET', block=True))
+    def get(self, request, concept_id):
+        profile = request.user.profile
+        game_lists = list(GameList.objects.owned_by(profile))
+
+        # ONE query for membership across every list, keyed on the concept being asked about --
+        # never a count per list, which is the N+1 a picker invites.
+        held = {
+            row['game_list_id']: row['id']
+            for row in GameListItem.objects
+            .filter(game_list__in=game_lists, concept_id=concept_id)
+            .values('game_list_id', 'id')
+        }
+
+        return JsonResponse({
+            'lists': [
+                {
+                    'id': game_list.id,
+                    'name': game_list.name,
+                    'game_count': game_list.game_count,
+                    'has_concept': game_list.id in held,
+                    # `game_count` rather than a live count: it is what the cap is felt as, it is
+                    # already denormalized, and a list that drifted high simply shows full one game
+                    # early -- which `add_concept` would then contradict by accepting. That is the
+                    # right way round: the service is the authority and this is a hint.
+                    # `svc.MAX_ITEMS_PER_LIST`, read through the SERVICE rather than from this
+                    # module's own import. The service is the enforcement point and this is only a
+                    # hint about it, so they must not be able to read different bindings -- a view
+                    # holding its own copy is how a picker starts saying "full" about a list that
+                    # `add_concept` then happily accepts into.
+                    'is_full': game_list.game_count >= svc.MAX_ITEMS_PER_LIST,
+                    'add_url': reverse_lazy('list_add_game', args=[game_list.id]),
+                    'remove_url': (
+                        reverse_lazy('list_remove_game', args=[game_list.id, held[game_list.id]])
+                        if game_list.id in held else None
+                    ),
+                }
+                for game_list in game_lists
+            ],
+            # The OTHER cap. A picker that offers "New list" to somebody holding three is the
+            # remedy-that-refuses defect `add_concept`'s own message was fixed for.
+            'can_create': len(game_lists) < svc.max_lists_for(profile),
+            'max_lists': svc.max_lists_for(profile),
+            # THE CEILING AND THE DESTINATION, so the client hardcodes neither. `NAME_MAX_LENGTH`
+            # carries a comment about having been written three times before somebody showed the
+            # number to a hunter; the popover's field was a fourth copy. `/support/` was a literal
+            # too, on the one line that exists to point somebody at membership.
+            'name_max_length': NAME_MAX_LENGTH,
+            'support_url': reverse_lazy('support_hub'),
+        })
+
+
+class CreateListWithConceptView(LoginRequiredMixin, _LinkedProfileRequired, View):
+    """"New list" from the popover: make it, and put this game in it.
+
+    ONE ENDPOINT BECAUSE IT IS ONE ACT. Called as two requests, a failure between them leaves an
+    empty list named after a game it does not contain -- and the hunter, having spent one of three
+    slots, is worse off than before they pressed anything. Both service calls run in one transaction
+    so a refusal on either leaves nothing behind.
+
+    Separate from `CreateListView` rather than a flag on it: that one is a plain form post that
+    redirects onto the new list, deliberately, because creating a list from My Lists is a navigation.
+    This one answers JSON and the hunter stays where they are, looking at the game they just filed.
+    Two different acts that happen to share a service call.
+    """
+
+    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
+    def post(self, request, concept_id):
+        concept = Concept.objects.filter(pk=concept_id).first()
+        if concept is None:
+            return JsonResponse({'error': 'That game is not available.'}, status=404)
+
+        try:
+            with transaction.atomic():
+                game_list = svc.create_list(
+                    request.user.profile,
+                    name=request.POST.get('name', ''),
+                    # Private, like every list. Publishing stays the separate deliberate act, and a
+                    # list created in passing from a browse grid is the LAST one to make public by
+                    # default.
+                    is_public=False,
+                )
+                svc.add_concept(game_list, request.user.profile, concept)
+        except svc.ListError as exc:
+            return JsonResponse({'error': str(exc)}, status=400)
+
+        # THE SAME EVENT `CreateListView` RECORDS, because this is the same act by another door --
+        # and on current shape the busier one, offered on four grids and two detail pages against one
+        # modal. That view's docstring explains the event sat declared and unreachable from 2019; it
+        # would have gone straight back to under-reporting, one commit later, if this were missed.
+        track_site_event('game_list_create', game_list.id, request)
+
+        # Just the name: the popover toasts it and stays where it is. An `id` and a `url` were
+        # returned here and read by nothing, which is a response promising a navigation that the
+        # design deliberately does not make.
+        return JsonResponse({'name': game_list.name})
 
 
 class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):

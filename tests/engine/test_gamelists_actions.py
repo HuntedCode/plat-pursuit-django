@@ -5,16 +5,36 @@ into a status code. So what is tested here is the TRANSLATION and the gates -- t
 refusals actually reach the wire, that a private list cannot be probed through an id, and that a
 refused call writes nothing.
 """
+import re
+
 import pytest
 from django.urls import reverse
 
-from gamelists.models import (FREE_MAX_LISTS, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED, GameList,
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
+from gamelists.models import (FREE_MAX_LISTS, NAME_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED, GameList,
                               GameListFollow, GameListItem, GameListLike, GameListSection)
+from pathlib import Path
+
 from gamelists.services import game_list_service as svc
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 from users.models import UserRestriction
 
 pytestmark = pytest.mark.django_db
+
+
+def _decommented(source):
+    """Strip comments before asserting on code.
+
+    A comment is a claim; only code is evidence -- and this project has shipped several assertions
+    that passed off prose naming the very thing that had been removed."""
+    source = re.sub(r'/\*.*?\*/', '', source, flags=re.S)
+    return re.sub(r'^\s*//.*$', '', source, flags=re.M)
+
+
+def _read(relative):
+    return (Path(__file__).resolve().parents[2] / relative).read_text(encoding='utf-8')
 
 
 def _staff(client, psn='hunter'):
@@ -1166,3 +1186,478 @@ def test_removing_an_item_gives_a_non_owner_one_answer_too(client):
     assert on_it.json()['error'] == not_on_it.json()['error']
 
     assert GameListItem.objects.filter(pk=on_their_list.pk).exists(), 'a refused call deleted a row'
+
+
+# ── quick-add: the entry points on the shared card and the game pages ────────────────────────────
+
+def test_the_picker_answers_where_this_game_can_go(client):
+    """One request, every list the hunter owns, with the three facts a row needs: whether the game is
+    already on it, which ITEM that is (so removing reuses the per-item route), and whether it is
+    full."""
+    owner = _member(client)
+    concept = _concept('Findable')
+
+    holds_it = svc.create_list(owner, name='Has it')
+    item = svc.add_concept(holds_it, owner, concept)
+    empty = svc.create_list(owner, name='Room here')
+
+    resp = client.get(reverse('lists_for_concept', args=[concept.id]))
+
+    assert resp.status_code == 200
+    rows = {row['name']: row for row in resp.json()['lists']}
+    assert rows['Has it']['has_concept'] is True
+    # THE ROUTE, and no bare `item_id` beside it. That field was returned under a paragraph arguing
+    # it was what let removal reuse the per-item route -- and nothing read it, because `remove_url`
+    # had been added for exactly that job. A response field with no reader is a second way to say one
+    # thing, and the one nobody maintains.
+    assert rows['Has it']['remove_url'] == reverse('list_remove_game', args=[holds_it.id, item.id])
+    assert 'item_id' not in rows['Has it'], 'the redundant id came back'
+    assert rows['Room here']['has_concept'] is False
+    assert rows['Room here']['remove_url'] is None
+    assert rows['Room here']['add_url'] == reverse('list_add_game', args=[empty.id])
+
+
+def test_the_picker_never_shows_another_hunters_lists(client):
+    """`owned_by`, not `readable_by`. A picker offering somebody else's PUBLIC list would be an add
+    that the service then refuses -- and it would put their private library in front of a stranger."""
+    author = _member(client, psn='author')
+    theirs = svc.create_list(author, name='Theirs', is_public=True)
+    concept = _concept('Shared')
+    svc.add_concept(theirs, author, concept)
+
+    client.logout()
+    _member(client, psn='stranger')
+
+    names = [row['name'] for row in
+             client.get(reverse('lists_for_concept', args=[concept.id])).json()['lists']]
+    assert names == [], "another hunter's list was offered as a destination"
+
+
+def test_the_picker_reports_both_caps(client, monkeypatch):
+    """A full list renders DISABLED rather than absent -- "no room" and "not a list" are different
+    answers, and hiding the first is a lie. And `can_create` is the other cap: offering "New list" to
+    somebody already holding three is the remedy-that-refuses defect all over again."""
+    from gamelists.services import game_list_service as service
+    from gamelists.models import FREE_MAX_LISTS
+
+    owner = _staff(client, psn='free')          # free tier: three lists
+    concept = _concept('Wanted')
+
+    monkeypatch.setattr(service, 'MAX_ITEMS_PER_LIST', 1)
+    full = svc.create_list(owner, name='Full')
+    svc.add_concept(full, owner, _concept('Filler'))
+
+    body = client.get(reverse('lists_for_concept', args=[concept.id])).json()
+    assert body['lists'][0]['is_full'] is True
+    assert body['can_create'] is True, 'one list of three is not the cap'
+
+    for n in range(FREE_MAX_LISTS - 1):
+        svc.create_list(owner, name=f'Spare {n}')
+    body = client.get(reverse('lists_for_concept', args=[concept.id])).json()
+    assert body['can_create'] is False, '"New list" was offered to somebody already at the cap'
+
+
+def test_the_picker_costs_one_membership_query_however_many_lists(client):
+    """The N+1 a picker invites is a membership check per row. A hunter holds up to 25 lists, so this
+    is the same bounded-`IN` shape the adder's typeahead uses."""
+    owner = _member(client)
+    concept = _concept('Wanted')
+    for n in range(8):
+        game_list = svc.create_list(owner, name=f'List {n}')
+        if n % 2 == 0:
+            svc.add_concept(game_list, owner, concept)
+
+    url = reverse('lists_for_concept', args=[concept.id])
+    client.get(url)                                   # warm
+    with CaptureQueriesContext(connection) as ctx:
+        resp = client.get(url)
+
+    assert len(resp.json()['lists']) == 8
+    member_reads = [q for q in ctx.captured_queries if 'gamelists_gamelistitem' in q['sql']]
+    assert len(member_reads) == 1, f'one read per list: {len(member_reads)}'
+
+
+def test_new_list_with_a_game_is_one_act(client):
+    """Two requests would leave an empty list named after a game it does not contain when the second
+    fails -- and the hunter, having spent one of three slots, is worse off than before they pressed
+    anything."""
+    owner = _member(client)
+    concept = _concept('Seed')
+
+    resp = client.post(reverse('list_create_with_concept', args=[concept.id]),
+                       {'name': 'Fresh start'})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    # LOOKED UP, not read from the response. The endpoint returns only the name: an `id` and a `url`
+    # were there and read by nothing, which is a response promising a navigation the design
+    # deliberately does not make.
+    assert body == {'name': 'Fresh start'}
+    created = GameList.objects.get(owner=owner, name='Fresh start')
+    assert list(created.items.values_list('concept_id', flat=True)) == [concept.id]
+    # PRIVATE, like every list. Publishing stays a separate deliberate act, and one made in passing
+    # from a browse grid is the last to make public by default.
+    assert created.is_public is False
+
+
+def test_a_refused_create_leaves_nothing_behind(client):
+    """The list-count cap, which `create_list` refuses before it builds anything."""
+    owner = _staff(client, psn='free')
+    concept = _concept('Seed')
+    for n in range(FREE_MAX_LISTS):
+        svc.create_list(owner, name=f'Existing {n}')
+
+    before = GameList.objects.filter(owner=owner).count()
+    resp = client.post(reverse('list_create_with_concept', args=[concept.id]), {'name': 'One more'})
+
+    assert resp.status_code == 400
+    assert 'error' in resp.json()
+    assert GameList.objects.filter(owner=owner).count() == before, 'a refused create left a list'
+
+
+def test_a_failure_AFTER_the_list_exists_rolls_it_back(client, monkeypatch):
+    """THE CASE THE TEST ABOVE CANNOT REACH, and the one the transaction is actually for.
+
+    A cap refusal happens inside `create_list`, so nothing is built and nothing needs rolling back --
+    which meant the atomicity was never exercised: removing `transaction.atomic()` left that test
+    green. Mutation testing caught it. The failure that matters is the SECOND call failing once the
+    first has already written a row: without the rollback the hunter is left an empty list named
+    after a game it does not contain, having spent one of three slots on it.
+
+    Forced with a monkeypatch because there is no natural input that passes `create_list` and then
+    fails `add_concept` -- which is exactly why this needs stating rather than hoping."""
+    from gamelists.services import game_list_service as service
+
+    owner = _member(client)
+    concept = _concept('Seed')
+    before = GameList.objects.filter(owner=owner).count()
+
+    def refuse(*args, **kwargs):
+        raise service.ListError('nope')
+
+    monkeypatch.setattr(service, 'add_concept', refuse)
+
+    resp = client.post(reverse('list_create_with_concept', args=[concept.id]), {'name': 'Doomed'})
+
+    assert resp.status_code == 400
+    assert GameList.objects.filter(owner=owner).count() == before, \
+        'the list survived a failure in the call that was meant to fill it'
+    assert not GameList.objects.filter(owner=owner, name='Doomed').exists()
+
+
+def test_adding_a_game_returns_the_route_to_undo_it(client):
+    """The popover flips a row from "add" to "remove" the moment this returns, and it used to derive
+    that path by rewriting the add URL -- hand-assembling a route, which is what breaks silently the
+    day one moves. The server owns URL shapes, so it says one.
+
+    ASSERTED ON `list_add_game`, not on the picker. The picker returns a `remove_url` too, and an
+    assertion there passes with this one deleted -- which is how this survived its first mutation."""
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Mine')
+    concept = _concept('Addable')
+
+    resp = client.post(reverse('list_add_game', args=[game_list.id]), {'concept_id': concept.id})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['remove_url'] == reverse('list_remove_game', args=[game_list.id, body['item_id']])
+    # ...and it actually works, rather than merely looking right.
+    assert client.post(body['remove_url']).status_code == 200
+    assert game_list.items.count() == 0
+
+
+def test_the_quick_add_endpoints_refuse_an_unlinked_hunter(client):
+    """`_LinkedProfileRequired`, like every other write here. Both of these are reachable from a
+    browse grid, which is the surface an unlinked account sees most of."""
+    user = UserFactory()
+    ProfileFactory(user=user, is_linked=False, psn_username='unlinked')
+    client.force_login(user)
+    concept = _concept('Wanted')
+
+    for url in (reverse('lists_for_concept', args=[concept.id]),
+                reverse('list_create_with_concept', args=[concept.id])):
+        resp = client.post(url, {'name': 'x'}) if 'new-with-game' in url else client.get(url)
+        assert resp.status_code in (302, 400, 403), f'{url} answered {resp.status_code}'
+
+
+def test_the_browse_grid_renders_the_trigger_for_a_linked_hunter(client):
+    """The template test above reads the partial; this proves the partial is REACHED, with a real
+    request, on the surface that matters most. Browse Games is the site's main catalogue and the
+    page most of this feature's traffic will come from."""
+    concept = _concept('Findable Quest')
+    _member(client, psn='hunter')
+
+    body = client.get(reverse('games_list')).content.decode()
+
+    assert 'data-quick-add' in body, 'the browse grid rendered no way onto a list'
+    assert f'data-concept-id="{concept.id}"' in body
+    assert 'pp-gcard-wrap' in body
+
+
+def test_a_visitor_sees_no_trigger_and_no_wrapper(client):
+    """Signed-out traffic is the bulk of a browse grid's audience -- it is what the SEO work brings
+    in -- and every other action on the site is hidden from it. The WRAPPER goes too: five other
+    grids should keep exactly the DOM they had."""
+    _concept('Findable Quest')
+
+    body = client.get(reverse('games_list')).content.decode()
+
+    assert 'data-quick-add' not in body
+    # `class="pp-gcard-wrap"`, not the bare name: the page's inline scroller config now mentions the
+    # wrapper in a JS comment, which SHIPS -- so the loose form matched prose and failed over correct
+    # markup. The same shipped-comment trap this project has hit several times.
+    assert 'class="pp-gcard-wrap"' not in body, 'a visitor pays for a wrapper that wraps nothing'
+
+
+def test_an_unlinked_hunter_sees_no_trigger(client):
+    """The endpoints behind it carry `_LinkedProfileRequired`, so the page and the endpoint have to
+    agree about who can act -- the rule this feature states every time it renders a control."""
+    _concept('Findable Quest')
+    user = UserFactory()
+    ProfileFactory(user=user, is_linked=False, psn_username='unlinked')
+    client.force_login(user)
+
+    assert 'data-quick-add' not in client.get(reverse('games_list')).content.decode()
+
+
+def test_the_grid_costs_no_extra_queries_for_the_trigger(client):
+    """THE WHALE RULE, on the site's largest catalogue. The trigger deliberately carries no
+    membership state -- whether this game is already on one of your lists -- because computing that
+    per concept on a 24-card grid is a per-user query on a page this size. The popover reads
+    membership for ONE game, when it opens."""
+    for n in range(6):
+        _concept(f'Bulk {n:03d}')
+    owner = _member(client, psn='hunter')
+    svc.add_concept(svc.create_list(owner, name='Mine'), owner, _concept('On a list'))
+
+    url = reverse('games_list')
+    client.get(url)                                   # warm
+    with CaptureQueriesContext(connection) as ctx:
+        client.get(url)
+
+    # No read of the list tables at all: the grid does not know, and does not ask.
+    list_reads = [q for q in ctx.captured_queries
+                  if 'gamelists_gamelist' in q['sql']]
+    assert list_reads == [], f'the browse grid now queries the list tables: {len(list_reads)}'
+
+
+def test_the_concept_page_offers_the_add_action():
+    """The concept page is the one a list ACTUALLY holds -- `GameListItem.concept` -- so it is the
+    most honest place on the site to offer this.
+
+    ASSERTED AGAINST THE TEMPLATE, NOT A RENDER, and that is a real weakness rather than a choice.
+    `/games/c/<concept_id>/` 302s to its own URL under the test client -- a loop that predates this
+    branch and has nothing to do with lists -- so a request-level test either reads a redirect body
+    or spins. The sibling page IS render-tested (`test_the_trophy_list_page_offers_the_add_action`
+    below) and its markup is the same shape, which is the only reason this is acceptable: if the
+    button here silently stopped rendering for a reason the source cannot show, this would not
+    notice. Worth fixing when somebody works out what that redirect is.
+    """
+    page = _read('templates/trophies/game_page.html')
+
+    assert 'data-quick-add' in page, 'the concept page offers no way onto a list'
+    assert 'data-concept-id="{{ concept.id }}"' in page
+    assert 'Add to list' in page
+    # The controller is loaded here too; a trigger with nothing listening is a dead button.
+    assert "js/quick-add.js" in page
+
+    # Same gate as everywhere else: the endpoints behind it are login- and link-gated, so the page
+    # and the endpoint have to agree about who can act.
+    assert 'concept and user.is_authenticated and user.profile.is_linked' in page
+
+
+def test_the_trophy_list_page_offers_the_add_action(client):
+    """The other detail page. It files the CONCEPT, not the trophy list, which is why it is gated on
+    `game.concept_id`: a list whose games were reassigned has no concept to add."""
+    concept = _concept('Findable Quest')
+    game = concept.games.first()
+    _member(client, psn='hunter')
+
+    body = client.get(reverse('game_detail', args=[game.np_communication_id])).content.decode()
+
+    assert 'data-quick-add' in body
+    assert f'data-concept-id="{concept.id}"' in body
+    assert 'js/quick-add.js' in body
+
+
+def test_neither_detail_page_offers_it_to_a_visitor(client):
+    """Same rule as the card: the endpoints behind it are login- and link-gated, so the page and the
+    endpoint have to agree about who can act."""
+    concept = _concept('Findable Quest')
+    game = concept.games.first()
+
+    for url in (concept.game_page_url, reverse('game_detail', args=[game.np_communication_id])):
+        assert 'data-quick-add' not in client.get(url).content.decode(), url
+
+
+def test_the_concept_pages_switcher_stays_put_without_the_button(client):
+    """The tabs row became `justify-between` to seat the action on the left. With one child that
+    renders identically to the `justify-end` it replaced -- the empty span is what holds that true
+    for a viewer who gets no button, rather than letting the switcher drift to the centre."""
+    page = _read('templates/trophies/game_page.html')
+
+    row = page[page.index('id="gp-tabs-row"'):]
+    row = row[:row.index('</div>', row.index('pp-switch'))]
+    assert '{% else %}<span></span>{% endif %}' in row, \
+        'the switcher centres itself for a signed-out reader'
+
+
+# ── the audit round ──────────────────────────────────────────────────────────────────────────────
+
+def test_infinite_scroll_appends_the_cell_not_the_bare_card(client):
+    """THE WORST DEFECT IN THIS FEATURE, and it was invisible on page one.
+
+    `InfiniteScroller` clones `cardSelector` nodes out of the fetched HTML. The quick-add button is a
+    SIBLING of the card inside `.pp-gcard-wrap` -- it has to be, because the card is an `<a>` and a
+    `<button>` in a link is invalid HTML -- so cloning the card alone dropped the wrapper and the
+    button with it. Cards 1-30 had a way onto a list and every card after the first scroll did not,
+    with nothing on screen to show the difference.
+
+    `cellSelector` is the fix and it is opt-in, so no other scroller changes behaviour."""
+    utils = _read('static/js/utils.js')
+
+    assert 'config.cellSelector' in utils, 'the scroller cannot append anything but a bare card'
+    clone = utils[utils.index('const newCards = doc.querySelectorAll(cardSelector)'):]
+    clone = clone[:clone.index('page++')]
+    assert "card.closest(config.cellSelector)" in clone, 'it still clones the card, not the cell'
+    # ...and falls back, so a caller that passes nothing is untouched.
+    assert '|| card' in clone
+
+    # EVERY GRID THAT RENDERS THE BUTTON PASSES IT. Three of the four are JS, one is inline in a
+    # template; missing one would reproduce the bug on that page alone, which is exactly the kind of
+    # partial fix that survives review.
+    for rel in ('templates/trophies/game_list.html', 'static/js/recently-added.js',
+                'static/js/tag-detail.js', 'static/js/trophy-lists.js'):
+        source = _read(rel)
+        assert "cellSelector: '.pp-gcard-wrap'" in source, rel
+
+
+def test_the_legacy_button_styling_is_gone(client):
+    """A `.pp-gcard__add` block from the 2019 quick-add outlived its markup and collided with the
+    rebuilt button, which reuses the class. Its `transform: scale(.82)` still applied -- the new sheet
+    never sets `transform` -- while the two rules that cancelled it could not, because they matched
+    the button as a DESCENDANT of `.pp-gcard` and it is now a sibling. The button drew at 82% with a
+    36px hit area on every hover-capable device, under a comment claiming a 44px floor."""
+    legacy = _read('static/css/components/game-card.css')
+
+    # DECOMMENTED. The note left in that file explaining the removal naturally quotes the
+    # declaration it removed, so a bare search matched prose -- the same trap this suite has now hit
+    # often enough to be a habit rather than an accident.
+    legacy_code = re.sub(r'/\*.*?\*/', '', legacy, flags=re.S)
+    assert '.pp-gcard__add {' not in legacy_code, 'the legacy block is back, and it wins on nothing'
+    assert 'scale(.82)' not in legacy_code
+    # The one place it lives now.
+    assert '.pp-gcard__add {' in _read('static/css/components/quick-add.css')
+
+
+def test_the_popover_shows_what_the_server_actually_said(client):
+    """`PP.API` throws an Error whose `.response` is the raw fetch Response, NOT a parsed body -- so
+    `err.response.error` was always undefined and every refusal was replaced by a generic fallback.
+    A hunter tapping a list at its 200-game cap was told "That could not be saved" instead of the
+    sentence `add_concept` runs an extra query to get right."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    assert 'function failureMessage(' in js
+    assert 'err.response.json()' in js, 'the body is still never awaited'
+    assert 'err.response.error' not in js, 'the property that is always undefined is back'
+    # BOTH failure paths use it. Counted from the CALL sites only: the definition line contains the
+    # same substring, so a bare count of three would have been satisfied by one caller plus the
+    # function itself.
+    assert js.count('failureMessage(err).then(') == 2
+
+
+def test_the_popover_survives_the_gestures_a_phone_makes(client):
+    """Two closes that fired on the most ordinary mobile actions. Android raises `resize` when the
+    virtual keyboard opens -- and the popover focuses its "New list" field on open for a hunter with
+    no lists yet, so it could vanish on the frame it appeared. And the inner row list chained its
+    scroll to the document, whose `scroll` listener shut the panel mid-flick."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    resize = js[js.index("window.addEventListener('resize'"):]
+    resize = resize[:resize.index('});') + 3]
+    assert 'place(openTrigger)' in resize, 'a resize still closes rather than repositions'
+
+    css = _read('static/css/components/quick-add.css')
+    assert 'overscroll-behavior: contain' in css, 'the inner scroll still chains to the document'
+
+
+def test_the_popover_lets_go_of_the_page_it_was_anchored_to(client):
+    """Browse Games swaps its grid on every filter change. The panel went on floating over the new
+    results, anchored to a button no longer in the document -- and a row click still posted, filing a
+    game the hunter could no longer see."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    assert "htmx:afterSwap" in js, 'a filter change orphans the popover'
+    assert 'openTrigger.isConnected' in js
+
+
+def test_focus_comes_back_when_it_was_inside(client):
+    """Every close path but Escape passed `restoreFocus = false`, so a keyboard user who scrolled or
+    clicked away had the focused row deleted out from under them and focus reset to <body> -- the next
+    Tab restarting at the top of the document. Whether focus needs restoring is a fact about the DOM,
+    not a decision for the caller."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    fn = js[js.index('function close('):js.index('function rowHtml(')]
+    assert 'pop.contains(document.activeElement)' in fn, 'the caller still decides'
+    # ...and read BEFORE the content is thrown away, or the answer is always false.
+    assert fn.index('document.activeElement') < fn.index("pop.innerHTML = ''")
+
+
+def test_the_trigger_does_not_swallow_the_click_other_menus_listen_for(client):
+    """`stopPropagation` was left over from when the button lived inside the card's `<a>`. Stopping
+    the click one node below `document` is where the site's other outside-click closers listen, so
+    opening this left the nav search, the sub-nav menu and Browse Games' own discipline popovers
+    hanging open behind it."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    handler = js[js.index("var trigger = e.target.closest && e.target.closest('[data-quick-add]')"):]
+    handler = handler[:handler.index('var row =')]
+    assert 'stopPropagation' not in handler
+    assert 'preventDefault' not in handler, 'a type=button outside a form has nothing to prevent'
+
+
+def test_the_full_row_is_reachable_and_announced(client):
+    """As a role-less `<span>` it was neither: a keyboard user never reached it, and a screen reader
+    read "Backlog Full" as loose text indistinguishable from the heading -- which defeats the reason
+    for rendering a full list rather than hiding it."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    assert '<button type="button" class="qa-pop__row qa-pop__row--full" aria-disabled="true">' in js
+    # Focusable means clickable, so the refusal moved into the handler.
+    assert "row.getAttribute('aria-disabled') === 'true'" in js
+
+
+def test_the_client_hardcodes_neither_a_route_nor_a_ceiling(client):
+    """Three literals in a feature whose own endpoint comment argues that hand-assembling a path is
+    what breaks silently the day one moves -- plus `maxlength="60"`, which `NAME_MAX_LENGTH`'s comment
+    records having been written three times before somebody showed the number to a hunter."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    assert '/community/lists/for-game/' not in js
+    assert '/community/lists/new-with-game/' not in js
+    assert 'href="/support/"' not in js
+    assert 'maxlength="60"' not in js
+    assert 'data.name_max_length' in js
+
+    # ...and the server supplies all four.
+    owner = _member(client)
+    concept = _concept('Wanted')
+    body = client.get(reverse('lists_for_concept', args=[concept.id])).json()
+    assert body['name_max_length'] == NAME_MAX_LENGTH
+    assert body['support_url'] == reverse('support_hub')
+
+    card = _read('templates/trophies/partials/game_list/game_cards.html')
+    assert 'data-lists-url' in card and 'data-create-url' in card
+
+
+def test_creating_from_the_popover_records_the_event(client):
+    """`CreateListView` wires `game_list_create` under a docstring explaining the event sat declared
+    and unreachable from 2019. This is the same act by another door, and on current shape the busier
+    one -- four grids and two detail pages against one modal."""
+    views = _decommented(_read('gamelists/views.py'))
+
+    block = views[views.index('class CreateListWithConceptView'):]
+    block = block[:block.index('class ListGameSearchView')]
+    assert "track_site_event('game_list_create'" in block, \
+        'the busier creation path does not record the event'

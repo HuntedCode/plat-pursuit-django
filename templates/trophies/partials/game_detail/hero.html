@@ -187,9 +187,25 @@
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><path d="M7 15h4"/></svg>{% if plat_card.variant == 'full' %}100% Card{% else %}Plat Card{% endif %}
                             </a>
                         {% endif %}
-                        {% comment %}Add-to-list: removed while the Game Lists system is hidden pending its revamp. A
-        button that files a game into somewhere nobody can open is worse than no button -- it
-        collects data the revamp then has to reconcile. Restore with the system.{% endcomment %}
+                        {% comment %}ADD TO A LIST. A real labelled button here, unlike the icon on
+                        the shared card: this row already holds labelled peers, there is room, and the
+                        card's reason for an icon (six grids, every cell) does not apply to one hero.
+
+                        Also unlike the card, no wrapper is needed -- `gd-hero__actions` is a plain
+                        row of buttons rather than something nested in a link.
+
+                        `game.concept_id` gates it as well as feeding it: a trophy list whose games
+                        were reassigned has no concept, and a list holds concepts.{% endcomment %}
+                        {% if game.concept_id and user.is_authenticated and user.profile.is_linked %}
+                            <button type="button" class="gd-btn gd-btn--ghost" data-quick-add
+                                    data-concept-id="{{ game.concept_id }}"
+                                    data-lists-url="{% url 'lists_for_concept' game.concept_id %}"
+                                    data-create-url="{% url 'list_create_with_concept' game.concept_id %}"
+                                    data-game-name="{{ game.concept.unified_title|default:game.title_name }}"
+                                    aria-haspopup="dialog" aria-expanded="false">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add to list
+                            </button>
+                        {% endif %}
                         {% if user.is_authenticated and user.profile %}
                         {% if user.profile.is_linked %}
                             <button id="game-flag-btn" class="gd-btn gd-btn--ghost" aria-label="Report a data issue" data-game-id="{{ game.id }}">

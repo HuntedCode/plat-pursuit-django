@@ -56,7 +56,27 @@ helper the sitemap and search use, so the three can never disagree.{% endcomment
         </div>
 
         {# ── Concept tabs: one segmented switcher, site standard. Lists is the default view. ── #}
-        <div class="flex items-center justify-end mt-5 mb-4" id="gp-tabs-row">
+        {% comment %}`justify-between` now that the row can hold two things: the add action on the
+        left, the view switcher on the right. With one child it renders identically to the
+        `justify-end` this replaced, so a visitor's page is unchanged.{% endcomment %}
+        <div class="flex items-center justify-between flex-wrap gap-2 mt-5 mb-4" id="gp-tabs-row">
+            {% comment %}THE CONCEPT PAGE IS THE ONE A LIST ACTUALLY HOLDS -- `GameListItem.concept` --
+            so this is the most honest place on the site to offer it. A labelled button for the same
+            reason the hero's is: there is room, and the row has peers.
+
+            The `{% templatetag openblock %} if not ... {% templatetag closeblock %}` spacer keeps the
+            switcher hard right for a viewer who gets no button, rather than letting `justify-between`
+            centre it.{% endcomment %}
+            {% if concept and user.is_authenticated and user.profile.is_linked %}
+            <button type="button" class="gd-btn gd-btn--ghost" data-quick-add
+                    data-concept-id="{{ concept.id }}"
+                    data-lists-url="{% url 'lists_for_concept' concept.id %}"
+                    data-create-url="{% url 'list_create_with_concept' concept.id %}"
+                    data-game-name="{{ concept.unified_title }}"
+                    aria-haspopup="dialog" aria-expanded="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add to list
+            </button>
+            {% else %}<span></span>{% endif %}
             <div class="pp-switch" id="gp-switch" role="tablist" aria-label="Game view">
                 <button type="button" id="gp-tab-lists" aria-controls="gp-view-lists" class="pp-switch__chip{% if initial_view == 'lists' %} is-active{% endif %}" data-view="lists" role="tab" aria-selected="{% if initial_view == 'lists' %}true{% else %}false{% endif %}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg><span class="pp-switch__lbl">Trophy Lists</span>
@@ -113,6 +133,9 @@ the slim-down made this page the About host.{% endcomment %}
 ratings-tab.js (its consumer -- the hygiene test pins the pair), and both precede game-page.js
 (which calls RatingsTab.reveal).{% endcomment %}
 {% block js_scripts %}
+    {% comment %}The quick-add popover, for the "Add to list" button in the hero. Loaded per page
+    rather than from `base.html`: only pages that render a trigger should pay for the controller.{% endcomment %}
+    <script src="{% static 'js/quick-add.js' %}"></script>
     <script src="{% static 'js/shot-lightbox.js' %}"></script>
     <script src="{% static 'js/trophy-grid.js' %}"></script>
     <script src="{% static 'js/quick-rate.js' %}"></script>

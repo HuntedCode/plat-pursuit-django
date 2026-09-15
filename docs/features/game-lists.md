@@ -220,6 +220,37 @@ whatever sort is showing. Two wrong answers preceded that rule and both are wort
    list renumbers 1..N alphabetically, claiming the alphabet was the author's ranking. `detail_card`
    shows the plate on every sort precisely because a rank is a fact about the **entry**, not the view.
 
+### Getting a game onto a list
+
+Three entry points, as the design conversation settled. The adder on the list itself was built first;
+the other two arrived 2026-09-15.
+
+| Where | What it looks like |
+|---|---|
+| The shared game card | An icon, top-right of the cover, quiet until hover or focus. Included by **four** browse pages: Browse Games, Recently Added, tag detail, Trophy Lists browse. |
+| Both game detail pages | A labelled "Add to list" button — there is room in an action row, and the card's reason for an icon (every cell of four grids) does not apply. |
+| The list's own adder | The typeahead in the toolbar. |
+
+All three open **one detached popover**, moved to whichever trigger was pressed and filled from a
+single request. It adds, removes and creates. Three things about it are load-bearing:
+
+- **The card needed a wrapper.** `.pp-gcard` is an `<a>`, and a `<button>` inside a link is invalid
+  HTML that swallows the link's own activation. `.pp-gcard-wrap` makes the button a sibling, exactly
+  as `.gl-item` does on list detail. It renders **only when the button does**, so a grid with no
+  button keeps the DOM it had.
+- **Infinite scroll has to clone the CELL.** `InfiniteScroller` clones `cardSelector` nodes out of the
+  fetched HTML, so cloning the card alone dropped the wrapper and the button with it: page one had
+  buttons and every page after the first scroll did not. `cellSelector` is the opt-in fix and all four
+  grids pass it. **If you add a fifth grid, pass it there too.**
+- **The card carries no membership state**, deliberately. Showing "already on a list" per card would
+  mean a per-user query for every concept on four grids, one of them the main catalogue — the whale
+  rule's exact case. A test asserts the browse grid makes **zero** queries against the list tables.
+  The button is an action; the popover reads membership for one game, when it opens.
+
+Two endpoints serve it: `lists_for_concept` (one bounded read — every list plus one `IN` over their
+items) and `list_create_with_concept` (create and file in one transaction, because two requests can
+leave an empty list named after a game it does not contain, with one of three slots spent).
+
 ### Previewing the non-member render
 
 `?preview=lists-free` on any list you own renders the page as a **free hunter** sees it, for staff

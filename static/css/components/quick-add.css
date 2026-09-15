@@ -1,0 +1,190 @@
+/* ============================================================
+   Quick-add: the button on a game card, and the one popover it opens
+   ============================================================
+   The button appears on the shared game card -- included by FOUR browse pages: Browse Games,
+   Recently Added, tag detail and Trophy Lists browse (Franchise and Company detail render their own
+   templates and get none) -- and on the two game detail pages. The popover is a single detached
+   element moved to whichever trigger was pressed; `static/js/quick-add.js` says why there is one.
+   ============================================================ */
+
+/* THE WRAPPER exists because the card is an `<a>` and a `<button>` inside a link is invalid HTML
+   that swallows the link's own activation. `.gl-item` on the list detail page is the same pattern
+   for the same reason. `.pp-gbrowse__grid` lays out with `grid-template-columns` and no
+   direct-child selectors, so this simply becomes the grid cell. */
+.pp-gcard-wrap { position: relative; display: flex; }
+.pp-gcard-wrap > .pp-gcard { flex: 1; min-width: 0; }
+
+/* THE TRIGGER. Top-right of the cover, mirroring where the list page puts its remove control, and
+   quiet until the card is hovered or the button itself takes focus -- the design conversation asked
+   for "an icon, not a labelled button", and this lands on four grids at once.
+
+   `z-index: 3` clears the community-flag overlay (2) that shares the cover's corners. */
+.pp-gcard__add {
+    position: absolute; top: 6px; right: 6px; z-index: 3;
+    display: grid; place-items: center;
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-bg-0) 86%, transparent);
+    color: var(--pp-primary);
+    /* Tailwind v4's preflight does not set this on buttons. */
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.pp-gcard__add svg { width: 15px; height: 15px; }
+/* A REAL TOUCH TARGET at a 28px drawn size, the same transparent-`::before` trick `.gl-item__grab`
+   and `.gl-section__act` use. Nothing else sits within 44px of this corner, so unlike the section
+   header's pair there is no neighbour to overlap. */
+.pp-gcard__add::before {
+    content: '';
+    position: absolute; top: 50%; left: 50%;
+    width: 44px; height: 44px;
+    transform: translate(-50%, -50%);
+}
+.pp-gcard-wrap:hover .pp-gcard__add,
+.pp-gcard__add:focus-visible { opacity: 1; }
+/* Always visible on touch: there is no hover to reveal it, and a control nobody can summon does not
+   exist. */
+@media (hover: none) {
+    .pp-gcard__add { opacity: 1; }
+}
+/* Guarded, or the lit state STICKS after a tap until something else is tapped. */
+@media (hover: hover) {
+    .pp-gcard__add:hover {
+        color: var(--pp-bg-0);
+        background: var(--pp-primary);
+        border-color: var(--pp-primary);
+    }
+}
+.pp-gcard__add[aria-expanded="true"] {
+    opacity: 1;
+    color: var(--pp-bg-0);
+    background: var(--pp-primary);
+    border-color: var(--pp-primary);
+}
+.pp-gcard__add:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ── The popover ─────────────────────────────────────────────────────────────────────────────────
+ *
+ * `position: fixed` and viewport coordinates, set by the JS. The trigger sits inside a grid cell
+ * with `overflow` ancestors and a transform-capable page wrapper, so an absolutely-positioned panel
+ * would be clipped by the first of those it met. z-index clears `.mobile-tabbar` (40), matching what
+ * the nav search and the list adder's own panel use. */
+.qa-pop {
+    position: fixed;
+    z-index: 100;
+    width: min(20rem, calc(100vw - 16px));
+    padding: 8px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+    overflow-y: auto;
+    /* WITHOUT THIS THE PANEL CLOSES ITSELF. Reaching the end of the row list chains the scroll to
+       the document, the window `scroll` listener fires, and the popover shuts mid-flick -- which a
+       hunter with enough lists to scroll hits every single time. */
+    overscroll-behavior: contain;
+    /* Set by the JS from the room the chosen direction actually has; this is the floor it starts
+       from before the first measurement. */
+    max-height: 21rem;
+}
+.qa-pop[hidden] { display: none; }
+
+.qa-pop__head {
+    margin: 0 0 6px; padding: 2px 6px;
+    font-size: 0.72rem; color: var(--pp-text-dim);
+    /* The game's name can be long and this is one line of context, not content. */
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.qa-pop__head strong { color: var(--pp-text); font-weight: 700; }
+
+.qa-pop__rows { display: flex; flex-direction: column; gap: 2px; }
+
+.qa-pop__row {
+    display: flex; align-items: center; gap: 9px;
+    width: 100%;
+    padding: 9px 8px;
+    /* The 44px floor every control in this feature carries. */
+    min-height: 44px;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--pp-text);
+    font-size: 0.78rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+@media (hover: hover) {
+    .qa-pop__row:hover { background: color-mix(in oklab, var(--pp-text) 8%, transparent); }
+}
+.qa-pop__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+
+.qa-pop__icon { flex: none; display: grid; place-items: center; width: 18px; height: 18px; color: var(--pp-text-mute); }
+.qa-pop__icon svg { width: 15px; height: 15px; }
+.qa-pop__row.is-on .qa-pop__icon { color: var(--pp-primary); }
+
+.qa-pop__name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qa-pop__count {
+    flex: none;
+    font-size: 0.68rem; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-text-mute);
+}
+
+/* A FULL list is shown disabled rather than hidden: "no room" and "not a list" are different
+   answers, and a picker that hides the first is lying about where a game can go. */
+.qa-pop__row--full { cursor: not-allowed; opacity: 0.55; }
+.qa-pop__tag {
+    flex: none;
+    padding: 2px 7px; border-radius: 999px;
+    font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 14%, transparent);
+}
+
+.qa-pop__empty,
+.qa-pop__loading,
+.qa-pop__capped {
+    margin: 0; padding: 10px 8px;
+    font-size: 0.72rem; line-height: 1.45;
+    color: var(--pp-text-dim);
+}
+.qa-pop__capped { border-top: 1px solid var(--pp-divider); margin-top: 6px; }
+.qa-pop__capped a { color: var(--pp-primary); font-weight: 700; }
+@media (hover: hover) { .qa-pop__capped a:hover { text-decoration: underline; } }
+
+/* "New list" -- the field and its button on one line, the same shape the sections bar uses. */
+.qa-pop__new {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 6px; padding-top: 8px;
+    border-top: 1px solid var(--pp-divider);
+}
+.qa-pop__input {
+    flex: 1 1 0; min-width: 0;
+    padding: 9px 10px; min-height: 44px;
+    border-radius: 9px;
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-2);
+    color: var(--pp-text);
+    font-size: 0.76rem;
+}
+.qa-pop__input:focus {
+    outline: none;
+    border-color: var(--pp-primary);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 20%, transparent);
+}
+.qa-pop__go {
+    flex: none;
+    padding: 0 12px; min-height: 44px;
+    border-radius: 9px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    color: var(--pp-primary);
+    font-size: 0.74rem; font-weight: 700;
+    cursor: pointer;
+}
+@media (hover: hover) {
+    .qa-pop__go:hover { background: var(--pp-primary); color: var(--pp-bg-0); }
+}
+.qa-pop__go:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }

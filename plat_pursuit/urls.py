@@ -24,8 +24,9 @@ from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
-                            CreateSectionView, DeleteListView, DeleteSectionView,
-                            GameListDetailView, ListGameSearchView, MyListsView,
+                            CreateListWithConceptView, CreateSectionView, DeleteListView,
+                            DeleteSectionView, GameListDetailView, ListGameSearchView,
+                            MyListsForConceptView, MyListsView,
                             RemoveItemView, RenameSectionView, ReorderItemsView,
                             ReorderSectionsView, ToggleFollowView,
                             ToggleLikeView, UpdateListView)
@@ -437,6 +438,13 @@ urlpatterns = [
          AssignItemView.as_view(), name='list_item_assign'),
     path('community/lists/<int:list_id>/search/', ListGameSearchView.as_view(),
          name='list_game_search'),
+    # QUICK-ADD (2026-09): the entry points on the shared game card and the game pages. Keyed on the
+    # CONCEPT rather than a list, because the question they ask is "where can this game go" -- so
+    # these sit beside the list routes rather than under one.
+    path('community/lists/for-game/<int:concept_id>/', MyListsForConceptView.as_view(),
+         name='lists_for_concept'),
+    path('community/lists/new-with-game/<int:concept_id>/', CreateListWithConceptView.as_view(),
+         name='list_create_with_concept'),
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),
     path('my-lists/', MyListsView.as_view(), name='my_lists'),
 

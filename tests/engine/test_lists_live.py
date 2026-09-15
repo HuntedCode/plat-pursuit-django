@@ -334,22 +334,50 @@ def test_the_sitemap_advertises_lists_and_reads_the_rebuilt_model():
     assert GameListSitemap().location(published) == f'/community/lists/{published.id}/'
 
 
-def test_no_game_card_offers_to_add_to_a_list():
-    """The least obvious entry point and the most numerous: the quick-add button rode on the shared game
-    card, so it appeared on Browse Games, Recently Added, tag/franchise/company grids and game detail.
-    A button that files a game somewhere unreachable is worse than no button."""
-    for rel in ('templates/trophies/partials/game_list/game_cards.html',
-                'templates/trophies/partials/game_detail/hero.html',
-                'templates/trophies/game_detail.html',
-                'templates/trophies/game_list.html',
-                'templates/trophies/recently_added.html',
-                'templates/trophies/tag_detail.html',
-                'templates/trophies/trophy_lists.html'):
-        src = (ROOT / rel).read_text(encoding='utf-8')
-        # Strip the notes explaining the removal, which naturally name the thing they removed.
-        src = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', '', src, flags=re.S)
-        assert 'quick-add-trigger' not in src, f'{rel} still renders the add-to-list button'
-        assert 'GameListQuickAdd' not in src, f'{rel} still boots the add-to-list widget'
+def test_the_game_card_offers_to_add_to_a_list():
+    """The inverse of the guard that stood here, and a lesson about how it stopped working.
+
+    While Game Lists was hidden, this asserted that no template rendered `quick-add-trigger` -- the
+    LEGACY class. The entry points are now back under different names (`data-quick-add`,
+    `.pp-gcard__add`), so the old assertion went on passing over the exact change it was written to
+    catch: a negative over a name cannot notice a name that did not exist when it was written. It is
+    the same way `gl-sections__locked` let an upsell slip past its own guard a day earlier.
+
+    So this asserts the POSITIVE. A test that says what should be there fails when that stops being
+    true; a test that lists what should not be there passes by default forever.
+    """
+    card = (ROOT / 'templates/trophies/partials/game_list/game_cards.html').read_text(
+        encoding='utf-8')
+
+    assert 'data-quick-add' in card, 'the shared game card offers no way onto a list'
+    assert 'data-concept-id="{{ game.concept_id }}"' in card, \
+        'the trigger carries no concept, so the popover has nothing to ask about'
+
+    # OUTSIDE THE ANCHOR. The card is an `<a>`, and a `<button>` inside a link is invalid HTML that
+    # swallows the link's own activation -- the bug the list detail card documents. The wrapper is
+    # what makes the button a sibling instead.
+    assert 'pp-gcard-wrap' in card
+    assert card.index('</a>') < card.index('data-quick-add'), \
+        'the add button is nested inside the card link again'
+
+    # ...and the routes it posts to exist.
+    for name in ('lists_for_concept', 'list_create_with_concept'):
+        assert reverse(name, args=[1]), name
+
+
+def test_the_card_offers_nothing_to_a_visitor_or_a_conceptless_row(client):
+    """Two negatives that still earn their place, because both are about what the button CANNOT do.
+
+    A signed-out visitor is the bulk of a browse grid's traffic and every other action on the site is
+    hidden from them. A conceptless row -- a trophy list whose games were reassigned -- has nothing a
+    list could hold, so the button would file nothing."""
+    card = (ROOT / 'templates/trophies/partials/game_list/game_cards.html').read_text(
+        encoding='utf-8')
+
+    # The gate is one expression, used for the wrapper and the button alike.
+    assert 'request.user.is_authenticated and request.user.profile.is_linked' in card
+    assert '{% with quick_add=game.concept_id %}' in card, \
+        'a conceptless row would be offered a destination it cannot reach'
 
 
 def test_live_pages_do_not_ship_the_dead_list_controller():

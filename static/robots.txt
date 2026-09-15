@@ -89,6 +89,9 @@ Disallow: /community/lists/*/like/
 Disallow: /community/lists/*/follow/
 Disallow: /community/lists/*/add/
 Disallow: /community/lists/*/items/
+# Quick-add: a per-concept read and a POST-only create. Login-gated and useless to a crawler.
+Disallow: /community/lists/for-game/
+Disallow: /community/lists/new-with-game/
 # Sections (2026-09), same reasoning as the rest of this block: POST-only, so a GET is a 405, and
 # nothing here is a page. Enumerated rather than wildcarded for the same reason too -- a
 # `/community/lists/*/sections*` rule would also match nothing useful while risking the detail

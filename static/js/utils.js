@@ -1067,6 +1067,7 @@ const InfiniteScroller = {
      * Create an infinite scroller instance
      * @param {Object} config - Configuration object
      * @param {string} config.gridId - ID of the grid/container element
+     * @param {string} [config.cellSelector] - When a caller WRAPS its cards, the wrapper's selector. Appended pages clone `card.closest(cellSelector)` instead of the card, so anything the wrapper carries as a SIBLING of the card survives. Without it a wrapped grid silently loses that sibling from page two onward.
      * @param {string} config.sentinelId - ID of the sentinel element to observe
      * @param {string} config.loadingId - ID of the loading indicator element
      * @param {number} config.paginateBy - Number of items per page (used to determine if more pages exist)
@@ -1136,7 +1137,17 @@ const InfiniteScroller = {
                     nextPageUrl = null;
                 } else {
                     const appended = [];
-                    newCards.forEach(card => { const clone = card.cloneNode(true); grid.appendChild(clone); appended.push(clone); });
+                    // THE GRID CELL, not the card inside it. A caller may wrap its cards to hang a
+                    // control beside the card rather than inside it -- the game card does, because
+                    // the card is an `<a>` and a `<button>` within a link is invalid HTML. Cloning
+                    // the card alone dropped that wrapper and the control with it, so page one had
+                    // buttons and every page after it did not, with nothing to show the difference.
+                    newCards.forEach(card => {
+                        const source = (config.cellSelector && card.closest(config.cellSelector)) || card;
+                        const clone = source.cloneNode(true);
+                        grid.appendChild(clone);
+                        appended.push(clone);
+                    });
                     // Optional hook so callers can wire freshly-appended cards (e.g. a scroll-reveal observer).
                     if (typeof config.onAppend === 'function') { try { config.onAppend(appended); } catch (e) { /* non-fatal */ } }
                     page++;

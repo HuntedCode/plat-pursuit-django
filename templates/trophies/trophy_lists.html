@@ -341,6 +341,11 @@ request.path); filtered states carry the noindex block above.{% endcomment %}
 {% endblock %}
 
 {% block js_scripts %}
+    {% comment %}The quick-add popover. Loaded per page rather than from `base.html`: it is only
+    useful where the shared game card renders its trigger, and every page that does not carry one
+    should not pay for the controller. The script itself is delegated from `document.body`, so an
+    htmx grid swap does not need it re-run.{% endcomment %}
+    <script src="{% static 'js/quick-add.js' %}"></script>
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script src="{% static 'js/trophy-lists.js' %}"></script>
     {% comment %}game-lists.js stays off while the (unrelated) Game Lists collections system is
