@@ -52,6 +52,26 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # JS lint. Runs BEFORE the Python suite because it takes seconds and answers a question the
+      # suite structurally cannot: `game-flag.js` once shipped with a variable used in four places
+      # and declared in none -- valid JavaScript, so the build, collectstatic and every Django test
+      # passed while a button silently did nothing in the browser. See eslint.config.mjs.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      # `npm install`, not `npm ci`: package-lock.json is gitignored in this repo (npm is a local
+      # tool here -- Tailwind runs through npx), so there is no lockfile for `ci` to read. The
+      # determinism `ci` would give comes from EXACT versions in package.json instead: without them
+      # a future eslint patch could add a rule and turn CI red with no code change. If the lockfile
+      # is ever committed, switch this back.
+      - name: Install JS dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint JS
+        run: npm run lint
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
