@@ -1680,32 +1680,53 @@ def test_the_add_button_leaves_the_cover_art_on_touch(client):
     assert '.pp-gcard-wrap .pp-gcard__title { padding-right: 36px; }' in touch
 
 
-def test_the_add_button_arrives_with_its_card(client):
-    """The stagger animates `.pp-gcard`, and the button is its SIBLING -- so on touch, where it is
-    visible at rest, it hung motionless while the card sprang up underneath it.
+def test_an_invisible_add_button_is_never_tappable(client):
+    """THE BUG THE OWNER HIT, stated as the rule that prevents it.
 
-    Coupled in CSS rather than by editing four reveal callbacks: `staggerReveal` marks the card
-    `.is-revealed` a frame after it starts, and a general-sibling selector reaches the button."""
+    `opacity: 0` hides a control and keeps every one of its hit targets, and this button carries a
+    44px `::before` for the touch floor. So an unrevealed button sat invisibly over each card's title
+    and swallowed taps meant for the card: nothing on screen, nothing responding, which on a phone
+    reads as the page freezing.
+
+    The invariant is that the two move together. Every rule that sets one sets the other, so there is
+    no state in which the button is invisible and live."""
     css = _read('static/css/components/quick-add.css')
 
-    assert '.pp-reveal .pp-gcard-wrap .pp-gcard__add { opacity: 0; }' in css
-    assert '.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add' in css
+    block = css[css.index('.pp-gcard__add {'):css.index('.qa-pop {')]
 
-    # A HOVER DEVICE MUST SEE NONE OF IT, and this asserts the containment rather than an ORDER.
+    # Wherever the button is hidden it is also inert...
+    assert 'opacity: 0;' in block and 'pointer-events: none;' in block
+    # ...and wherever it is shown it is live. Three places show it: hover/focus, touch, and while its
+    # own popover is open.
+    assert block.count('pointer-events: auto;') == 3, \
+        'a rule shows the button without making it tappable, or hides it without making it inert'
+    for shown in ('.pp-gcard-wrap:hover .pp-gcard__add,\n.pp-gcard__add:focus-visible '
+                  '{ opacity: 1; pointer-events: auto; }',):
+        assert shown in block
+
+    # ON TOUCH IT IS SIMPLY THERE. No reveal state to get stuck in -- see the test below.
     #
-    # The first version compared the source positions of two blocks and passed while the feature was
-    # broken on every desktop: the re-hide it was checking for is (0,4,0) and the hover rule that
-    # brings the button back is (0,3,0), so once a card revealed, nothing hover could do outranked
-    # it. Order is not what decides a cascade; specificity is, and the honest fix was to stop
-    # emitting the rules on hover devices at all.
-    block = css[css.index('@media (prefers-reduced-motion: no-preference) and (hover: none) {'):]
-    block = block[:block.index('\n}') + 2]
-    for rule in ('.pp-reveal .pp-gcard-wrap .pp-gcard__add { opacity: 0; }',
-                 '.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add'):
-        assert rule in block, f'{rule} escaped the touch-only query'
-    assert '(hover: hover)' not in block
-    # ...and nothing anywhere re-hides it after a reveal, which is what broke desktop.
-    assert '.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add { opacity: 0; }' not in css
+    # SLICED TO THE ONE RULE, not to "everything after the media query opens". The looser slice ran
+    # past the query's end and matched the `[aria-expanded]` rule's `opacity: 1`, so setting the touch
+    # rule to `opacity: 0` -- losing the button on every phone, the reported bug -- left this passing.
+    touch = block[block.index('@media (hover: none) {'):]
+    touch_rule = touch[touch.index('.pp-gcard__add {'):touch.index('}')]
+    assert 'opacity: 1;' in touch_rule, 'the button is hidden on touch, where nothing can reveal it'
+    assert 'pointer-events: auto;' in touch_rule
+
+
+def test_the_reveal_coupling_is_gone_and_stays_gone(client):
+    """It cost two bugs in two commits for a fade. First it hid the button on every desktop grid --
+    the re-hide was (0,4,0) against hover's (0,3,0) -- and then it left the button invisible but
+    tappable on touch, which is the freeze.
+
+    The owner's actual complaint was a plus permanently on the cover art, and that was answered by
+    MOVING it. The animation was a nicety chasing a sibling's state, and it is not worth a third."""
+    css = _read('static/css/components/quick-add.css')
+
+    assert '.pp-gcard.is-revealed ~ .pp-gcard__add' not in css, \
+        'the coupling is back; it has broken this button twice'
+    assert '.pp-reveal .pp-gcard-wrap .pp-gcard__add' not in css
 
 
 def test_the_long_press_route_was_not_taken(client):

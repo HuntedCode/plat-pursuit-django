@@ -30,6 +30,11 @@
     /* Tailwind v4's preflight does not set this on buttons. */
     cursor: pointer;
     opacity: 0;
+    /* AN INVISIBLE CONTROL MUST NOT BE TAPPABLE. `opacity: 0` hides a thing and keeps every one of
+       its hit targets, and this button carries a 44px `::before` -- so an unrevealed button sat
+       invisibly over the title, swallowing taps meant for the card. On a phone that reads as the
+       page freezing: nothing visible, nothing responding. Tied to opacity everywhere it changes. */
+    pointer-events: none;
     transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 .pp-gcard__add svg { width: 15px; height: 15px; }
@@ -43,7 +48,7 @@
     transform: translate(-50%, -50%);
 }
 .pp-gcard-wrap:hover .pp-gcard__add,
-.pp-gcard__add:focus-visible { opacity: 1; }
+.pp-gcard__add:focus-visible { opacity: 1; pointer-events: auto; }
 /* ── ON TOUCH IT LEAVES THE ART ──────────────────────────────────────────────────────────────────
  *
  * Owner's call: a plus sitting permanently on every cover is noise on a catalogue you scan BY the
@@ -67,6 +72,7 @@
 @media (hover: none) {
     .pp-gcard__add {
         opacity: 1;
+        pointer-events: auto;
         top: auto;
         bottom: 32px;
         right: 7px;
@@ -81,37 +87,18 @@
     .pp-gcard__add:active { color: var(--pp-primary); }
 }
 
-/* ── IT ARRIVES WITH THE CARD ────────────────────────────────────────────────────────────────────
+/* THE REVEAL COUPLING WAS REMOVED, and the reasoning is worth more than the animation was.
  *
- * The stagger animates `.pp-gcard`, and the button is its SIBLING now -- so on touch, where it is
- * visible at rest, it hung motionless while the card sprang up underneath it. Owner noticed.
+ * The button is the card's SIBLING, so it did not ride the stagger: on touch, where it is visible at
+ * rest, it hung still while the card sprang up under it. Coupling it to `.is-revealed` fixed that and
+ * broke two other things in two commits -- first hiding the button on every desktop grid (the re-hide
+ * outranked hover), then leaving it invisible-but-tappable on touch, which is the page-freeze above.
  *
- * Done in CSS rather than by touching four reveal callbacks: `staggerReveal` marks the card
- * `.is-revealed` a frame after it starts, and a general-sibling selector reaches the button from
- * there. The small delay lets the card land first, the same courtesy the progress bar already gets.
- *
- * `.pp-reveal` is added by the JS only when it will actually observe, so a page with no reveal never
- * hides the button. */
-/* SCOPED TO TOUCH, and that scoping is the whole correctness of this block rather than tidiness.
- *
- * The first cut applied the coupling everywhere and then re-hid the button on hover devices with
- * `.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add` -- four classes, (0,4,0). The rule meant to
- * bring it back on hover is `.pp-gcard-wrap:hover .pp-gcard__add`, three classes, (0,3,0). So the
- * moment a card finished revealing, nothing hover could do outranked the re-hide, and the button
- * became unreachable on desktop: no icon on hover, on every grid. Specificity beats source order,
- * which is the third time that has bitten this feature and the second time in this file.
- *
- * The coupling was only ever FOR touch. On a hover device the button rests at `opacity: 0` anyway,
- * so it cannot hang motionless while the card springs -- there is nothing to couple. Gating the
- * whole thing on `(hover: none)` means a hover device sees none of these rules and keeps exactly the
- * behaviour it had, which is both the fix and what should have been written. */
-@media (prefers-reduced-motion: no-preference) and (hover: none) {
-    .pp-reveal .pp-gcard-wrap .pp-gcard__add { opacity: 0; }
-    .pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add {
-        opacity: 1;
-        transition: opacity 0.32s ease 0.12s;
-    }
-}
+ * Two bugs for a fade is a bad trade, and the owner's actual complaint -- a plus permanently on the
+ * cover art -- was answered by MOVING it, not by animating it. The button now simply exists at rest
+ * on touch. If the arrival is ever worth revisiting, the honest way is to animate the WRAPPER in the
+ * four reveal callbacks so the card and its control are one moving thing, rather than to chase the
+ * card's state from a sibling selector. */
 /* Guarded, or the lit state STICKS after a tap until something else is tapped. */
 @media (hover: hover) {
     .pp-gcard__add:hover {
@@ -122,6 +109,7 @@
 }
 .pp-gcard__add[aria-expanded="true"] {
     opacity: 1;
+    pointer-events: auto;
     color: var(--pp-bg-0);
     background: var(--pp-primary);
     border-color: var(--pp-primary);
