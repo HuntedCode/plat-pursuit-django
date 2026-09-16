@@ -450,7 +450,7 @@ def test_deletion_takes_their_prompts_and_the_answers_on_them(client):
     bucket = PromptBucket.objects.create(prompt=prompt, label='S', position=0)
     answer = PromptResponse.objects.create(prompt=prompt, profile=stranger, placement_count=1)
     PromptPlacement.objects.create(response=answer, prompt_game=game, bucket=bucket,
-                                   single_slot=False)
+                                   single_slot=False, no_duplicates=True)
 
     _delete(client)
 

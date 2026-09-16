@@ -53,6 +53,7 @@ from prompts.models import (
     Prompt,
     PromptBucket,
     PromptGame,
+    PromptPlacement,
     PromptResponse,
 )
 from trophies.models import Profile
@@ -245,7 +246,7 @@ def _check_grid_columns(raw):
 _FROZEN_WHILE_PUBLIC = {
     SHAPE_TIER: frozenset(),
     SHAPE_GRID: frozenset({'rows', 'pool_remove'}),
-    SHAPE_POLL: frozenset({'rows', 'pool_add', 'pool_remove', 'pool_order'}),
+    SHAPE_POLL: frozenset({'rows', 'pool_add', 'pool_remove', 'pool_order', 'question'}),
 }
 
 _FROZEN_COPY = {
@@ -253,7 +254,27 @@ _FROZEN_COPY = {
     'pool_add': 'A published {shape} cannot take new games.',
     'pool_remove': 'A published {shape} cannot lose games.',
     'pool_order': 'A published {shape} cannot be rearranged.',
+    'question': 'A published {shape} asks a fixed question.',
 }
+
+
+def _has_duplicate_placement(locked):
+    """Does any answer here already use one game in more than one slot?
+
+    Asked before turning duplicates OFF. Bounded by the prompt's own answers, which the toggle's
+    refusal on a published grid keeps to the author's own.
+    """
+    from prompts.models import PromptPlacement
+
+    for column in ('prompt_game_id', 'concept_id'):
+        seen = (PromptPlacement.objects
+                .filter(response__prompt=locked, **{f'{column}__isnull': False})
+                .values('response_id', column)
+                .annotate(n=models.Count('pk'))
+                .filter(n__gt=1))
+        if seen.exists():
+            return True
+    return False
 
 
 def _refuse_if_frozen(locked, *, act):
@@ -266,7 +287,7 @@ def _refuse_if_frozen(locked, *, act):
     )
 
 
-def _refuse_if_not_publishable(locked):
+def _refuse_if_not_publishable(locked, *, forbids_duplicates=None):
     """The floor a prompt has to clear before anybody can be asked to answer it.
 
     AT THE PUBLISH TRANSITION AND NOWHERE ELSE. A draft may sit at one game for as long as its author
@@ -277,6 +298,9 @@ def _refuse_if_not_publishable(locked):
     AND turned duplicates off needs at least as many games as it has slots, or it ships a grid nobody
     can finish.
     """
+    if locked.is_closed:
+        raise PromptError('This is closed to new answers. Reopen it before publishing.')
+
     rows = PromptBucket.objects.filter(prompt=locked).count()
     if rows < 1:
         raise PromptError('Add at least one row before publishing this.')
@@ -291,7 +315,14 @@ def _refuse_if_not_publishable(locked):
 
     # A grid with an EMPTY pool is the open kind: respondents search the catalogue for each slot, so
     # there is nothing to be short of. Only a supplied pool has to be big enough.
-    if locked.shape == SHAPE_GRID and games and locked.forbids_duplicates and games < rows:
+    #
+    # `forbids_duplicates` IS PASSED IN rather than read off the row, because a single call may
+    # publish AND flip the toggle, and the row still holds the old value at this point. Reading it
+    # here refused `update_prompt(is_public=True, allow_duplicates=True)` -- a call whose entire
+    # purpose is turning duplicates ON -- with a message about duplicates being off. Splitting it into
+    # two calls succeeded, which is the signature of a stale read rather than a rule.
+    effective = locked.forbids_duplicates if forbids_duplicates is None else forbids_duplicates
+    if locked.shape == SHAPE_GRID and games and effective and games < rows:
         raise PromptError(
             f'With duplicates off, this needs at least as many games as slots: {rows} slots, '
             f'{games} games.'
@@ -422,7 +453,10 @@ def create_prompt(profile, *, shape, title, description='', grid_columns=3,
 
     prompt = Prompt.objects.create(
         owner=profile, shape=shape, title=title, description=description,
-        grid_columns=columns, allow_duplicates=bool(allow_duplicates))
+        grid_columns=columns,
+        # Grid-only, and now a CheckConstraint. A tier list and a poll forbid duplicates
+        # unconditionally, so storing True on one is a value that reads backwards.
+        allow_duplicates=bool(allow_duplicates) and shape == SHAPE_GRID)
 
     for position, (label, colour) in enumerate(DEFAULT_BUCKETS.get(shape, ())):
         PromptBucket.objects.create(prompt=prompt, label=label, colour=colour, position=position)
@@ -476,7 +510,11 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
     # PUBLISHING CLEARS A FLOOR. Checked before anything is written, so a call carrying a rename and
     # a publish lands neither if the floor is not met.
     if is_public is not None and is_public and not locked.is_public:
-        _refuse_if_not_publishable(locked)
+        _refuse_if_not_publishable(
+            locked,
+            forbids_duplicates=(None if allow_duplicates is None
+                                else (locked.shape != SHAPE_GRID or not allow_duplicates)),
+        )
 
     # THE DUPLICATES TOGGLE, and the two rules around it. It is refused on a published grid because it
     # changes what every existing answer is allowed to be; and turning it OFF against a supplied pool
@@ -497,6 +535,26 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
                     f'With duplicates off, this needs at least as many games as slots: {rows} '
                     f'slots, {games} games.'
                 )
+            # AND NO ANSWER MAY ALREADY HOLD ONE, because the rewrite below flips those rows INTO the
+            # partial unique. Two of them then collide inside a bulk `.update()` and Postgres raises
+            # IntegrityError -- a 500 past every `except PromptError`, with no message naming the slot
+            # the author has to clear. The check the author needs is this one, said in words.
+            if _has_duplicate_placement(locked):
+                raise PromptError(
+                    'An answer here already uses the same game in more than one slot. Clear those '
+                    'first, or leave duplicates on.'
+                )
+
+    # A PUBLISHED POLL'S TITLE IS ITS QUESTION, and nothing was stopping it changing. "Best platinum
+    # of 2026?" collects four hundred votes, the author edits it to "Worst platinum of 2026?", and
+    # every one of those votes now says the opposite of what its author meant -- with no row changed
+    # and no trace. That is verbatim the harm the grid's slot freeze exists to prevent, and the
+    # comment above claiming "a poll freezes entirely" was simply false.
+    #
+    # A GRID AND A TIER LIST KEEP THEIRS EDITABLE: a grid's questions are its slot labels, which ARE
+    # frozen, and a tier list is live by design. Only the poll carries its question in the title.
+    if (title is not None or description is not None) and locked.shape == SHAPE_POLL:
+        _refuse_if_frozen(locked, act='question')
 
     changed = []
     if title is not None:
@@ -511,7 +569,7 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
     if grid_columns is not None:
         locked.grid_columns = _check_grid_columns(grid_columns)
         changed.append('grid_columns')
-    if allow_duplicates is not None:
+    if allow_duplicates is not None and locked.allow_duplicates != bool(allow_duplicates):
         locked.allow_duplicates = bool(allow_duplicates)
         changed.append('allow_duplicates')
 
@@ -526,7 +584,9 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
     #
     # Bounded: the toggle is refused on a published grid, and an unpublished one can only carry
     # answers from its own author.
-    if allow_duplicates is not None:
+    if allow_duplicates is not None and 'allow_duplicates' in changed:
+        # Gated on an actual CHANGE. Firing on a no-op toggle rewrote every placement of the prompt
+        # for nothing, which is the one statement here whose row count is not bounded by a cap.
         from prompts.models import PromptPlacement
         PromptPlacement.objects.filter(response__prompt=locked).update(
             no_duplicates=locked.forbids_duplicates)
@@ -622,6 +682,20 @@ def add_concept(prompt, profile, concept):
 
     locked = _lock_prompt(prompt)
     _refuse_if_frozen(locked, act='pool_add')
+    # ADDING A POOL TO AN OPEN GRID IS A MODE CHANGE, NOT AN ADDITION. The grid's pool may grow --
+    # more choices is additive -- but the FIRST game turns an open grid into a pooled one, and every
+    # free pick already made becomes an answer nobody can edit: `place` refuses a free pick once a
+    # pool exists, and until this was caught `unplace` did too, so a hunter could not even take their
+    # own card back. The comment above once said "more choices breaks nothing"; for an open grid that
+    # was the one shape it broke.
+    if (locked.shape == SHAPE_GRID
+            and not PromptGame.objects.filter(prompt=locked).exists()
+            and PromptPlacement.objects.filter(
+                response__prompt=locked, concept__isnull=False).exists()):
+        raise PromptError(
+            'People have already picked their own games for this grid. Giving it a set list now '
+            'would strand their answers.'
+        )
     if PromptGame.objects.filter(prompt=locked, concept=concept).exists():
         raise PromptError('That game is already in here.')
 
@@ -662,6 +736,16 @@ def remove_concept(prompt, profile, game):
 
     locked = _lock_prompt(prompt)
     _refuse_if_frozen(locked, act='pool_remove')
+    # A PUBLISHED PROMPT MAY NOT FALL BELOW THE FLOOR IT HAD TO CLEAR. A tier list is live by design,
+    # which let its author empty a published, answered one to zero games: unanswerable, unpublishable
+    # (somebody has answered) and undeletable (same reason). A terminal state reached one removal at a
+    # time. The floor was a doorway; on a published prompt it is a floor.
+    floor = MIN_GAMES_TO_PUBLISH[locked.shape]
+    if locked.is_public and floor and PromptGame.objects.filter(prompt=locked).count() <= floor:
+        raise PromptError(
+            f'A published {locked.get_shape_display().lower()} keeps at least {floor} games. '
+            'Unpublish it first, or add another before removing this one.'
+        )
     fresh = _lock_game(game, locked)
 
     # Collected BEFORE the delete, because afterwards there is no way to find them.
@@ -769,7 +853,11 @@ def update_bucket(bucket, profile, *, label=None, colour=None):
         refuse_if_restricted(profile)
 
     locked = _lock_prompt(prompt)
-    _refuse_if_frozen(locked, act='rows')
+    # ONLY A RELABEL IS FROZEN. The label is the question; `colour` is a palette slot, and a grid slot
+    # and a poll have no use for one anyway. Refusing a recolour on a published grid was the freeze
+    # being applied per-FUNCTION where the rest of this service applies it per-FIELD.
+    if label is not None:
+        _refuse_if_frozen(locked, act='rows')
     fresh = _lock_bucket(bucket, locked)
 
     changed = []

@@ -206,14 +206,25 @@ def test_the_escape_hatch_is_a_rule_that_already_existed():
 
 
 def test_once_answered_the_door_closes_for_good():
+    """The escape hatch shuts on the first answer: the prompt can no longer be unpublished, so
+    the structure is frozen for good rather than until the author feels like changing it.
+
+    ONLY THE UNPUBLISH REFUSAL BELONGS HERE. An earlier version also asserted that relabelling a
+    slot raises -- but `update_bucket` never consults the answered rule at all; that raise was the
+    ordinary published-grid freeze, which fires whether or not anybody has answered, and the same
+    assertion already sits in the escape-hatch test above on a grid with zero responses. It proved
+    nothing about "once answered"."""
     owner = _hunter()
     prompt, pool, slots = _grid(owner, slots=2, games=2, public=True)
     rsvc.place(prompt, _hunter('responder'), game_id=pool[0].pk, bucket_id=slots[0].pk)
 
     with pytest.raises(svc.PromptError):
         svc.update_prompt(prompt, owner, is_public=False)
-    with pytest.raises(svc.PromptError):
-        svc.update_bucket(slots[0], owner, label='Too late')
+
+    # ...and because it cannot be unpublished, the escape hatch that WOULD have unfrozen the
+    # slots is gone with it. That is the actual "for good".
+    prompt.refresh_from_db()
+    assert prompt.is_public is True
 
 
 # ── open grids ────────────────────────────────────────────────────────────────────────────────────
@@ -228,7 +239,7 @@ def test_an_open_grid_takes_any_game_the_respondent_finds():
     answerer = _hunter('answerer')
     chosen = ConceptFactory()
 
-    placement = rsvc.place(prompt, answerer, concept_id=chosen.pk, bucket_id=slots[0].pk)
+    placement = rsvc.place(prompt, answerer, concept_pk=chosen.pk, bucket_id=slots[0].pk)
 
     assert placement.concept_id == chosen.pk
     assert placement.prompt_game_id is None
@@ -244,7 +255,7 @@ def test_a_grid_with_a_pool_refuses_a_free_pick():
     answerer = _hunter('answerer')
 
     with pytest.raises(svc.PromptError):
-        rsvc.place(prompt, answerer, concept_id=ConceptFactory().pk, bucket_id=slots[0].pk)
+        rsvc.place(prompt, answerer, concept_pk=ConceptFactory().pk, bucket_id=slots[0].pk)
 
     rsvc.place(prompt, answerer, game_id=pool[0].pk, bucket_id=slots[0].pk)
     assert rsvc.response_for(prompt, answerer).placements.count() == 1
@@ -263,12 +274,12 @@ def test_only_a_grid_takes_free_picks():
     assert tier.games.count() == 0, 'the pool must be empty or the pool check answers instead'
 
     with pytest.raises(svc.PromptError):
-        rsvc.place(tier, owner, concept_id=ConceptFactory().pk,
+        rsvc.place(tier, owner, concept_pk=ConceptFactory().pk,
                    bucket_id=tier.buckets.first().pk)
 
     poll = svc.create_prompt(owner, shape=SHAPE_POLL, title='Which?')
     with pytest.raises(svc.PromptError):
-        rsvc.place(poll, owner, concept_id=ConceptFactory().pk,
+        rsvc.place(poll, owner, concept_pk=ConceptFactory().pk,
                    bucket_id=poll.buckets.get().pk)
 
     assert not PromptPlacement.objects.exists()
@@ -283,7 +294,7 @@ def test_a_placement_names_exactly_one_thing():
     with pytest.raises(svc.PromptError):
         rsvc.place(prompt, answerer, bucket_id=slots[0].pk)
     with pytest.raises(svc.PromptError):
-        rsvc.place(prompt, answerer, game_id=pool[0].pk, concept_id=ConceptFactory().pk,
+        rsvc.place(prompt, answerer, game_id=pool[0].pk, concept_pk=ConceptFactory().pk,
                    bucket_id=slots[0].pk)
 
 

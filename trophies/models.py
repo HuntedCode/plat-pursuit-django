@@ -1776,9 +1776,22 @@ class Concept(models.Model):
                 # anyway would be precisely the silent cross-account data loss this branch exists to
                 # prevent, performed by the code written to prevent it.
                 continue
+            # THE EXCLUDE IS NARROWER THAN IT LOOKS, and getting that wrong was a shipped data-loss
+            # bug. A response already holding the SURVIVOR row cannot also receive the re-pointed one
+            # -- but ONLY where `no_duplicates` is true, because P3 made that unique constraint
+            # PARTIAL. A grid that allows duplicates is entitled to the same game in two slots, so
+            # such a response must be re-pointed like any other and ends up with two perfectly legal
+            # placements of the survivor row.
+            #
+            # Without the flag on both sides, every merge on a duplicates-allowing pooled grid
+            # silently emptied a slot in every answer holding both games. The free-pick branch below
+            # was written against the new partial constraint; this one was not, and the comment that
+            # used to sit here -- asserting the constraint was unconditional -- is what kept it
+            # looking correct.
             PromptPlacement.objects.filter(prompt_game_id=doomed_id).exclude(
+                no_duplicates=True,
                 response_id__in=PromptPlacement.objects
-                .filter(prompt_game_id=survivor_id).values('response_id')
+                .filter(prompt_game_id=survivor_id, no_duplicates=True).values('response_id'),
             ).update(prompt_game_id=survivor_id)
             rescued.append((prompt_id, gap, doomed_id))
 
@@ -1794,15 +1807,24 @@ class Concept(models.Model):
         # partial on `no_duplicates`: a grid that allows duplicates can legitimately hold both
         # concepts in one answer, collides with nothing, and every row simply re-points. Only rows
         # that forbid duplicates AND already hold the survivor have to go.
-        free_pick_responses = set(
-            PromptPlacement.objects.filter(concept=other).values_list('response_id', flat=True)
-        )
         already_has_survivor = PromptPlacement.objects.filter(
             concept=self, no_duplicates=True).values('response_id')
+        # ONLY THE ANSWERS THAT ACTUALLY LOSE A ROW, collected before the delete that removes them.
+        #
+        # The first version collected every response holding `other` ANYWHERE -- which, on a merge of
+        # a popular concept, is every answer to every open grid on the site, the overwhelming majority
+        # of them pure re-points whose count does not change. Recomputing those costs one row lock and
+        # one correlated count each, inside sync, for nothing: exactly the failure the pool branch's
+        # own comment above claims to have avoided, reintroduced twenty lines below it.
+        free_pick_losers = set(
+            PromptPlacement.objects
+            .filter(concept=other, no_duplicates=True, response_id__in=already_has_survivor)
+            .values_list('response_id', flat=True)
+        )
         PromptPlacement.objects.filter(
             concept=other, no_duplicates=True, response_id__in=already_has_survivor).delete()
         PromptPlacement.objects.filter(concept=other).update(concept=self)
-        touched_response_ids |= free_pick_responses
+        touched_response_ids |= free_pick_losers
 
         # The same two invariants the list branch repairs, plus a third this system has and lists do
         # not: `placement_count` on the responses that lost a placement to the cascade above.

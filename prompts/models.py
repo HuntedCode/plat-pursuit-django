@@ -275,15 +275,22 @@ class Prompt(models.Model):
     #: call overrides that: on a grid, naming the same game twice is the point, so the constraint
     #: became conditional and the tray became "everything, minus nothing" for an open grid.
     #:
-    #: DEFAULTS TO ALLOWING THEM, because a grid asking nine questions usually wants nine independent
+    #: A NEW GRID ALLOWS THEM, because a grid asking nine questions usually wants nine independent
     #: answers. Turning it off is a deliberate "each slot gets a different game", and the service
-    #: refuses to turn it off unless the pool is big enough to actually fill every slot -- otherwise
-    #: the author ships a grid nobody can complete.
+    #: refuses to turn it off unless the pool can actually fill every slot -- otherwise the author
+    #: ships a grid nobody can complete.
+    #:
+    #: THE COLUMN DEFAULTS TO FALSE AND THE GRID'S DEFAULT LIVES IN `create_prompt`, which looks
+    #: backwards and is not. `prompt_duplicates_grid_only` below requires this to be False on every
+    #: shape that has no such setting, so a column default of True would make `Prompt.objects.create()`
+    #: violate a check constraint for a tier list or a poll -- i.e. the admin, the shell and every data
+    #: migration, which are exactly the writers that constraint exists for. The default belongs to the
+    #: one shape that has the setting, so it lives at that shape's door.
     #:
     #: Read by nothing on a tier list or a poll, which forbid duplicates unconditionally. See
     #: `forbids_duplicates`.
     allow_duplicates = models.BooleanField(
-        default=True,
+        default=False,
         help_text='Grids only: may one game be used in more than one slot?',
     )
 
@@ -355,6 +362,14 @@ class Prompt(models.Model):
                 condition=Q(grid_columns__gte=MIN_GRID_COLUMNS,
                             grid_columns__lte=MAX_GRID_COLUMNS),
                 name='prompt_grid_columns_sane'),
+            # GRID-ONLY, said in the database. `forbids_duplicates` short-circuits on shape, so a
+            # stored `True` on a poll was inert -- but it reads backwards to anyone looking at the
+            # table or an admin form ("this poll allows duplicates" is the opposite of what a poll
+            # promises), and it becomes a live bug across two shapes the day somebody writes
+            # `if prompt.allow_duplicates:` instead of `if not prompt.forbids_duplicates:`.
+            models.CheckConstraint(
+                condition=Q(shape=SHAPE_GRID) | Q(allow_duplicates=False),
+                name='prompt_duplicates_grid_only'),
         ]
 
     def __str__(self):
@@ -609,7 +624,12 @@ class PromptPlacement(models.Model):
     #: toggled. The service therefore refuses to toggle it on a published grid and rewrites every
     #: existing placement when it does toggle -- which is bounded, because an unpublished grid can
     #: only hold answers from its own author.
-    no_duplicates = models.BooleanField(default=True)
+    #: NO DEFAULT, exactly like `single_slot` above and for the same reason. A default makes exactly
+    #: one of the two flags silently writable by anything that forgets it -- and a forgotten flag here
+    #: is not a loud error, it is a row the partial index cannot see. `single_slot` was written without
+    #: one deliberately; this one had `default=True` only to serve its own migration's backfill, which
+    #: is where a one-off default belongs.
+    no_duplicates = models.BooleanField()
     #: Order within `(response, bucket)`. Dense, and deliberately NOT global the way
     #: `GameListItem.position` is: neither of the two things that forced global there -- the cover
     #: mosaic's bounded prefetch and the two render-time numbering modes -- has an analogue inside a
@@ -634,13 +654,25 @@ class PromptPlacement(models.Model):
             # that migration.
             #
             # TWO OF THEM, because a placement has two possible identity columns: a pool row, or a
-            # free-picked Concept. Unique indexes ignore NULLs, so each constraint only ever sees the
-            # rows that use its column, and neither needs to know about the other.
+            # free-picked Concept, each scoped by its own `isnull=False` below.
+            #
+            # WHAT THEY DO NOT TOGETHER FORBID, said plainly because the sentence that used to sit
+            # here claimed otherwise: one response holding the same GAME once as a pool row and once
+            # as a free pick. They are two different columns and neither index sees the other's rows.
+            # The service keeps that state unreachable by refusing to give an answered open grid a
+            # pool at all; the schema does not.
+            # `isnull=False` ON EACH, so each index really does hold only the rows that use its
+            # column. Without it both indexes carry the WHOLE table: Postgres stores NULLs in a btree
+            # and merely treats them as mutually distinct, so every pooled row sat in the concept
+            # index and every free pick in the game index, paying full write cost for entries that
+            # could never collide. (The comment that used to sit here said unique indexes "ignore
+            # NULLs". They do not -- this file gets that right forty lines up, about `nulls_distinct`,
+            # and got it wrong here.)
             models.UniqueConstraint(fields=['response', 'prompt_game'],
-                                    condition=Q(no_duplicates=True),
+                                    condition=Q(no_duplicates=True, prompt_game__isnull=False),
                                     name='promptplacement_unique_game'),
             models.UniqueConstraint(fields=['response', 'concept'],
-                                    condition=Q(no_duplicates=True),
+                                    condition=Q(no_duplicates=True, concept__isnull=False),
                                     name='promptplacement_unique_concept'),
             # A placement is of ONE thing. Both set is two claims about one card; neither set is a
             # placement of nothing, which would render as a blank slot nobody can remove.
@@ -657,11 +689,24 @@ class PromptPlacement(models.Model):
             # The editor's read: every placement of one response, grouped by bucket.
             models.Index(fields=['response', 'bucket', 'position'], name='prmplace_editor_idx'),
             # The tally's GROUP BY: per bucket, per game, how many responses placed it there.
-            models.Index(fields=['bucket', 'prompt_game'], name='prmplace_tally_idx'),
+            # ONE PER IDENTITY COLUMN, and each partial on its own. An open grid's placements all
+            # carry a NULL `prompt_game`, so the pooled index's second key held no information for
+            # them at all -- it would have paid full write cost to serve a tally it could not answer,
+            # on the shape most likely to want one (there is no pool constraining the answers, so the
+            # tally is the only aggregate view an open grid has).
+            models.Index(fields=['bucket', 'prompt_game'], name='prmplace_tally_idx',
+                         condition=Q(prompt_game__isnull=False)),
+            models.Index(fields=['bucket', 'concept'], name='prmplace_tally_free_idx',
+                         condition=Q(concept__isnull=False)),
         ]
 
     def __str__(self):
-        return f'{self.prompt_game.concept.unified_title} -> {self.bucket.label}'
+        # BOTH IDENTITIES. `prompt_game` became nullable when open grids shipped, so the old one-liner
+        # raised AttributeError on every free pick -- in the admin changelist, in any traceback's
+        # repr, and in any message built from the object.
+        concept = self.concept or (self.prompt_game.concept if self.prompt_game_id else None)
+        name = concept.unified_title if concept else 'an unknown game'
+        return f'{name} -> {self.bucket.label}'
 
 
 class PromptLike(models.Model):

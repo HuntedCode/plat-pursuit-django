@@ -84,7 +84,12 @@ def test_a_deactivated_moderator_does_not_keep_the_key():
     user.is_active = False
     user.save(update_fields=['is_active'])
 
-    assert _ask(user).status_code == 302
+    resp = _ask(user)
+    assert resp.status_code == 302
+    # WHERE, not just "a redirect". Both answers this mixin can give are 302s, so a bare status check
+    # stays green if a future change starts sending them to the login page instead -- a completely
+    # different thing to tell somebody whose account was deactivated.
+    assert resp['Location'] == '/beta-access/'
 
 
 def test_a_signed_out_visitor_goes_to_the_login_and_not_the_beta_page():

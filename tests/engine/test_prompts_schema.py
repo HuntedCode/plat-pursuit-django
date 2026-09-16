@@ -22,7 +22,8 @@ The two that carry the most weight:
 import pytest
 from django.db import IntegrityError, models, transaction
 
-from prompts.models import (MAX_GRID_COLUMNS, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES, Prompt,
+from prompts.models import (MAX_GRID_COLUMNS, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES,
+                            SINGLE_SLOT_SHAPES, Prompt,
                             PromptBucket, PromptGame, PromptLike, PromptPlacement, PromptResponse,
                             PromptResponseLike)
 from tests.factories import ConceptFactory, ProfileFactory
@@ -56,6 +57,7 @@ def _place(response, game, bucket, position=0):
     codebase reads yet -- means the shape is what decides, which is the actual claim."""
     return PromptPlacement.objects.create(response=response, prompt_game=game, bucket=bucket,
                                           single_slot=bucket.prompt.is_single_slot,
+                                          no_duplicates=bucket.prompt.forbids_duplicates,
                                           position=position)
 
 
@@ -112,9 +114,15 @@ def test_a_response_is_public_unless_its_author_says_otherwise():
 
 
 def test_a_response_cannot_place_one_game_in_two_buckets():
-    """Refused for every shape, including grid, where "wins Best Combat AND Best Story" is a real
-    thing somebody will ask for. The tray is defined as `pool - placements`; a game in two slots is
-    simultaneously placed and unplaced, and the tray stops being derivable."""
+    """Refused wherever `no_duplicates` is set -- which is every tier list and every poll, and a grid
+    only when its author turns duplicates off.
+
+    THE RULE THIS USED TO STATE WAS RETRACTED. It read "refused for every shape, including grid,
+    where 'wins Best Combat AND Best Story' is a real thing somebody will ask for" -- which was the
+    P0 position, overturned by the owner in P3 because on a grid that is the point. The constraint
+    went partial; this test kept passing because it uses a tier list, and its docstring went on
+    asserting a rule the code no longer holds. Exactly the note-that-stays-believed failure the model
+    file warns about, in the file next door."""
     prompt = _prompt(ProfileFactory())
     game = _pool(prompt, 1)[0]
     top, bottom = _buckets(prompt, 'S', 'A')
@@ -364,6 +372,32 @@ def test_every_shape_maps_to_the_flag_the_database_reads():
     assert _prompt(owner, SHAPE_GRID).is_single_slot is True
     assert _prompt(owner, SHAPE_POLL).is_single_slot is True
 
-    # ...and every declared shape is answered, so a fourth cannot arrive without a decision here.
-    for shape in SHAPES:
-        assert _prompt(owner, shape).is_single_slot in (True, False)
+    # ...and every declared shape is accounted for, so a fourth cannot arrive without a decision
+    # here. Asserted as a SET IDENTITY rather than by calling the property: the previous version
+    # looped the shapes asserting `is_single_slot in (True, False)`, which is true of any boolean and
+    # therefore true of every possible implementation. It could not fail.
+    assert SINGLE_SLOT_SHAPES | {SHAPE_TIER} == SHAPES, (
+        'a shape was added without deciding whether its buckets hold one game or many'
+    )
+
+
+def test_a_placement_points_at_exactly_one_thing_in_the_database_too():
+    """`promptplacement_one_identity`, which the service tests cover only through `_resolve_card`.
+
+    Every other constraint on this table has a direct DB-level test in this file; this one was
+    reachable only through the service, so dropping it from the model was a green-suite mutation."""
+    prompt = _prompt(ProfileFactory(), SHAPE_GRID, title='Slots')
+    game = _pool(prompt, 1)[0]
+    bucket = _buckets(prompt, 'Best combat')[0]
+    response = PromptResponse.objects.create(prompt=prompt, profile=ProfileFactory())
+
+    with pytest.raises(IntegrityError):          # neither
+        with transaction.atomic():
+            PromptPlacement.objects.create(response=response, bucket=bucket,
+                                           single_slot=True, no_duplicates=True)
+
+    with pytest.raises(IntegrityError):          # both
+        with transaction.atomic():
+            PromptPlacement.objects.create(response=response, bucket=bucket, prompt_game=game,
+                                           concept=ConceptFactory(),
+                                           single_slot=True, no_duplicates=True)

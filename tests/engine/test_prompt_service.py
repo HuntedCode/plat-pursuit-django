@@ -73,7 +73,8 @@ def _answer(prompt, hunter, game=None, bucket=None):
     response = PromptResponse.objects.create(prompt=prompt, profile=hunter)
     if game is not None and bucket is not None:
         PromptPlacement.objects.create(response=response, prompt_game=game, bucket=bucket,
-                                       single_slot=prompt.is_single_slot)
+                                       single_slot=prompt.is_single_slot,
+                                       no_duplicates=prompt.forbids_duplicates)
         response.placement_count = 1
         response.save(update_fields=['placement_count'])
     return response
@@ -140,10 +141,18 @@ def test_a_sub_resource_from_another_prompt_does_not_resolve():
     assert svc.get_game(mine, their_game.pk) is None
 
     # ...and the write path refuses it too, not merely the lookup.
-    with pytest.raises(svc.PromptError):
-        svc.delete_bucket(their_bucket, owner)
+    #
+    # `remove_concept` is the one that proves the SCOPING: it takes the prompt and the game
+    # separately, so a mismatched pair reaches `_lock_game`'s `prompt=locked_prompt` filter. That is
+    # the shape that can be paired wrongly, and this is the assertion that holds it.
     with pytest.raises(svc.PromptError):
         svc.remove_concept(mine, owner, their_game)
+
+    # `delete_bucket` is listed here only to say what it does NOT prove: it derives the prompt from
+    # the bucket, so ownership refuses first and the cross-prompt filter is never reached. Covered as
+    # ownership by `test_only_the_owner_writes`; kept here so nobody re-adds it as scoping coverage.
+    with pytest.raises(svc.PromptError):
+        svc.delete_bucket(their_bucket, owner)
 
 
 def test_the_service_offers_no_way_to_change_a_shape():

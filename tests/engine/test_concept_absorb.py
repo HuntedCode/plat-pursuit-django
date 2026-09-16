@@ -380,7 +380,8 @@ def _answered(prompt, concept_rows, *, bucket, hunter):
                                              placement_count=len(concept_rows))
     for i, row in enumerate(concept_rows):
         PromptPlacement.objects.create(response=response, prompt_game=row, bucket=bucket,
-                                       single_slot=prompt.is_single_slot, position=i)
+                                       single_slot=prompt.is_single_slot,
+                                       no_duplicates=prompt.forbids_duplicates, position=i)
     return response
 
 
@@ -672,5 +673,44 @@ def test_absorb_keeps_both_picks_where_a_grid_allows_duplicates():
 
     assert answer.placements.count() == 2, 'a deliberate duplicate was deduped away'
     assert set(answer.placements.values_list('concept_id', flat=True)) == {survivor.pk}
+    answer.refresh_from_db()
+    assert answer.placement_count == 2
+
+
+def test_absorb_keeps_both_pool_placements_where_a_grid_allows_duplicates():
+    """The POOLED counterpart of the free-pick test above, and the case that branch forgot.
+
+    A grid that allows duplicates may hold the same game in two slots. When two pool rows merge into
+    one, a response holding BOTH is entitled to keep both cards -- `unique(response, prompt_game)` is
+    partial on `no_duplicates` and does not apply to it. Excluding that response from the re-point
+    means its doomed placement cascades away with the pool row and one slot silently empties.
+    """
+    from prompts.models import Prompt, PromptBucket, PromptGame, PromptPlacement, PromptResponse
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='poolgrid')
+
+    grid = Prompt.objects.create(owner=author, shape='grid', title='Pick one each',
+                                 allow_duplicates=True, is_public=True, game_count=2)
+    kept_row = PromptGame.objects.create(prompt=grid, concept=survivor, position=0)
+    doomed_row = PromptGame.objects.create(prompt=grid, concept=doomed, position=1)
+    left = PromptBucket.objects.create(prompt=grid, label='Best combat', position=0)
+    right = PromptBucket.objects.create(prompt=grid, label='Best story', position=1)
+
+    answer = PromptResponse.objects.create(
+        prompt=grid, profile=ProfileFactory(is_linked=True, psn_username='duppool'),
+        placement_count=2)
+    PromptPlacement.objects.create(response=answer, prompt_game=kept_row, bucket=left,
+                                   single_slot=True, no_duplicates=False)
+    PromptPlacement.objects.create(response=answer, prompt_game=doomed_row, bucket=right,
+                                   single_slot=True, no_duplicates=False)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    assert answer.placements.count() == 2, (
+        'a slot silently emptied: the merge dropped a placement the grid explicitly allowed'
+    )
+    assert set(answer.placements.values_list('bucket_id', flat=True)) == {left.pk, right.pk}
     answer.refresh_from_db()
     assert answer.placement_count == 2
