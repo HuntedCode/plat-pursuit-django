@@ -60,11 +60,23 @@
  * the invalid HTML this whole wrapper exists to avoid. So it is positioned into the strip rather
  * than placed in it.
  *
- * THE OFFSET IS THE STRIP'S OWN ARITHMETIC, from `game-card.css`: 9px body padding-bottom, a ~15px
- * facts line, and the body's 6px gap put the title block's baseline 30px up; the title is a stable
- * 2.5em (31px) because `min-height` holds it at two lines whether the name wraps or not. Centring a
- * 28px control on that block lands at 32px. Spelled out rather than nudged, so the next person to
- * change the card's padding knows what moved.
+ * MEASURED FROM THE COVER, NOT FROM THE BOTTOM OF THE CARD. The first cut anchored with
+ * `bottom: 32px`, derived from the strip's padding, facts line and gap -- and landed the button at the
+ * bottom-right corner instead of beside the title, because `.pp-gcard__facts` becomes a TWO-ROW grid
+ * in one of its variants (`game-card.css`'s `:has(> .pp-gcard__mid)` block). Anything measured up
+ * from the bottom inherits every row below it, and those rows are not fixed.
+ *
+ * The cover IS fixed: `aspect-ratio: 3 / 4`, so its height is exactly 4/3 of the card's width. A
+ * PERCENTAGE MARGIN resolves against the containing block's WIDTH, which is the one place CSS will
+ * convert a width into a height -- so `margin-top: 133.333%` on a `top: 0` box lands precisely at the
+ * cover's lower edge, whatever the strip below does.
+ *
+ *   cover height        (W - 2px border) x 4/3  =  1.3333W - 2.67px
+ *   + the card's top border                     =  1.3333W - 1.67px   (top of the body)
+ *   + the body's 8px padding-top                =  1.3333W + 6.33px   (top of the title)
+ *   - centring 28px on the title's 15.6px line  =  1.3333W + 0.13px
+ *
+ * which rounds to the bare 133.333%. Written out because it looks like a magic number and is not.
  *
  * Long-press was the other candidate and was not taken: it would seize the browser's own long-press
  * on a link (open in new tab, copy link, the iOS preview) across the main catalogue, it cannot be
@@ -73,8 +85,9 @@
     .pp-gcard__add {
         opacity: 1;
         pointer-events: auto;
-        top: auto;
-        bottom: 32px;
+        top: 0;
+        /* The cover's own height, converted from the card's width. See the note above. */
+        margin-top: 133.333%;
         right: 7px;
         /* On the card's own surface now, not floating over an image, so it drops the scrim-ish
            backdrop and reads as one more control in the strip. */

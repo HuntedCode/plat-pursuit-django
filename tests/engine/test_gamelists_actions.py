@@ -1673,9 +1673,13 @@ def test_the_add_button_leaves_the_cover_art_on_touch(client):
     touch = css[css.index('@media (hover: none) {'):]
     touch = touch[:touch.index('\n}', touch.index('.pp-gcard__add:active')) + 2]
 
-    # OFF the cover: the top anchor is released and it is placed from the bottom instead.
-    assert 'top: auto;' in touch, 'it is still anchored to the top of the cover'
-    assert 'bottom: 32px;' in touch
+    # OFF the cover, and anchored TO it. `bottom: 32px` was the first attempt -- derived from the
+    # strip's padding, facts line and gap -- and it put the button in the card's bottom-right corner,
+    # because `.pp-gcard__facts` becomes a two-row grid in one variant and anything measured up from
+    # the bottom inherits every row below it. The cover's `aspect-ratio: 3 / 4` is the fixed thing, and
+    # a PERCENTAGE MARGIN is the one place CSS converts a width into a height.
+    assert 'margin-top: 133.333%;' in touch, 'it is no longer measured from the cover'
+    assert 'bottom: 32px;' not in touch, 'the guess measured up from the bottom is back'
     # ...and the title makes room, or a two-line name runs underneath it.
     assert '.pp-gcard-wrap .pp-gcard__title { padding-right: 36px; }' in touch
 
