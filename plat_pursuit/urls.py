@@ -23,6 +23,8 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
+from prompts.models import SHAPE_GRID, SHAPE_POLL, SHAPE_TIER
+from prompts.views import BrowsePromptsView
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
                             CreateListWithConceptView, CreateSectionView, DeleteListView,
                             DeleteSectionView, GameListDetailView, ListGameSearchView,
@@ -399,6 +401,13 @@ urlpatterns = [
     # The PRE-2026 paths below still 302 (not 301) to the homepage: a 301 is cached by browsers
     # indefinitely and those bookmarks belong to the people who used lists most. `/…/edit/` is among
     # them deliberately -- the rebuild edits in place and has no such address.
+    # TIERS, GRIDS & POLLS -- three URLs onto ONE view, the shape fixed by the route rather than by
+    # a querystring. Each shape gets a link worth sharing and its own page for a crawler to index,
+    # while the switcher stays what it looks like: one page with three tabs. Behind the member+staff
+    # beta gate, so all three currently answer a redirect for everybody else.
+    path('community/tiers/', BrowsePromptsView.as_view(shape=SHAPE_TIER), name='prompts_browse_tiers'),
+    path('community/grids/', BrowsePromptsView.as_view(shape=SHAPE_GRID), name='prompts_browse_grids'),
+    path('community/polls/', BrowsePromptsView.as_view(shape=SHAPE_POLL), name='prompts_browse_polls'),
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
     path('community/lists/create/', CreateListView.as_view(), name='list_create'),
     path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),

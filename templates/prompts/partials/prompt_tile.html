@@ -1,0 +1,61 @@
+{% comment %}One prompt on the browse grid.
+
+THE MOSAIC IS OPTIONAL HERE, which is the one way this differs from the list tile it is modelled on.
+An open grid has no pool -- the author asked the questions and every respondent picks their own games
+-- so it has no author-chosen art to show. That renders as a STATE with its own line, not as a broken
+mosaic or a row of placeholders: "they pick the games" is information, and it is the single most
+useful thing to know about a grid before opening it.
+
+`cover_items` is attached by `prompts.services.covers.attach_cover_games`, two queries for the whole
+page. Never reach for art from here.{% endcomment %}
+{% load humanize %}
+<a href="#" class="pp-gtile pp-ptile" data-prompt-id="{{ prompt.id }}" aria-label="{{ prompt.title }}">
+    <span class="pp-gtile__mosaic pp-ptile__mosaic">
+        {% if prompt.cover_items %}
+            {% for game in prompt.cover_items %}
+            <img src="{{ game.display_image_url }}" alt="" loading="lazy"
+                 class="pp-gtile__cover{% if not game.has_cover_art %} pp-gtile__cover--placeholder{% endif %}" />
+            {% endfor %}
+        {% else %}
+        <span class="pp-ptile__open" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+        </span>
+        {% endif %}
+        <span class="pp-ptile__shape">{{ prompt.get_shape_display }}</span>
+    </span>
+
+    <span class="pp-gtile__body">
+        <span class="pp-gtile__name pp-ptile__name">{{ prompt.title }}</span>
+
+        <span class="pp-ptile__by">
+            by {{ prompt.owner.display_psn_username }}
+        </span>
+
+        {% comment %}The two numbers that decide whether this is worth opening, and they are the two
+        the browse sorts on -- so the tile shows what the ordering is made of rather than a number
+        that agrees with nothing. Answers first: on a prompt, how many people bothered is the stronger
+        signal, which is why it is also the default sort.{% endcomment %}
+        <span class="pp-ptile__facts">
+            <span class="pp-ptile__fact" title="{{ prompt.response_count }} answer{{ prompt.response_count|pluralize }}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>{{ prompt.response_count|intcomma }}
+            </span>
+            <span class="pp-ptile__fact{% if prompt.viewer_has_liked %} is-liked{% endif %}" title="{{ prompt.like_count }} like{{ prompt.like_count|pluralize }}">
+                <svg viewBox="0 0 24 24" fill="{% if prompt.viewer_has_liked %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8z"/>
+                </svg>{{ prompt.like_count|intcomma }}
+            </span>
+            {% if not prompt.cover_items %}
+            <span class="pp-ptile__fact pp-ptile__fact--open">they pick the games</span>
+            {% elif prompt.game_count %}
+            <span class="pp-ptile__fact">{{ prompt.game_count|intcomma }} game{{ prompt.game_count|pluralize }}</span>
+            {% endif %}
+            {% if prompt.is_closed %}
+            <span class="pp-ptile__fact pp-ptile__fact--closed">Closed</span>
+            {% endif %}
+        </span>
+    </span>
+</a>

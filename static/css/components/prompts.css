@@ -1,0 +1,149 @@
+/* ================================================================================================
+ * TIERS, GRIDS & POLLS -- browse.
+ *
+ * Deliberately thin. The tile is `.pp-gtile` (the shared browse tile the franchise, company and list
+ * grids all use) plus a `.pp-ptile` modifier for the three things a prompt has that a list does not:
+ * a shape badge, an "open grid" state where the mosaic would be, and a facts row carrying the two
+ * numbers the browse actually sorts on.
+ *
+ * Reusing the tile rather than building one is the whole point: a prompt tile sitting next to a list
+ * tile in the re-formed Community hub has to look like it came from the same place.
+ * ============================================================================================== */
+
+/* The tab strip. `.pp-switch` is the site-wide segmented treatment; these are ANCHORS rather than
+   buttons, because each tab is a real URL. Only the layout differs from a button strip -- the chip
+   styling is inherited, which is what keeps one treatment site-wide rather than two that drift. */
+.pp-pbrowse__tabs {
+    margin-bottom: 0.5rem;
+}
+.pp-pbrowse__tabs .pp-switch__chip {
+    text-decoration: none;
+}
+
+/* ── The tile ─────────────────────────────────────────────────────────────────────────────────── */
+
+/* The shape, over the mosaic's bottom-left. A reader scanning a mixed grid -- which is what the
+   Community hub will show -- needs to know what they are looking at before the title makes sense:
+   "Best combat" reads very differently on a poll than on a grid. */
+.pp-ptile__shape {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    z-index: 2;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--pp-bg-0);
+    background: color-mix(in oklab, var(--pp-primary) 88%, transparent);
+    /* The mosaic is busy and the badge sits on top of cover art, so it carries its own separation
+       rather than relying on whatever image happens to be underneath. */
+    box-shadow: 0 1px 6px -1px color-mix(in oklab, #000 55%, transparent);
+}
+
+/* THE OPEN GRID, where the mosaic would be. Not a placeholder and not an error: an open grid has no
+   author-chosen art because the author chose not to choose, and that is worth showing as its own
+   quiet state. A row of four generic placeholders would say "broken"; this says "open". */
+.pp-ptile__open {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    color: color-mix(in oklab, var(--pp-text-mute) 70%, transparent);
+    background:
+        repeating-linear-gradient(
+            135deg,
+            color-mix(in oklab, var(--pp-bg-2) 92%, transparent) 0 10px,
+            color-mix(in oklab, var(--pp-bg-1) 92%, transparent) 10px 20px
+        );
+}
+.pp-ptile__open svg {
+    width: 28%;
+    max-width: 44px;
+    height: auto;
+    opacity: 0.75;
+}
+
+.pp-ptile__name {
+    /* A prompt title is a QUESTION and reads as one, so it gets two lines where a list name gets its
+       own treatment. `pr-1` is the house rule for a line-clamped box; there is no italic here, but
+       the clamp still shaves a descender at some widths without it. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    padding-right: 1px;
+}
+
+.pp-ptile__by {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.68rem;
+    color: var(--pp-text-mute);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-ptile__facts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.6rem;
+    margin-top: 5px;
+    font-size: 0.68rem;
+    color: var(--pp-text-dim);
+}
+.pp-ptile__fact {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.22rem;
+    white-space: nowrap;
+}
+.pp-ptile__fact svg {
+    width: 12px;
+    height: 12px;
+    opacity: 0.8;
+}
+/* Liked by the viewer: the heart fills, and the colour comes with it. The fill is set on the SVG in
+   the template rather than here, because a filled heart and an outlined one are different markup,
+   not different paint. */
+.pp-ptile__fact.is-liked {
+    color: var(--pp-primary);
+}
+.pp-ptile__fact.is-liked svg {
+    opacity: 1;
+}
+/* "they pick the games" -- the open grid's line, said once in the facts row so the state is legible
+   even on a narrow tile where the mosaic's hatching is only a sliver. */
+.pp-ptile__fact--open {
+    font-style: italic;
+    color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute));
+}
+.pp-ptile__fact--closed {
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--pp-text-mute);
+    border: 1px solid var(--pp-border);
+}
+
+/* ── Mobile ───────────────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 767px) {
+    /* At 375px the facts row is the first thing to crowd. The author line is the expendable one --
+       the two numbers are what the sorts are made of, and the shape is already on the badge -- so it
+       goes rather than wrapping the row onto a third line. The full byline is on the prompt itself. */
+    .pp-ptile__by {
+        display: none;
+    }
+    .pp-ptile__facts {
+        gap: 0.3rem 0.45rem;
+        font-size: 0.64rem;
+    }
+}

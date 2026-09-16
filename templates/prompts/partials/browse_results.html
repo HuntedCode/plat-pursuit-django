@@ -1,0 +1,33 @@
+{% comment %}Browse results -- the grid only.
+
+Returned on HTMX filter swaps AND on the InfiniteScroller's `?page` fetches (X-Requested-With, via
+`HtmxListMixin`'s XHR guard). The scroll sentinel and spinner live in the host page, OUTSIDE this
+partial, so a filter change swaps the grid without tearing out the thing watching for the next page.
+
+`pp-reveal` is baked in on HTMX swaps only: htmx's settle step restores server attributes on id'd
+swapped elements, so a class added by JS in `afterSwap` is wiped again and the cards unhide with a
+flash.{% endcomment %}
+{% load humanize %}
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
+    {% for prompt in object_list %}
+    {% include 'prompts/partials/prompt_tile.html' with prompt=prompt %}
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        {% if query %}
+        <p class="pp-gtile-empty__title">Nothing matches &ldquo;{{ query }}&rdquo;</p>
+        <p class="pp-gtile-empty__hint">Try a different term, or look in another tab.</p>
+        {% else %}
+        {% comment %}Per shape, because "nobody has made a tier list" and "nobody has asked a
+        question" are different sentences and a shared one is neither. See `views.EMPTY_COPY`.{% endcomment %}
+        <p class="pp-gtile-empty__title">{{ empty_copy }}</p>
+        {% endif %}
+
+        <div class="pp-gtile-empty__action">
+            {% if has_filters %}
+            <a href="{% url shape_tab_url %}" class="pp-cta pp-cta--ghost">Clear search</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
