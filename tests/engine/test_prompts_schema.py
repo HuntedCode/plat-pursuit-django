@@ -20,9 +20,9 @@ The two that carry the most weight:
   quietly not exist.
 """
 import pytest
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 
-from prompts.models import (MAX_GRID_COLUMNS, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, Prompt,
+from prompts.models import (MAX_GRID_COLUMNS, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES, Prompt,
                             PromptBucket, PromptGame, PromptLike, PromptPlacement, PromptResponse,
                             PromptResponseLike)
 from tests.factories import ConceptFactory, ProfileFactory
@@ -46,9 +46,17 @@ def _buckets(prompt, *labels):
             for i, label in enumerate(labels)]
 
 
-def _place(response, game, bucket, *, single_slot, position=0):
+def _place(response, game, bucket, position=0):
+    """`single_slot` comes from the PROMPT, never from the caller.
+
+    Hand-setting it made these tests pass for the wrong reason: the poll test below asserted a second
+    vote was refused, but it would have asserted that just as happily against a tier prompt, because
+    the only mechanism under test was a boolean the test itself had set to True. Deriving it from
+    `Prompt.is_single_slot` -- which is the sole supported source, and which nothing else in the
+    codebase reads yet -- means the shape is what decides, which is the actual claim."""
     return PromptPlacement.objects.create(response=response, prompt_game=game, bucket=bucket,
-                                          single_slot=single_slot, position=position)
+                                          single_slot=bucket.prompt.is_single_slot,
+                                          position=position)
 
 
 # -- the pool ------------------------------------------------------------------------------------
@@ -111,11 +119,11 @@ def test_a_response_cannot_place_one_game_in_two_buckets():
     game = _pool(prompt, 1)[0]
     top, bottom = _buckets(prompt, 'S', 'A')
     response = PromptResponse.objects.create(prompt=prompt, profile=ProfileFactory())
-    _place(response, game, top, single_slot=False)
+    _place(response, game, top)
 
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            _place(response, game, bottom, single_slot=False)
+            _place(response, game, bottom)
 
 
 def test_a_tier_row_holds_many_games_and_a_single_slot_bucket_holds_one():
@@ -128,19 +136,19 @@ def test_a_tier_row_holds_many_games_and_a_single_slot_bucket_holds_one():
     a, b = _pool(tier, 2)
     s_row = _buckets(tier, 'S')[0]
     tier_response = PromptResponse.objects.create(prompt=tier, profile=ProfileFactory())
-    _place(tier_response, a, s_row, single_slot=False, position=0)
-    _place(tier_response, b, s_row, single_slot=False, position=1)
+    _place(tier_response, a, s_row, position=0)
+    _place(tier_response, b, s_row, position=1)
     assert tier_response.placements.count() == 2, 'a tier row must hold more than one game'
 
     grid = _prompt(owner, SHAPE_GRID)
     c, d = _pool(grid, 2)
     slot = _buckets(grid, 'Best combat')[0]
     grid_response = PromptResponse.objects.create(prompt=grid, profile=ProfileFactory())
-    _place(grid_response, c, slot, single_slot=True)
+    _place(grid_response, c, slot)
 
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            _place(grid_response, d, slot, single_slot=True)
+            _place(grid_response, d, slot)
 
 
 def test_a_poll_cannot_be_voted_in_twice():
@@ -152,11 +160,11 @@ def test_a_poll_cannot_be_voted_in_twice():
     left, right = _pool(poll, 2)
     box = _buckets(poll, 'Your pick')[0]
     response = PromptResponse.objects.create(prompt=poll, profile=ProfileFactory())
-    _place(response, left, box, single_slot=True)
+    _place(response, left, box)
 
     with pytest.raises(IntegrityError):
         with transaction.atomic():
-            _place(response, right, box, single_slot=True)
+            _place(response, right, box)
 
 
 # -- what the author's edits do to other people's answers ----------------------------------------
@@ -176,8 +184,8 @@ def test_removing_a_pool_game_clears_it_from_every_response():
     responses = [PromptResponse.objects.create(prompt=prompt, profile=ProfileFactory())
                  for _ in range(3)]
     for response in responses:
-        _place(response, doomed, row, single_slot=False, position=0)
-        _place(response, kept, row, single_slot=False, position=1)
+        _place(response, doomed, row, position=0)
+        _place(response, kept, row, position=1)
     assert PromptPlacement.objects.count() == 6
 
     doomed.delete()
@@ -198,7 +206,7 @@ def test_removing_a_bucket_returns_its_games_to_the_tray_rather_than_deleting_th
     game = _pool(prompt, 1)[0]
     row = _buckets(prompt, 'S')[0]
     response = PromptResponse.objects.create(prompt=prompt, profile=ProfileFactory())
-    _place(response, game, row, single_slot=False)
+    _place(response, game, row)
 
     row.delete()
 
@@ -213,7 +221,7 @@ def test_deleting_a_response_leaves_the_prompt_and_its_pool_alone():
     game = _pool(prompt, 1)[0]
     row = _buckets(prompt, 'S')[0]
     response = PromptResponse.objects.create(prompt=prompt, profile=ProfileFactory())
-    _place(response, game, row, single_slot=False)
+    _place(response, game, row)
 
     response.delete()
 
@@ -292,9 +300,13 @@ def test_each_of_the_two_likeable_things_takes_one_like_per_hunter():
 
 
 def test_a_signed_out_reader_never_matches_a_private_prompt():
-    """`readable_by(None)` is its own branch rather than `Q(owner=None)`, so a row with a null owner
-    -- which should not exist, but the floor is not allowed to depend on that -- cannot be matched by
-    a reader who has no profile."""
+    """The three answers `readable_by` gives, which is the read every detail page makes.
+
+    It does NOT pin the `profile is None` branch, and an earlier version of this docstring claimed it
+    did. That branch cannot be made to fail: `owner` is NOT NULL, and `Q(owner=None)` compiles to
+    `IS NULL`, which matches nothing on such a column -- so deleting the branch entirely returns the
+    same rows and this test still passes. Worth saying out loud rather than leaving a test that reads
+    like a guard over something unfalsifiable."""
     owner = ProfileFactory()
     private = _prompt(owner, title='Not yet')
     public = _prompt(owner, title='Ready', is_public=True)
@@ -315,3 +327,43 @@ def test_a_soft_deleted_prompt_is_gone_from_every_read_but_still_in_the_table():
     assert not Prompt.objects.public().exists()
     assert not Prompt.objects.readable_by(owner).exists()
     assert Prompt.objects.filter(pk=prompt.pk).exists(), 'the floor should be opt-in, not baked in'
+
+
+# -- rules the file states in prose and nothing else was holding -----------------------------------
+
+
+def test_a_response_carries_no_user_written_words():
+    """THE PREMISE THE WHOLE RESPONSE SURFACE RESTS ON, and until now it lived only in a docstring.
+
+    A response has no title, no description and no per-placement note. That is what lets every write
+    on the response side skip text sanitation, the banned-word check and the `all_ugc` restriction
+    gate -- none of which it currently calls, because there is nothing to sanitize.
+
+    Add one text field here and that reasoning silently becomes false: a UGC surface opens with no
+    gate in front of it, and nothing in the service would fail, because the service was written when
+    the premise was true. So the premise is a test."""
+    for model in (PromptResponse, PromptPlacement):
+        prose = [f.name for f in model._meta.get_fields()
+                 if isinstance(f, (models.CharField, models.TextField))]
+        assert not prose, (
+            f'{model.__name__} grew a text field ({prose}). That opens a UGC surface with no '
+            f'sanitation, no banned-word check and no restriction gate in front of it -- see the '
+            f'model docstring before adding one.'
+        )
+
+
+def test_every_shape_maps_to_the_flag_the_database_reads():
+    """`single_slot` is the only thing standing between a poll and unlimited votes, and the partial
+    unique's predicate is PER ROW -- so one placement written with the wrong flag is not merely
+    unconstrained, it is invisible to the index and will not collide with the correct row beside it.
+
+    `Prompt.is_single_slot` is the sole supported source of that value. It had no callers and no
+    test, which is a poor state for the sharpest edge in the schema."""
+    owner = ProfileFactory()
+    assert _prompt(owner, SHAPE_TIER).is_single_slot is False
+    assert _prompt(owner, SHAPE_GRID).is_single_slot is True
+    assert _prompt(owner, SHAPE_POLL).is_single_slot is True
+
+    # ...and every declared shape is answered, so a fourth cannot arrive without a decision here.
+    for shape in SHAPES:
+        assert _prompt(owner, shape).is_single_slot in (True, False)

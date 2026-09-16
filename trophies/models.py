@@ -1743,37 +1743,58 @@ class Concept(models.Model):
                     prompt_id__in=PromptGame.objects.filter(concept=self).values('prompt_id'))
             .values_list('prompt_id', 'position', 'pk')
         )
-        # A LOOP OVER COLLIDING PROMPTS, NOT OVER ROWS, and the distinction is what keeps this inside
-        # the whale rule: a concept pair collides in a handful of prompts at most, and each iteration
-        # is two set-based statements regardless of how many responses that prompt carries. Resolving
-        # the survivor's pool row per prompt is also why this is not one statement -- `.update()`
-        # cannot SET a foreign key from a joined column, and the correlated-subquery form would need
-        # an OuterRef across a join the UPDATE cannot express.
-        for prompt_id, _gap, doomed_id in prompt_collisions:
-            survivor_id = (PromptGame.objects
-                           .filter(prompt_id=prompt_id, concept=self)
-                           .values_list('pk', flat=True).first())
-            if survivor_id is None:       # cannot happen -- a collision means both rows exist
+        # WHICH RESPONSES STAND TO LOSE A PLACEMENT, collected BEFORE anything moves, because after
+        # the delete there is no way to find them. This is the narrowing that keeps the repair below
+        # proportional to the merge instead of to the prompt's popularity: the alternative --
+        # recomputing every response of a colliding prompt -- is one statement either way, so a
+        # query-count test sees nothing, while a 50,000-response prompt would take 50,000 row locks
+        # and 50,000 correlated counts inside SYNC, blocking every hunter editing their answer.
+        doomed_ids = [pk for _, _, pk in prompt_collisions]
+        touched_response_ids = set(
+            PromptPlacement.objects.filter(prompt_game_id__in=doomed_ids)
+            .values_list('response_id', flat=True)
+        )
+        # Every survivor row in ONE query rather than one per collision. The loop below is over
+        # colliding PROMPTS, not over rows -- each iteration is a single set-based statement no matter
+        # how many responses that prompt carries -- but the per-iteration lookup it used to do was a
+        # plain N+1 in the sync path, and "a pair collides in only a handful of prompts" is an
+        # assumption with nothing enforcing it. A PS4/PS5 duplicate of a headline game is precisely the
+        # pair that appears in many prompts AND the pair most likely to be merged.
+        survivors = dict(
+            PromptGame.objects
+            .filter(concept=self, prompt_id__in=[pid for pid, _, _ in prompt_collisions])
+            .values_list('prompt_id', 'pk')
+        )
+        # Only collisions we actually rescued may be deleted. `.update()` cannot SET a foreign key
+        # from a joined column, which is why the re-point is per-prompt rather than one statement.
+        rescued = []
+        for prompt_id, gap, doomed_id in prompt_collisions:
+            survivor_id = survivors.get(prompt_id)
+            if survivor_id is None:
+                # Cannot happen -- a collision means both rows exist -- but if a concurrent pool edit
+                # ever makes it happen, the doomed row must SURVIVE. Skipping the rescue and deleting
+                # anyway would be precisely the silent cross-account data loss this branch exists to
+                # prevent, performed by the code written to prevent it.
                 continue
             PromptPlacement.objects.filter(prompt_game_id=doomed_id).exclude(
                 response_id__in=PromptPlacement.objects
                 .filter(prompt_game_id=survivor_id).values('response_id')
             ).update(prompt_game_id=survivor_id)
+            rescued.append((prompt_id, gap, doomed_id))
 
-        PromptGame.objects.filter(pk__in=[pk for _, _, pk in prompt_collisions]).delete()
+        PromptGame.objects.filter(pk__in=[pk for _, _, pk in rescued]).delete()
         PromptGame.objects.filter(concept=other).update(concept=self)
 
         # The same two invariants the list branch repairs, plus a third this system has and lists do
-        # not: `placement_count` on every response of a colliding prompt, because the cascade above
-        # removed placements from responses nobody touched. Recomputed from rows rather than
-        # decremented, so a count that has drifted for any other reason is corrected too.
-        for prompt_id, gap, _ in prompt_collisions:
+        # not: `placement_count` on the responses that lost a placement to the cascade above.
+        # Recomputed from rows rather than decremented, so a count that drifted for any other reason
+        # is corrected too.
+        for prompt_id, gap, _ in rescued:
             PromptGame.objects.filter(prompt_id=prompt_id, position__gt=gap).update(
                 position=F('position') - 1)
 
-        if prompt_collisions:
-            prompt_ids = {pid for pid, _, _ in prompt_collisions}
-            Prompt.objects.filter(pk__in=prompt_ids).update(
+        if rescued:
+            Prompt.objects.filter(pk__in={pid for pid, _, _ in rescued}).update(
                 game_count=Coalesce(
                     Subquery(
                         PromptGame.objects.filter(prompt=OuterRef('pk'))
@@ -1782,7 +1803,8 @@ class Concept(models.Model):
                     0,
                 )
             )
-            PromptResponse.objects.filter(prompt_id__in=prompt_ids).update(
+        if touched_response_ids:
+            PromptResponse.objects.filter(pk__in=touched_response_ids).update(
                 placement_count=Coalesce(
                     Subquery(
                         PromptPlacement.objects.filter(response=OuterRef('pk'))

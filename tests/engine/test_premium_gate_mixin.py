@@ -9,8 +9,10 @@ page in order to moderate what is on it.
 Tested through a throwaway view rather than a real URL, because the mixin is the unit and a route
 would drag in whichever surface happened to be mounted this month.
 
-The gate is also designed to be DELETED. `test_removing_the_mixin_opens_the_view` pins that: ending
-the beta is removing one class from one base list, not reconfiguring anything.
+The gate is designed to be DELETED -- ending the beta is removing one class from one base list. There
+was a test here claiming to pin that; it asserted a bare `django.views.View` returns 200, which holds
+forever no matter what this mixin does. It proved Django works. Removed rather than rewritten: the
+property is real but it is not one a test can hold, and a test that cannot fail is worse than none.
 """
 import pytest
 from django.contrib.auth.models import AnonymousUser
@@ -25,11 +27,6 @@ pytestmark = pytest.mark.django_db
 
 
 class _Gated(PremiumRequiredMixin, View):
-    def get(self, request, *args, **kwargs):
-        return HttpResponse('in')
-
-
-class _Ungated(View):
     def get(self, request, *args, **kwargs):
         return HttpResponse('in')
 
@@ -97,13 +94,3 @@ def test_a_signed_out_visitor_goes_to_the_login_and_not_the_beta_page():
 
     assert resp.status_code == 302
     assert '/beta-access/' not in resp['Location']
-
-
-def test_removing_the_mixin_opens_the_view():
-    """The gate is one class in one base list. Ending the beta must not be a migration, a setting, or
-    a hunt through templates -- so this asserts the ungated view is reachable by the hunter the gate
-    turns away."""
-    request = RequestFactory().get('/anything/')
-    request.user = ProfileFactory(is_linked=True).user
-
-    assert _Ungated.as_view()(request).status_code == 200

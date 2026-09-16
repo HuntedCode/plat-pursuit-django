@@ -380,7 +380,7 @@ def _answered(prompt, concept_rows, *, bucket, hunter):
                                              placement_count=len(concept_rows))
     for i, row in enumerate(concept_rows):
         PromptPlacement.objects.create(response=response, prompt_game=row, bucket=bucket,
-                                       single_slot=False, position=i)
+                                       single_slot=prompt.is_single_slot, position=i)
     return response
 
 
@@ -492,7 +492,19 @@ def test_absorb_leaves_a_prompt_that_only_held_the_doomed_concept_whole():
     survivor, doomed = ConceptFactory(), ConceptFactory()
     author = ProfileFactory(is_linked=True, psn_username='author4')
 
-    prompt = Prompt.objects.create(owner=author, shape='poll', title='Which one?', game_count=2)
+    # A REAL COLLISION SOMEWHERE ELSE, which this test did not have and needed. The repair runs inside
+    # `if rescued:`, so with no collision anywhere the statement under test never executes at all --
+    # widening it to every prompt on the site left this test green, because it was asserting over code
+    # that had not run. A colliding prompt belonging to somebody else is what arms it.
+    other_author = ProfileFactory(is_linked=True, psn_username='collider4')
+    colliding = Prompt.objects.create(owner=other_author, shape='tier', title='Both', game_count=2)
+    PromptGame.objects.create(prompt=colliding, concept=survivor, position=0)
+    PromptGame.objects.create(prompt=colliding, concept=doomed, position=1)
+
+    # DELIBERATELY DRIFTED. Seeding the correct count made this test unable to fail: a repair that
+    # rewrote every prompt on the site would land on 2 as well, so "was it left alone?" and "was it
+    # recomputed?" were the same assertion. 99 is wrong, and only the narrowing keeps it wrong.
+    prompt = Prompt.objects.create(owner=author, shape='poll', title='Which one?', game_count=99)
     first = PromptGame.objects.create(prompt=prompt, concept=doomed, position=0)
     PromptGame.objects.create(prompt=prompt, concept=ConceptFactory(), position=1)
 
@@ -502,5 +514,82 @@ def test_absorb_leaves_a_prompt_that_only_held_the_doomed_concept_whole():
     first.refresh_from_db()
     assert first.concept_id == survivor.pk
     prompt.refresh_from_db()
-    assert prompt.game_count == 2, 'an untouched prompt had its count rewritten'
+    assert prompt.game_count == 99, 'an untouched prompt was walked and its count rewritten'
     assert list(prompt.games.order_by('position').values_list('position', flat=True)) == [0, 1]
+    # The other half of the same claim: the prompt that DID collide was repaired. Without this, the
+    # test would also pass against a repair that had been deleted outright.
+    colliding.refresh_from_db()
+    assert colliding.game_count == 1, 'the colliding prompt was not repaired'
+
+
+def test_absorb_repairs_only_the_responses_that_lost_a_placement():
+    """The narrowing, as a number that cannot be reached by accident.
+
+    The repair used to recompute every response of a colliding prompt. One statement either way, so a
+    query-count test sees nothing -- but the row count is the risk: a 50,000-response prompt meant
+    50,000 row locks and 50,000 correlated counts inside SYNC, blocking every hunter editing their
+    answer to it.
+
+    A response holding neither concept is seeded with a deliberately wrong `placement_count`. If the
+    repair still walks it, the wrong number is corrected and this test fails -- which is the only way
+    to assert "we did not touch these rows" from the outside."""
+    from prompts.models import Prompt, PromptBucket, PromptGame
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='author5')
+
+    prompt = Prompt.objects.create(owner=author, shape='tier', title='Rank them', game_count=3)
+    kept_row = PromptGame.objects.create(prompt=prompt, concept=survivor, position=0)
+    doomed_row = PromptGame.objects.create(prompt=prompt, concept=doomed, position=1)
+    third_row = PromptGame.objects.create(prompt=prompt, concept=ConceptFactory(), position=2)
+    s_tier = PromptBucket.objects.create(prompt=prompt, label='S', position=0)
+
+    loser = _answered(prompt, [kept_row, doomed_row],
+                      bucket=s_tier, hunter=ProfileFactory(is_linked=True, psn_username='loser'))
+    bystander = _answered(prompt, [third_row],
+                          bucket=s_tier,
+                          hunter=ProfileFactory(is_linked=True, psn_username='bystander'))
+    bystander.placement_count = 77
+    bystander.save(update_fields=['placement_count'])
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    loser.refresh_from_db()
+    assert loser.placement_count == 1, 'the response that lost a placement was not repaired'
+    bystander.refresh_from_db()
+    assert bystander.placement_count == 77, (
+        'a response that lost nothing was rewritten -- the repair is walking the whole prompt again'
+    )
+
+
+def test_absorb_works_through_a_prompt_whose_buckets_hold_one_game():
+    """Every other absorb test here drops into a tier row, so the partial unique
+    `unique(response, bucket) WHERE single_slot` was never exercised by a merge at all.
+
+    It is safe for a structural reason worth pinning: the re-point sets `prompt_game_id` only, and
+    that constraint is keyed on `(response, bucket)` -- neither column moves, so no index entry
+    changes and no collision is possible. If a future version of this branch ever re-files a rescued
+    placement into a different bucket, this is the test that stops it."""
+    from prompts.models import Prompt, PromptBucket, PromptGame
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='author6')
+
+    poll = Prompt.objects.create(owner=author, shape='poll', title='Best one?', game_count=2)
+    kept_row = PromptGame.objects.create(prompt=poll, concept=survivor, position=0)
+    doomed_row = PromptGame.objects.create(prompt=poll, concept=doomed, position=1)
+    box = PromptBucket.objects.create(prompt=poll, label='Your pick', position=0)
+
+    voted_doomed = _answered(poll, [doomed_row], bucket=box,
+                             hunter=ProfileFactory(is_linked=True, psn_username='votedone'))
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    placement = voted_doomed.placements.get()
+    assert placement.prompt_game_id == kept_row.pk, 'a vote was lost to the merge'
+    assert placement.single_slot is True, 'the flag that carries the one-pick rule was disturbed'
+    assert placement.bucket_id == box.pk
+    voted_doomed.refresh_from_db()
+    assert voted_doomed.placement_count == 1
