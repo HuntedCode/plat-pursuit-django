@@ -1785,6 +1785,25 @@ class Concept(models.Model):
         PromptGame.objects.filter(pk__in=[pk for _, _, pk in rescued]).delete()
         PromptGame.objects.filter(concept=other).update(concept=self)
 
+        # FREE PICKS ON OPEN GRIDS point at the Concept directly rather than at a pool row, so they
+        # need their own branch -- the corollary `PromptPlacement` used to be able to claim ("this
+        # table has no Concept FK, so absorb needs no branch for it") stopped being true the day open
+        # grids shipped, and a stale comment is how that gets missed.
+        #
+        # The dedup is NARROWER than the pool one above, because `unique(response, concept)` is
+        # partial on `no_duplicates`: a grid that allows duplicates can legitimately hold both
+        # concepts in one answer, collides with nothing, and every row simply re-points. Only rows
+        # that forbid duplicates AND already hold the survivor have to go.
+        free_pick_responses = set(
+            PromptPlacement.objects.filter(concept=other).values_list('response_id', flat=True)
+        )
+        already_has_survivor = PromptPlacement.objects.filter(
+            concept=self, no_duplicates=True).values('response_id')
+        PromptPlacement.objects.filter(
+            concept=other, no_duplicates=True, response_id__in=already_has_survivor).delete()
+        PromptPlacement.objects.filter(concept=other).update(concept=self)
+        touched_response_ids |= free_pick_responses
+
         # The same two invariants the list branch repairs, plus a third this system has and lists do
         # not: `placement_count` on the responses that lost a placement to the cascade above.
         # Recomputed from rows rather than decremented, so a count that drifted for any other reason

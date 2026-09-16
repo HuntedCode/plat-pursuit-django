@@ -13,8 +13,8 @@ the module owns, because they are the ones that are invisible until they are wro
 """
 import pytest
 
-from prompts.models import (MAX_PLACEMENTS_PER_RESPONSE, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER,
-                            PromptPlacement, PromptResponse)
+from prompts.models import (MAX_PLACEMENTS_PER_RESPONSE, MIN_GAMES_TO_PUBLISH, SHAPE_GRID,
+                            SHAPE_POLL, SHAPE_TIER, PromptPlacement, PromptResponse)
 from prompts.services import prompt_service as psvc
 from prompts.services import response_service as svc
 from tests.factories import ConceptFactory, ProfileFactory
@@ -36,13 +36,22 @@ def _restrict(profile):
                                    reason='testing', created_by_label='Admin')
 
 
-def _built(owner, shape=SHAPE_TIER, games=3, public=True):
-    """A prompt with a pool, ready to be answered."""
-    prompt = psvc.create_prompt(owner, shape=shape, title='Rank them', is_public=public)
-    pool = [psvc.add_concept(prompt, owner, ConceptFactory()) for _ in range(games)]
+def _built(owner, shape=SHAPE_TIER, games=3, public=True, allow_duplicates=True):
+    """A prompt with a pool, published the way an author would publish it.
+
+    Built BEFORE publishing, because every shape now has a floor to clear and a grid starts with no
+    slots at all. `games=0` gives an open grid: no pool, and respondents pick from the catalogue.
+    """
+    prompt = psvc.create_prompt(owner, shape=shape, title='Rank them',
+                                allow_duplicates=allow_duplicates)
     if shape == SHAPE_GRID:
         for label in ('Best combat', 'Best story'):
             psvc.create_bucket(prompt, owner, label=label)
+    need = max(games, MIN_GAMES_TO_PUBLISH[shape]) if public else games
+    pool = [psvc.add_concept(prompt, owner, ConceptFactory()) for _ in range(need)]
+    if public:
+        psvc.update_prompt(prompt, owner, is_public=True)
+        prompt.refresh_from_db()
     return prompt, pool, list(prompt.buckets.order_by('position'))
 
 
@@ -177,7 +186,9 @@ def test_a_tier_row_takes_as_many_as_you_like():
     prompt, pool, buckets = _built(owner, games=3)
     answerer = _hunter('answerer')
 
-    for game in pool:
+    # THREE OF THE POOL, named rather than "all of it": a published tier list carries at least the
+    # publish floor, so iterating the pool would make this test's subject the floor instead of the row.
+    for game in pool[:3]:
         svc.place(prompt, answerer, game_id=game.pk, bucket_id=buckets[0].pk)
 
     response = svc.response_for(prompt, answerer)
@@ -209,7 +220,7 @@ def test_unplacing_closes_the_gap_in_the_row_it_left():
     owner = _hunter()
     prompt, pool, buckets = _built(owner, games=3)
     answerer = _hunter('answerer')
-    for game in pool:
+    for game in pool[:3]:
         svc.place(prompt, answerer, game_id=game.pk, bucket_id=buckets[0].pk)
 
     svc.unplace(prompt, answerer, game_id=pool[0].pk)
@@ -242,18 +253,20 @@ def test_reordering_a_row_refuses_a_partial_order():
     owner = _hunter()
     prompt, pool, buckets = _built(owner, games=3)
     answerer = _hunter('answerer')
-    for game in pool:
+    for game in pool[:3]:
         svc.place(prompt, answerer, game_id=game.pk, bucket_id=buckets[0].pk)
 
-    ids = [pool[0].pk, pool[1].pk, pool[2].pk]
-    with pytest.raises(psvc.PromptError):
-        svc.reorder_bucket(prompt, answerer, bucket_id=buckets[0].pk, game_ids=ids[:2])
-    with pytest.raises(psvc.PromptError):
-        svc.reorder_bucket(prompt, answerer, bucket_id=buckets[0].pk, game_ids=ids + [ids[0]])
-
-    svc.reorder_bucket(prompt, answerer, bucket_id=buckets[0].pk, game_ids=list(reversed(ids)))
     response = svc.response_for(prompt, answerer)
-    ordered = list(response.placements.order_by('position').values_list('prompt_game_id', flat=True))
+    ids = list(response.placements.order_by('position').values_list('pk', flat=True))
+
+    with pytest.raises(psvc.PromptError):
+        svc.reorder_bucket(prompt, answerer, bucket_id=buckets[0].pk, placement_ids=ids[:2])
+    with pytest.raises(psvc.PromptError):
+        svc.reorder_bucket(prompt, answerer, bucket_id=buckets[0].pk, placement_ids=ids + [ids[0]])
+
+    svc.reorder_bucket(prompt, answerer, bucket_id=buckets[0].pk,
+                       placement_ids=list(reversed(ids)))
+    ordered = list(response.placements.order_by('position').values_list('pk', flat=True))
     assert ordered == list(reversed(ids))
 
 

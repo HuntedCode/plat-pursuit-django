@@ -20,8 +20,8 @@ import inspect
 import pytest
 
 from prompts.models import (FREE_MAX_PROMPTS, MAX_BUCKETS_PER_PROMPT, MAX_GAMES_PER_PROMPT,
-                            SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES, Prompt, PromptBucket,
-                            PromptGame, PromptPlacement, PromptResponse)
+                            MIN_GAMES_TO_PUBLISH, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES,
+                            Prompt, PromptBucket, PromptGame, PromptPlacement, PromptResponse)
 from prompts.services import prompt_service as svc
 from tests.factories import ConceptFactory, ProfileFactory
 from users.models import UserRestriction
@@ -42,8 +42,30 @@ def _restrict(profile):
                                    reason='testing', created_by_label='Admin')
 
 
+def _publishable(prompt, owner):
+    """Give it whatever its shape needs to clear the publish floor."""
+    if not prompt.buckets.exists():
+        svc.create_bucket(prompt, owner, label='Best of them')
+    need = MIN_GAMES_TO_PUBLISH[prompt.shape] - prompt.games.count()
+    for _ in range(max(need, 0)):
+        svc.add_concept(prompt, owner, ConceptFactory())
+    return prompt
+
+
 def _prompt(owner, shape=SHAPE_TIER, **kwargs):
-    return svc.create_prompt(owner, shape=shape, title=kwargs.pop('title', 'Rank them'), **kwargs)
+    """Create one, and PUBLISH IT PROPERLY if the caller wants it public.
+
+    `create_prompt` has no `is_public` argument any more: every shape has a floor to clear before it
+    can go up, and a brand-new prompt clears none of them, so the parameter could only ever have meant
+    "refuse this create". Publishing is the second act, here as in the product.
+    """
+    public = kwargs.pop('is_public', False)
+    prompt = svc.create_prompt(owner, shape=shape, title=kwargs.pop('title', 'Rank them'), **kwargs)
+    if public:
+        _publishable(prompt, owner)
+        svc.update_prompt(prompt, owner, is_public=True)
+        prompt.refresh_from_db()
+    return prompt
 
 
 def _answer(prompt, hunter, game=None, bucket=None):
@@ -548,6 +570,9 @@ def test_a_restricted_hunter_cannot_publish_a_prompt_they_wrote_earlier():
     deletion is the moderator's only remaining lever."""
     owner = _hunter()
     private = _prompt(owner, is_public=False, title='Written before')
+    # Publishable, so the restriction is the ONLY thing that can refuse this. Without the games it
+    # would raise either way and the test would prove nothing about the gate.
+    _publishable(private, owner)
     _restrict(owner)
 
     with pytest.raises(svc.PromptError):
@@ -633,6 +658,7 @@ def test_a_stale_instance_cannot_hide_a_prompt_that_has_been_answered():
     ran, and the answers ended up orphaned behind a private prompt."""
     owner = _hunter()
     prompt = _prompt(owner, is_public=False)
+    _publishable(prompt, owner)
     stale = Prompt.objects.get(pk=prompt.pk)          # the other tab, captured while private
 
     svc.update_prompt(prompt, owner, is_public=True)

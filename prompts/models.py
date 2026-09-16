@@ -140,6 +140,25 @@ MAX_BUCKETS_PER_PROMPT = {
 #: `PromptPlacement`). The bound is a service obligation like the others here, not a consequence.
 MAX_PLACEMENTS_PER_RESPONSE = MAX_GAMES_PER_PROMPT[SHAPE_TIER]
 
+#: HOW MANY GAMES BEFORE IT CAN BE PUBLISHED, per shape. Enforced at the PUBLISH transition and never
+#: at save: an author builds up to it, and a draft may sit at one game for as long as they like.
+#:
+#: Five for a tier list (owner's call): one per seeded row, and low enough that a six-entry franchise
+#: tier list is still legal. The floor exists to stop "two games in S" reaching the browse page, not
+#: to curate taste.
+#:
+#: Two for a poll, because a poll with one option is not a question.
+#:
+#: ZERO FOR A GRID, and that is the interesting one -- a grid may legitimately ship with no pool at
+#: all. See `Prompt.allow_duplicates` and `PromptPlacement.concept`: an empty pool means respondents
+#: search the whole catalogue for each slot, which is the shape the grid is really for. A grid's floor
+#: is on its SLOTS instead, and lives in the service.
+MIN_GAMES_TO_PUBLISH = {
+    SHAPE_TIER: 5,
+    SHAPE_GRID: 0,
+    SHAPE_POLL: 2,
+}
+
 #: Bucket colours, as PALETTE SLOTS rather than free hex. The tier-list genre has its own convention
 #: (S is red, F is grey) and hunters expect it, but free hex is a UGC surface that needs validating
 #: and can paint unreadable text over the design tokens. The CSS maps each slot to a `--pp-*` derived
@@ -248,6 +267,26 @@ class Prompt(models.Model):
         default=False,
         help_text='Opt-IN. A prompt is private until its author publishes it.',
     )
+    #: GRID ONLY, and the one rule the shipped schema had to be reopened for.
+    #:
+    #: `PromptPlacement` used to carry an UNCONDITIONAL `unique(response, prompt_game)` -- one bucket
+    #: per game, always -- and this file argued for refusing "Elden Ring wins Best Combat AND Best
+    #: Story" on the grounds that the tray must stay derivable as `pool - placements`. The owner's
+    #: call overrides that: on a grid, naming the same game twice is the point, so the constraint
+    #: became conditional and the tray became "everything, minus nothing" for an open grid.
+    #:
+    #: DEFAULTS TO ALLOWING THEM, because a grid asking nine questions usually wants nine independent
+    #: answers. Turning it off is a deliberate "each slot gets a different game", and the service
+    #: refuses to turn it off unless the pool is big enough to actually fill every slot -- otherwise
+    #: the author ships a grid nobody can complete.
+    #:
+    #: Read by nothing on a tier list or a poll, which forbid duplicates unconditionally. See
+    #: `forbids_duplicates`.
+    allow_duplicates = models.BooleanField(
+        default=True,
+        help_text='Grids only: may one game be used in more than one slot?',
+    )
+
     #: Answered but finished with. Closing hides nothing and deletes nothing: every response stays
     #: readable, and the prompt stays on its own page. It only refuses NEW responses.
     is_closed = models.BooleanField(
@@ -324,6 +363,20 @@ class Prompt(models.Model):
     def clean(self):
         if not self.title.strip():
             raise ValidationError({'title': 'A prompt needs a title.'})
+
+    @property
+    def forbids_duplicates(self):
+        """May one game appear in two of this prompt's buckets, within one answer?
+
+        THE SECOND AXIS, and it is genuinely not the same question as `is_single_slot`. That one asks
+        how many games a BUCKET holds; this asks how many buckets a GAME may occupy. A grid answers
+        "one" to the first and (by default) "as many as you like" to the second, which is why one
+        capacity number could never have expressed both.
+
+        Tier and poll forbid duplicates unconditionally: a game in two tiers is a contradiction and a
+        poll picks one thing.
+        """
+        return self.shape != SHAPE_GRID or not self.allow_duplicates
 
     @property
     def is_single_slot(self):
@@ -486,8 +539,12 @@ class PromptPlacement(models.Model):
     pruned them. A real FK to Concept fixes the dangling reference and NOT the actual problem, because
     the Concept is still there -- it is the author's pool row that went away.
 
-    Corollary worth stating because it saves a whole branch: this table has no Concept FK, so
-    `Concept.absorb()` needs no branch for it. Only `PromptGame.concept` touches Concept.
+    THAT USED TO SAVE A WHOLE BRANCH, and no longer does. This table had no Concept FK at all, so
+    `Concept.absorb()` needed nothing for it -- until open grids shipped and `concept` above arrived.
+    Both columns now have absorb branches, and they dedup differently: the pool one against
+    `unique(response, prompt_game)`, the free pick against a `unique(response, concept)` that is
+    PARTIAL on `no_duplicates`. Recorded as a correction rather than edited away, because "no branch
+    needed" is exactly the kind of note that stays believed after it stops being true.
 
     WHAT THE SCHEMA DOES **NOT** HOLD, said here rather than discovered later. Nothing ties these
     three foreign keys to the same prompt: a row whose `response` answers prompt A, whose
@@ -506,13 +563,30 @@ class PromptPlacement(models.Model):
     """
 
     response = models.ForeignKey(PromptResponse, on_delete=models.CASCADE, related_name='placements')
-    prompt_game = models.ForeignKey(PromptGame, on_delete=models.CASCADE, related_name='placements')
+    prompt_game = models.ForeignKey(PromptGame, on_delete=models.CASCADE, null=True,
+                                    blank=True, related_name='placements')
     #: CASCADE and NOT NULL, which looks like it contradicts `GameListItem.section = SET_NULL` and does
     #: not. SET_NULL exists there so that deleting a section never deletes GAMES. Here the game is not
     #: deleted -- it sits untouched in the pool and the card simply returns to the tray. A placement is
     #: an association, not the content. A null bucket would belong nowhere in a tally, and for a poll
     #: it would be a second unconstrained pick, because unique indexes ignore NULLs.
     bucket = models.ForeignKey(PromptBucket, on_delete=models.CASCADE, related_name='placements')
+    #: THE FREE PICK, and the reason `prompt_game` had to become nullable.
+    #:
+    #: An OPEN GRID has no pool: the author sets nine questions and every respondent searches the
+    #: whole catalogue for each slot. There is no pool row for such a pick to point at, so it points
+    #: at the Concept.
+    #:
+    #: This does NOT reopen the `UserChecklistProgress` bug that `prompt_game` exists to close. That
+    #: bug was a reference whose INTEGRITY TARGET could go away underneath it -- an author deleting a
+    #: pool entry and leaving dangling ids that still counted. Here there is no pool to be integral
+    #: to, and a Concept does not vanish: it is merged, and `Concept.absorb()` re-points this column
+    #: exactly as it re-points `PromptGame.concept`.
+    #:
+    #: EXACTLY ONE OF THE TWO IS SET, enforced below. A row with both would be two different claims
+    #: about the same card; a row with neither is a placement of nothing.
+    concept = models.ForeignKey(Concept, on_delete=models.CASCADE, null=True, blank=True,
+                                related_name='prompt_placements')
     #: Denormalized from `prompt.shape` at insert, and safe ONLY because shape is immutable. It is
     #: how "one game per bucket for a grid and a poll, unlimited for a tier row" reaches the database
     #: at all, since the rule lives on the grandparent and a CheckConstraint cannot see it.
@@ -526,6 +600,16 @@ class PromptPlacement(models.Model):
     #: Therefore: `Prompt.is_single_slot` is the ONLY supported source of this value, and the service
     #: is the only writer. Write-once -- nothing updates it, because nothing may.
     single_slot = models.BooleanField()
+    #: The other denormalized flag, from `Prompt.forbids_duplicates`, and carried for exactly the same
+    #: reason: the rule lives on the grandparent and a CheckConstraint cannot see it. Same warning
+    #: too -- the partial uniques below have per-ROW predicates, so one placement written with this
+    #: wrong does not collide with the correctly-flagged row beside it.
+    #:
+    #: Unlike `single_slot` this one is NOT safe by immutability, because `allow_duplicates` can be
+    #: toggled. The service therefore refuses to toggle it on a published grid and rewrites every
+    #: existing placement when it does toggle -- which is bounded, because an unpublished grid can
+    #: only hold answers from its own author.
+    no_duplicates = models.BooleanField(default=True)
     #: Order within `(response, bucket)`. Dense, and deliberately NOT global the way
     #: `GameListItem.position` is: neither of the two things that forced global there -- the cover
     #: mosaic's bounded prefetch and the two render-time numbering modes -- has an analogue inside a
@@ -542,15 +626,28 @@ class PromptPlacement(models.Model):
         #: yet; this says what the ordering is FOR, so P1 does not add a join to `Meta` to get it.)
         ordering = ['position']
         constraints = [
-            # ONE BUCKET PER GAME, always. Obvious for a tier list. For a grid it is a real product
-            # call -- "Elden Ring wins Best Combat AND Best Story" -- and it is refused, because the
-            # tray is defined as `pool - placements`: if a game can sit in two slots then a card is
-            # simultaneously placed and unplaced, the tray stops being derivable, and the drag needs a
-            # copy affordance. That is a different editor. The asymmetry decides it: dropping this
-            # constraint later is a one-line migration, adding it after four hundred people have
-            # answered is not.
+            # ONE BUCKET PER GAME -- now CONDITIONAL, and the history is worth keeping. This was
+            # unconditional, and this file argued for refusing "Elden Ring wins Best Combat AND Best
+            # Story" on the grounds that the tray must stay derivable as `pool - placements`. The
+            # owner's call overrode it: on a grid that is the point. The prediction in the old comment
+            # held exactly -- "dropping this constraint later is a one-line migration" -- and this is
+            # that migration.
+            #
+            # TWO OF THEM, because a placement has two possible identity columns: a pool row, or a
+            # free-picked Concept. Unique indexes ignore NULLs, so each constraint only ever sees the
+            # rows that use its column, and neither needs to know about the other.
             models.UniqueConstraint(fields=['response', 'prompt_game'],
+                                    condition=Q(no_duplicates=True),
                                     name='promptplacement_unique_game'),
+            models.UniqueConstraint(fields=['response', 'concept'],
+                                    condition=Q(no_duplicates=True),
+                                    name='promptplacement_unique_concept'),
+            # A placement is of ONE thing. Both set is two claims about one card; neither set is a
+            # placement of nothing, which would render as a blank slot nobody can remove.
+            models.CheckConstraint(
+                condition=(Q(prompt_game__isnull=False, concept__isnull=True)
+                           | Q(prompt_game__isnull=True, concept__isnull=False)),
+                name='promptplacement_one_identity'),
             # ONE GAME PER BUCKET, for the shapes that promise it. Partial on the denormalized flag
             # because the condition lives two tables up.
             models.UniqueConstraint(fields=['response', 'bucket'], condition=Q(single_slot=True),

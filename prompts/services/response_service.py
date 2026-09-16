@@ -43,10 +43,13 @@ from django.utils import timezone
 
 from prompts.models import (
     MAX_PLACEMENTS_PER_RESPONSE,
+    SHAPE_GRID,
     Prompt,
+    PromptGame,
     PromptPlacement,
     PromptResponse,
 )
+from trophies.models import Concept
 from prompts.services.prompt_service import (
     PromptError,
     refuse_if_restricted,
@@ -121,23 +124,67 @@ def _lock_response(response):
 
 # ── placing ──────────────────────────────────────────────────────────────────────────────────────
 
+def _has_pool(prompt):
+    """Did the author supply a set of games, or is this open?
+
+    Read from ROWS rather than from `game_count`, because it decides whether a free pick is allowed
+    and a drifted counter must never be what opens or closes that door.
+    """
+    return PromptGame.objects.filter(prompt=prompt).exists()
+
+
+def _resolve_card(prompt, *, game_id, concept_id):
+    """Turn whichever id the caller sent into the thing a placement points at.
+
+    TWO IDENTITIES, ONE PLACEMENT. A pooled prompt's card is a `PromptGame` -- the integrity target
+    that makes an author's removal cascade correctly. An OPEN GRID has no pool at all: the author sets
+    the questions and every respondent searches the whole catalogue, so their card is a `Concept` and
+    there is nothing for it to be integral to.
+
+    The free pick is allowed ONLY on a grid with an empty pool. A grid whose author supplied games is
+    limited to those games, which is the author's whole reason for supplying them.
+    """
+    if (game_id is None) == (concept_id is None):
+        raise PromptError('Pick one game.')
+
+    if game_id is not None:
+        game = get_game(prompt, game_id)
+        if game is None:
+            raise PromptError('That game is not in this one.')
+        return {'prompt_game': game, 'concept': None}
+
+    if prompt.shape != SHAPE_GRID:
+        raise PromptError('This one has its own set of games to choose from.')
+    if _has_pool(prompt):
+        raise PromptError('This grid has its own set of games to choose from.')
+    concept = Concept.objects.filter(pk=concept_id).first()
+    if concept is None:
+        raise PromptError('That game could not be found.')
+    return {'prompt_game': None, 'concept': concept}
+
+
 @transaction.atomic
-def place(prompt, profile, *, game_id, bucket_id):
+def place(prompt, profile, *, bucket_id, game_id=None, concept_id=None):
     """Put one game in one bucket, creating the hunter's response if this is their first.
 
-    MOVING IS THE SAME ACT AS PLACING. A game already placed elsewhere in this response is moved
-    rather than refused -- that is what dragging a card from one row to another IS, and making the
-    editor unplace-then-place would leave a window where a drag that half-failed dropped the card out
-    of the response entirely.
+    EXACTLY ONE OF `game_id` / `concept_id`: a pool row for a pooled prompt, a free-picked Concept for
+    an open grid. See `_resolve_card`.
+
+    MOVING IS THE SAME ACT AS PLACING, on a prompt that forbids duplicates: a card already placed
+    elsewhere is moved rather than refused, because that is what dragging from one row to another IS,
+    and unplace-then-place would leave a window where a half-failed drag dropped it out entirely.
+
+    WHERE DUPLICATES ARE ALLOWED, THAT STOPS BEING TRUE, and it is the one behavioural fork in this
+    function. On such a grid the same game in two slots is the point, so placing it into a second slot
+    ADDS a card rather than moving the first -- and "already here" has to be asked per bucket instead
+    of per response, or the second drop would silently empty the first slot.
     """
     refuse_if_unlinked(profile)
     refuse_if_restricted(profile)
     _refuse_if_unreadable(prompt, profile)
 
-    # Resolved through the prompt, never by bare id -- rule 3. Both must belong to THIS prompt.
-    game = get_game(prompt, game_id)
-    if game is None:
-        raise PromptError('That game is not in this one.')
+    # Resolved through the prompt, never by bare id -- rule 3.
+    ident = _resolve_card(prompt, game_id=game_id, concept_id=concept_id)
     bucket = get_bucket(prompt, bucket_id)
     if bucket is None:
         raise PromptError('That row is not part of this one.')
@@ -167,7 +214,13 @@ def place(prompt, profile, *, game_id, bucket_id):
         response, _created = PromptResponse.objects.get_or_create(prompt=prompt, profile=profile)
 
     locked = _lock_response(response)
-    existing = PromptPlacement.objects.filter(response=locked, prompt_game=game).first()
+    # WHAT COUNTS AS "ALREADY HERE" DEPENDS ON THE DUPLICATES RULE. Per response when they are
+    # forbidden (so a second drop MOVES the card); per bucket when they are allowed (so a second drop
+    # in a different slot ADDS one, while a second drop in the SAME slot is still a no-op).
+    scope = dict(response=locked, **ident)
+    if not prompt.forbids_duplicates:
+        scope['bucket'] = bucket
+    existing = PromptPlacement.objects.filter(**scope).first()
 
     if existing is None:
         # The cap only binds a NEW placement; moving a card that is already here cannot exceed it.
@@ -177,10 +230,11 @@ def place(prompt, profile, *, game_id, bucket_id):
     # EVICTION, rule 4. On a grid the occupant goes back to the tray; on a poll this is what "change
     # your vote" means. Done before the write rather than after, so the partial unique never has two
     # rows to choose between -- and scoped to this response, so it is only ever the hunter's own card
-    # that moves.
+    # that moves. The `exclude` spares the card being placed: without it, re-placing a card where it
+    # already is deletes the row and then saves the stale object over it.
     if prompt.is_single_slot:
         PromptPlacement.objects.filter(response=locked, bucket=bucket).exclude(
-            prompt_game=game).delete()
+            pk=existing.pk if existing else 0).delete()
 
     if existing is not None:
         existing.bucket = bucket
@@ -190,11 +244,13 @@ def place(prompt, profile, *, game_id, bucket_id):
     else:
         placement = PromptPlacement.objects.create(
             response=locked,
-            prompt_game=game,
             bucket=bucket,
-            # THE FLAG, from the prompt and never from a caller. See rule 1.
+            # THE FLAGS, from the prompt and never from a caller. See rule 1. `no_duplicates` is the
+            # second axis and is just as load-bearing: its partial uniques have per-ROW predicates too.
             single_slot=prompt.is_single_slot,
+            no_duplicates=prompt.forbids_duplicates,
             position=_next_position(locked, bucket),
+            **ident,
         )
 
     _recount(locked, prompt)
@@ -202,26 +258,38 @@ def place(prompt, profile, *, game_id, bucket_id):
 
 
 @transaction.atomic
-def unplace(prompt, profile, *, game_id):
-    """Take one card back to the tray. Ungated: withdrawing your own content never is."""
+def unplace(prompt, profile, *, game_id=None, concept_id=None, bucket_id=None):
+    """Take one card back to the tray. Ungated: withdrawing your own content never is.
+
+    `bucket_id` NARROWS IT TO ONE SLOT, and it only means anything where duplicates are allowed: a
+    grid may hold the same game in three slots, and tapping remove on one of them must not empty the
+    other two. Left out, every copy of that card comes back, which is the honest reading of "take this
+    game out of my answer".
+    """
     refuse_if_unlinked(profile)
 
-    game = get_game(prompt, game_id)
-    if game is None:
-        raise PromptError('That game is not in this one.')
+    ident = _resolve_card(prompt, game_id=game_id, concept_id=concept_id)
 
     response = response_for(prompt, profile)
     if response is None:
         return None
 
     locked = _lock_response(response)
-    placement = PromptPlacement.objects.filter(response=locked, prompt_game=game).first()
+    scope = dict(response=locked, **ident)
+    if bucket_id is not None:
+        bucket = get_bucket(prompt, bucket_id)
+        if bucket is None:
+            raise PromptError('That row is not part of this one.')
+        scope['bucket'] = bucket
+    placement = PromptPlacement.objects.filter(**scope).first()
     if placement is None:
         return None
 
     bucket_id = placement.bucket_id
     removed_position = placement.position
     placement.delete()
+    # Every other copy of the same card, where duplicates put one there.
+    PromptPlacement.objects.filter(**scope).delete()
     # Dense within the bucket it left, the same contract the pool keeps.
     PromptPlacement.objects.filter(
         response=locked, bucket_id=bucket_id, position__gt=removed_position,
@@ -232,8 +300,13 @@ def unplace(prompt, profile, *, game_id):
 
 
 @transaction.atomic
-def reorder_bucket(prompt, profile, *, bucket_id, game_ids):
-    """Set the order WITHIN one bucket to exactly `game_ids`.
+def reorder_bucket(prompt, profile, *, bucket_id, placement_ids):
+    """Set the order WITHIN one bucket to exactly `placement_ids`.
+
+    KEYED ON PLACEMENTS, NOT ON GAMES, because a card no longer has one identity: a pooled prompt's
+    placement points at a pool row and an open grid's at a Concept, and a grid that allows duplicates
+    can hold the same game twice in one row. The placement id is the only thing that names exactly one
+    card in exactly one slot.
 
     Refuses a partial list, the same contract every reorder on this site holds: a drag that posts a
     subset means the client and the server disagree about what is in the row.
@@ -253,20 +326,19 @@ def reorder_bucket(prompt, profile, *, bucket_id, game_ids):
 
     locked = _lock_response(response)
     try:
-        wanted = [int(value) for value in game_ids]
+        wanted = [int(value) for value in placement_ids]
     except (TypeError, ValueError):
         raise PromptError('That is not a valid order.')
 
     here = list(PromptPlacement.objects.filter(response=locked, bucket=bucket)
-                .values_list('prompt_game_id', flat=True))
+                .values_list('pk', flat=True))
     if sorted(wanted) != sorted(here):
         raise PromptError('That order does not match what is in this row.')
 
-    by_game = {p.prompt_game_id: p for p in
-               PromptPlacement.objects.filter(response=locked, bucket=bucket)}
-    for position, game_id in enumerate(wanted):
-        by_game[game_id].position = position
-    PromptPlacement.objects.bulk_update(by_game.values(), ['position'])
+    by_pk = {p.pk: p for p in PromptPlacement.objects.filter(response=locked, bucket=bucket)}
+    for position, placement_id in enumerate(wanted):
+        by_pk[placement_id].position = position
+    PromptPlacement.objects.bulk_update(by_pk.values(), ['position'])
     PromptResponse.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
 
 

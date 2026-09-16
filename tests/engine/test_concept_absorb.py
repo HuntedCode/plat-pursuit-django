@@ -593,3 +593,84 @@ def test_absorb_works_through_a_prompt_whose_buckets_hold_one_game():
     assert placement.bucket_id == box.pk
     voted_doomed.refresh_from_db()
     assert voted_doomed.placement_count == 1
+
+
+def test_absorb_moves_a_free_pick_on_an_open_grid():
+    """The second Concept FK on the placement table, which arrived with open grids.
+
+    An open grid has no pool, so a respondent's card points at the Concept itself. `PromptPlacement`
+    used to carry a comment saying it needed no absorb branch at all -- true until that column
+    existed, and exactly the kind of note that stays believed after it stops being true.
+
+    The dedup is NARROWER than the pool branch's: `unique(response, concept)` is partial on
+    `no_duplicates`, so a grid that allows duplicates holds both concepts happily and every row simply
+    re-points."""
+    from prompts.models import Prompt, PromptBucket, PromptPlacement, PromptResponse
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='gridauthor')
+
+    grid = Prompt.objects.create(owner=author, shape='grid', title='Pick one each',
+                                 allow_duplicates=False, is_public=True)
+    left = PromptBucket.objects.create(prompt=grid, label='Best combat', position=0)
+    right = PromptBucket.objects.create(prompt=grid, label='Best story', position=1)
+
+    # One hunter picked only the doomed concept: nothing to collide with, so it must MOVE.
+    mover = PromptResponse.objects.create(
+        prompt=grid, profile=ProfileFactory(is_linked=True, psn_username='mover'),
+        placement_count=1)
+    PromptPlacement.objects.create(response=mover, concept=doomed, bucket=left,
+                                   single_slot=True, no_duplicates=True)
+
+    # Another picked BOTH, in different slots. They are the same game now, and this grid forbids
+    # duplicates, so one of the two has to go.
+    both = PromptResponse.objects.create(
+        prompt=grid, profile=ProfileFactory(is_linked=True, psn_username='both'),
+        placement_count=2)
+    PromptPlacement.objects.create(response=both, concept=survivor, bucket=left,
+                                   single_slot=True, no_duplicates=True)
+    PromptPlacement.objects.create(response=both, concept=doomed, bucket=right,
+                                   single_slot=True, no_duplicates=True)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    assert mover.placements.get().concept_id == survivor.pk, 'a free pick was dropped, not moved'
+    mover.refresh_from_db()
+    assert mover.placement_count == 1
+
+    assert both.placements.count() == 1, 'the merge left one game in the answer twice'
+    assert both.placements.get().concept_id == survivor.pk
+    both.refresh_from_db()
+    assert both.placement_count == 1, 'placement_count still counts the dropped duplicate'
+
+
+def test_absorb_keeps_both_picks_where_a_grid_allows_duplicates():
+    """The half the pool branch has no analogue for. `unique(response, concept)` is PARTIAL on
+    `no_duplicates`, so on a grid that allows duplicates the two concepts becoming one collides with
+    nothing -- and the hunter, who deliberately named the same game twice, keeps both cards."""
+    from prompts.models import Prompt, PromptBucket, PromptPlacement, PromptResponse
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='dupauthor')
+
+    grid = Prompt.objects.create(owner=author, shape='grid', title='Pick one each',
+                                 allow_duplicates=True, is_public=True)
+    left = PromptBucket.objects.create(prompt=grid, label='Best combat', position=0)
+    right = PromptBucket.objects.create(prompt=grid, label='Best story', position=1)
+
+    answer = PromptResponse.objects.create(
+        prompt=grid, profile=ProfileFactory(is_linked=True, psn_username='dupper'),
+        placement_count=2)
+    PromptPlacement.objects.create(response=answer, concept=survivor, bucket=left,
+                                   single_slot=True, no_duplicates=False)
+    PromptPlacement.objects.create(response=answer, concept=doomed, bucket=right,
+                                   single_slot=True, no_duplicates=False)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    assert answer.placements.count() == 2, 'a deliberate duplicate was deduped away'
+    assert set(answer.placements.values_list('concept_id', flat=True)) == {survivor.pk}
+    answer.refresh_from_db()
+    assert answer.placement_count == 2

@@ -43,7 +43,9 @@ from prompts.models import (
     MAX_GAMES_PER_PROMPT,
     MAX_GRID_COLUMNS,
     MEMBER_MAX_PROMPTS,
+    MIN_GAMES_TO_PUBLISH,
     MIN_GRID_COLUMNS,
+    SHAPE_GRID,
     SHAPE_POLL,
     SHAPE_TIER,
     SHAPES,
@@ -224,6 +226,78 @@ def _check_grid_columns(raw):
 
 # ── locks and lookups ────────────────────────────────────────────────────────────────────────────
 
+#: WHAT A PUBLISHED PROMPT STOPS ACCEPTING, per shape. Owner's call, and the reasoning differs by
+#: shape rather than being one blanket rule:
+#:
+#: * A TIER LIST stays fully live. Its rows are a ranking the author owns, and a locked decision says
+#:   author edits reach existing answers -- an added game appears unplaced in everyone's, a removed
+#:   one drops out. Nothing here freezes.
+#: * A GRID freezes its SLOTS, because the slots are the questions: changing "Best combat" to "Worst
+#:   combat" after people answer inverts what every existing answer says, silently, with no row
+#:   changed. Its POOL may still GROW -- more choices is additive and breaks nothing -- but nothing
+#:   may leave it, because a departing game takes real answers with it.
+#: * A POLL freezes entirely. Adding an option mid-vote is the classic way to rig one, and the tally
+#:   is the whole artifact.
+#:
+#: THE ESCAPE HATCH IS A RULE THAT ALREADY EXISTS rather than a special case: unpublishing is refused
+#: only once somebody has answered, so an author who spots a typo with zero responses can unpublish,
+#: fix and republish. The moment anyone answers, that door closes and the structure is fixed for good.
+_FROZEN_WHILE_PUBLIC = {
+    SHAPE_TIER: frozenset(),
+    SHAPE_GRID: frozenset({'rows', 'pool_remove'}),
+    SHAPE_POLL: frozenset({'rows', 'pool_add', 'pool_remove', 'pool_order'}),
+}
+
+_FROZEN_COPY = {
+    'rows': 'The rows of a published {shape} cannot be changed.',
+    'pool_add': 'A published {shape} cannot take new games.',
+    'pool_remove': 'A published {shape} cannot lose games.',
+    'pool_order': 'A published {shape} cannot be rearranged.',
+}
+
+
+def _refuse_if_frozen(locked, *, act):
+    """Refuse an edit this shape does not accept while it is public."""
+    if not locked.is_public or act not in _FROZEN_WHILE_PUBLIC[locked.shape]:
+        return
+    what = _FROZEN_COPY[act].format(shape=locked.get_shape_display().lower())
+    raise PromptError(
+        f'{what} Unpublish it first -- you still can, while nobody has answered.'
+    )
+
+
+def _refuse_if_not_publishable(locked):
+    """The floor a prompt has to clear before anybody can be asked to answer it.
+
+    AT THE PUBLISH TRANSITION AND NOWHERE ELSE. A draft may sit at one game for as long as its author
+    likes; what must not happen is a half-built thing reaching the browse page, because the first page
+    of a new feature is where a two-game tier list does the most damage.
+
+    Three checks, and the third is the one that is easy to miss: a grid whose author supplied a pool
+    AND turned duplicates off needs at least as many games as it has slots, or it ships a grid nobody
+    can finish.
+    """
+    rows = PromptBucket.objects.filter(prompt=locked).count()
+    if rows < 1:
+        raise PromptError('Add at least one row before publishing this.')
+
+    games = PromptGame.objects.filter(prompt=locked).count()
+    floor = MIN_GAMES_TO_PUBLISH[locked.shape]
+    if games < floor:
+        raise PromptError(
+            f'A {locked.get_shape_display().lower()} needs at least {floor} games before it goes up. '
+            f'This one has {games}.'
+        )
+
+    # A grid with an EMPTY pool is the open kind: respondents search the catalogue for each slot, so
+    # there is nothing to be short of. Only a supplied pool has to be big enough.
+    if locked.shape == SHAPE_GRID and games and locked.forbids_duplicates and games < rows:
+        raise PromptError(
+            f'With duplicates off, this needs at least as many games as slots: {rows} slots, '
+            f'{games} games.'
+        )
+
+
 def _lock_prompt(prompt):
     """Re-read FOR UPDATE and re-assert the precondition on the row that came back.
 
@@ -312,12 +386,18 @@ def _answered_by_somebody_else(prompt):
 # ── prompts ──────────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
-def create_prompt(profile, *, shape, title, description='', is_public=False, grid_columns=3):
+def create_prompt(profile, *, shape, title, description='', grid_columns=3,
+                  allow_duplicates=True):
     """Make one, with the buckets its shape starts with.
 
     The buckets are created HERE rather than by the author's first edit, because a poll's single
     bucket is an integrity guarantee rather than a convenience: there is no path in this service that
     creates a poll without exactly one, and none that lets a second appear.
+
+    IT IS ALWAYS BORN PRIVATE, and there is deliberately no `is_public` argument. Every shape now has
+    a floor to clear before it can be published (`_refuse_if_not_publishable`), and a brand-new prompt
+    clears none of them -- so the parameter could only ever have meant "refuse this create". Publishing
+    is a deliberate second act with its own affordance, which is what the design asked for anyway.
     """
     refuse_if_unlinked(profile)
     refuse_if_restricted(profile)
@@ -342,7 +422,7 @@ def create_prompt(profile, *, shape, title, description='', is_public=False, gri
 
     prompt = Prompt.objects.create(
         owner=profile, shape=shape, title=title, description=description,
-        is_public=bool(is_public), grid_columns=columns)
+        grid_columns=columns, allow_duplicates=bool(allow_duplicates))
 
     for position, (label, colour) in enumerate(DEFAULT_BUCKETS.get(shape, ())):
         PromptBucket.objects.create(prompt=prompt, label=label, colour=colour, position=position)
@@ -351,7 +431,7 @@ def create_prompt(profile, *, shape, title, description='', is_public=False, gri
 
 @transaction.atomic
 def update_prompt(prompt, profile, *, title=None, description=None, is_public=None,
-                  grid_columns=None):
+                  grid_columns=None, allow_duplicates=None):
     """Edit one you own. Every argument is optional; only what is passed is touched.
 
     NO `shape` ARGUMENT, and that absence is the feature. See `prompts/models.py` -- changing a tier
@@ -393,6 +473,31 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
                 'answers stay readable and nobody new can add one.'
             )
 
+    # PUBLISHING CLEARS A FLOOR. Checked before anything is written, so a call carrying a rename and
+    # a publish lands neither if the floor is not met.
+    if is_public is not None and is_public and not locked.is_public:
+        _refuse_if_not_publishable(locked)
+
+    # THE DUPLICATES TOGGLE, and the two rules around it. It is refused on a published grid because it
+    # changes what every existing answer is allowed to be; and turning it OFF against a supplied pool
+    # needs that pool to be able to fill every slot, or the author ships something unfinishable.
+    if allow_duplicates is not None:
+        if locked.shape != SHAPE_GRID:
+            raise PromptError('Only a grid has that setting.')
+        if locked.is_public:
+            raise PromptError(
+                'A published grid cannot change that. Unpublish it first -- you still can, while '
+                'nobody has answered.'
+            )
+        if not allow_duplicates:
+            games = PromptGame.objects.filter(prompt=locked).count()
+            rows = PromptBucket.objects.filter(prompt=locked).count()
+            if games and games < rows:
+                raise PromptError(
+                    f'With duplicates off, this needs at least as many games as slots: {rows} '
+                    f'slots, {games} games.'
+                )
+
     changed = []
     if title is not None:
         locked.title = _check_title(title)
@@ -406,9 +511,26 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
     if grid_columns is not None:
         locked.grid_columns = _check_grid_columns(grid_columns)
         changed.append('grid_columns')
+    if allow_duplicates is not None:
+        locked.allow_duplicates = bool(allow_duplicates)
+        changed.append('allow_duplicates')
 
     if changed:
         locked.save(update_fields=[*changed, 'updated_at'])
+
+    # EVERY EXISTING PLACEMENT'S FLAG MOVES WITH IT. `no_duplicates` is denormalized onto each
+    # placement because the partial uniques cannot see the grandparent, and unlike `single_slot` it is
+    # not protected by immutability -- so a toggle that left old rows behind would leave a grid whose
+    # answers disagree with its own rule, invisibly, because a per-row predicate does not collide with
+    # anything.
+    #
+    # Bounded: the toggle is refused on a published grid, and an unpublished one can only carry
+    # answers from its own author.
+    if allow_duplicates is not None:
+        from prompts.models import PromptPlacement
+        PromptPlacement.objects.filter(response__prompt=locked).update(
+            no_duplicates=locked.forbids_duplicates)
+
     return locked
 
 
@@ -499,6 +621,7 @@ def add_concept(prompt, profile, concept):
     refuse_if_restricted(profile)
 
     locked = _lock_prompt(prompt)
+    _refuse_if_frozen(locked, act='pool_add')
     if PromptGame.objects.filter(prompt=locked, concept=concept).exists():
         raise PromptError('That game is already in here.')
 
@@ -538,6 +661,7 @@ def remove_concept(prompt, profile, game):
     _require_owner(prompt, profile)
 
     locked = _lock_prompt(prompt)
+    _refuse_if_frozen(locked, act='pool_remove')
     fresh = _lock_game(game, locked)
 
     # Collected BEFORE the delete, because afterwards there is no way to find them.
@@ -571,6 +695,7 @@ def reorder_games(prompt, profile, game_ids):
     """
     _require_owner(prompt, profile)
     locked = _lock_prompt(prompt)
+    _refuse_if_frozen(locked, act='pool_order')
 
     try:
         wanted = [int(value) for value in game_ids]
@@ -613,6 +738,7 @@ def create_bucket(prompt, profile, *, label, colour=''):
     colour = _check_colour(colour)
 
     locked = _lock_prompt(prompt)
+    _refuse_if_frozen(locked, act='rows')
     if locked.shape == SHAPE_POLL:
         raise PromptError('A poll asks one question. Its answer box is the only row it has.')
 
@@ -643,6 +769,7 @@ def update_bucket(bucket, profile, *, label=None, colour=None):
         refuse_if_restricted(profile)
 
     locked = _lock_prompt(prompt)
+    _refuse_if_frozen(locked, act='rows')
     fresh = _lock_bucket(bucket, locked)
 
     changed = []
@@ -676,6 +803,7 @@ def delete_bucket(bucket, profile):
     _require_owner(prompt, profile)
 
     locked = _lock_prompt(prompt)
+    _refuse_if_frozen(locked, act='rows')
     fresh = _lock_bucket(bucket, locked)
 
     if PromptBucket.objects.filter(prompt=locked).count() <= 1:
@@ -709,6 +837,7 @@ def reorder_buckets(prompt, profile, bucket_ids):
     """
     _require_owner(prompt, profile)
     locked = _lock_prompt(prompt)
+    _refuse_if_frozen(locked, act='rows')
 
     try:
         wanted = [int(value) for value in bucket_ids]
