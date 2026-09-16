@@ -1,0 +1,329 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% block title %}{{ prompt.title }}{% endblock %}
+{% comment %}A DRAFT IS NEVER INDEXED, and neither is a closed-off querystring permutation. `readable_by`
+already 404s a draft for everybody but its author, so this is belt-and-braces -- but the author's own
+render IS a 200 with real content, and that is exactly the page a signed-in crawler session would
+otherwise be handed.{% endcomment %}
+{% block robots %}{% if not prompt.is_public or request.GET %}noindex, nofollow{% else %}{{ block.super }}{% endif %}{% endblock %}
+
+{% block content %}
+{% comment %}ONE PROMPT, and the page its author builds it on.
+
+THE AUTHOR'S TOOLS ARE THE SAME MARKUP THE READER SEES, with controls added -- never a separate edit
+mode and never a separate address. What is being edited IS the published artefact: the rows, their
+order, their colours. An edit screen that looked different from the live page would be a preview that
+lies, which matters more here than on a list because a respondent's whole experience is the structure
+the author is arranging.
+
+EVERY CONTROL IS GATED ON A `can_*` FLAG FROM THE VIEW, and those flags come from
+`prompt_service.frozen_acts`. No template on this page knows that a poll freezes when it goes public
+or that a draft freezes nothing -- that rule is stated once, in the service that enforces it. If a
+button renders here, the endpoint behind it will accept the press.{% endcomment %}
+{% comment %}`data-pd-browse-url` is where a delete returns to. Server-built rather than assembled in
+JS, and NOT `document.referrer` -- the referrer may be the page of the prompt that was just
+deleted.{% endcomment %}
+<div class="pp-pdet" data-pd-root data-pd-shape="{{ prompt.shape }}"
+     data-pd-browse-url="{{ browse_url }}">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Page header: the accented card every rebuilt page opens with. ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0 flex-1" data-pd-identity>
+
+                    {# ── the read view ── #}
+                    <div data-pd-identity-view>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="pp-pdet__shape">{{ shape_label }}</span>
+                            {% comment %}The draft chip is the single most important thing on this page
+                            for an author: it is the difference between "I am working on this" and
+                            "people can answer this", and it is the state they will forget they are
+                            in. Hidden rather than absent, so the JS can reveal it on unpublish
+                            without a reload.{% endcomment %}
+                            <span class="pp-pdet__chip pp-pdet__chip--draft"
+                                  data-pd-draft-chip {% if prompt.is_public %}hidden{% endif %}>Draft</span>
+                            <span class="pp-pdet__chip pp-pdet__chip--closed"
+                                  data-pd-closed-chip {% if not prompt.is_closed %}hidden{% endif %}>Closed</span>
+                        </div>
+
+                        <div class="flex items-center gap-2 mt-1">
+                            <h1 class="text-lg md:text-xl lg:text-2xl font-bold break-words" data-pd-title>{{ prompt.title }}</h1>
+                            {% if can_edit_question %}
+                            <button type="button" class="pp-pdet__pencil" data-pd-edit-open
+                                    aria-label="Edit the title and description">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>
+                                </svg>
+                            </button>
+                            {% endif %}
+                        </div>
+
+                        <p class="text-xs md:text-sm text-base-content/60 mt-1 pr-1" data-pd-description
+                           {% if not prompt.description %}hidden{% endif %}>{{ prompt.description }}</p>
+
+                        <p class="text-[0.7rem] md:text-xs text-base-content/45 mt-1.5">
+                            {% comment %}`default:` because `display_psn_username` is nullable -- it is
+                            filled from the PSN API, so an unsynced profile renders the literal string
+                            "None". Same guard as the tile and the list byline.{% endcomment %}
+                            by {{ prompt.owner.display_psn_username|default:prompt.owner.psn_username }}
+                            &middot; {{ prompt.created_at|date:'j M Y' }}
+                        </p>
+                    </div>
+
+                    {% comment %}── the edit form ──
+                    IN PLACE, revealed over the read view rather than routed to. `hidden` on the way in
+                    so a reader (and a crawler) never receives a form they cannot use -- and so the
+                    read view is what renders with JS off.{% endcomment %}
+                    {% if can_edit_question %}
+                    <form data-pd-identity-edit hidden class="pp-pdet__edit"
+                          data-url="{% url 'prompt_update' prompt.id %}">
+                        <label class="pp-pdet__field">
+                            <span class="pp-pdet__label">Title</span>
+                            {% comment %}`maxlength` from the same constant the column and the service
+                            read. A live counter that disagrees with what the server accepts is worse
+                            than no counter, because it is confidently wrong.{% endcomment %}
+                            <input type="text" name="title" value="{{ prompt.title }}"
+                                   maxlength="{{ title_max_length }}" required
+                                   data-pd-edit-title class="pp-pdet__input" />
+                        </label>
+                        <label class="pp-pdet__field">
+                            <span class="pp-pdet__label">Description <span class="pp-pdet__optional">optional</span></span>
+                            <textarea name="description" rows="2" maxlength="{{ description_max_length }}"
+                                      data-pd-edit-description class="pp-pdet__input pp-pdet__input--area">{{ prompt.description }}</textarea>
+                        </label>
+
+                        {% if is_grid %}
+                        {% comment %}GRID ONLY, because these are the two settings only a grid has.
+                        `grid_columns` is geometry the author picks -- nine slots is a different promise
+                        laid out 3x3 than 1x9 -- and duplicates is the "each slot gets a different
+                        game" switch. Both are refused on other shapes by the service; not drawing them
+                        is the affordance matching the rule.{% endcomment %}
+                        <div class="pp-pdet__grid-settings">
+                            <label class="pp-pdet__field pp-pdet__field--inline">
+                                <span class="pp-pdet__label">Columns</span>
+                                <select name="grid_columns" data-pd-edit-columns class="pp-pdet__select">
+                                    {% for n in grid_column_choices %}
+                                    <option value="{{ n }}" {% if prompt.grid_columns == n %}selected{% endif %}>{{ n }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label class="pp-pdet__check">
+                                <input type="checkbox" data-pd-edit-duplicates
+                                       {% if prompt.allow_duplicates %}checked{% endif %} />
+                                <span>Let one game fill more than one slot</span>
+                            </label>
+                        </div>
+                        {% endif %}
+
+                        <div class="pp-pdet__edit-actions">
+                            <button type="submit" class="pp-cta" data-pd-edit-save>Save</button>
+                            <button type="button" class="pp-cta pp-cta--ghost" data-pd-edit-cancel>Cancel</button>
+                        </div>
+                    </form>
+                    {% endif %}
+                </div>
+
+                {% comment %}The two numbers this prompt is judged by, in the site's tally treatment.
+                Answers first: on a prompt, how many people bothered is the stronger signal, and it is
+                what the browse sorts on by default.{% endcomment %}
+                <div class="flex items-center gap-4 shrink-0 text-right">
+                    <div>
+                        <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl"
+                              data-pd-tally-answers>{{ prompt.response_count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">answer{{ prompt.response_count|pluralize }}</span>
+                    </div>
+                    <div>
+                        <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl"
+                              data-pd-tally-likes>{{ prompt.like_count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">like{{ prompt.like_count|pluralize }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {# ── the action row ── #}
+            <div class="pp-pdet__actions">
+                {% if can_like %}
+                <button type="button" class="pp-cta{% if not viewer_liked %} pp-cta--ghost{% endif %}"
+                        data-pd-like data-url="{% url 'prompt_like' prompt.id %}"
+                        aria-pressed="{% if viewer_liked %}true{% else %}false{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="{% if viewer_liked %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-pd-like-icon>
+                        <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8z"/>
+                    </svg>
+                    <span data-pd-like-label>{% if viewer_liked %}Liked{% else %}Like{% endif %}</span>
+                </button>
+                {% endif %}
+
+                {% if can_edit %}
+                {% comment %}PUBLISH AND UNPUBLISH ARE ONE CONTROL IN TWO STATES, both rendered and one
+                hidden, so the JS swaps visibility rather than rebuilding markup -- the same shape the
+                list page's visibility control uses.
+
+                The blocker line is the service's own refusal, asked ahead of time by
+                `publish_blocker`. An author reads why they cannot publish instead of discovering it by
+                pressing an enabled button, and because it is the same function that refuses the write,
+                the hint and the error cannot word it differently.{% endcomment %}
+                <span class="pp-pdet__visibility" data-pd-visibility
+                      data-url="{% url 'prompt_update' prompt.id %}">
+                    <span class="contents" data-pd-draft-state {% if prompt.is_public %}hidden{% endif %}>
+                        <button type="button" class="pp-cta" data-pd-publish
+                                {% if publish_blocker %}disabled{% endif %}>Publish</button>
+                    </span>
+                    <span class="contents" data-pd-public-state {% if not prompt.is_public %}hidden{% endif %}>
+                        <button type="button" class="pp-cta pp-cta--ghost" data-pd-unpublish>Unpublish</button>
+                        <button type="button" class="pp-cta pp-cta--ghost" data-pd-close
+                                data-url="{% url 'prompt_close' prompt.id %}">
+                            <span data-pd-close-label>{% if prompt.is_closed %}Reopen{% else %}Close{% endif %}</span>
+                        </button>
+                    </span>
+                </span>
+
+                <button type="button" class="pp-cta pp-cta--danger pp-pdet__delete" data-pd-delete
+                        data-url="{% url 'prompt_delete' prompt.id %}">Delete</button>
+                {% endif %}
+            </div>
+
+            {% if publish_blocker %}
+            <p class="pp-pdet__blocker" data-pd-blocker>{{ publish_blocker }}</p>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %}── THE ROWS ──
+    Not drawn for a poll, and not because of a shape branch: a poll's row quota is one, `create_prompt`
+    spends it, so `can_add_rows` is already false and its single bucket has no label worth showing. The
+    panel is gated on the rows themselves existing or being addable.{% endcomment %}
+    {% if not is_poll %}
+    <section class="scard pp-pdet__panel" data-pd-rows-panel>
+        <header class="pp-pdet__panel-head">
+            <h2 class="pp-pdet__panel-title">{% if is_grid %}Slots{% else %}Rows{% endif %}</h2>
+            <span class="pp-pdet__panel-count" data-pd-row-count>{{ buckets|length }}/{{ max_buckets }}</span>
+        </header>
+
+        <div class="pp-pdet__rows" data-pd-rows
+             data-reorder-url="{% url 'prompt_reorder_buckets' prompt.id %}">
+            {% for bucket in buckets %}
+            {% include 'prompts/partials/detail_row.html' %}
+            {% empty %}
+            <p class="pp-pdet__empty" data-pd-rows-empty>
+                {% if is_grid %}No slots yet. Each one is a question people answer with a game.
+                {% else %}No rows yet. S, A, B, C and D is the classic, but they are yours.{% endif %}
+            </p>
+            {% endfor %}
+        </div>
+
+        {% if can_add_rows %}
+        <form class="pp-pdet__rowadd" data-pd-row-add data-url="{% url 'prompt_create_bucket' prompt.id %}">
+            <input type="text" name="label" class="pp-pdet__input" data-pd-row-label
+                   maxlength="{{ label_max_length }}" required
+                   placeholder="{% if is_grid %}Best soundtrack{% else %}S{% endif %}"
+                   aria-label="{% if is_grid %}New slot{% else %}New row{% endif %} label" />
+            <select class="pp-pdet__select" data-pd-row-colour aria-label="Row colour">
+                {% for value, label in bucket_colours %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="pp-cta">Add</button>
+        </form>
+        {% elif can_edit and not is_poll %}
+        {% comment %}The author can see WHY the control is gone. A missing button with no explanation
+        reads as a bug; "a published grid cannot change its slots" reads as a rule.{% endcomment %}
+        <p class="pp-pdet__note" data-pd-rows-note>
+            {% if buckets|length >= max_buckets %}That is the most {% if is_grid %}slots{% else %}rows{% endif %} one can have.
+            {% else %}The {% if is_grid %}slots{% else %}rows{% endif %} are fixed while this is published. Unpublish to change them.{% endif %}
+        </p>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {% comment %}── THE POOL ──
+    An OPEN GRID has none, and that is a state rather than an absence: the author asked the questions
+    and every respondent searches the catalogue for their own answers. Saying so is the most useful
+    thing on the page for somebody deciding whether to answer.{% endcomment %}
+    <section class="scard pp-pdet__panel" data-pd-pool-panel>
+        <header class="pp-pdet__panel-head">
+            <h2 class="pp-pdet__panel-title">{% if is_poll %}Options{% else %}Games{% endif %}</h2>
+            <span class="pp-pdet__panel-count" data-pd-game-count>{{ pool|length }}{% if not is_open_grid %}/{{ max_games }}{% endif %}</span>
+        </header>
+
+        {% if can_add_more_games %}
+        {% comment %}The shared typeahead adder -- `.pp-bgal__search` markup and the same
+        `wireAdder` behaviour the list page uses, pointed at this prompt's endpoint. Reused whole
+        rather than re-implemented: half of it is the debounce, the abort of the in-flight request and
+        the keyboard handling, and copying only the markup is how three browser bugs got shipped on the
+        last surface that tried.{% endcomment %}
+        <div class="pp-bgal__search pp-pdet__adder" data-search-wrap data-pd-adder
+             data-search-url="{% url 'prompt_game_search' prompt.id %}"
+             data-add-url="{% url 'prompt_add_game' prompt.id %}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" placeholder="Add a game&hellip;" data-pd-adder-input
+                   aria-label="Search for a game to add"
+                   role="combobox" aria-expanded="false" aria-autocomplete="list"
+                   aria-controls="pd-adder-results" />
+            <span class="pp-search-spin" aria-hidden="true"></span>
+            <div class="pp-pdet__adder-panel" id="pd-adder-results" data-pd-adder-results role="listbox" hidden></div>
+        </div>
+        <p class="sr-only" aria-live="polite" data-pd-adder-status></p>
+        {% elif can_edit %}
+        <p class="pp-pdet__note" data-pd-pool-note>
+            {% if pool|length >= max_games %}That is the most games one prompt can hold.
+            {% else %}A published {{ shape_label|lower }} cannot take new games. Unpublish to add more.{% endif %}
+        </p>
+        {% endif %}
+
+        <div class="pp-pdet__pool" data-pd-pool
+             data-reorder-url="{% url 'prompt_reorder_games' prompt.id %}">
+            {% for game in pool %}
+            {% include 'prompts/partials/detail_game.html' %}
+            {% empty %}
+            <p class="pp-pdet__empty" data-pd-pool-empty>
+                {% if is_open_grid %}This one is open: whoever answers picks their own games for every slot.
+                {% elif is_poll %}No options yet. A poll needs at least two.
+                {% else %}No games yet. Add the ones people will be sorting.{% endif %}
+            </p>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% comment %}── THE ANSWERS ──
+    Read-only for now: the response editor is the next surface, and until it exists this panel's job is
+    to show that answers are the point of the page rather than to collect one. The count is the real
+    one, so an author watching their prompt land sees it move.{% endcomment %}
+    <section class="scard pp-pdet__panel" data-pd-answers-panel>
+        <header class="pp-pdet__panel-head">
+            <h2 class="pp-pdet__panel-title">Answers</h2>
+            <span class="pp-pdet__panel-count">{{ prompt.response_count|intcomma }}</span>
+        </header>
+
+        {% if responses %}
+        <ul class="pp-pdet__answers">
+            {% for response in responses %}
+            <li class="pp-pdet__answer">
+                <span class="pp-pdet__answer-by">{{ response.profile.display_psn_username|default:response.profile.psn_username }}</span>
+                <span class="pp-pdet__answer-meta">{{ response.placement_count }} placed &middot; {{ response.like_count|intcomma }} like{{ response.like_count|pluralize }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% if prompt.response_count > responses|length %}
+        <p class="pp-pdet__note">Showing the first {{ responses|length }}.</p>
+        {% endif %}
+        {% else %}
+        <p class="pp-pdet__empty">
+            {% if not prompt.is_public %}Nobody can answer a draft. Publish it when it is ready.
+            {% elif prompt.is_closed %}This closed before anybody answered.
+            {% else %}No answers yet. Somebody has to go first.{% endif %}
+        </p>
+        {% endif %}
+    </section>
+
+    {% if can_edit %}<p class="sr-only" aria-live="polite" data-pd-status></p>{% endif %}
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+    {% if can_edit or can_like %}
+    <script src="{% static 'js/prompt-detail.js' %}"></script>
+    {% endif %}
+{% endblock %}

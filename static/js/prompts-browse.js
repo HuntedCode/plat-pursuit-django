@@ -66,9 +66,88 @@
         countLast = newVal;
     }
 
+    /**
+     * The create dialog.
+     *
+     * A native `<dialog>` on the `.gd-modal` recipe, so the focus trap, Escape and focus restoration
+     * come from the element rather than from this file. `dismissableSheet` adds the touch grab pill
+     * and the swipe-down dismiss the site uses for sheets.
+     *
+     * THIS POSTS JSON RATHER THAN SUBMITTING, unlike the lists create dialog, and the difference is
+     * the refusal. `create_prompt` can decline for reasons the hunter can act on -- the prompt cap,
+     * a banned word, a title that sanitizes to nothing -- and the endpoint hands those back in its
+     * own words. A plain form submit would replace the page with an error and lose what was typed;
+     * here the refusal lands in the dialog beside the field it is about.
+     *
+     * The destination is `detail_url` FROM THE SERVER, never a path assembled here from the id.
+     */
+    function wireCreate(first) {
+        if (!first) { return; }                 // bound once: the dialog is outside the swap target
+        var dialog = document.getElementById('pr-create');
+        var open = document.querySelector('[data-pr-create-open]');
+        if (!dialog || !open || !dialog.showModal) { return; }
+
+        var form = dialog.querySelector('[data-pr-create-form]');
+        var error = dialog.querySelector('[data-pr-create-error]');
+        var save = dialog.querySelector('[data-pr-create-save]');
+
+        function close() {
+            if (dialog.open) { dialog.close(); }
+        }
+
+        function fail(message) {
+            if (!error) { return; }
+            error.textContent = message;
+            error.hidden = false;
+        }
+
+        open.addEventListener('click', function () {
+            if (error) { error.hidden = true; error.textContent = ''; }
+            dialog.showModal();
+            var title = dialog.querySelector('[data-pr-create-title]');
+            if (title) { title.focus(); }
+        });
+
+        Array.prototype.forEach.call(
+            dialog.querySelectorAll('[data-pr-create-close]'),
+            function (button) { button.addEventListener('click', close); });
+
+        if (PP.dismissableSheet) { PP.dismissableSheet(dialog, { onClose: close }); }
+
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                if (error) { error.hidden = true; }
+                if (save) { save.disabled = true; }
+
+                PP.postJson(form.dataset.url, new FormData(form))
+                    .then(function (data) {
+                        // Straight to the new prompt, which is empty and is where the next thing
+                        // happens. A toast on the page they are leaving would not be read.
+                        window.location.href = data.detail_url;
+                    })
+                    .catch(function (err) {
+                        if (save) { save.disabled = false; }
+                        if (window.console && window.console.error) {
+                            window.console.error('[prompts-browse] create failed', {
+                                status: (err && err.response && err.response.status) || 'no response',
+                                error: err,
+                            });
+                        }
+                        // THE SERVICE'S OWN WORDS when it refused -- they name the actual problem
+                        // ("you have 25 prompts already"), which a generic apology would discard.
+                        fail(err && err.signedOut
+                             ? 'You may have been signed out. Reload the page and try again.'
+                             : ((err && err.response && err.message) || 'That could not be made.'));
+                    });
+            });
+        }
+    }
+
     function boot(first) {
         initReveal();
         initScroller();
+        wireCreate(first);
 
         if (first) {
             // ON `afterSettle`, NOT `afterSwap`: htmx restores server-rendered attributes during

@@ -1,11 +1,14 @@
 {% comment %}One prompt on the browse grid.
 
-NOT AN ANCHOR YET, and that is deliberate rather than unfinished. There is no detail page to link to,
-and `<a href="#">` is not a harmless placeholder: it is a focusable control that promises navigation
-and delivers a scroll to the top, twenty-four dead tab stops per page, and -- on a page carrying
-`hx-push-url` -- a junk `#` entry wedged into history between filter states. A screen reader announces
-every one of them as a link. When the detail route lands this becomes an `<a>` and gains its `href`;
-until then it is what it actually is.
+THE WHOLE TILE IS THE LINK, which it was not while there was nowhere to go: this shipped as a `<div>`
+rather than as `<a href="#">`, because a placeholder anchor is a focusable control that promises
+navigation and delivers a scroll to the top -- twenty-four dead tab stops per page, each announced as
+a link, each wedging a junk `#` entry into the history of a page carrying `hx-push-url`. Now that
+`prompt_detail` exists it is the anchor it always wanted to be.
+
+ONE anchor wrapping everything, not a linked title beside linked art. Two links to one destination is
+two tab stops and two screen-reader announcements for one thing, and it leaves the rest of the tile
+looking clickable while not being.
 
 THE SCRIM IS NOT OPTIONAL. `.pp-gtile__name` is white with a text-shadow tuned to sit ON a scrim, and
 `.pp-gtile__author` is white at 66% for the same reason -- the shared tile overlays its body on the
@@ -22,7 +25,8 @@ to know about a grid before opening it.
 `cover_items` is attached by `prompts.services.covers.attach_cover_games`, two queries for the whole
 page. Never reach for art from here.{% endcomment %}
 {% load humanize %}
-<div class="pp-gtile pp-ptile" data-prompt-id="{{ prompt.id }}">
+<a class="pp-gtile pp-ptile" data-prompt-id="{{ prompt.id }}"
+   href="{% url 'prompt_detail' prompt.id %}">
     {% comment %}A DIRECT CHILD OF THE TILE, like `.pp-gtile__tag`, and not a child of the mosaic --
     which is `inset: 0`, so anything positioned from its bottom edge lands underneath
     `.pp-gtile__body` and is painted over by the facts row. Being outside the mosaic also keeps it
@@ -88,4 +92,4 @@ page. Never reach for art from here.{% endcomment %}
             {% endif %}
         </span>
     </span>
-</div>
+</a>

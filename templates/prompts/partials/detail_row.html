@@ -1,0 +1,56 @@
+{% comment %}One row of a tier list, or one slot of a grid.
+
+RENDERED IDENTICALLY FOR READER AND AUTHOR, with the controls added. The row IS the published artefact
+-- its label, its colour, its place in the order -- so an author editing it must be looking at what a
+respondent will see. `can_edit_rows` comes from `prompt_service.frozen_acts`, so a published grid
+draws no controls here and a draft draws them all, without this file knowing either rule.
+
+THE COLOUR IS A PALETTE SLOT, never free hex: `data-pd-colour` names the slot and the CSS maps it to a
+`--pp-*` derived colour, so a theme change moves every tier row at once and no UGC value can paint
+unreadable text over the design tokens.
+
+THE DRAG HANDLE IS NOT THE WHOLE ROW. A row carries a text input for the author; making the row itself
+draggable would eat the pointer events that input needs, which is the bug the list page's arrange mode
+records. The handle is its own control and carries the keyboard alternative with it.{% endcomment %}
+<div class="pp-pdet__row{% if bucket.colour %} pp-pdet__row--{{ bucket.colour }}{% endif %}"
+     {% comment %}`data-item-id` is DragReorderManager's contract, not a name chosen here: the manager
+     reads `evt.item.dataset.itemId` to build the reordered id list it hands to `onReorder`. A
+     differently-named attribute reorders correctly on screen and posts a list of `undefined`.{% endcomment %}
+     data-pd-row data-item-id="{{ bucket.id }}" data-pd-colour="{{ bucket.colour }}"
+     data-update-url="{% url 'prompt_update_bucket' prompt.id bucket.id %}"
+     data-delete-url="{% url 'prompt_delete_bucket' prompt.id bucket.id %}">
+
+    {% if can_edit_rows %}
+    <button type="button" class="pp-pdet__grip" data-pd-row-grip
+            aria-label="Reorder {{ bucket.label }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="17" x2="16" y2="17"/>
+        </svg>
+    </button>
+    {% endif %}
+
+    <span class="pp-pdet__row-label" data-pd-row-label-view>{{ bucket.label }}</span>
+
+    {% if can_edit_rows %}
+    {% comment %}The label input sits BESIDE the read span rather than replacing it, both always in the
+    DOM: swapping markup on every keystroke is what breaks focus mid-edit, and the read span is what
+    renders with JS off.{% endcomment %}
+    <input type="text" class="pp-pdet__row-input" data-pd-row-label-input hidden
+           value="{{ bucket.label }}" maxlength="{{ label_max_length }}"
+           aria-label="Rename {{ bucket.label }}" />
+
+    <select class="pp-pdet__row-colour" data-pd-row-colour-input
+            aria-label="Colour for {{ bucket.label }}">
+        {% for value, label in bucket_colours %}
+        <option value="{{ value }}" {% if bucket.colour == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+
+    <button type="button" class="pp-pdet__row-del" data-pd-row-delete
+            aria-label="Delete {{ bucket.label }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+    </button>
+    {% endif %}
+</div>

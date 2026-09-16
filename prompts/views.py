@@ -19,15 +19,21 @@ from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.urls import reverse, reverse_lazy
-from django.views.generic import ListView
+from django.views.generic import DetailView, ListView
 
-from prompts.models import (SHAPE_CHOICES, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES, Prompt,
-                            PromptLike)
+from prompts.models import (BUCKET_COLOUR_CHOICES, DESCRIPTION_MAX_LENGTH, LABEL_MAX_LENGTH,
+                            MAX_BUCKETS_PER_PROMPT, MAX_GAMES_PER_PROMPT, MAX_GRID_COLUMNS,
+                            MIN_GRID_COLUMNS, SHAPE_BLURBS,
+                            SHAPE_CHOICES, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES,
+                            TITLE_MAX_LENGTH, Prompt, PromptGame, PromptLike, shape_options)
 from django_ratelimit.decorators import ratelimit
 
 from api.utils import safe_int
 from prompts.services import prompt_service as svc
+from prompts.services import response_service as responses
 from prompts.services import social_service as social
+from gamelists.services.covers import cover_games_for
+from gamelists.services.game_search import SearchRefused, search_concepts
 from prompts.services.covers import attach_cover_games
 from trophies.mixins import HtmxListMixin, PremiumRequiredMixin
 from trophies.models import Concept
@@ -184,6 +190,23 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Tiers, Grids & Polls'},
         ]
+
+        # ── the create dialog ───────────────────────────────────────────────────────────────────
+        #
+        # `is_linked` because `create_prompt` refuses an unlinked profile outright. A button whose
+        # every press 400s is worse than no button, and the gate on the page must agree with the gate
+        # on the endpoint -- that disagreement is the bug this app keeps guarding against.
+        #
+        # DELIBERATELY NOT `max_prompts_for(profile)`: the cap is enforced at the write, where the
+        # count is taken under a lock, and asking here would run a COUNT on every browse render to
+        # decide whether to draw a button. The refusal carries its own words when somebody is full.
+        # `viewer` is the one settled above for the like hydration -- not re-fetched.
+        context['can_create'] = viewer is not None and viewer.is_linked
+        # The shapes with their blurbs, from the model, so the dialog and the tabs cannot describe the
+        # same shape differently. `shape` is already in context and preselects the current tab.
+        context['shape_options'] = shape_options()
+        context['title_max_length'] = TITLE_MAX_LENGTH
+        context['description_max_length'] = DESCRIPTION_MAX_LENGTH
         # `seo_title` FEEDS THE og/twitter TAGS; `{% block title %}` does not. Without it every share
         # of these three URLs previewed as the site-wide "Platinum Pursuit" with a correct
         # description under it -- the exact half-job `GameListDetailView` diagnosed and fixed for
@@ -199,6 +222,187 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
         if not self.request.user.is_authenticated:
             return None
         return getattr(self.request.user, 'profile', None)
+
+
+# ── the prompt itself ────────────────────────────────────────────────────────────────────────────
+
+#: A backstop on the answers panel, not a page. Real pagination arrives with the response surfaces;
+#: until then this is what stops a prompt that goes well from rendering four hundred cards into one
+#: response. Named rather than inlined so the day it becomes a page size, there is one number to move.
+MAX_RESPONSES_RENDERED = 48
+
+
+class PromptDetailView(PremiumRequiredMixin, DetailView):
+    """One prompt, and where its author builds it IN PLACE.
+
+    NO SEPARATE `/edit/` ADDRESS, for the reason the list detail page gives: editing happens where you
+    can see the result. That matters more here than it does on a list, because what an author is
+    editing IS the thing respondents will see -- rows, their order, their colours -- so an edit screen
+    that looked different from the published page would be a preview that lies.
+
+    `readable_by` is the single supported read, so a draft 404s for everybody but its author rather
+    than 403ing. Same reason as everywhere else in this app: a 403 confirms the prompt exists from
+    nothing but an id.
+
+    WHAT THE AUTHOR MAY DO IS ASKED OF THE SERVICE, never re-derived here. `frozen_acts` and
+    `publish_blocker` are the two readers this page needs, and both are thin wrappers over the rules
+    the write endpoints enforce -- so a control cannot be drawn for an act that would be refused, and
+    a refusal cannot be phrased differently from the hint that preceded it.
+    """
+
+    model = Prompt
+    template_name = 'prompts/detail.html'
+    context_object_name = 'prompt'
+    pk_url_kwarg = 'prompt_id'
+
+    def _viewer(self):
+        if not self.request.user.is_authenticated:
+            return None
+        return getattr(self.request.user, 'profile', None)
+
+    def get_queryset(self):
+        # `owner` for the byline. The pool's cover art is attached per-row below, batched.
+        return Prompt.objects.readable_by(self._viewer()).select_related('owner')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        prompt = self.object
+        viewer = self._viewer()
+        is_owner = viewer is not None and prompt.owner_id == viewer.id
+
+        # ── the structure ───────────────────────────────────────────────────────────────────────
+        #
+        # Both bounded by their per-shape caps (`MAX_BUCKETS_PER_PROMPT`, `MAX_GAMES_PER_PROMPT`), so
+        # these are the bounded reads CLAUDE.md's whale rule allows rather than the unbounded
+        # per-row iteration it bans. Two queries, flat, regardless of how well the prompt did.
+        buckets = list(prompt.buckets.all())
+        # `concept__igdb_match` deferred, because the pool cards call `display_image_url`, whose
+        # first lookup is the IGDB cover -- without the select_related that is one query per game,
+        # and without the `defer` each drags the ~30 KB `raw_response` blob that caused the May 2026
+        # OOM. CLAUDE.md names this pairing explicitly.
+        pool = list(
+            prompt.games
+            .select_related('concept', 'concept__igdb_match')
+            .defer('concept__igdb_match__raw_response')
+            .order_by('position')
+        )
+        covers = cover_games_for([game.concept_id for game in pool])
+        for game in pool:
+            game.cover = covers.get(game.concept_id)
+
+        context['buckets'] = buckets
+        context['pool'] = pool
+
+        # ── who is looking ──────────────────────────────────────────────────────────────────────
+        context['is_owner'] = is_owner
+        # `is_linked` for the same reason the list page carries it: every write endpoint refuses an
+        # unlinked profile, so the page and the endpoints have to agree about who can act. Drawing
+        # tools for somebody whose every use of them 400s is worse than drawing none.
+        context['can_edit'] = is_owner and viewer.is_linked
+
+        # ── what the author may do, asked of the service ────────────────────────────────────────
+        #
+        # One call, unpacked into the five flags the template needs. The template gets booleans and
+        # no rule: it must not know that a poll freezes or that a draft never does, because that
+        # knowledge in a template is a copy of the rule that no test will ever fail.
+        frozen = svc.frozen_acts(prompt)
+        context['can_edit_rows'] = context['can_edit'] and 'rows' not in frozen
+        context['can_add_games'] = context['can_edit'] and 'pool_add' not in frozen
+        context['can_remove_games'] = context['can_edit'] and 'pool_remove' not in frozen
+        context['can_reorder_pool'] = context['can_edit'] and 'pool_order' not in frozen
+        context['can_edit_question'] = context['can_edit'] and 'question' not in frozen
+        # Only meaningful to an author looking at a draft; computed only then, because it runs two
+        # COUNTs and a reader can do nothing with the answer.
+        context['publish_blocker'] = (
+            svc.publish_blocker(prompt) if context['can_edit'] and not prompt.is_public else None)
+
+        # ── the shape, as labels rather than as branches ────────────────────────────────────────
+        context['shape_label'] = prompt.get_shape_display()
+        context['shape_blurb'] = SHAPE_BLURBS[prompt.shape]
+        context['is_tier'] = prompt.shape == SHAPE_TIER
+        context['is_grid'] = prompt.shape == SHAPE_GRID
+        context['is_poll'] = prompt.shape == SHAPE_POLL
+        # An OPEN grid -- no pool -- is a different page: respondents search the catalogue per slot,
+        # so there is no pool panel to draw and no tray to drag from. Derived from the pool being
+        # empty rather than stored, which is the same derivation `_has_pool` makes in the response
+        # service, so the two cannot disagree about which kind of grid this is.
+        context['is_open_grid'] = context['is_grid'] and not pool
+
+        context['max_games'] = MAX_GAMES_PER_PROMPT[prompt.shape]
+        context['max_buckets'] = MAX_BUCKETS_PER_PROMPT[prompt.shape]
+        # The column picker's options, from the same bounds the check constraint and the service
+        # validator read, so the select cannot offer a value the database refuses.
+        context['grid_column_choices'] = range(MIN_GRID_COLUMNS, MAX_GRID_COLUMNS + 1)
+        # THE CAPS DECIDE WHETHER AN ADD CONTROL EXISTS, computed here so the template never compares
+        # a length to a constant.
+        #
+        # AN EARLIER VERSION OF THIS COMMENT CLAIMED THE CAP IS ALSO WHAT KEEPS A POLL FROM DRAWING
+        # ROW TOOLS "without a shape branch". That is false, and mutation testing is what said so: the
+        # template hides the whole rows panel behind `{% if not is_poll %}`, because a poll's single
+        # bucket has no label worth showing -- so `can_add_rows` could be forced True and the control
+        # still would not render. The cap here is a second line, not the line.
+        #
+        # The actual guarantee that a poll never gains a second bucket lives in `create_bucket`, which
+        # refuses it, and is pinned by `test_prompt_service`. It has to live there: "a hunter votes
+        # once" rests on `unique(response, bucket) WHERE single_slot`, which allows one placement PER
+        # BUCKET -- so a second bucket on a poll buys a second vote with every flag set correctly, and
+        # the database cannot catch it because the count lives on the parent.
+        context['can_add_rows'] = context['can_edit_rows'] and len(buckets) < context['max_buckets']
+        context['can_add_more_games'] = context['can_add_games'] and len(pool) < context['max_games']
+        context['bucket_colours'] = BUCKET_COLOUR_CHOICES
+        context['title_max_length'] = TITLE_MAX_LENGTH
+        context['description_max_length'] = DESCRIPTION_MAX_LENGTH
+        context['label_max_length'] = LABEL_MAX_LENGTH
+
+        # ── the answers ─────────────────────────────────────────────────────────────────────────
+        #
+        # The viewer's own answer is fetched even when it is PRIVATE -- `listed_responses` filters to
+        # public, and your own answer is yours to see either way. Two queries rather than one because
+        # they ask different questions; merging them would mean ORing a per-viewer predicate into the
+        # public read, which is how a private row ends up in somebody else's list.
+        context['viewer_response'] = responses.response_for(prompt, viewer)
+        context['responses'] = list(
+            responses.listed_responses(prompt)
+            .select_related('profile')
+            .order_by('-like_count', '-updated_at')[:MAX_RESPONSES_RENDERED]
+        )
+
+        # ── social ──────────────────────────────────────────────────────────────────────────────
+        #
+        # ONE `exists()`, and only for a signed-in viewer. An anonymous reader cannot have liked
+        # anything, so asking is a query whose answer is known.
+        context['viewer_liked'] = bool(
+            viewer is not None
+            and PromptLike.objects.filter(prompt=prompt, profile=viewer).exists()
+        )
+        # THE THREE REFUSALS `set_prompt_like` MAKES, asked before drawing the control. An owner is
+        # excluded because liking your own is refused outright -- a heart that always errors is worse
+        # than no heart -- and an unlinked profile is excluded for the reason `can_edit` carries it.
+        # Withdrawing a like is deliberately NOT gated on restriction here even though liking is: the
+        # service allows an unlike from a restricted profile, and a page that hid the lit heart would
+        # strand a like nobody could take back. That was a real bug on this surface once already.
+        context['can_like'] = bool(
+            viewer is not None and viewer.is_linked and not is_owner
+            and (context['viewer_liked'] or prompt.is_public)
+        )
+
+        # BACK TO THIS PROMPT'S OWN SHAPE, not to a generic hub: a reader who arrived on a poll wants
+        # the polls tab, and `SHAPE_TABS` is the one place that maps a shape to its URL -- read rather
+        # than reproduced, so a renamed route cannot leave a dead crumb here.
+        shape_url = next(url for value, _label, url in SHAPE_TABS if value == prompt.shape)
+        # Also where a delete returns to, which is why it is its own key rather than being dug back
+        # out of the breadcrumb: the crumb is presentation and could gain or lose a level.
+        context['browse_url'] = reverse(shape_url)
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Tiers, Grids & Polls', 'url': context['browse_url']},
+            {'text': prompt.title},
+        ]
+
+        # The share card and the tab both want the prompt's own name, not the site default.
+        context['seo_title'] = f'{prompt.title} -- {context["shape_label"]}'
+        context['seo_description'] = prompt.description or context['shape_blurb']
+        return context
 
 
 # ── the author's write endpoints ─────────────────────────────────────────────────────────────────
@@ -254,7 +458,15 @@ class CreatePromptView(PremiumRequiredMixin, View):
             )
         except svc.PromptError as exc:
             return JsonResponse({'error': str(exc)}, status=400)
-        return JsonResponse({'id': prompt.pk, 'title': prompt.title, 'shape': prompt.shape})
+        return JsonResponse({
+            'id': prompt.pk,
+            'title': prompt.title,
+            'shape': prompt.shape,
+            # A SERVER-BUILT ROUTE, never an id the client assembles into a path. `AddGameView`'s
+            # `remove_url` learned this: a hand-assembled URL is what breaks silently the day a route
+            # moves, and the create dialog navigates straight here.
+            'detail_url': reverse('prompt_detail', args=[prompt.pk]),
+        })
 
 
 class UpdatePromptView(_PromptActionView):
@@ -444,6 +656,42 @@ class ReorderBucketsView(_PromptActionView):
         except svc.PromptError as exc:
             return self.fail(exc)
         return JsonResponse({'ok': True})
+
+
+class PromptGameSearchView(_PromptActionView):
+    """Typeahead for the pool adder. The catalogue half is shared; the membership half is this one's.
+
+    GET, not POST, so it inherits `_PromptActionView`'s prompt resolution and its gate while answering
+    a read. The base's `post` is simply not defined, so a POST here is a 405 -- which is correct.
+
+    `already_added` IS BOUNDED TO THE TWELVE ROWS BEING RENDERED, never computed by reading the pool.
+    That is the same shape the list adder was fixed into, and for the reason CLAUDE.md's whale rule
+    names: `list(qs.values_list(...))` followed by Python membership runs on every keystroke, at 120
+    requests a minute, against a pool that can hold two hundred. The `WHERE concept_id IN (...)` is
+    served by the `unique(prompt, concept)` index, so it is a bounded seek.
+
+    Marked rather than filtered: somebody searching for a game already in the pool should be told it is
+    there, not left wondering why their search returns nothing.
+    """
+
+    @method_decorator(ratelimit(key='user', rate='120/m', method='GET', block=True))
+    def get(self, request, prompt_id):
+        prompt = self.get_prompt(request, prompt_id)
+        if prompt is None:
+            return self.not_found()
+        try:
+            results = search_concepts(request.GET.get('q'))
+        except SearchRefused as exc:
+            return self.fail(exc)
+
+        already = set(
+            PromptGame.objects
+            .filter(prompt=prompt, concept_id__in=[row['concept_id'] for row in results])
+            .values_list('concept_id', flat=True)
+        )
+        return JsonResponse({'results': [
+            dict(row, already_added=row['concept_id'] in already) for row in results
+        ]})
 
 
 class TogglePromptLikeView(_PromptActionView):

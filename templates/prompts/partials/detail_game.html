@@ -1,0 +1,45 @@
+{% comment %}One game in the prompt's pool, on the author's page.
+
+`game.cover` is a `Game` row attached by the view in ONE batched query for the whole pool. Never reach
+for art from here: a property that looks up its own image is what took the list browse to 23 queries
+for 20 rows while looking exactly like a field.
+
+`display_image_url` is the single source for the fallback chain (trusted IGDB cover, then PSN, then
+the trophy-list art) -- never reimplement it inline. `object-cover object-top` because PSN fallback art
+is wider than the 3:4 container and anchoring to the top is what keeps a game's logo in frame.
+
+A CONCEPT WITH NO TROPHY LIST IS ABSENT from the cover mapping -- that is `cover_games_for`'s stated
+contract -- so the placeholder here is a real state and not a missing-data bug.{% endcomment %}
+{# `data-item-id` is DragReorderManager's contract -- see the note in detail_row.html. #}
+<div class="pp-pdet__game" data-pd-game data-item-id="{{ game.id }}"
+     data-remove-url="{% url 'prompt_remove_game' prompt.id game.id %}">
+
+    {% if can_reorder_pool %}
+    <button type="button" class="pp-pdet__game-grip" data-pd-game-grip
+            aria-label="Reorder {{ game.concept.unified_title }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="17" x2="16" y2="17"/>
+        </svg>
+    </button>
+    {% endif %}
+
+    <span class="pp-pdet__game-art">
+        {% if game.cover %}
+        <img src="{{ game.cover.display_image_url }}" alt="" loading="lazy"
+             class="pp-pdet__game-img{% if not game.cover.has_cover_art %} pp-pdet__game-img--icon{% endif %}" />
+        {% else %}
+        <span class="pp-pdet__game-img pp-pdet__game-img--icon" aria-hidden="true"></span>
+        {% endif %}
+    </span>
+
+    <span class="pp-pdet__game-title">{{ game.concept.unified_title }}</span>
+
+    {% if can_remove_games %}
+    <button type="button" class="pp-pdet__game-del" data-pd-game-remove
+            aria-label="Remove {{ game.concept.unified_title }}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+    </button>
+    {% endif %}
+</div>

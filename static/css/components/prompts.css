@@ -152,3 +152,602 @@
         font-size: 0.64rem;
     }
 }
+
+
+/* ================================================================================================
+ * TIERS, GRIDS & POLLS -- one prompt, and the author's tools on it.
+ *
+ * THE PANELS ARE `.scard`, the site's section surface, so nothing here restates a border, a radius or
+ * a background. What this file adds is the inside of those panels: a row strip, a pool card, an
+ * adder skin and the header's chips.
+ *
+ * THE ROW COLOURS ARE PALETTE SLOTS, never free hex. `BUCKET_COLOUR_CHOICES` names seven, the model
+ * validates against them, and each maps to a `--pp-*` derived tint here -- so a theme change moves
+ * every tier row on the site at once, and no UGC value can paint unreadable text over the tokens.
+ * They are defined as a tint of a hue rather than as the hue itself because the label sits ON them:
+ * S-tier red at full strength is a red block with black text, which is the tier-list convention and
+ * is also the least readable thing on the page at 375px.
+ * ============================================================================================== */
+
+/* ── Header ───────────────────────────────────────────────────────────────────────────────────── */
+
+/* The shape, as a quiet label rather than a second badge. `.pp-ptile__shape` on the browse tile is
+   white-on-primary because it sits over cover art; here it sits on the page surface, where the same
+   treatment would read as a call to action next to the actual buttons. */
+.pp-pdet__shape {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.14rem 0.5rem;
+    border: 1px solid var(--pp-border);
+    border-radius: 999px;
+    background: var(--pp-bg-3);
+    color: var(--pp-text-mute);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+}
+
+.pp-pdet__chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.14rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+/* DRAFT IS THE LOUDEST THING IN THE HEADER, on purpose. It is the difference between "I am working on
+   this" and "people can answer this", and it is the state an author forgets they are in. Warning
+   rather than error: a draft is a normal place to be, not a fault. */
+.pp-pdet__chip--draft {
+    background: color-mix(in oklab, var(--pp-warning) 18%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 42%, transparent);
+    color: var(--pp-warning);
+}
+
+.pp-pdet__chip--closed {
+    background: var(--pp-bg-3);
+    border: 1px solid var(--pp-border);
+    color: var(--pp-text-dim);
+}
+
+/* The pencil beside the title. Sized to the 44px touch target the site uses, with the icon smaller
+   than its hit area rather than the other way round. */
+.pp-pdet__pencil {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: var(--pp-radius-sm);
+    color: var(--pp-text-mute);
+    transition: color var(--pp-dur-fast) var(--pp-ease),
+                background-color var(--pp-dur-fast) var(--pp-ease);
+}
+.pp-pdet__pencil svg { width: 0.95rem; height: 0.95rem; }
+@media (hover: hover) {
+    .pp-pdet__pencil:hover { color: var(--pp-primary); background: var(--pp-bg-3); }
+}
+.pp-pdet__pencil:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ── The identity editor ──────────────────────────────────────────────────────────────────────── */
+
+.pp-pdet__edit {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 0.25rem;
+}
+
+.pp-pdet__field { display: flex; flex-direction: column; gap: 0.25rem; }
+.pp-pdet__field--inline { flex-direction: row; align-items: center; gap: 0.5rem; }
+
+.pp-pdet__label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.pp-pdet__optional {
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--pp-text-dim);
+}
+
+.pp-pdet__input,
+.pp-pdet__select {
+    width: 100%;
+    padding: 0.42rem 0.6rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-1);
+    color: var(--pp-text);
+    font-size: 0.85rem;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease);
+}
+.pp-pdet__input:focus,
+.pp-pdet__select:focus {
+    outline: none;
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+}
+.pp-pdet__input--area { resize: vertical; min-height: 3.2rem; }
+.pp-pdet__select { width: auto; }
+
+.pp-pdet__grid-settings {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1.1rem;
+}
+.pp-pdet__check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--pp-text-dim);
+}
+
+.pp-pdet__edit-actions { display: flex; gap: 0.5rem; }
+
+/* ── The action row ───────────────────────────────────────────────────────────────────────────── */
+
+/* WRAPS RATHER THAN SCROLLS. At 375px an author can have five controls here (Publish, Unpublish,
+   Close, Delete, plus the like a non-owner sees); a horizontal scroller would hide Delete behind a
+   gesture nobody knows is available. `.contents` on the state wrappers is what lets the buttons
+   participate in this flex directly, so hiding one does not leave a gap. */
+.pp-pdet__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.85rem;
+}
+.pp-pdet__visibility { display: contents; }
+
+/* DELETE IS PUSHED AWAY FROM THE REST, so the irreversible control is not adjacent to the one an
+   author presses most. `margin-left: auto` only once there is room for it to mean something. */
+@media (min-width: 640px) {
+    .pp-pdet__delete { margin-left: auto; }
+}
+
+/* The reason Publish is disabled, in the service's own words. Sits under the actions rather than
+   beside the button: it is a sentence, and a sentence in a button row wraps into nonsense at 375px. */
+.pp-pdet__blocker {
+    margin-top: 0.5rem;
+    font-size: 0.72rem;
+    color: var(--pp-warning);
+}
+
+/* ── Panels ───────────────────────────────────────────────────────────────────────────────────── */
+
+.pp-pdet__panel { margin-top: 0.75rem; padding: 0.85rem 0.75rem; }
+@media (min-width: 768px) { .pp-pdet__panel { padding: 1.1rem; } }
+
+.pp-pdet__panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.7rem;
+}
+.pp-pdet__panel-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.pp-pdet__panel-count {
+    font-size: 0.72rem;
+    color: var(--pp-text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.pp-pdet__empty {
+    padding: 0.9rem 0.25rem;
+    font-size: 0.78rem;
+    color: var(--pp-text-dim);
+    font-style: italic;
+    /* `pr-1` in Tailwind terms: italic glyphs slant past their box and the last character clips. */
+    padding-right: 0.25rem;
+}
+.pp-pdet__note {
+    margin-top: 0.55rem;
+    font-size: 0.7rem;
+    color: var(--pp-text-dim);
+}
+
+/* ── Rows ─────────────────────────────────────────────────────────────────────────────────────── */
+
+.pp-pdet__rows { display: flex; flex-direction: column; gap: 0.35rem; }
+
+.pp-pdet__row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--pp-border);
+    border-left: 3px solid var(--pd-row-tint, var(--pp-border));
+    border-radius: var(--pp-radius-md);
+    background: linear-gradient(90deg,
+                color-mix(in oklab, var(--pd-row-tint, transparent) 10%, transparent),
+                transparent 60%),
+                var(--pp-bg-1);
+}
+
+/* The palette. One custom property per slot, consumed by the two rules above -- so adding a colour is
+   one line here and one line in `BUCKET_COLOUR_CHOICES`, and the tint can never be a raw value that
+   arrived from a form. */
+.pp-pdet__row--red    { --pd-row-tint: var(--pp-error); }
+.pp-pdet__row--orange { --pd-row-tint: var(--pp-metal-bronze); }
+.pp-pdet__row--yellow { --pd-row-tint: var(--pp-metal-gold); }
+.pp-pdet__row--green  { --pd-row-tint: var(--pp-success); }
+.pp-pdet__row--blue   { --pd-row-tint: var(--pp-info); }
+.pp-pdet__row--purple { --pd-row-tint: var(--pp-secondary); }
+.pp-pdet__row--grey   { --pd-row-tint: var(--pp-text-mute); }
+
+.pp-pdet__row-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--pp-text);
+    cursor: text;
+}
+.pp-pdet__row-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-0);
+    color: var(--pp-text);
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+.pp-pdet__row-input:focus { outline: none; }
+
+.pp-pdet__row-colour {
+    flex: none;
+    padding: 0.16rem 0.3rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-2);
+    color: var(--pp-text-dim);
+    font-size: 0.68rem;
+}
+
+/* Grip and delete share a shape. Both are 1.75rem so the row stays 44px-ish tall on touch without the
+   row itself needing a min-height that would look padded on desktop. */
+.pp-pdet__grip,
+.pp-pdet__row-del,
+.pp-pdet__game-grip,
+.pp-pdet__game-del {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--pp-radius-sm);
+    color: var(--pp-text-mute);
+    transition: color var(--pp-dur-fast) var(--pp-ease),
+                background-color var(--pp-dur-fast) var(--pp-ease);
+}
+.pp-pdet__grip svg,
+.pp-pdet__row-del svg,
+.pp-pdet__game-grip svg,
+.pp-pdet__game-del svg { width: 0.9rem; height: 0.9rem; }
+
+.pp-pdet__grip,
+.pp-pdet__game-grip { cursor: grab; }
+.pp-pdet__grip:active,
+.pp-pdet__game-grip:active { cursor: grabbing; }
+
+@media (hover: hover) {
+    .pp-pdet__grip:hover,
+    .pp-pdet__game-grip:hover { color: var(--pp-text); background: var(--pp-bg-3); }
+    .pp-pdet__row-del:hover,
+    .pp-pdet__game-del:hover { color: var(--pp-error); background: var(--pp-bg-3); }
+}
+.pp-pdet__grip:focus-visible,
+.pp-pdet__row-del:focus-visible,
+.pp-pdet__game-grip:focus-visible,
+.pp-pdet__game-del:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 1px;
+}
+
+.pp-pdet__rowadd {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+}
+.pp-pdet__rowadd .pp-pdet__input { flex: 1 1 8rem; width: auto; }
+
+/* ── Pool ─────────────────────────────────────────────────────────────────────────────────────── */
+
+.pp-pdet__pool {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+}
+
+.pp-pdet__game {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.45rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-1);
+    min-width: 0;
+}
+
+/* `aspect-[3/4]` in Tailwind terms -- IGDB's native cover ratio. */
+.pp-pdet__game-art {
+    flex: none;
+    width: 2rem;
+    aspect-ratio: 3 / 4;
+    border-radius: var(--pp-radius-sm);
+    overflow: hidden;
+    background: var(--pp-bg-3);
+}
+/* `object-top` because PSN fallback art is wider than this container: anchoring to the top is what
+   keeps a game's logo in frame when it crops. Never `fill`, which distorts. */
+.pp-pdet__game-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+    display: block;
+}
+/* A generic PS placeholder is an ICON, not art: it gets padding and is not cropped. */
+.pp-pdet__game-img--icon {
+    object-fit: contain;
+    padding: 0.3rem;
+    opacity: 0.55;
+}
+
+.pp-pdet__game-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.78rem;
+    color: var(--pp-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── The adder ────────────────────────────────────────────────────────────────────────────────── */
+
+/* RAISED, NOT REBUILT: every rule is scoped to `.pp-pdet__adder` and layers over `.pp-bgal__search`,
+   the shared search field. The behaviour is `PP.GameAdder`, shared with the lists page; only the skin
+   is local, and `prefix: 'pp-adder'` is what ties the two together. */
+.pp-pdet__adder { position: relative; width: 100%; }
+
+.pp-pdet__adder-panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 0.3rem);
+    left: 0;
+    right: 0;
+    max-height: 19rem;
+    overflow-y: auto;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2);
+    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.55);
+}
+
+.pp-adder__opt {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    width: 100%;
+    padding: 0.4rem 0.55rem;
+    text-align: left;
+    color: var(--pp-text);
+    transition: background-color var(--pp-dur-fast) var(--pp-ease);
+}
+.pp-adder__opt + .pp-adder__opt { border-top: 1px solid var(--pp-divider); }
+@media (hover: hover) { .pp-adder__opt:hover:not(:disabled) { background: var(--pp-bg-3); } }
+.pp-adder__opt:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.pp-adder__opt:disabled { color: var(--pp-text-dim); cursor: default; }
+
+.pp-adder__thumb {
+    flex: none;
+    width: 1.75rem;
+    aspect-ratio: 3 / 4;
+    border-radius: var(--pp-radius-sm);
+    overflow: hidden;
+    background: var(--pp-bg-3);
+    display: grid;
+    place-items: center;
+}
+.pp-adder__thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+}
+.pp-adder__thumb svg { width: 0.9rem; height: 0.9rem; color: var(--pp-text-mute); }
+
+.pp-adder__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pp-adder__state {
+    flex: none;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pp-primary);
+}
+.pp-adder__opt:disabled .pp-adder__state { color: var(--pp-text-dim); }
+
+.pp-adder__note {
+    padding: 0.7rem 0.6rem;
+    font-size: 0.75rem;
+    color: var(--pp-text-dim);
+}
+
+/* ── Answers ──────────────────────────────────────────────────────────────────────────────────── */
+
+.pp-pdet__answers { display: flex; flex-direction: column; }
+.pp-pdet__answer {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.42rem 0.15rem;
+}
+.pp-pdet__answer + .pp-pdet__answer { border-top: 1px solid var(--pp-divider); }
+.pp-pdet__answer-by { font-size: 0.82rem; color: var(--pp-text); }
+.pp-pdet__answer-meta {
+    flex: none;
+    font-size: 0.68rem;
+    color: var(--pp-text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── 375px ────────────────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+    /* The colour select loses its words and keeps its function: at this width the row is a label, a
+       grip and two controls, and "Orange" spelled out takes a third of it. The accessible name is on
+       the `aria-label`, which does not shrink. */
+    .pp-pdet__row-colour { max-width: 4.4rem; }
+    /* One game per line rather than two cramped ones -- a title ellipsed at eight characters is not a
+       game anybody can recognise. */
+    .pp-pdet__pool { grid-template-columns: 1fr; }
+}
+
+/* ── The create dialog ────────────────────────────────────────────────────────────────────────────
+ *
+ * A SKIN OVER `.gd-modal`, not a second modal. That recipe owns the positioning, the radius, the
+ * backdrop, the open/close animation and `:not([open]) { display: none }`; everything here is the
+ * inside of the sheet. The lists dialog layers over the same recipe the same way.
+ * ---------------------------------------------------------------------------------------------- */
+
+.pp-pdlg__form { display: flex; flex-direction: column; max-height: 88vh; }
+
+.pp-pdlg__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem 0.6rem;
+    border-bottom: 1px solid var(--pp-divider);
+}
+.pp-pdlg__title { font-size: 1rem; font-weight: 700; color: var(--pp-text); }
+
+.pp-pdlg__close {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: var(--pp-radius-sm);
+    color: var(--pp-text-mute);
+    font-size: 1.3rem;
+    line-height: 1;
+    transition: color var(--pp-dur-fast) var(--pp-ease),
+                background-color var(--pp-dur-fast) var(--pp-ease);
+}
+@media (hover: hover) {
+    .pp-pdlg__close:hover { color: var(--pp-text); background: var(--pp-bg-3); }
+}
+.pp-pdlg__close:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* SCROLLS INSIDE THE SHEET rather than growing it: three shape cards plus two fields plus a note is
+   taller than a 375px viewport in landscape, and a dialog taller than the screen puts its own submit
+   button out of reach with no way to scroll to it. */
+.pp-pdlg__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    padding: 0.9rem 1rem;
+    overflow-y: auto;
+}
+
+.pp-pdlg__label {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+    margin-bottom: 0.3rem;
+}
+
+.pp-pdlg__field { display: block; }
+
+/* ── The shape picker ── */
+
+.pp-pdlg__shapes { display: flex; flex-direction: column; gap: 0.35rem; border: 0; padding: 0; }
+
+.pp-pdlg__shape {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2);
+    cursor: pointer;
+    transition: border-color var(--pp-dur-fast) var(--pp-ease),
+                background-color var(--pp-dur-fast) var(--pp-ease);
+}
+@media (hover: hover) {
+    .pp-pdlg__shape:hover { border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
+}
+/* `:has()` so the whole card reads as selected, not just the dot. Supported everywhere this site
+   targets; the radio itself still shows state if it ever is not, so this degrades to a plain list. */
+.pp-pdlg__shape:has(input:checked) {
+    border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 9%, var(--pp-bg-2));
+}
+/* The focus ring belongs on the CARD, because the radio itself is a 13px dot at the edge of a 3rem
+   target -- a ring around it reads as a rendering artefact rather than as "you are here". */
+.pp-pdlg__shape:has(input:focus-visible) {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+.pp-pdlg__shape input { margin-top: 0.15rem; flex: none; accent-color: var(--pp-primary); }
+
+.pp-pdlg__shape-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.pp-pdlg__shape-name { font-size: 0.85rem; font-weight: 700; color: var(--pp-text); }
+.pp-pdlg__shape-blurb { font-size: 0.72rem; color: var(--pp-text-dim); }
+
+.pp-pdlg__note { font-size: 0.7rem; color: var(--pp-text-dim); }
+
+/* The refusal, in the service's own words, beside the fields it is about. `hidden` until there is
+   one -- an empty error box reserves space for a state that usually never happens. */
+.pp-pdlg__error {
+    padding: 0.45rem 0.6rem;
+    border: 1px solid color-mix(in oklab, var(--pp-error) 45%, transparent);
+    border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--pp-error) 12%, transparent);
+    color: var(--pp-error);
+    font-size: 0.75rem;
+}
+
+.pp-pdlg__foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.7rem 1rem 0.9rem;
+    border-top: 1px solid var(--pp-divider);
+}

@@ -394,6 +394,42 @@ def get_game(prompt, game_id):
     return PromptGame.objects.filter(pk=game_id, prompt=prompt).first()
 
 
+def frozen_acts(prompt):
+    """Which edits this prompt does not accept right now, as the act names `_refuse_if_frozen` uses.
+
+    THE PAGE ASKS THIS RATHER THAN KEEPING ITS OWN COPY of the freeze table. The detail page has to
+    decide which controls to draw, and the obvious way to do that -- `if prompt.shape == 'poll' and
+    prompt.is_public` in a view or, worse, in a template -- is a second statement of a rule that the
+    service already owns. Two copies of a rule do not stay equal; the one that drifts is whichever
+    nobody is testing, and here that would be the one deciding whether a hunter sees a button.
+
+    This is an AFFORDANCE reader, not a gate. `_refuse_if_frozen` still refuses at the door, so a
+    hand-posted request is denied whatever the page chose to draw.
+    """
+    if not prompt.is_public:
+        return frozenset()
+    return _FROZEN_WHILE_PUBLIC[prompt.shape]
+
+
+def publish_blocker(prompt):
+    """Why this cannot be published yet, in the words the endpoint would use -- or None.
+
+    The same function that refuses the write, asked ahead of time. The author sees "a tier list needs
+    at least 5 games before it goes up. This one has 3" beside a disabled button instead of finding it
+    out by pressing an enabled one.
+
+    Reusing the refusal rather than restating the floor is the entire point: the rule is stated once,
+    so the reason on the page and the reason from the endpoint cannot disagree. It reads the counts off
+    the row and takes no lock, which is right for a hint -- the authoritative check runs inside the
+    transaction, where a game removed between this render and that click is caught.
+    """
+    try:
+        _refuse_if_not_publishable(prompt)
+    except PromptError as exc:
+        return str(exc)
+    return None
+
+
 def _require_owner(prompt, profile):
     """Ownership, asked about the row rather than about the URL."""
     if prompt.is_deleted:

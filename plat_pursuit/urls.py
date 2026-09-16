@@ -26,7 +26,8 @@ from django.views.generic import RedirectView, TemplateView
 from prompts.models import SHAPE_GRID, SHAPE_POLL, SHAPE_TIER
 from prompts.views import (AddGameView, BrowsePromptsView, CreateBucketView,
                           CreatePromptView, DeleteBucketView, DeletePromptView,
-                          RemoveGameView, ReorderBucketsView, ReorderGamesView,
+                          PromptDetailView, PromptGameSearchView, RemoveGameView, ReorderBucketsView,
+                          ReorderGamesView,
                           SetClosedView, TogglePromptLikeView, UpdateBucketView,
                           UpdatePromptView)
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
@@ -412,6 +413,10 @@ urlpatterns = [
     path('community/tiers/', BrowsePromptsView.as_view(shape=SHAPE_TIER), name='prompts_browse_tiers'),
     path('community/grids/', BrowsePromptsView.as_view(shape=SHAPE_GRID), name='prompts_browse_grids'),
     path('community/polls/', BrowsePromptsView.as_view(shape=SHAPE_POLL), name='prompts_browse_polls'),
+    # ONE PROMPT. Shape-blind on purpose: the three browse URLs exist so each shape has a link worth
+    # sharing, but a prompt's own page is identified by its id and putting the shape in this path
+    # would make the same prompt reachable at a URL that could contradict its row.
+    path('community/prompts/<int:prompt_id>/', PromptDetailView.as_view(), name='prompt_detail'),
     # The author's write endpoints, under the page's own path rather than /api/v1/ -- they are this
     # feature's behaviour and share its gate, and a second permission stack is a second thing that
     # has to agree forever.
@@ -424,6 +429,8 @@ urlpatterns = [
     path('community/prompts/<int:prompt_id>/like/', TogglePromptLikeView.as_view(),
          name='prompt_like'),
     path('community/prompts/<int:prompt_id>/games/', AddGameView.as_view(), name='prompt_add_game'),
+    path('community/prompts/<int:prompt_id>/games/search/', PromptGameSearchView.as_view(),
+         name='prompt_game_search'),
     path('community/prompts/<int:prompt_id>/games/reorder/', ReorderGamesView.as_view(),
          name='prompt_reorder_games'),
     path('community/prompts/<int:prompt_id>/games/<int:game_id>/remove/', RemoveGameView.as_view(),

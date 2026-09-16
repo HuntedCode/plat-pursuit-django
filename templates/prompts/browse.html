@@ -29,9 +29,25 @@ to the prompts themselves.{% endcomment %}
                     </p>
                 </div>
 
-                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
-                    <span id="pr-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
-                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">shown</span>
+                <div class="flex items-center gap-3 shrink-0">
+                    {% comment %}"Make one" lives in the page header rather than on a My Prompts page,
+                    because there is no My Prompts page: a prompt's home is its own detail page and a
+                    hunter reaches their drafts from here. Rendered only for somebody who can actually
+                    create one -- the endpoint refuses an unlinked profile, and a button whose every
+                    press 400s is worse than no button.{% endcomment %}
+                    {% if can_create %}
+                    <button type="button" class="pp-cta" data-pr-create-open>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="w-4 h-4">
+                            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        Make one
+                    </button>
+                    {% endif %}
+
+                    <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block">
+                        <span id="pr-count" class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl" data-countup="{{ paginator.count }}">{{ paginator.count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">shown</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -96,6 +112,71 @@ to the prompts themselves.{% endcomment %}
     <div id="pr-sentinel" class="h-4" aria-hidden="true"></div>
     <div id="pr-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
 </div>
+
+{% if can_create %}
+{% comment %}CREATE, in a native <dialog> on the `.gd-modal` recipe -- the house pattern for form
+sheets, and the element that brings a real focus trap, Escape and focus restoration for free.
+
+NOT progressive enhancement, and the lists dialog records having claimed otherwise wrongly: with JS
+off a `<dialog>` is `display: none` and the only opener is a `<button type="button">`, so this is
+JS-only. It is stated rather than implied so nobody counts on a no-JS path that does not exist.
+
+THE SHAPE IS PICKED HERE AND NEVER AGAIN. `shape` is immutable after creation -- `update_prompt` takes
+no `shape` argument at all, because tier-to-grid would leave rows holding seven games under a one-game
+promise and make `single_slot` lie on every existing placement. So this dialog is the only place the
+choice is ever offered, which is why each option carries its blurb rather than just its name.{% endcomment %}
+<dialog id="pr-create" class="gd-modal pp-pdlg" aria-labelledby="pr-create-title">
+    <form class="pp-pdlg__form" data-pr-create-form data-url="{% url 'prompt_create' %}">
+        <div class="pp-pdlg__head">
+            <h2 class="pp-pdlg__title" id="pr-create-title">Set a prompt</h2>
+            <button type="button" class="pp-pdlg__close" data-pr-create-close aria-label="Close">&times;</button>
+        </div>
+
+        <div class="pp-pdlg__body">
+            {% comment %}RADIOS, not a select: three options with a line of explanation each is a
+            choice to read, not a value to pick, and it is a decision that cannot be revised. Radios
+            also give arrow-key navigation and one tab stop for the group.{% endcomment %}
+            <fieldset class="pp-pdlg__shapes">
+                <legend class="pp-pdlg__label">What kind</legend>
+                {% for value, label, blurb in shape_options %}
+                <label class="pp-pdlg__shape">
+                    <input type="radio" name="shape" value="{{ value }}"
+                           {% if shape == value %}checked{% endif %} required />
+                    <span class="pp-pdlg__shape-body">
+                        <span class="pp-pdlg__shape-name">{{ label }}</span>
+                        <span class="pp-pdlg__shape-blurb">{{ blurb }}</span>
+                    </span>
+                </label>
+                {% endfor %}
+            </fieldset>
+
+            <label class="pp-pdlg__field">
+                <span class="pp-pdlg__label">Title</span>
+                {# `maxlength` from the constant the column and the service both read. #}
+                <input type="text" name="title" maxlength="{{ title_max_length }}" required
+                       placeholder="Every Soulsborne, ranked" data-pr-create-title
+                       class="pp-pdet__input" />
+            </label>
+
+            <label class="pp-pdlg__field">
+                <span class="pp-pdlg__label">Description <span class="pp-pdet__optional">optional</span></span>
+                <textarea name="description" rows="2" maxlength="{{ description_max_length }}"
+                          class="pp-pdet__input pp-pdet__input--area"></textarea>
+            </label>
+
+            <p class="pp-pdlg__note">
+                Private until you publish it. You add the games and the rows next.
+            </p>
+            <p class="pp-pdlg__error" data-pr-create-error hidden></p>
+        </div>
+
+        <div class="pp-pdlg__foot">
+            <button type="button" class="pp-cta pp-cta--ghost" data-pr-create-close>Cancel</button>
+            <button type="submit" class="pp-cta" data-pr-create-save>Make it</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
 {% endblock %}
 
 {% block js_scripts %}
