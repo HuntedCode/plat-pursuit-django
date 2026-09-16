@@ -372,20 +372,40 @@
     // inner scrolling does not reach here: `overscroll-behavior: contain` stops it chaining to the
     // document, which otherwise closed the popover mid-flick for anybody with enough lists to scroll.
     //
-    // NOT WHILE THE FOCUS IS OURS, which is the same iOS keyboard problem the `resize` handler below
-    // was written for, reaching this handler by a route nobody applied the fix to. A hunter with NO
-    // lists yet -- precisely who the "Name one and this game starts it" copy is for -- gets the New
-    // list field focused on open; on iOS that raises the keyboard, and the keyboard SCROLLS the
-    // document to lift the field clear of it. So the panel closed on the frame it appeared, every
-    // time, and the feature was simply unreachable for a first-run hunter on an iPhone. A scroll the
-    // panel itself caused is not the hunter scrolling away from it; reposition, as resize does.
-    window.addEventListener('scroll', function () {
+    // ...BUT THE TRIGGER LEAVING IS THE TEST, not the scroll itself. The iOS keyboard scrolls the
+    // document on its own: the panel focuses its New list field on open for a hunter with no lists --
+    // precisely who the "Name one and this game starts it" copy is for -- the keyboard raises, the
+    // page scrolls to lift the field clear of it, and a handler that closes on any scroll closed the
+    // panel on the frame it appeared. Every time. The feature was unreachable for a first-run hunter
+    // on an iPhone, which is the same keyboard the `resize` handler below already had to learn about.
+    //
+    // ASKING WHETHER THE FOCUS IS OURS DOES NOT WORK, and it is worth saying why, because it is the
+    // obvious fix: `open()` focuses the panel on EVERY open, mouse included, so that test is true for
+    // every loaded popover and scroll-to-close simply stops existing -- the panel then rides a
+    // mouse-wheel scroll all the way off its card, and `place()` has no clamp in that direction, so it
+    // ends up hanging over the site header still posting for a game nobody can see.
+    //
+    // What actually distinguishes the two cases is whether the CARD is still on screen. A keyboard
+    // raise nudges it; scrolling away takes it out of the viewport entirely. So: follow while it is
+    // visible, close once it is not. `place()` forces two reflows, so this rides a frame.
+    var scrollPending = false;
+    function onScrollSettled() {
+        scrollPending = false;
         if (!pop || pop.hidden) { return; }
-        if (pop.contains(document.activeElement)) {
-            if (openTrigger && openTrigger.isConnected) { place(openTrigger); }
-            return;
-        }
-        close(false);
+        // Gone from the DOM entirely, the branch `resize` has always had: an anchor that no longer
+        // exists cannot be followed, and a panel left floating against a detached node is the state
+        // the htmx closer below exists to prevent.
+        if (!openTrigger || !openTrigger.isConnected) { close(false); return; }
+        var r = openTrigger.getBoundingClientRect();
+        var vh = window.innerHeight || document.documentElement.clientHeight;
+        if (r.bottom <= 0 || r.top >= vh) { close(false); return; }
+        place(openTrigger);
+    }
+    window.addEventListener('scroll', function () {
+        if (!pop || pop.hidden || scrollPending) { return; }
+        scrollPending = true;
+        if (window.requestAnimationFrame) { requestAnimationFrame(onScrollSettled); }
+        else { onScrollSettled(); }
     }, { passive: true });
 
     // REPOSITIONED, NOT CLOSED. Android fires `resize` when the virtual keyboard opens, and the

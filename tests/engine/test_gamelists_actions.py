@@ -1845,8 +1845,9 @@ def test_the_reveal_animates_the_cell_so_the_button_rides_with_its_card():
     utils = _decommented(_read('static/js/utils.js'))
 
     stagger = utils[utils.index('function staggerReveal('):utils.index('function arriveOnScroll(')]
-    assert "o.reveal((o.cellSelector && el.closest(o.cellSelector)) || el, delay)" in stagger, \
+    assert "var target = (o.cellSelector && el.closest(o.cellSelector)) || el;" in stagger, \
         'the reveal plays on the card, so a control beside it is outside the animation'
+    assert 'o.reveal(target, delay);' in stagger
 
     # ...and every grid that renders a cell asks for it. A caller that forgets is a grid whose button
     # hangs still over an arriving card -- the bug itself, on one page.
@@ -1886,10 +1887,86 @@ def test_the_popover_survives_the_ios_keyboard_raising():
     never carried across to `scroll`."""
     js = _decommented(_read('static/js/quick-add.js'))
 
-    handler = js[js.index("window.addEventListener('scroll'"):]
+    handler = js[js.index('function onScrollSettled()'):]
     handler = handler[:handler.index("window.addEventListener('resize'")]
-    assert 'pop.contains(document.activeElement)' in handler, \
-        'a scroll the panel itself caused still closes the panel'
-    # Repositioned, not merely ignored: the panel is `fixed`, so a scroll it did not cause moves the
-    # page under it, and a panel that ignores the scroll floats away from its trigger.
+
+    # THE TRIGGER'S VISIBILITY IS THE TEST. Not the scroll (which the keyboard causes by itself), and
+    # NOT whether the focus is ours -- `open()` focuses the panel on every open, mouse included, so
+    # that test is true for every loaded popover and scroll-to-close stops existing altogether.
+    assert 'getBoundingClientRect()' in handler
+    assert 'r.bottom <= 0 || r.top >= vh' in handler, \
+        'the panel follows its card off the screen instead of closing'
     assert 'place(openTrigger)' in handler
+
+    # The branch `resize` has always had and this one was missing: an anchor that no longer exists
+    # cannot be followed, and the panel must not be left floating against a detached node.
+    assert 'if (!openTrigger || !openTrigger.isConnected) { close(false); return; }' in handler
+
+    # `place()` forces two reflows, so a raw scroll listener calling it is a per-event reflow storm.
+    assert 'requestAnimationFrame(onScrollSettled)' in js
+
+
+def test_an_arriving_cell_is_inert_until_its_animation_finishes():
+    """THE HALF `.is-revealed` CANNOT DO, and the correction to the first attempt at this.
+
+    OPACITY DOES NOT AFFECT HIT-TESTING. Animating the cell hid the button -- and left it catching
+    every tap, because the class that releases it lands one frame into a stagger the animation holds
+    for up to ~950ms more. So the control was invisible and live over a card that was not on screen,
+    which is the freeze, reached by a different road.
+
+    Only the animation knows when the cell is really there, so the mark is lifted by the animation."""
+    utils = _decommented(_read('static/js/utils.js'))
+    stagger = utils[utils.index('function staggerReveal('):utils.index('function arriveOnScroll(')]
+
+    assert "target.classList.add('pp-arriving')" in stagger
+    # Lifted by the animation finishing, NOT by a timer and NOT by `.is-revealed`.
+    assert 'a.finished' in stagger and "removeProperty" not in stagger
+    assert stagger.count("target.classList.remove('pp-arriving')") == 3, \
+        'an ending that does not hand the cell back leaves the grid permanently dead'
+
+    # A cancelled animation rejects; a cancelled arrival must still release the cell.
+    finish = stagger[stagger.index('Promise.all(running.map'):]
+    assert '.catch(' in finish[:400], 'a cancelled reveal leaves the cell inert forever'
+
+    # And the mark has to mean something.
+    motion = _decommented_css(_read('static/css/components/motion.css'))
+    assert '.pp-arriving { pointer-events: none; }' in motion
+
+
+def test_the_list_detail_controls_ride_their_tile_and_do_not_stick_on():
+    """Two bugs in one pair of rules, both from releasing a control with `.is-revealed`.
+
+    It lands a frame into the reveal, so the remove "x" and the drag grip came back long before their
+    tiles did. And because the release SET opacity at (0,4,0), it outranked the (0,2,0) hover rule for
+    the rest of the page's life: every tile on desktop wore a permanent "x" instead of showing one on
+    hover -- a rule meant to last 500ms quietly disabling the control's whole resting design."""
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    for control in ('.gl-item__remove', '.gl-item__grab'):
+        assert f'.pp-reveal .gl-item .pp-gcard.is-revealed ~ {control}' not in css, \
+            f'{control} is released by a class that outranks its own hover rule forever'
+        rule = css[css.index(f'.pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ {control}'):]
+        rule = rule[:rule.index('}') + 1]
+        assert 'opacity: 0' in rule and 'pointer-events: none' in rule
+
+    # The arrival itself belongs to the engine, which animates the cell these controls live in.
+    js = _decommented(_read('static/js/list-detail.js'))
+    block = js[js.index('staggerReveal({'):][:200]
+    assert "cellSelector: '.gl-item'" in block
+
+
+def test_no_stylesheet_shows_a_control_on_is_revealed():
+    """The guard that was scoped to one file while a second file did the forbidden thing.
+
+    `.is-revealed` may HIDE a card's sibling control and must never SHOW one: it lands on frame 2 for
+    the whole batch, while the WAAPI `backwards` fill is what actually holds a cell down. Every such
+    rule is both ~950ms early AND, being specific enough to win, permanent."""
+    root = Path(__file__).resolve().parents[2] / 'static' / 'css'
+    offenders = []
+    for path in root.rglob('*.css'):
+        if path.name == 'output.css':
+            continue        # generated; it can only contain what the sources above already hold
+        for line in _decommented_css(path.read_text(encoding='utf-8')).splitlines():
+            if '.is-revealed ~' in line and 'opacity: 1' in line:
+                offenders.append(f'{path.name}: {line.strip()}')
+    assert not offenders, 'a control is shown by .is-revealed: ' + '; '.join(offenders)

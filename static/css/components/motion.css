@@ -126,3 +126,14 @@
         transform: translate(var(--rise-x, 0px), -40px) scale(1) rotate(var(--rise-r, 15deg));
     }
 }
+
+/* ARRIVING: written by `PlatPursuit.staggerReveal` onto the element it animates, and cleared when that
+ * element's own animations finish. It exists because OPACITY DOES NOT AFFECT HIT-TESTING -- a grid cell
+ * held at zero opacity through its stagger delay still catches every click, tap and drag aimed at where
+ * it will be. On a grid whose cell carries controls beside the card (a quick-add button, a remove "x", a
+ * drag grip) that meant tapping a card that was not on screen yet.
+ *
+ * Deliberately NOT keyed on `.is-revealed`: that class lands one frame after the reveal starts, for the
+ * whole batch at once, whereas the WAAPI animation's `backwards` fill is what actually holds a cell
+ * down. Only the animation knows when the cell is really there, so only the animation lifts this. */
+.pp-arriving { pointer-events: none; }

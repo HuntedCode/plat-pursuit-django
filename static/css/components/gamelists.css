@@ -231,11 +231,21 @@
    `.pp-reveal .pp-gcard { opacity: 0 }` (game-card.css) never covered it. On desktop that was masked because it
    rests at opacity 0 anyway -- but on touch it is forced visible, so after every sort, add and
    remove the grid showed a row of bare floating "x" glyphs hanging over empty space for ~500ms
-   while the tiles faded up beneath them. Hidden on the same terms, and released by the same
-   `.is-revealed` mark the shared engine writes to each card's tile. */
+   while the tiles faded up beneath them.
+
+   RELEASING IT WITH `.is-revealed` WAS THE WRONG HALF OF THE PAIR, twice over. That class lands one
+   frame after the reveal starts, while the animation's `backwards` fill holds the tile down for up to
+   ~950ms more -- so the "x" came back long before its tile did. And a rule that SETS opacity 1 at
+   (0,4,0) outranks the (0,2,0) hover rule above for the rest of the page's life: every tile on desktop
+   wore a permanent "x" instead of showing one on hover.
+
+   Both go away by hiding on the negative instead, which expires cleanly and leaves the resting rules
+   to do their job. The arrival itself is the shared engine's business now -- `staggerReveal` animates
+   the `.gl-item` cell, so these controls ride it, and `.pp-arriving` (motion.css) keeps the cell inert
+   while it does. `pointer-events` travels with the opacity because a hidden control that still catches
+   taps is the freeze bug this project has now written down three times. */
 @media (prefers-reduced-motion: no-preference) {
-    .pp-reveal .gl-item .gl-item__remove { opacity: 0; }
-    .pp-reveal .gl-item .pp-gcard.is-revealed ~ .gl-item__remove { opacity: 1; }
+    .pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ .gl-item__remove { opacity: 0; pointer-events: none; }
 }
 
 /* The new transforms above are gated, like the dialog's are and like every sibling component's
@@ -441,11 +451,11 @@
     }
     .gl-item__grab svg { position: relative; }
 }
-/* Same sibling problem the remove control documents above: the grip is outside the card's <a>, so
-   the shared reveal never covers it, and it would hang over empty space while the tiles fade up. */
+/* Same sibling problem the remove control documents above, and the same correction: the grip is
+   outside the card's <a>, so the shared reveal never covers it, and it would hang over empty space
+   while the tiles fade up. Hidden on the negative, released by the cell's own animation. */
 @media (prefers-reduced-motion: no-preference) {
-    .pp-reveal .gl-item .gl-item__grab { opacity: 0; }
-    .pp-reveal .gl-item .pp-gcard.is-revealed ~ .gl-item__grab { opacity: 1; }
+    .pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ .gl-item__grab { opacity: 0; pointer-events: none; }
 }
 @media (prefers-reduced-motion: reduce) {
     /* `opacity` stays: the reveal is a fade, not motion, and the remove control keeps it here too. */

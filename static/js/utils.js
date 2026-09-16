@@ -2339,7 +2339,30 @@ function staggerReveal(o) {
         // card invisible through its stagger delay. Only something inside the animation is hidden by
         // the animation. Animating the cell puts the control inside it, which is both the correct
         // motion (one moving thing) and the only place the timing is right.
-        o.reveal((o.cellSelector && el.closest(o.cellSelector)) || el, delay);
+        var target = (o.cellSelector && el.closest(o.cellSelector)) || el;
+        // INERT WHILE IT ARRIVES, and this is the half that `.is-revealed` cannot do. OPACITY DOES
+        // NOT AFFECT HIT-TESTING: an element at zero opacity keeps every one of its hit targets. The
+        // class above lands on frame 2 for the whole batch, so any CSS keyed on it releases the cell's
+        // controls almost a second before the animation stops holding them invisible -- and a tap in
+        // that window opened a list picker for a card that was not on screen yet, which on a phone
+        // reads as the page doing something at random. The animation is the only thing that knows when
+        // the cell is really there, so ask IT: mark the cell inert, clear the mark when its own
+        // animations finish. Descendant animations (a progress bar wiping in after the card lands) are
+        // not in `getAnimations()` on the cell, which is what we want -- the cell is usable the moment
+        // it is visible, not when its last flourish ends.
+        target.classList.add('pp-arriving');
+        o.reveal(target, delay);
+        var running = target.getAnimations ? target.getAnimations() : null;
+        if (running && running.length && window.Promise) {
+            // The `catch` is not a swallow: an animation that is CANCELLED rejects, and a cancelled
+            // arrival must still hand the cell back. Both endings clear the mark; nothing else can.
+            Promise.all(running.map(function (a) { return a.finished; }))
+                .then(function () { target.classList.remove('pp-arriving'); })
+                .catch(function () { target.classList.remove('pp-arriving'); });
+        } else {
+            // No WAAPI, or a caller that animates nothing: there is no invisible window to protect.
+            target.classList.remove('pp-arriving');
+        }
         if (window.requestAnimationFrame) { requestAnimationFrame(function () { el.classList.add('is-revealed'); }); }
         else { el.classList.add('is-revealed'); }
     }
