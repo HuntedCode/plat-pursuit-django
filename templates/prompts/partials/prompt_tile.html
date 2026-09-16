@@ -1,20 +1,39 @@
 {% comment %}One prompt on the browse grid.
 
-THE MOSAIC IS OPTIONAL HERE, which is the one way this differs from the list tile it is modelled on.
-An open grid has no pool -- the author asked the questions and every respondent picks their own games
--- so it has no author-chosen art to show. That renders as a STATE with its own line, not as a broken
-mosaic or a row of placeholders: "they pick the games" is information, and it is the single most
-useful thing to know about a grid before opening it.
+NOT AN ANCHOR YET, and that is deliberate rather than unfinished. There is no detail page to link to,
+and `<a href="#">` is not a harmless placeholder: it is a focusable control that promises navigation
+and delivers a scroll to the top, twenty-four dead tab stops per page, and -- on a page carrying
+`hx-push-url` -- a junk `#` entry wedged into history between filter states. A screen reader announces
+every one of them as a link. When the detail route lands this becomes an `<a>` and gains its `href`;
+until then it is what it actually is.
+
+THE SCRIM IS NOT OPTIONAL. `.pp-gtile__name` is white with a text-shadow tuned to sit ON a scrim, and
+`.pp-gtile__author` is white at 66% for the same reason -- the shared tile overlays its body on the
+art. The first version of this file took the mosaic and the overlaid body and left the scrim out,
+then coloured its own lines with `--pp-text-mute` and `--pp-text-dim`, which are PAGE-SURFACE tokens
+(`input.css` sizes them for contrast against `bg-2`). Over a bright cover that is unreadable text on
+unreadable text. Everything set over the art is white-based here, and the scrim is rendered.
+
+THE MOSAIC IS OPTIONAL, though. An open grid has no pool -- the author asked the questions and every
+respondent picks their own games -- so it has no author-chosen art. That renders as a STATE with its
+own line, not a broken mosaic: "they pick the games" is information, and it is the most useful thing
+to know about a grid before opening it.
 
 `cover_items` is attached by `prompts.services.covers.attach_cover_games`, two queries for the whole
 page. Never reach for art from here.{% endcomment %}
 {% load humanize %}
-<a href="#" class="pp-gtile pp-ptile" data-prompt-id="{{ prompt.id }}" aria-label="{{ prompt.title }}">
-    <span class="pp-gtile__mosaic pp-ptile__mosaic">
+<div class="pp-gtile pp-ptile" data-prompt-id="{{ prompt.id }}">
+    {% comment %}A DIRECT CHILD OF THE TILE, like `.pp-gtile__tag`, and not a child of the mosaic --
+    which is `inset: 0`, so anything positioned from its bottom edge lands underneath
+    `.pp-gtile__body` and is painted over by the facts row. Being outside the mosaic also keeps it
+    still during the hover zoom: a type label is not art.{% endcomment %}
+    <span class="pp-ptile__shape">{{ prompt.get_shape_display }}</span>
+
+    <span class="pp-gtile__mosaic{% if prompt.cover_items %} is-{{ prompt.cover_items|length }}{% endif %}">
         {% if prompt.cover_items %}
             {% for game in prompt.cover_items %}
             <img src="{{ game.display_image_url }}" alt="" loading="lazy"
-                 class="pp-gtile__cover{% if not game.has_cover_art %} pp-gtile__cover--placeholder{% endif %}" />
+                 class="pp-gtile__tile-art{% if not game.has_cover_art %} pp-gtile__tile-art--icon{% endif %}" />
             {% endfor %}
         {% else %}
         <span class="pp-ptile__open" aria-hidden="true">
@@ -23,20 +42,31 @@ page. Never reach for art from here.{% endcomment %}
             </svg>
         </span>
         {% endif %}
-        <span class="pp-ptile__shape">{{ prompt.get_shape_display }}</span>
     </span>
 
-    <span class="pp-gtile__body">
-        <span class="pp-gtile__name pp-ptile__name">{{ prompt.title }}</span>
+    {# The scrim the white body text is tuned for. Between the art and the body. #}
+    <span class="pp-gtile__scrim" aria-hidden="true"></span>
 
-        <span class="pp-ptile__by">
-            by {{ prompt.owner.display_psn_username }}
+    <span class="pp-gtile__body">
+        {% comment %}A HEADING, so the grid is navigable. The lists tile uses `<h3>` for the same
+        reason: without one, a screen-reader user has a page whose entire payload is unreachable by
+        heading navigation.{% endcomment %}
+        <h3 class="pp-gtile__name pp-ptile__name">{{ prompt.title }}</h3>
+
+        {% comment %}`default:` because `display_psn_username` is nullable -- it is populated from the
+        PSN API, so a profile whose name has not synced renders the literal string "None". The list
+        tile guards the same field the same way.
+
+        KEPT AT EVERY WIDTH. An earlier version hid this under 768px to save a row, which took away
+        the only human in the tile on the surface where the toolbar advertises "search prompts or
+        creators" -- a phone reader searching a creator got back tiles that never name one.{% endcomment %}
+        <span class="pp-gtile__author pp-ptile__by">
+            by {{ prompt.owner.display_psn_username|default:prompt.owner.psn_username }}
         </span>
 
-        {% comment %}The two numbers that decide whether this is worth opening, and they are the two
-        the browse sorts on -- so the tile shows what the ordering is made of rather than a number
-        that agrees with nothing. Answers first: on a prompt, how many people bothered is the stronger
-        signal, which is why it is also the default sort.{% endcomment %}
+        {% comment %}The two numbers the browse SORTS on, so the tile shows what the ordering is made
+        of rather than a number that agrees with nothing. Answers first: on a prompt, how many people
+        bothered is the stronger signal, which is why it is also the default sort.{% endcomment %}
         <span class="pp-ptile__facts">
             <span class="pp-ptile__fact" title="{{ prompt.response_count }} answer{{ prompt.response_count|pluralize }}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -58,4 +88,4 @@ page. Never reach for art from here.{% endcomment %}
             {% endif %}
         </span>
     </span>
-</a>
+</div>

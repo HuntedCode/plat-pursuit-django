@@ -1,46 +1,53 @@
 /* ================================================================================================
  * TIERS, GRIDS & POLLS -- browse.
  *
- * Deliberately thin. The tile is `.pp-gtile` (the shared browse tile the franchise, company and list
- * grids all use) plus a `.pp-ptile` modifier for the three things a prompt has that a list does not:
- * a shape badge, an "open grid" state where the mosaic would be, and a facts row carrying the two
- * numbers the browse actually sorts on.
+ * Deliberately thin. The tile is `.pp-gtile` (the shared browse tile the franchise, company and
+ * profile-activity grids use) plus a `.pp-ptile` modifier for the three things a prompt has that they
+ * do not: a shape badge, an "open grid" state where the mosaic would be, and a facts row carrying the
+ * two numbers the browse actually sorts on.
  *
- * Reusing the tile rather than building one is the whole point: a prompt tile sitting next to a list
- * tile in the re-formed Community hub has to look like it came from the same place.
+ * EVERYTHING HERE SITS OVER COVER ART, so every colour is white-based. `.pp-gtile` overlays its body
+ * on the image behind `.pp-gtile__scrim`, and `.pp-gtile__name` / `__author` are white with shadows
+ * tuned for exactly that. The first cut of this file used `--pp-text-mute` and `--pp-text-dim`, which
+ * `input.css` sizes for contrast against `bg-2` -- page-surface tokens painted over arbitrary game
+ * covers, which is unreadable the moment a bright key art lands in the first slot.
  * ============================================================================================== */
 
-/* The tab strip. `.pp-switch` is the site-wide segmented treatment; these are ANCHORS rather than
-   buttons, because each tab is a real URL. Only the layout differs from a button strip -- the chip
-   styling is inherited, which is what keeps one treatment site-wide rather than two that drift. */
+/* The tab strip. `.pp-switch` is the site-wide segmented treatment and already handles `<a>` chips --
+   `switcher.css` sets `text-decoration: none` on the chip itself, so there is nothing to restate
+   here. Only the placement differs from a view-toggle strip: this is a primary navigation, so it sits
+   left rather than pinned right. */
 .pp-pbrowse__tabs {
     margin-bottom: 0.5rem;
-}
-.pp-pbrowse__tabs .pp-switch__chip {
-    text-decoration: none;
 }
 
 /* ── The tile ─────────────────────────────────────────────────────────────────────────────────── */
 
-/* The shape, over the mosaic's bottom-left. A reader scanning a mixed grid -- which is what the
-   Community hub will show -- needs to know what they are looking at before the title makes sense:
-   "Best combat" reads very differently on a poll than on a grid. */
+/* The shape, top-left over the art -- A DIRECT CHILD OF `.pp-gtile`, matching `.pp-gtile__tag`.
+ *
+ * It began as a child of `.pp-gtile__mosaic` positioned from the bottom, which was wrong twice over.
+ * The mosaic is `inset: 0`, so it covers the WHOLE tile rather than a top strip: anything measured up
+ * from its bottom edge lands inside `.pp-gtile__body`, at the same `z-index`, and the body -- later
+ * in the DOM -- painted the facts row straight over the badge at every width. And being inside the
+ * mosaic meant riding its `scale(1.06)` hover zoom, which a type label has no business doing.
+ *
+ * `z-index: 3` and white-on-primary, both matching `.pp-gtile__tag`: two badges of the same family in
+ * one tile should not have opposite polarity. */
 .pp-ptile__shape {
     position: absolute;
-    left: 6px;
-    bottom: 6px;
-    z-index: 2;
+    top: 8px;
+    left: 8px;
+    z-index: 3;
     padding: 2px 7px;
     border-radius: 999px;
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    line-height: 1.4;
     text-transform: uppercase;
-    color: var(--pp-bg-0);
-    background: color-mix(in oklab, var(--pp-primary) 88%, transparent);
-    /* The mosaic is busy and the badge sits on top of cover art, so it carries its own separation
-       rather than relying on whatever image happens to be underneath. */
-    box-shadow: 0 1px 6px -1px color-mix(in oklab, #000 55%, transparent);
+    color: #fff;
+    background: color-mix(in oklab, var(--pp-primary) 82%, var(--pp-bg-0));
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
 }
 
 /* THE OPEN GRID, where the mosaic would be. Not a placeholder and not an error: an open grid has no
@@ -51,7 +58,7 @@
     place-items: center;
     width: 100%;
     height: 100%;
-    color: color-mix(in oklab, var(--pp-text-mute) 70%, transparent);
+    color: rgba(255, 255, 255, 0.5);
     background:
         repeating-linear-gradient(
             135deg,
@@ -66,25 +73,18 @@
     opacity: 0.75;
 }
 
+/* `.pp-gtile__name` already sets the two-line clamp, the white, and the shadow. All this adds is the
+   breathing room a line-clamped box wants, plus the heading reset -- the title is an `<h3>` so the
+   grid is navigable by heading, and `h3` carries UA margins that would push the body off the tile. */
 .pp-ptile__name {
-    /* A prompt title is a QUESTION and reads as one, so it gets two lines where a list name gets its
-       own treatment. `pr-1` is the house rule for a line-clamped box; there is no italic here, but
-       the clamp still shaves a descender at some widths without it. */
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    padding-right: 1px;
+    margin: 0;
+    padding-right: 4px;
 }
 
+/* `.pp-gtile__author` supplies the colour, the size and the ellipsis. This only adds the gap. */
 .pp-ptile__by {
     display: block;
     margin-top: 2px;
-    font-size: 0.68rem;
-    color: var(--pp-text-mute);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .pp-ptile__facts {
@@ -94,7 +94,10 @@
     gap: 0.35rem 0.6rem;
     margin-top: 5px;
     font-size: 0.68rem;
-    color: var(--pp-text-dim);
+    /* White-based, like everything else over the art. Slightly brighter than the author line: these
+       are the numbers the sorts are made of, so they outrank the byline. */
+    color: rgba(255, 255, 255, 0.82);
+    font-variant-numeric: tabular-nums;
 }
 .pp-ptile__fact {
     display: inline-flex;
@@ -105,11 +108,11 @@
 .pp-ptile__fact svg {
     width: 12px;
     height: 12px;
-    opacity: 0.8;
+    opacity: 0.85;
 }
-/* Liked by the viewer: the heart fills, and the colour comes with it. The fill is set on the SVG in
-   the template rather than here, because a filled heart and an outlined one are different markup,
-   not different paint. */
+/* Liked by the viewer: the heart fills and takes the accent. The fill is set on the SVG in the
+   template rather than here, because a filled heart and an outlined one are different markup, not
+   different paint. */
 .pp-ptile__fact.is-liked {
     color: var(--pp-primary);
 }
@@ -117,10 +120,11 @@
     opacity: 1;
 }
 /* "they pick the games" -- the open grid's line, said once in the facts row so the state is legible
-   even on a narrow tile where the mosaic's hatching is only a sliver. */
+   even on a narrow tile where the hatching is only a sliver. Brightened rather than tinted: over art,
+   a mid-tone accent is the first thing to disappear. */
 .pp-ptile__fact--open {
     font-style: italic;
-    color: color-mix(in oklab, var(--pp-primary) 62%, var(--pp-text-mute));
+    color: rgba(255, 255, 255, 0.72);
 }
 .pp-ptile__fact--closed {
     padding: 1px 6px;
@@ -129,21 +133,22 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: var(--pp-text-mute);
-    border: 1px solid var(--pp-border);
+    color: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 /* ── Mobile ───────────────────────────────────────────────────────────────────────────────────── */
 
 @media (max-width: 767px) {
-    /* At 375px the facts row is the first thing to crowd. The author line is the expendable one --
-       the two numbers are what the sorts are made of, and the shape is already on the badge -- so it
-       goes rather than wrapping the row onto a third line. The full byline is on the prompt itself. */
-    .pp-ptile__by {
-        display: none;
-    }
+    /* THE BYLINE STAYS. An earlier version hid it here to stop the facts row reaching a third line --
+       which it did not achieve (a closed open-grid prompt still wraps to three), and which took away
+       the only human in the tile on the surface whose toolbar advertises "search prompts or
+       creators". A phone reader searching for a creator got back tiles that never name one, with no
+       detail page to recover it from.
+       The facts row tightens instead; if anything else has to go at 375 it should be the game count,
+       which the mosaic already implies. */
     .pp-ptile__facts {
-        gap: 0.3rem 0.45rem;
+        gap: 0.28rem 0.42rem;
         font-size: 0.64rem;
     }
 }

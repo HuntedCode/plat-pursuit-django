@@ -13,11 +13,13 @@ twice, and both times the locked UI looked fine while its data layer ran anyway.
 
 Ending the beta is deleting one class from one base list. There is deliberately nothing else to undo.
 """
+from django.core.exceptions import ImproperlyConfigured
 from django.db.models import Q
 from django.urls import reverse_lazy
 from django.views.generic import ListView
 
-from prompts.models import (SHAPE_CHOICES, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, Prompt, PromptLike)
+from prompts.models import (SHAPE_CHOICES, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES, Prompt,
+                            PromptLike)
 from prompts.services.covers import attach_cover_games
 from trophies.mixins import HtmxListMixin, PremiumRequiredMixin
 
@@ -57,8 +59,10 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
     context_object_name = 'prompts'
     paginate_by = 24
 
-    #: Set by the URL, never by the querystring.
-    shape = SHAPE_TIER
+    #: Set by the URL, never by the querystring. NO CLASS DEFAULT: `as_view()` without a shape must
+    #: fail loudly rather than silently serve Tiers under whatever path it was mounted at -- a
+    #: duplicate of /community/tiers/ with a switcher marking the wrong tab and no error anywhere.
+    shape = None
 
     #: Sorts as data, so the toolbar and the queryset read one list.
     SORT_CHOICES = (
@@ -75,8 +79,28 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
     _ORDERING = {
         'answered': ('-response_count', '-created_at'),
         'popular': ('-like_count', '-created_at'),
-        'recent': ('-created_at',),
+        # `-pk` TIEBREAKS, and it is not decoration. `created_at` is `auto_now_add`, set in Python, so
+        # a seed, a fixture or a data migration produces ties -- and a tie straddling a page boundary
+        # under LIMIT/OFFSET means one prompt renders on two pages while another never renders at
+        # all. It is already the index's implicit final key, so it costs nothing.
+        'recent': ('-created_at', '-pk'),
     }
+
+    def setup(self, request, *args, **kwargs):
+        """Refuse a bad shape at the door rather than 500 three context keys later.
+
+        `View.as_view` only checks `hasattr`, so it cannot catch a missing or misspelled shape. Left
+        unvalidated, `as_view(shape='tiers')` passed, ran the full paginated query AND
+        `attach_cover_games`, and only then raised `KeyError` out of `dict(SHAPE_CHOICES)[...]` --
+        one of three unguarded lookups in `get_context_data`. Failing here costs nothing and names
+        the problem.
+        """
+        if self.shape not in SHAPES:
+            raise ImproperlyConfigured(
+                f'{type(self).__name__} needs a valid shape from as_view(shape=...); '
+                f'got {self.shape!r}.'
+            )
+        super().setup(request, *args, **kwargs)
 
     def _selected_sort(self):
         """Clamped `?sort=`. Junk falls back rather than dropping to NO ordering, which is how a grid
@@ -123,7 +147,11 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
         context['empty_copy'] = EMPTY_COPY[self.shape]
         context['sort_choices'] = self.SORT_CHOICES
         context['current_sort'] = self._selected_sort()
-        context['query'] = (self.request.GET.get('q') or '').strip()
+        # THROUGH THE SAME PARSER THE QUERYSET USES. The raw value made the per-shape empty copy
+        # unreachable for any 1-2 character `?q=`: nothing was filtered, so `has_filters` was False
+        # and no "Clear search" appeared -- but the template still branched on `query` and told the
+        # reader "Nothing matches 'ab'" about a search that never ran, with no way to undo it.
+        context['query'] = self._query()
         # "You narrowed it to nothing" and "there is nothing here yet" are opposite situations, and
         # offering the wrong remedy is worse than offering none. Read through the same parser the
         # queryset uses, so a term too short to filter does not claim to be filtering.
@@ -133,8 +161,12 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
         if viewer is not None and prompts:
             # ONE query for the page's likes, bounded by the page slice -- never one per tile. The
             # tile shows whether YOU liked it, which is the shape that most invites an N+1.
+            # A LIST OF PRIMARY KEYS, not the queryset. `context['prompts']` is a SLICED queryset,
+            # and Django keeps a sliced qs's LIMIT/OFFSET and ORDER BY when it becomes an `__in`
+            # subquery -- so this re-executed the entire browse query, ILIKE-plus-join and OFFSET
+            # walk included, to find twenty-four ids already sitting in memory.
             liked = set(PromptLike.objects
-                        .filter(profile=viewer, prompt__in=prompts)
+                        .filter(profile=viewer, prompt_id__in=[p.pk for p in prompts])
                         .values_list('prompt_id', flat=True))
             for prompt in prompts:
                 prompt.viewer_has_liked = prompt.pk in liked
@@ -143,6 +175,11 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Tiers, Grids & Polls'},
         ]
+        # `seo_title` FEEDS THE og/twitter TAGS; `{% block title %}` does not. Without it every share
+        # of these three URLs previewed as the site-wide "Platinum Pursuit" with a correct
+        # description under it -- the exact half-job `GameListDetailView` diagnosed and fixed for
+        # detail pages while leaving its own browse page short.
+        context['seo_title'] = f"{context['shape_label']}s on Platinum Pursuit"
         context['seo_description'] = (
             'Tier lists, grids and polls set by the Platinum Pursuit community. Somebody sets the '
             'prompt; you make the call.'

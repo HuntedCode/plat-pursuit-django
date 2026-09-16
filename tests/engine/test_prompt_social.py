@@ -208,3 +208,55 @@ def test_deleting_an_answer_takes_its_likes_with_it():
 
     assert not PromptResponseLike.objects.exists()
     assert PromptLike.objects.count() == 1, "the question's likes went with the answer"
+
+def test_a_like_can_always_be_withdrawn_even_after_the_prompt_goes_private():
+    """RULE 1, WHICH THE CODE DID NOT HOLD. Every refusal except the linked check is scoped to
+    liking.
+
+    Reachable with no admin: a fan likes a published prompt; the author unpublishes it (legal --
+    nobody had answered); the fan taps the lit heart. With visibility checked on the way out too,
+    the unlike was refused, the like kept counting, and it re-entered the popular sort the moment
+    the author republished. A signal you cannot withdraw is not a signal."""
+    owner, fan = _hunter('owner'), _hunter('fan')
+    # NOBODY HAS ANSWERED, which is what makes the unpublish legal and the scenario reachable -- an
+    # answered prompt cannot be hidden at all. A brand-new prompt with a couple of likes and no
+    # answers is the single most likely state in the first week of this feature.
+    prompt = svc.create_prompt(owner, shape=SHAPE_TIER, title='Rank them')
+    for _ in range(MIN_GAMES_TO_PUBLISH[SHAPE_TIER]):
+        svc.add_concept(prompt, owner, ConceptFactory())
+    svc.update_prompt(prompt, owner, is_public=True)
+    prompt.refresh_from_db()
+    social.set_prompt_like(prompt, fan, liked=True)
+
+    svc.update_prompt(prompt, owner, is_public=False)
+    prompt.refresh_from_db()
+
+    assert social.set_prompt_like(prompt, fan, liked=False) == 0
+    prompt.refresh_from_db()
+    assert prompt.like_count == 0, 'a lit heart became permanent'
+
+
+def test_an_answer_can_be_unliked_after_its_author_hides_it():
+    """The same rule on the other target."""
+    owner, answerer, fan = _hunter('owner'), _hunter('answerer'), _hunter('fan')
+    prompt, response = _answered(owner, answerer)
+    social.set_response_like(response, fan, liked=True)
+
+    rsvc.set_public(prompt, answerer, is_public=False)
+    response.refresh_from_db()
+
+    assert social.set_response_like(response, fan, liked=False) == 0
+    response.refresh_from_db()
+    assert response.like_count == 0
+
+
+def test_a_prompts_author_may_like_the_answers_to_their_own_question():
+    """One of the things this feature is for -- and the self-like rule looks like it should
+    generalise to the prompt's owner, so it is written down here rather than left to be tightened
+    away by a future edit with a green suite."""
+    owner, answerer = _hunter('owner'), _hunter('answerer')
+    prompt, response = _answered(owner, answerer)
+
+    assert social.set_response_like(response, owner, liked=True) == 1
+    response.refresh_from_db()
+    assert response.like_count == 1

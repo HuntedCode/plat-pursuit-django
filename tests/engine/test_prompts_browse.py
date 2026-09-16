@@ -9,6 +9,7 @@ its real data path for people who could not use it, and both times the lock look
 """
 import pytest
 from django.db import connection
+from django.test import RequestFactory
 from django.test.utils import CaptureQueriesContext
 
 from prompts.models import MIN_GAMES_TO_PUBLISH, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER
@@ -25,8 +26,13 @@ POLLS = '/community/polls/'
 
 #: Any query touching this feature's own tables. The gate's promise is that a hunter outside the
 #: cohort causes none of them.
+#: All SEVEN of this app's tables. `prompts_prompt` is a substring of every other name, so the
+#: filter would work with that entry alone -- which is exactly what hid the missing
+#: `prompts_promptresponselike` from review. Listed in full so the tuple documents intent rather
+#: than resting on a substring coincidence a future exact-match refactor would quietly break.
 PROMPT_TABLES = ('prompts_prompt', 'prompts_promptgame', 'prompts_promptbucket',
-                 'prompts_promptresponse', 'prompts_promptplacement', 'prompts_promptlike')
+                 'prompts_promptresponse', 'prompts_promptplacement', 'prompts_promptlike',
+                 'prompts_promptresponselike')
 
 
 def _member(psn='member', premium=True, staff=False, moderator=False):
@@ -196,10 +202,16 @@ def test_the_default_sort_leads_with_how_many_people_answered(client):
     """On a prompt, how many people bothered is the stronger signal -- which is why the tile shows the
     number the sort is made of rather than one that agrees with nothing."""
     owner, answerer = _member('owner'), _member('answerer')
-    quiet = _published(owner, title='Nobody answered this')
+    # BUSY IS CREATED FIRST, so `-created_at` -- the tiebreak -- would put it LAST. The first
+    # version created it second, which meant the tiebreak alone produced the expected order and
+    # the assertion held with `response_count` stuck at zero on both. It could not fail for its
+    # own reason.
     busy = _published(owner, title='Everybody answered this')
+    quiet = _published(owner, title='Nobody answered this')
     rsvc.place(busy, answerer, game_id=busy.games.first().pk,
                bucket_id=busy.buckets.first().pk)
+    busy.refresh_from_db()
+    assert busy.response_count == 1 and quiet.response_count == 0, 'the fixture did not take'
     client.force_login(_member('reader').user)
 
     titles = [p.title for p in client.get(TIERS).context['prompts']]
@@ -230,31 +242,45 @@ def test_the_query_count_does_not_move_with_the_number_of_prompts(client):
 def test_the_viewers_own_likes_cost_one_query_not_one_per_tile(client):
     """"Did I like this?" is the shape that most invites an N+1, because it is per-viewer and per-row
     at once."""
+    #
+    # COMPARED ACROSS PAGE SIZES, the only axis that can see it. The first version compared the
+    # same six prompts liked against unliked -- but the hydration query runs either way, so a
+    # per-tile `exists()` would have added six queries to BOTH arms and the equality would still
+    # have held. It passed over exactly the N+1 it is named for.
     owner, reader = _member('owner'), _member('reader')
-    prompts = [_published(owner, title=f'Prompt {i}') for i in range(6)]
-    for prompt in prompts:
-        social.set_prompt_like(prompt, reader, liked=True)
     client.force_login(reader.user)
 
-    liked = len(_prompt_queries(client, TIERS))
+    for i in range(3):
+        social.set_prompt_like(_published(owner, title=f'Few {i}'), reader, liked=True)
+    small = len(_prompt_queries(client, TIERS))
 
-    for prompt in prompts:
-        social.set_prompt_like(prompt, reader, liked=False)
-    unliked = len(_prompt_queries(client, TIERS))
+    for i in range(9):
+        social.set_prompt_like(_published(owner, title=f'More {i}'), reader, liked=True)
+    large = len(_prompt_queries(client, TIERS))
 
-    assert liked == unliked, 'the like state is being fetched per tile'
+    assert small == large, f'the like state is fetched per tile: {small} -> {large}'
 
 
 def test_the_grid_never_drags_the_igdb_blob_along(client):
     """`raw_response` is the ~30 KB IGDB payload behind the May 2026 web-server OOM, and no cover
-    render reads it. A byte-size regression no query count can see."""
+    render reads it. A byte-size regression no query count can see.
+
+    UNFILTERED, and that is the whole correction. The first version looped `_prompt_queries`,
+    which keeps only queries containing `prompts_` -- and the cover fetch is
+    `FROM trophies_game JOIN trophies_igdbmatch`, with no `prompts_` substring anywhere. The
+    filter removed the one query the loop existed to inspect, the `if` never evaluated true, and
+    the assertion never ran. It passed over `defer()` being deleted outright."""
     owner = _member('owner')
     _published(owner)
     client.force_login(_member('reader').user)
 
-    for query in _prompt_queries(client, TIERS):
-        if 'igdb' in query['sql'].lower():
-            assert 'raw_response' not in query['sql']
+    with CaptureQueriesContext(connection) as ctx:
+        assert client.get(TIERS).status_code == 200
+
+    igdb = [q for q in ctx.captured_queries if 'igdbmatch' in q['sql'].lower()]
+    assert igdb, 'no query joined the IGDB table; this test is inspecting nothing'
+    for query in igdb:
+        assert 'raw_response' not in query['sql'], 'the cover prefetch carries the IGDB blob'
 
 
 # ── the empty state ───────────────────────────────────────────────────────────────────────────────
@@ -301,3 +327,115 @@ def test_a_term_too_short_to_filter_does_not_claim_to_be_filtering(client):
     resp = client.get(TIERS, {'q': 'ab'})
 
     assert resp.context['has_filters'] is False
+
+def test_the_author_line_and_the_covers_actually_reach_the_page(client):
+    """Nothing asserted that a cover ever renders, which left the covers path pinned only at the
+    service level -- and `attach_cover_games` works by mutating the very instances the template
+    iterates. Drop `paginate_by` and `list(prompts)` would evaluate a second set of objects,
+    every mosaic would silently become the open-grid state, and the suite would stay green.
+
+    The author line is here for the same reason: rendered from a nullable column, so without an
+    assertion "by None" ships."""
+    owner = _member('owner')
+    _published(owner, title='Has art')
+    client.force_login(_member('reader').user)
+
+    body = client.get(TIERS).content.decode()
+
+    assert 'pp-gtile__tile-art' in body, 'no cover reached the grid'
+    # THE FALLBACK BRANCH. `display_psn_username` is populated from the PSN API and is nullable, and
+    # the factory leaves it unset -- which is the common case for a profile whose name has not
+    # synced. Without the template's `default:` this renders the literal string "None".
+    assert owner.display_psn_username is None, 'fixture no longer exercises the fallback'
+    assert f'by {owner.psn_username}' in body
+    assert 'by None' not in body
+
+    # ...and the branch that uses the display name when there is one.
+    named = _member('named')
+    named.display_psn_username = 'ProperName'
+    named.save(update_fields=['display_psn_username'])
+    _published(named, title='Also has art')
+    assert 'by ProperName' in client.get(TIERS).content.decode()
+
+
+def test_an_open_grid_says_so_instead_of_showing_a_broken_mosaic(client):
+    owner = _member('owner')
+    grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Open one')
+    svc.create_bucket(grid, owner, label='Best combat')
+    svc.update_prompt(grid, owner, is_public=True)
+    client.force_login(_member('reader').user)
+
+    body = client.get(GRIDS).content.decode()
+
+    assert 'they pick the games' in body
+    assert 'pp-ptile__open' in body
+    assert 'pp-gtile__tile-art' not in body
+
+
+def test_a_bad_shape_fails_at_setup_rather_than_three_context_keys_later(client):
+    """`as_view()` only checks `hasattr`, so a missing or misspelled shape used to pass, run the
+    full paginated query AND the cover fetch, and only then raise KeyError out of a context
+    lookup."""
+    from django.core.exceptions import ImproperlyConfigured
+
+    from prompts.views import BrowsePromptsView
+
+    request = RequestFactory().get('/community/tiers/')
+    request.user = _member('reader').user
+
+    for view in (BrowsePromptsView.as_view(), BrowsePromptsView.as_view(shape='tiers')):
+        with pytest.raises(ImproperlyConfigured):
+            view(request)
+
+
+def test_a_short_search_leaves_the_shapes_own_empty_copy_in_place(client):
+    """A 1-2 character `?q=` filters nothing, so the page must not claim a search excluded
+    results -- and must not offer to clear one that never ran. The two used to disagree:
+    `has_filters` went through the parser and `query` did not."""
+    client.force_login(_member('reader').user)
+
+    resp = client.get(POLLS, {'q': 'ab'})
+    body = resp.content.decode()
+
+    assert resp.context['has_filters'] is False
+    assert resp.context['empty_copy'] in body, "the shape's own empty copy was unreachable"
+    assert 'Nothing matches' not in body
+
+
+def test_every_page_carries_a_title_for_a_share_card(client):
+    """`seo_title` feeds the og/twitter tags; `{% block title %}` does not. Without it every
+    share of these three URLs previewed as the site-wide default with a correct description
+    under it."""
+    client.force_login(_member('reader').user)
+
+    seen = set()
+    for url in (TIERS, GRIDS, POLLS):
+        title = client.get(url).context['seo_title']
+        assert title and 'Platinum Pursuit' in title
+        seen.add(title)
+    assert len(seen) == 3, 'two shapes share an og:title'
+
+def test_the_like_hydration_does_not_re_run_the_browse_query(client):
+    """A COST REGRESSION NO QUERY COUNT CAN SEE, which is why this reads the SQL.
+
+    `context['prompts']` is a SLICED queryset, and Django keeps a sliced queryset's ORDER BY and
+    LIMIT/OFFSET when it becomes an `__in` subquery -- so passing it directly re-executed the
+    entire browse query, search join and OFFSET walk included, to rediscover twenty-four ids
+    already in memory. One statement either way; twice the work.
+
+    Verified by inspection before it was fixed: the emitted SQL carried
+    `IN (SELECT ... ORDER BY response_count DESC ... LIMIT 3)`."""
+    owner, reader = _member('owner'), _member('reader')
+    for i in range(3):
+        social.set_prompt_like(_published(owner, title=f'P{i}'), reader, liked=True)
+    client.force_login(reader.user)
+
+    with CaptureQueriesContext(connection) as ctx:
+        assert client.get(TIERS).status_code == 200
+
+    likes = [q['sql'] for q in ctx.captured_queries if 'promptlike' in q['sql']]
+    assert likes, 'the like hydration did not run; this test is inspecting nothing'
+    for sql in likes:
+        assert 'SELECT' == sql.strip()[:6] and sql.count('SELECT') == 1, (
+            f'the like hydration carries a subquery: {sql[:200]}'
+        )

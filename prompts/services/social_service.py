@@ -10,9 +10,11 @@ shape `game_list_service._set_social` already avoids by parameterising on the mo
 
 THE SIX RULES, all lifted from that function because they were earned there:
 
-1. **Gated on the way IN, open on the way out.** `all_ugc` refuses a new like; withdrawing one is
-   never refused. A like is wordless, which makes it tempting to leave open -- but it is a public
-   signal attributed to a profile that feeds a public ranking, which is exactly what the scope covers.
+1. **Gated on the way IN, open on the way out.** Every refusal below except the linked check is
+   scoped to `liked` -- not just the restriction. A like is wordless, which makes the gate tempting
+   to skip, but it is a public signal attributed to a profile that feeds a public ranking, which is
+   exactly what `all_ugc` covers. Withdrawing one is never refused, including after the thing you
+   liked has gone private: otherwise a lit heart becomes permanent and keeps counting.
 2. **You cannot like what you cannot see.** Otherwise liking by id is an oracle that reports whether a
    private prompt exists, and whose.
 3. **You cannot like your own.** Self-liking would let an author push their own work up the ranking
@@ -20,11 +22,17 @@ THE SIX RULES, all lifted from that function because they were earned there:
 4. **Idempotent in both directions.** A double tap is not an error and does not double-count.
 5. **The counter moves with `F()`**, never a read-modify-write: it is contended by definition.
 6. **The stored value is re-read and returned**, so a caller renders the number the database holds
-   rather than the one it hoped for.
+   rather than the one it hoped for -- as of that statement. What this does NOT buy: a like and an
+   unlike issued concurrently by one profile resolve to whichever transaction's write landed, not to
+   whichever the hunter pressed last. The row and the counter always agree (the delta is the rowcount
+   of the write itself, never a prediction from an earlier read); the INTENT can still lose a race.
+   Closing that needs `SELECT ... FOR UPDATE` on the parent, which is a real cost on a hot row for a
+   benefit measured in double-taps. `_set_social` makes the identical trade.
 """
 from django.db import models, transaction
 
 from prompts.models import Prompt, PromptLike, PromptResponse, PromptResponseLike
+from prompts.services.response_service import listed_responses as listed_responses_for
 from prompts.services.prompt_service import (
     PromptError,
     refuse_if_restricted,
@@ -34,15 +42,24 @@ from prompts.services.prompt_service import (
 
 @transaction.atomic
 def set_prompt_like(prompt, profile, *, liked):
-    """Like or unlike the QUESTION."""
-    if liked:
-        refuse_if_restricted(profile)
+    """Like or unlike the QUESTION.
+
+    EVERY REFUSAL EXCEPT THE LINKED CHECK IS SCOPED TO LIKING, which is what makes rule 1 true rather
+    than aspirational. The first cut gated only the restriction and left visibility and self-like
+    unconditional, so: a fan likes a published prompt, the author unpublishes it (legal, nobody had
+    answered), and the fan's lit heart becomes permanent -- `readable_by` now excludes it, so the
+    unlike is refused, the like keeps counting, and it re-enters the popular sort the moment the
+    author republishes. Withdrawing a signal you already gave leaks nothing: the row's existence is
+    your own information.
+    """
     refuse_if_unlinked(profile)
 
-    if not Prompt.objects.readable_by(profile).filter(pk=prompt.pk).exists():
-        raise PromptError('That is not available.')
-    if prompt.owner_id == profile.id:
-        raise PromptError('That is your own.')
+    if liked:
+        refuse_if_restricted(profile)
+        if not Prompt.objects.readable_by(profile).filter(pk=prompt.pk).exists():
+            raise PromptError('That is not available.')
+        if prompt.owner_id == profile.id:
+            raise PromptError('That is your own.')
 
     return _toggle(
         PromptLike, {'prompt': prompt}, profile,
@@ -59,18 +76,22 @@ def set_response_like(response, profile, *, liked):
     so asking only about the response would let a like confirm the existence of an answer to a
     withdrawn draft.
     """
-    if liked:
-        refuse_if_restricted(profile)
     refuse_if_unlinked(profile)
 
-    visible = (PromptResponse.objects
-               .filter(pk=response.pk, is_public=True, placement_count__gt=0)
-               .filter(prompt__in=Prompt.objects.readable_by(profile))
-               .exists())
-    if not visible:
-        raise PromptError('That answer is not available.')
-    if response.profile_id == profile.id:
-        raise PromptError('That is your own answer.')
+    if liked:
+        refuse_if_restricted(profile)
+        # THE SAME POPULATION `listed_responses` RETURNS, built from it rather than beside it. Writing
+        # the predicate out twice is how the two drift, which is the argument this module opens with.
+        visible = (listed_responses_for(response.prompt)
+                   .filter(pk=response.pk)
+                   .filter(prompt__in=Prompt.objects.readable_by(profile))
+                   .exists())
+        if not visible:
+            raise PromptError('That answer is not available.')
+        if response.profile_id == profile.id:
+            raise PromptError('That is your own answer.')
+        # NOT refused for the PROMPT's author: liking the answers to your own question is one of the
+        # things this feature is for. Stated because the rule above looks like it should generalise.
 
     return _toggle(
         PromptResponseLike, {'response': response}, profile,
