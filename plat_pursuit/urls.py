@@ -24,7 +24,11 @@ from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
 from prompts.models import SHAPE_GRID, SHAPE_POLL, SHAPE_TIER
-from prompts.views import BrowsePromptsView
+from prompts.views import (AddGameView, BrowsePromptsView, CreateBucketView,
+                          CreatePromptView, DeleteBucketView, DeletePromptView,
+                          RemoveGameView, ReorderBucketsView, ReorderGamesView,
+                          SetClosedView, TogglePromptLikeView, UpdateBucketView,
+                          UpdatePromptView)
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
                             CreateListWithConceptView, CreateSectionView, DeleteListView,
                             DeleteSectionView, GameListDetailView, ListGameSearchView,
@@ -408,6 +412,30 @@ urlpatterns = [
     path('community/tiers/', BrowsePromptsView.as_view(shape=SHAPE_TIER), name='prompts_browse_tiers'),
     path('community/grids/', BrowsePromptsView.as_view(shape=SHAPE_GRID), name='prompts_browse_grids'),
     path('community/polls/', BrowsePromptsView.as_view(shape=SHAPE_POLL), name='prompts_browse_polls'),
+    # The author's write endpoints, under the page's own path rather than /api/v1/ -- they are this
+    # feature's behaviour and share its gate, and a second permission stack is a second thing that
+    # has to agree forever.
+    path('community/prompts/create/', CreatePromptView.as_view(), name='prompt_create'),
+    path('community/prompts/<int:prompt_id>/update/', UpdatePromptView.as_view(),
+         name='prompt_update'),
+    path('community/prompts/<int:prompt_id>/close/', SetClosedView.as_view(), name='prompt_close'),
+    path('community/prompts/<int:prompt_id>/delete/', DeletePromptView.as_view(),
+         name='prompt_delete'),
+    path('community/prompts/<int:prompt_id>/like/', TogglePromptLikeView.as_view(),
+         name='prompt_like'),
+    path('community/prompts/<int:prompt_id>/games/', AddGameView.as_view(), name='prompt_add_game'),
+    path('community/prompts/<int:prompt_id>/games/reorder/', ReorderGamesView.as_view(),
+         name='prompt_reorder_games'),
+    path('community/prompts/<int:prompt_id>/games/<int:game_id>/remove/', RemoveGameView.as_view(),
+         name='prompt_remove_game'),
+    path('community/prompts/<int:prompt_id>/rows/', CreateBucketView.as_view(),
+         name='prompt_create_bucket'),
+    path('community/prompts/<int:prompt_id>/rows/reorder/', ReorderBucketsView.as_view(),
+         name='prompt_reorder_buckets'),
+    path('community/prompts/<int:prompt_id>/rows/<int:bucket_id>/update/', UpdateBucketView.as_view(),
+         name='prompt_update_bucket'),
+    path('community/prompts/<int:prompt_id>/rows/<int:bucket_id>/delete/', DeleteBucketView.as_view(),
+         name='prompt_delete_bucket'),
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
     path('community/lists/create/', CreateListView.as_view(), name='list_create'),
     path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
