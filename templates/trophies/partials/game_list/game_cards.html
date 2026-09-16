@@ -30,13 +30,13 @@
     an earlier version of this note claimed them, and the CSS claimed six page types.{% endcomment %}
     {% with quick_add=game.concept_id %}
     {% if quick_add and request.user.is_authenticated and request.user.profile.is_linked %}<div class="pp-gcard-wrap">{% endif %}
-    <a href="{% if condensed_cards and game.concept_id %}{{ game.concept.game_page_url }}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="pp-gcard" data-gcard>
+    <a href="{% if condensed_cards and game.concept_id %}{{ game.concept.game_page_url }}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="pp-gcard" data-gcard draggable="false">
         {% comment %} Cover: IGDB-first via display_image_url (helper owns the fallback chain). Community flag
         icons overlay top-left; the viewer's progress rides the bottom edge (platinum-tinted once
         earned). The quick-add button also sits top-right but is NOT in here -- it is a sibling of the
         anchor, for the invalid-HTML reason the wrapper above explains. {% endcomment %}
         <div class="pp-gcard__cover">
-            <img src="{{ game.display_image_url }}" alt="{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}" loading="lazy"
+            <img draggable="false" src="{{ game.display_image_url }}" alt="{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}" loading="lazy"
                  class="pp-gcard__art{% if not game.has_cover_art %} pp-gcard__art--placeholder{% endif %}" />
 
             {% include 'trophies/partials/_game_flags.html' with game=game variant='overlay' %}

@@ -7,6 +7,23 @@
  * the Flagged / Recently Added / Tag grids -- those don't set show_game_hooks, so they get the card sans band.
  * Depth-pass card per playbook section 4.
  * ============================================================ */
+/* PRESS AND HOLD MUST NOT START A DRAG. A link wrapping an image is draggable by default, so
+   holding the mouse on a card begins a native drag of the link -- and while one is in flight the
+   browser suppresses page clicks AND keyboard shortcuts, so the page reads as frozen: the card stuck
+   in `:active`, taps landing nowhere, Ctrl+R swallowed, and only the browser's own refresh button
+   still working. Reported from a desktop browser at mobile width, which is where a long-press IS a
+   held mouse button.
+
+   Nobody drags a card deliberately -- it is a tile you scan and click -- so the capability is worth
+   less than the lockup costs. The image needs its own rule because images drag independently of the
+   link around them, and the `draggable="false"` attributes in the template cover the engines that do
+   not implement this property. `-webkit-user-drag` is already used this way on the badge medallions.
+
+   NOT `-webkit-touch-callout`: on a real phone a long-press raises a dismissible sheet rather than
+   locking anything, and that sheet is how somebody opens a game in a new tab from a catalogue. The
+   list page suppresses it only inside the arrange mode you deliberately enter. */
+.pp-gcard, .pp-gcard__art { -webkit-user-drag: none; }
+
 .pp-gcard {
     display: flex; flex-direction: column; height: 100%;
     border-radius: 13px; overflow: hidden;

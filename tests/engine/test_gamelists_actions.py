@@ -33,6 +33,14 @@ def _decommented(source):
     return re.sub(r'^\s*//.*$', '', source, flags=re.M)
 
 
+def _decommented_css(source):
+    """The same, for CSS, which has only the block form.
+
+    Separate from `_decommented` so a caller cannot accidentally strip `//` from a stylesheet, where
+    it is not a comment at all -- a URL contains one."""
+    return re.sub(r'/\*.*?\*/', '', source, flags=re.S)
+
+
 def _read(relative):
     return (Path(__file__).resolve().parents[2] / relative).read_text(encoding='utf-8')
 
@@ -1748,3 +1756,37 @@ def test_the_long_press_route_was_not_taken(client):
     card = _read('templates/trophies/partials/game_list/game_cards.html')
     assert '<button type="button" class="pp-gcard__add" data-quick-add' in card
     assert 'aria-label="Add ' in card
+
+
+def test_holding_a_card_cannot_start_a_native_drag(client):
+    """A link wrapping an image is draggable by default, so holding the mouse on a card begins a
+    native drag of the link -- and while one is in flight the browser suppresses page clicks AND
+    keyboard shortcuts. The page reads as frozen: the card stuck in `:active`, taps landing nowhere,
+    Ctrl+R swallowed, and only the browser's own refresh button still working.
+
+    Not caused by quick-add -- it is the default for every link-and-image on the web -- but it is what
+    a long-press on a card does, and a page that looks frozen is worth more than a drag nobody
+    performs on purpose.
+
+    BOTH MECHANISMS, because neither covers every engine: the CSS property is WebKit's, and the
+    attribute is what the others read. And the image needs its own, because images drag independently
+    of the link around them."""
+    css = _read('static/css/components/game-card.css')
+    assert '.pp-gcard, .pp-gcard__art { -webkit-user-drag: none; }' in css
+
+    card = _read('templates/trophies/partials/game_list/game_cards.html')
+    assert 'class="pp-gcard" data-gcard draggable="false"' in card, 'the link is draggable again'
+    assert '<img draggable="false"' in card, 'the cover art is draggable independently of its link'
+
+
+def test_the_touch_callout_is_left_alone(client):
+    """Deliberate, and the opposite of the arrange mode on list detail. On a real phone a long-press
+    raises a dismissible sheet rather than locking anything, and that sheet is how somebody opens a
+    game in a new tab from a catalogue. Suppressing it would take a browser capability away from the
+    site's main browsing surface to stop a gesture that already does no harm there."""
+    # DECOMMENTED. The note above the rule explains why the property is NOT used, so it names it --
+    # and a bare search matched that prose. This is the sixteenth time this session an assertion of
+    # mine has matched a comment instead of code; decommenting first is the habit, not the exception.
+    css = _decommented_css(_read('static/css/components/game-card.css'))
+    assert '-webkit-touch-callout' not in css, \
+        'the catalogue lost open-in-new-tab to suppress a gesture that is harmless on a phone'
