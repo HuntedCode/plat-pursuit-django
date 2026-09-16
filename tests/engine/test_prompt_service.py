@@ -19,9 +19,9 @@ import inspect
 
 import pytest
 
-from prompts.models import (MAX_BUCKETS_PER_PROMPT, MAX_GAMES_PER_PROMPT, SHAPE_GRID, SHAPE_POLL,
-                            SHAPE_TIER, Prompt, PromptBucket, PromptGame, PromptPlacement,
-                            PromptResponse)
+from prompts.models import (FREE_MAX_PROMPTS, MAX_BUCKETS_PER_PROMPT, MAX_GAMES_PER_PROMPT,
+                            SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES, Prompt, PromptBucket,
+                            PromptGame, PromptPlacement, PromptResponse)
 from prompts.services import prompt_service as svc
 from tests.factories import ConceptFactory, ProfileFactory
 from users.models import UserRestriction
@@ -265,6 +265,14 @@ def test_only_the_owner_writes():
         lambda: svc.create_bucket(prompt, other, label='Mine'),
         lambda: svc.update_bucket(prompt.buckets.first(), other, label='Mine'),
         lambda: svc.delete_bucket(prompt.buckets.first(), other),
+        # These two were missing, and `reorder_buckets` is the sharper omission: bucket order IS a
+        # rank on a tier list, so an unguarded one lets any signed-in hunter silently rewrite what
+        # every existing answer to somebody else's prompt MEANS, without touching a placement.
+        lambda: svc.reorder_buckets(prompt, other,
+                                    list(prompt.buckets.values_list('pk', flat=True))),
+        lambda: svc.reorder_games(prompt, other, []),
+        lambda: svc.remove_concept(prompt, other,
+                                   svc.add_concept(prompt, owner, ConceptFactory())),
     ):
         with pytest.raises(svc.PromptError):
             call()
@@ -329,6 +337,12 @@ def test_removing_a_game_closes_the_gap_and_repairs_every_count_it_moves():
     prompt = _prompt(owner)
     bucket = prompt.buckets.first()
     first, second, third = [svc.add_concept(prompt, owner, ConceptFactory()) for _ in range(3)]
+
+    # DELIBERATELY DRIFTED, so a recompute is distinguishable from a nudge. Starting from a correct
+    # 3, `update(game_count=F('game_count') - 1)` lands on the same 2 a recompute does -- and the
+    # whole argument of `_recount`'s docstring is that recomputing CORRECTS existing drift.
+    prompt.game_count = 99
+    prompt.save(update_fields=['game_count'])
 
     loser = _answer(prompt, _hunter('loser'), second, bucket)
     bystander = _answer(prompt, _hunter('bystander'), third, bucket)
@@ -466,18 +480,22 @@ def test_a_banned_word_is_refused_without_naming_itself():
     BannedWord.objects.create(word='shovelware', is_active=True)
     cache.delete('banned_words:active')
     owner = _hunter()
+    # try/finally, because the ROW rolls back with the test transaction and the CACHE does not. Any
+    # failure below would otherwise leave 'shovelware' banned process-wide for 300 seconds, breaking
+    # every later test in this worker that writes a title -- as a cascade that looks unrelated to
+    # whatever actually broke.
+    try:
+        with pytest.raises(svc.PromptError) as caught:
+            svc.create_prompt(owner, shape=SHAPE_TIER, title='Ranking the shovelware')
+        assert 'shovelware' not in str(caught.value)
 
-    with pytest.raises(svc.PromptError) as caught:
-        svc.create_prompt(owner, shape=SHAPE_TIER, title='Ranking the shovelware')
-    assert 'shovelware' not in str(caught.value)
-
-    prompt = _prompt(owner, title='Clean title')
-    with pytest.raises(svc.PromptError):
-        svc.update_prompt(prompt, owner, description='full of shovelware')
-    with pytest.raises(svc.PromptError):
-        svc.create_bucket(prompt, owner, label='shovelware')
-
-    cache.delete('banned_words:active')
+        prompt = _prompt(owner, title='Clean title')
+        with pytest.raises(svc.PromptError):
+            svc.update_prompt(prompt, owner, description='full of shovelware')
+        with pytest.raises(svc.PromptError):
+            svc.create_bucket(prompt, owner, label='shovelware')
+    finally:
+        cache.delete('banned_words:active')
 
 
 def test_a_title_is_required_and_bounded():
@@ -516,3 +534,195 @@ def test_grid_columns_are_bounded_where_the_template_divides_by_them():
         svc.create_prompt(owner, shape=SHAPE_GRID, title='Grid', grid_columns=0)
     with pytest.raises(svc.PromptError):
         svc.create_prompt(owner, shape=SHAPE_GRID, title='Grid', grid_columns='three')
+
+
+# ── what the audit found untested ─────────────────────────────────────────────────────────────────
+
+
+def test_a_restricted_hunter_cannot_publish_a_prompt_they_wrote_earlier():
+    """THE BYPASS `update_list` HAD, which this service's `or publishing` clause exists to prevent and
+    which nothing was testing.
+
+    Without that clause the route around a restriction is: write prompts privately, get restricted for
+    something unrelated, then POST `is_public=true` on each. They all go public with no gate, and
+    deletion is the moderator's only remaining lever."""
+    owner = _hunter()
+    private = _prompt(owner, is_public=False, title='Written before')
+    _restrict(owner)
+
+    with pytest.raises(svc.PromptError):
+        svc.update_prompt(private, owner, is_public=True)
+
+    private.refresh_from_db()
+    assert private.is_public is False
+
+
+def test_a_tier_list_cannot_grow_unlimited_rows():
+    """The cap behind the poll branch. The poll test deliberately asserts the poll MESSAGE so it can
+    tell which refusal fired -- which leaves the cap itself untested, and a loop posting
+    `create_bucket` would give one tier list thousands of rows, each rendering a header on every
+    answer to that prompt."""
+    owner = _hunter()
+    prompt = _prompt(owner)
+    cap = MAX_BUCKETS_PER_PROMPT[SHAPE_TIER]
+
+    while prompt.buckets.count() < cap:
+        svc.create_bucket(prompt, owner, label=f'Row {prompt.buckets.count()}')
+
+    with pytest.raises(svc.PromptError):
+        svc.create_bucket(prompt, owner, label='One too many')
+    assert prompt.buckets.count() == cap
+
+
+def test_a_tier_list_holds_far_more_games_than_a_poll():
+    """The per-shape pool cap, exercised rather than asserted as a dict comparison. Hardcoding the
+    poll's ceiling for every shape would cap a 200-game tier list at 20 and refuse the 21st with
+    "This holds 20 games"."""
+    owner = _hunter()
+    tier = _prompt(owner)
+    for _ in range(MAX_GAMES_PER_PROMPT[SHAPE_POLL] + 5):
+        svc.add_concept(tier, owner, ConceptFactory())
+
+    tier.refresh_from_db()
+    assert tier.game_count == MAX_GAMES_PER_PROMPT[SHAPE_POLL] + 5
+
+
+def test_a_member_actually_gets_the_bigger_allowance():
+    """`max_prompts_for`'s member branch was compared as a constant and never exercised. Hardcoding
+    the free cap would silently give members three."""
+    member = _hunter('member', premium=True)
+    for i in range(svc.max_prompts_for(_hunter('yardstick')) + 1):
+        _prompt(member, title=f'Prompt {i}')
+
+    assert Prompt.objects.owned_by(member).count() > FREE_MAX_PROMPTS
+
+
+def test_the_seeded_rows_would_survive_the_checks_the_service_applies_to_authored_ones():
+    """`create_prompt` writes `DEFAULT_BUCKETS` straight to the database without running them through
+    `_check_label` or `_check_colour`, so a seed is the one label and colour on the site that nothing
+    validates. Adding `('S', 'crimson')` would ship a CSS class the stylesheet does not define, with a
+    green suite."""
+    for shape, seeds in svc.DEFAULT_BUCKETS.items():
+        assert shape in SHAPES
+        for label, colour in seeds:
+            assert svc._check_label(label) == label
+            assert svc._check_colour(colour) == colour
+        if shape == SHAPE_POLL:
+            assert len(seeds) == 1, 'a poll seeded with two rows is two votes'
+
+
+def test_deleting_twice_is_a_no_op():
+    """A second click must not answer "that is not yours" about a prompt just removed."""
+    owner = _hunter()
+    prompt = _prompt(owner)
+    svc.delete_prompt(prompt, owner)
+    svc.delete_prompt(prompt, owner)
+    prompt.refresh_from_db()
+    assert prompt.is_deleted is True
+
+
+# ── the pivot must come from the locked row, not the caller's copy ───────────────────────────────
+
+
+def test_a_stale_instance_cannot_hide_a_prompt_that_has_been_answered():
+    """RULE 2, WHICH THIS FILE STATES AND DID NOT HOLD.
+
+    The unpublish refusal is gated on the prompt already being public, and that value used to be read
+    off the caller's object. Two tabs: publish in one, four hunters answer, "make private" from the
+    other -- whose instance still says private. The conjunct short-circuited, the answered-check never
+    ran, and the answers ended up orphaned behind a private prompt."""
+    owner = _hunter()
+    prompt = _prompt(owner, is_public=False)
+    stale = Prompt.objects.get(pk=prompt.pk)          # the other tab, captured while private
+
+    svc.update_prompt(prompt, owner, is_public=True)
+    game = svc.add_concept(prompt, owner, ConceptFactory())
+    _answer(prompt, _hunter('responder'), game, prompt.buckets.first())
+
+    with pytest.raises(svc.PromptError):
+        svc.update_prompt(stale, owner, is_public=False)
+
+    prompt.refresh_from_db()
+    assert prompt.is_public is True, 'an answered prompt was hidden through a stale instance'
+
+
+def test_a_stale_instance_does_not_short_circuit_closing():
+    """The same class, smaller blast radius: the idempotency shortcut decided from the caller's copy,
+    so an instance that still said "closed" after somebody reopened it wrote nothing and handed the
+    view back an object claiming a state the row did not have."""
+    owner = _hunter()
+    prompt = _prompt(owner)
+
+    # The service mutates the row it LOCKED, not the caller's object -- so after this line
+    # `prompt` still says open while the row says closed. That divergence is the whole test, and
+    # the reopen below is where it becomes detectable: an earlier version asserted the final
+    # state, which both the correct and the broken path reach.
+    svc.set_closed(prompt, owner, closed=True)
+    assert prompt.is_closed is False, "the caller's object is expected to be stale here"
+
+    svc.set_closed(prompt, owner, closed=False)
+
+    prompt.refresh_from_db()
+    assert prompt.is_closed is False, (
+        'the reopen was skipped: the shortcut compared against a stale flag that already said '
+        'open, so a prompt its author believes is taking answers is still closed'
+    )
+
+
+# ── the pool can be arranged ──────────────────────────────────────────────────────────────────────
+
+
+def test_the_pool_can_be_reordered_without_touching_anybodys_answer():
+    """`reorder_buckets` shipped and its counterpart did not, which was not cosmetic: the browse
+    tile's cover mosaic is a bounded prefetch over the first four pool rows, so those four games are
+    what represents this prompt to everybody scrolling past -- and the author could not choose them.
+
+    The only workaround was remove-then-add, which appends to the end AND cascades that game out of
+    every existing answer: the most destructive write in the feature, as the remedy for wanting a
+    different cover."""
+    owner = _hunter()
+    prompt = _prompt(owner)
+    games = [svc.add_concept(prompt, owner, ConceptFactory()) for _ in range(3)]
+    responder = _answer(prompt, _hunter('responder'), games[2], prompt.buckets.first())
+
+    svc.reorder_games(prompt, owner, [games[2].pk, games[0].pk, games[1].pk])
+
+    assert list(prompt.games.order_by('position').values_list('pk', flat=True)) == [
+        games[2].pk, games[0].pk, games[1].pk]
+    assert list(prompt.games.order_by('position').values_list('position', flat=True)) == [0, 1, 2]
+
+    # Placements point at the pool ROW, not at its position, so no answer moved.
+    responder.refresh_from_db()
+    assert responder.placements.get().prompt_game_id == games[2].pk
+    assert responder.placement_count == 1
+
+
+def test_reordering_the_pool_refuses_a_partial_order():
+    owner = _hunter()
+    prompt = _prompt(owner)
+    games = [svc.add_concept(prompt, owner, ConceptFactory()) for _ in range(3)]
+    ids = [g.pk for g in games]
+
+    for bad in (ids[:2], ids + [ids[0]], ['not-an-id'] + ids[1:]):
+        with pytest.raises(svc.PromptError):
+            svc.reorder_games(prompt, owner, bad)
+
+    assert list(prompt.games.order_by('position').values_list('pk', flat=True)) == ids
+
+
+def test_a_none_profile_is_refused_rather_than_crashing():
+    """`_require_owner` dereferences `profile.id`, so it must not run before the None check.
+
+    A view using this codebase's own `getattr(request.user, 'profile', None)` idiom and forgetting the
+    None branch would otherwise get an AttributeError -- which sails past every `except PromptError`
+    and reaches the client as a 500 HTML page where a 400 was designed."""
+    owner = _hunter()
+    prompt = _prompt(owner)
+
+    for call in (
+        lambda: svc.create_prompt(None, shape=SHAPE_TIER, title='Nobody'),
+        lambda: svc.add_concept(prompt, None, ConceptFactory()),
+        lambda: svc.create_bucket(prompt, None, label='Nobody'),
+    ):
+        with pytest.raises(svc.PromptError):
+            call()

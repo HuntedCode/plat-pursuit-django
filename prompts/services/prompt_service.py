@@ -101,8 +101,12 @@ def max_prompts_for(profile):
 
 # ── gates ────────────────────────────────────────────────────────────────────────────────────────
 
-def _refuse_if_restricted(profile):
+def refuse_if_restricted(profile):
     """`all_ugc`, the same scope every other user-content surface uses.
+
+    PUBLIC, because the response service shares it: both of this app's services ask the same two
+    questions of a writer, so the gates belong to the app rather than to whichever module happened to
+    need them first.
 
     A title, a description and a bucket label are user-submitted content shown to other people.
     Restricting somebody hides nothing they already published -- their prompts stay up and their
@@ -112,7 +116,7 @@ def _refuse_if_restricted(profile):
         raise PromptError('Your account is currently restricted from posting.')
 
 
-def _refuse_if_unlinked(profile):
+def refuse_if_unlinked(profile):
     if profile is None or not profile.is_linked:
         raise PromptError('Link your PSN account to build one of these.')
 
@@ -315,8 +319,8 @@ def create_prompt(profile, *, shape, title, description='', is_public=False, gri
     bucket is an integrity guarantee rather than a convenience: there is no path in this service that
     creates a poll without exactly one, and none that lets a second appear.
     """
-    _refuse_if_unlinked(profile)
-    _refuse_if_restricted(profile)
+    refuse_if_unlinked(profile)
+    refuse_if_restricted(profile)
 
     shape = _check_shape(shape)
     title = _check_title(title)
@@ -366,13 +370,24 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
     # and only the third case -- making it public -- is the one restriction speaks to.
     publishing = is_public is not None and bool(is_public)
     if title is not None or description is not None or publishing:
-        _refuse_if_restricted(profile)
+        refuse_if_restricted(profile)
+
+    # LOCKED BEFORE THE PIVOT IS READ, which this function did not do and needed to.
+    #
+    # The unpublish refusal below is gated on the prompt ALREADY being public, and that value used to
+    # come off the caller's in-memory object. An author with the prompt open in two tabs -- publish in
+    # one, four hunters answer, "make private" from the other -- handed in an instance whose
+    # `is_public` was still False, so the conjunct short-circuited, the answered-check never ran, and
+    # four responses ended up orphaned behind a private prompt. Exactly the state this service exists
+    # to prevent, reached by reading the pivot off a stale copy: rule 2, broken by the file that
+    # states it.
+    locked = _lock_prompt(prompt)
 
     # UNPUBLISHING IS REFUSED ONCE SOMEBODY HAS ANSWERED, for the reason `delete_prompt` gives: a
     # response cannot be read without the structure it was placed into. Checked before anything is
     # written, so a POST carrying a rename AND an unpublish changes neither.
-    if is_public is not None and not is_public and prompt.is_public:
-        if _answered_by_somebody_else(prompt):
+    if is_public is not None and not is_public and locked.is_public:
+        if _answered_by_somebody_else(locked):
             raise PromptError(
                 'People have answered this, so it cannot be hidden. Close it instead -- their '
                 'answers stay readable and nobody new can add one.'
@@ -380,21 +395,21 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
 
     changed = []
     if title is not None:
-        prompt.title = _check_title(title)
+        locked.title = _check_title(title)
         changed.append('title')
     if description is not None:
-        prompt.description = _check_description(description)
+        locked.description = _check_description(description)
         changed.append('description')
     if is_public is not None:
-        prompt.is_public = bool(is_public)
+        locked.is_public = bool(is_public)
         changed.append('is_public')
     if grid_columns is not None:
-        prompt.grid_columns = _check_grid_columns(grid_columns)
+        locked.grid_columns = _check_grid_columns(grid_columns)
         changed.append('grid_columns')
 
     if changed:
-        prompt.save(update_fields=[*changed, 'updated_at'])
-    return prompt
+        locked.save(update_fields=[*changed, 'updated_at'])
+    return locked
 
 
 @transaction.atomic
@@ -409,11 +424,15 @@ def set_closed(prompt, profile, *, closed):
     Ungated by restriction, deliberately. Closing submits no content and removes nothing.
     """
     _require_owner(prompt, profile)
-    if prompt.is_closed == bool(closed):
-        return prompt
-    prompt.is_closed = bool(closed)
-    prompt.save(update_fields=['is_closed', 'updated_at'])
-    return prompt
+    # Locked before the idempotency shortcut, which otherwise decides from the caller's copy: an
+    # instance that still says "closed" after somebody reopened it short-circuits, writes nothing, and
+    # hands the view back an object claiming a state the row does not have.
+    locked = _lock_prompt(prompt)
+    if locked.is_closed == bool(closed):
+        return locked
+    locked.is_closed = bool(closed)
+    locked.save(update_fields=['is_closed', 'updated_at'])
+    return locked
 
 
 @transaction.atomic
@@ -433,16 +452,32 @@ def delete_prompt(prompt, profile):
     if prompt.is_deleted:
         return prompt
 
-    if _answered_by_somebody_else(prompt):
+    # LOCKED, because the refusal below is otherwise advisory. Without it the check and the write are
+    # not serialized against a response arriving between them: the author deletes a prompt with zero
+    # answers, the first responder commits theirs a millisecond later, and that answer ends up hanging
+    # off a row `visible()` filters out of every read -- unreadable, uncountable, and with no undelete
+    # in this service.
+    #
+    # THE OTHER HALF IS AN OBLIGATION ON THE RESPONSE SERVICE, and is discharged there: creating a
+    # response re-reads this same row FOR UPDATE, so the two acts queue rather than interleave. A lock
+    # only one side takes serializes nothing.
+    # NOT `_lock_prompt`, which REFUSES an already-deleted row -- that helper exists for writers where
+    # a vanished prompt is an error, and here it is the success case. Deleting twice must stay a no-op:
+    # a second click should not answer "that no longer exists" about a prompt somebody just removed.
+    locked = Prompt.objects.select_for_update().filter(pk=prompt.pk).first()
+    if locked is None or locked.is_deleted:
+        return locked or prompt
+
+    if _answered_by_somebody_else(locked):
         raise PromptError(
             'People have answered this, so it cannot be deleted. Close it instead -- their answers '
             'stay readable and nobody new can add one.'
         )
 
-    prompt.is_deleted = True
-    prompt.deleted_at = timezone.now()
-    prompt.save(update_fields=['is_deleted', 'deleted_at', 'updated_at'])
-    return prompt
+    locked.is_deleted = True
+    locked.deleted_at = timezone.now()
+    locked.save(update_fields=['is_deleted', 'deleted_at', 'updated_at'])
+    return locked
 
 
 # ── the pool ─────────────────────────────────────────────────────────────────────────────────────
@@ -455,9 +490,13 @@ def add_concept(prompt, profile, concept):
     pool is rendered inside every response -- so a note here would be authored text appearing on other
     people's pages, which is a moderation surface this feature does not otherwise have.
     """
+    # UNLINKED FIRST, because `_require_owner` dereferences `profile.id`. A view using this
+    # codebase's own `getattr(request.user, 'profile', None)` idiom and forgetting the None
+    # check would otherwise get an AttributeError -- a 500 past every `except PromptError`,
+    # where a 400 was designed.
+    refuse_if_unlinked(profile)
     _require_owner(prompt, profile)
-    _refuse_if_unlinked(profile)
-    _refuse_if_restricted(profile)
+    refuse_if_restricted(profile)
 
     locked = _lock_prompt(prompt)
     if PromptGame.objects.filter(prompt=locked, concept=concept).exists():
@@ -489,9 +528,12 @@ def remove_concept(prompt, profile, game):
     intended behaviour -- an author editing a live prompt is the locked design -- and it is the reason
     `PromptPlacement` points at the pool row rather than at the Concept.
 
-    `placement_count` is repaired for the responses that lost something. Bounded to those, not to
-    every response of the prompt: the same narrowing `Concept.absorb()` needed, and for the same
-    reason, since a popular prompt is exactly the one with thousands of answers.
+    `placement_count` is repaired for the responses that lost something -- NARROWED to those, not
+    bounded. The distinction matters and an earlier version of this comment blurred it: nothing caps
+    how many responses a prompt has, so removing a game every one of fifty thousand answers had placed
+    still row-locks fifty thousand rows in one statement. What the narrowing buys is proportionality to
+    the EDIT rather than to the prompt's popularity. `Concept.absorb()` needed the same narrowing and
+    says the same thing honestly.
     """
     _require_owner(prompt, profile)
 
@@ -512,6 +554,40 @@ def remove_concept(prompt, profile, game):
     _recount_placements(touched)
 
 
+@transaction.atomic
+def reorder_games(prompt, profile, game_ids):
+    """Set the pool's order to exactly `game_ids`.
+
+    THE COUNTERPART `reorder_buckets` SHIPPED WITHOUT, and its absence was not cosmetic. Pool
+    `position` is dense and the browse tile's cover mosaic is a bounded prefetch over the first four
+    rows, so those four games are what represents this prompt to everybody scrolling past it -- and
+    the author had no way to choose them. The only workaround was remove-then-add, which appends to
+    the end AND cascades that game out of every existing response: the most destructive write in the
+    feature, as the remedy for wanting a different cover.
+
+    Refuses a partial list, like every reorder here. Ungated by restriction -- arranging your own rows
+    submits no content -- and it disturbs no answer, because placements point at the pool ROW, not at
+    its position.
+    """
+    _require_owner(prompt, profile)
+    locked = _lock_prompt(prompt)
+
+    try:
+        wanted = [int(value) for value in game_ids]
+    except (TypeError, ValueError):
+        raise PromptError('That is not a valid order.')
+
+    existing = list(PromptGame.objects.filter(prompt=locked).values_list('pk', flat=True))
+    if sorted(wanted) != sorted(existing):
+        raise PromptError('That order does not match the games that are here.')
+
+    by_id = {game.pk: game for game in PromptGame.objects.filter(prompt=locked)}
+    for position, game_id in enumerate(wanted):
+        by_id[game_id].position = position
+    PromptGame.objects.bulk_update(by_id.values(), ['position'])
+    _touch(locked)
+
+
 # ── buckets ──────────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
@@ -525,9 +601,13 @@ def create_bucket(prompt, profile, *, label, colour=''):
     already refuses it; this is here so the refusal SAYS something true, and so deleting that cap
     cannot quietly open the hole.
     """
+    # UNLINKED FIRST, because `_require_owner` dereferences `profile.id`. A view using this
+    # codebase's own `getattr(request.user, 'profile', None)` idiom and forgetting the None
+    # check would otherwise get an AttributeError -- a 500 past every `except PromptError`,
+    # where a 400 was designed.
+    refuse_if_unlinked(profile)
     _require_owner(prompt, profile)
-    _refuse_if_unlinked(profile)
-    _refuse_if_restricted(profile)
+    refuse_if_restricted(profile)
 
     label = _check_label(label)
     colour = _check_colour(colour)
@@ -542,9 +622,11 @@ def create_bucket(prompt, profile, *, label, colour=''):
 
     highest = PromptBucket.objects.filter(prompt=locked).aggregate(
         top=models.Max('position'))['top']
-    return PromptBucket.objects.create(
+    bucket = PromptBucket.objects.create(
         prompt=locked, label=label, colour=colour,
         position=0 if highest is None else highest + 1)
+    _touch(locked)
+    return bucket
 
 
 @transaction.atomic
@@ -558,7 +640,7 @@ def update_bucket(bucket, profile, *, label=None, colour=None):
     prompt = bucket.prompt
     _require_owner(prompt, profile)
     if label is not None:
-        _refuse_if_restricted(profile)
+        refuse_if_restricted(profile)
 
     locked = _lock_prompt(prompt)
     fresh = _lock_bucket(bucket, locked)
@@ -573,12 +655,17 @@ def update_bucket(bucket, profile, *, label=None, colour=None):
 
     if changed:
         fresh.save(update_fields=changed)
+        _touch(locked)
     return fresh
 
 
 @transaction.atomic
 def delete_bucket(bucket, profile):
     """Remove a row, CLOSE THE GAP, and refuse to remove the last one.
+
+    THE SAME FAN-OUT `remove_concept` CARRIES, and worse in practice: the S row of a popular tier
+    list holds a placement from nearly every answer, so deleting one row can rewrite `placement_count`
+    across every response there is. One statement, N rows, N unbounded.
 
     The games do not go: a placement is an association, so its cards simply return to every
     responder's tray. But a prompt with no buckets cannot be answered at all -- and on a poll, the one
@@ -603,6 +690,7 @@ def delete_bucket(bucket, profile):
     fresh.delete()
     PromptBucket.objects.filter(prompt=locked, position__gt=removed_position).update(
         position=models.F('position') - 1)
+    _touch(locked)
     _recount_placements(touched)
 
 
@@ -635,10 +723,25 @@ def reorder_buckets(prompt, profile, bucket_ids):
     for position, bucket_id in enumerate(wanted):
         by_id[bucket_id].position = position
     PromptBucket.objects.bulk_update(by_id.values(), ['position'])
-    Prompt.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
+    _touch(locked)
 
 
 # ── counters ─────────────────────────────────────────────────────────────────────────────────────
+
+def _touch(locked):
+    """Bump the prompt's `updated_at` for an edit that changed no field ON the prompt.
+
+    The three bucket writers used to skip this, which was a divergence introduced while lifting from
+    `game_list_service` rather than a decision -- `delete_section` bumps it. Nothing SORTS on
+    `updated_at` here (`Meta.ordering` is `-created_at` and no index carries it, deliberately), so the
+    cost of skipping it was never a wrong page: it was a prompt whose five row labels had all been
+    rewritten still reporting itself unmodified to an "edited N ago" line, or to any future ETag.
+
+    `.update()` rather than `save()`, because `auto_now` only fires for a field named in
+    `update_fields`, and there is no field to name.
+    """
+    Prompt.objects.filter(pk=locked.pk).update(updated_at=timezone.now())
+
 
 def _recount(locked):
     """Set `game_count` from the rows rather than nudging it.
@@ -660,9 +763,11 @@ def _recount(locked):
 def _recount_placements(response_ids):
     """Repair `placement_count` on responses that lost placements to a cascade.
 
-    ONE STATEMENT, and bounded to the responses actually affected. The unbounded version -- every
-    response of the prompt -- looks identical to a query-count test and takes a row lock per answer,
-    which on the prompt everybody answered is the one place that matters.
+    ONE STATEMENT, narrowed to the responses actually affected -- which is not the same as bounded,
+    and calling it bounded is how somebody stops measuring. Nothing caps responses per prompt, so this
+    still touches N rows for N affected answers; a query-count test sees one query either way and
+    cannot tell the two apart. The narrowing makes the cost proportional to the edit instead of to the
+    prompt's popularity, and that is all it does.
     """
     if not response_ids:
         return
