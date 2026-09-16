@@ -453,63 +453,19 @@
 
     /* ------------------------------------------------------------------- adder ---- */
 
-    function placeholderIcon() {
-        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('fill', 'none');
-        svg.setAttribute('stroke', 'currentColor');
-        svg.setAttribute('stroke-width', '1.8');
-        svg.setAttribute('aria-hidden', 'true');
-        var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', '2'); rect.setAttribute('y', '3');
-        rect.setAttribute('width', '20'); rect.setAttribute('height', '14');
-        rect.setAttribute('rx', '2');
-        svg.appendChild(rect);
-        return svg;
-    }
-
-    // Built with DOM APIs, never innerHTML: `title` is catalogue text and this is the one place on
-    // the page where server strings become markup.
-    function buildRow(result) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'gl-adder__opt';
-        btn.dataset.conceptId = result.concept_id;
-
-        var thumb = document.createElement('span');
-        thumb.className = 'gl-adder__thumb';
-        if (result.cover) {
-            var img = document.createElement('img');
-            img.src = result.cover;
-            img.alt = '';
-            img.loading = 'lazy';
-            thumb.appendChild(img);
-        } else {
-            thumb.appendChild(placeholderIcon());
-        }
-
-        var name = document.createElement('span');
-        name.className = 'gl-adder__name';
-        name.textContent = result.title;
-
-        var state = document.createElement('span');
-        state.className = 'gl-adder__state';
-        if (result.already_added) {
-            btn.disabled = true;
-            state.textContent = 'On this list';
-            // Without this the disabled row's only distinction is colour.
-            btn.setAttribute('aria-label', result.title + ' is already on this list');
-        } else {
-            state.textContent = 'Add';
-            btn.setAttribute('aria-label', 'Add ' + result.title + ' to this list');
-        }
-
-        btn.appendChild(thumb);
-        btn.appendChild(name);
-        btn.appendChild(state);
-        return btn;
-    }
-
+    /**
+     * The list's game adder.
+     *
+     * THE BEHAVIOUR MOVED TO `PP.GameAdder` when Tiers/Grids/Polls needed the same control. What was
+     * here was not a search box: it was four shipped bug fixes wearing one (the sequence guard on all
+     * four exits, the short-query orphan, the signed-out redirect trap, and the status line looked up
+     * from `document` because `sr-only` is not a flex child). Those now live in one place, so the
+     * fifth lands for both callers instead of for whichever page somebody happened to be on.
+     *
+     * WHAT STAYS HERE is everything list-shaped: the class prefix its stylesheet already uses, the
+     * "On this list" copy, the tally, and the server re-render. None of that is shareable, and none
+     * of it was ever the hard part.
+     */
     function wireAdder() {
         var root = document.querySelector('[data-gl-adder]');
         if (!root || wired.has(root)) { return; }
@@ -517,202 +473,47 @@
 
         var input = root.querySelector('[data-gl-adder-input]');
         var panel = root.querySelector('[data-gl-adder-results]');
-        // `document`, not `root`: the status line is a SIBLING of the search field in the toolbar
-        // bar, not a child of it. Scoped to `root` this silently returned null and every count
-        // announcement was dropped -- no error, just an accessibility feature that quietly did
-        // nothing. (`sr-only` is absolutely positioned, so it is not a flex item in the bar.)
-        var status = document.querySelector('[data-gl-adder-status]');
         if (!input || !panel) { return; }
 
-        // Matches ListGameSearchView.MIN_QUERY. Below it the endpoint answers an empty list, so
-        // asking is pure latency.
-        var MIN_QUERY = 3;
-        var seq = 0;
-
-        function say(message) { if (status) { status.textContent = message; } }
-
-        function closePanel() {
-            panel.hidden = true;
-            panel.textContent = '';
-        }
-
-        /**
-         * Close the results AND orphan whatever is in flight.
-         *
-         * One helper because the `seq++` was applied to only two of the four exits, and the two it
-         * missed are both reachable without the debounce to rescue them. The clean reproducer:
-         * type "hol", results render; type "low", the debounce fires and a request goes out; press
-         * ArrowDown into the panel then Escape. The panel closes, `seq` is untouched, the response
-         * lands, passes `mine === seq` and RE-OPENS the panel over a field the reader has already
-         * dismissed. The comment above the guard described exactly this and the fix had reached
-         * half the exits.
-         */
-        function abandon() {
-            seq++;
-            if (searchField) { searchField.setBusy(false); }
-            closePanel();
-            say('');
-        }
-
-        function note(message) {
-            panel.textContent = '';
-            var p = document.createElement('p');
-            p.className = 'gl-adder__note';
-            p.textContent = message;
-            panel.appendChild(p);
-            panel.hidden = false;
-        }
-
-        function render(results) {
-            if (!results.length) {
-                note('No games match that search.');
-                say('No games found.');
-                return;
-            }
-            panel.textContent = '';
-            results.forEach(function (result) { panel.appendChild(buildRow(result)); });
-            panel.hidden = false;
-            say(results.length === 1 ? '1 game found.' : results.length + ' games found.');
-        }
-
-        var search = PP.debounce(function () {
-            var query = input.value.trim();
-            if (query.length < MIN_QUERY) {
-                // `++seq` here too, and it is not cosmetic. Without it: type "hollow", then clear
-                // the field while the request is in flight. This branch closes the panel but leaves
-                // `seq` alone, so the in-flight response still satisfies `mine === seq`, renders,
-                // and RE-OPENS the panel with twelve results for a query the field no longer holds.
-                // The guard below only ever covered longer-query to longer-query.
-                seq++;
-                if (searchField) { searchField.setBusy(false); }
-                closePanel();
-                say('');
-                return;
-            }
-            // Out-of-order responses: a slow request for "hol" must not overwrite the results for
-            // "hollow" typed after it. Only the newest sequence number is allowed to render.
-            var mine = ++seq;
-            if (searchField) { searchField.setBusy(true); }
-            PP.API.get(root.dataset.searchUrl + '?q=' + encodeURIComponent(query))
-                .then(function (data) {
-                    if (mine !== seq) { return; }
-                    // Same redirect trap `postJson` guards on the write side: `fetch` follows a
-                    // bounce to the login page, `API.request` finds no JSON content type and hands
-                    // back the page as a STRING, and `(data && data.results) || []` then reports
-                    // "No games match that search" for a session that has simply expired.
-                    if (data === null || typeof data !== 'object') {
-                        var err = new Error('expected JSON, got a redirected page');
-                        err.signedOut = true;
-                        throw err;
-                    }
-                    render(data.results || []);
-                })
-                .catch(function (err) {
-                    if (mine !== seq) { return; }
-                    logFailure('search ' + root.dataset.searchUrl, err);
-                    note(err && err.signedOut
-                         ? 'You may have been signed out. Reload the page and try again.'
-                         : failureCopy(statusOf(err)));
-                    say('Search failed.');
-                })
-                .finally(function () {
-                    if (mine === seq && searchField) { searchField.setBusy(false); }
-                });
-        }, 220);
-
-        // The shared search chrome: `.has-value` (clear button), Escape-to-clear, and `setBusy` for
-        // the spinner. Same helper the browse toolbar and the game page's hunter search use.
-        if (PP.wireSearchField) {
-            searchField = PP.wireSearchField(input, {
-                // `setBusy(false)` is required, not tidiness. `seq++` orphans any in-flight request,
-                // so its `.finally` fails the `mine === seq` test and never clears the busy flag --
-                // leaving `.is-searching` set, which keeps the spinner turning on an empty field AND
-                // hides the clear button, so the visible control is stuck until the next keystroke.
-                onClear: abandon,
-            });
-        }
-
-        input.addEventListener('input', search);
-
-        // Escape with an empty field closes the results; with text in it, wireSearchField clears
-        // first (and its onClear closes the panel), which is the expected two-step.
-        input.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && !input.value) { abandon(); return; }
-            if (e.key === 'ArrowDown') {
-                var first = panel.querySelector('.gl-adder__opt:not(:disabled)');
-                if (first) { e.preventDefault(); first.focus(); }
-            }
-        });
-
-        // Arrow keys walk the results; Escape anywhere in them returns to the field. Rows are real
-        // buttons, so Tab already works and this only adds the vertical shortcut.
-        // `stopPropagation` as well as `preventDefault`, because the position mode listens for the
-        // same keys on the DOCUMENT. The result rows are <button>s, so `isTyping` does not exclude
-        // them, and arrowing through search results ALSO moved the picked card and fired a reorder
-        // write -- Escape likewise both closed the panel and dropped the pick.
-        panel.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') { e.stopPropagation(); input.focus(); abandon(); return; }
-            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') { return; }
-            e.stopPropagation();
-            var rows = Array.prototype.slice.call(
-                panel.querySelectorAll('.gl-adder__opt:not(:disabled)'));
-            var at = rows.indexOf(document.activeElement);
-            if (at === -1) { return; }
-            e.preventDefault();
-            if (e.key === 'ArrowUp' && at === 0) { input.focus(); return; }
-            var next = rows[at + (e.key === 'ArrowDown' ? 1 : -1)];
-            if (next) { next.focus(); }
-        });
-
-        // Now that the results FLOAT over the page, they have to be dismissable by clicking away --
-        // in flow they merely pushed content down and could be left open harmlessly. Bound on the
-        // document, and only while a panel is actually open, so it costs nothing at rest.
-        document.addEventListener('click', function (e) {
-            if (panel.hidden) { return; }
-            if (root.contains(e.target)) { return; }
-            abandon();
-        });
-
-        panel.addEventListener('click', function (e) {
-            var row = e.target.closest ? e.target.closest('.gl-adder__opt') : null;
-            if (!row || row.disabled || row.dataset.busy === '1') { return; }
-            row.dataset.busy = '1';
-            // NOT `abandon()` -- the panel stays open on purpose so several games can be added from
-            // one search. But the in-flight search must still be orphaned: its response rebuilds
-            // every row from an `already_added` snapshot taken BEFORE this add, which would undo the
-            // flip below and re-enable a row for a game that is now on the list.
-            seq++;
-
-            var body = new FormData();
-            body.append('concept_id', row.dataset.conceptId);
-            postJson(root.dataset.addUrl, body)
-                .then(function (data) {
-                    setTally('[data-game-count]', data.game_count);
-                    // The row stays and flips to its added state rather than vanishing: somebody
-                    // adding several games from one search should not have the list move under them.
-                    row.disabled = true;
-                    var state = row.querySelector('.gl-adder__state');
-                    if (state) { state.textContent = 'On this list'; }
-                    row.setAttribute('aria-label', data.title + ' is already on this list');
+        if (!PP.GameAdder) { return; }
+        PP.GameAdder(root, {
+            input: input,
+            panel: panel,
+            // `document`, not `root`: the status line is a SIBLING of the search field in the toolbar
+            // bar, not a child of it. Scoped to `root` this silently returned null and every count
+            // announcement was dropped -- no error, just an accessibility feature quietly doing
+            // nothing. (`sr-only` is absolutely positioned, so it is not a flex item in the bar.)
+            status: document.querySelector('[data-gl-adder-status]'),
+            prefix: 'gl-adder',
+            // Matches `game_search.MIN_QUERY`. Below it the endpoint answers an empty list, so asking
+            // is pure latency. MIN_QUERY = 3 -- pinned against the server by a test, so this literal
+            // and that constant cannot drift.
+            minQuery: 3,
+            addLabel: 'Add',
+            addedLabel: 'On this list',
+            addAria: function (title) { return 'Add ' + title + ' to this list'; },
+            addedAria: function (title) { return title + ' is already on this list'; },
+            logLabel: 'list-detail',
+            // The module's own copy, passed through rather than restated. Writing it out again here
+            // would have been a second set of sentences for the same four statuses.
+            failureCopy: failureCopy,
+            onAdded: function (data) {
+                setTally('[data-game-count]', data.game_count);
+                if (PP.ToastManager) {
+                    PP.ToastManager.show('Added ' + data.title + '.', 'success');
+                }
+                announce('Added ' + data.title + ' to the list.');
+                // Its own catch, for the same reason as remove -- and worse here, because the
+                // success toast has ALREADY fired. Chained into a shared catch, a failed re-render
+                // put "Added Hollow Knight." and "That game could not be added." on screen together,
+                // and re-armed a row that had just been disabled.
+                return refreshItems().catch(function (err) {
+                    logFailure('items refresh after add', err);
                     if (PP.ToastManager) {
-                        PP.ToastManager.show('Added ' + data.title + '.', 'success');
+                        PP.ToastManager.show('Added. Reload to see it in the list.', 'warning');
                     }
-                    announce('Added ' + data.title + ' to the list.');
-                    // Its own catch, for the same reason as remove -- and worse here, because the
-                    // success toast has ALREADY fired. Chained into the catch below, a failed
-                    // re-render put "Added Hollow Knight." and "That game could not be added."
-                    // on screen together, and re-armed a row that had just been disabled.
-                    return refreshItems().catch(function (err) {
-                        logFailure('items refresh after add', err);
-                        if (PP.ToastManager) {
-                            PP.ToastManager.show('Added. Reload to see it in the list.', 'warning');
-                        }
-                    });
-                })
-                .catch(function (err) {
-                    row.dataset.busy = '';
-                    toastError(err, 'That game could not be added.');
                 });
+            },
         });
     }
 
