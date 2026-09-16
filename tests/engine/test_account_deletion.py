@@ -427,3 +427,61 @@ def test_somebody_elses_lists_are_untouched_by_a_deletion(client):
 
     assert GameList.objects.filter(pk=theirs.pk).exists()
 
+
+# ── Tiers, Grids & Polls ──────────────────────────────────────────────────────────────────────
+#
+# Two things leave with the hunter, and one of them belongs to other people.
+
+
+def test_deletion_takes_their_prompts_and_the_answers_on_them(client):
+    """This OVERRIDES the rule that an answered prompt cannot be deleted, and the override is the
+    point: that rule protects responders from an author's change of mind, not from an author's
+    departure. A deletion request is not a product preference.
+
+    It is asserted rather than assumed because the rule is enforced in the service, and a flow that
+    quietly obeyed it here would leave a departed hunter's question on the site forever."""
+    from prompts.models import Prompt, PromptBucket, PromptGame, PromptPlacement, PromptResponse
+
+    profile, user, _ = _account(client)
+    stranger = ProfileFactory(is_linked=True, psn_username='stranger')
+
+    prompt = Prompt.objects.create(owner=profile, shape='tier', title='Rank the Souls games')
+    game = PromptGame.objects.create(prompt=prompt, concept=ConceptFactory(), position=0)
+    bucket = PromptBucket.objects.create(prompt=prompt, label='S', position=0)
+    answer = PromptResponse.objects.create(prompt=prompt, profile=stranger, placement_count=1)
+    PromptPlacement.objects.create(response=answer, prompt_game=game, bucket=bucket,
+                                   single_slot=False)
+
+    _delete(client)
+
+    assert not Prompt.objects.filter(pk=prompt.pk).exists()
+    assert not PromptResponse.objects.filter(pk=answer.pk).exists(), 'an answer outlived its question'
+    assert not PromptPlacement.objects.exists()
+    assert not PromptGame.objects.exists()
+
+
+def test_deletion_takes_their_own_answers_and_repairs_the_counts_it_moves(client):
+    """A response carries NO prose at all, so the blurb-clearing argument does not reach it. The
+    leak-back hatch does: the profile survives and can be re-linked, so a stranger who later verifies
+    this handle would inherit a stack of public opinions with somebody else's taste in them.
+
+    `response_count` is repaired afterwards because the prompt losing a response belongs to somebody
+    else, and a drifted count is what their browse page sorts on."""
+    from prompts.models import Prompt, PromptResponse
+
+    profile, user, _ = _account(client)
+    author = ProfileFactory(is_linked=True, psn_username='someoneelse')
+
+    their_prompt = Prompt.objects.create(owner=author, shape='poll', title='Which one?',
+                                         is_public=True, response_count=2)
+    mine = PromptResponse.objects.create(prompt=their_prompt, profile=profile)
+    survives = PromptResponse.objects.create(prompt=their_prompt,
+                                             profile=ProfileFactory(is_linked=True, psn_username='c'))
+
+    _delete(client)
+
+    assert not PromptResponse.objects.filter(pk=mine.pk).exists()
+    assert PromptResponse.objects.filter(pk=survives.pk).exists(), "somebody else's answer was taken"
+    their_prompt.refresh_from_db()
+    assert their_prompt.owner_id == author.pk, "the departing hunter took somebody else's prompt"
+    assert their_prompt.response_count == 1, 'response_count still counts the deleted answer'

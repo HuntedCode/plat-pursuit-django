@@ -8,20 +8,31 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 
 class PremiumRequiredMixin(LoginRequiredMixin):
+    """Members and the team. Everybody else gets the beta-access page.
+
+    THE TEAM BRANCH WAS MISSING and this mixin had no callers, so nothing had noticed. Every
+    description of what it is for -- `docs/design/tier-lists.md`, the premium proposal -- states the
+    cohort as "member + staff", and the code checked membership alone. The first surface to mount it
+    would have locked out every moderator who does not personally subscribe, which is precisely the
+    group that has to be able to reach a gated page in order to moderate it.
+
+    Reading it as "premium OR team" rather than renaming the class: a paywall the team cannot see
+    through is wrong for any caller this ever gets, not only for the beta one.
     """
-    Mixin that requires the user to be a premium member.
-    Redirects non-premium users to the beta access page.
-    """
+
     def dispatch(self, request, *args, **kwargs):
         # First check if user is authenticated (handled by LoginRequiredMixin)
         if not request.user.is_authenticated:
             return self.handle_no_permission()
 
-        # Check if user is premium
         if hasattr(request.user, 'profile') and request.user.profile.user_is_premium:
             return super().dispatch(request, *args, **kwargs)
 
-        # Redirect non-premium users to beta access page
+        # The team, via the one expression the whole site uses for it -- never a hand-rolled
+        # `is_staff or is_moderator`, which is the drift `core/previews.py` has a test against.
+        if is_mod_or_admin(request.user):
+            return super().dispatch(request, *args, **kwargs)
+
         return redirect('beta_access_required')
 
 

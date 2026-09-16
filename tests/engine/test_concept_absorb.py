@@ -362,3 +362,145 @@ def test_the_list_repair_does_not_scale_with_list_length():
         positions = list(game_list.items.order_by('position').values_list('position', flat=True))
         assert positions == list(range(len(positions))), f'positions are not dense: {positions}'
         assert game_list.game_count == len(positions), 'game_count drifted from the rows'
+
+
+# -- prompt pools (prompts.PromptGame, 2026-09) ---------------------------------------------------
+#
+# The list branch above migrates one hunter's own curation. This one migrates a pool that OTHER
+# PEOPLE have already answered, so the same collision that merely drops a row up there cascades into
+# strangers' responses down here. These tests delete the doomed concept at the end for the reason the
+# module docstring gives: without the delete they would pass over a re-point that never happened.
+
+
+def _answered(prompt, concept_rows, *, bucket, hunter):
+    """One hunter's response placing every given pool row into `bucket`."""
+    from prompts.models import PromptPlacement, PromptResponse
+
+    response = PromptResponse.objects.create(prompt=prompt, profile=hunter,
+                                             placement_count=len(concept_rows))
+    for i, row in enumerate(concept_rows):
+        PromptPlacement.objects.create(response=response, prompt_game=row, bucket=bucket,
+                                       single_slot=False, position=i)
+    return response
+
+
+def test_absorb_moves_other_peoples_placements_onto_the_surviving_pool_row():
+    """The failure this branch exists to prevent: a catalogue merge silently editing a stranger's
+    answer.
+
+    A hunter placed the doomed concept and never held the survivor, so their placement is not a
+    duplicate of anything -- it must MOVE. Left to the cascade it would simply vanish, and the hunter
+    would find a game missing from a tier list they made, with no event anywhere that explains it."""
+    from prompts.models import Prompt, PromptBucket, PromptGame, PromptResponse
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='author')
+    responder = ProfileFactory(is_linked=True, psn_username='responder')
+
+    prompt = Prompt.objects.create(owner=author, shape='tier', title='Rank them', game_count=2)
+    kept_row = PromptGame.objects.create(prompt=prompt, concept=survivor, position=0)
+    doomed_row = PromptGame.objects.create(prompt=prompt, concept=doomed, position=1)
+    s_tier = PromptBucket.objects.create(prompt=prompt, label='S', position=0)
+
+    response = _answered(prompt, [doomed_row], bucket=s_tier, hunter=responder)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    placement = response.placements.get()
+    assert placement.prompt_game_id == kept_row.pk, 'a stranger\'s placement was dropped, not moved'
+    assert not PromptGame.objects.filter(pk=doomed_row.pk).exists()
+    response.refresh_from_db()
+    assert response.placement_count == 1
+
+
+def test_absorb_drops_the_placement_that_would_become_a_duplicate():
+    """A hunter who placed BOTH concepts cannot keep both: `unique(response, prompt_game)` forbids
+    it, and the two rows were always the same game. The genuine duplicate cascades away with the
+    doomed pool row; the survivor's placement stays where the hunter put it.
+
+    Without the `exclude` in the branch, this insert is the one that raises mid-merge -- and because
+    absorb() is not transactional, that raise would commit the re-points above it, skip every repair
+    below it, and stop the caller's `other.delete()`."""
+    from prompts.models import Prompt, PromptBucket, PromptGame
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='author2')
+    responder = ProfileFactory(is_linked=True, psn_username='hadboth')
+
+    prompt = Prompt.objects.create(owner=author, shape='tier', title='Rank them', game_count=2)
+    kept_row = PromptGame.objects.create(prompt=prompt, concept=survivor, position=0)
+    doomed_row = PromptGame.objects.create(prompt=prompt, concept=doomed, position=1)
+    s_tier = PromptBucket.objects.create(prompt=prompt, label='S', position=0)
+
+    response = _answered(prompt, [kept_row, doomed_row], bucket=s_tier, hunter=responder)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    assert response.placements.count() == 1, 'the merge left one game in the response twice'
+    assert response.placements.get().prompt_game_id == kept_row.pk
+    response.refresh_from_db()
+    assert response.placement_count == 1, 'placement_count still counts the dropped duplicate'
+
+
+def test_absorb_repairs_every_response_of_a_colliding_prompt():
+    """`placement_count` is the numerator the editor and the response browse both read, and the rows
+    it counts were removed from responses nobody touched.
+
+    The repair is one statement over the prompt's responses rather than a loop, because a popular
+    prompt is exactly the one with thousands of them -- and this runs inside `Game.add_concept()`,
+    which is to say inside sync."""
+    from prompts.models import Prompt, PromptBucket, PromptGame
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='author3')
+
+    prompt = Prompt.objects.create(owner=author, shape='tier', title='Rank them', game_count=3)
+    kept_row = PromptGame.objects.create(prompt=prompt, concept=survivor, position=0)
+    doomed_row = PromptGame.objects.create(prompt=prompt, concept=doomed, position=1)
+    third_row = PromptGame.objects.create(prompt=prompt, concept=ConceptFactory(), position=2)
+    s_tier = PromptBucket.objects.create(prompt=prompt, label='S', position=0)
+
+    # Three hunters, three different overlaps with the merge.
+    only_doomed = _answered(prompt, [doomed_row],
+                            bucket=s_tier, hunter=ProfileFactory(is_linked=True, psn_username='a'))
+    both = _answered(prompt, [kept_row, doomed_row],
+                     bucket=s_tier, hunter=ProfileFactory(is_linked=True, psn_username='b'))
+    neither = _answered(prompt, [third_row],
+                        bucket=s_tier, hunter=ProfileFactory(is_linked=True, psn_username='c'))
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    for response, expected in ((only_doomed, 1), (both, 1), (neither, 1)):
+        response.refresh_from_db()
+        assert response.placement_count == expected
+        assert response.placements.count() == expected, 'the count and the rows disagree'
+
+    prompt.refresh_from_db()
+    assert prompt.game_count == 2, 'game_count still counts the dropped pool row'
+    positions = list(prompt.games.order_by('position').values_list('position', flat=True))
+    assert positions == [0, 1], f'pool positions are not dense: {positions}'
+
+
+def test_absorb_leaves_a_prompt_that_only_held_the_doomed_concept_whole():
+    """Per-prompt dedup, same rule the list branch states: a prompt with no collision loses nothing,
+    keeps its positions and keeps its count."""
+    from prompts.models import Prompt, PromptGame
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    author = ProfileFactory(is_linked=True, psn_username='author4')
+
+    prompt = Prompt.objects.create(owner=author, shape='poll', title='Which one?', game_count=2)
+    first = PromptGame.objects.create(prompt=prompt, concept=doomed, position=0)
+    PromptGame.objects.create(prompt=prompt, concept=ConceptFactory(), position=1)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    first.refresh_from_db()
+    assert first.concept_id == survivor.pk
+    prompt.refresh_from_db()
+    assert prompt.game_count == 2, 'an untouched prompt had its count rewritten'
+    assert list(prompt.games.order_by('position').values_list('position', flat=True)) == [0, 1]

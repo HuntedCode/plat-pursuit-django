@@ -1646,7 +1646,9 @@ class Concept(models.Model):
         # Game list entries (gamelists.GameListItem -> Concept, added 2026-09 when the rebuilt lists
         # moved from Game keying to Concept keying).
         #
-        # DELIBERATELY LAST. absorb() is not transactional, so a branch that raises commits
+        # DELIBERATELY LATE -- it was last until the `prompts` branch below joined it, which is held
+        # to the same placement for the same reason and is now the one carrying the tail risk.
+        # absorb() is not transactional, so a branch that raises commits
         # everything above it, skips everything below it, and stops the caller's `other.delete()` --
         # leaving a half-migrated orphan Concept. That risk is real here and not theoretical:
         # `gamelists` is a new app, so during a rolling deploy a worker running new code before
@@ -1709,6 +1711,82 @@ class Concept(models.Model):
                     Subquery(
                         GameListItem.objects.filter(game_list=OuterRef('pk'))
                         .values('game_list').annotate(c=Count('pk')).values('c')[:1]
+                    ),
+                    0,
+                )
+            )
+
+        # Prompt pools (prompts.PromptGame -> Concept, added 2026-09 with Tiers, Grids & Polls).
+        #
+        # LAST, for the reason the branch above used to be: `prompts` is the newest app, so a worker
+        # running new code before `migrate` has created its tables raises here, and a raise costs only
+        # what follows it. Nothing follows it.
+        #
+        # HARDER THAN THE LIST BRANCH, and the difference is the whole reason this needs its own
+        # comment rather than a copy of that one. Dropping a colliding pool row here does not only
+        # cost the author their entry -- it CASCADES into every placement of that game in every
+        # response, including responses belonging to other people. So the placements have to be moved
+        # to the surviving pool row BEFORE the doomed row goes, or a catalogue merge silently edits
+        # four hundred hunters' answers.
+        #
+        # The `exclude` is not optional: `unique(response, prompt_game)` means a response that already
+        # placed the SURVIVOR cannot also receive the re-pointed row. Those placements are the genuine
+        # duplicates and they cascade away with the doomed row, which is correct -- that hunter placed
+        # one game twice and now knows it as one game.
+        from prompts.models import Prompt, PromptGame, PromptPlacement, PromptResponse
+
+        # Only the prompts that actually LOSE a row, same narrowing the list branch documents.
+        # `unique(prompt, concept)` bounds this to exactly one deletion per colliding prompt.
+        prompt_collisions = list(
+            PromptGame.objects
+            .filter(concept=other,
+                    prompt_id__in=PromptGame.objects.filter(concept=self).values('prompt_id'))
+            .values_list('prompt_id', 'position', 'pk')
+        )
+        # A LOOP OVER COLLIDING PROMPTS, NOT OVER ROWS, and the distinction is what keeps this inside
+        # the whale rule: a concept pair collides in a handful of prompts at most, and each iteration
+        # is two set-based statements regardless of how many responses that prompt carries. Resolving
+        # the survivor's pool row per prompt is also why this is not one statement -- `.update()`
+        # cannot SET a foreign key from a joined column, and the correlated-subquery form would need
+        # an OuterRef across a join the UPDATE cannot express.
+        for prompt_id, _gap, doomed_id in prompt_collisions:
+            survivor_id = (PromptGame.objects
+                           .filter(prompt_id=prompt_id, concept=self)
+                           .values_list('pk', flat=True).first())
+            if survivor_id is None:       # cannot happen -- a collision means both rows exist
+                continue
+            PromptPlacement.objects.filter(prompt_game_id=doomed_id).exclude(
+                response_id__in=PromptPlacement.objects
+                .filter(prompt_game_id=survivor_id).values('response_id')
+            ).update(prompt_game_id=survivor_id)
+
+        PromptGame.objects.filter(pk__in=[pk for _, _, pk in prompt_collisions]).delete()
+        PromptGame.objects.filter(concept=other).update(concept=self)
+
+        # The same two invariants the list branch repairs, plus a third this system has and lists do
+        # not: `placement_count` on every response of a colliding prompt, because the cascade above
+        # removed placements from responses nobody touched. Recomputed from rows rather than
+        # decremented, so a count that has drifted for any other reason is corrected too.
+        for prompt_id, gap, _ in prompt_collisions:
+            PromptGame.objects.filter(prompt_id=prompt_id, position__gt=gap).update(
+                position=F('position') - 1)
+
+        if prompt_collisions:
+            prompt_ids = {pid for pid, _, _ in prompt_collisions}
+            Prompt.objects.filter(pk__in=prompt_ids).update(
+                game_count=Coalesce(
+                    Subquery(
+                        PromptGame.objects.filter(prompt=OuterRef('pk'))
+                        .values('prompt').annotate(c=Count('pk')).values('c')[:1]
+                    ),
+                    0,
+                )
+            )
+            PromptResponse.objects.filter(prompt_id__in=prompt_ids).update(
+                placement_count=Coalesce(
+                    Subquery(
+                        PromptPlacement.objects.filter(response=OuterRef('pk'))
+                        .values('response').annotate(c=Count('pk')).values('c')[:1]
                     ),
                     0,
                 )

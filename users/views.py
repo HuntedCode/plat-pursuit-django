@@ -242,8 +242,12 @@ class SettingsView(LoginRequiredMixin, View):
         form when blocked, but templates are not access control), password re-entry behind the
         same throttle shape as the password action, CSRF via the normal form path.
         """
+        from django.db.models import Count, OuterRef, Subquery
+        from django.db.models.functions import Coalesce
+
         from core.models import EmailLog
         from gamelists.models import GameList
+        from prompts.models import Prompt, PromptResponse
         from trophies.models import BlurbReport, UserConceptRating
 
         # Staff first, before anything destructive: moderation history PROTECTs its moderator
@@ -306,6 +310,36 @@ class SettingsView(LoginRequiredMixin, View):
                 # service uses: a soft-deleted row is retention with no purpose and a leak-back
                 # path, which is the argument this flow already makes about hidden blurbs.
                 GameList.objects.filter(owner=profile).delete()
+                # Prompts go the same way, and they take other people's answers with them. That is
+                # worth stating plainly because it OVERRIDES this system's own rule that an answered
+                # prompt cannot be deleted: that rule protects responders from an author's change of
+                # mind, not from an author's departure. A deletion request is not a product
+                # preference, and a question nobody can read is not a question anybody can answer.
+                #
+                # Their OWN responses go too, even though a response carries no prose at all -- the
+                # leak-back hatch above is the reason. The profile survives and can be re-linked, so a
+                # stranger who later verifies this handle would otherwise inherit a stack of public
+                # opinions with somebody else's taste in them, attributed to their profile.
+                #
+                # `response_count` is repaired after the delete rather than decremented during it,
+                # because the prompts losing a response are somebody else's rows and a drifted count
+                # is what their browse page sorts on.
+                answered_prompt_ids = set(
+                    PromptResponse.objects.filter(profile=profile)
+                    .values_list('prompt_id', flat=True)
+                )
+                PromptResponse.objects.filter(profile=profile).delete()
+                Prompt.objects.filter(owner=profile).delete()
+                if answered_prompt_ids:
+                    Prompt.objects.filter(pk__in=answered_prompt_ids).update(
+                        response_count=Coalesce(
+                            Subquery(
+                                PromptResponse.objects.filter(prompt=OuterRef('pk'))
+                                .values('prompt').annotate(c=Count('pk')).values('c')[:1]
+                            ),
+                            0,
+                        )
+                    )
                 profile.unlink_user()
             # The address is the personal data in an email log; the log's system value
             # (what sent, when, delivery status) survives the scrub.
