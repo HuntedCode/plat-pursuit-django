@@ -1,0 +1,23 @@
+{% comment %}The pool's cards -- the INSIDE of `[data-pd-pool]`, and a swap target on its own.
+
+WHY THIS IS ITS OWN FILE. Adding a game used to reload the whole page, which threw away the adder's
+open results with it -- so adding three games meant searching three times. `GameAdder` deliberately
+leaves its panel open after an add for exactly that reason, and a full reload defeats the one
+affordance the component was built around.
+
+Re-rendered from the SERVER rather than built in the client, which is the trade the list page makes
+too: a pool card carries two server-built URLs and cover art that arrives from one batched query for
+the whole pool. Mirroring that markup in JS would be a second copy of `detail_game.html` that drifts
+the first time either changes.
+
+THE ADDER IS DELIBERATELY NOT IN HERE. It sits outside this fragment precisely so a swap cannot
+destroy the results panel the hunter is still picking from.{% endcomment %}
+{% for game in pool %}
+{% include 'prompts/partials/detail_game.html' %}
+{% empty %}
+<p class="pp-pdet__empty" data-pd-pool-empty>
+    {% if is_open_grid %}This one is open: whoever answers picks their own games for every slot.
+    {% elif is_poll %}No options yet. A poll needs at least two.
+    {% else %}No games yet. Add the ones people will be sorting.{% endif %}
+</p>
+{% endfor %}

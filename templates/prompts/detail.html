@@ -202,16 +202,13 @@ deleted.{% endcomment %}
             <span class="pp-pdet__panel-count" data-pd-row-count>{{ buckets|length }}/{{ max_buckets }}</span>
         </header>
 
+        {% comment %}A SWAP TARGET. Adding a row re-renders this and nothing else, so the add form
+        below keeps its focus -- see `detail_rows.html`.{% endcomment %}
         <div class="pp-pdet__rows" data-pd-rows
+             data-max="{{ max_buckets }}"
+             data-refresh-url="{% url 'prompt_detail' prompt.id %}?part=rows"
              data-reorder-url="{% url 'prompt_reorder_buckets' prompt.id %}">
-            {% for bucket in buckets %}
-            {% include 'prompts/partials/detail_row.html' %}
-            {% empty %}
-            <p class="pp-pdet__empty" data-pd-rows-empty>
-                {% if is_grid %}No slots yet. Each one is a question people answer with a game.
-                {% else %}No rows yet. S, A, B, C and D is the classic, but they are yours.{% endif %}
-            </p>
-            {% endfor %}
+            {% include 'prompts/partials/detail_rows.html' %}
         </div>
 
         {% if can_add_rows %}
@@ -273,17 +270,17 @@ deleted.{% endcomment %}
         </p>
         {% endif %}
 
+        {% comment %}A SWAP TARGET, and the adder above is deliberately NOT inside it: adding a game
+        re-renders only this, so the results panel stays open and several games can be added from one
+        search. That is what `GameAdder` keeps its panel open FOR.
+
+        `data-max` so the client can retire the adder at the cap without a reload. A comparison
+        against a server-rendered number, not a rule -- `add_concept` still refuses either way.{% endcomment %}
         <div class="pp-pdet__pool" data-pd-pool
+             data-max="{{ max_games }}"
+             data-refresh-url="{% url 'prompt_detail' prompt.id %}?part=pool"
              data-reorder-url="{% url 'prompt_reorder_games' prompt.id %}">
-            {% for game in pool %}
-            {% include 'prompts/partials/detail_game.html' %}
-            {% empty %}
-            <p class="pp-pdet__empty" data-pd-pool-empty>
-                {% if is_open_grid %}This one is open: whoever answers picks their own games for every slot.
-                {% elif is_poll %}No options yet. A poll needs at least two.
-                {% else %}No games yet. Add the ones people will be sorting.{% endif %}
-            </p>
-            {% endfor %}
+            {% include 'prompts/partials/detail_pool.html' %}
         </div>
     </section>
 

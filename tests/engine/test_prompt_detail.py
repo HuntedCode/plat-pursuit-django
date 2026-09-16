@@ -522,6 +522,88 @@ def test_the_prompt_adders_floor_matches_the_endpoint():
     assert int(match.group(1)) == game_search.MIN_QUERY
 
 
+# ── adding several games from one search ─────────────────────────────────────────────────────────
+
+def test_adding_a_game_never_reloads_the_page():
+    """THE REGRESSION THIS SUITE EXISTS FOR. `GameAdder` deliberately leaves its results panel open
+    after an add so several games can be picked from one search -- and the first cut of `onAdded`
+    called `window.location.reload()`, which threw the whole page away and took the open panel with
+    it. Adding three games meant searching three times.
+
+    Asserted against the two ADD paths specifically, not against the file: publishing and unpublishing
+    reload on purpose, because they change which controls may exist and that derivation is the
+    server's."""
+    js = _read('static/js/prompt-detail.js')
+
+    reloads = js.count('window.location.reload()')
+    assert reloads == 1, f'{reloads} reloads; only the publish/unpublish one is intended'
+    # And it is the one inside the visibility wiring.
+    visibility = js[js.index('function wireVisibility('):js.index('function wireDelete(')]
+    assert 'window.location.reload()' in visibility
+
+    # Both add paths go through the partial refresh instead.
+    assert js.count("refreshPanel('pool')") >= 1
+    assert js.count("refreshPanel('rows')") >= 1
+
+
+def test_each_panel_refreshes_from_its_own_fragment(client):
+    """The panel is re-rendered by the SERVER, so a pool card keeps its server-built URLs and its
+    batched cover art rather than being mirrored in JS."""
+    owner = _signed_in(client, _member('author'))
+    prompt = _draft(owner, SHAPE_TIER, games=2, rows=2)
+
+    pool = client.get(_url(prompt), {'part': 'pool'})
+    assert pool.status_code == 200
+    body = pool.content.decode()
+    assert 'data-pd-game' in body
+    # A FRAGMENT, not the page: no chrome, no header, no adder to destroy.
+    assert '<html' not in body
+    assert 'data-pd-adder' not in body, 'the adder is inside the swap and would be destroyed'
+
+    rows = client.get(_url(prompt), {'part': 'rows'}).content.decode()
+    assert 'data-pd-row' in rows
+    assert '<html' not in rows
+    assert 'data-pd-row-add' not in rows, 'the add form is inside the swap and would lose focus'
+
+
+def test_an_unknown_part_falls_through_to_the_full_page(client):
+    """`?part=` is attacker-controlled. A template name taken from the querystring would render any
+    template in the tree with this page's context; the whitelist is what stops that, and an unknown
+    value shows the prompt rather than erroring."""
+    owner = _signed_in(client, _member('author'))
+    prompt = _draft(owner, title='Still here')
+
+    for part in ('base.html', '../../settings.py', 'nope', ''):
+        resp = client.get(_url(prompt), {'part': part})
+        assert resp.status_code == 200, part
+        assert 'Still here' in resp.content.decode(), part
+
+
+def test_the_fragment_respects_the_same_gate_and_visibility(client):
+    """A fragment route is a second door onto the same data, and a second door is where a permission
+    check gets forgotten. It is the same view, so it inherits both -- asserted, not assumed."""
+    prompt = _draft(_member('author'))
+
+    _signed_in(client, _member('stranger'))
+    assert client.get(_url(prompt), {'part': 'pool'}).status_code == 404
+
+    client.logout()
+    _signed_in(client, _member('outsider', premium=False))
+    assert client.get(_url(prompt), {'part': 'pool'}).status_code == 302
+
+
+def test_the_pool_carries_the_cap_the_client_compares_against():
+    """The adder is retired at the cap between renders by comparing the count to `data-max`. That
+    number is rendered by the server from `MAX_GAMES_PER_PROMPT`, so the client never holds the rule."""
+    from prompts.models import MAX_GAMES_PER_PROMPT
+
+    markup = _read('templates/prompts/detail.html')
+    assert 'data-max="{{ max_games }}"' in markup
+    assert 'data-max="{{ max_buckets }}"' in markup
+    # And the view supplies it from the model's table rather than a literal.
+    assert MAX_GAMES_PER_PROMPT[SHAPE_POLL] == 20
+
+
 def test_the_reorder_ids_use_the_managers_own_attribute():
     """`DragReorderManager` builds its id list from `evt.item.dataset.itemId`. A differently-named
     attribute reorders correctly ON SCREEN and posts a list of `undefined` -- a failure with no

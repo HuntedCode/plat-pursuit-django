@@ -89,6 +89,137 @@
         if (el) { el.textContent = value; }
     }
 
+    /* ------------------------------------------------------------- partial refresh ---- */
+
+    //: One per panel, so a slow refresh of the pool cannot be superseded by a fast one and then land
+    //: last. Two quick adds issue two independent GETs and the older response can arrive second,
+    //: repainting the panel with a game that is already gone.
+    var refreshSeq = { pool: 0, rows: 0 };
+
+    /**
+     * Re-render ONE panel from the server.
+     *
+     * NOT A PAGE RELOAD, and that is the whole point. The adder keeps its results panel open after an
+     * add so several games can be picked from one search; a reload threw that away and made adding
+     * three games mean searching three times.
+     *
+     * NOT CLIENT-BUILT MARKUP EITHER. A pool card carries two server-built URLs and cover art that
+     * arrives from one batched query; a row carries those plus a colour select and its edit gating.
+     * Mirroring either in JS is a second copy of a template that drifts the first time one changes.
+     *
+     * A RESOLVED PROMISE IS NOT EVIDENCE OF A SWAP -- the lesson the list page records. htmx resolves
+     * its ajax promise for every HTTP status; only a network error, an abort or a timeout rejects, and
+     * its `responseHandling` maps 4xx/5xx to `swap: false`. So a 500 resolves successfully, never
+     * swaps, and leaves the count reading N+1 over a panel still showing N. The node identity is the
+     * signal: an `innerHTML` swap always builds new nodes, so an unchanged first child means nothing
+     * landed.
+     */
+    function refreshPanel(which) {
+        var panel = root.querySelector(which === 'pool' ? '[data-pd-pool]' : '[data-pd-rows]');
+        if (!panel || !window.htmx) { return Promise.resolve(); }
+
+        var mine = ++refreshSeq[which];
+        var before = panel.firstElementChild;
+        return window.htmx
+            .ajax('GET', panel.dataset.refreshUrl, { target: panel, swap: 'innerHTML' })
+            .then(function () {
+                if (mine !== refreshSeq[which]) { return; }
+                if (panel.firstElementChild === before) {
+                    throw new Error(which + ' panel did not swap');
+                }
+                // The fresh nodes have no Sortable on them and the panel may have crossed the
+                // one-item threshold in either direction, so the drag is re-armed against what is
+                // actually there now.
+                armDrag(which);
+            });
+    }
+
+    /**
+     * Retire the adder at the cap, and bring it back under it.
+     *
+     * A COMPARISON AGAINST A SERVER-RENDERED NUMBER, not a rule this file knows. `data-max` is written
+     * by the template from `MAX_GAMES_PER_PROMPT`, and `add_concept` refuses at the cap regardless --
+     * this only decides whether the control is on screen between renders. Without it, an author who
+     * fills a 20-option poll keeps an adder whose every use 400s until they reload.
+     */
+    function syncAdderVisibility(total) {
+        var pool = root.querySelector('[data-pd-pool]');
+        var adder = root.querySelector('[data-pd-adder]');
+        if (!pool || !adder) { return; }
+        var max = parseInt(pool.dataset.max, 10);
+        if (!isNaN(max)) { adder.hidden = total >= max; }
+    }
+
+    /* --------------------------------------------------------------------- dragging ---- */
+
+    //: The live managers, so a re-arm after a swap replaces rather than stacks. Two Sortables on one
+    //: container both fire on every drop, which posts the order twice and races the two writes.
+    var draggers = { pool: null, rows: null };
+
+    var DRAG = {
+        pool: {
+            panel: '[data-pd-pool]',
+            item: '[data-pd-game]',
+            grip: '[data-pd-game-grip]',
+            param: 'game_ids[]',
+            what: 'pool',
+        },
+        rows: {
+            panel: '[data-pd-rows]',
+            item: '[data-pd-row]',
+            grip: '[data-pd-row-grip]',
+            param: 'bucket_ids[]',
+            what: 'rows',
+        },
+    };
+
+    /**
+     * (Re)arm drag reordering on one panel.
+     *
+     * GRIP-ONLY, unlike the list page's cards: a row carries a text input and a select, and making the
+     * whole row draggable would eat the pointer events both of those need.
+     *
+     * LONG-PRESS ON TOUCH, immediate with a mouse. A finger resting on a row is how you begin a
+     * scroll, so touch needs a deliberate hold before a drag arms; `delayOnTouchOnly` keeps the mouse
+     * instant and the manager's own threshold lets a scroll cancel a pending pick-up.
+     *
+     * Pool order is not cosmetic: `attach_cover_games` bounds the browse mosaic on `position__lt=4`,
+     * so the first four are the tile's cover art.
+     */
+    function armDrag(which) {
+        var spec = DRAG[which];
+        var panel = root.querySelector(spec.panel);
+
+        if (draggers[which]) {
+            draggers[which].destroy();
+            draggers[which] = null;
+        }
+        if (!panel || !PP.DragReorderManager) { return; }
+        // Nothing to reorder, and no grips to do it with -- a reader's page has neither.
+        if (panel.querySelectorAll(spec.item).length < 2) { return; }
+        if (!panel.querySelector(spec.grip)) { return; }
+
+        draggers[which] = new PP.DragReorderManager({
+            container: panel,
+            itemSelector: spec.item,
+            handleSelector: spec.grip,
+            delay: 320,
+            delayOnTouchOnly: true,
+            // The manager hands back every id in the new order, so this never re-reads the DOM.
+            // `data-item-id` is ITS attribute, not one chosen here -- it builds this list from
+            // `evt.item.dataset.itemId`, and a differently-named one posts `undefined`.
+            onReorder: function (itemId, position, allIds) {
+                var body = new FormData();
+                allIds.forEach(function (id) { body.append(spec.param, id); });
+                post(panel.dataset.reorderUrl, body)
+                    .catch(function (err) {
+                        logFailure('reorder ' + spec.what, err);
+                        toastError(err, 'That order could not be saved.');
+                    });
+            },
+        });
+    }
+
     /* ------------------------------------------------------------------ identity ---- */
 
     /**
@@ -416,49 +547,32 @@
                 var body = new FormData();
                 body.append('label', typed);
                 body.append('colour', colourInput ? colourInput.value : '');
+                var button = form.querySelector('button[type="submit"]');
+                if (button) { button.disabled = true; }
                 post(form.dataset.url, body)
                     .then(function () {
-                        // A RELOAD, not a client-built row. The row's markup carries four
-                        // server-rendered URLs, a colour select seeded from the palette and the
-                        // `can_edit_rows` gating -- rebuilding that here would be a second copy of
-                        // `detail_row.html` that drifts the first time either changes. The lists page
-                        // re-renders from the server for the same reason.
-                        window.location.reload();
+                        // THE PANEL, NOT THE PAGE. The field keeps its focus, so a hunter typing
+                        // S / A / B / C / D gets five rows without touching the mouse.
+                        return refreshPanel('rows').then(function () {
+                            labelInput.value = '';
+                            labelInput.focus();
+                            refreshCount();
+                            announce('Added ' + typed + '.');
+                        });
                     })
                     .catch(function (err) {
                         logFailure('add row', err);
                         toastError(err, 'That could not be added.');
-                    });
+                    })
+                    .finally(function () { if (button) { button.disabled = false; } });
             });
         }
 
         // ── reorder ──
         //
-        // GRIP-ONLY, unlike the list page's cards: a row carries a text input and a select, and
-        // making the whole row draggable would eat the pointer events both of those need.
-        //
-        // LONG-PRESS ON TOUCH, immediate with a mouse. A finger resting on a row is how you begin a
-        // scroll, so touch needs a deliberate hold before a drag arms; `delayOnTouchOnly` keeps the
-        // mouse instant and the manager's own threshold lets a scroll cancel a pending pick-up.
-        if (PP.DragReorderManager && count() > 1 && rows.querySelector('[data-pd-row-grip]')) {
-            new PP.DragReorderManager({
-                container: rows,
-                itemSelector: '[data-pd-row]',
-                handleSelector: '[data-pd-row-grip]',
-                delay: 320,
-                delayOnTouchOnly: true,
-                // The manager hands back every id in the new order, so this never re-reads the DOM.
-                onReorder: function (itemId, position, allIds) {
-                    var body = new FormData();
-                    allIds.forEach(function (id) { body.append('bucket_ids[]', id); });
-                    post(rows.dataset.reorderUrl, body)
-                        .catch(function (err) {
-                            logFailure('reorder rows', err);
-                            toastError(err, 'That order could not be saved.');
-                        });
-                },
-            });
-        }
+        // Armed through the shared helper, because the panel is re-rendered on every add and the
+        // fresh nodes need it again. See `armDrag` for the grip-only and long-press reasoning.
+        armDrag('rows');
     }
 
     /* ---------------------------------------------------------------------- pool ---- */
@@ -516,40 +630,25 @@
                 logLabel: 'prompt-detail',
                 onAdded: function (data) {
                     refreshCount(data.game_count);
-                    if (PP.ToastManager) {
-                        PP.ToastManager.show('Added ' + data.title + '.', 'success');
-                    }
+                    syncAdderVisibility(data.game_count);
                     announce('Added ' + data.title + '.');
-                    // The pool card carries server-rendered URLs and cover art from a batched query;
-                    // see the row-add note for why this asks the server rather than building one.
-                    window.location.reload();
+                    // THE PANEL, NOT THE PAGE -- and NO TOAST. The results panel stays open on
+                    // purpose so several games can be added from one search, the row itself flips to
+                    // "Added" as the confirmation, and a toast per game would stack four deep over
+                    // the panel being picked from. The list page toasts because its adder sits in a
+                    // toolbar above a grid the hunter is not looking at.
+                    return refreshPanel('pool').catch(function (err) {
+                        logFailure('pool refresh after add', err);
+                        if (PP.ToastManager) {
+                            PP.ToastManager.show('Added. Reload to see it in the pool.', 'warning');
+                        }
+                    });
                 },
             });
         }
 
         // ── reorder ──
-        //
-        // GRIP-ONLY and long-press on touch, for the reasons the row reorder above gives. Pool order
-        // matters even where it looks cosmetic: `attach_cover_games` bounds the browse mosaic on
-        // `position__lt=4`, so the first four are the tile's cover art.
-        if (PP.DragReorderManager && pool.querySelector('[data-pd-game-grip]')) {
-            new PP.DragReorderManager({
-                container: pool,
-                itemSelector: '[data-pd-game]',
-                handleSelector: '[data-pd-game-grip]',
-                delay: 320,
-                delayOnTouchOnly: true,
-                onReorder: function (itemId, position, allIds) {
-                    var body = new FormData();
-                    allIds.forEach(function (id) { body.append('game_ids[]', id); });
-                    post(pool.dataset.reorderUrl, body)
-                        .catch(function (err) {
-                            logFailure('reorder pool', err);
-                            toastError(err, 'That order could not be saved.');
-                        });
-                },
-            });
-        }
+        armDrag('pool');
     }
 
     /* ---------------------------------------------------------------------- boot ---- */

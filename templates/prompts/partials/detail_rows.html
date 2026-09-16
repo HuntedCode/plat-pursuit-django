@@ -1,0 +1,16 @@
+{% comment %}The rows -- the INSIDE of `[data-pd-rows]`, and a swap target on its own.
+
+Same reason as `detail_pool.html`: adding a row used to reload the page. A row carries two
+server-built URLs, a colour select seeded from the palette and its `can_edit_rows` gating, so it is
+re-rendered by the server rather than mirrored in JS.
+
+The add form sits OUTSIDE this fragment, so a swap leaves the field focused and ready for the next
+one.{% endcomment %}
+{% for bucket in buckets %}
+{% include 'prompts/partials/detail_row.html' %}
+{% empty %}
+<p class="pp-pdet__empty" data-pd-rows-empty>
+    {% if is_grid %}No slots yet. Each one is a question people answer with a game.
+    {% else %}No rows yet. S, A, B, C and D is the classic, but they are yours.{% endif %}
+</p>
+{% endfor %}

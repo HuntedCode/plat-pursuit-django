@@ -255,6 +255,24 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
     context_object_name = 'prompt'
     pk_url_kwarg = 'prompt_id'
 
+    #: THE PANELS THAT RE-RENDER ON THEIR OWN, as data rather than as branches.
+    #:
+    #: Adding a game used to reload the page, which threw away the adder's open results with it -- so
+    #: adding three games meant searching three times. `GameAdder` keeps its panel open after an add
+    #: for precisely that reason, and a reload defeated the one affordance it was built around.
+    #:
+    #: A WHITELIST, not a template name from the querystring. `?part=` is attacker-controlled, and
+    #: `get_template_names` returning it directly would render any template in the tree with this
+    #: page's context. An unknown value falls through to the full page rather than erroring, because
+    #: this is a cosmetic route and a stale bookmark should still show the prompt.
+    FRAGMENTS = {
+        'pool': 'prompts/partials/detail_pool.html',
+        'rows': 'prompts/partials/detail_rows.html',
+    }
+
+    def get_template_names(self):
+        return [self.FRAGMENTS.get(self.request.GET.get('part')) or self.template_name]
+
     def _viewer(self):
         if not self.request.user.is_authenticated:
             return None
