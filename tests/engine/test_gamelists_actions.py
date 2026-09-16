@@ -1691,11 +1691,21 @@ def test_the_add_button_arrives_with_its_card(client):
     assert '.pp-reveal .pp-gcard-wrap .pp-gcard__add { opacity: 0; }' in css
     assert '.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add' in css
 
-    # ON A HOVER DEVICE IT MUST STAY HIDDEN. The reveal rule would otherwise un-hide a button whose
-    # whole treatment there is "quiet until you hover", and the later block is what holds that.
-    guard = css.index('@media (prefers-reduced-motion: no-preference) and (hover: hover)')
-    reveal = css.index('.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add')
-    assert guard > reveal, 'the hover guard comes first, so the reveal rule wins and the button shows'
+    # A HOVER DEVICE MUST SEE NONE OF IT, and this asserts the containment rather than an ORDER.
+    #
+    # The first version compared the source positions of two blocks and passed while the feature was
+    # broken on every desktop: the re-hide it was checking for is (0,4,0) and the hover rule that
+    # brings the button back is (0,3,0), so once a card revealed, nothing hover could do outranked
+    # it. Order is not what decides a cascade; specificity is, and the honest fix was to stop
+    # emitting the rules on hover devices at all.
+    block = css[css.index('@media (prefers-reduced-motion: no-preference) and (hover: none) {'):]
+    block = block[:block.index('\n}') + 2]
+    for rule in ('.pp-reveal .pp-gcard-wrap .pp-gcard__add { opacity: 0; }',
+                 '.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add'):
+        assert rule in block, f'{rule} escaped the touch-only query'
+    assert '(hover: hover)' not in block
+    # ...and nothing anywhere re-hides it after a reveal, which is what broke desktop.
+    assert '.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add { opacity: 0; }' not in css
 
 
 def test_the_long_press_route_was_not_taken(client):

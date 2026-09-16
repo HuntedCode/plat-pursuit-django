@@ -92,18 +92,25 @@
  *
  * `.pp-reveal` is added by the JS only when it will actually observe, so a page with no reveal never
  * hides the button. */
-@media (prefers-reduced-motion: no-preference) {
+/* SCOPED TO TOUCH, and that scoping is the whole correctness of this block rather than tidiness.
+ *
+ * The first cut applied the coupling everywhere and then re-hid the button on hover devices with
+ * `.pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add` -- four classes, (0,4,0). The rule meant to
+ * bring it back on hover is `.pp-gcard-wrap:hover .pp-gcard__add`, three classes, (0,3,0). So the
+ * moment a card finished revealing, nothing hover could do outranked the re-hide, and the button
+ * became unreachable on desktop: no icon on hover, on every grid. Specificity beats source order,
+ * which is the third time that has bitten this feature and the second time in this file.
+ *
+ * The coupling was only ever FOR touch. On a hover device the button rests at `opacity: 0` anyway,
+ * so it cannot hang motionless while the card springs -- there is nothing to couple. Gating the
+ * whole thing on `(hover: none)` means a hover device sees none of these rules and keeps exactly the
+ * behaviour it had, which is both the fix and what should have been written. */
+@media (prefers-reduced-motion: no-preference) and (hover: none) {
     .pp-reveal .pp-gcard-wrap .pp-gcard__add { opacity: 0; }
     .pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add {
         opacity: 1;
         transition: opacity 0.32s ease 0.12s;
     }
-}
-/* ...and on a hover device it stays hover-gated, so the rule above must not un-hide it. */
-@media (prefers-reduced-motion: no-preference) and (hover: hover) {
-    .pp-reveal .pp-gcard.is-revealed ~ .pp-gcard__add { opacity: 0; }
-    .pp-gcard-wrap:hover .pp-gcard__add,
-    .pp-gcard__add:focus-visible { opacity: 1; }
 }
 /* Guarded, or the lit state STICKS after a tap until something else is tapped. */
 @media (hover: hover) {
