@@ -1250,8 +1250,17 @@ def test_the_adder_uses_the_shared_search_chrome(client):
     assert 'pp-search-spin' in adder
     assert 'data-search-clear' in adder
 
+    # THE HELPER MOVED, THE CONTRACT DID NOT. The adder's behaviour now lives in `PP.GameAdder`
+    # (shared with the prompts adder), so this page delegates to it and `GameAdder` is what calls
+    # `wireSearchField`. Both halves are still asserted -- delegation here, the shared chrome there --
+    # because asserting only the first would pass over a GameAdder that hand-rolled its own spinner.
     js = _decommented(_read('static/js/list-detail.js'))
-    assert 'wireSearchField(' in js
+    assert 'GameAdder(' in js, 'the adder no longer goes through the shared component'
+    assert 'wireSearchField(' not in js, 'the adder is driving the search chrome itself again'
+
+    utils = _decommented(_read('static/js/utils.js'))
+    adder_src = utils[utils.index('function GameAdder('):utils.index('window.PlatPursuit.GameAdder')]
+    assert 'wireSearchField(' in adder_src
 
 
 def test_the_detail_page_does_not_load_the_my_lists_script(client):
@@ -1265,14 +1274,22 @@ def test_the_detail_page_does_not_load_the_my_lists_script(client):
 
 def test_the_adder_min_query_matches_the_endpoint(client):
     """Two copies of a threshold drift. If the endpoint's floor rises, the client must not keep
-    firing requests below it that can only ever return nothing."""
-    from gamelists.views import ListGameSearchView
+    firing requests below it that can only ever return nothing.
 
+    Points at `game_search` since the catalogue half of the adder was extracted there for the prompts
+    adder to share. That is the single source now: the view no longer carries its own copy, which is
+    the whole reason this assertion still has something to be worth pinning.
+    """
+    from gamelists.services import game_search
+
+    # `minQuery:` since the adder became a shared component configured per caller. The floor is still
+    # declared by THIS page -- which is the point: `GameAdder` has a default, and a page that quietly
+    # took a different one from the endpoint is exactly the drift being guarded against.
     js = _decommented(_read('static/js/list-detail.js'))
-    match = re.search(r'MIN_QUERY\s*=\s*(\d+)', js)
+    match = re.search(r'minQuery:\s*(\d+)', js)
 
-    assert match, 'the adder no longer declares a MIN_QUERY'
-    assert int(match.group(1)) == ListGameSearchView.MIN_QUERY
+    assert match, 'the adder no longer declares a minQuery'
+    assert int(match.group(1)) == game_search.MIN_QUERY
 
 
 # -- guards against the audit's findings ----------------------------------------------------------
@@ -1828,8 +1845,13 @@ def test_the_chrome_refresh_verifies_it_actually_swapped(client):
 def test_the_adder_results_do_not_also_move_the_picked_card(client):
     """The results rows are <button>s, so `isTyping` does not exclude them and the document-level
     position handler ran too: arrowing through search results moved the picked card and fired a
-    reorder write, and Escape both closed the panel and dropped the pick."""
-    js = _decommented(_read('static/js/list-detail.js'))
+    reorder write, and Escape both closed the panel and dropped the pick.
+
+    READ FROM `utils.js` since the adder became `PP.GameAdder`. The document-level position handler
+    this defends against is still list-detail's, so the guard is still this page's to keep -- it just
+    now pins the shared component every adder gets, which is strictly more coverage than before.
+    """
+    js = _decommented(_read('static/js/utils.js'))
 
     start = js.index("panel.addEventListener('keydown'")
     handler = js[start:js.index('});', start)]
@@ -2361,7 +2383,10 @@ def test_a_section_change_asks_for_the_chrome_and_an_ordinary_refresh_does_not(c
         body = js[js.index(f'function {fn}('):js.index('\n    }', js.index(f'function {fn}('))]
         assert 'refreshItems(true)' in body, f'{fn} leaves the bar describing the previous list'
 
-    remove = js[js.index('function onRemove('):js.index('function placeholderIcon(')]
+    # Ends at `wireAdder`, the next function in the file. It used to end at `placeholderIcon`, which
+    # moved into `PP.GameAdder` -- an incidental anchor. A section-comment would read better and
+    # cannot be used: `_decommented` strips comments before this runs, so the anchor has to be code.
+    remove = js[js.index('function onRemove('):js.index('function wireAdder(')]
     assert 'refreshItems()' in remove and 'refreshItems(true)' not in remove
 
 

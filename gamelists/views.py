@@ -34,6 +34,7 @@ from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST
                               list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
+from gamelists.services.game_search import SearchRefused, search_concepts
 from trophies.mixins import HtmxListMixin
 from trophies.models import Concept
 
@@ -1381,11 +1382,6 @@ class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
     add once.
     """
 
-    LIMIT = 12
-    MIN_QUERY = 3
-    MAX_QUERY = MAX_QUERY_LENGTH          # shared with the browse filter, so the two cannot drift
-    CACHE_TTL = 60
-
     @method_decorator(ratelimit(key='user', rate='120/m', method='GET', block=True))
     def get(self, request, list_id):
         game_list = GameList.objects.readable_by(
@@ -1398,36 +1394,13 @@ class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
             # is the method, not the status.)
             return JsonResponse({'error': 'That list is not available.'}, status=404)
 
-        query = (request.GET.get('q') or '').strip()
-        if len(query) > self.MAX_QUERY:
-            # An unbounded `q` becomes an unbounded LIKE pattern. `SiteSuggestView` refuses these.
-            return JsonResponse({'error': 'That search is too long.'}, status=400)
-        if len(query) < self.MIN_QUERY:
-            return JsonResponse({'results': []})
-
-        # Cached on the normalized query, NOT on the list: the catalogue half of the answer is the
-        # same for everybody, and it is the expensive half. `already_added` is per-list and applied
-        # after the cache, so one hunter's list never leaks into another's results.
-        cache_key = f'gamelists:search:{query.lower()}'
-        cached = cache.get(cache_key)
-        if cached is None:
-            concepts = list(
-                Concept.objects.filter(unified_title__icontains=query)
-                .exclude(unified_title='')
-                .select_related('igdb_match')
-                .defer('igdb_match__raw_response')
-                .order_by('unified_title')[:self.LIMIT]
-            )
-            covers = cover_games_for([c.pk for c in concepts])
-            cached = [
-                {
-                    'concept_id': concept.pk,
-                    'title': concept.unified_title,
-                    'cover': covers[concept.pk].display_image_url if concept.pk in covers else '',
-                }
-                for concept in concepts
-            ]
-            cache.set(cache_key, cached, self.CACHE_TTL)
+        # The catalogue half, cached on the normalized query and shared with every other adder on the
+        # site -- see `gamelists.services.game_search`. `already_added` below is the per-list half and
+        # is deliberately applied AFTER, so one hunter's list never leaks into another's results.
+        try:
+            cached = search_concepts(request.GET.get('q'))
+        except SearchRefused as exc:
+            return JsonResponse({'error': str(exc)}, status=400)
 
         # BOUNDED TO THE PAGE OF RESULTS, which is the same idiom `api/rating_views.py` uses for its
         # prefill rows and for the same reason. This read every `concept_id` on the list into a Python
