@@ -36,7 +36,7 @@
         var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
         var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
         revealHandle = PP.staggerReveal({
-            grid: grid, cardSelector: '.pp-gcard', step: 22,
+            grid: grid, cardSelector: '.pp-gcard', cellSelector: '.pp-gcard-wrap', step: 22,
             reveal: function (el, delayMs) {
                 if (!el.animate) { return; }
                 el.animate([{ opacity: 0 }, { opacity: 1 }],

@@ -136,9 +136,12 @@
         </div>
     </a>
     {% if quick_add and request.user.is_authenticated and request.user.profile.is_linked %}
-    {% comment %}OUTSIDE the anchor, positioned over its top-right corner by CSS. Quiet until the
-    card is hovered or the button itself takes focus -- the design conversation asked the card
-    affordance to be "an icon, not a labelled button", and this lands on six page types at once.
+    {% comment %}OUTSIDE the anchor, positioned by CSS, and it sits in TWO different places: over the
+    cover's top-right corner on a pointer device, quiet until the card is hovered or the button takes
+    focus; and down in the title row, visible at rest, on touch -- where there is no hover to reveal it
+    and a plus permanently on the art is noise on a catalogue you scan BY the art. The design
+    conversation asked the card affordance to be "an icon, not a labelled button". Four browse pages,
+    per the note above; an earlier version of this line said six.
 
     It carries the CONCEPT and the title and nothing else: the popover fetches the rest when it
     opens, because a grid of 24 cards must not carry 24 copies of a hunter's list collection.{% endcomment %}

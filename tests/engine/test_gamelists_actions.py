@@ -1727,17 +1727,23 @@ def test_an_invisible_add_button_is_never_tappable(client):
     assert 'pointer-events: auto;' in touch_rule
 
 
-def test_the_reveal_coupling_is_gone_and_stays_gone(client):
-    """It cost two bugs in two commits for a fade. First it hid the button on every desktop grid --
-    the re-hide was (0,4,0) against hover's (0,3,0) -- and then it left the button invisible but
-    tappable on touch, which is the freeze.
+def test_the_button_is_never_shown_by_the_reveal_class(client):
+    """`.is-revealed` may HIDE this button and must never SHOW it, and the asymmetry is the whole
+    lesson of three attempts at this arrival.
 
-    The owner's actual complaint was a plus permanently on the cover art, and that was answered by
-    MOVING it. The animation was a nicety chasing a sibling's state, and it is not worth a third."""
+    Keying the button's appearance on `.is-revealed` is the fix that looks obviously right and is
+    wrong: the class lands on frame 2 for every card in the batch, while what actually holds a card
+    invisible through its stagger delay is the WAAPI animation's `fill: 'backwards'`. So a show-rule
+    lights the button ~950ms before its card arrives -- the bug, with a test around it. (It also broke
+    the button outright twice on the way here: a re-hide at (0,4,0) beating hover at (0,3,0), then
+    invisible-but-tappable, which reads on a phone as the page freezing.)
+
+    The arrival is solved in `staggerReveal` instead, by animating the CELL so the button is inside the
+    animation. What survives in CSS is a hide, for the one frame before that animation exists."""
     css = _read('static/css/components/quick-add.css')
 
     assert '.pp-gcard.is-revealed ~ .pp-gcard__add' not in css, \
-        'the coupling is back; it has broken this button twice'
+        'the show-coupling is back; it has broken this button twice and cannot fix it'
     assert '.pp-reveal .pp-gcard-wrap .pp-gcard__add' not in css
 
 
@@ -1790,3 +1796,100 @@ def test_the_touch_callout_is_left_alone(client):
     css = _decommented_css(_read('static/css/components/game-card.css'))
     assert '-webkit-touch-callout' not in css, \
         'the catalogue lost open-in-new-tab to suppress a gesture that is harmless on a phone'
+
+
+def test_an_appended_cell_still_reaches_the_reveal(client):
+    """THE SECOND-ORDER BUG FROM THE cellSelector FIX, and the reason a shared-file change wants its
+    own audit: the damage does not show up in the feature that caused it.
+
+    `InfiniteScroller` now appends the `.pp-gcard-wrap` CELL so the button travels with its card. All
+    four callers forward those appended nodes straight into `staggerReveal.observe`, which tested
+    `nd.matches('.pp-gcard')` and silently dropped anything that was not itself a card. So page two
+    onward was never observed, never got `.is-revealed`, and stayed at the `opacity: 0` the hide class
+    holds it at -- thirty correctly-sized, completely blank cells per page, with the quick-add buttons
+    (siblings, so not covered by the hide rule) floating over the voids.
+
+    Invisible to a signed-out visitor, who never gets a wrapper. Invisible under reduced motion, where
+    the reveal never arms. Which is to say: invisible in most casual testing."""
+    utils = _decommented(_read('static/js/utils.js'))
+
+    # SCOPED TO `staggerReveal`. `utils.js` has TWO `observe: function (nodes)` -- the other belongs
+    # to `cardReveal`, which Career and job detail use for `.rp-row` and which filters nothing. The
+    # unscoped slice found that one and failed over correct code in the function it was not testing.
+    reveal = utils[utils.index('function staggerReveal('):]
+    fn = reveal[reveal.index('observe: function (nodes) {'):reveal.index('disconnect: function ()')]
+    # It must accept a node that CONTAINS a card, not only one that IS a card.
+    assert 'nd.querySelector(sel)' in fn, 'an appended cell is dropped and its card never reveals'
+    # ...and still take the card itself, which is what every other caller hands it.
+    assert 'nd.matches(sel) ? nd' in fn
+
+    # The pairing that makes this necessary: the scroller appends cells for exactly these grids.
+    scroller = _decommented(_read('static/js/utils.js'))
+    assert 'config.cellSelector' in scroller
+
+
+def test_the_reveal_animates_the_cell_so_the_button_rides_with_its_card():
+    """The button is the card's SIBLING, so it does not inherit the grid's staggered reveal.
+
+    On touch it is visible at rest, so that left a row of grey plus signs hanging in empty space for up
+    to a second while the cards faded up beneath them -- and touch also makes it tappable, so a tap in
+    that window opened a picker for a card not yet on screen.
+
+    THE OBVIOUS FIX IS THE WRONG ONE. A sibling rule keyed on `.is-revealed` (the shape already
+    shipping for `.gl-item__remove`) looks like it covers this and does not: `.is-revealed` lands on
+    frame 2 for every card in the batch, while what actually holds a card invisible through its stagger
+    delay is the WAAPI animation's `fill: 'backwards'` -- which a selector cannot see. That rule would
+    have lit the button ~950ms early and looked fixed.
+
+    Only something INSIDE the animation is hidden by the animation, so the cell is what animates."""
+    utils = _decommented(_read('static/js/utils.js'))
+
+    stagger = utils[utils.index('function staggerReveal('):utils.index('function arriveOnScroll(')]
+    assert "o.reveal((o.cellSelector && el.closest(o.cellSelector)) || el, delay)" in stagger, \
+        'the reveal plays on the card, so a control beside it is outside the animation'
+
+    # ...and every grid that renders a cell asks for it. A caller that forgets is a grid whose button
+    # hangs still over an arriving card -- the bug itself, on one page.
+    for path in ('templates/trophies/game_list.html', 'static/js/tag-detail.js',
+                 'static/js/recently-added.js', 'static/js/trophy-lists.js'):
+        src = _decommented(_read(path))
+        # The config line only -- the callback below it is full of `});` and would end the slice early.
+        block = src[src.index('staggerReveal({'):][:200]
+        assert "cellSelector: '.pp-gcard-wrap'" in block, f'{path} reveals the bare card'
+
+
+def test_the_button_is_hidden_and_inert_until_its_card_reveals():
+    """The one frame before the animation exists, and an appended cell still waiting on the observer.
+
+    Hidden is not enough on its own: `opacity: 0` keeps every hit target, and this button carries a
+    44px `::before`. The pair is the rule -- the same pairing the base block documents."""
+    css = _decommented_css(_read('static/css/components/quick-add.css'))
+
+    rule = css[css.index('.pp-reveal .pp-gcard:not(.is-revealed) ~ .pp-gcard__add'):]
+    rule = rule[:rule.index('}') + 1]
+    assert 'opacity: 0' in rule
+    assert 'pointer-events: none' in rule, 'invisible but tappable is the page-freeze bug'
+
+    # Guarded by the same media query as the card's own hide rule: they are halves of one behaviour,
+    # and a reduced-motion viewer never gets `.pp-reveal` at all.
+    before = css[:css.index('.pp-reveal .pp-gcard:not(.is-revealed) ~ .pp-gcard__add')]
+    assert before.rstrip().endswith('@media (prefers-reduced-motion: no-preference) {')
+
+
+def test_the_popover_survives_the_ios_keyboard_raising():
+    """A hunter with NO lists gets the New list field focused on open. On iOS that raises the keyboard,
+    which SCROLLS the document to lift the field clear of it -- and the scroll handler closed on any
+    scroll, so the panel vanished on the frame it appeared. Every time, for exactly the first-run
+    hunter the empty-state copy is written for.
+
+    The `resize` handler one block down was already written for this same keyboard; the reasoning was
+    never carried across to `scroll`."""
+    js = _decommented(_read('static/js/quick-add.js'))
+
+    handler = js[js.index("window.addEventListener('scroll'"):]
+    handler = handler[:handler.index("window.addEventListener('resize'")]
+    assert 'pop.contains(document.activeElement)' in handler, \
+        'a scroll the panel itself caused still closes the panel'
+    # Repositioned, not merely ignored: the panel is `fixed`, so a scroll it did not cause moves the
+    # page under it, and a panel that ignores the scroll floats away from its trigger.
+    assert 'place(openTrigger)' in handler

@@ -39,8 +39,10 @@
 }
 .pp-gcard__add svg { width: 15px; height: 15px; }
 /* A REAL TOUCH TARGET at a 28px drawn size, the same transparent-`::before` trick `.gl-item__grab`
-   and `.gl-section__act` use. Nothing else sits within 44px of this corner, so unlike the section
-   header's pair there is no neighbour to overlap. */
+   and `.gl-section__act` use. At THIS position (the cover's top-right, the desktop one) it has the
+   corner to itself: 22px above the button's centre is 2px past the top of the card, and the grid's
+   own 10-12px gap means it never reaches the card in the row above. The touch position is tighter and
+   biases the box downward -- see the block below. */
 .pp-gcard__add::before {
     content: '';
     position: absolute; top: 50%; left: 50%;
@@ -95,23 +97,41 @@
         border-color: transparent;
         color: var(--pp-text-mute);
     }
+    /* THE HIT BOX BIASES DOWN, INTO THE STRIP. Centred, its 44px would reach 22px up from a centre
+       that sits only ~15.8px below the cover's lower edge -- so the bottom 6px of the cover art, and
+       with it the whole right end of the progress bar, would open a list picker instead of the game.
+       On the strip's side there is nothing but the facts row, which is not interactive. The card's
+       art is the primary tap target on a catalogue; the control borrows from the text, not from it. */
+    .pp-gcard__add::before { top: calc(50% + 6px); }
     /* Room for it, or a two-line title runs underneath. 28px of control plus the 7px inset. */
     .pp-gcard-wrap .pp-gcard__title { padding-right: 36px; }
     .pp-gcard__add:active { color: var(--pp-primary); }
 }
 
-/* THE REVEAL COUPLING WAS REMOVED, and the reasoning is worth more than the animation was.
+/* ── THE ARRIVAL, done the way the earlier attempts should have been ─────────────────────────────
  *
- * The button is the card's SIBLING, so it did not ride the stagger: on touch, where it is visible at
- * rest, it hung still while the card sprang up under it. Coupling it to `.is-revealed` fixed that and
- * broke two other things in two commits -- first hiding the button on every desktop grid (the re-hide
- * outranked hover), then leaving it invisible-but-tappable on touch, which is the page-freeze above.
+ * The button is the card's SIBLING, so it does not inherit the grid's staggered reveal. On touch,
+ * where it is visible at rest, that left a row of grey plus signs hanging in empty space for up to a
+ * second while the cards faded up beneath them -- and because touch also makes it tappable, a tap in
+ * that window opened a list picker for a card that was not on screen yet. The same freeze the
+ * `pointer-events` note above was written about, arriving from the other direction: that fix tied the
+ * button's hit area to ITS OWN opacity, and the opacity that matters here is the CARD's.
  *
- * Two bugs for a fade is a bad trade, and the owner's actual complaint -- a plus permanently on the
- * cover art -- was answered by MOVING it, not by animating it. The button now simply exists at rest
- * on touch. If the arrival is ever worth revisiting, the honest way is to animate the WRAPPER in the
- * four reveal callbacks so the card and its control are one moving thing, rather than to chase the
- * card's state from a sibling selector. */
+ * TWO EARLIER ATTEMPTS CHASED `.is-revealed` FROM A SIBLING SELECTOR AND BOTH BROKE something else --
+ * first hiding the button on every desktop grid (the re-hide outranked hover), then leaving it
+ * invisible-but-tappable. They were also aiming at the wrong thing: `.is-revealed` lands on frame 2
+ * for every card in the batch, whereas what actually holds a card invisible through its stagger delay
+ * is the WAAPI animation's `fill: 'backwards'`. A sibling selector cannot see that, so a rule keyed on
+ * `.is-revealed` alone would have shown the button ~950ms early and called the bug fixed.
+ *
+ * So the fix is in the engine, not here: `staggerReveal` takes a `cellSelector` and animates the CELL,
+ * which contains the button. The card and its control are now one moving thing. All this rule does is
+ * cover the one frame BEFORE that animation exists (and an appended cell still waiting on the
+ * observer), which is exactly what `.is-revealed` is good for. Guarded by the same media query as the
+ * card's own hide rule in `game-card.css`, because they are halves of one behaviour. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-gcard:not(.is-revealed) ~ .pp-gcard__add { opacity: 0; pointer-events: none; }
+}
 /* Guarded, or the lit state STICKS after a tap until something else is tapped. */
 @media (hover: hover) {
     .pp-gcard__add:hover {

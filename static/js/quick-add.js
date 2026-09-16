@@ -263,8 +263,12 @@
     /* --------------------------------------------------------------------- acting ---- */
 
     function onRow(row) {
-        // `aria-disabled` keeps it focusable, so it can still be clicked and pressed -- the trade for
-        // being announced at all. The refusal is here rather than in the markup.
+        // BELT AND BRACES, and honestly labelled as such: a full row renders WITHOUT `data-row`, and
+        // the delegated handler only arrives here through `closest('[data-row]')`, so today this
+        // cannot fire. It stays because `aria-disabled` keeps a row focusable -- that is the trade for
+        // being announced as an option that exists and cannot be used -- so the day somebody adds
+        // `data-row` to the full branch to make it keyboard-reachable, the refusal is already here.
+        // (An earlier version of this comment claimed the guard was load-bearing. It was not.)
         if (row.getAttribute('aria-disabled') === 'true') { return; }
         if (row.dataset.busy) { return; }
         var on = row.getAttribute('aria-pressed') === 'true';
@@ -367,8 +371,21 @@
     // nothing. Closing is the honest answer and the one a hunter expects from a menu. The panel's own
     // inner scrolling does not reach here: `overscroll-behavior: contain` stops it chaining to the
     // document, which otherwise closed the popover mid-flick for anybody with enough lists to scroll.
+    //
+    // NOT WHILE THE FOCUS IS OURS, which is the same iOS keyboard problem the `resize` handler below
+    // was written for, reaching this handler by a route nobody applied the fix to. A hunter with NO
+    // lists yet -- precisely who the "Name one and this game starts it" copy is for -- gets the New
+    // list field focused on open; on iOS that raises the keyboard, and the keyboard SCROLLS the
+    // document to lift the field clear of it. So the panel closed on the frame it appeared, every
+    // time, and the feature was simply unreachable for a first-run hunter on an iPhone. A scroll the
+    // panel itself caused is not the hunter scrolling away from it; reposition, as resize does.
     window.addEventListener('scroll', function () {
-        if (pop && !pop.hidden) { close(false); }
+        if (!pop || pop.hidden) { return; }
+        if (pop.contains(document.activeElement)) {
+            if (openTrigger && openTrigger.isConnected) { place(openTrigger); }
+            return;
+        }
+        close(false);
     }, { passive: true });
 
     // REPOSITIONED, NOT CLOSED. Android fires `resize` when the virtual keyboard opens, and the

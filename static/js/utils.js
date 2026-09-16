@@ -2299,7 +2299,8 @@ function flipGrid(o) {
  * @param {Object} o
  * @param {HTMLElement} o.grid          the grid container
  * @param {string} o.cardSelector       selects the cards within the grid
- * @param {function(HTMLElement, number)} o.reveal   plays one card's arrival, given (el, delayMs)
+ * @param {string} [o.cellSelector]     if the card sits inside a cell, the CELL is what animates
+ * @param {function(HTMLElement, number)} o.reveal   plays one arrival, given (el, delayMs)
  * @param {number} [o.step=24]          per-card stagger step (ms)
  * @param {number} [o.batchCap=560]     max delay for the initial in-grid batch
  * @param {number} [o.appendCap=200]    max delay within a scroll-appended batch
@@ -2329,7 +2330,16 @@ function staggerReveal(o) {
         // animation then masks the resting state, and at its end the backwards fill reverts to .is-revealed.
         if (el.classList.contains('pp-revealing') || el.classList.contains('is-revealed')) { return; }
         el.classList.add('pp-revealing');
-        o.reveal(el, delay);
+        // THE CELL ANIMATES, NOT THE CARD, wherever a cell exists. A card with a control beside it
+        // (the game card's wrapper, which holds the anchor and a quick-add button as siblings) has a
+        // part that is NOT inside the animated element -- so the button hung motionless while the card
+        // sprang up under it, and worse, was fully opaque and tappable over a card the delayed
+        // animation still holds at zero. `.is-revealed` cannot fix that from CSS: it lands on frame 2
+        // for EVERY card in the batch, while the WAAPI `fill: 'backwards'` is what actually keeps a
+        // card invisible through its stagger delay. Only something inside the animation is hidden by
+        // the animation. Animating the cell puts the control inside it, which is both the correct
+        // motion (one moving thing) and the only place the timing is right.
+        o.reveal((o.cellSelector && el.closest(o.cellSelector)) || el, delay);
         if (window.requestAnimationFrame) { requestAnimationFrame(function () { el.classList.add('is-revealed'); }); }
         else { el.classList.add('is-revealed'); }
     }
@@ -2343,7 +2353,28 @@ function staggerReveal(o) {
         shown.forEach(function (el, j) { play(el, Math.min(j * step, appendCap)); io.unobserve(el); });
     }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
     return {
-        observe: function (nodes) { Array.prototype.forEach.call(nodes, function (nd) { if (nd.matches && nd.matches(sel)) { io.observe(nd); } }); },
+        /**
+         * Observe freshly-appended nodes -- either the cards themselves, or the CELLS that contain
+         * them.
+         *
+         * The container case is not hypothetical and not decoration: `InfiniteScroller` gained a
+         * `cellSelector` so a caller whose card is wrapped (the game card wraps its anchor so a
+         * button can sit beside it rather than inside the link) appends the wrapper. This function
+         * tested `nd.matches(sel)` and silently dropped anything that was not itself a card, so those
+         * pages were never observed, never got `.is-revealed`, and stayed at the `opacity: 0` the
+         * hide class holds them at. The grid grew by thirty correctly-sized, completely blank cells,
+         * with the buttons -- siblings, so not covered by the hide rule -- floating over the voids.
+         *
+         * Anything handed a list of nodes should cope with being handed their containers; that is
+         * cheaper than every caller remembering to unwrap.
+         */
+        observe: function (nodes) {
+            Array.prototype.forEach.call(nodes, function (nd) {
+                if (!nd || !nd.matches) { return; }
+                var target = nd.matches(sel) ? nd : (nd.querySelector && nd.querySelector(sel));
+                if (target) { io.observe(target); }
+            });
+        },
         disconnect: function () { io.disconnect(); }
     };
 }
