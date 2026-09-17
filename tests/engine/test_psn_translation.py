@@ -14,6 +14,7 @@ PSN objects are faked with SimpleNamespace shaped to the attributes each method
 touches (verified against psn_api_service.py).
 """
 
+import logging
 from types import SimpleNamespace
 
 import pytest
@@ -129,9 +130,10 @@ def test_create_or_update_profile_game_maps_fields():
         progress=42, hidden_flag=False, earned_trophies=_counts(bronze=3, platinum=0)
     )
 
-    pg, created = PsnApiService.create_or_update_profile_game(profile, game, tt)
+    pg, created, drifted = PsnApiService.create_or_update_profile_game(profile, game, tt)
 
     assert created is True
+    assert drifted == []  # a fresh row was written by the create, not by the drift path
     assert pg.progress == 42
     assert pg.earned_trophies == {"bronze": 3, "silver": 0, "gold": 0, "platinum": 0}
 
@@ -166,7 +168,7 @@ def test_profile_game_accepts_a_correction_with_an_unchanged_timestamp():
     )
 
     # Same timestamp, corrected numbers -- exactly what PSN serves for this title today.
-    PsnApiService.create_or_update_profile_game(
+    _, _, drifted = PsnApiService.create_or_update_profile_game(
         profile,
         game,
         fake_trophy_title(
@@ -180,17 +182,19 @@ def test_profile_game_accepts_a_correction_with_an_unchanged_timestamp():
     pg = ProfileGame.objects.get(profile=profile, game=game)
     assert pg.progress == 100  # the completion tests can see him again
     assert pg.earned_trophies == {"bronze": 56, "silver": 15, "gold": 4, "platinum": 1}
+    # The caller reads this to put the row into touched_profilegame_ids, which is what gets the
+    # badge/contract credit re-evaluated. Fixing the number alone would not have paid him.
+    assert "progress" in drifted
 
 
 @pytest.mark.parametrize("psn_progress,stored", [(111, 100), (-5, 0)])
 def test_profile_game_clamps_impossible_psn_progress(psn_progress, stored):
-    # A percentage outside 0-100 is Sony's arithmetic contradicting itself mid-restructure. We
-    # store the honest reading rather than the impossible number, because `progress == 100` is a
-    # completion test, not a label.
+    # A percentage outside 0-100 is Sony's arithmetic contradicting itself mid-restructure. On the
+    # create path we have no EarnedTrophy rows to outrank it with, so the clamped value stands.
     profile = ProfileFactory()
     game = GameFactory()
 
-    pg, _ = PsnApiService.create_or_update_profile_game(
+    pg, _, _ = PsnApiService.create_or_update_profile_game(
         profile,
         game,
         fake_trophy_title(
@@ -200,21 +204,105 @@ def test_profile_game_clamps_impossible_psn_progress(psn_progress, stored):
         ),
     )
 
-    assert pg.progress == stored
+    assert ProfileGame.objects.get(pk=pg.pk).progress == stored
+
+
+def test_impossible_payload_defers_to_our_own_rows_rather_than_inventing_completion():
+    # An earned count that outnumbers the defined count does NOT mean the hunter holds the whole
+    # list: trophies from a group PSN dropped can outnumber base-game trophies they are still
+    # missing. Clamping such a row to 100 would invent a completion and hand out badge, contract
+    # and plat-card credit for an unfinished game, so our own EarnedTrophy denorms outrank the
+    # payload. Floored, so it reads 100 only when nothing is unearned.
+    profile = ProfileFactory()
+    game = GameFactory()
+    ProfileGameFactory(
+        profile=profile,
+        game=game,
+        progress=50,
+        earned_trophies_count=34,
+        unearned_trophies_count=3,  # three trophies of the live list still missing
+    )
+
+    PsnApiService.create_or_update_profile_game(
+        profile,
+        game,
+        fake_trophy_title(
+            progress=127,
+            earned_trophies=_counts(bronze=20, silver=5, gold=8, platinum=1),
+            defined_trophies=_counts(bronze=20, silver=5, gold=4, platinum=1),
+        ),
+    )
+
+    assert ProfileGame.objects.get(profile=profile, game=game).progress == 91  # 34*100//37
+
+
+def test_impossible_payload_with_in_range_progress_still_defers_and_warns(monkeypatch, caplog):
+    # The contradiction is earned > defined; `progress` itself happens to look plausible. The
+    # payload is still untrustworthy, so the same fallback applies, and the warning names both
+    # totals because the overshoot is what says the title's list moved under Sony.
+    profile = ProfileFactory()
+    game = GameFactory()
+    ProfileGameFactory(
+        profile=profile,
+        game=game,
+        progress=64,
+        earned_trophies_count=30,
+        unearned_trophies_count=0,
+    )
+
+    # The psn_api logger is configured with propagate=False, so caplog's root handler cannot see
+    # it without this. Without the propagation flip the assertion below passes vacuously.
+    monkeypatch.setattr(logging.getLogger("psn_api"), "propagate", True)
+
+    with caplog.at_level(logging.WARNING, logger="psn_api"):
+        PsnApiService.create_or_update_profile_game(
+            profile,
+            game,
+            fake_trophy_title(
+                progress=64,  # in range, so a range check alone would wave this through
+                earned_trophies=_counts(bronze=25, silver=5, gold=3, platinum=1),
+                defined_trophies=_counts(bronze=20, silver=5, gold=4, platinum=1),
+            ),
+        )
+
+    assert ProfileGame.objects.get(profile=profile, game=game).progress == 100  # 30*100//30
+    assert any(
+        "earned=34 defined=30" in r.getMessage() for r in caplog.records
+    ), "the contradiction that names the incident class was not logged"
+
+
+def test_profile_game_writes_on_a_single_field_drift():
+    # The gate compares four PSN-owned fields. Dropping any one of them from the comparison
+    # would freeze that field forever, so each must be able to trigger the write on its own.
+    profile = ProfileFactory()
+    game = GameFactory()
+    title = fake_trophy_title(hidden_flag=False)
+    PsnApiService.create_or_update_profile_game(profile, game, title)
+
+    moved = timezone.now()
+    _, _, drifted = PsnApiService.create_or_update_profile_game(
+        profile, game, fake_trophy_title(hidden_flag=True, last_updated_datetime=moved)
+    )
+
+    pg = ProfileGame.objects.get(profile=profile, game=game)
+    assert sorted(drifted) == ["hidden_flag", "last_updated_datetime"]
+    assert pg.hidden_flag is True
+    assert pg.last_updated_datetime == moved
 
 
 def test_profile_game_skips_the_write_when_nothing_moved():
     # The value comparison replaced a timestamp comparison; it must not have cost us the
-    # original intent, which was to leave an unchanged row alone. last_sync is auto_now, so a
-    # save would bump it.
+    # original intent, which was to leave an unchanged row alone. last_sync is auto_now and is
+    # listed in update_fields, so a save bumps it.
     profile = ProfileFactory()
     game = GameFactory()
     title = fake_trophy_title(progress=42, earned_trophies=_counts(bronze=3))
-    pg, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+    pg, _, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
     first_sync = ProfileGame.objects.get(pk=pg.pk).last_sync
 
-    PsnApiService.create_or_update_profile_game(profile, game, title)
+    _, _, drifted = PsnApiService.create_or_update_profile_game(profile, game, title)
 
+    assert drifted == []
     assert ProfileGame.objects.get(pk=pg.pk).last_sync == first_sync
 
 

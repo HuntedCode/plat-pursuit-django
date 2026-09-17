@@ -23,7 +23,7 @@ from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
 from .models import Profile, Game, Concept, TitleID, TrophyGroup, ProfileGame, EarnedTrophy, ScoutAccount
-from .services.psn_api_service import PsnApiService
+from .services.psn_api_service import PsnApiService, psn_trophy_total
 from .psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client, log_api_call
 from trophies.util_modules.constants import TITLE_ID_BLACKLIST, TITLE_STATS_SUPPORTED_PLATFORMS
@@ -2463,7 +2463,7 @@ class TokenKeeper:
             if game_created:
                 new_game_count += 1
 
-            profile_game, pgame_created = PsnApiService.create_or_update_profile_game(profile, game, title)
+            profile_game, pgame_created, pgame_drifted = PsnApiService.create_or_update_profile_game(profile, game, title)
 
             # Concept-less game classification:
             # - Modern platform games (PS4/PS5) go through sync_title_stats →
@@ -2505,19 +2505,13 @@ class TokenKeeper:
 
             # Trophy-count drift detection: compare PSN's earned total for this
             # title against our DB's. Mismatch = needs sync_trophies re-run.
-            title_earned_total = (
-                title.earned_trophies.bronze + title.earned_trophies.silver
-                + title.earned_trophies.gold + title.earned_trophies.platinum
-            )
+            title_earned_total = psn_trophy_total(title.earned_trophies)
             db_earned_total = db_earned_by_game.get(game.id, 0)
             has_drift = (title_earned_total != db_earned_total)
 
             # TrophyGroup completeness: new games or games whose defined_trophies
             # total disagrees with DB, or which simply have no TrophyGroup rows yet.
-            title_defined_total = (
-                title.defined_trophies.bronze + title.defined_trophies.silver
-                + title.defined_trophies.gold + title.defined_trophies.platinum
-            )
+            title_defined_total = psn_trophy_total(title.defined_trophies)
             needs_groups = (
                 game_created
                 or game.get_total_defined_trophies() != title_defined_total
@@ -2534,6 +2528,13 @@ class TokenKeeper:
                 # added to touched_profilegame_ids. update_profilegame_stats and
                 # evaluate_for_sync scope their work to this list, so adding
                 # untouched games is wasted DB / badge-eval cycles.
+                touched_profilegame_ids.append(profile_game.id)
+            elif 'progress' in pgame_drifted:
+                # A completion % that PSN corrected in place, with no trophy drift behind it:
+                # nothing to re-fetch, so this game does NOT join games_to_resync. It must still
+                # join the touched list, because badge eval and contract detection are scoped to
+                # it and `progress == 100` is what they gate on -- otherwise we fix the number a
+                # hunter sees and leave the credit it owes them unawarded.
                 touched_profilegame_ids.append(profile_game.id)
 
         # Title observations for the WHOLE walk in one bulk pass (~4 queries), not per title.
