@@ -22,7 +22,7 @@ from django.utils import timezone
 from trophies.models import EarnedTrophy, Game, ProfileGame, Trophy
 from trophies.services.psn_api_service import PsnApiService
 from trophies.sync_utils import sync_signal_suppressor
-from tests.factories import GameFactory, ProfileFactory, TrophyFactory
+from tests.factories import GameFactory, ProfileFactory, ProfileGameFactory, TrophyFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -147,6 +147,75 @@ def test_create_or_update_profile_game_increments_played_count_once():
 
     game.refresh_from_db()
     assert game.played_count == 1
+
+
+def test_profile_game_accepts_a_correction_with_an_unchanged_timestamp():
+    # Regression guard for the frozen-row bug (The Long Dark, NPWR13317_00). PSN revised this
+    # title's earned counts and progress IN PLACE without moving last_updated_datetime. The
+    # update gated solely on that timestamp, so the correction could never land and the row sat
+    # at an impossible 111% for five months, failing every `progress == 100` completion test.
+    frozen = timezone.now()
+    profile = ProfileFactory()
+    game = GameFactory()
+    ProfileGameFactory(
+        profile=profile,
+        game=game,
+        progress=111,
+        earned_trophies={"bronze": 67, "silver": 16, "gold": 4, "platinum": 1},
+        last_updated_datetime=frozen,
+    )
+
+    # Same timestamp, corrected numbers -- exactly what PSN serves for this title today.
+    PsnApiService.create_or_update_profile_game(
+        profile,
+        game,
+        fake_trophy_title(
+            progress=100,
+            earned_trophies=_counts(bronze=56, silver=15, gold=4, platinum=1),
+            defined_trophies=_counts(bronze=56, silver=15, gold=4, platinum=1),
+            last_updated_datetime=frozen,
+        ),
+    )
+
+    pg = ProfileGame.objects.get(profile=profile, game=game)
+    assert pg.progress == 100  # the completion tests can see him again
+    assert pg.earned_trophies == {"bronze": 56, "silver": 15, "gold": 4, "platinum": 1}
+
+
+@pytest.mark.parametrize("psn_progress,stored", [(111, 100), (-5, 0)])
+def test_profile_game_clamps_impossible_psn_progress(psn_progress, stored):
+    # A percentage outside 0-100 is Sony's arithmetic contradicting itself mid-restructure. We
+    # store the honest reading rather than the impossible number, because `progress == 100` is a
+    # completion test, not a label.
+    profile = ProfileFactory()
+    game = GameFactory()
+
+    pg, _ = PsnApiService.create_or_update_profile_game(
+        profile,
+        game,
+        fake_trophy_title(
+            progress=psn_progress,
+            earned_trophies=_counts(bronze=67, silver=16, gold=4, platinum=1),
+            defined_trophies=_counts(bronze=56, silver=15, gold=4, platinum=1),
+        ),
+    )
+
+    assert pg.progress == stored
+
+
+def test_profile_game_skips_the_write_when_nothing_moved():
+    # The value comparison replaced a timestamp comparison; it must not have cost us the
+    # original intent, which was to leave an unchanged row alone. last_sync is auto_now, so a
+    # save would bump it.
+    profile = ProfileFactory()
+    game = GameFactory()
+    title = fake_trophy_title(progress=42, earned_trophies=_counts(bronze=3))
+    pg, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
+    first_sync = ProfileGame.objects.get(pk=pg.pk).last_sync
+
+    PsnApiService.create_or_update_profile_game(profile, game, title)
+
+    assert ProfileGame.objects.get(pk=pg.pk).last_sync == first_sync
 
 
 # --- Trophy translation -------------------------------------------------------
