@@ -95,25 +95,105 @@ def test_holo_needs_full_complete():
 
 
 # ── platform routing between the two groups ──────────────────────────────────
-def test_platform_routing_splits_between_groups():
+def test_one_clear_credits_every_edition_the_stage_reaches():
+    """THE cross-platform rule (owner's call, 2026-09). One stage is one WORK; clearing it on any platform
+    clears it everywhere the stage is in scope.
+
+    This test used to assert the opposite -- that the PS5 clear left Legacy HD at zero until the PS3 copy
+    was done too. That made a cross-gen hunter buy and replay the same game once per edition to collect
+    both badges, which is not what a badge is for.
+    """
     legacy, ultra = _groups()
     series, stage = _series_with_stage()
     concept = ConceptFactory()               # one concept, two platform versions
     stage.concepts.add(concept)
-    ps3 = _game(concept, platforms=('PS3',))
+    _game(concept, platforms=('PS3',))
     ps5 = _game(concept, platforms=('PS5',))
     gb_legacy = GroupBadgeFactory(series=series, platform_group=legacy)
     gb_ultra = GroupBadgeFactory(series=series, platform_group=ultra)
 
     profile = ProfileFactory()
-    _complete(profile, ps5, base=True)       # only the PS5 version done
+    _complete(profile, ps5, base=True)       # ONLY the PS5 version done
     res = evaluate_profile(profile, [gb_legacy, gb_ultra])
-    assert res[gb_ultra.id].base_earned is True      # Ultra: satisfied via PS5
-    assert res[gb_legacy.id].base_earned is False     # Legacy: PS3 version untouched
 
-    _complete(profile, ps3, base=True)       # now the PS3 version too
-    res2 = evaluate_profile(profile, [gb_legacy, gb_ultra])
-    assert res2[gb_legacy.id].base_earned is True
+    assert res[gb_ultra.id].base_earned is True
+    assert res[gb_legacy.id].base_earned is True, (
+        'the PS5 clear did not credit Legacy HD -- satisfaction is still platform-scoped'
+    )
+    # Both editions still GATE on their own platform: the stage is required in each because each has an
+    # obtainable copy of it. Gating never went cross-platform, only satisfaction.
+    assert res[gb_legacy.id].gating_count == 1
+    assert res[gb_ultra.id].gating_count == 1
+
+
+def test_a_stage_with_no_copy_on_the_groups_platforms_is_out_of_scope():
+    """The limit on the rule above. Cross-platform satisfaction applies only to stages the badge can SEE;
+    a stage with nothing on the group's platforms is not that badge's business, so clearing it credits
+    nothing there -- no gating, no satisfaction, no XP."""
+    legacy, ultra = _groups()
+    series, stage = _series_with_stage()
+    concept = ConceptFactory()
+    stage.concepts.add(concept)
+    ps5 = _game(concept, platforms=('PS5',))      # PS5 ONLY -- nothing for Legacy HD to route to
+    gb_legacy = GroupBadgeFactory(series=series, platform_group=legacy)
+    gb_ultra = GroupBadgeFactory(series=series, platform_group=ultra)
+
+    profile = ProfileFactory()
+    _complete(profile, ps5, base=True)
+    res = evaluate_profile(profile, [gb_legacy, gb_ultra])
+
+    assert res[gb_ultra.id].base_earned is True
+    assert res[gb_legacy.id].gating_count == 0, 'a PS5-only stage gated a PS3 badge'
+    assert res[gb_legacy.id].base_earned is False
+    assert res[gb_legacy.id].xp_stage_count == 0, 'an out-of-scope stage paid XP to a badge it never reached'
+
+
+def test_a_bundle_only_routes_to_platforms_every_member_runs_on():
+    """A ConceptBundle is satisfied only when EVERY member is complete, so the platforms it can be
+    completed on are the INTERSECTION of its members', not the union.
+
+    The union made a badge nobody could earn: a bundle with a PS3-only member and a PS5-only member
+    reported {PS3, PS5}, so it qualified for Ultra HD, GATED it, and could never be satisfied there -- a
+    permanent "0 / N" chase with no path to completion, violating the engine's own rule that a badge must
+    not demand work that cannot be done on its own platforms.
+    """
+    legacy, ultra = _groups()
+    series, stage = _series_with_stage()
+    from trophies.models import ConceptBundle
+
+    bundle = ConceptBundle.objects.create(stage=stage, label='Mixed era')
+    ps3_only, ps5_only = ConceptFactory(), ConceptFactory()
+    _game(ps3_only, platforms=('PS3',))
+    _game(ps5_only, platforms=('PS5',))
+    bundle.concepts.set([ps3_only, ps5_only])
+    gb_legacy = GroupBadgeFactory(series=series, platform_group=legacy)
+    gb_ultra = GroupBadgeFactory(series=series, platform_group=ultra)
+
+    res = evaluate_profile(ProfileFactory(), [gb_legacy, gb_ultra])
+
+    assert res[gb_ultra.id].gating_count == 0, 'a bundle no Ultra HD hunter can finish gated Ultra HD'
+    assert res[gb_legacy.id].gating_count == 0, 'a bundle no Legacy HD hunter can finish gated Legacy HD'
+
+
+def test_a_bundle_whose_members_share_a_platform_still_gates_there():
+    """The other half: intersection must not break the normal case. Both members on PS5 -> the bundle
+    routes to Ultra HD exactly as before."""
+    legacy, ultra = _groups()
+    series, stage = _series_with_stage()
+    from trophies.models import ConceptBundle
+
+    bundle = ConceptBundle.objects.create(stage=stage, label='PS5 episodic')
+    a, b = ConceptFactory(), ConceptFactory()
+    _game(a, platforms=('PS5',))
+    _game(b, platforms=('PS5',))
+    bundle.concepts.set([a, b])
+    gb_legacy = GroupBadgeFactory(series=series, platform_group=legacy)
+    gb_ultra = GroupBadgeFactory(series=series, platform_group=ultra)
+
+    res = evaluate_profile(ProfileFactory(), [gb_legacy, gb_ultra])
+
+    assert res[gb_ultra.id].gating_count == 1
+    assert res[gb_legacy.id].gating_count == 0
 
 
 # ── delisted policy differs per group ────────────────────────────────────────

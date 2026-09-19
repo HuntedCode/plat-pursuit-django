@@ -17,12 +17,12 @@
 .bd-btn--sm.bd-btn--icon { padding: 4px; }
 
 .bd-btn--primary {
-    background: color-mix(in oklch, var(--pp-primary) 18%, var(--pp-bg-2));
+    background: color-mix(in oklab, var(--pp-primary) 18%, var(--pp-bg-2));
     border-color: color-mix(in oklch, var(--pp-primary) 50%, transparent);
     color: var(--pp-primary);
 }
 .bd-btn--primary:hover {
-    background: color-mix(in oklch, var(--pp-primary) 26%, var(--pp-bg-2));
+    background: color-mix(in oklab, var(--pp-primary) 26%, var(--pp-bg-2));
     border-color: var(--pp-primary);
 }
 .bd-btn--ghost { color: var(--pp-text-mute); }

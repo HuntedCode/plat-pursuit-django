@@ -52,6 +52,28 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # JS lint. Runs BEFORE the Python suite because it takes seconds and answers a question the
+      # suite structurally cannot: `game-flag.js` once shipped with a variable used in four places
+      # and declared in none -- valid JavaScript, so the build, collectstatic and every Django test
+      # passed while a button silently did nothing in the browser. See eslint.config.mjs.
+      # Node 22 (LTS), matching local. 20 is deprecated on GitHub's runners as of 2025-09.
+      # `cache: npm` keys on package-lock.json, which is committed -- it hard fails without one.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # `npm ci`, which installs EXACTLY the locked tree and refuses if package.json and the lockfile
+      # disagree. That refusal is the point: CI used to re-resolve the whole transitive dependency
+      # graph from the network on every run and execute its install scripts, so a patch release
+      # anywhere in the tree landed on the runner unreviewed. The lockfile pins exact tarballs with
+      # integrity hashes; `ci` is what honours them.
+      - name: Install JS dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint JS
+        run: npm run lint
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

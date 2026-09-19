@@ -27,6 +27,16 @@ _CJK_PATTERN = re.compile(
     ']'
 )
 
+
+def psn_trophy_total(counts) -> int:
+    """Total trophies in one of PSN's per-tier count objects (earned_trophies/defined_trophies).
+
+    Takes psnawp's attribute-style TrophySet, which is what the `trophy_titles` walk yields. Not
+    every psnawp endpoint wraps these counts the same way, so pass it a TrophySet, not a raw dict.
+    """
+    return counts.bronze + counts.silver + counts.gold + counts.platinum
+
+
 class PsnApiService:
     """Service class for PSN API data processing and model updates."""
 
@@ -416,44 +426,133 @@ class PsnApiService:
         return False
 
     @classmethod
-    def create_or_update_profile_game(cls, profile, game, trophy_title: TrophyTitle):
-        """Create or update ProfileGame model from PSN trophy title data."""
-        profile_game, created = ProfileGame.objects.get_or_create(
-            profile=profile,
-            game=game,
-            defaults={
-                "progress": trophy_title.progress,
-                "hidden_flag": trophy_title.hidden_flag,
-                "earned_trophies": {
-                    "bronze": trophy_title.earned_trophies.bronze,
-                    "silver": trophy_title.earned_trophies.silver,
-                    "gold": trophy_title.earned_trophies.gold,
-                    "platinum": trophy_title.earned_trophies.platinum
-                },
-                "last_updated_datetime": trophy_title.last_updated_datetime,
-                "user_hidden": False,
-            },
-        )
+    def _psn_progress(cls, trophy_title: TrophyTitle) -> tuple[int, bool]:
+        """PSN's title `progress` clamped into 0-100, plus whether the payload was self-consistent.
 
-        if not created and (profile_game.last_updated_datetime != trophy_title.last_updated_datetime):
-            profile_game.progress = trophy_title.progress
-            profile_game.hidden_flag = trophy_title.hidden_flag
-            profile_game.earned_trophies = {
+        `progress` is Sony's number, not ours: a grade-weighted fraction (the tiers are not equal
+        shares) of the title's DEFINED set. During a trophy-list restructure that arithmetic can
+        contradict itself. The Long Dark (NPWR13317_00) reported earned=88 against defined=76 in
+        April 2026 and handed us a progress of 111, which we stored verbatim.
+
+        An out-of-range percentage is not a display nuisance. `progress == 100` is an EQUALITY
+        test wherever completion is read: badge full_complete (badge_engine), contract completion
+        (contract_service, process_contracts), the plat-card gate (game_views),
+        Profile.total_completes and Game.full_completion_count. A row stuck at 111 satisfies none
+        of them, so it denies a hunter every scrap of credit for a game they did finish.
+
+        The caller gets the inconsistency flag rather than a decision, because the clamped value is
+        NOT sufficient on its own. An earned count that outnumbers the defined count compares
+        COUNTS and cannot establish set containment: a hunter holding 12 trophies from a group PSN
+        dropped can outnumber the defined set while still missing base-game trophies. Clamping such
+        a row to 100 would invent a completion. Only our own EarnedTrophy rows can settle that,
+        which the caller has and this does not.
+        """
+        progress = trophy_title.progress or 0
+        earned_total = psn_trophy_total(trophy_title.earned_trophies)
+        defined_total = psn_trophy_total(trophy_title.defined_trophies)
+        consistent = 0 <= progress <= 100 and earned_total <= defined_total
+        if not consistent:
+            # Deliberately does NOT promise a fallback: whether one happens is the caller's call
+            # and depends on us holding rows for this game at all. Says what PSN sent and what we
+            # will store at worst, so the log stays true on the create path too.
+            logger.warning(
+                "PSN payload contradicts itself for %s: progress=%s, earned=%s defined=%s. "
+                "The title's trophy list likely moved under Sony; storing at most %s.",
+                trophy_title.np_communication_id, progress, earned_total, defined_total,
+                min(100, max(0, progress)),
+            )
+        return min(100, max(0, progress)), consistent
+
+    @staticmethod
+    def _progress_from_own_rows(profile_game) -> int | None:
+        """Count-based completion from our own EarnedTrophy denorms, or None when we have no rows.
+
+        FLOORED, matching ProfileTrophyGroup and detect_dlc_and_refresh: it reads 100 if and only
+        if every trophy we hold a row for is earned, so it can never round a near-miss up into a
+        completion. This is what outranks an impossible PSN percentage.
+
+        These two denorms are refreshed by update_profilegame_stats at sync_complete, i.e. AFTER
+        the walk that calls this, so during a sync where the hunter also earned new trophies on
+        the same title they still hold the PREVIOUS sync's counts. That is accepted rather than
+        worked around: it only bites when an inconsistent payload and fresh trophies land in the
+        same sync, and the next walking sync converges it. The alternative -- an EarnedTrophy
+        aggregate per title, inside the walk -- is a per-row query on the sync hot path.
+        """
+        total = (profile_game.earned_trophies_count or 0) + (profile_game.unearned_trophies_count or 0)
+        if not total:
+            return None
+        return min(100, (profile_game.earned_trophies_count or 0) * 100 // total)
+
+    @classmethod
+    def create_or_update_profile_game(cls, profile, game, trophy_title: TrophyTitle):
+        """Create or update ProfileGame model from PSN trophy title data.
+
+        Returns (profile_game, created, drifted) -- `drifted` being the PSN-owned field names this
+        call actually wrote. The caller needs it: badge and contract evaluation are scoped to the
+        ProfileGames a sync touched, so a row whose `progress` we corrected here has to enter that
+        list or the number gets fixed while the completion credit it gates does not.
+        """
+        psn_progress, psn_consistent = cls._psn_progress(trophy_title)
+        # The fields PSN owns on this row, built once so the create and update paths cannot drift
+        # apart and so the update can ask "did any of them actually change?".
+        psn_fields = {
+            "progress": psn_progress,
+            # bool(): the column is NOT NULL and psnawp types this as optional.
+            "hidden_flag": bool(trophy_title.hidden_flag),
+            "earned_trophies": {
                 "bronze": trophy_title.earned_trophies.bronze,
                 "silver": trophy_title.earned_trophies.silver,
                 "gold": trophy_title.earned_trophies.gold,
                 "platinum": trophy_title.earned_trophies.platinum
-            }
-            profile_game.last_updated_datetime = trophy_title.last_updated_datetime
-            profile_game.user_hidden = False  # PSN returned this game, so it's not hidden
-            profile_game.save()
+            },
+            "last_updated_datetime": trophy_title.last_updated_datetime,
+        }
+
+        profile_game, created = ProfileGame.objects.get_or_create(
+            profile=profile,
+            game=game,
+            defaults={**psn_fields, "user_hidden": False},
+        )
+
+        drifted = []
+        # Accept a CORRECTION, not just fresh activity. This gated solely on
+        # last_updated_datetime moving, which meant a value PSN revised in place could never
+        # reach us: Sony walked The Long Dark's earned count back from 88 to 76 and its progress
+        # from 111 to 100 without touching that timestamp, so every sync for five months fetched
+        # the corrected payload, compared timestamps, and threw the correction away. Every other
+        # gate in the pipeline (has_drift, needs_groups) asks "is there MORE than before?" and so
+        # is blind to a retraction in exactly the same way. Comparing the values themselves keeps
+        # the original intent -- no pointless write when nothing moved -- while letting a
+        # retraction through.
+        if not created:
+            if not psn_consistent:
+                # Our own rows outrank a payload that fails its own arithmetic. Update path only:
+                # a freshly created row has no EarnedTrophy rows yet, so there is nothing to
+                # outrank it with, and the clamped value stands until the next sync.
+                own_progress = cls._progress_from_own_rows(profile_game)
+                if own_progress is not None:
+                    psn_fields["progress"] = own_progress
+
+            drifted = [f for f, value in psn_fields.items() if getattr(profile_game, f) != value]
+            if drifted:
+                for field in drifted:
+                    setattr(profile_game, field, psn_fields[field])
+                # PSN returned this game, so it is not hidden. Deliberately outside the drift
+                # comparison above: the visibility set-diff later in the sync owns this flag, and
+                # this line is belt-and-braces, not a reason to write a row.
+                profile_game.user_hidden = False
+                # Scoped rather than a full save: this fires on any PSN correction now, not only
+                # on fresh activity, and a full save would rewrite nine columns owned by other
+                # steps of the sync from values read microseconds earlier. last_sync is auto_now
+                # and only bumps when listed.
+                profile_game.save(update_fields=[*drifted, "user_hidden", "last_sync"])
 
         # Game.played_count is maintained by the post_save signal
         # update_game_played_count_on_save (trophies/signals.py). Do NOT
         # increment it here as well: doing so was the historical double-count
         # bug (signal +1 plus this +1 = +2 per newly linked game, while a
         # removal only decremented by 1, so the counter ratcheted upward).
-        return profile_game, created
+        return profile_game, created, drifted
 
     @classmethod
     def create_or_update_trophy_from_trophy_data(cls, game: Game, trophy_data):

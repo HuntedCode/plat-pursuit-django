@@ -15,6 +15,10 @@ Tuesday travels with Wednesday's wave -- and makes the two halves of an announce
 thing, which is what an announcement is. It also means a wave that failed to post to Discord shows
 nobody a modal claiming it was announced.
 
+The one exception is the STAFF PREVIEW (`?preview=new-contracts`), which ignores this gate along with
+every other. It shows nobody but the previewer, writes nothing, and exists to look at the modal -- a
+door that only opens when production-shaped data happens to exist is not a door. See `new_for`.
+
 THE MARKER is the newest `announced_at` this hunter has already been shown, stored as an ISO string
 in `ui_flags['contracts_seen']`. Not a timestamp of "now": a wave announced between the render and
 the dismissal would be silently skipped by a now-stamp, because it was announced before the click but
@@ -171,38 +175,60 @@ def new_for(profile, user, limit=MAX_LIST, preview=False):
     if profile is None or user is None or not getattr(user, 'is_authenticated', False):
         return empty()
 
-    # POSTED, not merely settled. `announced_at` is the clock, but on its own it also covers the
-    # rows `--baseline` recorded as known WITHOUT posting -- the ~1,000 launch contracts among them,
-    # which do carry `went_live_at`. Announcing to a reader something nobody was ever told is the
-    # one outcome this whole gate exists to prevent, so the flag is part of the filter.
-    #
-    # `went_live_at` needs no filter of its own: the announcer only ever sees contracts that have
-    # one, so a stamp here implies it.
-    qs = (annotated_contracts(profile, with_ranking=False)
-          .filter(announced_at__isnull=False, announcement_posted=True))
-    marker = None if preview else seen_marker(user)
+    qs = annotated_contracts(profile, with_ranking=False)
+
     if preview:
-        # A PREVIEW IGNORES BOTH GATES. Staff reach this with `?preview=new-contracts` to look at the
-        # modal, and the reader most likely to want that is the one who has already dismissed it --
-        # for whom the marker means there is nothing left to show. Honouring their marker made the
-        # preview blank for exactly the person using it.
+        # A PREVIEW IGNORES EVERY GATE: the announced-and-posted one, the 14-day window, and the
+        # per-hunter marker. All of them protect a READER, and there is no reader here -- the door is
+        # staff-or-moderator only (`core.previews`), writes no state, and spends no marker.
+        #
+        # Without the widening it only opened on a database that had already announced something, so
+        # on a dev box -- where nothing has -- it rendered an empty modal and looked broken. The point
+        # of a door is to LOOK at the thing.
+        #
+        # A "faithful" variant was tried, falling back to the wide query only when a real recent wave
+        # exists, so a production preview would show a hunter-shaped list. It was reverted: it makes
+        # the dev case WORSE in the ordinary way, because one announced contract in the last fortnight
+        # is enough to reduce the preview to a single row -- useless for the layout hunting this is
+        # for. The known cost is that on production the count reads the whole catalogue rather than a
+        # wave. That is visible to staff only, and it is the ordering and the row shapes that are
+        # being inspected, not the number.
         pass
-    elif marker is not None:
-        qs = qs.filter(announced_at__gt=marker)
     else:
-        # NO MARKER MEANS NO FLOOR, and without one that reads as "everything ever posted is new to
-        # you" -- literally true and useless: a hunter who signs up in a year would be met with every
-        # wave since launch on their first Career visit.
+        # ONE `if not preview` block for every gate, so "a preview ignores them all" is a single
+        # statement. It was three separate `if preview` decisions that had to agree, which is how a
+        # later edit widens one and leaves another -- and each of these is load-bearing.
         #
-        # Only two people have no marker: a brand-new account, and everyone at rollout. Both want the
-        # same thing, which is the recent past rather than the archive. `new_contract_cutoff` is the
-        # site's existing 14-day answer to "is this contract new?" -- the board's Latest chip and the
-        # card markers read it too -- so a first visit sees exactly what the board is calling new.
+        # POSTED, not merely settled. `announced_at` is the clock, but on its own it also covers the
+        # rows `--baseline` recorded as known WITHOUT posting -- the ~1,000 launch contracts among
+        # them, which do carry `went_live_at`. Announcing to a reader something nobody was ever told
+        # is the one outcome this whole gate exists to prevent, so the flag is part of the filter.
         #
-        # This does NOT touch the hunter away for three weeks. They have a marker, so the floor never
-        # applies to them and they are still told everything they missed, which is the whole reason
-        # the marker exists.
-        qs = qs.filter(announced_at__gte=new_contract_cutoff())
+        # `announced_at__isnull=False` is belt-and-braces: both branches below already exclude NULL
+        # by comparing against it. Kept because it states the rule this filter is FOR, rather than
+        # leaving it an emergent property of whichever date branch runs.
+        #
+        # `went_live_at` needs no filter of its own: the announcer only ever sees contracts that have
+        # one, so a stamp here implies it.
+        qs = qs.filter(announced_at__isnull=False, announcement_posted=True)
+        marker = seen_marker(user)
+        if marker is not None:
+            qs = qs.filter(announced_at__gt=marker)
+        else:
+            # NO MARKER MEANS NO FLOOR, and without one that reads as "everything ever posted is
+            # new to you" -- literally true and useless: a hunter who signs up in a year would be met
+            # with every wave since launch on their first Career visit.
+            #
+            # Only two people have no marker: a brand-new account, and everyone at rollout. Both want
+            # the same thing, which is the recent past rather than the archive. `new_contract_cutoff`
+            # is the site's existing 14-day answer to "is this contract new?" -- the board's Latest
+            # chip and the card markers read it too -- so a first visit sees exactly what the board is
+            # calling new.
+            #
+            # This does NOT touch the hunter away for three weeks. They have a marker, so the floor
+            # never applies to them and they are still told everything they missed, which is the whole
+            # reason the marker exists.
+            qs = qs.filter(announced_at__gte=new_contract_cutoff())
 
     total = qs.count()
     if not total:
@@ -233,7 +259,12 @@ def new_for(profile, user, limit=MAX_LIST, preview=False):
     # That is the intended trade above MAX_LIST rather than an accident: a hunter with 200+ new
     # contracts is served by the board, and `extra` plus the board link say so. Below the cap, where
     # the two values differ, this is strictly the safer one.
-    newest = max((r.announced_at for r in rows), default=None)
+    # None-safe because a PREVIEW can now surface never-announced contracts, whose `announced_at` is
+    # null -- and `max()` over Nones raises rather than returning one. Unused on that path (a preview
+    # writes no marker), but a crash while computing a value nobody reads is a poor trade. On the
+    # real path the `announced_at__isnull=False` filter makes the guard a no-op.
+    stamps = [r.announced_at for r in rows if r.announced_at is not None]
+    newest = max(stamps) if stamps else None
 
     heroes = rows[:MAX_HEROES]
     covers = _hero_covers(heroes)

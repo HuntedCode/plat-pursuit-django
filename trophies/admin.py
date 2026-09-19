@@ -1413,7 +1413,119 @@ class StageAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ['concepts']
     inlines = [ConceptBundleInline]
-    actions = ['convert_to_contract']
+    actions = ['duplicate_to_series', 'convert_to_contract']
+
+    # The confirm page posts this back so the action can tell "the curator just clicked the dropdown"
+    # from "the curator typed a slug and submitted". Without it a blank box would read as a fresh
+    # click and the page would re-render forever instead of reporting the validation error.
+    _DUPLICATE_CONFIRM_FIELD = '_duplicate_confirm'
+
+    @admin.action(description='Duplicate selected stages under a new series slug')
+    def duplicate_to_series(self, request, queryset):
+        """Copy the selected stages, wholesale, onto a different `series_slug`.
+
+        Authoring a second edition of a series (a franchise badge that mirrors a series badge, a
+        megamix that reuses another series' stage list) means re-entering the same concept picks one
+        stage at a time. The stages themselves are identical; only the slug they join on differs.
+
+        Everything that makes a stage a stage travels: number, title, icon, required tiers, the
+        online flag, the standalone concepts, and each ConceptBundle with its own members. Nothing is
+        MOVED -- the originals are untouched.
+
+        `stage_icon` is copied AND then recomputed: it is derived from the first concept
+        (`auto_populate_stage_icon`), and `concepts.set()` on the copy fires that signal. Copying it
+        first is what preserves a hand-set icon on a stage with no concepts to re-derive from, which
+        is the only case the signal never touches.
+
+        A stage whose `(new slug, stage_number)` already exists is SKIPPED and named in the message
+        rather than renumbered. Renumbering would quietly produce a stage list that does not match
+        the one the curator thought they were copying, and `unique_together` is the only thing that
+        would have told them.
+        """
+        from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
+        from django.shortcuts import render
+        from django.utils.text import slugify
+
+        stages = list(
+            queryset.order_by('series_slug', 'stage_number')
+            .prefetch_related('concepts', 'concept_bundles__concepts')
+        )
+        raw_slug = (request.POST.get('new_series_slug') or '').strip()
+        error = None
+
+        if request.POST.get(self._DUPLICATE_CONFIRM_FIELD):
+            # Always re-slugify rather than trusting SlugField's validator, which accepts uppercase:
+            # `Elden-Ring` would store fine and then join to nothing, because every stage lookup
+            # compares the slug exactly. Same reasoning as BadgeSeriesCreationForm.clean_series_slug.
+            new_slug = slugify(raw_slug)
+            if not new_slug:
+                error = 'Enter a slug for the duplicated stages.'
+            elif len(new_slug) > Stage._meta.get_field('series_slug').max_length:
+                error = f'That slug is longer than {Stage._meta.get_field("series_slug").max_length} characters.'
+            else:
+                created, skipped = self._duplicate_stages(stages, new_slug)
+                if created:
+                    self.message_user(
+                        request,
+                        f'Duplicated {len(created)} stage(s) onto "{new_slug}": '
+                        f'stage {", ".join(str(n) for n in created)}.',
+                        messages.SUCCESS,
+                    )
+                if skipped:
+                    self.message_user(
+                        request,
+                        f'Skipped {len(skipped)} stage(s) whose number was already taken on '
+                        f'"{new_slug}": stage {", ".join(str(n) for n in skipped)}.',
+                        messages.WARNING,
+                    )
+                return None
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Duplicate stages under a new series slug',
+            'stages': stages,
+            'selected': [s.pk for s in stages],
+            'action_checkbox_name': ACTION_CHECKBOX_NAME,
+            'confirm_field': self._DUPLICATE_CONFIRM_FIELD,
+            'new_series_slug': raw_slug,
+            'error': error,
+        }
+        return render(request, 'admin/trophies/stage/duplicate_to_series.html', context)
+
+    @staticmethod
+    def _duplicate_stages(stages, new_slug):
+        """Copy `stages` onto `new_slug`. Returns (created stage numbers, skipped stage numbers).
+
+        One transaction for the whole run: a stage is its concepts and its bundles, and a copy that
+        committed the row but died before `concepts.set()` would look like a real stage that gates on
+        nothing -- which in the badge engine reads as instantly satisfied, not as broken.
+        """
+        taken = set(
+            Stage.objects.filter(series_slug=new_slug).values_list('stage_number', flat=True)
+        )
+        created, skipped = [], []
+        with transaction.atomic():
+            for stage in stages:
+                if stage.stage_number in taken:
+                    skipped.append(stage.stage_number)
+                    continue
+                taken.add(stage.stage_number)   # two selected stages can share a number across slugs
+                copy = Stage.objects.create(
+                    series_slug=new_slug,
+                    stage_number=stage.stage_number,
+                    title=stage.title,
+                    stage_icon=stage.stage_icon,
+                    required_tiers=list(stage.required_tiers or []),
+                    has_online_trophies=stage.has_online_trophies,
+                )
+                copy.concepts.set(stage.concepts.all())
+                for bundle in stage.concept_bundles.all():
+                    bundle_copy = ConceptBundle.objects.create(
+                        stage=copy, label=bundle.label, sort_order=bundle.sort_order,
+                    )
+                    bundle_copy.concepts.set(bundle.concepts.all())
+                created.append(stage.stage_number)
+        return created, skipped
 
     @admin.action(description="Convert anchored concepts to Contracts (keyed on IGDB id, skip existing)")
     def convert_to_contract(self, request, queryset):
@@ -3181,20 +3293,6 @@ class FranchiseAdmin(admin.ModelAdmin):
     # Rename via `name` is fine; everything else is read-only.
     readonly_fields = ('igdb_id', 'source_type')
     inlines = [FranchiseConceptInline]
-
-    def get_search_results(self, request, queryset, search_term):
-        qs, may_have_dupes = super().get_search_results(request, queryset, search_term)
-        # This model holds BOTH franchises and IGDB collections (source_type),
-        # which collided as name-doubles in the badge autocompletes. Scope each
-        # badge FK to its own type so the pickers stay disambiguated; other
-        # franchise autocompletes (e.g. concept links) still see everything.
-        if request.GET.get('model_name') == 'badge':
-            field_name = request.GET.get('field_name')
-            if field_name == 'franchise':
-                qs = qs.filter(source_type='franchise')
-            elif field_name == 'collection':
-                qs = qs.filter(source_type='collection')
-        return qs, may_have_dupes
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(

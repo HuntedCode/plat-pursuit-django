@@ -105,7 +105,10 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--title-ids', dest='title_ids',
-            help='Comma-separated NP communication IDs for trophy_titles_for_title.',
+            help='Comma-separated NP TITLE IDs (e.g. CUSA12345_00, PPSA28997_00) for '
+                 'trophy_titles_for_title. NOT np_communication_ids: PSN keys this '
+                 'endpoint on npTitleId and 404s on an NPWR id. Ours live in '
+                 'Game.title_ids / Concept.title_ids.',
         )
         parser.add_argument(
             '--limit', type=int, default=None,

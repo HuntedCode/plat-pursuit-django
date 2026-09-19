@@ -684,7 +684,7 @@ Shared parts (`.rcp__stamp`, `.rcp__chips`, `.rcp__pair`, `.rcp-quiz__*`, ...) a
   saved recaps; clamping to `badge.created_at` puts XP in months where the earned badges do not appear).
 
 - **Monthly badge XP comes from the engine's dates, not a ledger.** There is no badge-XP ledger and
-  none is needed: every cleared gating stage carries `StageResult.base_date` and every earned badge
+  none is needed: every cleared in-scope stage carries `StageResult.base_date` and every earned badge
   carries `GroupBadgeResult.earned_date`, so `badge_xp.monthly_xp` buckets the same two components
   `_group_badge_xp` sums. **That coupling is load-bearing** -- change how XP is scored and both must
   move, or the recap and the profile's standing show different numbers for the same work.

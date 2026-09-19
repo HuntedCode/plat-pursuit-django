@@ -3532,8 +3532,17 @@ class BadgeSeries(models.Model):
     display_series = models.CharField(max_length=100, blank=True)
 
     # Subject attribution (which of these is relevant depends on badge_type).
-    franchise = models.ForeignKey('Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='badge_series')
-    collection = models.ForeignKey('Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='collection_badge_series')
+    # `Franchise` holds BOTH IGDB franchises and IGDB collections, so an unscoped picker offers each
+    # subject twice under the same name and the two FKs become interchangeable by accident. The scope
+    # lives on the field, not in the admin: `limit_choices_to` is applied by every ModelForm AND by
+    # `AutocompleteJsonView`, so the admin autocomplete, the staff authoring form, and any future
+    # picker all inherit it. The admin-side version of this (a `get_search_results` hook keyed on the
+    # request's `model_name`) silently stopped filtering the moment the badge rebuild renamed the
+    # model out from under the string it matched on.
+    franchise = models.ForeignKey('Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='badge_series',
+                                  limit_choices_to={'source_type': 'franchise'})
+    collection = models.ForeignKey('Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='collection_badge_series',
+                                   limit_choices_to={'source_type': 'collection'})
     developer = models.ForeignKey('Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='developed_badge_series')
     submitted_by = models.ForeignKey('Profile', on_delete=models.SET_NULL, null=True, blank=True, related_name='submitted_badge_series', help_text="Credited submitter for 'user' badges; also the source of the badge art (their avatar) when no image is set.")
 

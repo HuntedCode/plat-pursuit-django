@@ -1135,6 +1135,20 @@
 .pp-howto .nc__dialog {
     width: min(880px, 100%); max-height: 88vh; overflow: visible;
     display: flex; flex-direction: column;
+    /* `min-width: 0`, and it is the `overflow: visible` above that makes it necessary.
+       This dialog is a GRID ITEM (`.pp-detail-modal` is `display: grid; place-items: center`), and a
+       grid item's `min-width: auto` resolves to its CONTENT-BASED minimum in both axes -- but only
+       while its overflow is visible. The base `.pp-howto__dialog` sets `overflow-y: auto`, which
+       suppresses that; opening this one up for the discipline popovers re-armed it.
+       So `width: min(880px, 100%)` computed to 335px on a 375px phone and was then floored by the
+       widest thing inside, and the dialog rendered wider than the screen with its right edge -- the
+       filter chips, the contract rows, the "Open the board" button -- cut off and unreachable, since
+       an overflowing centred grid item cannot be scrolled to.
+       The content can all shrink on its own -- `.nc__list` is the scroll container (its own
+       `overflow-y: auto` makes its intrinsic contribution zero), the toolbar and heroes wrap, and
+       `.nc__hero` carries its own `min-width: 0`. Note the rows do NOT ellipsise below 640px any
+       more; they wrap and break, which is the rule 130 lines down. */
+    min-width: 0;
 }
 .pp-howto .nc__dialog > .pp-detail-modal__body {
     display: flex; flex-direction: column; flex: 1 1 auto;
@@ -1258,6 +1272,24 @@
     color: var(--pp-text-mute); background: var(--pp-bg-3); border: 1px solid var(--pp-border);
 }
 .nc__chip--claim { color: #06140d; background: var(--pp-primary); border-color: transparent; }
+
+/* TWO LINES ON A PHONE: the title takes a row of its own, the icons and the status chip share the
+   next. One line put the name in a shrinking middle column between the job icons and a chip as wide
+   as "Ready to claim", so anything longer than a few words ellipsised away -- and the name is the
+   only part of the row a reader is actually scanning for. Wrapping costs vertical space in a list
+   that scrolls, which is the cheap axis here; horizontal room is the scarce one. */
+@media (max-width: 639px) {
+    .nc__row { flex-wrap: wrap; row-gap: 5px; padding: 9px 11px; }
+    /* `overflow-wrap`, NOT `overflow: visible`. With `white-space: normal` the inherited
+       `text-overflow: ellipsis` is already inert, so visible overflow bought nothing and cost the
+       clip: one long unbroken token would paint outside the row's own border and background, and
+       make `.nc__list` scroll sideways (a container with `overflow-y: auto` computes overflow-x to
+       `auto` too). Breaking the token keeps it inside the card. */
+    .nc__name { flex: 1 1 100%; white-space: normal; overflow-wrap: anywhere; }
+    /* The chip to the far right of the second line, icons left -- the same left-to-right reading
+       order the single-line layout had, just folded. */
+    .nc__chip { margin-left: auto; }
+}
 .nc__chip--going { color: var(--pp-text-dim); background: var(--pp-bg-3); }
 /* Always in the tree (only its TEXT changes), because a live region that is `hidden` at the
    moment its content changes is not reliably announced -- VoiceOver in particular stays silent. */
@@ -1273,11 +1305,34 @@
    in components/, and they earn it because the art has to disappear, not merely shrink. Below
    620px it goes entirely: on a landscape phone the list is the content. */
 @media (max-height: 800px) and (max-width: 1023px) { .nc__hero-art { max-height: 18vh; } }
+/* A PHONE GETS SMALLER COVERS THAN A LAPTOP, at any height. The two height queries above and below
+   left a gap: a 390x844 phone (iPhone 12-15) is TALLER than 800px, so it kept the 24vh covers AND
+   the full three-row filter, which by arithmetic is the tightest chrome budget left on this modal
+   (~688px against ~679px available) -- and the failure mode is the footer buttons ending up off
+   screen with `overflow: visible` offering no scrollbar to reach them.
+   Width-based rather than a third height band: the covers are small on a phone because the DIALOG is
+   narrow there, which is true at every height. Computed, not observed -- the arithmetic says it was
+   marginally over, and 18vh puts it comfortably clear. */
+@media (max-width: 767px) { .nc__hero-art { max-height: 18vh; } }
 @media (max-height: 620px) {
     .nc__heroes, .nc__more { display: none; }
     .nc__list { min-height: 56px; }
 }
-/* A SMALL PHONE GETS THE LIST, not the covers. At 375x667 the wrapped filter, the hero row and the
-   footer together exceed 88vh, and with `overflow: visible` there is no scrollbar to reach the
-   buttons with -- so on a short PHONE the art is what gives way. Taller phones (812+) keep it. */
-@media (max-width: 767px) and (max-height: 740px) { .nc__heroes { display: none; } }
+/* A SMALL PHONE GETS THE COVERS, and the FILTER is what gives way (owner's call, 2026-09).
+   The constraint is unchanged -- at 375x667 the wrapped filter, the hero row and the footer together
+   exceed 88vh, and `overflow: visible` means there is no scrollbar to reach the buttons with -- but
+   the thing sacrificed is not. The filter was costing TWO rows at that width (five discipline
+   triggers wrap), which is more than the art it was displacing, and the art is what makes this modal
+   worth opening. The list underneath is still SORTABLE (progress or A-Z) and ordered by what you can
+   act on, so a phone without discipline filters can still find things; a phone without covers is a
+   text list. Note a landscape phone loses BOTH: the 620px rule above drops the art, this one drops
+   the filter, and at that height the list is all there is room for.
+   `.nc__sort` stays: it is one control on the row the filter vacated, so it now costs nothing.
+   Below 620px (a landscape phone) the rule above still drops the art entirely -- there is no room
+   for any of it there, and the list IS the content. */
+@media (max-width: 767px) and (max-height: 740px) {
+    .nc__filter { display: none; }
+    /* Shorter than the 18vh above: the covers have to clear the footer on a 667px screen. */
+    .nc__hero-art { max-height: 15vh; }
+    .nc__toolbar { padding-top: 8px; }
+}

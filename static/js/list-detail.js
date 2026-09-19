@@ -39,7 +39,6 @@
     var PP = window.PlatPursuit || {};
     var revealHandle = null;
     var handledGrid = null;
-    var searchField = null;
     var pendingFocusIndex = null;
     // Set when an add-section write is in flight, so the field can be refocused once the refresh
     // that replaced it settles. See `restoreSectionFocus`.
@@ -2040,7 +2039,6 @@
 
     function boot(first) {
         handledGrid = null;
-        searchField = null;
         // THE MODE'S STATE TOO. This file's header commits to honouring the `onPageReady` restore
         // contract even though the current htmx config never fires it -- and under that contract
         // these six carried over: a restored page would paint "Done" on a toggle whose panel has no

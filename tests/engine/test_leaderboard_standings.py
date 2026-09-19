@@ -629,12 +629,19 @@ def test_a_null_country_propagates_as_empty_not_none():
 
 def _desired_for(profile, gb, cleared, gating):
     """Hand-built engine output for one group badge, which is what `recompute_standing` consumes. Building
-    it directly (rather than driving the whole engine) keeps these tests about the WRITE seam."""
+    it directly (rather than driving the whole engine) keeps these tests about the WRITE seam.
+
+    `xp_stage_count` mirrors `cleared` -- the all-gating case. These tests are about the write seam, not
+    about the two counters diverging; that divergence is covered where `_group_badge_xp` lives
+    (`test_badge_xp.py::test_xp_reads_the_in_scope_count_not_the_gating_one`). No knob here, because an
+    unused parameter is just dead code waiting to be mistaken for coverage.
+    """
     from types import SimpleNamespace
 
     return {gb.id: SimpleNamespace(
         base_earned=cleared >= gating, holo=False, earned_date=None,
         base_satisfied_count=cleared, gating_count=gating, stages=[],
+        xp_stage_count=cleared,
     )}
 
 

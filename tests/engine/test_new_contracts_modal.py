@@ -4,6 +4,8 @@ Per-user marker (`ui_flags['contracts_seen']`), not the global 14-day Latest win
 answers "is this contract new?" and this answers "is it new TO YOU?". A hunter away for three weeks
 is told nothing by the window and everything by the marker, and they are who the modal exists for.
 """
+import re
+
 import pytest
 from django.urls import reverse
 from django.utils import timezone
@@ -1229,13 +1231,78 @@ def test_the_filter_is_never_a_scroll_container():
     assert 'flex-wrap: nowrap' not in rule
 
 
-def test_a_small_phone_drops_the_covers_rather_than_the_buttons():
+def test_a_small_phone_drops_the_filter_rather_than_the_covers():
     """That height has to come from somewhere. With `overflow: visible` on the dialog there is no
-    scrollbar, so chrome that exceeds 88vh puts the footer buttons off screen unreachable -- and at
-    375x667 the wrapped filter plus a hero row does exceed it."""
-    css = _elements_css()
+    scrollbar, so chrome exceeding 88vh puts the footer buttons off screen unreachable -- and at
+    375x667 the wrapped filter plus a hero row does exceed it.
 
-    assert '@media (max-width: 767px) and (max-height: 740px) { .nc__heroes { display: none; } }' in css
+    WHAT GIVES WAY CHANGED (owner's call, 2026-09): the FILTER, not the art. Five discipline triggers
+    wrap to two rows at that width, which is more height than the covers they were displacing -- and
+    the covers are what make this modal worth opening. The list below is still sortable (progress or
+    A-Z) and ordered by what you can act on, so a phone without discipline filters can still find
+    things; a phone without covers is a text list.
+
+    Asserted on the RULE rather than the whole formatted line the old version matched: that pinned
+    lightningcss-irrelevant whitespace, so reformatting the block would have failed a test about a
+    layout decision.
+    """
+    css = _elements_css()
+    block = re.search(
+        r'@media \(max-width: 767px\) and \(max-height: 740px\) \{(.*?)\n\}', css, re.S)
+    assert block, 'the small-phone rule is gone -- if it moved, move this guard with it'
+    body = re.sub(r'/\*.*?\*/', '', block.group(1), flags=re.S)
+
+    assert re.search(r'\.nc__filter\s*\{[^}]*display:\s*none', body), (
+        'the discipline filter is no longer what gives way on a small phone'
+    )
+    assert not re.search(r'\.nc__heroes\s*\{[^}]*display:\s*none', body), (
+        'the covers are being hidden again -- that trade was deliberately reversed'
+    )
+
+
+def test_a_phone_gets_smaller_covers_than_a_laptop_at_any_height():
+    """The two height queries left a gap. A 390x844 phone (iPhone 12-15) is TALLER than the 800px
+    band, so it kept the full 24vh covers AND the three-row filter -- by arithmetic the tightest
+    chrome budget left on this modal (~688px against ~679px available), and the failure mode is the
+    footer buttons off screen with `overflow: visible` offering no scrollbar to reach them.
+
+    Width-based rather than a third height band: the covers are small on a phone because the DIALOG
+    is narrow there, which is true at every height.
+
+    Guarded because deleting the rule survived the whole suite when it was added -- the same gap an
+    audit found on the row-stacking rule below.
+    """
+    css = _elements_css()
+    assert re.search(
+        r'@media \(max-width: 767px\) \{[^}]*\.nc__hero-art\s*\{[^}]*max-height:\s*18vh', css), (
+        'the phone-width cover trim is gone -- a tall narrow phone keeps 24vh art and can push the '
+        'footer buttons off screen'
+    )
+
+
+def test_a_narrow_screen_stacks_the_row_so_the_title_gets_a_line():
+    """One line put the contract name in a shrinking middle column between the job icons and a chip
+    as wide as "Ready to claim", so anything longer than a few words ellipsised away -- and the name
+    is the only part of the row anyone is scanning for. Wrapping spends vertical space in a list that
+    already scrolls, which is the cheap axis; horizontal room is the scarce one.
+
+    Guarded because an audit mutation deleting `flex-wrap: wrap` survived the entire suite: every
+    other layout decision in this modal is pinned and this one was not.
+    """
+    css = _elements_css()
+    block = re.search(r'@media \(max-width: 639px\) \{(.*?)\n\}', css, re.S)
+    assert block, 'the narrow-screen row rule is gone -- if it moved, move this guard with it'
+    body = re.sub(r'/\*.*?\*/', '', block.group(1), flags=re.S)
+
+    assert re.search(r'\.nc__row\s*\{[^}]*flex-wrap:\s*wrap', body), (
+        'the row no longer wraps, so the title is back in a shrinking middle column'
+    )
+    assert re.search(r'\.nc__name\s*\{[^}]*flex:\s*1 1 100%', body), (
+        'the title no longer takes a full line of its own'
+    )
+    # `overflow: visible` here would let one unbroken token paint outside the row and scroll the list
+    # sideways; breaking the word is what keeps it inside the card.
+    assert 'overflow-wrap' in body and 'overflow: visible' not in body
 
 
 def test_a_preview_never_records_the_previewer_as_having_seen_a_wave(hunter):
@@ -1317,3 +1384,111 @@ def test_the_empty_state_stays_in_the_accessibility_tree():
     assert 'empty.textContent' in partial, 'the live region is toggled rather than filled'
     assert 'empty.hidden' not in partial
     assert ':empty { margin: 0; }' in _elements_css(), 'an empty live region still takes up space'
+
+
+# -- the preview shows SOMETHING on a database that has announced nothing ---------------------------
+
+def test_the_preview_renders_contracts_that_were_never_announced(hunter):
+    """The door's whole purpose is to LOOK at the modal, and it only opened on a database that had
+    already posted a wave -- so on a fresh dev box, where nothing has, it rendered an empty modal and
+    read as broken. A preview tells nobody anything: staff-only, writes no state, spends no marker.
+    Requiring production-shaped data to inspect a layout defeats the affordance.
+    """
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+    _live('Never Announced', announced=False)
+
+    body = hunter.get('/career/?preview=new-contracts', **CF).content.decode()
+
+    assert 'id="new-contracts"' in body, 'the preview showed nothing on an un-announced catalogue'
+    assert 'Never Announced' in body
+
+
+def test_the_preview_does_not_crash_when_nothing_has_an_announced_stamp(hunter):
+    """`newest` is `max()` over `announced_at`, and an un-announced contract's is NULL -- `max()` over
+    Nones raises rather than returning one. The value is unused on this path (a preview writes no
+    marker), but a crash computing something nobody reads is a poor trade."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+    _live('No Stamp One', announced=False)
+    _live('No Stamp Two', announced=False)
+
+    payload = new_contracts_modal.new_for(hunter.profile, user, preview=True)
+
+    assert payload['total'] == 2
+    assert payload['newest'] is None
+
+
+def _baselined(name):
+    """SETTLED BUT NEVER POSTED -- what `announce_contracts --baseline` leaves behind. `announced_at`
+    is set and recent, so every date filter admits it; only `announcement_posted` keeps it away from a
+    reader. That makes it the ONLY shape that isolates the gate.
+
+    An `announced=False` contract does not: its `announced_at` is NULL, which the marker/cutoff filter
+    excludes on its own, so a test built on one passes with the gate deleted. Mutation-proven -- that
+    is exactly what the first version of the test below did.
+    """
+    c = _live(name, days_ago=1)
+    Contract.objects.filter(pk=c.pk).update(announcement_posted=False)
+    c.refresh_from_db()
+    return c
+
+
+def test_a_real_visit_still_only_sees_announced_and_posted_contracts(hunter):
+    """THE guard on the change above. Opening the preview must not open the real path: a hunter must
+    never be told about a wave nobody announced, which is the outcome the whole gate exists to
+    prevent."""
+    _baselined('Settled Not Posted')
+
+    payload = new_contracts_modal.new_for(hunter.profile, hunter.profile.user)
+    body = hunter.get(reverse('career'), **CF).content.decode()
+
+    assert payload['total'] == 0, 'a settled-but-unposted contract reached a real hunter'
+    assert payload['rows'] == []
+    assert 'Settled Not Posted' not in body
+
+
+def test_the_preview_shows_a_baselined_contract_a_hunter_would_never_see(hunter):
+    """The two halves stated together: the same row is invisible to a reader and visible to the
+    previewer, which is the whole point of widening the door."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+    _baselined('Settled Not Posted')
+
+    assert new_contracts_modal.new_for(hunter.profile, user)['total'] == 0
+    assert new_contracts_modal.new_for(hunter.profile, user, preview=True)['total'] == 1
+
+
+def test_a_real_visit_is_unaffected_when_announced_and_unannounced_are_mixed(hunter):
+    """The realistic shape: a posted wave sitting alongside a one-off published since. The hunter
+    sees the wave and nothing else; the preview sees both."""
+    user = hunter.profile.user
+    _live('Posted Wave', days_ago=1)
+    _live('Published Since', announced=False)
+
+    real = new_contracts_modal.new_for(hunter.profile, user)
+    names = {c.name for c in real['rows']}
+    assert names == {'Posted Wave'}
+
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+    preview = new_contracts_modal.new_for(hunter.profile, user, preview=True)
+    assert {c.name for c in preview['rows']} == {'Posted Wave', 'Published Since'}
+
+
+def test_the_preview_still_writes_no_marker_for_un_announced_contracts(hunter):
+    """The property that makes the door safe to hand to somebody. Re-checked here because the change
+    above widened WHAT the preview can surface, and a marker written from this path would be a stamp
+    taken from contracts no hunter was ever told about."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+    _live('Never Announced', announced=False)
+
+    hunter.get('/career/?preview=new-contracts', **CF)
+    user.refresh_from_db()
+
+    assert new_contracts_modal.FLAG not in (user.ui_flags or {})

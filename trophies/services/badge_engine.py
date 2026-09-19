@@ -10,10 +10,18 @@ facts and maps them into these inputs) and `ConceptBundle` handling are built on
 
 Rules encoded here (see docs/design/rebuild/badge-backend-rebuild.md §3.3):
   - A game QUALIFIES for a group if its platforms intersect the group's platforms.
-  - A qualifying game GATES its stage (makes the stage required) if it is obtainable AND (the group counts
-    delisted games, or the game isn't delisted). -> Legacy HD counts delisted; Ultra HD doesn't.
-  - A qualifying game SATISFIES its stage (if the user earned it) regardless of gating — so delisted (in
-    Ultra HD) and unobtainable games never BLOCK, but still COUNT.
+  - A stage is IN SCOPE for a group if it holds at least one qualifying game. A stage with nothing on the
+    group's platforms is not that badge's business at all: it cannot gate it, satisfy it, or pay XP for it.
+  - Gating is PLATFORM-SCOPED. An in-scope stage GATES (becomes required) if one of its QUALIFYING games is
+    obtainable AND (the group counts delisted games, or the game isn't delisted). -> Legacy HD counts
+    delisted; Ultra HD doesn't. So a stage whose only PS4 list is unobtainable stops gating Ultra HD even
+    when its PS3 list is still alive.
+  - Satisfaction is CROSS-PLATFORM. An in-scope stage is SATISFIED by ANY of its games, on any platform --
+    clear the PS4 list and the stage counts for Legacy HD too, and vice versa. One work, one clear.
+    (Owner's call, 2026-09. Before this, satisfaction was scoped to qualifying games the way gating still
+    is, so a cross-gen hunter had to re-clear the same game once per edition.)
+  - The two together mean delisted and unobtainable games never BLOCK, but still COUNT -- and a stage that
+    stopped gating still pays XP to anyone who cleared it. See `xp_stage_count`.
   - Two completion bars, supplied per game by the orchestrator (no platinum-specific branching in here):
       base_complete = the game's DEFAULT trophy group at 100% (the platinum for plat games; the main list for
                       no-plat games; DLC-independent).
@@ -77,10 +85,16 @@ class GroupBadgeResult:
     base_earned: bool
     holo: bool
     gating_count: int
-    base_satisfied_count: int
+    base_satisfied_count: int         # GATING stages cleared -- the progress numerator ("3 of 5")
     holo_satisfied_count: int
     earned_date: Optional[date]       # completion-ordered earn moment (see _earned_date)
     stages: list = field(default_factory=list)   # list[StageResult]
+    #: Every IN-SCOPE stage cleared, gating or not -- the XP numerator, and deliberately NOT
+    #: `base_satisfied_count`. The two diverge on a stage that is in scope but no longer gates (its
+    #: qualifying games went unobtainable): it pays XP to whoever cleared it while staying out of the
+    #: progress fraction, which must never exceed its own denominator. Appended with a default so the
+    #: positional constructions in the test suite keep working.
+    xp_stage_count: int = 0
 
 
 # ------------------------------------------------------------------ per-game predicates ------------------
@@ -100,15 +114,29 @@ def _gates(g: GameState, group: GroupInput) -> bool:
 # ------------------------------------------------------------------ evaluation ---------------------------
 
 def evaluate_stage(stage: StageInput, group: GroupInput) -> StageResult:
-    """Evaluate one stage for one group. Satisfaction is over ANY qualifying game the user met (gating or
-    not); gating is over obtainable+policy games only."""
-    qualifying = [g for g in stage.games if _qualifies(g, group)]
-    gates = any(_gates(g, group) for g in qualifying)
+    """Evaluate one stage for one group.
 
-    base_satisfied = any(g.base_complete for g in qualifying)
-    holo_satisfied = any(g.full_complete for g in qualifying)
-    # The stage becomes base-satisfied at the EARLIEST date a qualifying game met the base bar.
-    base_dates = [g.completion_date for g in qualifying if g.base_complete and g.completion_date is not None]
+    Two different scopes, on purpose:
+
+    - GATING reads only the QUALIFYING games (platform overlap). A badge must not require work that cannot
+      be done on its own platforms, so an Ultra HD badge never becomes gated by a PS3-only list.
+    - SATISFACTION reads EVERY game in the stage. The stage is one work; clearing it on any platform clears
+      it. This is what lets a cross-gen hunter finish both editions from one platinum instead of buying and
+      replaying the same game per edition.
+
+    A stage with NO qualifying game is out of scope entirely and returns all-False -- not gating, not
+    satisfied, no date -- so it contributes nothing to this badge anywhere downstream, XP included.
+    """
+    qualifying = [g for g in stage.games if _qualifies(g, group)]
+    if not qualifying:
+        return StageResult(stage.stage_number, False, False, False, None)
+
+    gates = any(_gates(g, group) for g in qualifying)
+    base_satisfied = any(g.base_complete for g in stage.games)
+    holo_satisfied = any(g.full_complete for g in stage.games)
+    # The stage becomes base-satisfied at the EARLIEST date ANY of its games met the base bar -- the same
+    # set satisfaction reads, so the date can never name a game that did not satisfy it.
+    base_dates = [g.completion_date for g in stage.games if g.base_complete and g.completion_date is not None]
     base_date = min(base_dates) if base_dates else None
     return StageResult(stage.stage_number, gates, base_satisfied, holo_satisfied, base_date)
 
@@ -132,11 +160,17 @@ def evaluate_group_badge(series: SeriesInput, group: GroupInput, stages: list) -
     gating_count = len(gating)
     base_ok = sum(1 for r in gating if r.base_satisfied)
     holo_ok = sum(1 for r in gating if r.holo_satisfied)
+    # Every in-scope stage cleared, gating or not. Out-of-scope stages report base_satisfied=False, so this
+    # needs no scope test of its own. Stage 0 is already excluded above and must stay excluded: it is
+    # tangential by definition, and paying XP for it would make optional work feel mandatory.
+    xp_stage_count = sum(1 for r in results if r.base_satisfied)
 
     if gating_count == 0:
-        # Nothing gates this group (e.g. every stage's only games are delisted in an exclude-delisted group,
-        # or unobtainable): the badge isn't offered/earnable here.
-        return GroupBadgeResult(False, False, 0, base_ok, holo_ok, None, results)
+        # Nothing gates this group (e.g. every stage's only qualifying games are unobtainable, or delisted
+        # in an exclude-delisted group): the badge is not earnable here, and a hunter holding it is revoked.
+        # The XP still travels. Those stages were genuinely cleared, and clawing points back because a
+        # storefront closed would punish the hunter for someone else's decision.
+        return GroupBadgeResult(False, False, 0, base_ok, holo_ok, None, results, xp_stage_count)
 
     if series.completion_policy == 'min_count':
         # Megamix. min_required applies to THIS group's gating stages; 0 means "all". (How min_required maps
@@ -150,4 +184,5 @@ def evaluate_group_badge(series: SeriesInput, group: GroupInput, stages: list) -
         holo = holo_ok == gating_count
 
     earned_date = _earned_date(gating, series.completion_policy, need, base_earned)
-    return GroupBadgeResult(base_earned, holo, gating_count, base_ok, holo_ok, earned_date, results)
+    return GroupBadgeResult(base_earned, holo, gating_count, base_ok, holo_ok, earned_date, results,
+                            xp_stage_count)

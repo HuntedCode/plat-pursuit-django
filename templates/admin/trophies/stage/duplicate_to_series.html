@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+The confirmation page for StageAdmin.duplicate_to_series.
+
+It exists because the action needs a SLUG and a Django action has nowhere to type one. It lists the
+stages by their current slug and number rather than a count, because the one mistake this page can
+make is copying the wrong selection, and a number cannot show that.
+{% endcomment %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% if error %}
+<p class="errornote">{{ error }}</p>
+{% endif %}
+
+<p>
+    Copy the {{ stages|length }} stage{{ stages|length|pluralize }} below onto a new series slug. The
+    originals are left alone. Each copy keeps its number, title, icon, required tiers, online flag,
+    concepts, and concept bundles.
+</p>
+
+<ul>
+    {% for stage in stages %}
+    <li>
+        <strong>{{ stage.series_slug }}</strong> &mdash; stage {{ stage.stage_number }}
+        {% if stage.title %}&ldquo;{{ stage.title }}&rdquo;{% endif %}
+        <small style="color:#888;">
+            ({{ stage.concepts.count }} concept{{ stage.concepts.count|pluralize }}{% if stage.concept_bundles.count %},
+            {{ stage.concept_bundles.count }} bundle{{ stage.concept_bundles.count|pluralize }}{% endif %})
+        </small>
+    </li>
+    {% endfor %}
+</ul>
+
+<p>A stage number already used by the new slug is skipped, not renumbered. You will be told which.</p>
+
+<form method="post">
+    {% csrf_token %}
+    <p>
+        <label for="id_new_series_slug"><b>New series slug</b></label><br>
+        <input type="text" name="new_series_slug" id="id_new_series_slug" size="60" maxlength="100"
+               required autofocus value="{{ new_series_slug }}">
+    </p>
+
+    {% for pk in selected %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="duplicate_to_series">
+    <input type="hidden" name="{{ confirm_field }}" value="1">
+
+    <input type="submit" value="Duplicate" class="default">
+    <a href="#" class="button cancel-link" onclick="history.back(); return false;">Cancel</a>
+</form>
+{% endblock %}

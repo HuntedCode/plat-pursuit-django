@@ -30,7 +30,12 @@
 .bd-chip--success, .bd-chip--warning, .bd-chip--error {
     color: var(--c);
     border-color: color-mix(in oklch, var(--c) 40%, transparent);
-    background: color-mix(in oklch, var(--c) 12%, var(--pp-bg-2));
+    /* `in oklab` over the OPAQUE surface. `--c` is injected (primary / secondary / accent / info /
+       success / warning / error), so the hue is unbounded -- and oklch walks the shorter hue arc to
+       --pp-bg-2 (h 252). `.bd-chip--error` (h 22) takes that arc BACKWARDS through magenta and lands
+       near h 268: a blue-purple wash on the one chip that must read as red. The border above keeps
+       oklch safely: transparent has no hue to interpolate toward. */
+    background: color-mix(in oklab, var(--c) 12%, var(--pp-bg-2));
 }
 .bd-chip--ghost { color: var(--pp-text-mute); }
 
