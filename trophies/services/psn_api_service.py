@@ -29,7 +29,11 @@ _CJK_PATTERN = re.compile(
 
 
 def psn_trophy_total(counts) -> int:
-    """Total trophies in one of PSN's per-tier count objects (earned_trophies/defined_trophies)."""
+    """Total trophies in one of PSN's per-tier count objects (earned_trophies/defined_trophies).
+
+    Takes psnawp's attribute-style TrophySet, which is what the `trophy_titles` walk yields. Not
+    every psnawp endpoint wraps these counts the same way, so pass it a TrophySet, not a raw dict.
+    """
     return counts.bronze + counts.silver + counts.gold + counts.platinum
 
 
@@ -437,21 +441,25 @@ class PsnApiService:
         of them, so it denies a hunter every scrap of credit for a game they did finish.
 
         The caller gets the inconsistency flag rather than a decision, because the clamped value is
-        NOT sufficient on its own. `earned_total >= defined_total` compares COUNTS and cannot
-        establish set containment: a hunter holding 12 trophies from a group PSN dropped can
-        outnumber the defined set while still missing base-game trophies. Clamping such a row to
-        100 would invent a completion. Only our own EarnedTrophy rows can settle that, which the
-        caller has and this does not.
+        NOT sufficient on its own. An earned count that outnumbers the defined count compares
+        COUNTS and cannot establish set containment: a hunter holding 12 trophies from a group PSN
+        dropped can outnumber the defined set while still missing base-game trophies. Clamping such
+        a row to 100 would invent a completion. Only our own EarnedTrophy rows can settle that,
+        which the caller has and this does not.
         """
         progress = trophy_title.progress or 0
         earned_total = psn_trophy_total(trophy_title.earned_trophies)
         defined_total = psn_trophy_total(trophy_title.defined_trophies)
         consistent = 0 <= progress <= 100 and earned_total <= defined_total
         if not consistent:
+            # Deliberately does NOT promise a fallback: whether one happens is the caller's call
+            # and depends on us holding rows for this game at all. Says what PSN sent and what we
+            # will store at worst, so the log stays true on the create path too.
             logger.warning(
                 "PSN payload contradicts itself for %s: progress=%s, earned=%s defined=%s. "
-                "The title's trophy list likely moved under Sony; falling back to our own rows.",
+                "The title's trophy list likely moved under Sony; storing at most %s.",
                 trophy_title.np_communication_id, progress, earned_total, defined_total,
+                min(100, max(0, progress)),
             )
         return min(100, max(0, progress)), consistent
 
@@ -462,6 +470,13 @@ class PsnApiService:
         FLOORED, matching ProfileTrophyGroup and detect_dlc_and_refresh: it reads 100 if and only
         if every trophy we hold a row for is earned, so it can never round a near-miss up into a
         completion. This is what outranks an impossible PSN percentage.
+
+        These two denorms are refreshed by update_profilegame_stats at sync_complete, i.e. AFTER
+        the walk that calls this, so during a sync where the hunter also earned new trophies on
+        the same title they still hold the PREVIOUS sync's counts. That is accepted rather than
+        worked around: it only bites when an inconsistent payload and fresh trophies land in the
+        same sync, and the next walking sync converges it. The alternative -- an EarnedTrophy
+        aggregate per title, inside the walk -- is a per-row query on the sync hot path.
         """
         total = (profile_game.earned_trophies_count or 0) + (profile_game.unearned_trophies_count or 0)
         if not total:
