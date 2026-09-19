@@ -31,16 +31,32 @@ def _poll(owner, options=3, public=True):
     return poll, pool, poll.buckets.get()
 
 
+def _grid_layout_for(slots):
+    """The smallest offered rectangle holding at least `slots` slots.
+
+    A grid's slots are a RECTANGLE now, created as a whole -- so a helper cannot ask for "three".
+    Callers still say how many they need and get at least that many; the extras are unused, which is
+    what a real author has while filling one in.
+    """
+    from prompts.models import GRID_LAYOUTS
+    for columns, rows in GRID_LAYOUTS:
+        if columns * rows >= slots:
+            return columns, rows
+    raise AssertionError(f'no offered grid holds {slots} slots')
+
+
 def _grid(owner, *, slots=2, picks=0, public=True, allow_duplicates=True):
     """A grid, its slots, and some games to answer it WITH -- free picks, not a pool.
 
     A grid has no author pool (owner's call, 2026-09-19), so the middle value is a list of plain
     Concepts passed as `concept_pk`, never `PromptGame` rows.
     """
+    columns, rows = _grid_layout_for(slots)
     grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Pick one each',
+                             grid_columns=columns, grid_rows=rows,
                              allow_duplicates=allow_duplicates)
-    for i in range(slots):
-        svc.create_bucket(grid, owner, label=f'Best {i}')
+    for i, bucket in enumerate(grid.buckets.order_by('position')):
+        svc.update_bucket(bucket, owner, label=f'Best {i}')
     chosen = [ConceptFactory() for _ in range(picks)]
     if public:
         svc.update_prompt(grid, owner, is_public=True)
@@ -153,6 +169,10 @@ def test_removing_one_copy_leaves_the_others_where_they_are():
     owner = _hunter()
     grid, picks, slots = _grid(owner, slots=3, picks=1)
     answerer = _hunter('answerer')
+    # THE FIRST THREE, named explicitly. `_grid` returns the smallest offered RECTANGLE holding at
+    # least three, which is four -- so iterating every slot would place four, and the counts below
+    # would be measuring the helper rather than `unplace`'s bucket narrowing.
+    slots = slots[:3]
     for slot in slots:
         rsvc.place(grid, answerer, concept_pk=picks[0].pk, bucket_id=slot.pk)
     assert rsvc.response_for(grid, answerer).placements.count() == 3

@@ -25,7 +25,8 @@ from prompts.models import (BUCKET_COLOUR_CHOICES, DESCRIPTION_MAX_LENGTH, LABEL
                             MAX_BUCKETS_PER_PROMPT, MAX_GAMES_PER_PROMPT, MAX_GRID_COLUMNS,
                             MIN_GRID_COLUMNS, SHAPE_BLURBS,
                             SHAPE_CHOICES, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES,
-                            TITLE_MAX_LENGTH, Prompt, PromptGame, PromptLike, shape_options)
+                            TITLE_MAX_LENGTH, Prompt, PromptGame, PromptLike,
+                            grid_layout_choices, shape_options)
 from django_ratelimit.decorators import ratelimit
 
 from api.utils import safe_int
@@ -205,6 +206,9 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
         # The shapes with their blurbs, from the model, so the dialog and the tabs cannot describe the
         # same shape differently. `shape` is already in context and preselects the current tab.
         context['shape_options'] = shape_options()
+        # The rectangle picker the modal reveals when Grid is chosen. From the model, so the
+        # dialog cannot offer a size the service would refuse.
+        context['grid_layouts'] = grid_layout_choices()
         context['title_max_length'] = TITLE_MAX_LENGTH
         context['description_max_length'] = DESCRIPTION_MAX_LENGTH
         # `seo_title` FEEDS THE og/twitter TAGS; `{% block title %}` does not. Without it every share
@@ -369,6 +373,16 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
         # The column picker's options, from the same bounds the check constraint and the service
         # validator read, so the select cannot offer a value the database refuses.
         context['grid_column_choices'] = range(MIN_GRID_COLUMNS, MAX_GRID_COLUMNS + 1)
+        # THE RECTANGLE PICKER. A grid's slots move only through `resize_grid`, so the page offers
+        # sizes rather than an add button and a delete on every slot -- those are what make a
+        # rectangle ragged. `grid_rows` is DERIVED rather than stored: resize is the only writer for
+        # a grid's buckets and it always writes `columns * rows`, so the division is exact. Guarded
+        # anyway, because a shell-made grid need not divide.
+        context['grid_layouts'] = grid_layout_choices()
+        if context['is_grid'] and prompt.grid_columns:
+            context['grid_rows'] = len(buckets) // prompt.grid_columns
+            context['grid_is_ragged'] = bool(len(buckets) % prompt.grid_columns)
+        context['can_resize_grid'] = context['can_edit_rows'] and context['is_grid']
         # THE CAPS DECIDE WHETHER AN ADD CONTROL EXISTS, computed here so the template never compares
         # a length to a constant.
         #
@@ -383,7 +397,11 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
         # once" rests on `unique(response, bucket) WHERE single_slot`, which allows one placement PER
         # BUCKET -- so a second bucket on a poll buys a second vote with every flag set correctly, and
         # the database cannot catch it because the count lives on the parent.
-        context['can_add_rows'] = context['can_edit_rows'] and len(buckets) < context['max_buckets']
+        # NOT FOR A GRID: its slot count moves only through the rectangle picker, so an add
+        # button and a per-slot delete would be the two controls that break the guarantee.
+        context['can_add_rows'] = (context['can_edit_rows'] and not context['is_grid']
+                                   and len(buckets) < context['max_buckets'])
+        context['can_delete_rows'] = context['can_edit_rows'] and not context['is_grid']
         context['can_add_more_games'] = context['can_add_games'] and len(pool) < context['max_games']
         context['bucket_colours'] = BUCKET_COLOUR_CHOICES
         context['title_max_length'] = TITLE_MAX_LENGTH
@@ -490,6 +508,7 @@ class CreatePromptView(PremiumRequiredMixin, View):
                 title=request.POST.get('title', ''),
                 description=request.POST.get('description', ''),
                 grid_columns=request.POST.get('grid_columns') or 3,
+                grid_rows=request.POST.get('grid_rows') or 3,
                 allow_duplicates=request.POST.get('allow_duplicates', 'true') == 'true',
             )
         except svc.PromptError as exc:
@@ -692,6 +711,31 @@ class ReorderBucketsView(_PromptActionView):
         except svc.PromptError as exc:
             return self.fail(exc)
         return JsonResponse({'ok': True})
+
+
+class ResizeGridView(_PromptActionView):
+    """Change a grid's rectangle. The only thing that moves a grid's slot count.
+
+    ONE ENDPOINT FOR BOTH DIRECTIONS, because growing and shrinking are the same act to an author
+    ("make it 4 x 4") and splitting them would be two permission stacks for one control. The service
+    refuses a published grid, so this is draft-only without saying so here.
+    """
+
+    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
+    def post(self, request, prompt_id):
+        prompt = self.get_prompt(request, prompt_id)
+        if prompt is None:
+            return self.not_found()
+        try:
+            prompt = svc.resize_grid(prompt, self._viewer(request),
+                                     columns=request.POST.get('columns'),
+                                     rows=request.POST.get('rows'))
+        except svc.PromptError as exc:
+            return self.fail(exc)
+        return JsonResponse({
+            'grid_columns': prompt.grid_columns,
+            'slots': prompt.buckets.count(),
+        })
 
 
 class PromptGameSearchView(_PromptActionView):

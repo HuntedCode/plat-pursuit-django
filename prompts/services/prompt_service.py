@@ -36,6 +36,8 @@ from django.utils import timezone
 
 from prompts.models import (
     BUCKET_COLOURS,
+    GRID_LAYOUTS,
+    GRID_SLOT_PLACEHOLDER,
     DESCRIPTION_MAX_LENGTH,
     FREE_MAX_PROMPTS,
     LABEL_MAX_LENGTH,
@@ -50,6 +52,7 @@ from prompts.models import (
     SHAPE_TIER,
     SHAPES,
     TITLE_MAX_LENGTH,
+    is_placeholder_label,
     Prompt,
     PromptBucket,
     PromptGame,
@@ -75,8 +78,14 @@ class PromptError(Exception):
 #: A POLL GETS ITS ONE BUCKET HERE and nowhere else. The author never sees it and can never add a
 #: second; see the module docstring for why that is an integrity rule rather than a cap.
 #:
-#: A GRID GETS NOTHING, deliberately. Its slots ARE the question ("Best combat", "Biggest letdown"),
-#: so seeding placeholders would either be wrong or would invite somebody to ship "Slot 1".
+#: A GRID IS NOT IN THIS TABLE because its slots are not a fixed set: the author picks a RECTANGLE
+#: at creation and gets that many, seeded `Slot 1..N` by `_seed_grid_slots` below.
+#:
+#: This entry used to say a grid gets nothing, "because seeding placeholders would either be wrong or
+#: would invite somebody to ship 'Slot 1'". The second half of that was right and is now handled
+#: where it belongs: `_refuse_if_not_publishable` will not let a grid go up while any slot still
+#: carries its placeholder. The first half assumed the author would add slots one at a time, which
+#: made a ragged last row the normal outcome.
 DEFAULT_BUCKETS = {
     SHAPE_TIER: (('S', 'red'), ('A', 'orange'), ('B', 'yellow'), ('C', 'green'), ('D', 'blue')),
     SHAPE_POLL: (('Your pick', ''),),
@@ -202,6 +211,35 @@ def _check_shape(raw):
     return value
 
 
+def _check_grid_layout(columns, rows):
+    """Refuse any rectangle that is not one of the offered ones.
+
+    AGAINST THE LIST, not against the bounds. `columns <= 6 and columns * rows <= 36` would also
+    admit 6x1 and 2x18 -- shapes the picker never shows, which a hand-posted request could still
+    reach, and which nothing downstream is designed to render.
+    """
+    try:
+        pair = (int(columns), int(rows))
+    except (TypeError, ValueError):
+        raise PromptError('That is not a grid size.')
+    if pair not in GRID_LAYOUTS:
+        raise PromptError('That is not a grid size.')
+    return pair
+
+
+def _seed_grid_slots(prompt, columns, rows, *, start=0):
+    """Create slots `start+1 .. columns*rows`, in order, named for the author to rename.
+
+    The placeholder is the only label available: the database forbids a blank one. Publishing is
+    refused while any survive, so this is a checklist rather than a default somebody can ship.
+    """
+    PromptBucket.objects.bulk_create([
+        PromptBucket(prompt=prompt, label=GRID_SLOT_PLACEHOLDER.format(n=n + 1),
+                     colour='', position=n)
+        for n in range(start, columns * rows)
+    ])
+
+
 def _check_colour(raw):
     """A palette slot, never free hex.
 
@@ -311,6 +349,19 @@ def _refuse_if_not_publishable(locked):
     rows = PromptBucket.objects.filter(prompt=locked).count()
     if rows < 1:
         raise PromptError('Add at least one row before publishing this.')
+
+    # A GRID'S SLOTS ARE ITS QUESTIONS, so a grid still carrying "Slot 4" is asking nothing. The
+    # placeholder exists only because the database forbids a blank label; this is what stops it
+    # reaching the browse page, and it names the slots so the author knows where to look.
+    if locked.shape == SHAPE_GRID:
+        unnamed = [bucket.label for bucket
+                   in PromptBucket.objects.filter(prompt=locked).order_by('position')
+                   if is_placeholder_label(bucket.label)]
+        if unnamed:
+            listed = ', '.join(unnamed[:4]) + ('...' if len(unnamed) > 4 else '')
+            raise PromptError(
+                f'Name every slot before this goes up. Still unnamed: {listed}'
+            )
 
     games = PromptGame.objects.filter(prompt=locked).count()
     floor = MIN_GAMES_TO_PUBLISH[locked.shape]
@@ -463,7 +514,7 @@ def _answered_by_somebody_else(prompt):
 # ── prompts ──────────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
-def create_prompt(profile, *, shape, title, description='', grid_columns=3,
+def create_prompt(profile, *, shape, title, description='', grid_columns=3, grid_rows=3,
                   allow_duplicates=True):
     """Make one, with the buckets its shape starts with.
 
@@ -482,7 +533,13 @@ def create_prompt(profile, *, shape, title, description='', grid_columns=3,
     shape = _check_shape(shape)
     title = _check_title(title)
     description = _check_description(description)
-    columns = _check_grid_columns(grid_columns)
+    # A GRID IS A RECTANGLE, so its geometry is validated as a PAIR against the offered layouts --
+    # not as two independent numbers, which would admit 6x1 and 2x18 from a hand-posted request.
+    # Every other shape ignores both and keeps the column default the column check enforces.
+    if shape == SHAPE_GRID:
+        columns, rows = _check_grid_layout(grid_columns, grid_rows)
+    else:
+        columns, rows = _check_grid_columns(grid_columns), 0
 
     # THE LOCK GOES ON THE PROFILE, not on the prompts. `@transaction.atomic` does nothing for this by
     # itself: at READ COMMITTED two requests both COUNT 2, both pass `2 >= 3`, both insert, and the
@@ -506,7 +563,60 @@ def create_prompt(profile, *, shape, title, description='', grid_columns=3,
 
     for position, (label, colour) in enumerate(DEFAULT_BUCKETS.get(shape, ())):
         PromptBucket.objects.create(prompt=prompt, label=label, colour=colour, position=position)
+    if shape == SHAPE_GRID:
+        _seed_grid_slots(prompt, columns, rows)
     return prompt
+
+
+@transaction.atomic
+def resize_grid(prompt, profile, *, columns, rows):
+    """Change a grid's rectangle: the ONLY way its slot count moves.
+
+    A GRID HAS NO PER-SLOT ADD OR DELETE (owner's call, 2026-09-19), because those are what make a
+    rectangle ragged: seven slots at three across renders 3 + 3 + 1. Resizing keeps the promise by
+    construction, and the picker only offers real rectangles.
+
+    DRAFT ONLY, and that falls out of a rule that already exists rather than being a new one:
+    `_refuse_if_frozen(act='rows')` refuses a published grid outright. So shrinking can only ever
+    destroy the AUTHOR'S OWN placements -- nobody else can have answered something unpublished --
+    which is why this does not need the "somebody answered" guard that unpublishing and deleting do.
+
+    SHRINKING TAKES THE SLOTS OFF THE END, in `position` order, so the ones an author already named
+    are the ones that survive. Their placements cascade with them, and `placement_count` is repaired
+    for every response that lost one.
+    """
+    refuse_if_unlinked(profile)
+    _require_owner(prompt, profile)
+    refuse_if_restricted(profile)
+
+    locked = _lock_prompt(prompt)
+    if locked.shape != SHAPE_GRID:
+        raise PromptError('Only a grid has a size.')
+    _refuse_if_frozen(locked, act='rows')
+    columns, rows = _check_grid_layout(columns, rows)
+
+    wanted = columns * rows
+    existing = list(PromptBucket.objects.filter(prompt=locked).order_by('position'))
+
+    if wanted < len(existing):
+        doomed = [bucket.pk for bucket in existing[wanted:]]
+        # The responses that are about to lose a placement, read BEFORE the delete cascades them
+        # away -- afterwards there is nothing left to identify them by.
+        touched = list(PromptPlacement.objects
+                       .filter(bucket_id__in=doomed)
+                       .values_list('response_id', flat=True).distinct())
+        PromptBucket.objects.filter(pk__in=doomed).delete()
+        _recount_placements(touched)
+    elif wanted > len(existing):
+        _seed_grid_slots(locked, columns, rows, start=len(existing))
+
+    # `position` STAYS DENSE. Growing appends from `len(existing)` and shrinking takes from the end,
+    # so neither leaves a gap -- and the grid template lays out by position.
+    # `updated_at` is `auto_now`, so naming it in `update_fields` bumps it -- no `_touch` beside
+    # this, which would be a second write for the same reason.
+    locked.grid_columns = columns
+    locked.save(update_fields=['grid_columns', 'updated_at'])
+    return locked
 
 
 @transaction.atomic
@@ -854,6 +964,12 @@ def create_bucket(prompt, profile, *, label, colour=''):
     _refuse_if_frozen(locked, act='rows')
     if locked.shape == SHAPE_POLL:
         raise PromptError('A poll asks one question. Its answer box is the only row it has.')
+    # A GRID IS A RECTANGLE, resized as a whole by `resize_grid`. Adding one slot is what makes it
+    # ragged -- seven at three across renders 3 + 3 + 1 -- so the door refuses rather than the page
+    # merely not drawing the button. The pool writers taught this: an affordance removed from a
+    # template is not a rule, and the endpoint behind it stays open to a hand-posted request.
+    if locked.shape == SHAPE_GRID:
+        raise PromptError('A grid is a rectangle. Change its size instead of adding one slot.')
 
     cap = MAX_BUCKETS_PER_PROMPT[locked.shape]
     if PromptBucket.objects.filter(prompt=locked).count() >= cap:
@@ -925,6 +1041,12 @@ def delete_bucket(bucket, profile):
 
     if PromptBucket.objects.filter(prompt=locked).count() <= 1:
         raise PromptError('Something needs somewhere to put the games. Add another row first.')
+
+    # A GRID IS A RECTANGLE, resized as a whole by `resize_grid`. Removing one slot is what makes it
+    # ragged, so the door refuses rather than the page merely not drawing the button -- an affordance
+    # removed from a template is not a rule, and the endpoint stays open to a hand-posted request.
+    if locked.shape == SHAPE_GRID:
+        raise PromptError('A grid is a rectangle. Change its size instead of removing one slot.')
 
     from prompts.models import PromptPlacement
     touched = set(

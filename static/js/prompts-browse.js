@@ -101,8 +101,25 @@
             error.hidden = false;
         }
 
+        // ── the grid-only fields ──
+        //
+        // REVEALED, not injected: the markup is server-rendered with its options and this only
+        // toggles `hidden`, so there is no second copy of the size list in the client.
+        var gridFields = dialog.querySelector('[data-pr-create-grid]');
+
+        function syncShape() {
+            if (!gridFields) { return; }
+            var picked = dialog.querySelector('input[name="shape"]:checked');
+            gridFields.hidden = !picked || picked.value !== 'grid';
+        }
+
+        Array.prototype.forEach.call(
+            dialog.querySelectorAll('input[name="shape"]'),
+            function (radio) { radio.addEventListener('change', syncShape); });
+
         open.addEventListener('click', function () {
             if (error) { error.hidden = true; error.textContent = ''; }
+            syncShape();          // the dialog reopens on whatever shape was left selected
             dialog.showModal();
             var title = dialog.querySelector('[data-pr-create-title]');
             if (title) { title.focus(); }
@@ -120,7 +137,21 @@
                 if (error) { error.hidden = true; }
                 if (save) { save.disabled = true; }
 
-                PP.postJson(form.dataset.url, new FormData(form))
+                // THE RECTANGLE, AS TWO NUMBERS. The select carries "4x3" because one control is
+                // one decision for the author; the service takes columns and rows and validates
+                // them as a PAIR against its own list, so it never has to parse this string.
+                var body = new FormData(form);
+                body.delete('grid_size');
+                var size = dialog.querySelector('[data-pr-create-size]');
+                if (size && size.value) {
+                    var parts = size.value.split('x');
+                    body.append('grid_columns', parts[0]);
+                    body.append('grid_rows', parts[1]);
+                }
+                var dupes = dialog.querySelector('[data-pr-create-duplicates]');
+                body.append('allow_duplicates', dupes && dupes.checked ? 'true' : 'false');
+
+                PP.postJson(form.dataset.url, body)
                     .then(function (data) {
                         // Straight to the new prompt, which is empty and is where the next thing
                         // happens. A toast on the page they are leaving would not be read.

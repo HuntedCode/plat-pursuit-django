@@ -30,6 +30,20 @@ def _hunter(psn='hunter'):
     return ProfileFactory(is_linked=True, psn_username=psn)
 
 
+def _grid_layout_for(slots):
+    """The smallest offered rectangle holding at least `slots` slots.
+
+    A grid's slots are a RECTANGLE now, created as a whole -- so a helper cannot ask for "three".
+    Callers still say how many they need and get at least that many; the extras are unused, which is
+    what a real author has while filling one in.
+    """
+    from prompts.models import GRID_LAYOUTS
+    for columns, rows in GRID_LAYOUTS:
+        if columns * rows >= slots:
+            return columns, rows
+    raise AssertionError(f'no offered grid holds {slots} slots')
+
+
 def _grid(owner, *, slots=2, picks=0, allow_duplicates=True, public=False):
     """A grid, its slots, and some games to answer it WITH.
 
@@ -37,10 +51,14 @@ def _grid(owner, *, slots=2, picks=0, allow_duplicates=True, public=False):
     of games, and these were rows on the prompt. A grid has no pool (owner's call, 2026-09-19), so
     these are plain Concepts -- free picks waiting to happen, passed as `concept_pk`.
     """
+    columns, rows = _grid_layout_for(slots)
     prompt = svc.create_prompt(owner, shape=SHAPE_GRID, title='Pick one each',
+                               grid_columns=columns, grid_rows=rows,
                                allow_duplicates=allow_duplicates)
-    for i in range(slots):
-        svc.create_bucket(prompt, owner, label=f'Best {i}')
+    # NAMED, because a grid whose slots still read "Slot 1" cannot be published -- which is the
+    # point of the placeholder, and would otherwise make `public=True` fail everywhere.
+    for i, bucket in enumerate(prompt.buckets.order_by('position')):
+        svc.update_bucket(bucket, owner, label=f'Best {i}')
     chosen = [ConceptFactory() for _ in range(picks)]
     if public:
         svc.update_prompt(prompt, owner, is_public=True)
@@ -91,16 +109,21 @@ def test_a_grid_publishes_with_no_games_at_all():
     questions and every respondent searches the catalogue for each one. There is no pool to be short
     of, so the floor is on the SLOTS instead."""
     owner = _hunter()
-    empty = svc.create_prompt(owner, shape=SHAPE_GRID, title='No slots yet')
+    # A grid arrives with its slots already, so what stands between it and publication is NAMING
+    # them -- not adding them, and never adding games.
+    grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Four questions',
+                             grid_columns=2, grid_rows=2)
 
-    with pytest.raises(svc.PromptError):
-        svc.update_prompt(empty, owner, is_public=True)
+    with pytest.raises(svc.PromptError, match='Name every slot'):
+        svc.update_prompt(grid, owner, is_public=True)
 
-    svc.create_bucket(empty, owner, label='Best combat')
-    svc.update_prompt(empty, owner, is_public=True)
-    empty.refresh_from_db()
-    assert empty.is_public is True
-    assert empty.game_count == 0
+    for n, bucket in enumerate(grid.buckets.order_by('position')):
+        svc.update_bucket(bucket, owner, label=f'Question {n + 1}')
+    svc.update_prompt(grid, owner, is_public=True)
+
+    grid.refresh_from_db()
+    assert grid.is_public is True
+    assert grid.game_count == 0, 'a grid publishes with no games at all'
 
 
 def test_a_grid_takes_no_pool_at_all():

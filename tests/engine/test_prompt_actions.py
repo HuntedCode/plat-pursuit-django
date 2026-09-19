@@ -32,7 +32,15 @@ def _member(psn='member', premium=True):
 
 
 def _draft(owner, shape=SHAPE_TIER, *, title='Rank them', games=0):
-    prompt = svc.create_prompt(owner, shape=shape, title=title)
+    """A grid arrives as a 2x2 rectangle with its slots named.
+
+    Its slots cannot be added one at a time, and an unnamed one blocks publishing -- the placeholder
+    doing its job -- so `_published` would fail for a grid without this.
+    """
+    prompt = svc.create_prompt(owner, shape=shape, title=title, grid_columns=2, grid_rows=2)
+    if shape == SHAPE_GRID:
+        for n, bucket in enumerate(prompt.buckets.order_by('position')):
+            svc.update_bucket(bucket, owner, label=f'Question {n + 1}')
     for _ in range(games):
         svc.add_concept(prompt, owner, ConceptFactory())
     return prompt
@@ -40,8 +48,6 @@ def _draft(owner, shape=SHAPE_TIER, *, title='Rank them', games=0):
 
 def _published(owner, shape=SHAPE_TIER, **kwargs):
     prompt = _draft(owner, shape, games=MIN_GAMES_TO_PUBLISH[shape], **kwargs)
-    if shape == SHAPE_GRID:
-        svc.create_bucket(prompt, owner, label='Best combat')
     svc.update_prompt(prompt, owner, is_public=True)
     prompt.refresh_from_db()
     return prompt
@@ -229,9 +235,13 @@ def test_one_field_at_a_time_does_not_clear_the_others(client):
 
 
 def test_rows_can_be_added_renamed_reordered_and_removed(client):
+    """ON A TIER LIST, because a grid no longer has per-row add or delete: its slots are a rectangle
+    resized as a whole, and those two controls are exactly what make one ragged. The grid's own
+    endpoints are covered by `test_a_grid_refuses_the_per_slot_endpoints` below."""
     owner = _member('owner')
-    prompt = _draft(owner, SHAPE_GRID, title='Grid')
+    prompt = _draft(owner, SHAPE_TIER, title='Tier')
     client.force_login(owner.user)
+    prompt.buckets.all().delete()          # start from nothing, so the ids below are this test's
 
     made = client.post(reverse('prompt_create_bucket', args=[prompt.pk]),
                        {'label': 'Best combat'}).json()
@@ -250,6 +260,31 @@ def test_rows_can_be_added_renamed_reordered_and_removed(client):
 
     client.post(reverse('prompt_delete_bucket', args=[prompt.pk, made['bucket_id']]))
     assert prompt.buckets.count() == 1
+
+
+def test_a_grid_refuses_the_per_slot_endpoints_and_resizes_instead(client):
+    """THE DOORS, not just the buttons. Removing the controls from the template is an affordance; a
+    hand-posted request still reaches the endpoint, and one added or deleted slot makes the rectangle
+    ragged. Both refuse, and the resize route is what a grid has instead."""
+    owner = _member('owner')
+    prompt = _draft(owner, SHAPE_GRID, title='Grid')
+    client.force_login(owner.user)
+    first = prompt.buckets.order_by('position').first()
+
+    added = client.post(reverse('prompt_create_bucket', args=[prompt.pk]), {'label': 'Sneaky'})
+    assert added.status_code == 400
+    assert 'rectangle' in added.json()['error']
+
+    removed = client.post(reverse('prompt_delete_bucket', args=[prompt.pk, first.pk]))
+    assert removed.status_code == 400
+    assert 'rectangle' in removed.json()['error']
+
+    before = prompt.buckets.count()
+    resized = client.post(reverse('prompt_resize_grid', args=[prompt.pk]),
+                          {'columns': '3', 'rows': '3'})
+    assert resized.status_code == 200
+    assert resized.json() == {'grid_columns': 3, 'slots': 9}
+    assert prompt.buckets.count() == 9 != before
 
 
 def test_the_pool_can_be_filled_reordered_and_emptied(client):

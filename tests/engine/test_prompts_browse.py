@@ -51,7 +51,8 @@ def _member(psn='member', premium=True, staff=False, moderator=False):
 def _published(owner, shape=SHAPE_TIER, *, title='Rank them', games=None):
     prompt = svc.create_prompt(owner, shape=shape, title=title)
     if shape == SHAPE_GRID:
-        svc.create_bucket(prompt, owner, label='Best combat')
+        for n, bucket in enumerate(prompt.buckets.order_by('position')):
+            svc.update_bucket(bucket, owner, label=f'Question {n + 1}')
     for _ in range(MIN_GAMES_TO_PUBLISH[shape] if games is None else games):
         concept = ConceptFactory()
         GameFactory(concept=concept)
@@ -361,7 +362,8 @@ def test_the_author_line_and_the_covers_actually_reach_the_page(client):
 def test_an_open_grid_says_so_instead_of_showing_a_broken_mosaic(client):
     owner = _member('owner')
     grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Open one')
-    svc.create_bucket(grid, owner, label='Best combat')
+    for n, bucket in enumerate(grid.buckets.order_by('position')):
+        svc.update_bucket(bucket, owner, label=f'Question {n + 1}')
     svc.update_prompt(grid, owner, is_public=True)
     client.force_login(_member('reader').user)
 

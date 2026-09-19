@@ -46,6 +46,11 @@ records. The handle is its own control and carries the keyboard alternative with
         {% endfor %}
     </select>
 
+    {% endif %}
+
+    {% comment %}DELETE IS ITS OWN FLAG. A grid's slots are a rectangle resized as a whole, so
+    removing one would leave 3 + 3 + 1; every other shape deletes a row at a time.{% endcomment %}
+    {% if can_delete_rows %}
     <button type="button" class="pp-pdet__row-del" data-pd-row-delete
             aria-label="Delete {{ bucket.label }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

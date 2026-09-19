@@ -53,10 +53,13 @@ def _built(owner, shape=SHAPE_TIER, games=3, public=True, allow_duplicates=True)
     placed with `concept_pk`. `_card_kwarg` below keeps call sites from having to remember which.
     """
     prompt = psvc.create_prompt(owner, shape=shape, title='Rank them',
+                                grid_columns=2, grid_rows=2,
                                 allow_duplicates=allow_duplicates)
     if shape == SHAPE_GRID:
-        for label in ('Best combat', 'Best story'):
-            psvc.create_bucket(prompt, owner, label=label)
+        # A grid's slots come as a RECTANGLE with the prompt; they are renamed rather than added,
+        # because an unnamed slot blocks publishing.
+        for n, bucket in enumerate(prompt.buckets.order_by('position')):
+            psvc.update_bucket(bucket, owner, label=f'Question {n + 1}')
         pool = [ConceptFactory() for _ in range(games)]
         if public:
             psvc.update_prompt(prompt, owner, is_public=True)

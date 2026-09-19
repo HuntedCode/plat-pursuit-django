@@ -164,6 +164,35 @@ choice is ever offered, which is why each option carries its blurb rather than j
                           class="pp-pdet__input pp-pdet__input--area"></textarea>
             </label>
 
+            {% comment %}── GRID ONLY ──
+            Revealed when Grid is selected and hidden otherwise, by `wireCreate`. Rendered always
+            rather than injected, so there is no markup built in the client and the fields keep their
+            server-rendered options.
+
+            SIZE IS A RECTANGLE, never a loose slot count: the picker offers `columns x rows` pairs
+            and the service validates against that same list, so a grid cannot be 7 slots at 3 across
+            (which renders 3 + 3 + 1). The option text leads with the TOTAL, because "twelve slots"
+            is what an author is deciding.
+
+            The slots arrive named "Slot 1..N" -- the database forbids a blank label -- and publishing
+            is refused while any still carry that name, so this is a checklist rather than a default
+            anybody can ship.{% endcomment %}
+            <div class="pp-pdlg__grid-only" data-pr-create-grid hidden>
+                <label class="pp-pdlg__field">
+                    <span class="pp-pdlg__label">Size</span>
+                    <select name="grid_size" class="pp-pdet__input" data-pr-create-size>
+                        {% for columns, rows, slots, label in grid_layouts %}
+                        <option value="{{ columns }}x{{ rows }}" {% if slots == 9 %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="pp-pdlg__check">
+                    <input type="checkbox" data-pr-create-duplicates checked />
+                    <span>Let one game fill more than one slot</span>
+                </label>
+            </div>
+
             <p class="pp-pdlg__note">
                 {% comment %}NO PROMISE ABOUT GAMES. This said "You add the games and the rows
                 next", which is false for a grid -- whose slots are answered out of the catalogue --

@@ -228,8 +228,13 @@ def test_a_rename_and_an_unpublish_in_one_call_change_neither():
 
 def test_each_shape_starts_with_the_rows_it_needs():
     """A tier list arrives usable because the genre has one universal convention and a tier list with
-    no rows is a form, not a tier list. A grid gets nothing on purpose -- its slots ARE the question,
-    so a placeholder would either be wrong or would ship as "Slot 1"."""
+    no rows is a form, not a tier list.
+
+    A GRID ARRIVES AS A RECTANGLE (owner's call, 2026-09-19). It used to get nothing, on the
+    reasoning that a placeholder "would either be wrong or would ship as Slot 1" -- the second half
+    of which is now handled where it belongs: publishing is refused while any slot still carries its
+    placeholder, so the name is a checklist rather than a default.
+    """
     owner = _hunter()
 
     tier = _prompt(owner, SHAPE_TIER)
@@ -237,7 +242,10 @@ def test_each_shape_starts_with_the_rows_it_needs():
     assert [b.position for b in tier.buckets.all()] == [0, 1, 2, 3, 4]
     assert all(b.colour for b in tier.buckets.all()), 'the tier palette is part of the convention'
 
-    assert _prompt(owner, SHAPE_GRID, title='Grid').buckets.count() == 0
+    grid = _prompt(owner, SHAPE_GRID, title='Grid')
+    assert grid.buckets.count() == grid.grid_columns * 3, 'the default rectangle is 3 x 3'
+    assert [b.label for b in grid.buckets.order_by('position')][:2] == ['Slot 1', 'Slot 2']
+    assert all(b.colour == '' for b in grid.buckets.all()), 'a slot is a question, not a tier'
     assert _prompt(owner, SHAPE_POLL, title='Poll').buckets.count() == 1
 
 

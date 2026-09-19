@@ -51,9 +51,24 @@ def _signed_in(client, profile):
 
 
 def _draft(owner, shape=SHAPE_TIER, *, title='Rank them', games=0, rows=0):
-    prompt = svc.create_prompt(owner, shape=shape, title=title)
-    for n in range(rows):
-        svc.create_bucket(prompt, owner, label=f'Row {n}')
+    """`rows` means "at least this many", and a GRID ignores it.
+
+    A grid's slots are a rectangle created with the prompt, so they cannot be added one at a time.
+    It gets the smallest offered rectangle instead, with its slots named -- an unnamed slot blocks
+    publishing, which is the placeholder doing its job and would otherwise fail every `_published`
+    grid in this module.
+    """
+    if shape == SHAPE_GRID:
+        from prompts.models import GRID_LAYOUTS
+        columns, grid_rows = next((c, r) for c, r in GRID_LAYOUTS if c * r >= max(rows, 1))
+        prompt = svc.create_prompt(owner, shape=shape, title=title,
+                                   grid_columns=columns, grid_rows=grid_rows)
+        for n, bucket in enumerate(prompt.buckets.order_by('position')):
+            svc.update_bucket(bucket, owner, label=f'Question {n + 1}')
+    else:
+        prompt = svc.create_prompt(owner, shape=shape, title=title)
+        for n in range(rows):
+            svc.create_bucket(prompt, owner, label=f'Row {n}')
     for _ in range(games):
         concept = ConceptFactory()
         GameFactory(concept=concept)
@@ -634,16 +649,20 @@ def test_adding_a_slot_clears_the_grids_publish_blocker(client):
     stopped reloading the page. The gate fragment is what the page now re-asks, so it must answer with
     the CURRENT state."""
     owner = _signed_in(client, _member('author'))
-    grid = _draft(owner, SHAPE_GRID)
+    # A grid arrives WITH its slots now, so "not ready" means they are still unnamed rather than
+    # missing -- the same staleness, on the state a grid can actually be in.
+    grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Four questions',
+                             grid_columns=2, grid_rows=2)
     url = _url(grid)
 
     before = client.get(url, {'part': 'publish'}).content.decode()
-    assert 'data-pd-blocker' in before, 'a slotless grid should be blocked'
+    assert 'data-pd-blocker' in before, 'a grid with unnamed slots should be blocked'
 
-    svc.create_bucket(grid, owner, label='Best combat')
+    for n, bucket in enumerate(grid.buckets.order_by('position')):
+        svc.update_bucket(bucket, owner, label=f'Question {n + 1}')
 
     after = client.get(url, {'part': 'publish'}).content.decode()
-    assert 'data-pd-blocker' not in after, 'the gate still blocks a grid that now has a slot'
+    assert 'data-pd-blocker' not in after, 'the gate still blocks a grid whose slots are all named'
     assert '<html' not in after
 
 
@@ -733,8 +752,7 @@ def test_the_tile_says_they_pick_the_games_from_the_shape_not_from_missing_art(c
 def test_a_grid_tile_does_say_it(client):
     """The other direction, so the test above cannot pass by the line disappearing for everybody."""
     owner = _member('author')
-    grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Nine questions')
-    svc.create_bucket(grid, owner, label='Best combat')
+    grid = _draft(owner, SHAPE_GRID, title='Nine questions', rows=4)
     svc.update_prompt(grid, owner, is_public=True)
 
     _signed_in(client, _member('reader'))

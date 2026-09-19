@@ -72,7 +72,10 @@ def test_an_open_grid_has_no_mosaic_and_that_is_a_state():
     the template treats that as a state rather than as missing data."""
     owner = _hunter()
     grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Open')
-    svc.create_bucket(grid, owner, label='Best combat')
+    # A grid is created as a RECTANGLE; its slots arrive named `Slot N` and must be renamed
+    # before it can be published.
+    for n, bucket in enumerate(grid.buckets.order_by('position')):
+        svc.update_bucket(bucket, owner, label=f'Question {n + 1}')
 
     attach_cover_games([grid])
 

@@ -695,6 +695,52 @@
                 });
         });
 
+        // ── resize, for the one shape whose slots move as a rectangle ──
+        var resize = panel.querySelector('[data-pd-resize]');
+        if (resize) {
+            resize.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var select = resize.querySelector('[data-pd-resize-size]');
+                var button = resize.querySelector('button[type="submit"]');
+                if (!select || !select.value) { return; }
+                var parts = select.value.split('x');
+
+                // SHRINKING DESTROYS SLOTS, and anything placed in them. Only ever the author's own
+                // answer -- a published grid's slots are frozen, so nobody else can have answered --
+                // but it is still not undoable, and the count makes the size of it concrete.
+                var current = panel.querySelectorAll('[data-pd-row]').length;
+                var wanted = parseInt(parts[0], 10) * parseInt(parts[1], 10);
+                if (wanted < current) {
+                    var losing = current - wanted;
+                    if (!window.confirm('Remove ' + losing + ' slot' + (losing === 1 ? '' : 's')
+                                        + ' from the end, with anything placed in them?')) { return; }
+                }
+
+                if (button) { button.disabled = true; }
+                var body = new FormData();
+                body.append('columns', parts[0]);
+                body.append('rows', parts[1]);
+                post(resize.dataset.url, body)
+                    .then(function (data) {
+                        refreshPublishGate();
+                        return refreshPanel('rows').then(function () {
+                            refreshCount();
+                            announce('Now ' + data.slots + ' slots.');
+                        }, function (err) {
+                            logFailure('rows refresh after resize', err);
+                            if (PP.ToastManager) {
+                                PP.ToastManager.show('Resized. Reload to see it.', 'warning');
+                            }
+                        });
+                    })
+                    .catch(function (err) {
+                        logFailure('resize', err);
+                        toastError(err, 'That could not be resized.');
+                    })
+                    .finally(function () { if (button) { button.disabled = false; } });
+            });
+        }
+
         // ── add ──
         var form = panel.querySelector('[data-pd-row-add]');
         if (form) {

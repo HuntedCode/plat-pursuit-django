@@ -223,7 +223,26 @@ deleted.{% endcomment %}
             {% include 'prompts/partials/detail_rows.html' %}
         </div>
 
-        {% if can_add_rows %}
+        {% comment %}A GRID IS RESIZED AS A WHOLE, so it gets a rectangle picker where the other
+        shapes get an add form. Adding and deleting one slot at a time is exactly what makes a
+        rectangle ragged, so a grid has neither -- see `can_delete_rows` in the row partial.{% endcomment %}
+        {% if can_resize_grid %}
+        <form class="pp-pdet__rowadd" data-pd-resize data-url="{% url 'prompt_resize_grid' prompt.id %}">
+            <label class="pp-pdet__field pp-pdet__field--inline">
+                <span class="pp-pdet__label">Size</span>
+                <select class="pp-pdet__select" data-pd-resize-size aria-label="Grid size">
+                    {% for columns, rows, slots, label in grid_layouts %}
+                    <option value="{{ columns }}x{{ rows }}"
+                            {% if columns == prompt.grid_columns and rows == grid_rows %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="submit" class="pp-cta">Resize</button>
+        </form>
+        {% comment %}Shrinking destroys the slots it removes. Only ever a draft -- a published grid's
+        slots are frozen -- so the only answer at risk is the author's own.{% endcomment %}
+        <p class="pp-pdet__note">Fewer slots removes them from the end, with anything placed in them.</p>
+        {% elif can_add_rows %}
         <form class="pp-pdet__rowadd" data-pd-row-add data-url="{% url 'prompt_create_bucket' prompt.id %}">
             <input type="text" name="label" class="pp-pdet__input" data-pd-row-label
                    maxlength="{{ label_max_length }}" required
@@ -240,8 +259,9 @@ deleted.{% endcomment %}
         {% comment %}The author can see WHY the control is gone. A missing button with no explanation
         reads as a bug; "a published grid cannot change its slots" reads as a rule.{% endcomment %}
         <p class="pp-pdet__note" data-pd-rows-note>
-            {% if buckets|length >= max_buckets %}That is the most {% if is_grid %}slots{% else %}rows{% endif %} one can have.
-            {% else %}The {% if is_grid %}slots{% else %}rows{% endif %} are fixed while this is published. Unpublish to change them.{% endif %}
+            {% if is_grid %}The slots are fixed while this is published. Unpublish to resize it.
+            {% elif buckets|length >= max_buckets %}That is the most rows one can have.
+            {% else %}The rows are fixed while this is published. Unpublish to change them.{% endif %}
         </p>
         {% endif %}
 

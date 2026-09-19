@@ -27,7 +27,7 @@ from prompts.models import SHAPE_GRID, SHAPE_POLL, SHAPE_TIER
 from prompts.views import (AddGameView, BrowsePromptsView, CreateBucketView,
                           CreatePromptView, DeleteBucketView, DeletePromptView,
                           PromptDetailView, PromptGameSearchView, RemoveGameView, ReorderBucketsView,
-                          ReorderGamesView,
+                          ReorderGamesView, ResizeGridView,
                           SetClosedView, TogglePromptLikeView, UpdateBucketView,
                           UpdatePromptView)
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
@@ -437,6 +437,9 @@ urlpatterns = [
          name='prompt_remove_game'),
     path('community/prompts/<int:prompt_id>/rows/', CreateBucketView.as_view(),
          name='prompt_create_bucket'),
+    # A grid's slot count moves only as a whole rectangle -- never one slot at a time.
+    path('community/prompts/<int:prompt_id>/resize/', ResizeGridView.as_view(),
+         name='prompt_resize_grid'),
     path('community/prompts/<int:prompt_id>/rows/reorder/', ReorderBucketsView.as_view(),
          name='prompt_reorder_buckets'),
     path('community/prompts/<int:prompt_id>/rows/<int:bucket_id>/update/', UpdateBucketView.as_view(),

@@ -222,6 +222,56 @@ BUCKET_COLOURS = frozenset(value for value, _ in BUCKET_COLOUR_CHOICES)
 MIN_GRID_COLUMNS = 1
 MAX_GRID_COLUMNS = 6
 
+#: THE SHAPES A GRID MAY BE, as `(columns, rows)`. A grid is a RECTANGLE (owner's call, 2026-09-19):
+#: the author picks one of these and gets exactly `columns * rows` slots, rather than adding slots one
+#: at a time and discovering that seven of them at three across renders a ragged last row.
+#:
+#: DIMENSIONS ARE THE INPUT, not a slot count, because only dimensions can express the guarantee. A
+#: count would need the service to factorise it -- and most counts have several factorisations (12 is
+#: 3x4, 4x3, 2x6, 6x2), so it would be choosing the layout on the author's behalf and getting it wrong
+#: for anyone who wanted the other one. The picker shows the total so the count is still what a hunter
+#: reads: "12 slots (4 across, 3 down)".
+#:
+#: Bounded by `MAX_GRID_COLUMNS` on one side and `MAX_BUCKETS_PER_PROMPT[SHAPE_GRID]` on the other.
+#: 6x6 is exactly 36, which is where that cap came from -- see the note there.
+GRID_LAYOUTS = (
+    (2, 2),
+    (3, 2),
+    (3, 3),
+    (4, 3),
+    (4, 4),
+    (5, 4),
+    (5, 5),
+    (6, 5),
+    (6, 6),
+)
+
+#: What a freshly created slot is called. An author renames each one to the question it asks.
+#:
+#: A PLACEHOLDER EXISTS ONLY BECAUSE THE DATABASE FORBIDS A BLANK LABEL -- `promptbucket_label_not_blank`
+#: -- so "create nine slots" necessarily means "create nine labels". The comment on `DEFAULT_BUCKETS`
+#: was right that seeding placeholders invites somebody to ship "Slot 1"; the answer is not to avoid
+#: seeding but to refuse the PUBLISH while any survive, which turns the placeholder into a checklist.
+#: See `_refuse_if_not_publishable`.
+GRID_SLOT_PLACEHOLDER = 'Slot {n}'
+
+
+def grid_layout_choices():
+    """`(columns, rows, slots, label)` for the picker, so no template does the arithmetic."""
+    return [(columns, rows, columns * rows,
+             f'{columns * rows} slots ({columns} across, {rows} down)')
+            for columns, rows in GRID_LAYOUTS]
+
+
+def is_placeholder_label(label):
+    """Is this still the name the service gave a slot, rather than a question the author wrote?
+
+    Matched against the generated set rather than by parsing, so a hunter who genuinely names a slot
+    "Slot 7" on a grid with fewer than seven slots is not caught by it. Bounded by the bucket cap.
+    """
+    return label in {GRID_SLOT_PLACEHOLDER.format(n=n)
+                     for n in range(1, MAX_BUCKETS_PER_PROMPT[SHAPE_GRID] + 1)}
+
 
 class PromptQuerySet(models.QuerySet):
     """Reads that cannot forget a flag. Lifted from `GameListQuerySet`, deliberately unchanged.
