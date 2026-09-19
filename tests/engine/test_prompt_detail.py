@@ -604,6 +604,74 @@ def test_the_pool_carries_the_cap_the_client_compares_against():
     assert MAX_GAMES_PER_PROMPT[SHAPE_POLL] == 20
 
 
+# ── the publish gate stays current ───────────────────────────────────────────────────────────────
+
+def test_adding_a_slot_clears_the_grids_publish_blocker(client):
+    """THE REPORTED BUG. A new grid says "Add at least one row"; the author adds slots; the page kept
+    saying it, with Publish disabled, because the reason was computed once at load and adds had
+    stopped reloading the page. The gate fragment is what the page now re-asks, so it must answer with
+    the CURRENT state."""
+    owner = _signed_in(client, _member('author'))
+    grid = _draft(owner, SHAPE_GRID)
+    url = _url(grid)
+
+    before = client.get(url, {'part': 'publish'}).content.decode()
+    assert 'data-pd-blocker' in before, 'a slotless grid should be blocked'
+
+    svc.create_bucket(grid, owner, label='Best combat')
+
+    after = client.get(url, {'part': 'publish'}).content.decode()
+    assert 'data-pd-blocker' not in after, 'the gate still blocks a grid that now has a slot'
+    assert '<html' not in after
+
+
+def test_the_gate_follows_the_tier_floor_game_by_game(client):
+    """Same bug on the other shape: the tier floor is five games, added one at a time."""
+    owner = _signed_in(client, _member('author'))
+    tier = _draft(owner, SHAPE_TIER, rows=1, games=MIN_GAMES_TO_PUBLISH[SHAPE_TIER] - 1)
+    url = _url(tier)
+
+    assert 'data-pd-blocker' in client.get(url, {'part': 'publish'}).content.decode()
+
+    concept = ConceptFactory()
+    GameFactory(concept=concept)
+    svc.add_concept(tier, owner, concept)
+    assert 'data-pd-blocker' not in client.get(url, {'part': 'publish'}).content.decode()
+
+
+def test_every_structural_change_re_asks_the_publish_gate():
+    """Each of these changes what `publish_blocker` would say. One that forgets to re-ask leaves the
+    button stuck in whatever state the page loaded with, which is exactly how the bug shipped."""
+    js = _read('static/js/prompt-detail.js')
+
+    def body(start, end):
+        return js[js.index(start):js.index(end, js.index(start))]
+
+    sites = {
+        'add a game': body('onAdded: function (data) {', "refreshPanel('pool')"),
+        'remove a game': body("announce('Removed ' + name", '})'),
+        # Anchored on the row form's own label field. `post(form.dataset.url, body)` appears FIRST in
+        # the settings form, so a slice starting there ran through the settings save, found ITS call,
+        # and passed with the row add's call deleted -- mutation testing caught it.
+        'add a row': body("querySelector('[data-pd-row-label]')", "refreshPanel('rows')"),
+        'delete a row': body("announce('Deleted ' + name", '})'),
+        'save settings': body("announce('Saved.');", '})'),
+    }
+    for what, code in sites.items():
+        assert 'refreshPublishGate()' in code, f'{what} leaves the publish button stale'
+
+
+def test_the_publish_button_follows_the_servers_answer_not_a_rule():
+    """The button is disabled exactly when the server sent a reason. No floor, no row count and no
+    shape check in the client: those live in `publish_blocker`, stated once."""
+    js = _read('static/js/prompt-detail.js')
+    gate = js[js.index('function refreshPublishGate('):js.index('function syncAdderVisibility(')]
+
+    assert "button.disabled = gate.textContent.trim() !== ''" in gate
+    for rule in ('MIN_GAMES', 'game_count', 'shape', '>= 5', 'buckets'):
+        assert rule not in gate, f'the client is restating the publish rule ({rule})'
+
+
 def test_the_reorder_ids_use_the_managers_own_attribute():
     """`DragReorderManager` builds its id list from `evt.item.dataset.itemId`. A differently-named
     attribute reorders correctly ON SCREEN and posts a list of `undefined` -- a failure with no

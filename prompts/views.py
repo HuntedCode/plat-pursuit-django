@@ -268,6 +268,8 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
     FRAGMENTS = {
         'pool': 'prompts/partials/detail_pool.html',
         'rows': 'prompts/partials/detail_rows.html',
+        # Why Publish is disabled. Re-asked after every add or remove; see detail_publish_gate.html.
+        'publish': 'prompts/partials/detail_publish_gate.html',
     }
 
     def get_template_names(self):

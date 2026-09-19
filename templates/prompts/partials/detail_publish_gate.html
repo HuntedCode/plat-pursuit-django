@@ -1,0 +1,12 @@
+{% comment %}Why this cannot be published yet -- the INSIDE of `[data-pd-publish-gate]`, and a swap
+target on its own.
+
+RE-ASKED AFTER EVERY STRUCTURAL CHANGE. This used to be computed once at page load, which was fine
+while every add reloaded the page. Once adds refreshed only their own panel, it went stale: a new grid
+kept saying "Add at least one row" with the Publish button disabled after the author had added slots,
+because nothing asked the question again.
+
+Empty when there is nothing blocking. The Publish button's `disabled` follows whether this has any
+text, so the rule itself stays in `prompt_service.publish_blocker` and the client only reflects the
+server's answer.{% endcomment %}
+{% if publish_blocker %}<p class="pp-pdet__blocker" data-pd-blocker>{{ publish_blocker }}</p>{% endif %}

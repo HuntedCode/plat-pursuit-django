@@ -185,8 +185,14 @@ deleted.{% endcomment %}
                 {% endif %}
             </div>
 
-            {% if publish_blocker %}
-            <p class="pp-pdet__blocker" data-pd-blocker>{{ publish_blocker }}</p>
+            {% if can_edit and not prompt.is_public %}
+            {% comment %}A SWAP TARGET, re-rendered by the server after every add or remove so the
+            reason (and the button's disabled state with it) never goes stale. `aria-live` so a
+            screen reader hears "you can publish now" as it happens.{% endcomment %}
+            <div data-pd-publish-gate aria-live="polite"
+                 data-refresh-url="{% url 'prompt_detail' prompt.id %}?part=publish">
+                {% include 'prompts/partials/detail_publish_gate.html' %}
+            </div>
             {% endif %}
         </div>
     </section>

@@ -135,6 +135,44 @@
     }
 
     /**
+     * Ask the server again why this cannot be published, and let the button follow the answer.
+     *
+     * THE STALE-PUBLISH BUG. The reason and the button's `disabled` were computed once, at page load.
+     * That was invisible while every add reloaded the page. Once adds refreshed only their own panel,
+     * a new grid kept "Add at least one row before publishing" and a dead button after its author had
+     * added slots -- the server would have accepted the publish; the page never asked again.
+     *
+     * The rule stays in `prompt_service.publish_blocker`. This only fetches the server's sentence and
+     * treats "is there one" as "is the button disabled", so the client holds no copy of the floor.
+     *
+     * `fetch` rather than `htmx.ajax`, because an EMPTY answer is a real answer here ("nothing blocks
+     * you") and the node-identity swap proof `refreshPanel` uses cannot tell an empty swap from none.
+     * So the response is checked directly: not ok, or redirected to a login page, is a failure and
+     * leaves the previous state alone. A stale hint is safe either way -- the endpoint still refuses.
+     */
+    function refreshPublishGate() {
+        var gate = root.querySelector('[data-pd-publish-gate]');
+        if (!gate) { return Promise.resolve(); }      // published, or not the author: nothing to gate
+        var button = root.querySelector('[data-pd-publish]');
+
+        return fetch(gate.dataset.refreshUrl, {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+            .then(function (response) {
+                if (!response.ok || response.redirected) {
+                    throw new Error('publish gate answered ' + response.status);
+                }
+                return response.text();
+            })
+            .then(function (html) {
+                gate.innerHTML = html;
+                if (button) { button.disabled = gate.textContent.trim() !== ''; }
+            })
+            .catch(function (err) { logFailure('publish gate refresh', err); });
+    }
+
+    /**
      * Retire the adder at the cap, and bring it back under it.
      *
      * A COMPARISON AGAINST A SERVER-RENDERED NUMBER, not a rule this file knows. `data-max` is written
@@ -298,6 +336,8 @@
                     hide();
                     if (PP.ToastManager) { PP.ToastManager.show('Saved.', 'success'); }
                     announce('Saved.');
+                    // Turning duplicates off can make a grid's pool too small for its slots.
+                    refreshPublishGate();
                 })
                 .catch(function (err) {
                     logFailure('identity save', err);
@@ -526,6 +566,7 @@
                     row.remove();
                     refreshCount();
                     announce('Deleted ' + name + '.');
+                    refreshPublishGate();
                 })
                 .catch(function (err) {
                     button.disabled = false;
@@ -553,6 +594,7 @@
                     .then(function () {
                         // THE PANEL, NOT THE PAGE. The field keeps its focus, so a hunter typing
                         // S / A / B / C / D gets five rows without touching the mouse.
+                        refreshPublishGate();
                         return refreshPanel('rows').then(function () {
                             labelInput.value = '';
                             labelInput.focus();
@@ -602,6 +644,7 @@
                     card.remove();
                     refreshCount(data.game_count);
                     announce('Removed ' + name + '.');
+                    refreshPublishGate();
                 })
                 .catch(function (err) {
                     button.disabled = false;
@@ -637,6 +680,7 @@
                     // "Added" as the confirmation, and a toast per game would stack four deep over
                     // the panel being picked from. The list page toasts because its adder sits in a
                     // toolbar above a grid the hunter is not looking at.
+                    refreshPublishGate();
                     return refreshPanel('pool').catch(function (err) {
                         logFailure('pool refresh after add', err);
                         if (PP.ToastManager) {
