@@ -235,8 +235,9 @@ def _check_grid_columns(raw):
 #:   one drops out. Nothing here freezes.
 #: * A GRID freezes its SLOTS, because the slots are the questions: changing "Best combat" to "Worst
 #:   combat" after people answer inverts what every existing answer says, silently, with no row
-#:   changed. Its POOL may still GROW -- more choices is additive and breaks nothing -- but nothing
-#:   may leave it, because a departing game takes real answers with it.
+#:   changed. It has no POOL to freeze -- every slot is answered out of the whole catalogue, and all
+#:   three pool writers refuse the shape. (This paragraph used to end "its pool may still grow, but
+#:   nothing may leave it", which was the rule until the optional grid pool was removed.)
 #: * A POLL freezes entirely. Adding an option mid-vote is the classic way to rig one, and the tally
 #:   is the whole artifact.
 #:
@@ -245,7 +246,10 @@ def _check_grid_columns(raw):
 #: fix and republish. The moment anyone answers, that door closes and the structure is fixed for good.
 _FROZEN_WHILE_PUBLIC = {
     SHAPE_TIER: frozenset(),
-    SHAPE_GRID: frozenset({'rows', 'pool_remove'}),
+    # `pool_remove` was here while a grid could carry an author pool. It has none now, and
+    # `add_concept` refuses a grid outright, so there is no pool act left to freeze -- only its
+    # slots, which are fixed once people can answer them.
+    SHAPE_GRID: frozenset({'rows'}),
     SHAPE_POLL: frozenset({'rows', 'pool_add', 'pool_remove', 'pool_order', 'question'}),
 }
 
@@ -287,16 +291,19 @@ def _refuse_if_frozen(locked, *, act):
     )
 
 
-def _refuse_if_not_publishable(locked, *, forbids_duplicates=None):
+def _refuse_if_not_publishable(locked):
     """The floor a prompt has to clear before anybody can be asked to answer it.
 
     AT THE PUBLISH TRANSITION AND NOWHERE ELSE. A draft may sit at one game for as long as its author
     likes; what must not happen is a half-built thing reaching the browse page, because the first page
     of a new feature is where a two-game tier list does the most damage.
 
-    Three checks, and the third is the one that is easy to miss: a grid whose author supplied a pool
-    AND turned duplicates off needs at least as many games as it has slots, or it ships a grid nobody
-    can finish.
+    A THIRD CHECK LIVED HERE and went with the grid pool: duplicates-off needed a pool big enough to
+    fill every slot. It also needed `forbids_duplicates` passed IN rather than read off the row,
+    because one call may publish and flip the toggle together and the row still held the old value --
+    a stale read that refused `update_prompt(is_public=True, allow_duplicates=True)` with a message
+    about duplicates being off. Both the check and the parameter are gone: with the whole catalogue
+    behind every slot, no setting can make a grid unfillable.
     """
     if locked.is_closed:
         raise PromptError('This is closed to new answers. Reopen it before publishing.')
@@ -313,20 +320,6 @@ def _refuse_if_not_publishable(locked, *, forbids_duplicates=None):
             f'This one has {games}.'
         )
 
-    # A grid with an EMPTY pool is the open kind: respondents search the catalogue for each slot, so
-    # there is nothing to be short of. Only a supplied pool has to be big enough.
-    #
-    # `forbids_duplicates` IS PASSED IN rather than read off the row, because a single call may
-    # publish AND flip the toggle, and the row still holds the old value at this point. Reading it
-    # here refused `update_prompt(is_public=True, allow_duplicates=True)` -- a call whose entire
-    # purpose is turning duplicates ON -- with a message about duplicates being off. Splitting it into
-    # two calls succeeded, which is the signature of a stale read rather than a rule.
-    effective = locked.forbids_duplicates if forbids_duplicates is None else forbids_duplicates
-    if locked.shape == SHAPE_GRID and games and effective and games < rows:
-        raise PromptError(
-            f'With duplicates off, this needs at least as many games as slots: {rows} slots, '
-            f'{games} games.'
-        )
 
 
 def _lock_prompt(prompt):
@@ -428,6 +421,23 @@ def publish_blocker(prompt):
     except PromptError as exc:
         return str(exc)
     return None
+
+
+def _refuse_if_it_has_no_pool(locked):
+    """A grid's games come from whoever answers it, so it has no author pool to write to.
+
+    ON ALL THREE POOL WRITERS, not just `add_concept`. That is where this started, and it left
+    `remove_concept` and `reorder_games` open on a shape that is supposed to have nothing for them
+    to touch. Nothing in the schema forbids a `PromptGame` on a grid -- a shell, the admin or a
+    restored dump can make one -- and `remove_concept`'s other gate is the publish floor, which is
+    zero for a grid and short-circuits, so a stray row on a published, answered grid could be
+    removed and take other people's placements with it.
+    """
+    if not locked.takes_a_pool:
+        raise PromptError(
+            f'A {locked.get_shape_display().lower()} has no set list. '
+            'Whoever answers picks their own game for each slot.'
+        )
 
 
 def _require_owner(prompt, profile):
@@ -546,15 +556,10 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
     # PUBLISHING CLEARS A FLOOR. Checked before anything is written, so a call carrying a rename and
     # a publish lands neither if the floor is not met.
     if is_public is not None and is_public and not locked.is_public:
-        _refuse_if_not_publishable(
-            locked,
-            forbids_duplicates=(None if allow_duplicates is None
-                                else (locked.shape != SHAPE_GRID or not allow_duplicates)),
-        )
+        _refuse_if_not_publishable(locked)
 
-    # THE DUPLICATES TOGGLE, and the two rules around it. It is refused on a published grid because it
-    # changes what every existing answer is allowed to be; and turning it OFF against a supplied pool
-    # needs that pool to be able to fill every slot, or the author ships something unfinishable.
+    # THE DUPLICATES TOGGLE. Refused on a published grid, because it changes what every existing
+    # answer is allowed to be. The pool-size rule that used to sit beside that went with the pool.
     if allow_duplicates is not None:
         if locked.shape != SHAPE_GRID:
             raise PromptError('Only a grid has that setting.')
@@ -564,14 +569,7 @@ def update_prompt(prompt, profile, *, title=None, description=None, is_public=No
                 'nobody has answered.'
             )
         if not allow_duplicates:
-            games = PromptGame.objects.filter(prompt=locked).count()
-            rows = PromptBucket.objects.filter(prompt=locked).count()
-            if games and games < rows:
-                raise PromptError(
-                    f'With duplicates off, this needs at least as many games as slots: {rows} '
-                    f'slots, {games} games.'
-                )
-            # AND NO ANSWER MAY ALREADY HOLD ONE, because the rewrite below flips those rows INTO the
+            # NO ANSWER MAY ALREADY HOLD ONE, because the rewrite below flips those rows INTO the
             # partial unique. Two of them then collide inside a bulk `.update()` and Postgres raises
             # IntegrityError -- a 500 past every `except PromptError`, with no message naming the slot
             # the author has to clear. The check the author needs is this one, said in words.
@@ -718,20 +716,13 @@ def add_concept(prompt, profile, concept):
 
     locked = _lock_prompt(prompt)
     _refuse_if_frozen(locked, act='pool_add')
-    # ADDING A POOL TO AN OPEN GRID IS A MODE CHANGE, NOT AN ADDITION. The grid's pool may grow --
-    # more choices is additive -- but the FIRST game turns an open grid into a pooled one, and every
-    # free pick already made becomes an answer nobody can edit: `place` refuses a free pick once a
-    # pool exists, and until this was caught `unplace` did too, so a hunter could not even take their
-    # own card back. The comment above once said "more choices breaks nothing"; for an open grid that
-    # was the one shape it broke.
-    if (locked.shape == SHAPE_GRID
-            and not PromptGame.objects.filter(prompt=locked).exists()
-            and PromptPlacement.objects.filter(
-                response__prompt=locked, concept__isnull=False).exists()):
-        raise PromptError(
-            'People have already picked their own games for this grid. Giving it a set list now '
-            'would strand their answers.'
-        )
+    # A GRID HAS NO POOL, ever (owner's call, 2026-09-19), and this guard is worth more than the
+    # mode-change guard it replaces. That one had to stop an author adding the FIRST game to a grid
+    # people had already answered, because doing so flipped the grid from open to pooled and stranded
+    # every free pick -- `place` refuses a free pick once a pool exists, and until it was caught
+    # `unplace` did too, so a hunter could not take their own card back. A shape with one mode cannot
+    # be flipped into the other.
+    _refuse_if_it_has_no_pool(locked)
     if PromptGame.objects.filter(prompt=locked, concept=concept).exists():
         raise PromptError('That game is already in here.')
 
@@ -772,6 +763,7 @@ def remove_concept(prompt, profile, game):
 
     locked = _lock_prompt(prompt)
     _refuse_if_frozen(locked, act='pool_remove')
+    _refuse_if_it_has_no_pool(locked)
     # A PUBLISHED PROMPT MAY NOT FALL BELOW THE FLOOR IT HAD TO CLEAR. A tier list is live by design,
     # which let its author empty a published, answered one to zero games: unanswerable, unpublishable
     # (somebody has answered) and undeletable (same reason). A terminal state reached one removal at a
@@ -816,6 +808,7 @@ def reorder_games(prompt, profile, game_ids):
     _require_owner(prompt, profile)
     locked = _lock_prompt(prompt)
     _refuse_if_frozen(locked, act='pool_order')
+    _refuse_if_it_has_no_pool(locked)
 
     try:
         wanted = [int(value) for value in game_ids]

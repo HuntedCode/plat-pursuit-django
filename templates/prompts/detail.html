@@ -168,8 +168,14 @@ deleted.{% endcomment %}
                 <span class="pp-pdet__visibility" data-pd-visibility
                       data-url="{% url 'prompt_update' prompt.id %}">
                     <span class="contents" data-pd-draft-state {% if prompt.is_public %}hidden{% endif %}>
-                        <button type="button" class="pp-cta" data-pd-publish
-                                {% if publish_blocker %}disabled{% endif %}>Publish</button>
+                        {% comment %}`aria-disabled`, NOT `disabled`. A disabled button leaves the tab
+                        order entirely, so a keyboard or screen-reader user cannot reach it to learn
+                        it is off -- and the reason sits in an unassociated sibling. This stays
+                        reachable, announces itself as disabled, and points at the reason;
+                        `wireVisibility` short-circuits the click.{% endcomment %}
+                        <button type="button" class="pp-cta{% if publish_blocker %} is-disabled{% endif %}"
+                                data-pd-publish aria-describedby="pd-publish-reason"
+                                aria-disabled="{% if publish_blocker %}true{% else %}false{% endif %}">Publish</button>
                     </span>
                     <span class="contents" data-pd-public-state {% if not prompt.is_public %}hidden{% endif %}>
                         <button type="button" class="pp-cta pp-cta--ghost" data-pd-unpublish>Unpublish</button>
@@ -189,7 +195,7 @@ deleted.{% endcomment %}
             {% comment %}A SWAP TARGET, re-rendered by the server after every add or remove so the
             reason (and the button's disabled state with it) never goes stale. `aria-live` so a
             screen reader hears "you can publish now" as it happens.{% endcomment %}
-            <div data-pd-publish-gate aria-live="polite"
+            <div id="pd-publish-reason" data-pd-publish-gate
                  data-refresh-url="{% url 'prompt_detail' prompt.id %}?part=publish">
                 {% include 'prompts/partials/detail_publish_gate.html' %}
             </div>
@@ -238,17 +244,26 @@ deleted.{% endcomment %}
             {% else %}The {% if is_grid %}slots{% else %}rows{% endif %} are fixed while this is published. Unpublish to change them.{% endif %}
         </p>
         {% endif %}
+
+        {% comment %}A GRID HAS NO POOL, so this is the only place the page says how it gets
+        answered. Stated where the slots are, because that is what a reader is looking at when the
+        question "where do the games come from" occurs to them.{% endcomment %}
+        {% if is_grid %}
+        <p class="pp-pdet__note">Whoever answers picks their own game for each slot.</p>
+        {% endif %}
     </section>
     {% endif %}
 
     {% comment %}── THE POOL ──
-    An OPEN GRID has none, and that is a state rather than an absence: the author asked the questions
-    and every respondent searches the catalogue for their own answers. Saying so is the most useful
-    thing on the page for somebody deciding whether to answer.{% endcomment %}
+    NOT DRAWN FOR A GRID, which has none: the author asks the questions and whoever answers picks
+    their own game for every slot. That is said once, under the slots, rather than as an empty panel
+    -- a "Games 0/0" card with nothing in it reads as something missing rather than as the point of
+    the shape.{% endcomment %}
+    {% if prompt.takes_a_pool %}
     <section class="scard pp-pdet__panel" data-pd-pool-panel>
         <header class="pp-pdet__panel-head">
             <h2 class="pp-pdet__panel-title">{% if is_poll %}Options{% else %}Games{% endif %}</h2>
-            <span class="pp-pdet__panel-count" data-pd-game-count>{{ pool|length }}{% if not is_open_grid %}/{{ max_games }}{% endif %}</span>
+            <span class="pp-pdet__panel-count" data-pd-game-count>{{ pool|length }}/{{ max_games }}</span>
         </header>
 
         {% if can_add_more_games %}
@@ -289,6 +304,7 @@ deleted.{% endcomment %}
             {% include 'prompts/partials/detail_pool.html' %}
         </div>
     </section>
+    {% endif %}
 
     {% comment %}── THE ANSWERS ──
     Read-only for now: the response editor is the next surface, and until it exists this panel's job is
@@ -321,7 +337,11 @@ deleted.{% endcomment %}
         {% endif %}
     </section>
 
-    {% if can_edit %}<p class="sr-only" aria-live="polite" data-pd-status></p>{% endif %}
+    {% comment %}THE PAGE'S ONE LIVE REGION. Rendered for a liker as well as an author: it used to be
+    `{% if can_edit %}`, but `wireLike` is wired for non-owners, so every announcement in a liker's
+    error path went to a null element -- and the toast container carries no `aria-live` either, which
+    made a failed like completely silent for a screen-reader user.{% endcomment %}
+    {% if can_edit or can_like %}<p class="sr-only" aria-live="polite" data-pd-status></p>{% endif %}
 </div>
 {% endblock %}
 

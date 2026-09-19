@@ -17,10 +17,14 @@ then coloured its own lines with `--pp-text-mute` and `--pp-text-dim`, which are
 (`input.css` sizes them for contrast against `bg-2`). Over a bright cover that is unreadable text on
 unreadable text. Everything set over the art is white-based here, and the scrim is rendered.
 
-THE MOSAIC IS OPTIONAL, though. An open grid has no pool -- the author asked the questions and every
+THE MOSAIC IS OPTIONAL, though. A grid has no pool -- the author asks the questions and every
 respondent picks their own games -- so it has no author-chosen art. That renders as a STATE with its
 own line, not a broken mosaic: "they pick the games" is information, and it is the most useful thing
 to know about a grid before opening it.
+
+A tier list or a poll can ALSO come back with no `cover_items`, when its first four games have no
+trophy list. That is missing art, not a different kind of prompt, which is why the line below is
+gated on the shape and not on the art.
 
 `cover_items` is attached by `prompts.services.covers.attach_cover_games`, two queries for the whole
 page. Never reach for art from here.{% endcomment %}
@@ -82,7 +86,13 @@ page. Never reach for art from here.{% endcomment %}
                     <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8z"/>
                 </svg>{{ prompt.like_count|intcomma }}
             </span>
-            {% if not prompt.cover_items %}
+            {% comment %}FROM THE SHAPE, not from missing cover art. This read `{% if not
+            cover_items %}`, and `cover_items` is also empty when the first four games simply have no
+            trophy list -- `cover_games_for`'s documented contract for a `PP_*` stub or a reassigned
+            game. So a TIER LIST or a POLL whose first four covers were missing announced "they pick
+            the games", which is false, and the `{% elif %}` hid its real game count at the same
+            time. The fact is free now that a grid is the one shape with no pool.{% endcomment %}
+            {% if not prompt.takes_a_pool %}
             <span class="pp-ptile__fact pp-ptile__fact--open">they pick the games</span>
             {% elif prompt.game_count %}
             <span class="pp-ptile__fact">{{ prompt.game_count|intcomma }} game{{ prompt.game_count|pluralize }}</span>

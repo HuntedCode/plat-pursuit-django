@@ -6,11 +6,16 @@ two pieces of hard-won discipline this needs -- one query regardless of input si
 `select_related('concept__igdb_match')` paired with `.defer('...raw_response')`, which is the ~30 KB
 IGDB blob behind the May 2026 web-server OOM.
 
-WHAT IS DIFFERENT HERE IS THE OPEN GRID. A list always has items; a prompt need not have a pool at
-all. An open grid's tile has no author-chosen art to show, and inventing some by reaching into its
-responses would be a per-viewer aggregate on a browse page -- the whale rule's exact shape. So it
-renders with no mosaic, and the tile treats that as a state rather than as missing data. When the
-tally lands there is a cheap cached answer available; until then the honest render is the empty one.
+WHAT IS DIFFERENT HERE IS THE GRID. A list always has items, and so do a tier list and a poll -- but
+a GRID has no author pool at all (owner's call, 2026-09-19), so it can never have author-chosen art.
+Inventing some by reaching into its responses would be a per-viewer aggregate on a browse page, the
+whale rule's exact shape. So a grid renders with no mosaic, and the tile treats that as a state
+rather than as missing data. When the tally lands there is a cheap cached answer available; until
+then the honest render is the empty one.
+
+THE TILE MUST NOT READ THIS BACKWARDS. An empty `cover_items` does NOT mean "a grid": a tier list
+whose first four games have no trophy list comes back empty too, which is `cover_games_for`'s stated
+contract. The tile asks the shape.
 """
 from gamelists.services.covers import cover_games_for
 from prompts.models import PromptGame

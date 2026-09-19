@@ -404,16 +404,16 @@ def test_a_placement_points_at_exactly_one_thing_in_the_database_too():
                                            single_slot=True, no_duplicates=True)
 
 
-def test_a_grids_pool_cap_can_always_cover_its_slots():
-    """A grid with duplicates OFF needs at least as many pool games as slots -- `create_prompt`
-    refuses to publish one that cannot fill itself. So if the pool cap ever fell below the slot cap,
-    that combination would become unpublishable by construction: legal to build, impossible to ship,
-    with the refusal naming two numbers the author cannot reconcile.
+def test_a_grid_has_no_pool_cap_because_it_has_no_pool():
+    """A grid is answered out of the whole catalogue, so there is no author pool to bound.
 
-    Written when the slot cap went 12 -> 36 (owner's call, 2026-09-19), because that change moved one
-    of these two numbers toward the other for the first time.
+    THIS REPLACES A TEST WRITTEN THREE HOURS EARLIER, which pinned that the pool cap stayed at or
+    above the slot cap -- the invariant behind "with duplicates off you need enough games to fill
+    every slot". That rule is gone with the grid pool, so the invariant it protected is gone too.
+    Zero is asserted rather than the key being deleted: every other shape looks itself up here, and a
+    missing key would be a KeyError at a call site instead of an honest nothing.
     """
-    assert MAX_GAMES_PER_PROMPT[SHAPE_GRID] >= MAX_BUCKETS_PER_PROMPT[SHAPE_GRID]
+    assert MAX_GAMES_PER_PROMPT[SHAPE_GRID] == 0
 
 
 def test_the_grids_slot_cap_is_its_column_ceiling_squared():

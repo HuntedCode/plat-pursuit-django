@@ -45,7 +45,6 @@ from prompts.models import (
     MAX_PLACEMENTS_PER_RESPONSE,
     SHAPE_GRID,
     Prompt,
-    PromptGame,
     PromptPlacement,
     PromptResponse,
 )
@@ -124,15 +123,6 @@ def _lock_response(response):
 
 # ── placing ──────────────────────────────────────────────────────────────────────────────────────
 
-def _has_pool(prompt):
-    """Did the author supply a set of games, or is this open?
-
-    Read from ROWS rather than from `game_count`, because it decides whether a free pick is allowed
-    and a drifted counter must never be what opens or closes that door.
-    """
-    return PromptGame.objects.filter(prompt=prompt).exists()
-
-
 def _as_pk(value, *, what):
     """Coerce an incoming id, or refuse it.
 
@@ -156,13 +146,14 @@ def _resolve_card(prompt, *, game_id, concept_pk, allow_free_pick=True):
     picker off a game page would hand in `'PP_4821'` and get a `ValueError` 500. The parameter wants
     the primary key and now says so.
 
-    TWO IDENTITIES, ONE PLACEMENT. A pooled prompt's card is a `PromptGame` -- the integrity target
-    that makes an author's removal cascade correctly. An OPEN GRID has no pool at all: the author sets
-    the questions and every respondent searches the whole catalogue, so their card is a `Concept` and
-    there is nothing for it to be integral to.
+    TWO IDENTITIES, ONE PLACEMENT, and which one is decided by the SHAPE. A tier list's or a poll's
+    card is a `PromptGame` -- the integrity target that makes an author's removal cascade correctly.
+    A GRID has no pool at all: the author sets the questions and every respondent searches the whole
+    catalogue, so their card is a `Concept` and there is nothing for it to be integral to.
 
-    The free pick is allowed ONLY on a grid with an empty pool. A grid whose author supplied games is
-    limited to those games, which is the author's whole reason for supplying them.
+    THE FREE PICK IS ALLOWED ON A GRID, full stop. A grid has no author pool (owner's call,
+    2026-09-19), so there is no "limited to those games" case left; this docstring said there was
+    while the code twelve lines down said otherwise.
 
     `allow_free_pick=False` SKIPS THAT LEGALITY CHECK, and exists for withdrawal. See `unplace`.
     """
@@ -175,11 +166,12 @@ def _resolve_card(prompt, *, game_id, concept_pk, allow_free_pick=True):
             raise PromptError('That game is not in this one.')
         return {'prompt_game': game, 'concept': None}
 
-    if allow_free_pick:
-        if prompt.shape != SHAPE_GRID:
-            raise PromptError('This one has its own set of games to choose from.')
-        if _has_pool(prompt):
-            raise PromptError('This grid has its own set of games to choose from.')
+    # SHAPE ALONE DECIDES, since a grid has no pool to be restricted by (owner's call, 2026-09-19).
+    # This used to ask `_has_pool` as well, and that second question was the expensive one: it made a
+    # free pick legal or illegal depending on a row count that an author could change underneath a
+    # respondent mid-answer. A grid is open; a tier list and a poll are not.
+    if allow_free_pick and prompt.shape != SHAPE_GRID:
+        raise PromptError('This one has its own set of games to choose from.')
     concept = Concept.objects.filter(pk=_as_pk(concept_pk, what='game')).first()
     if concept is None:
         raise PromptError('That game could not be found.')
@@ -308,9 +300,13 @@ def unplace(prompt, profile, *, game_id=None, concept_pk=None, bucket_id=None):
 
     # `allow_free_pick=False`, because TAKING YOUR OWN CARD BACK IS NEVER REFUSED and this routed
     # through the check that decides whether a free pick may be MADE. An author adding one game to a
-    # published open grid flipped `_has_pool`, and every hunter who had already free-picked was then
-    # unable to remove their own card -- a structural refusal doing what no gate is allowed to do.
-    # Their only escape was `clear()`, which destroys the whole answer.
+    # published open grid used to flip that answer, and every hunter who had already free-picked was
+    # then unable to remove their own card -- a structural refusal doing what no gate is allowed to
+    # do, with `clear()` (which destroys the whole answer) as the only escape.
+    #
+    # THAT STATE IS NOW UNREACHABLE: a grid has no pool, so nothing can flip mid-answer. The argument
+    # stays because the principle is not about grids -- a removal must never consult a rule about what
+    # may be ADDED, whatever makes that rule change.
     ident = _resolve_card(prompt, game_id=game_id, concept_pk=concept_pk, allow_free_pick=False)
 
     response = response_for(prompt, profile)

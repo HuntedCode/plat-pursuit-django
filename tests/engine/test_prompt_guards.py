@@ -10,7 +10,7 @@ suite green.
 import pytest
 
 from prompts.models import (MIN_GAMES_TO_PUBLISH, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, Prompt,
-                            PromptGame, PromptPlacement)
+                            PromptGame, PromptPlacement, PromptResponse)
 from prompts.services import prompt_service as svc
 from prompts.services import response_service as rsvc
 from tests.factories import ConceptFactory, ProfileFactory
@@ -31,16 +31,21 @@ def _poll(owner, options=3, public=True):
     return poll, pool, poll.buckets.get()
 
 
-def _grid(owner, *, slots=2, games=2, public=True, allow_duplicates=True):
+def _grid(owner, *, slots=2, picks=0, public=True, allow_duplicates=True):
+    """A grid, its slots, and some games to answer it WITH -- free picks, not a pool.
+
+    A grid has no author pool (owner's call, 2026-09-19), so the middle value is a list of plain
+    Concepts passed as `concept_pk`, never `PromptGame` rows.
+    """
     grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Pick one each',
                              allow_duplicates=allow_duplicates)
     for i in range(slots):
         svc.create_bucket(grid, owner, label=f'Best {i}')
-    pool = [svc.add_concept(grid, owner, ConceptFactory()) for _ in range(games)]
+    chosen = [ConceptFactory() for _ in range(picks)]
     if public:
         svc.update_prompt(grid, owner, is_public=True)
         grid.refresh_from_db()
-    return grid, pool, list(grid.buckets.order_by('position'))
+    return grid, chosen, list(grid.buckets.order_by('position'))
 
 
 def _tier(owner, public=True):
@@ -101,12 +106,14 @@ def test_an_author_cannot_strand_answers_by_giving_an_open_grid_a_pool():
     Two things now hold it: the author is refused, and withdrawal no longer consults that check at
     all."""
     owner = _hunter()
-    grid, _pool, slots = _grid(owner, games=0)
+    grid, _picks, slots = _grid(owner)
     answerer = _hunter('answerer')
     chosen = ConceptFactory()
     rsvc.place(grid, answerer, concept_pk=chosen.pk, bucket_id=slots[0].pk)
 
-    with pytest.raises(svc.PromptError):
+    # `match`, because TWO guards can raise here: the shape refusal and the size cap (a grid's cap
+    # is zero, so `0 >= 0`). Without it, deleting the shape rule left this green.
+    with pytest.raises(svc.PromptError, match='set list'):
         svc.add_concept(grid, owner, ConceptFactory())
     grid.refresh_from_db()
     assert grid.game_count == 0
@@ -115,31 +122,42 @@ def test_an_author_cannot_strand_answers_by_giving_an_open_grid_a_pool():
 def test_a_card_can_always_be_taken_back_even_if_the_rules_changed_underneath_it():
     """The second half, pinned separately: `unplace` must not ask whether the card could be PLACED.
 
-    Reached here by giving the grid a pool directly, which is the state a data migration or a shell
-    could still produce even though the service now refuses it."""
+    ON A TIER LIST, and that is the whole point of the rewrite. This used to run on a grid with a
+    pool row bolted on by hand -- and once the grid pool went away, `_resolve_card` stopped consulting
+    `PromptGame` on the free-pick branch at all, so the bolted-on row became inert and the test went
+    vacuous: flipping `unplace`'s `allow_free_pick=False` to True killed nothing.
+
+    A free-pick placement on a POOLED shape is the state where the argument is still observable. It
+    is not reachable through the service -- which is the point: it is what a shell, the admin or a
+    restored dump can leave behind, and withdrawal must work on it anyway. With `allow_free_pick=True`
+    this raises "This one has its own set of games to choose from", which is a place-time rule
+    refusing a removal: precisely the failure this test exists for.
+    """
     owner = _hunter()
-    grid, _pool, slots = _grid(owner, games=0)
+    tier, _pool, slots = _tier(owner)
     answerer = _hunter('answerer')
     chosen = ConceptFactory()
-    rsvc.place(grid, answerer, concept_pk=chosen.pk, bucket_id=slots[0].pk)
 
-    PromptGame.objects.create(prompt=grid, concept=ConceptFactory(), position=0)
+    response = PromptResponse.objects.create(prompt=tier, profile=answerer, placement_count=1)
+    PromptPlacement.objects.create(response=response, bucket=slots[0], prompt_game=None,
+                                   concept=chosen, single_slot=tier.is_single_slot,
+                                   no_duplicates=tier.forbids_duplicates, position=0)
 
-    rsvc.unplace(grid, answerer, concept_pk=chosen.pk)
-    assert rsvc.response_for(grid, answerer).placements.count() == 0
+    rsvc.unplace(tier, answerer, concept_pk=chosen.pk)
+    assert rsvc.response_for(tier, answerer).placements.count() == 0
 
 
 def test_removing_one_copy_leaves_the_others_where_they_are():
     """`unplace`'s `bucket_id` narrowing. A grid may hold the same game in three slots; tapping remove
     on one of them must not empty the other two."""
     owner = _hunter()
-    grid, pool, slots = _grid(owner, slots=3, games=2)
+    grid, picks, slots = _grid(owner, slots=3, picks=1)
     answerer = _hunter('answerer')
     for slot in slots:
-        rsvc.place(grid, answerer, game_id=pool[0].pk, bucket_id=slot.pk)
+        rsvc.place(grid, answerer, concept_pk=picks[0].pk, bucket_id=slot.pk)
     assert rsvc.response_for(grid, answerer).placements.count() == 3
 
-    rsvc.unplace(grid, answerer, game_id=pool[0].pk, bucket_id=slots[1].pk)
+    rsvc.unplace(grid, answerer, concept_pk=picks[0].pk, bucket_id=slots[1].pk)
 
     response = rsvc.response_for(grid, answerer)
     assert response.placements.count() == 2
@@ -147,7 +165,7 @@ def test_removing_one_copy_leaves_the_others_where_they_are():
     assert response.placement_count == 2
 
     # ...and with no bucket named, every copy comes back.
-    rsvc.unplace(grid, answerer, game_id=pool[0].pk)
+    rsvc.unplace(grid, answerer, concept_pk=picks[0].pk)
     assert rsvc.response_for(grid, answerer).placements.count() == 0
 
 
@@ -209,9 +227,9 @@ def test_turning_duplicates_off_is_refused_rather_than_crashing():
 
     The author needs a refusal in words, which is what this now is."""
     owner = _hunter()
-    grid, pool, slots = _grid(owner, slots=3, games=3, public=False)
-    rsvc.place(grid, owner, game_id=pool[0].pk, bucket_id=slots[0].pk)
-    rsvc.place(grid, owner, game_id=pool[0].pk, bucket_id=slots[1].pk)
+    grid, picks, slots = _grid(owner, slots=3, picks=1, public=False)
+    rsvc.place(grid, owner, concept_pk=picks[0].pk, bucket_id=slots[0].pk)
+    rsvc.place(grid, owner, concept_pk=picks[0].pk, bucket_id=slots[1].pk)
 
     with pytest.raises(svc.PromptError) as caught:
         svc.update_prompt(grid, owner, allow_duplicates=False)
@@ -224,9 +242,14 @@ def test_turning_duplicates_off_is_refused_rather_than_crashing():
 def test_publishing_and_turning_duplicates_on_in_one_call_is_not_refused():
     """The floor read `forbids_duplicates` off the row while the same call was changing it, so a call
     whose entire purpose was turning duplicates ON was refused with a message about them being off.
-    Splitting it in two succeeded -- the signature of a stale read rather than a rule."""
+    Splitting it in two succeeded -- the signature of a stale read rather than a rule.
+
+    THE STALE READ IS NOW UNREACHABLE: the floor check that consulted the flag went with the grid
+    pool, so `_refuse_if_not_publishable` no longer takes it as a parameter. This is kept as a
+    regression test for the combined call, which must still land both changes in one go.
+    """
     owner = _hunter()
-    grid, _pool, _slots = _grid(owner, slots=9, games=3, public=False, allow_duplicates=False)
+    grid, _picks, _slots = _grid(owner, slots=9, public=False, allow_duplicates=False)
 
     svc.update_prompt(grid, owner, is_public=True, allow_duplicates=True)
 
@@ -244,14 +267,14 @@ def test_an_answer_cannot_land_on_a_prompt_that_was_just_unpublished():
     because deletion is refused once anybody else has answered -- the author locked out of a prompt
     they had already taken down."""
     owner = _hunter()
-    grid, pool, slots = _grid(owner)
+    grid, picks, slots = _grid(owner, picks=1)
     stranger = _hunter('stranger')
     stale = Prompt.objects.get(pk=grid.pk)          # the stranger's page, rendered while public
 
     svc.update_prompt(grid, owner, is_public=False)
 
     with pytest.raises(svc.PromptError):
-        rsvc.place(stale, stranger, game_id=pool[0].pk, bucket_id=slots[0].pk)
+        rsvc.place(stale, stranger, concept_pk=picks[0].pk, bucket_id=slots[0].pk)
 
     # ...and the author can still take it away, because nobody else got in.
     svc.delete_prompt(grid, owner)
@@ -359,27 +382,54 @@ def test_a_free_pick_can_be_printed():
     an AttributeError in the admin changelist, in any traceback's repr, and in any message built from
     the object."""
     owner = _hunter()
-    grid, _pool, slots = _grid(owner, games=0)
+    grid, _pool, slots = _grid(owner)
     chosen = ConceptFactory(unified_title='Hollow Knight')
     placement = rsvc.place(grid, _hunter('answerer'), concept_pk=chosen.pk, bucket_id=slots[0].pk)
 
     assert 'Hollow Knight' in str(placement)
 
 
-def test_the_bucket_order_of_a_tier_list_and_a_grid_can_still_be_rearranged():
+def test_the_pool_order_of_a_tier_list_can_still_be_rearranged():
     """`pool_order` is frozen only for a poll. `reorder_games` exists because the pool's first four
-    rows are the browse tile's cover mosaic, so silently freezing it on the two shapes that are
-    allowed it would take away the only control over how a prompt presents itself."""
+    rows are the browse tile's cover mosaic, so silently freezing it on a shape that is allowed it
+    would take away the only control over how a prompt presents itself.
+
+    THE GRID HALF IS GONE, and it was `[] == []`. `_grid` stopped returning `PromptGame` rows when
+    the grid pool did, so it reordered an empty list and compared two empty lists -- green whatever
+    `reorder_games` did. The behaviour it named is not merely untested now, it is unreachable: a grid
+    cannot hold a pool row. What a grid should do instead is refuse, which the test below asserts.
+    """
     owner = _hunter()
     tier, tpool, _ = _tier(owner)
     svc.reorder_games(tier, owner, [g.pk for g in reversed(tpool)])
     assert list(tier.games.order_by('position').values_list('pk', flat=True)) == [
         g.pk for g in reversed(tpool)]
 
-    grid, gpool, _ = _grid(_hunter('gridowner'))
-    svc.reorder_games(grid, grid.owner, [g.pk for g in reversed(gpool)])
-    assert list(grid.games.order_by('position').values_list('pk', flat=True)) == [
-        g.pk for g in reversed(gpool)]
+
+def test_every_pool_writer_refuses_a_shape_with_no_pool():
+    """ALL THREE DOORS, not just the one. "A grid has no pool" went in as a refusal inside
+    `add_concept`, and `remove_concept` / `reorder_games` still accepted a grid.
+
+    That was not theoretical. Nothing in the SCHEMA forbids a `PromptGame` on a grid -- a shell, the
+    admin or a restored dump can write one -- and `remove_concept`'s other gate is the publish floor,
+    which is zero for a grid and short-circuits. So a stray pool row on a PUBLISHED, ANSWERED grid
+    could be removed, cascading `PromptPlacement` rows out of other people's answers: exactly what
+    freezing `pool_remove` used to prevent before that entry was dropped.
+
+    Driven through the shell-made state the guard exists for, not through the service.
+    """
+    owner = _hunter()
+    grid, _picks, _slots = _grid(owner, public=False)
+    stray = PromptGame.objects.create(prompt=grid, concept=ConceptFactory(), position=0)
+
+    with pytest.raises(svc.PromptError, match='set list'):
+        svc.add_concept(grid, owner, ConceptFactory())
+    with pytest.raises(svc.PromptError, match='set list'):
+        svc.remove_concept(grid, owner, stray)
+    with pytest.raises(svc.PromptError, match='set list'):
+        svc.reorder_games(grid, owner, [stray.pk])
+
+    assert PromptGame.objects.filter(pk=stray.pk).exists(), 'the stray row was removed anyway'
 
 
 def test_editing_a_bucket_bumps_the_prompt():

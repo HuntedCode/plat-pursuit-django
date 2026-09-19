@@ -36,17 +36,32 @@ def _restrict(profile):
                                    reason='testing', created_by_label='Admin')
 
 
-def _built(owner, shape=SHAPE_TIER, games=3, public=True, allow_duplicates=True):
-    """A prompt with a pool, published the way an author would publish it.
+def _card(prompt, card):
+    """`game_id=` for a pooled shape, `concept_pk=` for a grid's free pick. See `_built`."""
+    return ({'concept_pk': card.pk} if prompt.shape == SHAPE_GRID else {'game_id': card.pk})
 
-    Built BEFORE publishing, because every shape now has a floor to clear and a grid starts with no
-    slots at all. `games=0` gives an open grid: no pool, and respondents pick from the catalogue.
+
+def _built(owner, shape=SHAPE_TIER, games=3, public=True, allow_duplicates=True):
+    """A prompt and the cards an answer is made of, published the way an author would publish it.
+
+    Built BEFORE publishing, because every shape has a floor to clear and a grid starts with no slots
+    at all.
+
+    WHAT THE MIDDLE VALUE IS DEPENDS ON THE SHAPE. A tier list and a poll have an author pool, so it
+    is a list of `PromptGame` rows, placed with `game_id`. A GRID HAS NO POOL (owner's call,
+    2026-09-19): every slot is answered out of the whole catalogue, so it is a list of plain Concepts,
+    placed with `concept_pk`. `_card_kwarg` below keeps call sites from having to remember which.
     """
     prompt = psvc.create_prompt(owner, shape=shape, title='Rank them',
                                 allow_duplicates=allow_duplicates)
     if shape == SHAPE_GRID:
         for label in ('Best combat', 'Best story'):
             psvc.create_bucket(prompt, owner, label=label)
+        pool = [ConceptFactory() for _ in range(games)]
+        if public:
+            psvc.update_prompt(prompt, owner, is_public=True)
+            prompt.refresh_from_db()
+        return prompt, pool, list(prompt.buckets.order_by('position'))
     need = max(games, MIN_GAMES_TO_PUBLISH[shape]) if public else games
     pool = [psvc.add_concept(prompt, owner, ConceptFactory()) for _ in range(need)]
     if public:
@@ -72,7 +87,8 @@ def test_the_flag_is_taken_from_the_prompt_and_never_from_a_caller():
     for shape, expected in ((SHAPE_TIER, False), (SHAPE_POLL, True), (SHAPE_GRID, True)):
         prompt, pool, buckets = _built(_hunter(f'owner-{shape}'), shape=shape, games=2)
         answerer = _hunter(f'answerer-{shape}')
-        placement = svc.place(prompt, answerer, game_id=pool[0].pk, bucket_id=buckets[0].pk)
+        placement = svc.place(prompt, answerer, bucket_id=buckets[0].pk,
+                              **_card(prompt, pool[0]))
         assert placement.single_slot is expected, f'{shape} wrote the wrong flag'
 
 
@@ -150,13 +166,13 @@ def test_filling_an_occupied_grid_slot_returns_the_occupant_to_the_tray():
     combat = buckets[0]
     answerer = _hunter('answerer')
 
-    svc.place(grid, answerer, game_id=pool[0].pk, bucket_id=combat.pk)
-    svc.place(grid, answerer, game_id=pool[1].pk, bucket_id=combat.pk)
+    svc.place(grid, answerer, concept_pk=pool[0].pk, bucket_id=combat.pk)
+    svc.place(grid, answerer, concept_pk=pool[1].pk, bucket_id=combat.pk)
 
     response = svc.response_for(grid, answerer)
-    assert [p.prompt_game_id for p in response.placements.all()] == [pool[1].pk]
-    # ...and the evicted game can go somewhere else, because it never left the pool.
-    svc.place(grid, answerer, game_id=pool[0].pk, bucket_id=buckets[1].pk)
+    assert [p.concept_id for p in response.placements.all()] == [pool[1].pk]
+    # ...and the evicted game can go somewhere else: being unplaced never took it off the table.
+    svc.place(grid, answerer, concept_pk=pool[0].pk, bucket_id=buckets[1].pk)
     assert response.placements.count() == 2
 
 

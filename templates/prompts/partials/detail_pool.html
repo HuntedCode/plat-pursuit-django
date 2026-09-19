@@ -16,8 +16,7 @@ destroy the results panel the hunter is still picking from.{% endcomment %}
 {% include 'prompts/partials/detail_game.html' %}
 {% empty %}
 <p class="pp-pdet__empty" data-pd-pool-empty>
-    {% if is_open_grid %}This one is open: whoever answers picks their own games for every slot.
-    {% elif is_poll %}No options yet. A poll needs at least two.
+    {% if is_poll %}No options yet. A poll needs at least two.
     {% else %}No games yet. Add the ones people will be sorting.{% endif %}
 </p>
 {% endfor %}

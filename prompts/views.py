@@ -148,7 +148,7 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
         context = super().get_context_data(**kwargs)
         prompts = context['prompts']
 
-        # The mosaic, in two queries for the whole page. An open grid comes back with an empty
+        # The mosaic, in two queries for the whole page. A grid comes back with an empty
         # `cover_items` and the tile renders that as a state -- see `prompts/services/covers.py`.
         attach_cover_games(prompts)
 
@@ -272,8 +272,21 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
         'publish': 'prompts/partials/detail_publish_gate.html',
     }
 
+    def _part(self):
+        """Which fragment was asked for, or None for the whole page.
+
+        A SHAPE WITH NO POOL DOES NOT SERVE THE POOL FRAGMENT. The panel is not rendered for a grid,
+        but the fragment URL stayed live and answered with the tier list's empty copy -- "No games
+        yet. Add the ones people will be sorting." -- to anybody who could read the prompt. A route
+        nothing links to is still a route.
+        """
+        part = self.request.GET.get('part')
+        if part == 'pool' and not self.object.takes_a_pool:
+            return None
+        return part if part in self.FRAGMENTS else None
+
     def get_template_names(self):
-        return [self.FRAGMENTS.get(self.request.GET.get('part')) or self.template_name]
+        return [self.FRAGMENTS.get(self._part()) or self.template_name]
 
     def _viewer(self):
         if not self.request.user.is_authenticated:
@@ -326,10 +339,14 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
         # no rule: it must not know that a poll freezes or that a draft never does, because that
         # knowledge in a template is a copy of the rule that no test will ever fail.
         frozen = svc.frozen_acts(prompt)
+        # `takes_a_pool` on every pool flag, because the three pool writers now refuse a shape that
+        # has none -- so without it `can_remove_games` was True on a published grid, an affordance
+        # contradicting the rule behind it.
+        pooled = prompt.takes_a_pool
         context['can_edit_rows'] = context['can_edit'] and 'rows' not in frozen
-        context['can_add_games'] = context['can_edit'] and 'pool_add' not in frozen
-        context['can_remove_games'] = context['can_edit'] and 'pool_remove' not in frozen
-        context['can_reorder_pool'] = context['can_edit'] and 'pool_order' not in frozen
+        context['can_add_games'] = pooled and context['can_edit'] and 'pool_add' not in frozen
+        context['can_remove_games'] = pooled and context['can_edit'] and 'pool_remove' not in frozen
+        context['can_reorder_pool'] = pooled and context['can_edit'] and 'pool_order' not in frozen
         context['can_edit_question'] = context['can_edit'] and 'question' not in frozen
         # Only meaningful to an author looking at a draft; computed only then, because it runs two
         # COUNTs and a reader can do nothing with the answer.
@@ -342,11 +359,10 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
         context['is_tier'] = prompt.shape == SHAPE_TIER
         context['is_grid'] = prompt.shape == SHAPE_GRID
         context['is_poll'] = prompt.shape == SHAPE_POLL
-        # An OPEN grid -- no pool -- is a different page: respondents search the catalogue per slot,
-        # so there is no pool panel to draw and no tray to drag from. Derived from the pool being
-        # empty rather than stored, which is the same derivation `_has_pool` makes in the response
-        # service, so the two cannot disagree about which kind of grid this is.
-        context['is_open_grid'] = context['is_grid'] and not pool
+        # `is_open_grid` stood here and is gone with the thing it distinguished. A grid used to be
+        # open OR pooled depending on whether the author had added games, and this page had to tell
+        # them apart; every grid is open now, so `is_grid` IS the answer and a second name for it
+        # would only be somewhere for the two to disagree.
 
         context['max_games'] = MAX_GAMES_PER_PROMPT[prompt.shape]
         context['max_buckets'] = MAX_BUCKETS_PER_PROMPT[prompt.shape]

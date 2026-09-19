@@ -3929,6 +3929,24 @@ function postJson(url, body) {
             throw err;
         }
         return data;
+    }, function (err) {
+        // THE SERVER'S OWN WORDS, RECOVERED. `API.request` throws `API request failed: 400` WITHOUT
+        // READING THE BODY, so every caller that showed `err.message` showed that string -- and the
+        // refusals on the other side are written for the hunter ("a tier list needs at least 5 games
+        // before it goes up. This one has 3", "That is the most rows one can have"). All of it was
+        // being thrown away and replaced with a status code. Found by an audit, not by review: the
+        // happy path looks identical either way.
+        //
+        // Read here rather than in `API.request`, which every page on the site shares and whose
+        // contract changing is its own decision. The body can only be read once, and nothing
+        // downstream of this reads it.
+        if (!err || !err.response || typeof err.response.json !== 'function') { throw err; }
+        return err.response.json().then(function (payload) {
+            if (payload && payload.error) { err.message = payload.error; }
+            throw err;
+        }, function () {
+            throw err;          // not JSON (an HTML error page): keep the status-code message
+        });
     });
 }
 

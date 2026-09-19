@@ -6,7 +6,12 @@ while every add reloaded the page. Once adds refreshed only their own panel, it 
 kept saying "Add at least one row" with the Publish button disabled after the author had added slots,
 because nothing asked the question again.
 
-Empty when there is nothing blocking. The Publish button's `disabled` follows whether this has any
-text, so the rule itself stays in `prompt_service.publish_blocker` and the client only reflects the
-server's answer.{% endcomment %}
+Empty when there is nothing blocking. The Publish button's `aria-disabled` follows whether this has
+any text, so the rule itself stays in `prompt_service.publish_blocker` and the client only reflects
+the server's answer.
+
+NOT AN `aria-live` REGION, though it was one at first. The transition worth hearing is reason ->
+EMPTY ("you can publish now"), and emptying a live region announces nothing: `aria-relevant` defaults
+to additions/text. So the only direction it could announce was the one that matters least. The JS
+announces both through the page's own status line instead.{% endcomment %}
 {% if publish_blocker %}<p class="pp-pdet__blocker" data-pd-blocker>{{ publish_blocker }}</p>{% endif %}

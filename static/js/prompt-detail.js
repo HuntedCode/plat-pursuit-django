@@ -89,12 +89,42 @@
         if (el) { el.textContent = value; }
     }
 
+    /**
+     * Take focus somewhere sensible before removing the element that currently holds it.
+     *
+     * Deleting the row or card a Delete button lives in drops focus to `<body>`, so a keyboard user
+     * working down a 36-slot grid loses their place on every deletion. The rest of this file is
+     * careful about focus (the editor restores it to the pencil, the row adder refocuses its field);
+     * the two removal paths were not.
+     */
+    function focusAfterRemoving(element) {
+        var next = element.nextElementSibling || element.previousElementSibling;
+        var target = next || element.parentElement;
+        if (!target) { return; }
+        // A container is not focusable by default; `tabindex="-1"` makes it focusable by script only,
+        // which is what a "you are here now" landing spot wants.
+        if (!next) { target.setAttribute('tabindex', '-1'); }
+        var control = next ? next.querySelector('button, [href], input, select') : null;
+        (control || target).focus();
+    }
+
     /* ------------------------------------------------------------- partial refresh ---- */
 
-    //: One per panel, so a slow refresh of the pool cannot be superseded by a fast one and then land
-    //: last. Two quick adds issue two independent GETs and the older response can arrive second,
-    //: repainting the panel with a game that is already gone.
-    var refreshSeq = { pool: 0, rows: 0 };
+    //: SERIALISED PER PANEL, one chain each, because a sequence NUMBER cannot do this job here.
+    //:
+    //: The first cut bumped a counter and checked it in `.then`, copying the list page. That guard
+    //: cannot prevent what it claims to: htmx performs the swap INSIDE the request handler and
+    //: resolves its promise afterwards, so by the time the check runs the stale response is already
+    //: in the DOM. It suppressed the stale `armDrag` and nothing else. Two quick adds -- the exact
+    //: workflow the fragment route exists to enable -- could leave five cards under a header reading
+    //: six. Found by an audit; the list page has the same flaw and the same misleading comment.
+    //:
+    //: Chaining removes the overlap rather than trying to detect it: two requests for one panel can
+    //: no longer be in flight together, so a late response cannot exist. It costs one round trip of
+    //: latency on a burst, which is invisible next to being wrong.
+    var refreshChain = { pool: Promise.resolve(), rows: Promise.resolve() };
+    //: The publish gate's own chain, same reasoning. See `refreshPublishGate`.
+    var gateChain = Promise.resolve();
 
     /**
      * Re-render ONE panel from the server.
@@ -116,22 +146,37 @@
      */
     function refreshPanel(which) {
         var panel = root.querySelector(which === 'pool' ? '[data-pd-pool]' : '[data-pd-rows]');
-        if (!panel || !window.htmx) { return Promise.resolve(); }
+        if (!panel) { return Promise.resolve(); }
+        if (!window.htmx) {
+            // htmx ships on every page, so this is unreachable -- but returning a RESOLVED promise
+            // would have the caller clear its field and announce success over an unchanged panel.
+            return Promise.reject(new Error('htmx is not loaded'));
+        }
 
-        var mine = ++refreshSeq[which];
-        var before = panel.firstElementChild;
-        return window.htmx
-            .ajax('GET', panel.dataset.refreshUrl, { target: panel, swap: 'innerHTML' })
-            .then(function () {
-                if (mine !== refreshSeq[which]) { return; }
-                if (panel.firstElementChild === before) {
-                    throw new Error(which + ' panel did not swap');
-                }
-                // The fresh nodes have no Sortable on them and the panel may have crossed the
-                // one-item threshold in either direction, so the drag is re-armed against what is
-                // actually there now.
-                armDrag(which);
-            });
+        // Queued behind whatever is already refreshing this panel. `.catch` keeps one failure from
+        // poisoning the chain for every refresh after it.
+        var run = refreshChain[which].catch(function () {}).then(function () {
+            var before = panel.firstElementChild;
+            return window.htmx
+                .ajax('GET', panel.dataset.refreshUrl, { target: panel, swap: 'innerHTML' })
+                .then(function () {
+                    // A RESOLVED PROMISE IS NOT EVIDENCE OF A SWAP. htmx resolves for every HTTP
+                    // status -- only a network error, an abort or a timeout rejects -- and its
+                    // `responseHandling` maps 4xx/5xx to `swap: false`. So a 500 resolves
+                    // successfully, never swaps, and leaves the count reading N+1 over a panel
+                    // showing N. An `innerHTML` swap always builds new nodes, so an unchanged first
+                    // child means nothing landed.
+                    if (panel.firstElementChild === before) {
+                        throw new Error(which + ' panel did not swap');
+                    }
+                    // The fresh nodes have no Sortable on them and the panel may have crossed the
+                    // one-item threshold in either direction, so the drag is re-armed against what
+                    // is actually there now.
+                    armDrag(which);
+                });
+        });
+        refreshChain[which] = run;
+        return run;
     }
 
     /**
@@ -147,14 +192,24 @@
      *
      * `fetch` rather than `htmx.ajax`, because an EMPTY answer is a real answer here ("nothing blocks
      * you") and the node-identity swap proof `refreshPanel` uses cannot tell an empty swap from none.
-     * So the response is checked directly: not ok, or redirected to a login page, is a failure and
-     * leaves the previous state alone. A stale hint is safe either way -- the endpoint still refuses.
+     * So the response is checked directly: not ok, or redirected to a login page, is a failure.
+     *
+     * SERIALISED, like the panels, and for a sharper reason. Add a fifth game to a tier list and
+     * immediately remove one: the add's answer ("nothing blocks you") can land after the remove's
+     * ("needs at least 5 games"), leaving Publish ENABLED with no reason shown on a prompt below the
+     * floor. The press is still refused by the transaction, so this was never a way to publish
+     * something unready -- but it is exactly the staleness this whole mechanism exists to remove.
+     *
+     * A FAILURE IS NOT SILENT. It used to log to the console only, which left an author under a
+     * stale reason with no hint that reloading would help. Safe, because the endpoint still refuses;
+     * not usable, which is a different bar.
      */
     function refreshPublishGate() {
         var gate = root.querySelector('[data-pd-publish-gate]');
         if (!gate) { return Promise.resolve(); }      // published, or not the author: nothing to gate
         var button = root.querySelector('[data-pd-publish]');
 
+        gateChain = gateChain.catch(function () {}).then(function () {
         return fetch(gate.dataset.refreshUrl, {
             credentials: 'same-origin',
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -166,10 +221,28 @@
                 return response.text();
             })
             .then(function (html) {
+                var was = gate.textContent.trim();
                 gate.innerHTML = html;
-                if (button) { button.disabled = gate.textContent.trim() !== ''; }
+                var now = gate.textContent.trim();
+                // `aria-disabled`, not `disabled`: a disabled button leaves the tab order entirely,
+                // so a keyboard user cannot reach it to discover it is off, and the reason sits in an
+                // unassociated sibling. The click handler short-circuits instead -- see `wireVisibility`.
+                if (button) {
+                    button.setAttribute('aria-disabled', now !== '' ? 'true' : 'false');
+                    button.classList.toggle('is-disabled', now !== '');
+                }
+                // ANNOUNCED HERE rather than left to the live region. The transition that matters is
+                // reason -> EMPTY, and emptying an `aria-live` region announces nothing (`aria-relevant`
+                // defaults to additions/text), so the one direction worth hearing was silent.
+                if (was && !now) { announce('You can publish this now.'); }
+                else if (now && now !== was) { announce(now); }
             })
-            .catch(function (err) { logFailure('publish gate refresh', err); });
+            .catch(function (err) {
+                logFailure('publish gate refresh', err);
+                announce('Could not check whether this is ready to publish. Reload to be sure.');
+            });
+        });
+        return gateChain;
     }
 
     /**
@@ -185,7 +258,39 @@
         var adder = root.querySelector('[data-pd-adder]');
         if (!pool || !adder) { return; }
         var max = parseInt(pool.dataset.max, 10);
-        if (!isNaN(max)) { adder.hidden = total >= max; }
+        if (isNaN(max)) { return; }
+        var full = total >= max;
+        // FOCUS FIRST. Hiding an ancestor of the focused element drops focus to `<body>` -- and when
+        // the cap is hit by an add, focus is inside the adder (the input, or the "Add" row in the
+        // open results panel, which is a child of it).
+        if (full && !adder.hidden && adder.contains(document.activeElement)) {
+            var heading = root.querySelector('[data-pd-pool-panel] .pp-pdet__panel-title');
+            if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
+            announce('That is the most games this can hold.');
+        }
+        adder.hidden = full;
+    }
+
+    /**
+     * The same, for the row add form -- which had no equivalent at all.
+     *
+     * `can_add_rows` decided the form's existence at page load only, and the form lives outside the
+     * swapped fragment by design, so adding rows up to the cap left it on screen with every further
+     * submit refused. Reachable in one sitting now that a grid may have 36 slots.
+     */
+    function syncRowAddVisibility() {
+        var rows = root.querySelector('[data-pd-rows]');
+        var form = root.querySelector('[data-pd-row-add]');
+        if (!rows || !form) { return; }
+        var max = parseInt(rows.dataset.max, 10);
+        if (isNaN(max)) { return; }
+        var full = rows.querySelectorAll('[data-pd-row]').length >= max;
+        if (full && !form.hidden && form.contains(document.activeElement)) {
+            var heading = root.querySelector('[data-pd-rows-panel] .pp-pdet__panel-title');
+            if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
+            announce('That is the most this can hold.');
+        }
+        form.hidden = full;
     }
 
     /* --------------------------------------------------------------------- dragging ---- */
@@ -336,7 +441,9 @@
                     hide();
                     if (PP.ToastManager) { PP.ToastManager.show('Saved.', 'success'); }
                     announce('Saved.');
-                    // Turning duplicates off can make a grid's pool too small for its slots.
+                    // The settings form can change `grid_columns` and the duplicates toggle,
+                    // and a published prompt's floor is re-read on every save, so the reason to
+                    // publish (or not) can move. The pool-size rule this once cited is gone.
                     refreshPublishGate();
                 })
                 .catch(function (err) {
@@ -360,7 +467,8 @@
      * published grid loses its row tools and its adder, a draft regains them. Those flags are
      * computed server-side from `frozen_acts`, and reproducing that derivation in JS would be a second
      * copy of the freeze rules -- the exact thing the template comments refuse to do. The server
-     * already knows the answer; asking it is one request and cannot disagree.
+     * already knows the answer; asking it is one request and cannot disagree. (A published grid
+     * loses its row tools; it has no adder in any state, having no pool.)
      */
     function wireVisibility() {
         var wrap = root.querySelector('[data-pd-visibility]');
@@ -380,7 +488,17 @@
 
         var publish = wrap.querySelector('[data-pd-publish]');
         if (publish) {
-            publish.addEventListener('click', function () { setPublic(true, publish); });
+            publish.addEventListener('click', function () {
+                // `aria-disabled` keeps the button reachable, so the handler is what has to refuse.
+                // The reason is already on screen and pointed at by `aria-describedby`; repeat it to
+                // the live region, because a press is the moment somebody wants to know why not.
+                if (publish.getAttribute('aria-disabled') === 'true') {
+                    var gate = root.querySelector('[data-pd-publish-gate]');
+                    announce((gate && gate.textContent.trim()) || 'This is not ready to publish yet.');
+                    return;
+                }
+                setPublic(true, publish);
+            });
         }
         var unpublish = wrap.querySelector('[data-pd-unpublish]');
         if (unpublish) {
@@ -563,8 +681,10 @@
             button.disabled = true;
             post(row.dataset.deleteUrl)
                 .then(function () {
+                    focusAfterRemoving(row);
                     row.remove();
                     refreshCount();
+                    syncRowAddVisibility();
                     announce('Deleted ' + name + '.');
                     refreshPublishGate();
                 })
@@ -595,11 +715,24 @@
                         // THE PANEL, NOT THE PAGE. The field keeps its focus, so a hunter typing
                         // S / A / B / C / D gets five rows without touching the mouse.
                         refreshPublishGate();
+                        // ITS OWN CATCH. `refreshPanel` throws by design when the swap does not land,
+                        // and chained into the catch below that reported "That could not be added."
+                        // for a row the server HAD created -- with the field left full, so the
+                        // obvious next move was to press Add again and make a duplicate. The pool
+                        // path already split these; this one did not.
                         return refreshPanel('rows').then(function () {
                             labelInput.value = '';
                             labelInput.focus();
                             refreshCount();
+                            syncRowAddVisibility();
                             announce('Added ' + typed + '.');
+                        }, function (err) {
+                            logFailure('rows refresh after add', err);
+                            labelInput.value = '';
+                            if (PP.ToastManager) {
+                                PP.ToastManager.show('Added. Reload to see it.', 'warning');
+                            }
+                            announce('Added ' + typed + '. Reload to see it.');
                         });
                     })
                     .catch(function (err) {
@@ -641,10 +774,22 @@
             button.disabled = true;
             post(card.dataset.removeUrl)
                 .then(function (data) {
+                    focusAfterRemoving(card);
                     card.remove();
                     refreshCount(data.game_count);
+                    // BACK UNDER THE CAP, the mirror of hiding it. Filling a 20-option poll hid the
+                    // adder correctly and removing one left it hidden until a reload, even though
+                    // the endpoint would have accepted.
+                    syncAdderVisibility(data.game_count);
                     announce('Removed ' + name + '.');
                     refreshPublishGate();
+                    // QUEUED BEHIND ANY IN-FLIGHT ADD REFRESH. Removing locally is instant, but an
+                    // earlier add's refresh may still be carrying a pre-removal snapshot; when it
+                    // landed it painted the removed game back in, with a Remove button whose URL now
+                    // 404s. Enqueuing here puts the truth last in the same chain.
+                    return refreshPanel('pool').catch(function (err) {
+                        logFailure('pool refresh after remove', err);
+                    });
                 })
                 .catch(function (err) {
                     button.disabled = false;

@@ -151,16 +151,36 @@ def test_a_published_poll_draws_no_tools_and_a_draft_poll_draws_them(client):
     assert 'data-pd-adder' not in client.get(_url(draft)).content.decode()
 
 
-def test_a_published_grid_keeps_its_adder_but_loses_its_row_tools(client):
-    """The grid's freeze is PARTIAL -- `{'rows', 'pool_remove'}` -- and a page that collapsed that to
-    "published means locked" would take away the one edit a published grid is supposed to keep."""
-    owner = _signed_in(client, _member('author'))
-    grid = _published(owner, SHAPE_GRID, games=2, rows=2)
+def test_a_grid_shows_no_pool_panel_at_all(client):
+    """A GRID HAS NO AUTHOR POOL (owner's call, 2026-09-19), so the page draws no games panel and no
+    adder -- on a draft or published. The page says how it gets answered instead.
 
-    body = client.get(_url(grid)).content.decode()
-    assert 'data-pd-adder' in body, 'a published grid may still gain games'
-    assert 'data-pd-row-delete' not in body, 'a published grid must not offer row deletion'
-    assert 'data-pd-game-remove' not in body, 'a published grid cannot lose games'
+    This replaces a test asserting that a published grid KEPT its adder, which was the one edit the
+    partial freeze `{'rows', 'pool_remove'}` used to allow. There is no pool to add to now, so the
+    freeze is only about slots.
+    """
+    owner = _signed_in(client, _member('author'))
+
+    draft = _draft(owner, SHAPE_GRID, rows=2)
+    body = client.get(_url(draft)).content.decode()
+    assert 'data-pd-pool-panel' not in body, 'a grid drew a games panel'
+    assert 'data-pd-adder' not in body, 'a grid offered a pool adder'
+    assert 'picks their own game for each slot' in body, 'the page never says how a grid is answered'
+
+    svc.update_prompt(draft, owner, is_public=True)
+    published = client.get(_url(draft)).content.decode()
+    assert 'data-pd-adder' not in published
+    assert 'data-pd-row-delete' not in published, 'a published grid must not offer row deletion'
+
+
+def test_a_tier_list_still_has_its_pool_panel(client):
+    """The other half, so the test above cannot pass by the panel disappearing for everybody."""
+    owner = _signed_in(client, _member('author'))
+    tier = _draft(owner, SHAPE_TIER, rows=1, games=2)
+
+    body = client.get(_url(tier)).content.decode()
+    assert 'data-pd-pool-panel' in body
+    assert 'data-pd-adder' in body
 
 
 def test_a_reader_gets_no_tools_at_all(client):
@@ -247,9 +267,11 @@ def test_a_publishable_draft_has_no_blocker_and_an_enabled_button(client):
     assert svc.publish_blocker(prompt) is None
     body = client.get(_url(prompt)).content.decode()
     assert 'data-pd-blocker' not in body
-    # The button is there and is not disabled.
-    publish = body[body.index('data-pd-publish'):body.index('data-pd-publish') + 120]
-    assert 'disabled' not in publish
+    # The button is there and is not refusing. `aria-disabled="false"` rather than the ABSENCE of a
+    # `disabled` attribute: the button stays in the tab order in both states, so a keyboard user can
+    # reach it and hear why it is off.
+    publish = body[body.index('data-pd-publish'):body.index('data-pd-publish') + 200]
+    assert 'aria-disabled="false"' in publish
 
 
 def test_publish_blocker_asks_the_same_function_that_refuses():
@@ -667,9 +689,144 @@ def test_the_publish_button_follows_the_servers_answer_not_a_rule():
     js = _read('static/js/prompt-detail.js')
     gate = js[js.index('function refreshPublishGate('):js.index('function syncAdderVisibility(')]
 
-    assert "button.disabled = gate.textContent.trim() !== ''" in gate
+    # Derived from whether the server's fragment carried any text, and from nothing else.
+    assert 'var now = gate.textContent.trim();' in gate
+    assert "button.setAttribute('aria-disabled', now !== '' ? 'true' : 'false');" in gate
     for rule in ('MIN_GAMES', 'game_count', 'shape', '>= 5', 'buckets'):
         assert rule not in gate, f'the client is restating the publish rule ({rule})'
+
+
+# -- what the audits found ------------------------------------------------------------------------
+
+def test_the_pool_fragment_is_not_served_for_a_shape_with_no_pool(client):
+    """A route nothing links to is still a route. The pool panel is not rendered for a grid, but
+    `?part=pool` stayed live and answered with the TIER LIST's empty copy -- "No games yet. Add the
+    ones people will be sorting." -- to anybody who could read the prompt."""
+    owner = _signed_in(client, _member('author'))
+    grid = _draft(owner, SHAPE_GRID, rows=2)
+
+    body = client.get(_url(grid), {'part': 'pool'}).content.decode()
+    assert 'Add the ones people will be sorting' not in body
+    # It falls through to the whole page, the same as any unknown `part`.
+    assert '<html' in body
+
+
+def test_the_tile_says_they_pick_the_games_from_the_shape_not_from_missing_art(client):
+    """`cover_items` is empty whenever the first four games have no trophy list -- `cover_games_for`'s
+    documented contract for a stub or reassigned concept. Deriving the fact from that made a TIER
+    LIST with missing art announce "they pick the games", which is false, and hid its real game count
+    in the same branch."""
+    owner = _member('author')
+    # A published tier list whose concepts have NO Game rows, so `cover_items` comes back empty.
+    tier = svc.create_prompt(owner, shape=SHAPE_TIER, title='No art here')
+    for _ in range(MIN_GAMES_TO_PUBLISH[SHAPE_TIER]):
+        svc.add_concept(tier, owner, ConceptFactory())
+    svc.update_prompt(tier, owner, is_public=True)
+
+    _signed_in(client, _member('reader'))
+    body = client.get('/community/tiers/').content.decode()
+
+    assert 'they pick the games' not in body, 'a tier list claimed its respondents pick the games'
+    assert '5 games' in body, 'the real game count was hidden by the same branch'
+
+
+def test_a_grid_tile_does_say_it(client):
+    """The other direction, so the test above cannot pass by the line disappearing for everybody."""
+    owner = _member('author')
+    grid = svc.create_prompt(owner, shape=SHAPE_GRID, title='Nine questions')
+    svc.create_bucket(grid, owner, label='Best combat')
+    svc.update_prompt(grid, owner, is_public=True)
+
+    _signed_in(client, _member('reader'))
+    assert 'they pick the games' in client.get('/community/grids/').content.decode()
+
+
+def test_the_publish_button_stays_reachable_while_it_is_refusing():
+    """`disabled` removes a button from the tab order, so a keyboard or screen-reader user cannot
+    land on it to discover why it is off -- and the reason sat in an unassociated sibling."""
+    markup = _read('templates/prompts/detail.html')
+
+    assert 'aria-describedby="pd-publish-reason"' in markup
+    assert 'id="pd-publish-reason"' in markup
+    assert 'aria-disabled="{% if publish_blocker %}true{% else %}false{% endif %}"' in markup
+    assert '{% if publish_blocker %}disabled{% endif %}' not in markup
+
+    js = _read('static/js/prompt-detail.js')
+    gate = js[js.index('function refreshPublishGate('):js.index('function syncAdderVisibility(')]
+    assert 'button.disabled' not in gate, 'the refresh put the real disabled attribute back'
+    # ...and the handler is what refuses, since the button is still clickable.
+    vis = js[js.index('function wireVisibility('):js.index('function wireDelete(')]
+    assert "getAttribute('aria-disabled') === 'true'" in vis
+
+
+def test_a_failed_write_shows_the_services_words_not_a_status_code():
+    """`API.request` throws `API request failed: 400` WITHOUT reading the body, so every caller that
+    showed `err.message` showed that. Each `PromptError` is written for the hunter -- "a tier list
+    needs at least 5 games before it goes up. This one has 3" -- and all of it was being discarded.
+
+    Pinned in `postJson`, which both this page and the lists page go through."""
+    utils = _read('static/js/utils.js')
+    body = utils[utils.index('function postJson('):utils.index('window.PlatPursuit.postJson')]
+
+    assert 'err.response.json()' in body, 'the refusal body is never read'
+    assert 'payload.error' in body, 'the service message is never lifted onto the error'
+
+
+def test_a_refresh_cannot_land_out_of_order():
+    """A sequence NUMBER cannot do this job: htmx swaps INSIDE the request handler and resolves
+    afterwards, so a stale response is already in the DOM by the time any `.then` guard runs. Two
+    quick adds could leave five cards under a header reading six."""
+    js = _read('static/js/prompt-detail.js')
+
+    assert 'refreshChain' in js and 'gateChain' in js
+    assert 'refreshSeq' not in js, 'the counter that could not work is back'
+    panel = js[js.index('function refreshPanel('):js.index('function refreshPublishGate(')]
+    # The chain must be READ, not merely written. Asserting `refreshChain[which]` alone passed with
+    # the queueing removed, because the assignment at the end of the function still matched.
+    assert 'refreshChain[which].catch(' in panel, 'refreshes are not queued behind each other'
+    assert 'refreshChain[which] = run;' in panel, 'the next refresh will not queue behind this one'
+
+
+def test_a_failed_panel_refresh_never_reports_the_write_as_failed():
+    """`refreshPanel` throws by design when the swap does not land. Chained into the write's catch,
+    that reported "That could not be added." for a row the server HAD created -- with the field left
+    full, so the obvious next move was to press Add again and make a duplicate."""
+    js = _read('static/js/prompt-detail.js')
+    start = js.index("querySelector('[data-pd-row-label]')")
+    add = js[start:js.index('function syncRowAddVisibility(') if
+             js.index('function syncRowAddVisibility(') > start else len(js)]
+    add = js[start:start + 2500]
+
+    assert 'rows refresh after add' in add, 'the refresh failure has no catch of its own'
+    assert 'Reload to see it' in add
+
+
+def test_the_caps_retire_and_restore_both_add_controls():
+    """Both directions, both panels. Hiding the adder at the cap shipped; bringing it back after a
+    removal did not, so a filled poll kept a hidden adder until a reload. The rows form had no
+    equivalent at all, which raising the grid slot cap to 36 made reachable in one sitting."""
+    js = _read('static/js/prompt-detail.js')
+
+    assert 'function syncRowAddVisibility(' in js
+
+    # SLICED TO THE HANDLER, not to the end of the file. The first cut sliced from the selector to
+    # EOF, so both assertions matched the call sites further down and passed with the removal-path
+    # calls deleted -- the exact half-done state this test names.
+    game_remove = js[js.index("closest('[data-pd-game-remove]')"):
+                     js.index('var adder = panel.querySelector')]
+    assert 'syncAdderVisibility' in game_remove, 'the adder never comes back under the cap'
+
+    row_delete = js[js.index("closest('[data-pd-row-delete]')"):
+                    js.index("panel.querySelector('[data-pd-row-add]')")]
+    assert 'syncRowAddVisibility' in row_delete, 'the row form never comes back under the cap'
+
+
+def test_the_status_line_exists_for_a_liker_too():
+    """`wireLike` is wired for non-owners, but the live region was `{% if can_edit %}`, so every
+    announcement in a liker's error path went to a null element -- and the toast container carries no
+    `aria-live`, so the failure was entirely silent for a screen-reader user."""
+    markup = _read('templates/prompts/detail.html')
+    assert '{% if can_edit or can_like %}' in markup
 
 
 def test_the_reorder_ids_use_the_managers_own_attribute():

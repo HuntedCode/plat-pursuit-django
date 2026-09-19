@@ -73,12 +73,24 @@ SHAPES = frozenset(value for value, _ in SHAPE_CHOICES)
 #: and can add that column when somebody asks for it.)
 SINGLE_SLOT_SHAPES = frozenset({SHAPE_GRID, SHAPE_POLL})
 
+#: Shapes whose AUTHOR supplies the games. A grid is answered out of the whole catalogue instead
+#: (owner's call, 2026-09-19), so it is the one shape with no pool.
+#:
+#: A SHAPE RULE, NOT A RULE OF ONE FUNCTION. It first went in as a refusal inside `add_concept`
+#: alone, and that was not enough: `remove_concept` and `reorder_games` write the same table and
+#: still accepted a grid. That mattered because nothing in the SCHEMA forbids a `PromptGame` on a
+#: grid -- a shell, the admin or a restored dump can create one -- and `remove_concept`'s only other
+#: gate is the publish floor, which is zero for a grid and short-circuits. So a stray pool row on a
+#: published, answered grid could be removed, cascading `PromptPlacement` rows out of other people's
+#: answers: exactly what freezing `pool_remove` used to prevent before this change dropped it.
+POOLED_SHAPES = frozenset({SHAPE_TIER, SHAPE_POLL})
+
 #: One line per shape, for the pickers. Beside the choices rather than in the templates that render
 #: them, so a shape cannot ship with a label and no explanation, and so the create dialog and the
 #: browse tabs cannot describe the same shape differently. Says what the hunter GETS.
 SHAPE_BLURBS = {
     SHAPE_TIER: 'Rank them into rows, S down to D.',
-    SHAPE_GRID: 'Labelled slots. One game each.',
+    SHAPE_GRID: 'Labelled slots. Everyone answers with their own games.',
     SHAPE_POLL: 'One question. Everybody picks one.',
 }
 
@@ -112,9 +124,13 @@ LABEL_MAX_LENGTH = 24
 #: FLAT WITHIN EACH SHAPE, never tiered. This is abuse prevention, and abuse prevention must not be
 #: purchasable -- a spam limit somebody can pay to raise is not a spam limit. The tiering lives on
 #: prompt COUNT above, where it says the honest thing.
+#: ZERO FOR A GRID, because a grid HAS no author pool (owner's call, 2026-09-19). Every slot is
+#: answered by whoever responds, picking any game in the catalogue. The entry stays in the table
+#: rather than being deleted so `MAX_GAMES_PER_PROMPT[shape]` is total for every shape and no caller
+#: has to guard a lookup; `add_concept` refuses a grid outright, so nothing ever counts against it.
 MAX_GAMES_PER_PROMPT = {
     SHAPE_TIER: 200,
-    SHAPE_GRID: 60,
+    SHAPE_GRID: 0,
     SHAPE_POLL: 20,
 }
 #: A bucket is a rendered row or slot with its own header. Tier lists in the wild run five to seven
@@ -128,9 +144,17 @@ MAX_GAMES_PER_PROMPT = {
 #: squared, so every column setting the author can choose can make a full square, and there is no
 #: second arbitrary number to keep in step with the first.
 #:
-#: `MAX_GAMES_PER_PROMPT[SHAPE_GRID]` is 60, which stays comfortably above this: a grid with
-#: duplicates off needs at least as many pool games as slots, so the pool cap must never fall below
-#: this one or that combination becomes unpublishable by construction.
+#: WHAT BOUNDS THE TALLY is worth stating correctly, since an earlier draft of this note justified 36
+#: with "the tally is buckets x pool and stays cheap". A grid has no pool: its tally is bounded by
+#: slots x DISTINCT GAMES PICKED, which respondents decide. Still fine at this size -- the query
+#: groups placements, of which each response holds at most one per slot -- but it is not the same
+#: quantity, and a future cap should be argued from the real one.
+#:
+#: THE POOL-CAP CAVEAT THAT WAS HERE IS GONE WITH THE POOL. It said the grid's pool cap (then 60)
+#: had to stay above this one, because duplicates-off needed enough games to fill every slot. A grid
+#: has no pool now, its cap is 0, and the test that protected that invariant was replaced the same
+#: day. Recorded rather than deleted because the sentence was load-bearing for hours and a reader of
+#: the git history will meet it.
 #:
 #: THE POLL ENTRY IS NOT A CAP, IT IS HALF OF A GUARANTEE. `unique(response, bucket) WHERE
 #: single_slot` allows one placement PER BUCKET, so "a hunter votes once" holds only while a poll has
@@ -160,10 +184,15 @@ MAX_PLACEMENTS_PER_RESPONSE = MAX_GAMES_PER_PROMPT[SHAPE_TIER]
 #:
 #: Two for a poll, because a poll with one option is not a question.
 #:
-#: ZERO FOR A GRID, and that is the interesting one -- a grid may legitimately ship with no pool at
-#: all. See `Prompt.allow_duplicates` and `PromptPlacement.concept`: an empty pool means respondents
-#: search the whole catalogue for each slot, which is the shape the grid is really for. A grid's floor
-#: is on its SLOTS instead, and lives in the service.
+#: ZERO FOR A GRID, necessarily: a grid has no pool to have a floor on. Its floor is on SLOTS
+#: instead, and lives in the service.
+#:
+#: A GRID USED TO OFFER AN OPTIONAL POOL and no longer does. That option gave the shape two modes --
+#: open, or restricted to the author's list -- and every rule that had to tell them apart was a place
+#: to get it wrong: a free pick allowed or refused depending on whether any pool row existed, a guard
+#: stopping an author adding the FIRST game to a grid people had already answered (it stranded every
+#: free pick, and shipped broken once), and a publish rule that duplicates-off needed a pool big
+#: enough to fill every slot. One mode deletes all of it.
 MIN_GAMES_TO_PUBLISH = {
     SHAPE_TIER: 5,
     SHAPE_GRID: 0,
@@ -287,9 +316,13 @@ class Prompt(models.Model):
     #: became conditional and the tray became "everything, minus nothing" for an open grid.
     #:
     #: A NEW GRID ALLOWS THEM, because a grid asking nine questions usually wants nine independent
-    #: answers. Turning it off is a deliberate "each slot gets a different game", and the service
-    #: refuses to turn it off unless the pool can actually fill every slot -- otherwise the author
-    #: ships a grid nobody can complete.
+    #: answers. Turning it off is a deliberate "each slot gets a different game".
+    #:
+    #: IT GOT SIMPLER WHEN THE GRID POOL WENT AWAY. While an author could supply a pool, turning
+    #: duplicates off had to check that the pool could fill every slot, or the grid shipped
+    #: unfinishable. With the whole catalogue behind every slot there is no such thing as a grid this
+    #: setting can make unanswerable, so the setting is now only what it says: may one game appear
+    #: twice in one response. Enforced by `unique(response, concept) WHERE no_duplicates`.
     #:
     #: THE COLUMN DEFAULTS TO FALSE AND THE GRID'S DEFAULT LIVES IN `create_prompt`, which looks
     #: backwards and is not. `prompt_duplicates_grid_only` below requires this to be False on every
@@ -389,6 +422,15 @@ class Prompt(models.Model):
     def clean(self):
         if not self.title.strip():
             raise ValidationError({'title': 'A prompt needs a title.'})
+
+    @property
+    def takes_a_pool(self):
+        """Does the AUTHOR supply this one's games? See `POOLED_SHAPES`.
+
+        Read by the three pool writers, by the detail page's affordance flags and by the template, so
+        the answer is given once. A grid says no.
+        """
+        return self.shape in POOLED_SHAPES
 
     @property
     def forbids_duplicates(self):

@@ -27,11 +27,16 @@
     cursor: pointer;
 }
 
-.pp-cta:hover:not(:disabled) {
+.pp-cta:hover:not(:disabled):not([aria-disabled="true"]) {
     box-shadow: 0 0 14px color-mix(in oklab, var(--cta-c, var(--pp-primary)) 30%, transparent);
 }
 
-.pp-cta:disabled {
+/* `[aria-disabled="true"]` LOOKS THE SAME AS `:disabled` AND STAYS REACHABLE. A real `disabled`
+   button leaves the tab order, so a keyboard or screen-reader user cannot land on it to find out why
+   it is off -- which matters when the reason is the whole point (see the prompt page's Publish
+   button and its `aria-describedby`). The handler refuses the press instead. */
+.pp-cta:disabled,
+.pp-cta[aria-disabled="true"] {
     opacity: 0.55;
     cursor: not-allowed;
     box-shadow: none;
@@ -66,5 +71,5 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-    .pp-cta:active:not(:disabled) { transform: translateY(1px); }
+    .pp-cta:active:not(:disabled):not([aria-disabled="true"]) { transform: translateY(1px); }
 }
