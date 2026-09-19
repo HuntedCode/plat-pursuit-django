@@ -118,8 +118,19 @@ MAX_GAMES_PER_PROMPT = {
     SHAPE_POLL: 20,
 }
 #: A bucket is a rendered row or slot with its own header. Tier lists in the wild run five to seven
-#: (S/A/B/C/D plus F and a joke tier); a grid is a 3x3 or a 4x3; a poll has exactly one, created by
-#: the service and never by the author.
+#: (S/A/B/C/D plus F and a joke tier); a poll has exactly one, created by the service and never by
+#: the author.
+#:
+#: THE GRID'S 36 IS 6x6, and it is owner's call (2026-09-19). It shipped at 12 on my reasoning that
+#: "a grid is a 3x3 or a 4x3", which was a guess about how people would use the shape, presented as a
+#: bound. Nothing technical wanted 12: the per-slot tally is `buckets x pool` and stays cheap, and a
+#: response is one placement per slot. 36 is derived rather than picked -- it is `MAX_GRID_COLUMNS`
+#: squared, so every column setting the author can choose can make a full square, and there is no
+#: second arbitrary number to keep in step with the first.
+#:
+#: `MAX_GAMES_PER_PROMPT[SHAPE_GRID]` is 60, which stays comfortably above this: a grid with
+#: duplicates off needs at least as many pool games as slots, so the pool cap must never fall below
+#: this one or that combination becomes unpublishable by construction.
 #:
 #: THE POLL ENTRY IS NOT A CAP, IT IS HALF OF A GUARANTEE. `unique(response, bucket) WHERE
 #: single_slot` allows one placement PER BUCKET, so "a hunter votes once" holds only while a poll has
@@ -128,7 +139,7 @@ MAX_GAMES_PER_PROMPT = {
 #: because the count lives on the parent.
 MAX_BUCKETS_PER_PROMPT = {
     SHAPE_TIER: 8,
-    SHAPE_GRID: 12,
+    SHAPE_GRID: 36,
     SHAPE_POLL: 1,
 }
 #: The abuse bound tier's unlimited-per-bucket buckets otherwise lack. Sized to the largest pool,

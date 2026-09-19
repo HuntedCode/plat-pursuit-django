@@ -22,7 +22,8 @@ The two that carry the most weight:
 import pytest
 from django.db import IntegrityError, models, transaction
 
-from prompts.models import (MAX_GRID_COLUMNS, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES,
+from prompts.models import (MAX_BUCKETS_PER_PROMPT, MAX_GAMES_PER_PROMPT, MAX_GRID_COLUMNS,
+                            SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES,
                             SINGLE_SLOT_SHAPES, Prompt,
                             PromptBucket, PromptGame, PromptLike, PromptPlacement, PromptResponse,
                             PromptResponseLike)
@@ -401,3 +402,22 @@ def test_a_placement_points_at_exactly_one_thing_in_the_database_too():
             PromptPlacement.objects.create(response=response, bucket=bucket, prompt_game=game,
                                            concept=ConceptFactory(),
                                            single_slot=True, no_duplicates=True)
+
+
+def test_a_grids_pool_cap_can_always_cover_its_slots():
+    """A grid with duplicates OFF needs at least as many pool games as slots -- `create_prompt`
+    refuses to publish one that cannot fill itself. So if the pool cap ever fell below the slot cap,
+    that combination would become unpublishable by construction: legal to build, impossible to ship,
+    with the refusal naming two numbers the author cannot reconcile.
+
+    Written when the slot cap went 12 -> 36 (owner's call, 2026-09-19), because that change moved one
+    of these two numbers toward the other for the first time.
+    """
+    assert MAX_GAMES_PER_PROMPT[SHAPE_GRID] >= MAX_BUCKETS_PER_PROMPT[SHAPE_GRID]
+
+
+def test_the_grids_slot_cap_is_its_column_ceiling_squared():
+    """36 is DERIVED, not picked: `MAX_GRID_COLUMNS` squared, so every column count an author can
+    choose can make a full square. Pinned so raising one without the other is a failing test rather
+    than a grid whose widest setting cannot fill its last row."""
+    assert MAX_BUCKETS_PER_PROMPT[SHAPE_GRID] == MAX_GRID_COLUMNS ** 2
