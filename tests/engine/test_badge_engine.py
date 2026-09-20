@@ -121,6 +121,123 @@ def test_unobtainable_only_stage_not_gating():
     assert r.gating_count == 0 and r.base_earned is False
 
 
+def test_an_unobtainable_stage_still_pays_whoever_cleared_it():
+    """Owner's call, 2026-09. The stage cannot be REQUIRED of anyone any more, but a hunter who cleared it
+    while it was alive keeps the points. Losing XP because a storefront closed is a punishment for someone
+    else's decision."""
+    cleared_but_dead = game(obtainable=False, base=True, day=1)
+    r = evaluate_group_badge(ALL, ULTRA, [stage(1, cleared_but_dead), stage(2, game(base=True, day=2))])
+
+    assert r.gating_count == 1, 'the unobtainable stage must not be required'
+    assert r.base_satisfied_count == 1, 'the progress numerator counts GATING stages only'
+    assert r.xp_stage_count == 2, 'the cleared-but-dead stage stopped paying'
+
+
+def test_a_badge_with_nothing_left_to_gate_is_revoked_but_still_pays():
+    """The whole-badge version of the rule above, and the shape that follows from it: the engine reports
+    base_earned=False (apply then deletes the hold), while xp_stage_count keeps the stages that were
+    actually cleared. `_group_badge_xp` withholds only the COMPLETION BONUS, which is for finishing a badge
+    that can no longer be finished."""
+    r = evaluate_group_badge(ALL, ULTRA, [
+        stage(1, game(obtainable=False, base=True, day=1)),
+        stage(2, game(obtainable=False, base=True, day=2)),
+    ])
+
+    assert r.gating_count == 0
+    assert r.base_earned is False, 'an unearnable badge must not be held'
+    assert r.xp_stage_count == 2, 'the hunter lost points for work they had already done'
+
+
+def test_stage_zero_never_pays_even_when_cleared():
+    """Stage 0 is tangential by definition. Paying XP for it would make optional work feel mandatory, and
+    it is the one exception the owner called out explicitly."""
+    r = evaluate_group_badge(ALL, ULTRA, [
+        stage(0, game(gid=1, base=True, day=1)),
+        stage(1, game(gid=2, base=True, day=2)),
+    ])
+
+    assert r.xp_stage_count == 1, 'stage 0 was paid'
+
+
+# ── cross-platform satisfaction ──────────────────────────────────────────────
+def test_a_clear_on_any_platform_satisfies_the_stage():
+    """One stage is one WORK. A hunter who platinumed the PS5 list has done the stage, and the PS3 badge
+    must credit it rather than asking them to buy and replay the same game."""
+    ps5_done = game(gid=1, platforms=('PS5',), base=True, day=1)
+    ps3_untouched = game(gid=2, platforms=('PS3',), base=False)
+
+    legacy = evaluate_group_badge(ALL, LEGACY, [stage(1, ps5_done, ps3_untouched)])
+
+    assert legacy.gating_count == 1, 'the PS3 copy still gates Legacy HD'
+    assert legacy.base_earned is True, 'the PS5 clear did not credit the PS3 badge'
+    # The DATE has to travel with the credit. `base_date` was widened alongside satisfaction, and if it
+    # ever narrows back, `base_satisfied` still reads the wider list -- so every assertion above keeps
+    # passing while `earned_date` goes None, `apply_changes` stamps `earned_at=now()`, and the diff then
+    # emits an `update` on every nightly forever, churning the earners board. Mutation-proven gap.
+    assert legacy.stages[0].base_date == _d(1)
+    assert legacy.earned_date == _d(1), 'the cross-platform earn lost its completion date'
+
+
+def test_holo_also_crosses_platforms():
+    """Holo follows base across platforms (owner's call, 2026-09).
+
+    Untested until an audit mutation proved it: every other holo test puts both games on PS5 and evaluates
+    against ULTRA, so `qualifying` and `stage.games` are the same list and narrowing holo back to
+    platform-scoped was invisible to the whole suite.
+
+    Worth knowing what this grants, because the two bars are not symmetric: base is the default trophy
+    group, holo is the WHOLE game including DLC -- and DLC differs between editions. 100%-ing a remaster
+    that folds its DLC into one list confers holo on an edition where the equivalent is several lists.
+    Accepted deliberately: one work, one mastery.
+    """
+    ps5_mastered = game(gid=1, platforms=('PS5',), base=True, full=True, day=1)
+    ps3_untouched = game(gid=2, platforms=('PS3',), base=False, full=False)
+
+    legacy = evaluate_group_badge(ALL, LEGACY, [stage(1, ps5_mastered, ps3_untouched)])
+
+    assert legacy.base_earned is True
+    assert legacy.holo is True, 'the PS5 100% did not confer holo on the PS3 edition'
+    assert legacy.holo_satisfied_count == 1
+
+
+def test_holo_still_needs_the_whole_game_somewhere():
+    """The limit: cross-platform widens WHICH game can supply the bar, never lowers the bar. A stage
+    base-cleared everywhere but 100%'d nowhere is earned and not holo."""
+    ps5_base_only = game(gid=1, platforms=('PS5',), base=True, full=False, day=1)
+    ps3_base_only = game(gid=2, platforms=('PS3',), base=True, full=False, day=1)
+
+    legacy = evaluate_group_badge(ALL, LEGACY, [stage(1, ps5_base_only, ps3_base_only)])
+
+    assert legacy.base_earned is True
+    assert legacy.holo is False
+
+
+def test_gating_stays_platform_scoped():
+    """The half that did NOT change. A badge must never require work that cannot be done on its own
+    platforms, so an alive PS3 list cannot make a stage required of Ultra HD when the PS4 copy is dead.
+    (Owner's decision, chosen over the alternative where any obtainable copy keeps the stage required.)"""
+    ps4_dead = game(gid=1, platforms=('PS4',), obtainable=False)
+    ps3_alive = game(gid=2, platforms=('PS3',), obtainable=True)
+
+    ultra = evaluate_group_badge(ALL, ULTRA, [stage(1, ps4_dead, ps3_alive)])
+
+    assert ultra.gating_count == 0, 'a PS3-only obtainable list made a stage required of Ultra HD'
+
+
+def test_an_out_of_scope_stage_credits_nothing_anywhere():
+    """The limit on cross-platform credit: a stage with no copy on the group's platforms is not that
+    badge's business at all. Not gating, not satisfied, and -- the part a naive implementation gets wrong
+    -- no XP either."""
+    ps5_only_done = game(gid=1, platforms=('PS5',), base=True, day=1)
+
+    legacy = evaluate_group_badge(ALL, LEGACY, [stage(1, ps5_only_done)])
+
+    assert legacy.gating_count == 0
+    assert legacy.base_satisfied_count == 0
+    assert legacy.xp_stage_count == 0, 'a stage this badge cannot see paid it XP'
+    assert legacy.stages[0].base_satisfied is False
+
+
 # ── stage 0 + all-required ───────────────────────────────────────────────────
 def test_stage_zero_is_skipped():
     done = game(gid=1, base=True, full=True, day=1)

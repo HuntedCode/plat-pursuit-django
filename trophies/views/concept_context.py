@@ -28,6 +28,7 @@ from django.db.models.functions import Lower
 from django.urls import reverse
 
 from trophies.constants import CACHE_TIMEOUT_IMAGES
+from trophies.services.game_grouping_service import version_peer_qs
 from trophies.models import Game, Stage
 from trophies.util_modules.constants import ALL_PLATFORMS
 
@@ -403,17 +404,17 @@ class ConceptContextMixin:
         igdb_id across separate Concepts (multi-concept-per-id), so grouping is by igdb_id, not concept.
         Falls back to same-Concept games when the Concept has no IGDB match. Cover-safe (CLAUDE.md rule).
         """
-        concept = game.concept
-        if not concept:
+        if not game.concept_id:
             return []
-        igdb_id = getattr(getattr(concept, 'igdb_match', None), 'igdb_id', None)
+        # The same-work rule lives in ONE place (game_grouping_service.version_peer_qs) -- the bulk
+        # flag endpoint's membership check reads it too, and a second copy that drifted wider would
+        # let a POST file flags on versions no page ever offered.
         qs = (
-            Game.objects
+            version_peer_qs(game)
             .select_related('concept', 'concept__igdb_match')
             .defer('concept__igdb_match__raw_response')
             .exclude(pk=game.pk)
         )
-        qs = qs.filter(concept__igdb_match__igdb_id=igdb_id) if igdb_id else qs.filter(concept_id=concept.pk)
         platform_order = {plat: idx for idx, plat in enumerate(ALL_PLATFORMS)}
         qs = qs.annotate(
             platform_order=Case(*[When(title_platform__contains=plat, then=Value(idx)) for plat, idx in platform_order.items()], default=999, output_field=IntegerField())

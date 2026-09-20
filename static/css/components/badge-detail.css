@@ -308,7 +308,7 @@
 .bd-band__cta svg, .bd-band__stats-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
 .bd-band__cta-arrow { width: 13px; height: 13px; color: var(--pp-text-mute); transition: transform var(--pp-dur) var(--pp-ease); }
 @media (hover: hover) {
-    .bd-band__cta:hover, .bd-band__stats-btn:hover { border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent); color: var(--pp-text); background: color-mix(in oklch, var(--pp-primary) 6%, var(--pp-bg-2)); }
+    .bd-band__cta:hover, .bd-band__stats-btn:hover { border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent); color: var(--pp-text); background: color-mix(in oklab, var(--pp-primary) 6%, var(--pp-bg-2)); }
     .bd-band__cta:hover .bd-band__cta-arrow { transform: translateX(2px); color: var(--pp-primary); }
 }
 
@@ -356,7 +356,10 @@
 .bd-gcard__pct.is-done { color: var(--pp-success); }
 .bd-gcard__plat { display: inline-flex; align-items: center; gap: 3px; }
 .bd-gcard__plat.is-earned { color: var(--pp-warning); }
-.bd-gcard__plat.is-none { color: color-mix(in oklch, var(--pp-error) 70%, var(--pp-text-mute)); }
+/* `in oklab` wherever the second colour is OPAQUE -- see the note on .bd-dead. oklch walks the
+   SHORTER HUE ARC, and error (h 22) to text-mute (h 256) takes it backwards through magenta: this
+   rendered rgb(219,112,177), a clear pink, where oklab gives rgb(230,114,117). */
+.bd-gcard__plat.is-none { color: color-mix(in oklab, var(--pp-error) 70%, var(--pp-text-mute)); }
 .bd-gcard__rt { display: inline-flex; align-items: center; gap: 2px; font-weight: 700; }
 .bd-gcard__rt--good { color: var(--pp-success); }
 .bd-gcard__rt--mid { color: var(--pp-warning); }
@@ -527,7 +530,10 @@
     margin: 0 14px 4px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
     background: color-mix(in oklch, var(--pp-bg-1) 55%, transparent);
 }
-.bd-qual.is-done { border-color: color-mix(in oklch, var(--pp-success) 30%, var(--pp-border)); }
+/* Same trap, and the most visible instance: success (h 162) to border (h 254) is a 92-degree arc
+   through cyan, so a SATISFIED bundle's "done" border rendered rgb(63,112,132) -- steel blue, on the
+   one element whose whole job is to say "green, finished". oklab gives rgb(72,115,105). */
+.bd-qual.is-done { border-color: color-mix(in oklab, var(--pp-success) 30%, var(--pp-border)); }
 .bd-qual__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 9px 12px; }
 .bd-qual__mark { display: grid; place-items: center; width: 17px; height: 17px; flex-shrink: 0; color: var(--pp-text-mute); }
 .bd-qual.is-done .bd-qual__mark { color: var(--pp-success); }
@@ -591,12 +597,16 @@
 }
 .bd-node--next {
     border-color: var(--pp-primary); color: var(--pp-primary);
-    background: color-mix(in oklch, var(--pp-primary) 12%, var(--pp-bg-2));
+    /* oklab: barely distinguishable at 12% (rgb 45,60,74 vs 42,62,70), corrected anyway so the rule
+       "oklch only over transparent" holds everywhere in this file without exemptions. */
+    background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2));
     --pulse-col: var(--pp-primary); animation: bd-node-pulse 2.2s var(--pp-ease) infinite;
 }
 .bd-node--bonus {
     border-style: dashed; border-color: var(--pp-accent); color: var(--pp-accent);
-    background: color-mix(in oklch, var(--pp-accent) 8%, var(--pp-bg-2));
+    /* oklab: this one DID drift -- rgb(44,51,66), a cool blue-grey, for a tint meant to be warm
+       amber. oklab gives rgb(53,50,53). Subtle at 8%, but in the wrong direction. */
+    background: color-mix(in oklab, var(--pp-accent) 8%, var(--pp-bg-2));
 }
 /* Pulse colour comes from a hoisted var (never color-mix inside a keyframe). */
 @keyframes bd-node-pulse {
@@ -1040,3 +1050,184 @@
    `.bd-view` later would un-collapse it and silently widen the gap. Zeroed explicitly so the spacing under
    the tab strip has exactly one owner. */
 #bd-view-overview > .bd2-groupswitch { margin-top: 0; }
+
+/* ============================================================
+   Retired stages + the unearnable-edition notice
+   ============================================================
+   A RETIRED stage is in scope for this edition but no longer gates it: everything it asks for here has gone
+   unobtainable. It stays on the page because clearing it still PAID -- dropping it would erase credited work
+   -- but it has to read as fenced off, not as another rung. Muted, desaturated, and visibly below the ladder.
+   Deliberately NOT hidden behind a <details>: the stage's own games already collapse, and burying a whole
+   section the hunter may have points in makes it look like the site forgot them. */
+.bd-retired { border-top: 1px solid var(--pp-divider); padding-top: 16px; }
+.bd-retired__head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 4px; }
+.bd-retired__ico {
+    display: grid; place-items: center; width: 26px; height: 26px; flex: none; margin-top: 1px;
+    border-radius: 50%; color: var(--pp-text-mute);
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+}
+.bd-retired__ico svg { width: 15px; height: 15px; }
+.bd-retired__title { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-dim); }
+.bd-retired__note { font-size: 0.78rem; line-height: 1.5; color: var(--pp-text-mute); max-width: 62ch; margin-top: 2px; }
+
+/* The cards themselves: same anatomy, dialled down -- through COLOUR only, never `opacity`.
+   A blanket 0.78 composited foreground and background alike toward the page and took three elements below
+   AA (the eyebrow to 3.30:1, the title to 4.02:1, the count pill to 3.39:1), plus every game card inside an
+   expanded retired stage. And it failed worst exactly where it mattered: the escape hatch below restores
+   CLEARED stages to full opacity, so the unreadable ones were the uncleared stages a hunter is reading to
+   work out why they are stuck. The muted head / eyebrow / title tones already say "fenced off" at full
+   strength. */
+.bd-stage--retired .bd-stage__head { background: color-mix(in oklch, var(--pp-text-mute) 6%, transparent); }
+.bd-stage--retired .bd-stage__head:hover { background: color-mix(in oklch, var(--pp-text-mute) 10%, transparent); }
+.bd-stage--retired .bd-stage__eyebrow--retired { color: var(--pp-text-mute); }
+.bd-stage--retired .bd-stage__title { color: var(--pp-text-dim); }
+/* A retired stage the hunter DID clear keeps its earned colour: the points were real and the page should
+   not take the acknowledgement back. The eyebrow still says it does not count.
+
+   These have to out-specify the retired greys ABOVE, or the achievement renders duller than the failure --
+   which is what happened: `.bd-stage--done:not(.bd-stage--mastered)` (0,3,0) beat the retired rules while
+   the MASTERED path had no `:not()` counterpart and lost to them, so a 100% stage came out grey with a
+   stray green icon border while a platinum-only one came out amber. Both paths are stated here at equal
+   specificity so neither can be decided by source order. */
+.bd-stages--retired .bd-stage--done:not(.bd-stage--mastered) .bd-stage__head { background: color-mix(in oklab, var(--pp-warning) 7%, transparent); }
+.bd-stages--retired .bd-stage--done:not(.bd-stage--mastered) .bd-stage__eyebrow--retired { color: var(--pp-warning); }
+.bd-stages--retired .bd-stage--done:not(.bd-stage--mastered) .bd-stage__ico { border-color: color-mix(in oklab, var(--pp-warning) 40%, transparent); }
+.bd-stages--retired .bd-stage--mastered .bd-stage__head { background: color-mix(in oklab, var(--pp-success) 8%, transparent); }
+.bd-stages--retired .bd-stage--mastered .bd-stage__eyebrow--retired { color: var(--pp-success); }
+.bd-stages--retired .bd-stage--mastered .bd-stage__ico { border-color: color-mix(in oklab, var(--pp-success) 40%, transparent); }
+/* No `.bd-node--retired` rule: the base `.bd-node` already paints exactly this (bg-2 / border / mute), so
+   one would be a dead declaration pretending to be a decision. The class stays on the element as a hook. */
+
+/* The unearnable-edition notice. One statement, at the top, before the furniture it explains. */
+/* `in oklab`, NOT `in oklch`, and the distinction is load-bearing wherever the second colour is OPAQUE.
+   oklch interpolates hue along the shorter arc, and --pp-warning (h 90) to --pp-bg-2 / --pp-border (h 252 /
+   254) is ~162 degrees -- the arc runs through cyan. Written in oklch this banner came out a cold blue-grey
+   card with a TEAL border, carrying an amber disc (the icon mixes with `transparent`, where hue is
+   powerless and oklch is safe). It read as an info callout, not a warning.
+
+   That is this file's existing convention: oklab for a tint over an opaque surface, oklch only over
+   `transparent`. */
+.bd-dead {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 14px; margin-bottom: 14px; border-radius: var(--pp-radius-md);
+    background: color-mix(in oklab, var(--pp-warning) 9%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 30%, var(--pp-border));
+}
+.bd-dead__ico {
+    display: grid; place-items: center; width: 30px; height: 30px; flex: none; margin-top: 1px;
+    border-radius: 50%; color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 14%, transparent);
+}
+.bd-dead__ico svg { width: 17px; height: 17px; }
+.bd-dead__title { font-size: 0.9rem; font-weight: 700; color: var(--pp-text); line-height: 1.35; }
+.bd-dead__text { font-size: 0.8rem; line-height: 1.55; color: var(--pp-text-dim); margin-top: 3px; max-width: 68ch; }
+
+@media (min-width: 768px) {
+    .bd-retired__note, .bd-dead__text { font-size: 0.82rem; }
+}
+
+/* Narrow: the chip drops to one word so the stage TITLE keeps the room. The distinction survives -- the
+   colour, the node and the screen-reader text all still carry it, and the full wording returns above 640px.
+   Same move the existing max-width:640px block makes for .bd-stage__pill, for the same reason. */
+@media (max-width: 640px) {
+    .bd-stage__bar { font-size: 0.64rem; padding: 2px 6px; letter-spacing: 0.03em; }
+    .bd-stage__bar--plat .bd-stage__bar-long { display: none; }
+}
+
+/* ============================================================
+   Stage bar reached: platinum vs 100%
+   ============================================================
+   The badge asks for a platinum in every stage; 100%-ing every stage on top is what makes it HOLOGRAPHIC.
+   The page used to render both identically, so it rewarded work it never acknowledged. Same pairing the
+   game cards already use one level down -- --pp-warning for platinum, --pp-success for 100% -- so a stage
+   and the cards inside it agree on what the colours mean.
+
+   `completion_state` stays three-valued (base completion is what earns the badge, and .bd-stage--done keeps
+   meaning exactly that); mastery is layered ON TOP as a modifier rather than a fourth state, so nothing
+   downstream that keys on "complete" had to learn a new vocabulary. */
+/* 0.7rem (11.2px) rather than the 0.58rem eyebrow scale: this is not decorative. The design system
+   reserves sub-12px for supplementary text, and telling "cleared" from "cleared at 100%" is the entire
+   reason the element exists. `flex-shrink` so it yields to the stage title rather than the other way
+   around -- at 375px the full "PLATINUM / NOT 100%" reserved ~130px and crushed the title to ~8 characters. */
+.bd-stage__bar {
+    font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 999px; white-space: nowrap; line-height: 1.5; flex-shrink: 1;
+}
+.bd-stage__bar--plat {
+    color: var(--pp-warning);
+    background: color-mix(in oklch, var(--pp-warning) 13%, transparent);
+    border: 1px solid color-mix(in oklch, var(--pp-warning) 34%, transparent);
+}
+.bd-stage__bar--max {
+    color: var(--pp-success);
+    background: color-mix(in oklch, var(--pp-success) 14%, transparent);
+    border: 1px solid color-mix(in oklch, var(--pp-success) 36%, transparent);
+}
+
+/* A cleared-but-not-100% stage is tinted PLATINUM rather than green: green is the finished state and this
+   one still has something in it. The green is earned by 100%, not by the platinum. */
+.bd-stage--done:not(.bd-stage--mastered) .bd-stage__head { background: color-mix(in oklch, var(--pp-warning) 7%, transparent); }
+.bd-stage--done:not(.bd-stage--mastered) .bd-stage__head:hover { background: color-mix(in oklch, var(--pp-warning) 12%, transparent); }
+.bd-stage--done:not(.bd-stage--mastered) .bd-stage__eyebrow { color: var(--pp-warning); }
+.bd-stage--done:not(.bd-stage--mastered) .bd-stage__ico { border-color: color-mix(in oklch, var(--pp-warning) 40%, transparent); }
+.bd-stage--done:not(.bd-stage--mastered) .bd-node--done {
+    background: var(--pp-warning); border-color: var(--pp-warning);
+}
+
+/* The rail running out of a cleared stage follows the node it hangs off. Left alone, an amber node had a
+   green rail below it -- the same colour leak as the tile check pill, one element over. */
+.bd-stages > .bd-stage--done:not(.bd-stage--mastered)::after {
+    background: color-mix(in oklab, var(--pp-warning) 42%, var(--pp-border));
+}
+
+/* 100%: the node keeps the success fill and gains a ring, so the two read apart at a glance on the spine
+   even before the chip is read. A box-shadow ring, not a transform or filter -- this sits on a scrolling
+   ladder and the node already animates its check.
+
+   The separator ring is --pp-bg-0: the node sits at left:-52px, OUTSIDE the card, over the page substrate.
+   Matching it to the card colour put a pale halo on the dark page. */
+.bd-node--mastered {
+    box-shadow: 0 0 0 2px var(--pp-bg-0), 0 0 0 4px color-mix(in oklab, var(--pp-success) 55%, transparent);
+}
+
+/* The requirements strip mirrors the ladder, so the compact checklist and the stages below it cannot
+   disagree about what a hunter has done.
+
+   The base `.is-done` rule above paints the tile's BACKGROUND and the check PILL success-green, so
+   overriding border-colour alone left a green tile carrying a green pill with a mis-tinted glyph on it --
+   worse than not distinguishing at all. Every surface holding the state has to move together: background,
+   border, and the pill's own fill. */
+.bd-req__tile.is-done:not(.is-mastered) {
+    background: color-mix(in oklab, var(--pp-warning) 8%, var(--pp-bg-2));
+    border-color: color-mix(in oklab, var(--pp-warning) 30%, var(--pp-border));
+}
+.bd-req__tile.is-done:not(.is-mastered) .bd-req__tile-check {
+    background: var(--pp-warning);
+    box-shadow: 0 0 8px -2px color-mix(in oklab, var(--pp-warning) 70%, transparent);
+}
+@media (hover: hover) {
+    .bd-req__tile.is-done:not(.is-mastered):hover { border-color: color-mix(in oklab, var(--pp-warning) 55%, var(--pp-border)); }
+}
+/* 100%: the success treatment it already had, plus the same ring the ladder's node gains, so the two read
+   apart at a glance on both surfaces rather than only on whichever one is being looked at. */
+.bd-req__tile.is-mastered { border-color: color-mix(in oklab, var(--pp-success) 45%, var(--pp-border)); }
+.bd-req__tile.is-mastered .bd-req__tile-check {
+    box-shadow: 0 0 0 2px var(--pp-bg-2), 0 0 0 3.5px color-mix(in oklch, var(--pp-success) 55%, transparent);
+}
+
+/* The bar reached, in the tile's own meta column -- a third line under the stage name rather than a fourth
+   flex child, which would have collided with the check pill hanging off the top-right corner. Same words
+   the ladder uses, because a hunter reading both should not have to translate between them. */
+/* 0.68rem (10.9px) -- still small, but this carries the distinction the tile exists to make, so it is
+   sized as content rather than as the 0.58rem "Stage N" eyebrow above it. */
+.bd-req__tile-bar {
+    font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--pp-warning); line-height: 1.4;
+}
+.bd-req__tile-bar--max { color: var(--pp-success); }
+
+/* Mastered tiles keep a hover border like every other tile: the base `@media (hover)` rule is beaten by
+   `.is-mastered`'s own border-color, so without this the two done-states behaved differently on hover. */
+@media (hover: hover) {
+    .bd-req__tile.is-mastered:hover { border-color: color-mix(in oklab, var(--pp-success) 65%, var(--pp-border)); }
+}

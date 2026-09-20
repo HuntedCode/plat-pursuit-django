@@ -1,8 +1,9 @@
 """`badge_xp.monthly_xp` -- badge XP bucketed by the month it was earned in.
 
 There is no badge-XP ledger. The engine already carries the dates, so monthly XP is a re-bucketing of the
-SAME two components `_group_badge_xp` sums: XP_PER_STAGE per cleared gating stage (at `StageResult.base_date`)
-and XP_BADGE_COMPLETION_BONUS per earned badge (at `GroupBadgeResult.earned_date`).
+SAME two components `_group_badge_xp` sums: XP_PER_STAGE per cleared IN-SCOPE stage (at
+`StageResult.base_date`) -- gating or not, since 2026-09 -- and XP_BADGE_COMPLETION_BONUS per earned badge
+(at `GroupBadgeResult.earned_date`).
 
 That makes drift the whole risk. If someone changes how XP is scored and only touches `_group_badge_xp`, the
 recap starts quietly disagreeing with the profile's standing. The reconciliation test below is the guard:
@@ -31,6 +32,10 @@ def _stage(n, *, gates=True, base=True, date=None):
 
 
 def _result(stages, *, earned=False, earned_date=None, gating_count=None):
+    """Mirrors what `evaluate_group_badge` builds, including the two DIFFERENT stage counts:
+    `base_satisfied_count` counts only GATING stages (the progress numerator) while `xp_stage_count`
+    counts every in-scope stage cleared (the XP numerator). Deriving both here rather than passing them
+    is what keeps these buckets reconcilable against the scored total."""
     gating = [s for s in stages if s.gates]
     return GroupBadgeResult(
         base_earned=earned,
@@ -40,6 +45,7 @@ def _result(stages, *, earned=False, earned_date=None, gating_count=None):
         holo_satisfied_count=0,
         earned_date=earned_date,
         stages=stages,
+        xp_stage_count=sum(1 for s in stages if s.base_satisfied),
     )
 
 
@@ -63,14 +69,20 @@ def test_the_completion_bonus_lands_on_the_earn_date():
     }
 
 
-def test_non_gating_stages_earn_nothing():
-    """Satisfaction is over ANY qualifying game; XP is over GATING stages only, exactly as _group_badge_xp
-    scores it (`base_satisfied_count` counts gating stages)."""
+def test_a_stage_that_stopped_gating_still_pays():
+    """XP is over every IN-SCOPE stage cleared, gating or not -- `xp_stage_count`, not
+    `base_satisfied_count`. A stage stops gating when its qualifying games go unobtainable or delisted,
+    which is a fact about the storefront, not about the hunter who already cleared it.
+
+    (This docstring used to say the opposite -- "XP is over GATING stages only" -- left behind when the
+    test was inverted. A reader repairing a future failure from it would have reintroduced the bug.)
+    """
     res = _result([
         _stage(1, date=_dt(2026, 3, 4)),
         _stage(2, gates=False, date=_dt(2026, 3, 5)),
     ])
-    assert monthly_xp([res]) == {(2026, 3): XP_PER_STAGE}
+    # BOTH stages pay. Stage 2 is in scope and cleared; it simply stopped being REQUIRED.
+    assert monthly_xp([res]) == {(2026, 3): 2 * XP_PER_STAGE}
 
 
 def test_uncleared_stages_earn_nothing():
@@ -81,12 +93,32 @@ def test_uncleared_stages_earn_nothing():
     assert monthly_xp([res]) == {(2026, 3): XP_PER_STAGE}
 
 
-def test_a_group_that_gates_nothing_contributes_nothing():
-    """gating_count == 0 means the badge is not offered in this platform group. _group_badge_xp scores it
-    at 0 (base_satisfied_count sums over an empty gating list), so the buckets must agree."""
+def test_a_group_that_gates_nothing_still_pays_for_cleared_stages():
+    """gating_count == 0 means the badge is no longer earnable in this platform group -- every stage's
+    qualifying games went unobtainable or delisted. The hunter loses the HOLD (the engine returns
+    base_earned=False, and apply revokes) and the completion bonus with it, but keeps the stage drip:
+    the work was done, and a storefront closing later is not theirs to answer for.
+
+    The two must agree, because the recap reads the buckets and the profile standing reads the score. If
+    this one skipped the group the way it used to, the recap would silently shed XP the standing still
+    shows. (Owner's call, 2026-09; before that both returned 0.)
+    """
     res = _result([_stage(1, gates=False, date=_dt(2026, 3, 4))], gating_count=0)
-    assert _group_badge_xp(res) == 0
-    assert monthly_xp([res]) == {}
+    assert _group_badge_xp(res) == XP_PER_STAGE
+    assert monthly_xp([res]) == {(2026, 3): XP_PER_STAGE}
+
+
+def test_an_unearnable_group_is_paid_the_stages_but_never_the_bonus():
+    """The bonus is for FINISHING the badge, and an unearnable badge cannot be finished. The engine never
+    reports base_earned on a zero-gating group, so this pins the arithmetic that follows from it."""
+    res = _result([_stage(1, gates=False, date=_dt(2026, 3, 4)),
+                   _stage(2, gates=False, date=_dt(2026, 4, 4))], gating_count=0)
+
+    assert _group_badge_xp(res) == 2 * XP_PER_STAGE
+    # The WHOLE dict, not `BONUS not in values()`. That check cannot see a bonus folded into a bucket
+    # that already holds a stage clear -- 600 + 500 = 1100, and `600 not in {1100}` is true. Mutation-
+    # proven: paying the bonus to a zero-gating group left the old assertion green.
+    assert monthly_xp([res]) == {(2026, 3): XP_PER_STAGE, (2026, 4): XP_PER_STAGE}
 
 
 def test_dateless_clears_are_dropped_not_guessed():

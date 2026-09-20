@@ -96,10 +96,11 @@ def compute_community_stats():
     # Total earnable badge XP over the live catalog: per live GROUP badge (XP accrues per edition, so a
     # two-edition series is worth twice a one-edition series), stages * XP_PER_STAGE + the flat bonus.
     #
-    # This is an UPPER BOUND, deliberately. True XP counts only GATING stages, and whether a stage gates
-    # depends on per-game obtainability within that edition -- resolvable only by building the full
-    # catalog, which is far too heavy for an hourly cron. A stage with no obtainable game in an edition
-    # is over-counted here. The legacy figure approximated too (it trusted `required_stages`), and this
+    # This is an UPPER BOUND, deliberately. True XP counts stages that are IN SCOPE for the edition (as
+    # of 2026-09; a stage that no longer gates still pays, but one with no game on the edition's platforms
+    # pays nothing), and scope depends on per-game platforms -- resolvable only by building the full
+    # catalog, which is far too heavy for an hourly cron. A stage that reaches no game in an edition is
+    # over-counted here. The legacy figure approximated too (it trusted `required_stages`), and this
     # is a headline ribbon number, not an accounting figure.
     live_groups_by_series = dict(
         GroupBadge.objects.filter(is_live=True)

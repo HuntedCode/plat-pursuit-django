@@ -179,6 +179,21 @@ extracted from List detail).
                     </div>
                 {% endif %}
 
+                {% comment %}Report: the same affordance List detail's hero carries, gated the same
+                way (linked viewers -- the modal itself is only rendered for them, so an ungated
+                button would be a button that opens nothing). Here it opens the CONCEPT-level modal,
+                which asks which versions the issue applies to. `data-flag-open` is the shared
+                opener hook game-flag.js binds, so this needs no JS of its own.{% endcomment %}
+                {% if user.is_authenticated and user.profile and user.profile.is_linked %}
+                    {% comment %}No aria-label: one that does not CONTAIN the visible text replaces
+                    the accessible name, so "click Report an issue" matched nothing for voice control
+                    (WCAG 2.5.3, Label in Name). The visible label plus aria-haspopup says it.{% endcomment %}
+                    <button type="button" class="gd-btn gd-btn--ghost gp-report" data-flag-open
+                            aria-haspopup="dialog">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>Report an issue
+                    </button>
+                {% endif %}
+
             </div>
         </div>
     </div>

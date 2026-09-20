@@ -125,7 +125,10 @@ dead because of that one word. The source-guard test now pins this tag.{% endcom
 tab's empty-state "tell us what's missing" CTA opens it via game-flag.js -- shipped here since
 the slim-down made this page the About host.{% endcomment %}
 {% if user.is_authenticated and user.profile and user.profile.is_linked %}
-    {% include 'trophies/partials/game_detail/report_modal.html' %}
+    {% comment %}`flag_versions` is what turns the shared modal into the concept-level one: the
+    switcher's entries become a version selector, and submit fans out to one report per picked
+    version. List detail includes the same partial WITHOUT it and keeps the single-list post.{% endcomment %}
+    {% include 'trophies/partials/game_detail/report_modal.html' with flag_versions=switcher_entries %}
 {% endif %}
 {% endblock %}
 

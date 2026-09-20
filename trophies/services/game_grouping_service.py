@@ -396,3 +396,31 @@ def compute_user_progress_stats(
         'trophies_earned': trophies_earned,
         'completion_pct': completion_pct,
     }
+
+
+def version_peer_qs(game):
+    """Every Game that is a VERSION of the same work as `game`, including `game` itself.
+
+    The rule this module's docstring states, as a queryset: games whose concepts share an IGDB id
+    are the same game, and a concept with no IGDB match falls back to its own concept's games so an
+    unmatched title is never alone-by-accident. Returned unordered and unselected so callers add
+    their own `select_related` / ordering / slicing.
+
+    Extracted because the rule was hand-written twice -- `ConceptContextMixin._build_other_versions`
+    (the About tab's versions card) and, in prose, `GamePageView._resolve` -- and a third copy was
+    about to be written for the bulk flag endpoint's membership check. That check is the reason this
+    has to be ONE definition: it decides which game ids a POST is allowed to file flags against, so
+    a copy that drifts wider than the page's own switcher is a way to file flags on games the page
+    never offered.
+
+    `GamePageView._resolve` deliberately does NOT come through here: it resolves from a URL kwarg
+    (igdb id or concept id) rather than from an anchor Game, and carries the page's own prefetch
+    stack. Same rule, different entry point.
+    """
+    concept = game.concept if game.concept_id else None
+    if concept is None:
+        return Game.objects.filter(pk=game.pk)
+    igdb_id = getattr(getattr(concept, 'igdb_match', None), 'igdb_id', None)
+    if igdb_id is not None:
+        return Game.objects.filter(concept__igdb_match__igdb_id=igdb_id)
+    return Game.objects.filter(concept_id=concept.pk)

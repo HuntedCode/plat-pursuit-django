@@ -36,12 +36,27 @@ takes #1.
 **`is_holo`** is a live cosmetic flag (100% including DLC on every gating stage). It flips both ways and
 is worth no XP.
 
-### Gating vs satisfaction
+### Scope, gating, satisfaction
 
-A stage is **satisfied** if the hunter completed ANY qualifying game in it. A stage **gates** an edition
-only if it holds a game that is obtainable within that edition's platform group. So a stage whose only
-game is PS3-exclusive gates Legacy HD but not Ultra HD, and the same series can require different work in
-each edition without any per-edition stage authoring.
+Three different questions, three different answers — this is the part of the engine most often misread.
+
+| Question | Reads | Rule |
+|---|---|---|
+| Is the stage **in scope** for this edition? | platforms | it holds at least one game on the edition's platforms |
+| Does it **gate** (become required)? | the edition's own games | one of THOSE is obtainable, and not delisted-in-an-excluding-group |
+| Is it **satisfied**? | **every game in the stage** | the hunter completed any of them, on any platform |
+
+**Satisfaction is cross-platform; gating is not.** Clear a stage on PS5 and it counts for Legacy HD too —
+one stage is one *work*, and a cross-gen hunter should not have to buy and replay the same game once per
+edition. But an alive PS3 list can never make a stage *required* of Ultra HD, because a badge must not
+demand work that cannot be done on its own platforms.
+
+A stage with nothing on the edition's platforms is **out of scope**: not gating, not satisfiable, and
+paying no XP there. That is the one limit on cross-platform credit.
+
+> **Changed 2026-09** (owner's call). Satisfaction used to be scoped to qualifying games the way gating
+> still is, so each edition had to be cleared on its own platform. The per-edition *independence* that
+> created is gone: two editions are separate chases now only when their stages don't overlap platforms.
 
 `completion_policy` is `all` (every gating stage) or `min_count` (megamix: `min_required` of them).
 
@@ -73,9 +88,25 @@ each edition without any per-edition stage authoring.
 
 Flat and deliberately simple, all constants in `badge_xp.py`:
 
-- `XP_PER_STAGE = 500` per gating stage cleared
+- `XP_PER_STAGE = 500` per **in-scope** stage cleared — gating or not (see below)
 - `XP_BADGE_COMPLETION_BONUS = 600` once, when the base badge is earned
 - Holo is worth nothing
+- Stage 0 pays nothing, ever. It is tangential by definition, and paying for it would make optional work
+  feel mandatory.
+
+**XP and requirements came apart in 2026-09.** A stage that stopped gating — its qualifying games went
+unobtainable, or delisted in an excluding group — still pays whoever cleared it while it was alive. Points
+are for work done, and clawing them back because a storefront closed punishes the hunter for someone
+else's decision. The engine carries two counts for this reason, and they must not be confused:
+
+| Field | Counts | Feeds |
+|---|---|---|
+| `base_satisfied_count` | **gating** stages cleared | the progress fraction ("3 of 5"), which must never exceed its denominator |
+| `xp_stage_count` | every **in-scope** stage cleared | XP |
+
+The corollary: a badge with no gating stages left is **revoked** (unearnable, so the hold is deleted) and
+still pays its stage XP. Only the completion bonus is withheld — that one is for finishing a badge that
+can no longer be finished.
 
 XP accrues **per group badge**, so a two-edition series is worth twice a one-edition series. It sums into
 `SeriesBadgeStanding` (per series) and `ProfileBadgeStanding` (grand total), with `ProfileEditionStanding`
@@ -122,23 +153,29 @@ art lands.
 
 ## Gotchas and Pitfalls
 
-**Two live features still write the legacy `Badge` table, and one of them is a payment flow.**
-`fundraiser/services/donation_service.py` credits a donor with
-`Badge.objects.filter(series_slug=...).update(funded_by=...)` when an artwork donation completes, and the
-fundraiser's badge picker reads `Badge.objects.live().filter(tier=1)`. But the medallion renders
-`GroupBadge.effective_funded_by`, which resolves `funded_by_override or series.funded_by` -- neither of
-which the fundraiser touches. **A donor who funds artwork today is credited on a row nothing displays.**
-`art_reveal.ArtRevealItem.release()` similarly writes `Badge.badge_image`. Repointing both onto
-`BadgeSeries` is outstanding work, and it is what actually retires the tier model; `BadgeAdmin` cannot be
-deleted until then (see below).
-
-**`BadgeAdmin` is retained deliberately.** `art_reveal.ArtRevealItem` has a live FK to `Badge`, and its
-inline's `autocomplete_fields` requires a registered admin for the model. Deleting the registration fails
-the ENTIRE admin site's system check with `admin.E039`, not just art_reveal.
+**The two art write paths have been repointed; `BadgeAdmin` is gone with them.** The fundraiser
+(`donation_service.complete_badge_claim`) and `art_reveal.ArtRevealItem.release()` both used to write the
+legacy `Badge` table -- `funded_by` and `badge_image` on a row nothing renders, so a donor who funded
+artwork was credited invisibly. Both now write `BadgeSeries`, which is what `GroupBadge.art_layers()` and
+`effective_funded_by` actually resolve through. `BadgeAdmin` was retained only because `art_reveal`'s
+inline autocompleted against `Badge` and dropping the registration fails the ENTIRE admin site's system
+check with `admin.E039`, not just art_reveal; that inline points at `BadgeSeries` now, so the registration
+went too. Legacy `Badge` / `UserBadge` rows are still READ in several places (titles, job-board coverage,
+company pages) and are retained for rollback and audit.
 
 **Scope by SERIES, never by badge.** `recompute_standing` REPLACES a series' standing from only the
 editions it is handed. Evaluate one edition of a two-edition series and the other's XP silently becomes
 zero. Every entry point resolves to series, then to all live editions of them.
+
+**`base_satisfied_count` is NOT the XP numerator.** It counts gating stages, so it is the progress
+fraction's numerator and is structurally `<= gating_count`. XP reads `xp_stage_count`, which counts every
+in-scope stage cleared. Wiring XP to `base_satisfied_count` silently stops paying for stages that went
+unobtainable; wiring progress to `xp_stage_count` produces bars over 100%.
+
+**Cross-platform satisfaction means an edition can be 'started' by work on another platform.** Any test or
+fixture that needs two INDEPENDENT editions must give them stages that do not overlap platforms — the
+shared-stage shape no longer produces an untouched edition. See `_split_edition_series` in
+`tests/engine/test_badge_xp.py`.
 
 **Bundled games are not in `Stage.concepts`.** A concept is either a direct stage member or a
 `ConceptBundle` member on that stage, never both. Any query that finds "the series a game belongs to"
@@ -168,6 +205,35 @@ transaction, so unclamped drift aborted the whole evaluation, not just the count
 **`is_live` gates evaluation AND every figure.** A dormant edition is invisible to XP, to `badges_held`,
 to the digest and to the community stats. Counting held rows without that filter made a curator's
 smoke-test badge show up in a real hunter's totals.
+
+## Curator authoring in admin
+
+Two affordances exist on the admin side because the models are shaped for the engine, not for the person
+filling them in.
+
+**The subject pickers are scoped by field.** `Franchise` holds IGDB franchises AND IGDB collections in
+one table (separate ID namespaces, one model), so an unscoped autocomplete offers "Resident Evil" twice
+with nothing to tell the rows apart, and `BadgeSeries.franchise` / `.collection` get filled in
+interchangeably. The scope is `limit_choices_to` on the model fields, NOT an admin hook: Django applies it
+in `AutocompleteJsonView` *and* in form validation, so it covers what the picker offers and what a posted
+id is allowed to be. The previous admin-side version keyed on the request's `model_name == 'badge'` and
+silently stopped filtering the moment the rebuild renamed the model to `badgeseries` -- a filter that
+fails open, with no error, is the reason this lives on the field now. Other `Franchise` autocompletes
+(e.g. `ConceptFranchise.franchise`) still see both types deliberately; IGDB lists both kinds of link.
+
+**Stages duplicate onto a new slug.** `Stage` joins to a series by a bare `series_slug` string, so a
+franchise badge that mirrors a series badge means re-entering the same concept picks stage by stage.
+`StageAdmin`'s "Duplicate selected stages under a new series slug" action copies a selection wholesale:
+number, title, icon, required tiers, the online flag, the standalone concepts, and each `ConceptBundle`
+with its own members. The originals are untouched, the whole run is one transaction (a committed stage
+with no concepts reads to the engine as instantly satisfied, not as broken), and a stage number already
+present on the target slug is SKIPPED and named in the message rather than renumbered -- renumbering would
+quietly produce a stage list that is not the one the curator copied. The slug is re-slugified on the way
+in, because `SlugField` accepts uppercase and `FromSoft` would save fine and then join to nothing.
+
+`stage_icon` is copied and then re-derived: it is a denorm of the first concept's cover, maintained by
+`auto_populate_stage_icon`, and setting the copy's concepts fires that signal. The copy is what preserves
+a hand-set icon on a stage with no concepts to re-derive from, the one case the signal never touches.
 
 ## Management Commands
 
