@@ -96,9 +96,10 @@ def test_hunters_is_a_community_surface_now():
     # destination. It ran `items=()` until then, on the reasoning that a single pill naming the
     # page you are already on is not navigation.
     # `challenges` joined 2026-09-19: a coming-soon PAGE, not a redirect, because a hub of two
-    # while a third is weeks away reads as the whole offering. See
+    # while a third is weeks away reads as the whole offering. It sits LAST and wears a
+    # `Soon` tag -- the two things you can use should not sit behind the one you cannot. See
     # `test_challenges_coming_soon.py`.
-    assert [i.slug for i in match['hub'].items] == ['lists', 'challenges', 'profiles']
+    assert [i.slug for i in match['hub'].items] == ['lists', 'profiles', 'challenges']
     assert match['active_slug'] == 'profiles'
 
     # ...and Browse's Catalog lost exactly one entry. 'jobs' joined in 2026-08 (`/jobs/` is the public

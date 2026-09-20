@@ -48,6 +48,9 @@ class HubSubnavItem:
                                        # which costs provider queries on every request)
     group: str = ''  # the rail group this item belongs to (e.g. 'Catalog' / 'Curation'). Items are
                      # defined in group order so the template can {% regroup %} consecutive runs.
+    tag: str = ''    # a short chip on the pill itself ('Soon', 'New'). SHORT, because a rail pill is
+                     # `white-space: nowrap` and a long one pushes its neighbours into the overflow
+                     # sheet -- the tag has to cost less room than the item it is labelling.
 
 
 @dataclass(frozen=True)
@@ -67,12 +70,18 @@ class RenderedSubnavItem:
 
     ``group`` is the rail group label (e.g. 'Catalog'); the template groups
     consecutive same-group items under a quiet separator.
+
+    ``tag`` is a short chip drawn on the pill itself ('Soon'), carried over from the
+    HubSubnavItem. It has to be repeated here rather than read off the config: the
+    template only ever sees these, which is exactly why the first cut rendered nothing
+    -- the `{% if item.tag %}` was true of the config object the template never gets.
     """
     slug: str
     label: str
     url: str
     icon: str | None = None
     group: str = ''
+    tag: str = ''
 
 
 @dataclass(frozen=True)
@@ -258,13 +267,18 @@ COMMUNITY_HUB = HubSubnavConfig(
     prefixes=('/community/', '/hunters/', '/profiles/'),
     items=(
         HubSubnavItem('lists', 'Game Lists', 'lists_browse', 'list'),
+        HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user'),
         # A COMING-SOON PAGE EARNS A RAIL ITEM, which is not obvious. It is here because the rail is
         # how somebody learns what this hub contains, and a hub of two while a third is weeks away
         # reads as the whole offering. The page it points at is real and says so plainly -- the rule
         # set when Challenges was parked was a page, never a redirect. It keeps its slug and url_name
         # when the real browse replaces it.
-        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag'),
-        HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user'),
+        #
+        # LAST, AND TAGGED. Last because the two things you can actually use should not sit behind
+        # the one you cannot; tagged because a pill that looks like its neighbours promises a
+        # destination like its neighbours, and somebody clicking it deserves to know before they do.
+        # Dropping the tag is what marks the feature as shipped.
+        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag', tag='Soon'),
     ),
 )
 
@@ -456,6 +470,7 @@ def build_rendered_items(
         except NoReverseMatch:
             continue
         rendered.append(RenderedSubnavItem(
-            slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group))
+            slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group,
+            tag=item.tag))
     rendered.extend(extras)
     return tuple(rendered)

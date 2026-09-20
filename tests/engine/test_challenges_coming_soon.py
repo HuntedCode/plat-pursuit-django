@@ -82,6 +82,31 @@ def test_it_is_in_the_community_rail(client):
     slugs = [item.slug for item in COMMUNITY_HUB.items]
     assert 'challenges' in slugs
     assert 'lists' in slugs, 'Game Lists left the rail'
+    # LAST. The two things you can actually use should not sit behind the one you cannot.
+    assert slugs[-1] == 'challenges', 'the unfinished item is not at the end of the rail'
+
+
+def test_the_unfinished_item_says_so_on_the_pill(client):
+    """A pill that looks like its neighbours promises a destination like its neighbours. The tag is
+    what tells somebody before they click, and dropping it is what marks the feature as shipped."""
+    from core.hub_subnav import COMMUNITY_HUB
+
+    challenges = next(item for item in COMMUNITY_HUB.items if item.slug == 'challenges')
+    assert challenges.tag == 'Soon'
+    # ...and nothing else wears one, so the tag stays meaningful.
+    assert [i.slug for i in COMMUNITY_HUB.items if i.tag] == ['challenges']
+
+    body = client.get(reverse('challenges')).content.decode()
+
+    # BOTH RENDER SITES. The pill is drawn twice -- once in the rail, once in the overflow sheet the
+    # narrow layout opens -- so `in body` proves only that ONE of them has it. Mutation testing
+    # caught exactly that: stripping the `aria-label` from the rail left this green because the
+    # sheet still carried it.
+    assert body.count('pp-subpill__tag') == 2, 'the tag is missing from one of the two pills'
+    # The `aria-label` REPLACES the contents-derived name, so it has to carry both parts or the tag
+    # is invisible to a screen reader -- the trap the list tile's own comment records.
+    assert body.count('aria-label="Challenges, coming soon"') == 2, (
+        'a screen reader loses the tag on one of the two pills')
 
 
 def test_the_real_browse_can_take_this_url_without_breaking_links():
