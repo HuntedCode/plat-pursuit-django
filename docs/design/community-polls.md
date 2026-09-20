@@ -1,7 +1,14 @@
 # Community Polls
 
-**Status: design. Nothing built.** Supersedes [tier-lists.md](tier-lists.md) and the `prompts` app
-built against it (see [Why not `prompts`](#why-not-prompts)).
+**Status: design. Nothing built, and deliberately not started yet.** Supersedes
+[tier-lists.md](tier-lists.md) and the `prompts` app built against it (see
+[Why not `prompts`](#why-not-prompts)).
+
+**Queue position: third.** Game Lists goes public first, then the Challenges revival, then this
+(owner's call, 2026-09-19). Lists was originally going to launch beside Tiers/Grids/Polls behind a
+shared beta gate; with that parked it launches on its own, which is simpler and no longer waits on
+anything. Writing this doc now is the point of it -- the idea is worth keeping whole while it is
+fresh, not re-derived in three months' time.
 
 A poll the team posts, the community answers, and everybody sees the results afterwards. Modelled on
 the Wii's Everybody Votes Channel: you pick your answer, you **predict what the majority will say**,
