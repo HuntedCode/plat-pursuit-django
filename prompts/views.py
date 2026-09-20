@@ -26,7 +26,7 @@ from prompts.models import (BUCKET_COLOUR_CHOICES, DESCRIPTION_MAX_LENGTH, LABEL
                             MIN_GRID_COLUMNS, SHAPE_BLURBS,
                             SHAPE_CHOICES, SHAPE_GRID, SHAPE_POLL, SHAPE_TIER, SHAPES,
                             TITLE_MAX_LENGTH, Prompt, PromptGame, PromptLike,
-                            grid_layout_choices, shape_options)
+                            grid_layout_choices, is_placeholder_label, shape_options)
 from django_ratelimit.decorators import ratelimit
 
 from api.utils import safe_int
@@ -209,6 +209,8 @@ class BrowsePromptsView(PremiumRequiredMixin, HtmxListMixin, ListView):
         # The rectangle picker the modal reveals when Grid is chosen. From the model, so the
         # dialog cannot offer a size the service would refuse.
         context['grid_layouts'] = grid_layout_choices()
+        # Compared against in the dialog, so the template never hardcodes the string 'grid'.
+        context['grid_shape'] = SHAPE_GRID
         context['title_max_length'] = TITLE_MAX_LENGTH
         context['description_max_length'] = DESCRIPTION_MAX_LENGTH
         # `seo_title` FEEDS THE og/twitter TAGS; `{% block title %}` does not. Without it every share
@@ -313,6 +315,12 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
         # these are the bounded reads CLAUDE.md's whale rule allows rather than the unbounded
         # per-row iteration it bans. Two queries, flat, regardless of how well the prompt did.
         buckets = list(prompt.buckets.all())
+        # WHICH SLOTS ARE STILL UNNAMED, marked here so the page can show the checklist rather than
+        # making an author discover it by pressing Publish. Asked of the same helper the publish
+        # refusal uses, so the dashed cell and the refusal can never disagree about which is which.
+        for bucket in buckets:
+            bucket.is_unnamed = (prompt.shape == SHAPE_GRID
+                                 and is_placeholder_label(bucket.label))
         # `concept__igdb_match` deferred, because the pool cards call `display_image_url`, whose
         # first lookup is the IGDB cover -- without the select_related that is one query per game,
         # and without the `defer` each drags the ~30 KB `raw_response` blob that caused the May 2026
@@ -402,6 +410,9 @@ class PromptDetailView(PremiumRequiredMixin, DetailView):
         context['can_add_rows'] = (context['can_edit_rows'] and not context['is_grid']
                                    and len(buckets) < context['max_buckets'])
         context['can_delete_rows'] = context['can_edit_rows'] and not context['is_grid']
+        # Colour is the TIER convention. `BUCKET_COLOUR_CHOICES` defaults to blank precisely because
+        # "a grid slot and a poll have no use for a tier colour", so the control follows the rule.
+        context['can_colour_rows'] = context['can_edit_rows'] and not context['is_grid']
         context['can_add_more_games'] = context['can_add_games'] and len(pool) < context['max_games']
         context['bucket_colours'] = BUCKET_COLOUR_CHOICES
         context['title_max_length'] = TITLE_MAX_LENGTH

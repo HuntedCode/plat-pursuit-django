@@ -106,20 +106,40 @@
         // REVEALED, not injected: the markup is server-rendered with its options and this only
         // toggles `hidden`, so there is no second copy of the size list in the client.
         var gridFields = dialog.querySelector('[data-pr-create-grid]');
+        //: Matches `SHAPE_GRID`. The template compares against the same constant through
+        //: `grid_shape`, so neither side spells the string twice.
+        var GRID_SHAPE = 'grid';
 
-        function syncShape() {
+        /**
+         * Slide the grid's settings out of the Grid button, and back in when another shape wins.
+         *
+         * `PP.animatePanel` rather than a hand-rolled height tween: it measures `scrollHeight` while
+         * collapsed, releases back to `auto` on `transitionend` so the content can reflow, and drops
+         * straight to the end state under `prefers-reduced-motion`. Hand-rolling any of that is how a
+         * panel ends up stuck at a fixed height the first time its contents wrap.
+         *
+         * `animate` is false for the first paint, so opening the dialog does not play a reveal for a
+         * shape that was already selected -- motion should mark a CHANGE, not a state.
+         */
+        function syncShape(animate) {
             if (!gridFields) { return; }
             var picked = dialog.querySelector('input[name="shape"]:checked');
-            gridFields.hidden = !picked || picked.value !== 'grid';
+            var wanted = !!picked && picked.value === GRID_SHAPE;
+            var open = !gridFields.hasAttribute('hidden');
+            if (wanted === open) { return; }          // already there: no tween to replay
+            if (PP.animatePanel) { PP.animatePanel(gridFields, wanted, animate); }
+            else { gridFields.hidden = !wanted; }
         }
 
         Array.prototype.forEach.call(
             dialog.querySelectorAll('input[name="shape"]'),
-            function (radio) { radio.addEventListener('change', syncShape); });
+            function (radio) { radio.addEventListener('change', function () { syncShape(true); }); });
 
         open.addEventListener('click', function () {
             if (error) { error.hidden = true; error.textContent = ''; }
-            syncShape();          // the dialog reopens on whatever shape was left selected
+            // The dialog reopens on whatever shape was left selected; no reveal for a state
+            // that was already true when it closed.
+            syncShape(false);
             dialog.showModal();
             var title = dialog.querySelector('[data-pr-create-title]');
             if (title) { title.focus(); }

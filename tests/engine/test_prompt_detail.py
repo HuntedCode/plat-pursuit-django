@@ -847,6 +847,90 @@ def test_the_status_line_exists_for_a_liker_too():
     assert '{% if can_edit or can_like %}' in markup
 
 
+def test_no_prompts_class_is_used_without_a_rule():
+    """An orphaned class name is invisible until somebody looks at the page.
+
+    THIS EXACT BUG SHIPPED: the create dialog's duplicates toggle carried `.pp-pdlg__check`, and the
+    rule had been written as `.pp-pdet__check` -- the detail page's block, one letter different. The
+    class matched nothing, so the row fell back to the body's ~16px with no dim colour and an
+    unaligned box, inside a card whose other text runs 0.65-0.85rem. It was reported as "the text
+    looks a bit strange" and took a stylesheet diff to place, which is exactly the kind of thing a
+    grep catches for free.
+
+    The lists app has carried this guard since `.gl-adder__field` did the same thing. This is that
+    test, pointed at the three `pp-p*` blocks this feature owns.
+
+    Checked against the BUILT stylesheet, because that is what the browser loads and this project has
+    been bitten by markup disagreeing with the compiled CSS.
+    """
+    import glob
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    built = (root / 'staticfiles' / 'css' / 'output.css').read_text(encoding='utf-8')
+
+    #: This feature's own blocks. Deliberately NOT every `pp-` class: the shared primitives
+    #: (`pp-cta`, `pp-switch`, `pp-tally`) belong to other files and are already covered where they
+    #: live, and sweeping them in here would make this test fail for somebody else's refactor.
+    owned = ('pp-ptile', 'pp-pdet', 'pp-pdlg', 'pp-pbrowse', 'pp-adder')
+
+    used = set()
+    for path in glob.glob(str(root / 'templates' / 'prompts' / '**' / '*.html'), recursive=True):
+        markup = Path(path).read_text(encoding='utf-8')
+        for attr in re.findall(r'class="([^"]+)"', markup):
+            # Django tags inside a class attribute are not class names.
+            cleaned = re.sub(r'\{[%{].*?[%}]\}', ' ', attr)
+            for name in cleaned.split():
+                if not any(name.startswith(block) for block in owned):
+                    continue
+                # A BARE BLOCK ROOT (`pp-pdet`) legitimately has no rule: it namespaces its
+                # descendants and carries no styling of its own. Only ELEMENTS (`__`) and MODIFIERS
+                # (`--`) assert that a specific rule exists, which is what this test is for -- and
+                # the bug it was written for, `.pp-pdlg__check`, is an element.
+                if '__' not in name and '--' not in name:
+                    continue
+                # `class="pp-pdet__row--{{ bucket.colour }}"` leaves `pp-pdet__row--` once the tag is
+                # stripped. That is a scanning artefact, not a class anybody wrote.
+                if name.endswith('-'):
+                    continue
+                used.add(name)
+
+    assert used, 'found no pp-p* classes at all -- the scan is broken, not the CSS'
+
+    # ON A NAME BOUNDARY, not a substring. `.pp-pdet__row` is a prefix of `.pp-pdet__row-label`, so
+    # a plain `in` check reports a rule for the shorter name that only the longer one has -- and this
+    # test's whole job is finding a class with no rule. Mutation testing caught it: renaming the rule
+    # to `.pp-pdlg__checkX` left the guard green, because the old name still sat inside the new one.
+    # A CSS class selector ends at anything that is not a word character or a hyphen.
+    def has_rule(name):
+        return re.search(r'\.' + re.escape(name) + r'(?![\w-])', built) is not None
+
+    orphaned = sorted(name for name in used if not has_rule(name))
+    assert not orphaned, f'classes with no rule in the built CSS: {orphaned}'
+
+
+def test_the_shape_settings_match_the_card_they_sit_in():
+    """Five type treatments in one small card is what "looks a bit strange" was.
+
+    The panel inherits the dialog's standard form styling otherwise: an UPPERCASE tracked micro-label
+    over a 0.85rem full-width select, which makes the settings compete with the option's own name.
+    Inside a card they are subordinate to it, so they sit at the blurb's scale.
+    """
+    css = _read('static/css/components/prompts.css')
+    scoped = css[css.index('.pp-pdlg__shape-extra .pp-pdlg__label'):]
+
+    assert 'text-transform: none' in scoped, 'the micro-label is still shouting inside the card'
+    assert '.pp-pdlg__check {' in scoped, 'the toggle row has no rule of its own'
+
+    # The select must not be the biggest thing in the card -- the option's name is.
+    name = re.search(r'\.pp-pdlg__shape-name \{[^}]*font-size: ([\d.]+)rem', css)
+    select = re.search(r'\.pp-pdlg__shape-extra \.pp-pdet__input \{[^}]*font-size: ([\d.]+)rem',
+                       scoped)
+    assert name and select
+    assert float(select.group(1)) < float(name.group(1)), (
+        'the size dropdown is set larger than the option it belongs to')
+
+
 def test_the_reorder_ids_use_the_managers_own_attribute():
     """`DragReorderManager` builds its id list from `evt.item.dataset.itemId`. A differently-named
     attribute reorders correctly ON SCREEN and posts a list of `undefined` -- a failure with no

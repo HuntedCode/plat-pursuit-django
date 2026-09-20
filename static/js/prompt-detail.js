@@ -613,25 +613,48 @@
             input.setSelectionRange(input.value.length, input.value.length);
         });
 
+        /**
+         * What the author last SAVED, kept on the input rather than read off the read-span.
+         *
+         * A grid slot has no span -- its name is an always-on field -- so the span could not go on
+         * being the source of truth for "revert to". An unnamed slot carries the empty string here
+         * even though its stored label is "Slot 4", which is what stops a blurred empty field from
+         * filling itself back in with its own placeholder.
+         */
+        function savedValue(input) { return input.dataset.saved || ''; }
+
+        function closeEditor(input) {
+            var label = input.closest('[data-pd-row]').querySelector('[data-pd-row-label-view]');
+            if (!label) { return; }        // an always-on field: there is nothing to swap back to
+            input.hidden = true;
+            label.hidden = false;
+        }
+
         function saveLabel(input) {
             var row = input.closest('[data-pd-row]');
             var label = row.querySelector('[data-pd-row-label-view]');
             var typed = input.value.trim();
-            input.hidden = true;
-            label.hidden = false;
-            if (!typed || typed === label.textContent.trim()) {
-                input.value = label.textContent.trim();     // nothing to save, and no empty label
+            var previous = savedValue(input);
+            closeEditor(input);
+            if (!typed || typed === previous) {
+                input.value = previous;      // nothing to save, and never an empty label
                 return;
             }
             post(row.dataset.updateUrl, field('label', typed))
                 .then(function (data) {
                     // The server's normalized label, for the reason the identity save gives.
-                    label.textContent = data.label;
+                    if (label) { label.textContent = data.label; }
+                    input.dataset.saved = data.label;
                     input.value = data.label;
+                    // A RENAMED SLOT IS NO LONGER UNNAMED. The dashed cell marks a grid slot still
+                    // carrying "Slot 4", which is what blocks publishing; leaving it on after the
+                    // rename would keep telling an author to do something they just did.
+                    row.classList.remove('is-unnamed');
+                    refreshPublishGate();
                     announce('Renamed to ' + data.label + '.');
                 })
                 .catch(function (err) {
-                    input.value = label.textContent.trim();
+                    input.value = previous;
                     logFailure('rename row', err);
                     toastError(err, 'That could not be renamed.');
                 });
@@ -647,8 +670,7 @@
             if (!e.target.matches || !e.target.matches('[data-pd-row-label-input]')) { return; }
             if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
             if (e.key === 'Escape') {
-                var row = e.target.closest('[data-pd-row]');
-                e.target.value = row.querySelector('[data-pd-row-label-view]').textContent.trim();
+                e.target.value = savedValue(e.target);
                 e.target.blur();
             }
         });

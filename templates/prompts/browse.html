@@ -139,14 +139,46 @@ choice is ever offered, which is why each option carries its blurb rather than j
             <fieldset class="pp-pdlg__shapes">
                 <legend class="pp-pdlg__label">What kind</legend>
                 {% for value, label, blurb in shape_options %}
-                <label class="pp-pdlg__shape">
-                    <input type="radio" name="shape" value="{{ value }}"
-                           {% if shape == value %}checked{% endif %} required />
-                    <span class="pp-pdlg__shape-body">
-                        <span class="pp-pdlg__shape-name">{{ label }}</span>
-                        <span class="pp-pdlg__shape-blurb">{{ blurb }}</span>
-                    </span>
-                </label>
+                <div class="pp-pdlg__shape-wrap">
+                    <label class="pp-pdlg__shape">
+                        <input type="radio" name="shape" value="{{ value }}"
+                               {% if shape == value %}checked{% endif %} required />
+                        <span class="pp-pdlg__shape-body">
+                            <span class="pp-pdlg__shape-name">{{ label }}</span>
+                            <span class="pp-pdlg__shape-blurb">{{ blurb }}</span>
+                        </span>
+                    </label>
+
+                    {% if value == grid_shape %}
+                    {% comment %}THE GRID'S OWN SETTINGS, slid out of the button they belong to and
+                    back in when another shape is picked. Attached to the card rather than floating
+                    at the bottom of the form, so it reads as "this option's settings" instead of
+                    "more fields".
+
+                    OUTSIDE THE `<label>`, deliberately. Inside it, every click on the select or the
+                    checkbox would also re-trigger the radio -- and a click on a `<label>` containing
+                    a control is routed to that control, so the select would fight the label for the
+                    same press.
+
+                    `hidden` on the way in: a reader with no JS gets the fields for whichever shape
+                    is preselected and never a panel they cannot close.{% endcomment %}
+                    <div class="pp-pdlg__shape-extra" data-pr-create-grid hidden>
+                        <label class="pp-pdlg__field">
+                            <span class="pp-pdlg__label">Size</span>
+                            <select name="grid_size" class="pp-pdet__input" data-pr-create-size>
+                                {% for columns, rows, slots, size_label in grid_layouts %}
+                                <option value="{{ columns }}x{{ rows }}" {% if slots == 9 %}selected{% endif %}>{{ size_label }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+
+                        <label class="pp-pdlg__check">
+                            <input type="checkbox" data-pr-create-duplicates checked />
+                            <span>Let one game fill more than one slot</span>
+                        </label>
+                    </div>
+                    {% endif %}
+                </div>
                 {% endfor %}
             </fieldset>
 
@@ -163,35 +195,6 @@ choice is ever offered, which is why each option carries its blurb rather than j
                 <textarea name="description" rows="2" maxlength="{{ description_max_length }}"
                           class="pp-pdet__input pp-pdet__input--area"></textarea>
             </label>
-
-            {% comment %}── GRID ONLY ──
-            Revealed when Grid is selected and hidden otherwise, by `wireCreate`. Rendered always
-            rather than injected, so there is no markup built in the client and the fields keep their
-            server-rendered options.
-
-            SIZE IS A RECTANGLE, never a loose slot count: the picker offers `columns x rows` pairs
-            and the service validates against that same list, so a grid cannot be 7 slots at 3 across
-            (which renders 3 + 3 + 1). The option text leads with the TOTAL, because "twelve slots"
-            is what an author is deciding.
-
-            The slots arrive named "Slot 1..N" -- the database forbids a blank label -- and publishing
-            is refused while any still carry that name, so this is a checklist rather than a default
-            anybody can ship.{% endcomment %}
-            <div class="pp-pdlg__grid-only" data-pr-create-grid hidden>
-                <label class="pp-pdlg__field">
-                    <span class="pp-pdlg__label">Size</span>
-                    <select name="grid_size" class="pp-pdet__input" data-pr-create-size>
-                        {% for columns, rows, slots, label in grid_layouts %}
-                        <option value="{{ columns }}x{{ rows }}" {% if slots == 9 %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-
-                <label class="pp-pdlg__check">
-                    <input type="checkbox" data-pr-create-duplicates checked />
-                    <span>Let one game fill more than one slot</span>
-                </label>
-            </div>
 
             <p class="pp-pdlg__note">
                 {% comment %}NO PROMISE ABOUT GAMES. This said "You add the games and the rows

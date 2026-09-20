@@ -216,7 +216,19 @@ deleted.{% endcomment %}
 
         {% comment %}A SWAP TARGET. Adding a row re-renders this and nothing else, so the add form
         below keeps its focus -- see `detail_rows.html`.{% endcomment %}
-        <div class="pp-pdet__rows" data-pd-rows
+        {% comment %}A GRID LAYS OUT AS ONE. Until now every shape rendered as a vertical list, so
+        an author who picked "4 across, 3 down" got twelve stacked rows and no rectangle anywhere on
+        the page -- the promise was kept in the data and never drawn.
+
+        `is-cols-N` CARRIES THE AUTHOR'S CHOICE and the stylesheet caps it per breakpoint: six across
+        is unreadable on a phone whatever the author picked. The cap is presentation only -- the
+        stored `grid_columns` never changes, so the layout returns at full width.
+
+        A CLASS PER COUNT rather than `repeat(min(var(--cols), 2), ...)`, because a math function
+        where CSS expects an <integer> is exactly the kind of thing that works in one engine and
+        quietly collapses the layout in another.{% endcomment %}
+        <div class="pp-pdet__rows{% if is_grid %} pp-pdet__rows--grid is-cols-{{ prompt.grid_columns }}{% endif %}"
+             data-pd-rows
              data-max="{{ max_buckets }}"
              data-refresh-url="{% url 'prompt_detail' prompt.id %}?part=rows"
              data-reorder-url="{% url 'prompt_reorder_buckets' prompt.id %}">

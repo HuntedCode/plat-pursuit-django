@@ -329,3 +329,211 @@ def test_creating_a_grid_over_http_lands_the_rectangle(client):
     assert prompt.buckets.count() == 12
     assert prompt.grid_columns == 4
     assert prompt.allow_duplicates is False
+
+
+# -- laid out as a rectangle ----------------------------------------------------------------------
+
+def _read(path):
+    with open(path, encoding='utf-8') as handle:
+        return handle.read()
+
+
+def test_a_grid_renders_as_a_grid_and_carries_its_column_count(client):
+    """Every shape used to render as a vertical list, so an author who picked "4 across, 3 down" got
+    twelve stacked rows and no rectangle anywhere on the page -- the promise kept in the data and
+    never drawn."""
+    owner = _hunter('author')
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    prompt = _grid(owner, columns=4, rows=3)
+    client.force_login(owner.user)
+
+    from django.urls import reverse
+    body = client.get(reverse('prompt_detail', args=[prompt.pk])).content.decode()
+
+    assert 'pp-pdet__rows--grid' in body
+    assert 'is-cols-4' in body, 'the layout does not carry the author\'s column count'
+
+
+def test_a_tier_list_does_not_render_as_a_grid(client):
+    """The control: the grid layout is a grid-only treatment, not the new default for every shape."""
+    owner = _hunter('author')
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    tier = svc.create_prompt(owner, shape=SHAPE_TIER, title='Rank them')
+    client.force_login(owner.user)
+
+    from django.urls import reverse
+    body = client.get(reverse('prompt_detail', args=[tier.pk])).content.decode()
+
+    assert 'pp-pdet__rows--grid' not in body
+    assert 'is-cols-' not in body
+
+
+def test_the_column_count_is_capped_at_every_breakpoint():
+    """Six across is unreadable at 375px whatever the author picked, so each breakpoint takes the
+    smaller of their choice and what fits. Presentation only -- `grid_columns` never changes, so the
+    chosen layout returns at full width.
+
+    Asserted on the SOURCE rather than the build, because the build minifies the media queries into
+    a form a substring check cannot read reliably.
+    """
+    import re
+
+    css = _read('static/css/components/prompts.css')
+    block = css[css.index('.pp-pdet__rows--grid {'):]
+
+    # Every offered column count has a base (phone) rule, and none of them shows more than two.
+    for columns in {c for c, _r in GRID_LAYOUTS}:
+        rule = re.search(r'\.pp-pdet__rows--grid\.is-cols-%d \{ --pd-shown: (\d)' % columns, block)
+        assert rule, f'{columns} columns has no phone rule'
+        assert int(rule.group(1)) <= 2, f'{columns} columns shows {rule.group(1)} across on a phone'
+
+    # ...and the ladder climbs back to the author's choice by the desktop breakpoint.
+    for breakpoint in ('640px', '768px', '1024px'):
+        assert f'min-width: {breakpoint}' in block, f'no {breakpoint} step'
+    desktop = block[block.index('min-width: 1024px'):]
+    assert '.is-cols-6 { --pd-shown: 6; }' in desktop, 'six across never returns at full width'
+
+
+def test_a_grid_slot_has_no_colour_control(client):
+    """Colour is the TIER convention -- the model says "a grid slot and a poll have no use for a tier
+    colour" -- and dropping it buys back the width a cell needs at 375px."""
+    owner = _hunter('author')
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    prompt = _grid(owner, columns=2, rows=2)
+    client.force_login(owner.user)
+
+    from django.urls import reverse
+    grid_body = client.get(reverse('prompt_detail', args=[prompt.pk])).content.decode()
+    assert 'data-pd-row-colour-input' not in grid_body
+
+    tier = svc.create_prompt(owner, shape=SHAPE_TIER, title='Rank them')
+    tier_body = client.get(reverse('prompt_detail', args=[tier.pk])).content.decode()
+    assert 'data-pd-row-colour-input' in tier_body, 'a tier list lost its palette'
+
+
+def test_an_unnamed_slot_is_marked_before_publish_is_pressed(client):
+    """The checklist, made visible. An author should see which slots still need a question while
+    they are looking at them, not discover it from a refusal."""
+    owner = _hunter('author')
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    prompt = _grid(owner, columns=2, rows=2, named=False)
+    client.force_login(owner.user)
+
+    from django.urls import reverse
+    url = reverse('prompt_detail', args=[prompt.pk])
+    assert client.get(url).content.decode().count('is-unnamed') == 4
+
+    for n, bucket in enumerate(prompt.buckets.order_by('position')):
+        svc.update_bucket(bucket, owner, label=f'Question {n + 1}')
+    assert 'is-unnamed' not in client.get(url).content.decode()
+
+
+# -- the slide-out ---------------------------------------------------------------------------------
+
+def test_the_grid_settings_belong_to_the_grid_button():
+    """Attached to the card rather than floating at the bottom of the form, so they read as "this
+    option's settings" -- and OUTSIDE the `<label>`, because a click on a control inside a label is
+    routed to the label and would re-trigger the radio."""
+    markup = _read('templates/prompts/browse.html')
+
+    wrap = markup[markup.index('pp-pdlg__shape-wrap'):markup.index('</fieldset>')]
+    label_close = wrap.index('</label>')
+    panel = wrap.index('data-pr-create-grid')
+    assert panel > label_close, 'the settings panel is inside the label'
+    assert '{% if value == grid_shape %}' in wrap, 'the template hardcodes the shape name'
+
+
+def test_the_settings_slide_rather_than_appearing():
+    """`PP.animatePanel` rather than a hand-rolled height tween: it measures while collapsed and
+    releases back to `auto` on `transitionend`, which is what stops a panel sticking at a fixed
+    height the first time its contents wrap. It also drops to the end state under reduced motion."""
+    js = _read('static/js/prompts-browse.js')
+    sync = js[js.index('function syncShape('):js.index('Array.prototype.forEach.call(')]
+
+    assert 'PP.animatePanel' in sync
+    assert 'wanted === open' in sync, 'a re-selected shape would replay the reveal'
+
+    css = _read('static/css/components/prompts.css')
+    panel = css[css.index('.pp-pdlg__shape-extra {'):]
+    # `animatePanel`'s contract: it cannot measure without the clip, and without a transition there
+    # is no `transitionend` to release the height.
+    assert 'overflow: hidden' in panel[:400]
+    assert 'transition: height' in panel[:400]
+
+
+def test_the_first_paint_does_not_play_a_reveal():
+    """Motion marks a CHANGE, not a state. Reopening the dialog on the shape it closed with should
+    show the settings already out."""
+    js = _read('static/js/prompts-browse.js')
+    assert 'syncShape(false)' in js, 'opening the dialog animates a panel that was already open'
+    assert 'syncShape(true)' in js, 'changing shape does not animate'
+
+
+def test_a_grid_slot_name_is_a_field_you_can_see(client):
+    """It was a span that turned into an input on click, which on a grid read as plain text on a
+    draggable square -- nothing said it could be typed into, and naming a 36-slot grid cost a click
+    per slot before a single keystroke."""
+    owner = _hunter('author')
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    prompt = _grid(owner, columns=2, rows=2)
+    client.force_login(owner.user)
+
+    from django.urls import reverse
+    body = client.get(reverse('prompt_detail', args=[prompt.pk])).content.decode()
+
+    assert body.count('pp-pdet__row-field') == 4, 'every slot should be a visible field'
+    # ...and no hidden span to click first.
+    assert 'data-pd-row-label-view' not in body
+
+
+def test_an_unnamed_slot_is_an_empty_field_with_its_number_behind_it(client):
+    """A field holding the literal "Slot 4" invites an author to select it and type over it; an empty
+    one with a grey "Slot 4" behind it is simply waiting. `data-saved` carries the empty string so a
+    blurred empty field does not fill itself back in with its own placeholder."""
+    owner = _hunter('author')
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    prompt = _grid(owner, columns=2, rows=2, named=False)
+    client.force_login(owner.user)
+
+    from django.urls import reverse
+    body = client.get(reverse('prompt_detail', args=[prompt.pk])).content.decode()
+
+    assert 'placeholder="Slot 1"' in body
+    assert 'value=""' in body and 'data-saved=""' in body
+    assert 'value="Slot 1"' not in body, 'the placeholder text was put in the field itself'
+
+
+def test_a_tier_row_keeps_the_click_to_edit_swap(client):
+    """Five always-on inputs down the left of a tier list would read as a form rather than a ranking,
+    and a tier label is set once and rarely touched."""
+    owner = _hunter('author')
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    tier = svc.create_prompt(owner, shape=SHAPE_TIER, title='Rank them')
+    client.force_login(owner.user)
+
+    from django.urls import reverse
+    body = client.get(reverse('prompt_detail', args=[tier.pk])).content.decode()
+
+    assert 'data-pd-row-label-view' in body, 'the tier row lost its read span'
+    assert 'pp-pdet__row-field' not in body
+
+
+def test_the_revert_value_lives_on_the_input_not_the_span():
+    """A grid slot has no span, so the span could not go on being the source of truth for what to
+    revert to on Escape or on a failed save."""
+    js = _read('static/js/prompt-detail.js')
+
+    assert 'function savedValue(input)' in js
+    rename = js[js.index('function saveLabel('):js.index('capture: `blur` does not bubble')]
+    assert 'label.textContent.trim()' not in rename, 'the save still reads the span'
+    assert 'savedValue(input)' in rename
+
+    keys = js[js.index("if (e.key === 'Escape')"):]
+    assert 'savedValue(e.target)' in keys[:300], 'Escape still reverts from the span'
