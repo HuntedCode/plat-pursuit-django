@@ -84,6 +84,23 @@ def _lock_report(report):
     return fresh
 
 
+def _lock_list_report(report):
+    """The same two halves as `_lock_report`: serialise two moderators, and turn the loser into a
+    clean "already handled" rather than a second, false log entry."""
+    from gamelists.models import GameListReport
+
+    try:
+        fresh = (GameListReport.objects.select_for_update()
+                 .select_related('game_list', 'game_list__owner', 'reporter')
+                 .get(pk=report.pk))
+    except ObjectDoesNotExist:
+        raise ModerationError('That report no longer exists.')
+    if fresh.status != 'pending':
+        raise ModerationError(
+            f'Already handled ({fresh.get_status_display()}). Reload the queue to see the current state.')
+    return fresh
+
+
 def _lock_flag(flag):
     try:
         fresh = GameFlag.objects.select_for_update().select_related('game').get(pk=flag.pk)
@@ -613,6 +630,88 @@ def reverse_action(action, moderator, reason):
 
 # -- how much is waiting -------------------------------------------------------------------------
 
+def hide_list_text(report, moderator, reason):
+    """Hide the reported list's name and description, and close the report.
+
+    THE LIST SURVIVES -- its games, its likes, its followers, the owner's curation. Only the words
+    go. That is the whole reason `text_hidden` is a field rather than a delete: removing a title a
+    moderator objects to should not destroy a two-hundred-game backlog somebody spent months on,
+    exactly as `hide_blurb` refuses to let hidden words rewrite a game's rating averages.
+
+    The stored name is KEPT, not blanked, so the decision is reversible and an appeal can still see
+    what was reported.
+    """
+    reason = _require_reason(reason)
+    report = _lock_list_report(report)
+    game_list = report.game_list
+    was_hidden = game_list.text_hidden
+
+    # Only write, and only claim a diff, if the words were actually still showing. A second report
+    # against an already-hidden list would otherwise log `text_hidden: [True, True]` -- an entry
+    # claiming a change that did not happen, which this module's docstring calls affirmatively
+    # misleading evidence. `hide_blurb` carries the identical guard for the identical reason.
+    if not was_hidden:
+        game_list.text_hidden = True
+        game_list.save(update_fields=['text_hidden'])
+    report.status = 'action_taken'
+    report.reviewed_by = moderator
+    report.reviewed_at = timezone.now()
+    report.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+
+    action = ModerationAction.objects.create(
+        actor=moderator, actor_label=_label(moderator), action='list_text_hidden', reason=reason,
+        # The list's OWNER. Hiding a list's words is evidence about whoever wrote them.
+        **_subject(game_list.owner),
+        list_report=report, target_id=game_list.pk,
+        target_label=f'List "{game_list.name}"'[:255],
+        changed={'text_hidden': [was_hidden, True]} if not was_hidden else {},
+    )
+    return action
+
+
+def dismiss_list_report(report, moderator, reason):
+    """Close the report and leave the list alone -- the report was wrong, or the name is fine."""
+    reason = _require_reason(reason)
+    report = _lock_list_report(report)
+
+    report.status = 'dismissed'
+    report.reviewed_by = moderator
+    report.reviewed_at = timezone.now()
+    report.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+
+    return ModerationAction.objects.create(
+        actor=moderator, actor_label=_label(moderator), action='list_report_dismissed',
+        reason=reason,
+        # The REPORTER, not the owner. A dismissal is evidence about the person who filed it and
+        # none at all about the person they filed it against.
+        **_subject(report.reporter),
+        list_report=report, target_id=report.game_list_id,
+        target_label=f'List "{report.game_list.name}"'[:255],
+    )
+
+
+def restore_list_text(game_list, moderator, reason):
+    """Put a hidden list's words back. The reverse of `hide_list_text`, and the reason the stored
+    name is kept rather than blanked."""
+    reason = _require_reason(reason)
+
+    from gamelists.models import GameList
+
+    locked = GameList.objects.select_for_update().select_related('owner').get(pk=game_list.pk)
+    if not locked.text_hidden:
+        raise ModerationError('That list\'s words are already showing.')
+
+    locked.text_hidden = False
+    locked.save(update_fields=['text_hidden'])
+
+    return ModerationAction.objects.create(
+        actor=moderator, actor_label=_label(moderator), action='list_text_restored', reason=reason,
+        **_subject(locked.owner),
+        target_id=locked.pk, target_label=f'List "{locked.name}"'[:255],
+        changed={'text_hidden': [True, False]},
+    )
+
+
 def queue_counts():
     """Per queue: how much is waiting, and how much there has ever been.
 
@@ -625,9 +724,15 @@ def queue_counts():
         open=Count('id', filter=Q(status='pending')), total=Count('id'))
     flags = GameFlag.objects.aggregate(
         open=Count('id', filter=Q(status='pending')), total=Count('id'))
+    # One more grouped aggregate, not one query per status -- see the docstring. Imported here
+    # rather than at module scope to keep the app dependency pointing one way.
+    from gamelists.models import GameListReport
+    lists = GameListReport.objects.aggregate(
+        open=Count('id', filter=Q(status='pending')), total=Count('id'))
     return {
         'quick-takes': {'open': blurbs['open'] or 0, 'total': blurbs['total'] or 0},
         'game-flags': {'open': flags['open'] or 0, 'total': flags['total'] or 0},
+        'list-reports': {'open': lists['open'] or 0, 'total': lists['total'] or 0},
     }
 
 

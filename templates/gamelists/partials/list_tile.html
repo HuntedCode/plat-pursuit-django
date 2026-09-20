@@ -32,7 +32,10 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
    omitted, which on My Lists made a private list and a public one sound identical -- and that chip is
    the only privacy signal on the card. The like count is stated only when there is one, matching what
    the card actually shows rather than announcing "0 likes" for every list.{% endcomment %}
-   aria-label="{{ game_list.name }}{% if show_privacy and not game_list.is_public %}, private{% endif %} by {{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}, {{ game_list.game_count }} game{{ game_list.game_count|pluralize }}{% if game_list.like_count %}, {{ game_list.like_count }} like{{ game_list.like_count|pluralize }}{% endif %}">
+   {% comment %}`display_name` HERE TOO. An `aria-label` built from the raw name would read a hidden
+   slur aloud to a screen-reader user while everybody else saw the neutral placeholder -- the hiding
+   working everywhere except the one surface nobody looks at.{% endcomment %}
+   aria-label="{{ game_list.display_name }}{% if show_privacy and not game_list.is_public %}, private{% endif %} by {{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}, {{ game_list.game_count }} game{{ game_list.game_count|pluralize }}{% if game_list.like_count %}, {{ game_list.like_count }} like{{ game_list.like_count|pluralize }}{% endif %}">
     <div class="pp-gcard__cover">
         {% if game_list.cover_items %}
         {% comment %} `is-N` picks the composition: 1 fills, 2 splits down the middle, 3 gives the first a full
@@ -58,7 +61,8 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
     </div>
 
     <div class="pp-gcard__body">
-        <h3 class="pp-gcard__title">{{ game_list.name }}</h3>
+        {# `display_name`, so a list whose words a moderator hid does not show them on the grid. #}
+        <h3 class="pp-gcard__title">{{ game_list.display_name }}</h3>
         <p class="gl-card__author">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</p>
 
         {% comment %} The shared foot: a hairline above the facts, so the counts read as metadata rather

@@ -729,3 +729,51 @@ def _set_social(model, game_list, profile, *, on, field):
         GameList.objects.filter(pk=game_list.pk).update(**{field: models.F(field) + delta})
 
     return GameList.objects.filter(pk=game_list.pk).values_list(field, flat=True).first()
+
+
+# ── reporting ────────────────────────────────────────────────────────────────────────────────────
+
+@transaction.atomic
+def report_list(game_list, profile, *, reason, details=''):
+    """A hunter objects to a list's name or description.
+
+    REPORTING IS NOT PUBLISHING, and the gate list reflects that. A reporter must be signed in and
+    linked -- accountability, and the same bar every other report on the site sets -- but a
+    RESTRICTED account may still report. A restriction stops somebody writing content other people
+    read; it is not a reason to stop them flagging something. The same asymmetry `_set_social`
+    already draws for withdrawing a like.
+
+    NOT YOUR OWN LIST. An author who dislikes their own name can edit it; a self-report is either a
+    mistake or an attempt to put a moderator's time somewhere it is not needed.
+
+    ONE REPORT PER HUNTER, enforced by `unique(game_list, reporter)` in the database and answered
+    here in words. Re-reporting is refused rather than silently ignored, because a reporter who
+    hears nothing assumes it did not work and tries again somewhere louder.
+
+    THE DETAILS ARE SANITIZED LIKE ANY OTHER FREE TEXT. They are read by a moderator in the queue,
+    which is a rendered page -- a report body is not exempt from the rule the rest of this module
+    follows just because its audience is staff.
+    """
+    from gamelists.models import GameListReport
+
+    _refuse_if_unlinked(profile)
+
+    if game_list.owner_id == profile.id:
+        raise ListError('That is your own list. Edit it instead.')
+
+    reason = (reason or '').strip()
+    if reason not in {value for value, _label in GameListReport.REPORT_REASONS}:
+        raise ListError('Pick a reason for the report.')
+
+    details = _clean_text(details, field='report', max_length=500)
+
+    # LOCKED, because `unique(game_list, reporter)` is the real guard and a double-submitted form
+    # would otherwise surface as an IntegrityError 500 rather than the sentence below. Locking the
+    # LIST rather than the report: the row being protected against does not exist yet.
+    locked = _lock_list(game_list)
+
+    if GameListReport.objects.filter(game_list=locked, reporter=profile).exists():
+        raise ListError('You have already reported this list. A moderator will take a look.')
+
+    return GameListReport.objects.create(
+        game_list=locked, reporter=profile, reason=reason, details=details)

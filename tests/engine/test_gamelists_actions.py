@@ -1444,8 +1444,15 @@ def test_the_grid_costs_no_extra_queries_for_the_trigger(client):
         client.get(url)
 
     # No read of the list tables at all: the grid does not know, and does not ask.
+    #
+    # The REPORT table is excluded, and not to make this pass. The fixture's user is staff, and a
+    # moderator's navbar marker counts open reports across every queue on every page -- site-wide
+    # chrome that has nothing to do with whether this grid asks if a card is on one of your lists,
+    # which is the whale-rule claim being made here. `gamelists_gamelistreport` contains
+    # `gamelists_gamelist` as a substring, which is the only reason it was ever caught.
     list_reads = [q for q in ctx.captured_queries
-                  if 'gamelists_gamelist' in q['sql']]
+                  if 'gamelists_gamelist' in q['sql']
+                  and 'gamelists_gamelistreport' not in q['sql']]
     assert list_reads == [], f'the browse grid now queries the list tables: {len(list_reads)}'
 
 

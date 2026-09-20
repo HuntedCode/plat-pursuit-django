@@ -103,6 +103,22 @@
     border-top: 1px solid var(--pp-divider);
 }
 
+/* THE SERVICE'S REFUSAL, shown beside the fields it is about. The create dialog never needed this
+   because it submits normally and a refusal replaces the page; the report dialog posts JSON so the
+   reporter keeps what they typed, and the refusals are worth reading -- "you have already reported
+   this one" is a different thing to learn than "that failed".
+
+   `hidden` until there is one: an empty error box reserves space for a state that usually never
+   happens. */
+.gl-dialog__error {
+    padding: 8px 10px;
+    border: 1px solid color-mix(in oklab, var(--pp-error) 45%, transparent);
+    border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--pp-error) 12%, transparent);
+    color: var(--pp-error);
+    font-size: 0.78rem;
+}
+
 /* Suggested names: quiet chips, deliberately lighter than a `.pp-cta` so they read as a shortcut
    past a blank field rather than as actions competing with "Create list". */
 .gl-suggest { display: flex; flex-wrap: wrap; gap: 6px; }

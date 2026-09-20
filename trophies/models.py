@@ -8046,6 +8046,12 @@ class ModerationAction(models.Model):
         ('blurb_restored_proactive', 'Quick take restored (was hidden without a report)'),
         ('blurb_report_dismissed', 'Quick take report dismissed'),
         ('blurb_report_reopened', 'Quick take report reopened'),
+        # A LIST'S WORDS, not the list. `GameList.text_hidden` hides the name and description and
+        # leaves the games, the likes and the owner's curation alone -- the same call `blurb_hidden`
+        # makes, so the vocabulary mirrors it rather than inventing a second shape.
+        ('list_text_hidden', 'List name and description hidden'),
+        ('list_text_restored', 'List name and description restored'),
+        ('list_report_dismissed', 'List report dismissed'),
         ('game_flag_approved', 'Game flag approved'),
         ('game_flag_dismissed', 'Game flag dismissed'),
         ('game_flag_reversed', 'Game flag approval reversed'),
@@ -8081,6 +8087,13 @@ class ModerationAction(models.Model):
     )
     game_flag = models.ForeignKey(
         'GameFlag', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='moderation_actions',
+    )
+    # A STRING REFERENCE ACROSS APPS. `gamelists` imports `trophies.models`, so a real import here
+    # would close the loop; Django resolves the label lazily and the dependency keeps running one
+    # way, which is the direction `Concept.absorb` already reaches in.
+    list_report = models.ForeignKey(
+        'gamelists.GameListReport', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='moderation_actions',
     )
     subject_user = models.ForeignKey(

@@ -462,12 +462,15 @@ def test_a_quiet_sibling_is_still_linked_but_wears_no_badge(client):
 
 
 def test_the_queue_registry_has_one_definition(client):
-    """The landing and both queue headers read the same list, so adding a third queue touches one
-    place rather than three that can disagree about what exists."""
+    """The landing and every queue header read the same list, so adding a queue touches one place
+    rather than several that can disagree about what exists.
+
+    The third one arrived 2026-09-20 (List Reports) and proved the claim: it needed one entry here
+    and nothing else."""
     from trophies.views.moderation_views import queue_summaries
 
     slugs = {q['slug'] for q in queue_summaries()}
-    assert slugs == {'quick-takes', 'game-flags'}
+    assert slugs == {'quick-takes', 'game-flags', 'list-reports'}
 
     client.force_login(_user('moderator'))
     landing = client.get(reverse('mod_center')).content.decode()
@@ -648,7 +651,8 @@ def test_the_url_conf_still_has_the_mod_urls_this_file_thinks_it_does():
     """A guard on the guard: if the routes move or are renamed, the sweep below would quietly
     exercise nothing and stay green."""
     urls = _every_mod_url()
-    assert len(urls) == 7, f'expected 7 /mod/ routes, found {urls}'
+    # 10 since List Reports joined (2026-09-20): its queue plus a hide and a dismiss.
+    assert len(urls) == 10, f'expected 10 /mod/ routes, found {urls}'
 
 
 def test_nobody_but_a_moderator_can_reach_anything_under_mod(client):

@@ -29,6 +29,7 @@ WHAT IS ACTUALLY DIFFERENT, since "rebuilt" should mean something:
 4. **`first_game_image` is gone.** It read like a field and ran a query per call, which is how the
    browse grid got to 23 queries for 20 lists. Covers come from a bounded prefetch in the view.
 """
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -230,6 +231,27 @@ class GameList(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    #: A MODERATOR HID THIS LIST'S WORDS. The list itself survives -- its games, its likes, its
+    #: followers, its owner's curation. Only the name and description stop being shown.
+    #:
+    #: THE SAME CALL `blurb_hidden` MAKES, for the same reason. That field exists so that hiding
+    #: words a moderator objects to does not silently rewrite a game's rating averages; here it
+    #: exists so a bad TITLE does not destroy a two-hundred-game backlog somebody spent months on.
+    #: A moderator who needs the whole list gone has the restriction and admin tooling for that.
+    #:
+    #: ONE FLAG FOR BOTH FIELDS, not one each. A moderator reviewing a reported list is judging its
+    #: presentation as a whole, the report reasons do not distinguish the two, and splitting a
+    #: boolean later is a cheap migration if precision is ever wanted.
+    #:
+    #: NEVER READ DIRECTLY BY A TEMPLATE. Read `display_name` / `display_description`, which is the
+    #: `display_image_url` rule: a flag honoured in one template and forgotten in the next is the
+    #: `profile_views.py:670` bug class, where a private row leaked through an HTMX path that never
+    #: rendered the parent.
+    text_hidden = models.BooleanField(
+        default=False,
+        help_text="A moderator hid this list's name and description. The list itself is untouched.",
+    )
+
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
@@ -278,6 +300,26 @@ class GameList(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.owner.display_psn_username})'
+
+    #: What a hidden list is called instead. Not "[removed]" or "[hidden by a moderator]": a reader
+    #: who lands on it does not need the site's moderation history, and naming the act invites
+    #: exactly the curiosity the hiding was meant to end.
+    HIDDEN_NAME = 'Untitled list'
+
+    @property
+    def display_name(self):
+        """THE supported way to render a list's name. See `text_hidden`.
+
+        The stored name is kept rather than blanked, so a moderator can still see what was reported
+        and the decision can be reversed. This is the only thing that decides what a READER sees.
+        """
+        return self.HIDDEN_NAME if self.text_hidden else self.name
+
+    @property
+    def display_description(self):
+        """The same, for the description. Empty rather than a placeholder: a missing description is
+        an ordinary state every list already renders, so it needs no explaining."""
+        return '' if self.text_hidden else self.description
 
     def clean(self):
         if not self.name.strip():
@@ -428,3 +470,65 @@ class GameListFollow(models.Model):
 
     def __str__(self):
         return f'{self.profile.display_psn_username} follows {self.game_list.name}'
+
+
+class GameListReport(models.Model):
+    """A hunter reporting a list's name or description (reactive moderation).
+
+    MIRRORS `BlurbReport`, deliberately and to the field. That is the fifth table of this shape in
+    the codebase and the duplication is real -- `CommentReport`, `ReviewReport`, `ChecklistReport`
+    and `BlurbReport` differ only in which row they point at. Three of those four are dead systems
+    (comments legacy, reviews archived, checklists replaced by Roadmaps), so the live pattern is
+    `BlurbReport` + its queue, and matching it exactly is what lets this drop into the existing Mod
+    Center with a `_QueueView` subclass and nothing else. A generic reports table is a worthwhile
+    refactor and a bad thing to attempt while wiring a new queue onto live moderation tooling.
+
+    IT LIVES IN `gamelists`, not `trophies`, because it is about a `GameList` -- the app owns its
+    own rows. `trophies.services.moderation_service` imports it, which is the direction that
+    dependency already runs (`Concept.absorb` reaches into `gamelists`).
+
+    NO `absorb()` BRANCH NEEDED. It FKs the LIST, not a `Concept`, so it follows its list through
+    everything -- the same reasoning `BlurbReport`'s own docstring gives for hanging off the rating.
+
+    `unique(game_list, reporter)` so one hunter is one report. Without it a single objector can
+    inflate a queue count that a moderator reads as consensus.
+    """
+
+    REPORT_REASONS = [
+        ('spam', 'Spam'),
+        ('harassment', 'Harassment'),
+        ('inappropriate', 'Inappropriate Content'),
+        ('other', 'Other'),
+    ]
+    REPORT_STATUS = [
+        ('pending', 'Pending Review'),
+        ('reviewed', 'Reviewed'),
+        ('dismissed', 'Dismissed'),
+        ('action_taken', 'Action Taken'),
+    ]
+
+    game_list = models.ForeignKey(GameList, on_delete=models.CASCADE, related_name='reports')
+    reporter = models.ForeignKey(Profile, on_delete=models.CASCADE,
+                                 related_name='submitted_list_reports')
+    reason = models.CharField(max_length=20, choices=REPORT_REASONS)
+    details = models.TextField(max_length=500, blank=True,
+                               help_text='Additional context for the report')
+    status = models.CharField(max_length=20, choices=REPORT_STATUS, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    # `settings.AUTH_USER_MODEL`, not a hardcoded label: the user model lives in `users`, and the
+    # other report tables reach it through `trophies.models`' own import rather than by name.
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                    blank=True, related_name='reviewed_list_reports')
+    admin_notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ['game_list', 'reporter']
+        indexes = [
+            # The queue reads pending-first, newest-first, and nothing else.
+            models.Index(fields=['status', '-created_at'], name='glistreport_status_idx'),
+            models.Index(fields=['game_list'], name='glistreport_list_idx'),
+        ]
+
+    def __str__(self):
+        return f'Report on list {self.game_list_id} by {self.reporter.psn_username}'

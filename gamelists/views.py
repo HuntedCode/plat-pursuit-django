@@ -30,7 +30,8 @@ from core.previews import previewing
 from core.services.tracking import track_site_event
 from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST_TYPE_RANKED,
                               MAX_ITEMS_PER_LIST, NAME_MAX_LENGTH, SECTION_NAME_MAX_LENGTH,
-                              GameList, GameListFollow, GameListItem, GameListLike, GameListSection,
+                              GameList, GameListFollow, GameListItem, GameListLike,
+                              GameListReport, GameListSection,
                               list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
@@ -763,6 +764,12 @@ class GameListDetailView(DetailView):
                 game_list=game_list, profile=viewer).exists()
             context['viewer_follows'] = GameListFollow.objects.filter(
                 game_list=game_list, profile=viewer).exists()
+            # The report dialog's options, from the model, so the form cannot offer a reason the
+            # service would refuse. `can_act` is already the right population: signed in, linked,
+            # and not the owner -- which is exactly who may report, since `report_list` refuses a
+            # self-report. A restricted account is deliberately still allowed: a restriction stops
+            # somebody WRITING content other people read, and flagging is not that.
+            context['report_reasons'] = GameListReport.REPORT_REASONS
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
@@ -1093,6 +1100,36 @@ class ToggleLikeView(_ListActionView):
         except svc.ListError as exc:
             return self.fail(exc)
         return JsonResponse({'liked': liked, 'like_count': count})
+
+
+class ReportListView(_ListActionView):
+    """A hunter objects to a list's name or description.
+
+    `_ListActionView` WITHOUT its ownership check, which is the point: every other action on that
+    base is something an owner does to their own list, and this is the one a stranger does. The base
+    supplies what is still wanted -- signed in, linked, POST only, `readable_by` resolution so a
+    private list 404s rather than 403ing -- and ownership was never in the base to begin with. It
+    lives in each service call, and `report_list` refuses a SELF-report instead.
+
+    A LOWER RATE LIMIT than the owner actions. Reporting is not a thing anybody does sixty times a
+    minute, and a report queue is a moderator's time: flooding it is the abuse this bounds.
+    """
+
+    @method_decorator(ratelimit(key='user', rate='10/m', method='POST', block=True))
+    def post(self, request, list_id):
+        game_list = self.get_list(request, list_id)
+        if game_list is None:
+            return self.not_found()
+        try:
+            svc.report_list(game_list, self._viewer(request),
+                            reason=request.POST.get('reason', ''),
+                            details=request.POST.get('details', ''))
+        except svc.ListError as exc:
+            return self.fail(exc)
+        # No counts and no state: the reporter is told it landed, and deliberately nothing about
+        # what happens next. How many reports a list carries is a moderator's information, and
+        # showing it would tell somebody organising a pile-on whether it is working.
+        return JsonResponse({'reported': True})
 
 
 class ToggleFollowView(_ListActionView):

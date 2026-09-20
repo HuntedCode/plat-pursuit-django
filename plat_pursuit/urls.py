@@ -28,7 +28,7 @@ from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, Cr
                             DeleteSectionView, GameListDetailView, ListGameSearchView,
                             MyListsForConceptView, MyListsView,
                             RemoveItemView, RenameSectionView, ReorderItemsView,
-                            ReorderSectionsView, ToggleFollowView,
+                            ReorderSectionsView, ReportListView, ToggleFollowView,
                             ToggleLikeView, UpdateListView)
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
@@ -63,6 +63,7 @@ sitemaps = {
 }
 from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView,
                             HideBlurbView, DismissBlurbReportView, ApproveGameFlagView,
+                            ListReportQueueView, HideListTextView, DismissListReportView,
                             DismissGameFlagView)
 from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
@@ -433,6 +434,7 @@ urlpatterns = [
     path('community/lists/<int:list_id>/sections/<int:section_id>/delete/',
          DeleteSectionView.as_view(), name='list_section_delete'),
     path('community/lists/<int:list_id>/like/', ToggleLikeView.as_view(), name='list_like'),
+    path('community/lists/<int:list_id>/report/', ReportListView.as_view(), name='list_report'),
     path('community/lists/<int:list_id>/follow/', ToggleFollowView.as_view(), name='list_follow'),
     path('community/lists/<int:list_id>/add/', AddConceptView.as_view(), name='list_add_game'),
     path('community/lists/<int:list_id>/items/<int:item_id>/remove/',
@@ -600,10 +602,14 @@ urlpatterns = [
     path('mod/', ModCenterView.as_view(), name='mod_center'),
     path('mod/quick-takes/', QuickTakeQueueView.as_view(), name='mod_quick_takes'),
     path('mod/game-flags/', GameFlagQueueView.as_view(), name='mod_game_flags'),
+    path('mod/list-reports/', ListReportQueueView.as_view(), name='mod_list_reports'),
     # Actions are POST-only (the views enforce it by defining no `get`): each mutates live data, and
     # a GET would be followed by a crawler, a prefetcher, or a bookmark.
     path('mod/quick-takes/<int:pk>/hide/', HideBlurbView.as_view(), name='mod_hide_blurb'),
     path('mod/quick-takes/<int:pk>/dismiss/', DismissBlurbReportView.as_view(), name='mod_dismiss_blurb'),
+    path('mod/list-reports/<int:pk>/hide/', HideListTextView.as_view(), name='mod_hide_list_text'),
+    path('mod/list-reports/<int:pk>/dismiss/', DismissListReportView.as_view(),
+         name='mod_dismiss_list_report'),
     path('mod/game-flags/<int:pk>/approve/', ApproveGameFlagView.as_view(), name='mod_approve_flag'),
     path('mod/game-flags/<int:pk>/dismiss/', DismissGameFlagView.as_view(), name='mod_dismiss_flag'),
 

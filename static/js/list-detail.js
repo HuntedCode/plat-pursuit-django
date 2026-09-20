@@ -39,7 +39,6 @@
     var PP = window.PlatPursuit || {};
     var revealHandle = null;
     var handledGrid = null;
-    var searchField = null;
     var pendingFocusIndex = null;
     // Set when an add-section write is in flight, so the field can be refocused once the refresh
     // that replaced it settles. See `restoreSectionFocus`.
@@ -514,6 +513,95 @@
                     }
                 });
             },
+        });
+    }
+
+    /* ------------------------------------------------------------------ report ---- */
+
+    /**
+     * Report this list's name or description.
+     *
+     * A native `<dialog>` on the `.gd-modal` recipe, so the focus trap, Escape and focus restoration
+     * come from the element. `dismissableSheet` adds the touch grab pill and swipe-down dismiss.
+     *
+     * POSTS JSON rather than submitting, unlike the create dialog next door, and the difference is
+     * the refusals. "You have already reported this list", "that is your own list" and "pick a
+     * reason" are all things the reporter can act on; a plain submit would replace the page with an
+     * error and lose what they typed.
+     *
+     * ONE-WAY. On success the dialog closes and says thank you, and the control does NOT flip to a
+     * "reported" state: a button that remembers would tell anybody sharing the page how many people
+     * had already reported it, which is a coordination signal for exactly the pile-on this feature
+     * exists to catch. The server enforces one report per hunter regardless.
+     */
+    function wireReport() {
+        var dialog = document.getElementById('gl-report');
+        var open = document.querySelector('[data-gl-report-open]');
+        if (!dialog || !open || !dialog.showModal || wired.has(dialog)) { return; }
+        wired.add(dialog);
+
+        var form = dialog.querySelector('[data-gl-report-form]');
+        var error = dialog.querySelector('[data-gl-report-error]');
+        var send = dialog.querySelector('[data-gl-report-send]');
+        if (!form) { return; }
+
+        function closeReport() { if (dialog.open) { dialog.close(); } }
+
+        open.addEventListener('click', function () {
+            if (error) { error.hidden = true; error.textContent = ''; }
+            dialog.showModal();
+            var reason = dialog.querySelector('[data-gl-report-reason]');
+            if (reason) { reason.focus(); }
+        });
+
+        Array.prototype.forEach.call(
+            dialog.querySelectorAll('[data-gl-report-close]'),
+            function (button) { button.addEventListener('click', closeReport); });
+
+        if (PP.dismissableSheet) { PP.dismissableSheet(dialog, { onClose: closeReport }); }
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (error) { error.hidden = true; }
+            if (send) { send.disabled = true; }
+
+            var body = new FormData();
+            var reason = dialog.querySelector('[data-gl-report-reason]');
+            var details = dialog.querySelector('[data-gl-report-details]');
+            body.append('reason', reason ? reason.value : '');
+            body.append('details', details ? details.value : '');
+
+            postJson(form.dataset.url, body)
+                .then(function () {
+                    closeReport();
+                    if (PP.ToastManager) {
+                        PP.ToastManager.show('Report sent. A moderator will take a look.', 'success');
+                    }
+                    // The toast carries no `aria-live`, as this file notes elsewhere, so the status
+                    // line is what actually announces it.
+                    announce('Report sent. A moderator will take a look.');
+                })
+                .catch(function (err) {
+                    logFailure('report', err);
+                    if (!error) { return; }
+                    var show = function (msg) {
+                        error.textContent = msg || 'That report could not be sent.';
+                        error.hidden = false;
+                        announce(error.textContent);
+                    };
+                    if (err && err.signedOut) {
+                        show('You may have been signed out. Reload the page and try again.');
+                    } else if (err && err.response && typeof err.response.json === 'function') {
+                        // The service's own words -- "you have already reported this list" is a
+                        // different thing to learn than "that failed".
+                        err.response.json()
+                            .then(function (data) { show(data && data.error); })
+                            .catch(function () { show(null); });
+                    } else {
+                        show(null);
+                    }
+                })
+                .finally(function () { if (send) { send.disabled = false; } });
         });
     }
 
@@ -2040,7 +2128,6 @@
 
     function boot(first) {
         handledGrid = null;
-        searchField = null;
         // THE MODE'S STATE TOO. This file's header commits to honouring the `onPageReady` restore
         // contract even though the current htmx config never fires it -- and under that contract
         // these six carried over: a restored page would paint "Done" on a toggle whose panel has no
@@ -2056,6 +2143,7 @@
         wireAdder();
         wireIdentityEditor();
         wireVisibility();
+        wireReport();
         wirePositioning();
         wireSections();
         initReveal();
