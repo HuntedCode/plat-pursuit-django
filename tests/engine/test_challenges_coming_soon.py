@@ -137,3 +137,34 @@ def test_it_invents_no_css_that_will_outlive_it():
     # Game Lists in the same rail.
     assert 'pp-head-cascade' in markup
     assert 'scard' in markup
+
+
+def test_the_tag_is_distinguishable_from_the_label_beside_it():
+    """QUIET IS NOT INVISIBLE, and the first cut was invisible.
+
+    The chip was `--pp-text-mute` (oklch 0.66 0.02 256) sitting next to a label in `--pp-text-dim`
+    (oklch 0.72 0.02 256): same hue, same near-zero chroma, six hundredths of lightness apart, at
+    under 0.8em. It read as more grey text. The active rule then turned it `--pp-primary` exactly
+    when the label also turns primary, so it blended in both states.
+
+    What this pins is the RULE rather than the shade: the chip must not be coloured with either of
+    the greys the pill's own text uses, and must not take the colour the active label takes.
+    """
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[2]
+           / 'static' / 'css' / 'components' / 'chrome.css').read_text(encoding='utf-8')
+    start = css.index('.pp-subpill__tag {')
+    rule = css[start:css.index('}', start)]
+
+    colour = [line for line in rule.splitlines() if line.strip().startswith('color:')]
+    assert colour, 'the tag sets no colour of its own'
+    assert '--pp-text-mute' not in colour[0] and '--pp-text-dim' not in colour[0], (
+        'the tag is coloured with the same grey as the label beside it')
+
+    # And nothing re-colours it to match the active label further down.
+    after = css[start:]
+    active = [line for line in after.splitlines()
+              if 'is-active' in line and 'pp-subpill__tag' in line]
+    assert not active or all('--pp-primary' not in line for line in active), (
+        'the tag turns primary on the active pill, where the label is already primary')

@@ -567,24 +567,36 @@
 @media (hover: hover) { .pp-subpill:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.05); } }
 .pp-subpill:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 /* A SHORT CHIP ON THE PILL ('Soon'), for an item that leads somewhere real but not yet finished.
-   Quiet on purpose: it is a caveat, not a badge to be proud of, so it reads as smaller and dimmer
-   than the label it qualifies rather than competing with it. `em` so it tracks the pill's own size
-   at every breakpoint instead of needing a second media query. */
+   Quiet on purpose -- it is a caveat, not a badge to be proud of -- but quiet is not the same as
+   INVISIBLE, which is what the first cut was.
+   
+   IT HAS TO DIFFER IN HUE, not in lightness. The first version coloured it `--pp-text-mute`
+   (oklch 0.66 0.02 256) next to a label in `--pp-text-dim` (oklch 0.72 0.02 256): the same hue, the
+   same near-zero chroma, six hundredths of lightness apart, at 0.78em. It read as more grey text
+   rather than as a chip. Worse, the active rule turned it `--pp-primary` exactly when the label also
+   turns primary, so it blended in BOTH states.
+   
+   `--pp-warning` is the site's own "not ready yet" colour -- the Draft chip and the unnamed-slot
+   state both use it -- and at 0.17 chroma against the label's 0.02 it separates on the axis the eye
+   actually reads. The treatment is the Draft chip's, sized down for a nav pill.
+   
+   `em`, so it tracks the pill's own size at every breakpoint instead of needing a second media
+   query. */
 .pp-subpill__tag {
     margin-left: 0.45em;
-    padding: 0.1em 0.42em;
+    padding: 0.08em 0.42em;
     border-radius: 999px;
-    background: color-mix(in oklab, var(--pp-text-mute) 22%, transparent);
-    color: var(--pp-text-mute);
-    font-size: 0.78em;
+    background: color-mix(in oklab, var(--pp-warning) 18%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 42%, transparent);
+    color: var(--pp-warning);
+    font-size: 0.72em;
     font-weight: 700;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
 }
-.pp-subpill.is-active .pp-subpill__tag {
-    background: color-mix(in oklab, var(--pp-primary) 20%, transparent);
-    color: var(--pp-primary);
-}
+/* UNCHANGED WHEN ACTIVE, deliberately. The label turns primary on the active pill; a chip that
+   turned primary with it would be the same invisibility again, one state over. Amber on the
+   primary-tinted active pill stays legible and stays distinct. */
 .pp-subpill.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 13%, transparent); }
 
 /* Overflow "More" trigger + dropdown (JS shows it only when the rail overflows). */
