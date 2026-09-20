@@ -254,10 +254,16 @@ COMMUNITY_HUB = HubSubnavConfig(
     icon='users',
     # Both spellings while the /profiles/ -> /hunters/ 301s stand: this is a PATH PREFIX match, so a
     # visitor landing on an old profile URL would otherwise lose the rail on the way through.
-    # `/community/` is here for the Lists pages already served under it, which are staff-gated today.
+    # `/community/` is here for the Lists and Challenges pages served under it.
     prefixes=('/community/', '/hunters/', '/profiles/'),
     items=(
         HubSubnavItem('lists', 'Game Lists', 'lists_browse', 'list'),
+        # A COMING-SOON PAGE EARNS A RAIL ITEM, which is not obvious. It is here because the rail is
+        # how somebody learns what this hub contains, and a hub of two while a third is weeks away
+        # reads as the whole offering. The page it points at is real and says so plainly -- the rule
+        # set when Challenges was parked was a page, never a redirect. It keeps its slug and url_name
+        # when the real browse replaces it.
+        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag'),
         HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user'),
     ),
 )

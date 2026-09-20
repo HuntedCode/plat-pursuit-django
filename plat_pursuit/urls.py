@@ -33,7 +33,7 @@ from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, Cr
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ChallengesComingSoonView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap,
@@ -401,6 +401,9 @@ urlpatterns = [
     # them deliberately -- the rebuild edits in place and has no such address.
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
     path('community/lists/create/', CreateListView.as_view(), name='list_create'),
+    # CHALLENGES, as a real page rather than a redirect while the system is rebuilt. Same URL and
+    # same name the real browse will take, so nothing that links here changes when it lands.
+    path('community/challenges/', ChallengesComingSoonView.as_view(), name='challenges'),
     path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
     # The list's own write endpoints. Under the page's path rather than /api/v1/, because they are
     # this page's behaviour and share its gate -- routing them through the API app would mean a

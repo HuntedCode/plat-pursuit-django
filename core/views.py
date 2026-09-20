@@ -4,6 +4,7 @@ import time
 from django.conf import settings
 from django.contrib.staticfiles.finders import find
 from django.http import HttpResponse
+from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
 from trophies.mixins import StaffRequiredMixin
@@ -61,6 +62,32 @@ class AboutView(TemplateView):
 
 class ContactView(TemplateView):
     template_name = 'pages/contact.html'
+
+
+class ChallengesComingSoonView(TemplateView):
+    """A real page saying Challenges are on the way, not a redirect.
+
+    THE CALL WAS MADE WHEN THE SYSTEM WAS PARKED: somebody following a link into a system that is
+    mid-rebuild gets told so, in the site's own voice, rather than bounced to the homepage -- which
+    reads as a broken link and teaches people the link is dead.
+
+    It also stops the Community rail looking barren at the Game Lists launch. The rail's own comment
+    has said "Challenges and the Hall of Fame join this rail next" since it turned on; this is the
+    first half of that, standing in until the real browse replaces it AT THE SAME URL AND NAME, so
+    nothing that links here has to be updated when it does.
+
+    Costs no queries. It reads nothing and renders a static template.
+    """
+
+    template_name = 'pages/challenges_coming_soon.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Challenges'},
+        ]
+        return context
 
 
 class WhatsNewView(TemplateView):

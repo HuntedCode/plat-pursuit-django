@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block title %}Challenges{% endblock %}
+{% block meta_description %}Challenges are coming back to Platinum Pursuit. Your past A-Z runs are safe.{% endblock %}
+{% comment %}NOINDEX. A page whose only content is "not yet" is a thin result that would rank for
+"platinum pursuit challenges" and answer nobody -- and it would keep ranking after the real page
+replaces it, because the URL is the same one. `follow` so the rail still passes authority onward to
+the pages that do have something on them.{% endcomment %}
+{% block robots %}noindex, follow{% endblock %}
+
+{% block content %}
+{% comment %}A REAL PAGE, not a redirect, and that was a deliberate call when Challenges was parked:
+somebody who followed a link to a system that is mid-rebuild deserves to be told so, on a page, in
+the site's own voice. Bouncing them to the homepage reads as a broken link.
+
+THE SHELL IS THE REBUILT ONE -- the accented header card every other rebuilt page opens with --
+because this sits in the Community rail directly beside Game Lists, and a placeholder that skipped
+the house treatment would make the whole tab look half-finished rather than in progress.{% endcomment %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                </svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Challenges</h1>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                Coming back soon.
+            </p>
+        </div>
+    </section>
+
+    {% comment %}UTILITIES, not a `.pp-soon` block. This page is deleted the day the real browse
+    lands, and a block invented for it would outlive it as orphan CSS -- which is exactly the class
+    of bug the lists app keeps a guard against.{% endcomment %}
+    <section class="scard p-4 md:p-6">
+        <p class="text-sm md:text-base text-base-content/80">
+            Challenges are being rebuilt from the ground up. Hang tight while we make something
+            worth the wait.
+        </p>
+
+        {% comment %}THE ONE CONCRETE THING, and it is the one hunters will actually worry about.
+        `ArchivedAZChallenge` is the only surviving copy of that data and the revival plan re-imports
+        it, so this is a promise the codebase can keep. Everything else about the rebuild is still
+        moving and is deliberately not promised here.{% endcomment %}
+        <p class="text-xs md:text-sm text-base-content/50 mt-3">
+            Your past A&ndash;Z runs are safe. We kept them, and they come with you.
+        </p>
+    </section>
+</div>
+{% endblock %}
