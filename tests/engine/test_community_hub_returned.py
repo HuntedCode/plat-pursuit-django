@@ -56,7 +56,10 @@ def test_the_rail_turned_on_when_there_was_somewhere_else_to_go():
     # Exact equality, which already excludes `my_lists` -- a second assertion saying so was
     # decoration wearing a guard's message, and no edit could make one pass while the other failed.
     # `test_lists_live.py` carries the membership check that CAN fail independently.
-    assert [i.slug for i in hub.items] == ['lists', 'profiles']
+    # `challenges` joined 2026-09-19: a coming-soon PAGE, not a redirect, because a hub of two
+    # while a third is weeks away reads as the whole offering. See
+    # `test_challenges_coming_soon.py`.
+    assert [i.slug for i in hub.items] == ['lists', 'challenges', 'profiles']
 
 
 def test_hunters_is_chromed_as_community_everywhere_it_is_reachable():

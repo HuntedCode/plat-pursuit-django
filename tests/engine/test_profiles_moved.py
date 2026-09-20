@@ -95,7 +95,10 @@ def test_hunters_is_a_community_surface_now():
     # The rail turned ON in 2026-09, when Game Lists came off its gate and gave the hub a second
     # destination. It ran `items=()` until then, on the reasoning that a single pill naming the
     # page you are already on is not navigation.
-    assert [i.slug for i in match['hub'].items] == ['lists', 'profiles']
+    # `challenges` joined 2026-09-19: a coming-soon PAGE, not a redirect, because a hub of two
+    # while a third is weeks away reads as the whole offering. See
+    # `test_challenges_coming_soon.py`.
+    assert [i.slug for i in match['hub'].items] == ['lists', 'challenges', 'profiles']
     assert match['active_slug'] == 'profiles'
 
     # ...and Browse's Catalog lost exactly one entry. 'jobs' joined in 2026-08 (`/jobs/` is the public
