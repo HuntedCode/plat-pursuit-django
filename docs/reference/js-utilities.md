@@ -72,6 +72,32 @@ try {
 
 **Do not migrate binary fetches**: API auto-parses as JSON/text. Use raw `fetch()` for blob/image downloads.
 
+### PlatPursuit.postJson
+
+`postJson(url, formDataOrObject)` -- POST that refuses a redirected HTML response.
+
+```js
+PlatPursuit.postJson(url, body).then(data => ...).catch(err => ...);
+```
+
+> **Why it exists.** `fetch` FOLLOWS redirects, so an expired session arrives as `200 text/html` --
+> a login page that a naive caller reads as success. It printed "Added undefined." and flipped a row
+> to a state the server never reached. This refuses a non-object body and sets `err.signedOut`, so
+> the caller can say "reload and try again" instead of lying. Every write on the Game Lists pages
+> goes through it; `API.postFormData` is called in exactly one place, inside this.
+
+### PlatPursuit.GameAdder
+
+`GameAdder(root, opts)` -- the catalogue typeahead that adds a game to something.
+
+```js
+PlatPursuit.GameAdder(panelRoot, { prefix: 'gl', minQuery: 3, onAdd: fn });
+```
+
+> Extracted from `list-detail.js` when a second caller needed it, and parameterised by `prefix` plus
+> its copy rather than copied. Debounced search, keyboard navigation, an `aria-live` status line, and
+> an `already_added` state bounded to the page of results rather than to the whole list.
+
 ### PlatPursuit.HTMLUtils
 
 | Method | Parameters | Returns | Purpose |
@@ -99,11 +125,20 @@ const scroller = PlatPursuit.InfiniteScroller.create({
     formSelector: '#filter-form',  // Optional: resets page on submit
     scrollKey: 'games_scroll',     // Optional: localStorage key for scroll restore
     cardSelector: '.card',         // Optional: selector for items in fetched HTML
+    cellSelector: '.card-wrap',    // Optional: the WRAPPER to append, when cards are wrapped
 });
 
 // Cleanup
 scroller.destroy();
 ```
+
+> **`cellSelector` and when it is load-bearing.** Some grids wrap each card in a cell that carries
+> sibling controls -- Browse Games and friends wrap `.pp-gcard` in `.pp-gcard-wrap` to hang the
+> quick-add button off it, and only for a signed-in linked hunter. Without `cellSelector` the
+> scroller appends the bare CARD and the wrapper is dropped, so the control vanishes **from page two
+> onward** while page one looks perfect. `staggerReveal` takes the same option for the same reason:
+> the reveal has to ride the cell, or a sibling control is animated independently of the card it
+> belongs to. Whenever one of them gets it, so does the other.
 
 Fetches next page via AJAX with `X-Requested-With: XMLHttpRequest`, parses HTML, appends matching elements to the grid. Automatically stops when a page returns no matching elements or 404.
 
@@ -344,7 +379,7 @@ use it.
 
 | Method | Parameters | Purpose |
 |--------|-----------|---------|
-| `staggerReveal(opts)` | `{grid, cardSelector, reveal, step?, batchCap?, appendCap?, hideClass?}` | Staggered WAAPI grid reveal for HTMX-swapped / infinite-scroll grids |
+| `staggerReveal(opts)` | `{grid, cardSelector, cellSelector?, reveal, step?, batchCap?, appendCap?, hideClass?}` | Staggered WAAPI grid reveal for HTMX-swapped / infinite-scroll grids. `cellSelector`: reveal the WRAPPER rather than the card -- see `InfiniteScroller` above |
 
 > **Never on a virtualized list.** It adds `.pp-reveal` to the container permanently and the paired CSS
 > holds rows at `opacity: 0` until an IntersectionObserver grants `.is-revealed`. Rows mounted and evicted

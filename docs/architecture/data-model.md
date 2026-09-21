@@ -409,7 +409,18 @@ for the full picture; the model facts that matter elsewhere:
 - `list_type` — `collection` or `ranked`, presentation only; switching it moves no rows
 - Denormalized `game_count`, `like_count`, `follower_count`, maintained only by the service
 - Soft delete via `is_deleted` + `deleted_at`
-- `GameListQuerySet` exposes `visible()` / `public()` / `owned_by()` / `readable_by()`. Only
+- `text_hidden` — a moderator hid the name AND description. The list, its games, its likes and its
+  followers are untouched; only the words go. **Never read directly** — `display_name` /
+  `display_description` are the supported readers, and the view context is as much a reader as a
+  template (the breadcrumb and the `og:*` tags leaked the hidden name until they used them). Browse
+  also excludes hidden rows from its text search and sorts them under the placeholder, because the
+  index and the sort order are both channels back to the words.
+- `featured_at` — nullable timestamp; non-null means the list is eligible for the browse Spotlight
+  and the most recent wins. Set only from the Django admin's feature/unfeature action.
+  `GameListQuerySet.featured()` is `public()` + non-null, ordered `-featured_at, -pk`.
+- `sections_restart_numbering` — sectioned RANKED lists only: restart at 1 in each section rather
+  than running 1..N. A display choice that stores nothing else; see `GameListItem.position`.
+- `GameListQuerySet` exposes `visible()` / `public()` / `owned_by()` / `readable_by()` / `featured()`. Only
   `owned_by()` is unconditionally index-served; `public()` is served when the caller names one of
   the two browse sorts (`Meta.ordering` matches neither), and `visible()` and `readable_by()` are
   not. See [game-lists.md](../features/game-lists.md#visibility) for the table.
@@ -438,6 +449,32 @@ Because entries point at `Concept`, **`Concept.absorb()` carries a `GameListItem
 `position` is **dense** and that is load-bearing beyond ordering: `gamelists.services.covers`
 composes the browse tile's cover mosaic with `position__lt=4`, so a gap renders a three-cover mosaic
 on a four-game list. The service re-compacts on removal and `absorb()` repairs after a merge.
+
+### gamelists.GameListSection
+
+An author-named group of games within one list. **A membership perk to CREATE**, never to read: a
+free hunter sees a sectioned list exactly as anyone else does, and a lapsed member keeps the
+sections they have.
+
+- `game_list` FK, `name`, `position` (dense, per list), capped by `MAX_SECTIONS_PER_LIST`
+- `GameListItem.section` is nullable and **SET_NULL** — deleting a section keeps its games, which
+  fall back into the ungrouped bucket. CASCADE here would delete somebody's games because they
+  tidied a header.
+- **Needs no `Concept.absorb()` branch**: it has no relation to `Concept` at all, and its items
+  travel through the `GameListItem` branch that is already there.
+
+### gamelists.GameListReport
+
+A hunter objects to a list's name or description. Mirrors `BlurbReport` field for field.
+
+- `game_list` FK (**CASCADE**), `reporter` FK to `Profile`, `reason` (choices), `details`, `status`,
+  `reviewed_by`, `reviewed_at`
+- `unique_together = ['game_list', 'reporter']` — one report per hunter per list, so the first
+  objector cannot silence the second
+- `trophies.ModerationAction.list_report` is the FK back (**SET_NULL**, cross-app by string label),
+  alongside the `list_text_hidden` / `list_text_restored` / `list_report_dismissed` /
+  `list_report_reopened` action choices. Both hide and dismiss are reversible through `_UNDO`.
+- **Needs no `absorb()` branch**: it FKs the LIST, not a `Concept`, so it follows its list.
 
 ### gamelists.GameListLike / gamelists.GameListFollow
 

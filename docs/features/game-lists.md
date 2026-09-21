@@ -59,6 +59,7 @@ gate.
 | `gamelists/services/game_list_service.py` | **Every write.** Rules live here, nowhere else |
 | `gamelists/services/covers.py` | Batched cover resolution for the tile mosaic |
 | `gamelists/views.py` | Three pages, twelve JSON endpoints, and the create form post |
+| `gamelists/admin.py` | The curation desk: featuring a list for the browse Spotlight. Read-mostly |
 | `templates/gamelists/` | `browse.html`, `my_lists.html`, `detail.html` + partials |
 | `static/js/lists-browse.js` | Browse page motion + infinite scroll |
 | `static/js/gamelists.js` | My Lists: the create dialog and the scope switcher |
@@ -84,6 +85,11 @@ Full field-level detail in [data-model.md](../architecture/data-model.md). What 
   itself cascades from its list, and **needs no `Concept.absorb()` branch**: it has no relation to
   `Concept` at all, and its items travel through the `GameListItem` branch that is already there.
 - Denormalized `game_count` / `like_count` / `follower_count`, written only by the service.
+- **`featured_at` is the whole of the Spotlight's storage.** Nullable timestamp: null means not
+  featured, and the most recent non-null wins. Deliberately not the `FeaturedGuide` /
+  `FeaturedGame` / `FeaturedProfile` shape (FK + `priority` + a date window) that `trophies` already
+  carries three copies of, two of which have no consumer outside the admin. See
+  [The Spotlight](#the-spotlight).
 
 ### Visibility
 
@@ -443,6 +449,24 @@ submits no content, so it sits with un-publishing and deleting on the allowed si
 
 ## Key Flows
 
+### Getting into the editor
+
+One entry point, `[data-gl-edit-open]`, and it opens the **whole** editing state: name, description,
+sections and arrange mode. There is deliberately no second door — they are one state, not four
+controls.
+
+It lives in the `.gl-actions` band beside Publish, as a labelled `Edit list` button. It used to be a
+44px icon-only pencil welded to the `h1`, and that was the wrong idiom twice over: a bare pencil
+beside a field is the *inline field-edit* pattern, the one you meet a dozen times down a settings
+form each editing the value it sits next to — so it read as "rename this heading" and went unfound,
+while what it opens is the entire editor. The band is where the page already puts actions that
+"act on the very thing the header describes", which is exactly what this does.
+
+Ghost, and first: Publish keeps the only filled treatment because it is the act a new owner should
+take, and editing goes first because it is the everyday one. It carries `aria-expanded` and
+`aria-controls="gl-edit-panel"`, toggled on both edges — an `aria-expanded` that never changes is
+worse than none, since it states a fact and then lies.
+
 ### Publishing
 
 A list is **private when it is born**, and publishing is a deliberate second act with its own
@@ -468,6 +492,97 @@ size cap made truncation impossible and the line was deleted.)
 A `Concept` cannot answer "what does this game look like" — two of the cover chain's four sources live
 on `Game`. `covers.cover_games_for()` picks a representative `Game` per concept in **one query** for
 the whole page, mirroring the concept page's platform-priority rule. Never call it per card.
+
+---
+
+## The Spotlight
+
+One featured list, in a wide band between the filter toolbar and the browse grid. It is the only
+place on the page where the site speaks in its own voice rather than showing what hunters made.
+
+**Why a band and not a shelf of four.** A row of featured tiles that look like their neighbours says
+*these are popular*; one band with a written line says *a person chose this*. It also survives the
+authoring constraint: a Featured shelf needs four fresh blurbs forever, a Spotlight needs one.
+
+**The blurb is the list's own `description`.** There is no separate editorial-blurb field, because
+that would be a second thing to write for every pick when the first already exists.
+
+### How it is chosen
+
+`GameList.objects.featured()` — `public()`, plus `featured_at__isnull=False`, ordered
+`-featured_at`, `.first()`. Built on `public()` rather than `visible()` so a list that is
+un-published, deleted or moderated *after* being featured drops out on its own. The page cannot
+promote something its own grid would refuse to show.
+
+Set it from Django admin (`/admin/gamelists/gamelist/`), which `core/admin_site.py` narrows to
+**superusers** — so featuring is the owner's lever, not the admin team's. That is right while the
+picks are staff-written; if it ever wants to be a moderator action it belongs in `/staff/`, where it
+would be logged. The `feature_selected` action refuses a multi-row selection (most-recent-wins would
+silently pick one and leave the others looking featured) and refuses a list the band could not show.
+
+Nothing restricts featuring to staff-owned lists, in the model or in a service guard. Curation *is*
+the act of setting the field, and the people who can set it are already the people with admin
+access. Encoding "staff-authored" a second time would have to be unpicked, with its tests, on the
+day a hunter's list deserves the slot.
+
+### The gate, and why it is only one
+
+`BrowseListsView._spotlight()` returns `None` on a **partial render** — HTMX or XHR — and otherwise
+fetches. The band lives *outside* `#browse-results`, so a filter swap and an InfiniteScroller page
+render the grid partial and never render it, but `get_context_data` still runs for them. Without
+this the query fires on every keystroke of live search to build a value that is discarded. The
+condition is `HtmxListMixin.is_partial_render()`, the mixin's own test — asked rather than
+re-implemented, so the two cannot drift.
+
+**There used to be a second gate on `has_filters`, and it was wrong in a way no server test could
+see.** A filtered page must not *show* the band, and returning `None` achieved that on a full
+render — but live search does not do full renders. It swaps `#browse-results`, the band is outside
+that target, so the band already sent simply stayed on screen above the reader's results. The gate
+worked only on the path nobody takes interactively.
+
+So the band is fetched on every full render and the **template** decides whether it starts
+collapsed (`.gl-spotwrap.is-collapsed` + `inert`), with `lists-browse.js` collapsing and restoring
+it as filters come and go. The grid partial carries `data-has-filters` so the client reads the
+server's definition rather than re-deriving it — a second copy of "is a filter on" in JS is what
+made the band vanish on the first keystroke in the first place.
+
+That also fixed the other half: landing on `?q=soulslike` and clearing the box used to leave no
+band at all, because none had ever been rendered to reveal. The cost is one indexed lookup on a
+filtered *full* page load — a direct link or an Enter press, never the per-keystroke path.
+
+**The collapse is an animation**, not `display: none`: `grid-template-rows: 1fr → 0fr`, because a
+band that vanishes mid-keystroke and drops the grid up the page reads as a glitch. `inert` rides
+with it — a 0px transparent band still has a focusable link otherwise, and opacity is not
+hit-testing.
+
+### Rendering
+
+`.gl-spotlight` in `gamelists.css`. It is **not** built on one of the four signature primitives:
+Frame, Pursuer Card, Horizon and Tally do not own "editorial feature", and Horizon in particular is
+a *progress* meter whose own anti-patterns forbid decorative use. The editorial accent comes from
+`.msc-spot` (`milestone-cards.css`) — a local `--spot-c`, a diagonal wash, a tinted border that
+strengthens on hover.
+
+**The band is a cover reel, not a bigger tile**, and that is the second version. The first paired a
+four-cover mosaic with three short lines of text, which on a desktop width left most of the band as
+empty gradient: it read as *highlighted* rather than *featured*. The fix came from the identity
+doc's own rule for the Frame — **the art should be the loudest element** — so the space went to the
+list's actual contents:
+
+| Part | What it does |
+|---|---|
+| `__reel` | A row of the list's real covers that deliberately **overflows** under a mask fade. The cut-off is the effect: a strip stopping short of the edge looks unfinished, one running off it says there is more of this list. Fills the width by construction at every breakpoint, so the dead space cannot return. |
+| `__eyebrow` | A bordered chip, not 9.5px of tracked-out caps. Caps are the site's *label* treatment; this is the one line on the page that is us talking. |
+| `__name` | Engages Bricolage's `wdth` axis at 100. `visual-identity.md` calls that axis load-bearing ("wider widths read as headline / monumental") and nothing else on the site had used it. |
+
+`SPOTLIGHT_COVERS` (8) is deeper than `LIST_TILE_COVERS` (4) **so that the reel overflows**, which
+is why the band gets its own `attach_cover_games` call rather than riding the grid's. Those were
+briefly merged, correctly, while both wanted four; merging them now would mean fetching eight covers
+for all twenty-four grid lists to serve one band. The layout splits at **640px**, not the usual
+`md:`, because the stacked layout wastes more width the wider it gets.
+
+The featured list also appears in the grid below, on purpose: excluding one row mid-pagination
+drifts the offsets InfiniteScroller pages on, so page two would skip or repeat a list.
 
 ---
 
@@ -529,10 +644,69 @@ runs the raw `section` through `safe_int` before that filter, because `filter(pk
 
 ---
 
+## Reporting and moderation
+
+A hunter reports a list's **words**, not the list. `hide_list_text` sets `text_hidden`, which the
+`display_name` / `display_description` readers honour everywhere; the games, likes, followers and
+the owner's curation are untouched. That mirrors `hide_blurb`'s call: removing an objectionable
+title is not a reason to destroy a two-hundred-game backlog.
+
+**Hiding is reversible**, through the same Reverse button every other decision uses —
+`_UNDO['list_text_hidden']` → `_undo_list_text_hidden`. It shipped without that and was a one-way
+door whose only exit was a shell write that bypassed the audit log. `restore_list_text` was the
+dead parallel writer and has been **deleted**: it set no `reverses` link and carried none of the
+standing-decision guard, so a future caller reaching for the obvious name would have re-created
+the bug below.
+
+**Two hides can cover one list.** The second finds the words already gone, writes `changed={}`,
+and is deliberately irreversible on that basis. So `_undo_list_text_hidden` also refuses when
+*another* unreversed `list_text_hidden` exists for the same target — without it, reversing the
+first hide put the words back over a standing decision nobody disputed, with no entry left that
+could take them down again. `_restore_hidden` carries the identical guard for the blurb path.
+
+### Hiding has to hide from the index too
+
+Three surfaces leaked the hidden text after the templates were fixed, and each is worth knowing
+because they are all the same shape — a flag honoured where somebody remembered:
+
+| Surface | Why it leaked |
+|---|---|
+| Breadcrumb, `og:title`, `og:description` | built in the **view**, not the template. The crumb renders visibly two inches above a corrected `h1`, and the OG tags are what Discord and Google scrape. |
+| Browse **search** | matched the raw columns. The tile said "Untitled list", but the match itself confirmed the string — reconstructable substring by substring on an anonymous page. |
+| Browse **`?sort=alpha`** | ordered on the raw name, so a hidden list sat at its real alphabetical position between two visible ones and could be read off by bisection. It sorts under the placeholder now. |
+
+A hidden list stays findable by its **owner's name**, which is not the moderated text and is how
+somebody returns to a list they know exists.
+
+### The restriction asymmetry
+
+`report_list` checks `'reports' in active_scopes_for(profile)` — the **narrow** scope, not
+`is_restricted_from(profile, 'reports')`, which resolves through `SCOPE_COVERS` and would also
+refuse an `all_ugc`-restricted hunter. That is deliberate: a restriction on writing content is not
+a reason to stop somebody flagging a slur, while a restriction aimed at report abuse is exactly
+that. **It makes list reports the one surface on the site that accepts an `all_ugc`-restricted
+reporter** — every other report path blocks them via the covering helper. Deliberate, but a
+divergence; the counter-argument is that `details` is 500 characters of free text pushed at a
+human, which is the thing `all_ugc` names.
+
 ## Gotchas and Pitfalls
 
 - **Import from the right module.** Three class names exist twice, and `trophies/views/__init__.py`
-  re-exports three view names the URLconf now takes from `gamelists.views`.
+  re-exports three view names the URLconf now takes from `gamelists.views`. This is not theoretical:
+  a code-reading agent pointed at "the Game Lists browse page" in 2026-09 spent its entire run in
+  `templates/trophies/browse_lists.html` and `trophies.GameList`, and reported confident, precise,
+  wholly inapplicable findings. Anything sourced from those paths is about the dead system.
+- **The Spotlight must stay outside `#browse-results`.** Inside the swap target it is torn out and
+  rebuilt on every filter keystroke and every scroll page, and `_spotlight()`'s partial-render gate
+  stops matching the thing it is gating. A template-order test pins it, because no assertion about
+  rendered text can see this.
+- **A marked byline needs its mark capped.** `.pp-markname` is an `inline-flex`; inside a
+  `white-space: nowrap` container nothing bounds it, so the container's `overflow: hidden` shears off
+  the overhang — and the glyph sits *after* the name, so what gets sheared is the mark itself, on
+  exactly the long names that made the row truncate. `max-width: 100%` fixes it. Making the byline a
+  flex container does **not**: that repairs the marked case and breaks the ~99% unmarked one, since a
+  bare text node inside a flex parent becomes an anonymous flex item at min-content width and cannot
+  ellipsize at all.
 - **Raising the ceiling means raising BOTH constants.** `MAX_ITEMS_RENDERED` is *derived* from
   `MAX_ITEMS_PER_LIST` for that reason. Decoupling them re-creates the truncation bug family; genuine
   pagination is the other way to break the tie, and that is a project rather than a constant.

@@ -119,9 +119,19 @@ surfaces (tier chips, become-preview) keep the flat run at every size.
 - **`user.save()` triggers a profile write** (the mark refresh). Bulk user updates via
   `queryset.update()` skip it -- if a bulk operation changes roles, refresh marks explicitly.
 - **Comments render the full partial** (glyph included -- a moderator's authority must not be
-  hue-alone, and staff crimson sits near `--pp-error`). Game-list surfaces render the author's
-  name plain: the rebuilt list card (2026-09) shows `display_psn_username` with no mark treatment,
-  which is a DECISION to revisit rather than the dormancy this used to describe. A browse grid of
-  twenty cards would carry twenty marks, and the card's job is to identify the LIST.
+  hue-alone, and staff crimson sits near `--pp-error`). **Game-list surfaces now wear the mark
+  too** -- the list card, the detail byline and the Spotlight band all render `{% name_mark %}`
+  (`tests/engine/test_list_author_mark.py`). The earlier decision to render them plain, on the
+  grounds that a grid of twenty cards would carry twenty marks and the card's job is to identify
+  the LIST, was reversed when Game Lists went public in 2026-09: without it a staff-written list
+  and a stranger's were indistinguishable on the grid, which is precisely what the editorial
+  Spotlight needed to say. The card byline was the one author name on the site rendering as bare
+  text.
+  - **A marked byline needs its mark CAPPED** (`.gl-card__author .pp-markname { max-width: 100% }`).
+    `.pp-markname` is an `inline-flex`; unbounded inside a `nowrap` container it lays out at full
+    width and the container's `overflow: hidden` shears off the overhang -- and the glyph sits
+    AFTER the name, so what gets sheared is the mark itself, on exactly the long names that made
+    the row truncate. Making the byline a flex container instead fixes the marked case and breaks
+    the unmarked ~99%.
 - **Unlinking a PSN profile clears the mark** (`update_profile_premium` handles the orphaned
   no-user case) -- an orphaned profile keeps rendering on Browse Hunters and the boards.
