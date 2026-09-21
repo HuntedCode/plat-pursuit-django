@@ -557,6 +557,67 @@ class ProfileDetailView(DetailView):
             'card_filename': f"{profile.display_psn_username or profile.psn_username}-profile-card.png",
         }
 
+    def _public_lists_for(self, profile):
+        """This hunter's PUBLISHED lists, newest-liked first. The queryset both readers share.
+
+        `.public()` rather than a hand-written `is_public=True, is_deleted=False`: it is the one
+        supported read path for somebody else's list, it matches the partial index predicate exactly,
+        and it is what keeps a soft-deleted or moderator-removed list off the wall. Browse reads it
+        the same way and for the same reason.
+
+        PUBLIC EVEN WHEN YOU ARE LOOKING AT YOURSELF. `/my-lists/` owns private lists and the whole
+        management surface; this tab answers what a hunter has put out, which is the same question
+        for the owner as for a visitor. Two surfaces managing one thing is the failure being avoided.
+
+        The ordering matches the browse page's default sort (`popular`), so a list does not change
+        rank depending on which grid you meet it in.
+
+        NO `select_related('owner')`, deliberately, where the browse page has one. Every row here
+        belongs to the profile being viewed, so the owner is already in memory; joining it would
+        materialize a fresh copy of a wide row (`about_me`, two JSONFields) once per list to render
+        a name this page already knows. `_build_lists_tab_context` assigns it instead.
+
+        The `-pk` tiebreak the rest of the app carries is deliberately absent: `created_at` is
+        `auto_now_add` at microsecond resolution and both columns here belong to ONE owner, so there
+        is no realistic tie. Add it if this ever sorts across owners.
+        """
+        from gamelists.models import GameList
+
+        return (GameList.objects.public()
+                .filter(owner=profile)
+                .order_by('-like_count', '-created_at'))
+
+    def _build_lists_tab_context(self, profile):
+        """The lists this hunter has published.
+
+        NOT PAGINATED, because `gamelists.MEMBER_MAX_LISTS` caps an account at 25 lists and the free
+        tier at 3 -- so this wall is bounded by a small constant rather than by the profile's size,
+        which is the one thing that makes a profile tab dangerous. There is no scroll append and no
+        results template; the panel deliberately renders no sentinel, which is how profile_detail.html
+        knows not to build a scroller. Raising that cap turns this into a real paginated tab.
+
+        `attach_cover_games` is TWO queries for the whole wall regardless of how many lists it holds,
+        and it is where the cover-art discipline lives: `select_related` for the two hops
+        `display_image_url` walks, and `raw_response` deferred (the ~30 KB IGDB blob behind the May
+        2026 OOM). Building the mosaic here instead would N+1 on every tile.
+        """
+        from gamelists.models import MEMBER_MAX_LISTS
+        from gamelists.services.covers import attach_cover_games
+
+        # THE RENDER CARRIES ITS OWN BOUND, which is the rule `gamelists/models.py` states for this
+        # exact shape: the caps live in the service, so a row that arrived another way (a shell
+        # write, a data migration, the legacy importer that model comment anticipates, or simply a
+        # raised cap) must not be able to turn a public page into an unbounded render. Without this
+        # the docstring's "bounded by a small constant" was a claim about a DIFFERENT module.
+        lists = self._public_lists_for(profile)[:MEMBER_MAX_LISTS]
+        # The owner is the profile being viewed, so hand it over rather than joining it per row.
+        # `attach_cover_games` materializes the slice, so this assigns onto the rows the template
+        # actually renders.
+        rows = attach_cover_games(lists)
+        for game_list in rows:
+            game_list.owner = profile
+        return {'profile_lists': rows}
+
     def _build_ratings_tab_context(self, profile):
         """What this hunter thinks of what they have played.
 
@@ -636,13 +697,33 @@ class ProfileDetailView(DetailView):
         # re-reads the raw query string on the HTMX path.
         if tab == 'card' and not is_own_profile:
             tab = 'games'
+        # LISTS normalizes away when there is nothing behind it, for exactly the reason `card` does
+        # above: its chip is conditional, so without this a hand-typed `?tab=lists` on a hunter with
+        # no public lists selected a tab that HAS no chip -- every chip rendering
+        # `aria-selected="false"`, nothing wearing `is-active`, and `slideViewIn`'s order array
+        # missing the slug it was handed. A switcher with nothing selected reads as broken.
+        #
+        # Reachable two ways: the typed URL, and a chip that went stale because the list was
+        # unpublished, deleted or moderated between the render that drew it and the click.
+        #
+        # Computed ONCE and reused by the chip loop below, which is why it is stored rather than
+        # called twice -- the first cut ran this `.exists()` and then evaluated the same queryset
+        # again a few lines later.
+        self._has_public_lists = (profile.psn_history_public
+                                  and self._public_lists_for(profile).exists())
+        if tab == 'lists' and not self._has_public_lists:
+            tab = 'games'
         # And the same normalization for anything that is not a tab at all. The dispatch below
         # already defaults an unknown slug to games, but `_resolved_tab` kept the raw string, and
-        # `get_template_names` has no default of its own -- so `?tab=lists` (or `?tab=anything`) over
-        # HTMX fell past both template maps and answered with the WHOLE PAGE, which htmx then swapped
-        # into the tab panel: a complete document nested inside a card grid. The InfiniteScroller
-        # path reached it too, since it rebuilds the query string from the address bar, so a stale
-        # `?tab=lists` bookmark plus a scroll appended a second copy of the site to the results.
+        # `get_template_names` has no default of its own -- so `?tab=anything` over HTMX fell past
+        # both template maps and answered with the WHOLE PAGE, which htmx then swapped into the tab
+        # panel: a complete document nested inside a card grid. The InfiniteScroller path reached it
+        # too, since it rebuilds the query string from the address bar, so a stale bookmark plus a
+        # scroll appended a second copy of the site to the results.
+        #
+        # The example here used to be `?tab=lists`, from the window when the legacy tab had been
+        # pulled. It is a real tab again as of 2026-09, so the example was changed rather than left
+        # to read as though the slug were still invalid.
         if tab not in self._TAB_TEMPLATES:
             tab = 'games'
         self._resolved_tab = tab
@@ -688,6 +769,8 @@ class ProfileDetailView(DetailView):
             tab_context = self._build_badges_tab_context(profile)
         elif tab == 'ratings':
             tab_context = self._build_ratings_tab_context(profile)
+        elif tab == 'lists':
+            tab_context = self._build_lists_tab_context(profile)
         elif tab == 'card':
             tab_context = self._build_card_tab_context(profile)
         else:
@@ -703,17 +786,38 @@ class ProfileDetailView(DetailView):
             {'text': f"{profile.display_psn_username}"}
         ]
         context['current_tab'] = tab
-        # The tabs the switcher renders, in order. Lists is not here, and as of 2026-09 the view no
-        # longer knows how to build it either. Closing the door was not enough: `?tab=lists` still
-        # RENDERED for anybody who typed it, and the count feeding its header ran a `COUNT(*)` against
-        # the parked system on every profile render -- into a context key no template read. The
-        # rebuilt system brings its own tab rather than inheriting this one.
+        # The tabs the switcher renders, in order.
         profile_tabs = [
             ('games', 'Games'),
             ('trophies', 'Trophies'),
             ('badges', 'Badges'),
             ('ratings', 'Ratings'),
         ]
+        # LISTS, rebuilt against `gamelists` in 2026-09. The legacy tab was removed when the old
+        # system was parked, and the note left here asked the revamp to bring its own rather than
+        # inherit it; this is that. Before it existed there was no author-scoped view of lists
+        # ANYWHERE -- browse filters on text, game count and a follow scope, never on a person -- so
+        # meeting a list and asking who made it dead-ended on a profile that never mentioned lists.
+        #
+        # CONDITIONAL, on the same principle as the Card chip below: a door is only offered when
+        # there is something behind it. At launch almost no profile has a public list, and a chip
+        # that is empty for everybody is chrome on every profile render plus crowding on a switcher
+        # that has to survive 375px.
+        #
+        # `.exists()`, NOT a count, and resolved once up with the tab normalization. The removed
+        # tab's actual sin was a `COUNT(*)` against the parked system on every profile render, into
+        # a context key no template read; an indexed existence check that decides whether to draw a
+        # chip is not that (`glst_owner_idx` serves it).
+        #
+        # The `psn_history_public` half of `_has_public_lists` is a SAVED QUERY, not the privacy
+        # guard -- worth being exact about, because the comment that used to sit here read as though
+        # it were the guard. What actually hides this chip on a private profile is the template's
+        # `{% if profile.psn_history_public %}` around the whole switcher; dropping that half changes
+        # no rendered byte, which is mutation-checked in test_profile_lists_tab.py. It stays because
+        # the strip is not rendered for that profile at all, so it is a question nothing can read the
+        # answer to.
+        if self._has_public_lists:
+            profile_tabs.append(('lists', 'Lists'))
         # The Card tab is owner-only: the share-card family only ever serves your OWN card (same
         # rule as the plat card endpoints), so a visitor is not offered a chip that would 403.
         if is_own_profile:
@@ -747,6 +851,9 @@ class ProfileDetailView(DetailView):
         'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
         'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
         'ratings': 'trophies/partials/profile_detail/tabs/ratings_tab.html',
+        # No `_RESULTS_TEMPLATES` or `_INFINITE_SCROLL_TEMPLATES` entry, and that is the design: the
+        # wall is capped at `gamelists.MEMBER_MAX_LISTS` so it never has a second page.
+        'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
         'card': 'trophies/partials/profile_detail/tabs/card_tab.html',
     }
     _RESULTS_TEMPLATES = {
