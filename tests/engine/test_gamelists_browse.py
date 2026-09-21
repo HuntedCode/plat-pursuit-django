@@ -7,9 +7,11 @@ clamp. What changed underneath is the KEYING -- items point at Concepts now, so 
 a batched service rather than a prefetch, and the flatness tests are the ones that notice if that
 regresses.
 
-The page is staff-gated while this branch is open (lists ship with the Challenges beta, in one
-update), so every request here logs in as staff. That gate is a `_DevelopmentGate` mixin and its
-removal is the whole of "turn it on".
+THE PAGE IS PUBLIC. It was staff-gated while this branch was being built -- a `_DevelopmentGate`
+mixin whose removal was the whole of "turn it on" -- and this file's fixture still signs in,
+because it predates the un-gating rather than because the page requires it. The anonymous path is
+the one most readers take, so anything genuinely about visibility belongs in `test_lists_live.py`,
+which asserts no view inherits that gate any more.
 """
 import pytest
 from django.db import connection

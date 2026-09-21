@@ -15,7 +15,7 @@ from django.contrib import messages
 from django.core.cache import cache
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Case, CharField, F, Q, Value, When
 from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.shortcuts import redirect
@@ -41,6 +41,21 @@ from trophies.models import Concept
 
 #: How many covers the `.pp-gtile` mosaic composes around (`is-1` .. `is-4`).
 LIST_TILE_COVERS = 4
+
+#: How many covers the Spotlight's reel fetches. Deeper than the tile's mosaic on purpose: the reel
+#: runs off the right edge under a fade, and the overflow IS the effect -- it says "there is more of
+#: this list" where a strip that stops short of the edge just looks unfinished. Eight fills the reel
+#: at desktop widths with a cover or two still cut off.
+SPOTLIGHT_COVERS = 8
+
+#: ONE BUDGET FOR ONE ACT, shared by both doors that create a list.
+#:
+#: `django_ratelimit` derives its group from module+qualname when `group=` is omitted, so two views
+#: implementing the same act get two independent buckets -- the real create allowance was 60/m, not
+#: the 30/m each decorator appears to state, and each pass runs the fixpoint sanitiser, the
+#: banned-word scan and a list COUNT. `api/game_flag_views.py` shares a group across its two doors
+#: for exactly this reason and says why: "one deliberate act by a person, one unit of budget".
+CREATE_LIST_RATELIMIT_GROUP = 'gamelists-create'
 
 #: How many entries a list page renders at once. DERIVED from the size cap rather than written out
 #: again, because the two being equal is the design: a list cannot exceed what one page shows, so no
@@ -130,23 +145,48 @@ class BrowseListsView(HtmxListMixin, ListView):
         raw = self.request.GET.get('sort', self._DEFAULT_SORT)
         return raw if raw in dict(self.SORT_CHOICES) else self._DEFAULT_SORT
 
+    def _effective_query(self):
+        """The `?q=` that actually NARROWS THE GRID, which is not the same string the reader typed.
+
+        BOUNDED, like the typeahead in this same file. An unbounded `q` becomes an unbounded LIKE
+        pattern across three columns and a join to Profile, on the surface that becomes ANONYMOUS as
+        of 2026-09. `_count_filter` bounds the numeric filters and none of that discipline had
+        reached the text one.
+
+        EXTRACTED because two callers were deciding this independently and disagreeing. `get_queryset`
+        clamped; `has_filters` read the raw string. So a one or two character `q` filtered NOTHING
+        while the page believed a filter was on -- which mis-worded the empty state, and then, once
+        the Spotlight arrived, made the band vanish on the first two keystrokes of live search and
+        stay gone until the third. One definition, two readers.
+
+        The raw string stays in `context['query']` on purpose: it is what the search inputs bind to,
+        and clamping THAT would delete the reader's own typing out from under them mid-word.
+        """
+        query = (self.request.GET.get('q') or '').strip()[:MAX_QUERY_LENGTH]
+        return '' if len(query) < self.MIN_QUERY else query
+
     def get_queryset(self):
         # `.public()` rather than a hand-written `is_public=True, is_deleted=False`: it is the one
         # supported read path for somebody else's list, and it matches the partial index predicate
         # exactly, so the safe way is also the indexed way.
         queryset = GameList.objects.public().select_related('owner')
 
-        # BOUNDED, like the typeahead in this same file. An unbounded `q` becomes an unbounded
-        # LIKE pattern across three columns and a join to Profile, on the surface that becomes
-        # ANONYMOUS as of 2026-09. `_count_filter` below bounds the
-        # numeric filters and none of that discipline had reached the text one.
-        query = (self.request.GET.get('q') or '').strip()[:MAX_QUERY_LENGTH]
-        if len(query) < self.MIN_QUERY:
-            query = ''
+        query = self._effective_query()
         if query:
+            # THE TEXT CLAUSES SKIP MODERATED LISTS, the owner clause does not.
+            #
+            # Searching the raw columns made hidden words queryable by anyone: the tile comes back
+            # reading "Untitled list", but the fact that it MATCHED confirms the string is in
+            # there, and `data-result-count` leaks the same signal without even rendering a tile.
+            # A slur could be reconstructed substring by substring on an anonymous page. Hiding
+            # the words has to hide them from the index too, or it only hides them from readers
+            # who were not looking.
+            #
+            # A hidden list stays findable by its OWNER'S NAME, which is not the moderated text and
+            # is how somebody gets back to a list they know exists.
             queryset = queryset.filter(
-                Q(name__icontains=query)
-                | Q(description__icontains=query)
+                Q(name__icontains=query, text_hidden=False)
+                | Q(description__icontains=query, text_hidden=False)
                 | Q(owner__psn_username__icontains=query)
             )
 
@@ -166,18 +206,70 @@ class BrowseListsView(HtmxListMixin, ListView):
             # order (verified against the server, not assumed). That is only true under the `C`
             # collation. Keep `Lower()` because it makes the order explicit and
             # collation-INDEPENDENT, not because the default would otherwise be wrong here.
-            return queryset.order_by(Lower('name'))
+            #
+            # A MODERATED LIST SORTS UNDER ITS PLACEHOLDER, not its real name. Excluding hidden
+            # lists from the search was only half the channel: a hidden list still took its RAW
+            # alphabetical position, wedged between two visible names, so an anonymous reader
+            # could read its leading characters off by bisection -- one dropdown click from the
+            # surface that was just closed. Weaker than `icontains`, same class, same page.
+            # `Value` of the placeholder keeps them together at one predictable spot instead.
+            #
+            # `-pk` AS A TIEBREAK, and it matters more here than it looks. Nothing stops two lists
+            # sharing a name (the model says so), but collapsing every hidden list onto the single
+            # key 'untitled list' turns a rare tie into a guaranteed one for the whole moderated
+            # set -- and ties across a LIMIT/OFFSET boundary are non-deterministic in Postgres, so
+            # a reader paging through would see one twice and miss another. `featured()` and
+            # `cover_games_for` both added a pk tiebreak for exactly this; this ordering was
+            # written without one.
+            return queryset.order_by(
+                Lower(Case(When(text_hidden=True, then=Value(GameList.HIDDEN_NAME)),
+                           default=F('name'), output_field=CharField())), '-pk')
         return queryset.order_by(*self._ORDERING[sort])
+
+    def _spotlight(self):
+        """The featured list shown above the grid, or None.
+
+        ONE GATE: PARTIAL RENDERS. The band lives OUTSIDE `#browse-results`, so an HTMX filter swap
+        and an InfiniteScroller `?page=` fetch both render the grid partial and never render this.
+        But `get_context_data` still runs for them, so without this check the query would fire on
+        every keystroke of live search and every scroll page, to build a value that is thrown away.
+        `is_partial_render()` is the mixin's OWN test, the one `get_template_names` uses to make
+        that decision -- asked rather than re-implemented, so the two cannot drift apart.
+
+        THE FILTER GATE USED TO LIVE HERE AND WAS WRONG, in a way no server test could see. A
+        filtered page must not SHOW the band, and returning None achieved that on a full render --
+        but live search does not do full renders. It swaps `#browse-results`, and the band is
+        outside that target, so the band the server had already sent simply stayed on screen above
+        somebody's search results. The gate worked on the one path nobody takes interactively.
+
+        So the band is now fetched for every full render and the TEMPLATE decides whether it starts
+        collapsed, with `lists-browse.js` collapsing and restoring it as filters come and go. That
+        also fixes the other half: landing on `?q=soulslike` and then clearing the box used to leave
+        no band at all, because none had ever been rendered to reveal.
+
+        The cost is one indexed lookup on a filtered FULL page load -- a direct link or an Enter
+        press, not the hot path. Partial renders, which are the per-keystroke ones, still pay
+        nothing.
+
+        `select_related('owner')` is for the byline's mark, which reads `owner.display_mark`.
+        """
+        if self.is_partial_render():
+            return None
+
+        featured = GameList.objects.featured().select_related('owner').first()
+        if featured is not None:
+            # ITS OWN CALL, at a DEEPER slice than the grid's. This was briefly folded into the
+            # grid's call to save two queries, which was right while both wanted four covers -- the
+            # band showed the same mosaic a tile does, so a second fetch was the same rows twice.
+            # The band now renders a REEL of `SPOTLIGHT_COVERS`, so the two want different depths
+            # and the calls are no longer redundant. Merging them again would mean fetching eight
+            # covers for all twenty-four grid lists to serve one band.
+            attach_cover_games([featured], per_list=SPOTLIGHT_COVERS)
+        return featured
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         lists = context['game_lists']
-
-        # The mosaic, in two queries for the whole page regardless of length. This CANNOT be a
-        # `Prefetch(to_attr=...)` the way the Game-keyed version was: the cover lives on a `Game`
-        # and an item now points at a `Concept`, which has N of them, so picking one is a step
-        # Django's prefetch cannot express. See `gamelists/services/covers.py`.
-        attach_cover_games(lists, per_list=LIST_TILE_COVERS)
 
         # The header renders `paginator.count` directly -- the number the page has already paid for.
         # There was a `total_lists` key here mirroring it, which no template read; a test asserted on
@@ -185,20 +277,32 @@ class BrowseListsView(HtmxListMixin, ListView):
         # thing to avoid, and not having one is what keeps the header agreeing with the grid.
         context['sort_choices'] = self.SORT_CHOICES
         context['current_sort'] = self._selected_sort()
+        # RAW, unlike everything that follows: this is what the two search inputs bind to, so
+        # clamping it would erase a reader's own typing mid-word. What FILTERS is
+        # `_effective_query()`.
         context['query'] = (self.request.GET.get('q') or '').strip()
 
         # Does the empty state offer "Clear filters" or "Make a list"? Those are opposite answers to
         # opposite situations -- "you narrowed it to nothing" versus "there is nothing yet" -- and
         # offering the wrong one is worse than offering neither.
         #
-        # Read through the SAME parsers the queryset uses, not the raw querystring: `_count_filter`
-        # discards junk, so `?min_games=abc` narrows nothing and must not claim a filter is on. Sort
-        # is excluded on purpose -- re-ordering an empty grid is not what emptied it.
+        # Read through the SAME parsers the queryset uses, never the raw querystring: `_count_filter`
+        # discards junk so `?min_games=abc` narrows nothing, and `_effective_query` discards a
+        # one-or-two character `q` for the same reason. Sort is excluded on purpose -- re-ordering an
+        # empty grid is not what emptied it.
         context['has_filters'] = bool(
-            context['query']
+            self._effective_query()
             or _count_filter(self.request.GET.get('min_games')) is not None
             or _count_filter(self.request.GET.get('max_games')) is not None
         )
+
+        context['spotlight'] = self._spotlight()
+
+        # The mosaic, in two queries for the whole page regardless of length. This CANNOT be a
+        # `Prefetch(to_attr=...)` the way the Game-keyed version was: the cover lives on a `Game`
+        # and an item now points at a `Concept`, which has N of them, so picking one is a step
+        # Django's prefetch cannot express. See `gamelists/services/covers.py`.
+        attach_cover_games(lists, per_list=LIST_TILE_COVERS)
 
         viewer = self._viewer()
         if viewer is not None and lists:
@@ -371,7 +475,8 @@ class CreateListView(LoginRequiredMixin, _LinkedProfileRequired, View):
     nothing else, which is the point of having the service at all.
     """
 
-    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
+    @method_decorator(ratelimit(group=CREATE_LIST_RATELIMIT_GROUP, key='user', rate='30/m',
+                                method='POST', block=True))
     def post(self, request):
         try:
             game_list = svc.create_list(
@@ -771,10 +876,16 @@ class GameListDetailView(DetailView):
             # somebody WRITING content other people read, and flagging is not that.
             context['report_reasons'] = GameListReport.REPORT_REASONS
 
+        # `display_name`, LIKE EVERY OTHER READER-FACING SURFACE. The templates were all moved onto
+        # the moderation readers and the VIEW CONTEXT was missed, which is the `profile_views.py:670`
+        # bug class the model's own docstring names: a flag honoured in one place and forgotten in
+        # the next. The crumb renders visibly, two inches above an `h1` that had been corrected --
+        # so a moderator hid a list's words, the page looked clean, and the hidden name was still
+        # printed above it to every reader.
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Game Lists', 'url': reverse_lazy('lists_browse')},
-            {'text': game_list.name},
+            {'text': game_list.display_name},
         ]
 
         # The in-place edit form needs the same ceilings the create dialog uses. Without them
@@ -796,19 +907,25 @@ class GameListDetailView(DetailView):
         # is worse than nothing, since it tells a reader deciding whether to click precisely
         # nothing. Bounded at 300 because `description` is capped there and og:description is
         # truncated by every consumer well before it.
+        #
+        # THE DISPLAY READERS HERE TOO, and this is the surface where the leak travelled furthest:
+        # og/twitter tags are what Discord, Slack and Google scrape, so a hidden name and
+        # description were being republished by every unfurl of the URL long after the moderator
+        # believed they were gone. The fallback branches on `display_description` as well, or a
+        # hidden description would fall through to the generated sentence while still being used.
         owner_name = game_list.owner.display_psn_username or game_list.owner.psn_username
-        if game_list.description:
-            context['seo_description'] = game_list.description
+        if game_list.display_description:
+            context['seo_description'] = game_list.display_description
         else:
             context['seo_description'] = (
-                f'{game_list.name} — a game list of {game_list.game_count} '
+                f'{game_list.display_name} — a game list of {game_list.game_count} '
                 f'{"game" if game_list.game_count == 1 else "games"} by {owner_name} on Platinum '
                 f'Pursuit.'
             )
         # `seo_title` feeds the og/twitter tags, which otherwise take the site-wide default even
         # though `{% block title %}` is set -- the two are separate, which is why the browse page
         # setting only a description was half a job too.
-        context['seo_title'] = f'{game_list.name} by {owner_name}'
+        context['seo_title'] = f'{game_list.display_name} by {owner_name}'
         # THE OUT-OF-BAND CHROME, and only on a fragment request. Gated on the querystring alone,
         # `GET ...?chrome=1` in a browser rendered the FULL page -- which includes the position slot
         # and the sort control -- and then had the items partial render both AGAIN inside
@@ -1094,7 +1211,12 @@ class ToggleLikeView(_ListActionView):
         game_list = self.get_list(request, list_id)
         if game_list is None:
             return self.not_found()
-        liked = request.POST.get('liked') == 'true'
+        # `safe_bool`, not `== 'true'`, and `UpdateListView` spells out why at length: the bare
+        # comparison reads 'True', '1', 'on' and 'yes' as FALSE. These two toggles were the
+        # siblings that never got the fix -- anything but the exact lowercase literal silently
+        # became an UN-like, answered 200, and the response echoed the REQUESTED boolean rather
+        # than the stored one, so no client could detect the mismatch.
+        liked = safe_bool(request.POST.get('liked'))
         try:
             count = svc.set_like(game_list, self._viewer(request), liked=liked)
         except svc.ListError as exc:
@@ -1138,7 +1260,7 @@ class ToggleFollowView(_ListActionView):
         game_list = self.get_list(request, list_id)
         if game_list is None:
             return self.not_found()
-        following = request.POST.get('following') == 'true'
+        following = safe_bool(request.POST.get('following'))   # see ToggleLikeView above
         try:
             count = svc.set_follow(game_list, self._viewer(request), following=following)
         except svc.ListError as exc:
@@ -1359,7 +1481,8 @@ class CreateListWithConceptView(LoginRequiredMixin, _LinkedProfileRequired, View
     Two different acts that happen to share a service call.
     """
 
-    @method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=True))
+    @method_decorator(ratelimit(group=CREATE_LIST_RATELIMIT_GROUP, key='user', rate='30/m',
+                                method='POST', block=True))
     def post(self, request, concept_id):
         concept = Concept.objects.filter(pk=concept_id).first()
         if concept is None:

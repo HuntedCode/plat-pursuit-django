@@ -118,6 +118,17 @@
     color: var(--pp-error);
     font-size: 0.78rem;
 }
+/* A REFUSAL ARRIVES, it does not blink into existence. This is the only feedback a reporter gets
+   for "you have already reported this list", and it was appearing by having `hidden` removed --
+   shoving the footer down a step with no transition, which reads as a layout glitch rather than as
+   an answer. The same fade-and-rise the rest of the site reveals with (`ppRevealIn`), kept short
+   because an error should not feel leisurely. Gated, like every other motion here. */
+@media (prefers-reduced-motion: no-preference) {
+    .gl-dialog__error:not([hidden]) {
+        animation: glErrorIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+}
+@keyframes glErrorIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
 /* Suggested names: quiet chips, deliberately lighter than a `.pp-cta` so they read as a shortcut
    past a blank field rather than as actions competing with "Create list". */
@@ -200,7 +211,7 @@
     color: var(--pp-text-dim);
     /* Tailwind v4's preflight sets no `cursor: pointer` on buttons, so every control has to declare
        it -- which this file argues explicitly 195 lines down while naming THIS element, and which
-       `.gl-edit-open` honours. The destructive control was the one still rendering an arrow. */
+       the sibling controls honour. The destructive control was the one still rendering an arrow. */
     cursor: pointer;
     opacity: 0;
     transform: scale(0.9);
@@ -1237,29 +1248,6 @@
    Tailwind v4's preflight sets no `cursor: pointer` on buttons so every comparable control must
    declare it. The pencil is the ONLY route to renaming and had neither. The visible circle stays
    26px; the rest is transparent padding, so the target grows without the button gaining weight. */
-.gl-edit-open {
-    display: inline-grid; place-items: center;
-    width: 44px; height: 44px;
-    margin: -9px;                       /* keeps the 26px glyph optically beside the title */
-    border-radius: 999px;
-    color: var(--pp-text-mute);
-    cursor: pointer;
-    transition: color 0.16s ease, background 0.16s ease;
-}
-.gl-edit-open svg { width: 14px; height: 14px; }
-.gl-edit-open::before {
-    content: ''; position: absolute; inset: 9px;
-    border-radius: 999px;
-    transition: background 0.16s ease;
-}
-.gl-edit-open { position: relative; }
-@media (hover: hover) {
-    /* The tint goes on the ::before so it traces the 26px circle, not the 44px hit area. */
-    .gl-edit-open:hover { color: var(--pp-text); }
-    .gl-edit-open:hover::before { background: oklch(1 0 0 / 0.07); }
-}
-.gl-edit-open:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-
 .gl-edit { display: flex; flex-direction: column; gap: 10px; max-width: 34rem; }
 .gl-edit__foot { display: flex; align-items: center; gap: 8px; }
 
@@ -1360,6 +1348,25 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* THE MARK, CAPPED -- the one line that makes a marked byline truncate instead of losing its glyph.
+ *
+ * The rules above ellipsize a BARE text node, which is what ~99% of names are. A marked name is not
+ * a text node: `.pp-markname` is an `inline-flex`, and on a `white-space: nowrap` line nothing
+ * constrains its width, so it lays out at full natural size and the `overflow: hidden` above shears
+ * off whatever sticks out. The glyph sits AFTER the name, so the part sheared off is exactly the
+ * mark -- the staff wrench vanishes on precisely the long PSN IDs that needed the row to truncate.
+ * leaderboards.css:203 records the same failure from the other end ("pushed the supporter mark out
+ * of the row entirely").
+ *
+ * `max-width: 100%` gives the flex container a definite bound, so its own `min-width: 0` can finally
+ * do something: the inner `.pp-supname` (already `overflow: hidden; text-overflow: ellipsis`) absorbs
+ * the shrink, and `.pp-markname__glyph` is `flex: none` so the mark never does.
+ *
+ * Deliberately NOT `display: flex` on `.gl-card__author` itself. That would fix the marked case and
+ * break the unmarked one: a bare text node inside a flex parent becomes an anonymous flex item at
+ * min-content width, which cannot ellipsize at all. The 99% case must keep its block context. */
+.gl-card__author .pp-markname { max-width: 100%; }
+
 /* `margin-top: auto` pins the foot to the bottom of the body, so a one-line title and a two-line
    title still line their counts up across a row. `.pp-gcard__body` is already a flex column. */
 .pp-gcard--list .pp-gcard__foot { margin-top: auto; }
@@ -1416,3 +1423,361 @@
 .gl-chip--private { flex-shrink: 0; }
 /* Only the like count takes the accent, and only when there is one to show. */
 .gl-chip--likes { color: var(--pp-primary); border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
+
+/* ═══ THE SPOTLIGHT ═══════════════════════════════════════════════════════════════════════════
+ *
+ * One featured list, between the filter toolbar and the browse grid. A band, not a fifth tile:
+ * a row of featured tiles that look like their neighbours says "these are popular", where one
+ * band with a written line says a person chose this. It is also the only place on the page that
+ * speaks in our voice.
+ *
+ * THE FIRST CUT WAS A WIDE TILE and it read as one: a four-cover mosaic beside three short lines,
+ * with most of a desktop-width band left as empty gradient. It looked HIGHLIGHTED rather than
+ * FEATURED. Three things changed, and all three come from the same principle -- the identity doc's
+ * rule for the Frame, that the art should be the loudest element:
+ *
+ *   1. The mosaic became a REEL of the list's real covers, running off the edge under a fade. It
+ *      fills the width by construction at every breakpoint, so the dead space cannot come back, and
+ *      it shows the list's substance instead of implying it with four crops.
+ *   2. The eyebrow became a real chip instead of 9.5px of tracked-out caps.
+ *   3. The title engages Bricolage's `wdth` axis, which visual-identity.md calls load-bearing --
+ *      "wider widths read as headline / monumental". Nothing else on the site used it yet.
+ *
+ * The editorial accent is still `.msc-spot`'s (milestone-cards.css:168): a local `--spot-c`, a
+ * diagonal wash, a tinted border that strengthens on hover.
+ */
+/* THE COLLAPSE WRAPPER. Filtering cannot remove the band from the DOM -- it lives outside the htmx
+ * swap target -- so it closes instead, and closing is a real animation rather than a `display:none`
+ * that drops the grid up the page mid-keystroke.
+ *
+ * `grid-template-rows: 1fr -> 0fr` is the technique: a grid row is animatable where `height: auto`
+ * is not, and the child clips itself (`.gl-spotlight` already sets `overflow: hidden`). The margin
+ * lives HERE rather than on the band so it can close too -- left on the band, a collapsed wrapper
+ * kept 28px of empty gap that read as a rendering fault. */
+.gl-spotwrap {
+    display: grid;
+    grid-template-rows: 1fr;
+    margin: 16px 0 12px;
+    transition: grid-template-rows 0.34s var(--pp-ease, ease),
+                margin 0.34s var(--pp-ease, ease),
+                opacity 0.2s ease;
+}
+.gl-spotwrap > * { min-height: 0; }
+.gl-spotwrap.is-collapsed {
+    grid-template-rows: 0fr;
+    margin-top: 0;
+    margin-bottom: 0;
+    opacity: 0;
+}
+/* THE PADDING AND BORDER HAVE TO GO TOO, and leaving them is why the first cut did not actually
+   collapse. A `0fr` row sizes the item's MARGIN box, and under `box-sizing: border-box` a 0px used
+   height floors the CONTENT box at zero while padding and border keep their own space. The band
+   carries both, so a filtered page kept 32px of invisible gap at base and 42px at `lg` -- exactly
+   the "empty gap that reads as a rendering fault" this wrapper was built to remove, moved from the
+   margin to the padding rather than solved. `min-height: 0` does not help: it answers the flex
+   min-content floor, not the box model. */
+.gl-spotwrap.is-collapsed > * {
+    padding-block: 0;
+    border-block-width: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+    .gl-spotwrap { transition: none; }
+}
+
+.gl-spotlight {
+    /* DECLARED ON THE BASE, not only in a variant. A `color-mix()` reading an undefined custom
+       property invalidates the whole declaration, which empties the wash and the border together --
+       the trap profile-hero.css:990 records having already emptied the badge meters. */
+    --spot-c: var(--spot-accent, var(--pp-primary));
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 15px 0 15px 15px;   /* no right padding: the reel runs to the edge and fades */
+    /* 13px, MATCHING THE CARDS, not `--pp-radius-md`. That scale (4/6/8px) is the CONTROL scale --
+       inputs, chips, buttons -- and 6px under a wall of 13px `.pp-gcard` tiles reads as a different
+       component family. `.pp-gtile` is 13px and `.msc-spot` is 12px; this belongs with them. */
+    border-radius: 13px;
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+    background: linear-gradient(135deg, color-mix(in oklab, var(--spot-c) 13%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 72%);
+    border: 1px solid color-mix(in oklab, var(--spot-c) 30%, var(--pp-border));
+    /* 0.18s LITERAL, not `var(--pp-dur)`. The token is 240ms, and every card this band sits beside
+       -- `.pp-gcard`, `.pp-gtile`, `.msc-spot` -- hovers at 0.18s. Using the token made the featured
+       element the slowest-reacting thing on a page of identical gestures. */
+    /* `padding` and `border-width` ride the wrapper's 0.34s collapse, not the 0.18s hover tempo --
+       they only ever change when the band is closing, and they have to finish with it or the gap
+       snaps shut after the height has already gone. */
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease,
+                padding 0.34s var(--pp-ease, ease), border-width 0.34s var(--pp-ease, ease);
+}
+
+/* THE BAND JOINS THE PAGE'S OPENING BEAT.
+ *
+ * This page is already choreographed: the header card plays `.pp-head-cascade`, then the grid
+ * springs in tile by tile (`lists-browse.js` -> `staggerReveal`). The band sat between the two and
+ * simply APPEARED -- the one static element in the middle of a sequence, and the most important
+ * thing on the page. Not restraint; an omission.
+ *
+ * SAME GRAMMAR AS THE TILES, deliberately, because the band must read as part of the same beat and
+ * not as its own effect: identical durations (420 / 500ms) and identical curves to the `reveal()`
+ * in `lists-browse.js`. Two SEPARATE animations, which is the part that is easy to get wrong -- the
+ * spring's overshoot control point is >1, so putting that curve on opacity too spikes it to full
+ * almost immediately and the fade reads as a hard flash instead of a fade. The grid's own comment
+ * records learning that.
+ *
+ * `backwards`, never `both`. `backwards` holds the hidden "from" state through the delay so nothing
+ * flashes before the beat; `both` would PERSIST the final transform, which makes the band a
+ * containing block forever and would quietly break the hover lift below.
+ *
+ * 0.16s lands it after the header's cascade has begun and just before the tiles, so the page reads
+ * top to bottom once rather than as three unrelated animations. */
+@media (prefers-reduced-motion: no-preference) {
+    .gl-spotlight {
+        animation: glSpotFade 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) 0.16s backwards,
+                   glSpotRise 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) 0.16s backwards;
+    }
+}
+/* Transform and opacity only -- no `color-mix()` anywhere near a keyframe, which lightningcss drops
+   silently, taking the whole frame with it. */
+@keyframes glSpotFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes glSpotRise { from { transform: translateY(14px) scale(0.965); } to { transform: none; } }
+
+.gl-spotlight__body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    padding-right: 15px;
+}
+
+/* THE CHIP. It was 9.5px of tracked-out caps, which is the site's label treatment -- correct for a
+   caption, far too quiet for the one line on the page that is us talking. A bordered pill at 11px
+   with the star reads as a mark of selection rather than as a field label. */
+.gl-spotlight__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--spot-c) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--spot-c) 38%, transparent);
+    color: var(--spot-c);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1;
+}
+.gl-spotlight__eyebrow svg { width: 12px; height: 12px; flex: none; }
+
+/* MONUMENTAL, via the OPTICAL SIZE axis -- not the width axis, which cannot do it.
+ *
+ * This said `"wdth" 100` and claimed to be reaching for the axis visual-identity.md calls
+ * load-bearing. It was inert: the `@font-face` declares `font-stretch: 75% 100%`, so 100 is the
+ * axis MAXIMUM, and 100 is also CSS's default for normal width. The declaration set the axis to
+ * the value it already had. Worse, the doc's "wider reads as headline" only produces contrast
+ * against something NARROWER, and nothing else on the site sets `wdth` at all -- so there was no
+ * baseline to read wide against even if it had moved.
+ *
+ * `opsz` is the axis that delivers it, and the Tally primitive is the precedent: it tracks optical
+ * size to font-size at every rung so the face reads monumental big and ledger small. At this
+ * title's 20.8-31.2px the matching rung is ~32.
+ *
+ * `font-weight: 800` ALONGSIDE the variation settings, which every other consumer in the project
+ * pairs and this one did not. Tailwind's preflight resets `h1..h6` to `font-weight: inherit`, so
+ * the computed weight was 400 from the anchor and the boldness came only from
+ * `font-variation-settings` -- which applies only once Bricolage loads. With `font-display: swap`
+ * the title painted in the fallback at 400 and then snapped to 800. */
+.gl-spotlight__name {
+    margin: 0;
+    font-family: var(--pp-font-display, inherit);
+    font-size: clamp(1.3rem, 2.4vw, 1.95rem);
+    font-weight: 800;
+    font-variation-settings: "opsz" 32, "wght" 800;
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    color: var(--pp-text);
+    /* Two lines maximum, so a long title wraps rather than pushing the pitch and the byline out of
+       a band whose height the reel is holding open. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.gl-spotlight__blurb {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--pp-text-dim);
+    max-width: 62ch;   /* prose stays readable even when the band is 1200px wide */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.gl-spotlight__foot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 1px;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 11.5px;
+    color: var(--pp-text-mute);
+}
+
+/* The byline is the shrinkable part: the game count is short, fixed and the thing that must not
+ * wrap. `min-width: 0` lets the name give way first.
+ *
+ * ALL THREE TRUNCATION PROPERTIES, not just `overflow`. The first cut copied `overflow: hidden` off
+ * `.gl-card__author` and left `white-space` and `text-overflow` behind, which inverted the bug it
+ * was supposed to prevent: a MARKED name was fine, because `.pp-markname .pp-supname` brings its own
+ * `nowrap` + `ellipsis`, while an UNMARKED one -- the overwhelming majority -- simply wrapped to two
+ * lines and pushed the whole foot row taller. `overflow: hidden` cannot clip that: this is a flex
+ * item with auto height, so it grows rather than overflowing. Half a shared pattern is its own bug. */
+.gl-spotlight__by {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.gl-spotlight__count,
+.gl-spotlight__dot { flex: none; }
+
+/* THE SAME CAP THE TILE BYLINE NEEDS, for the same reason: `.pp-markname` is an `inline-flex` and
+   an unbounded one lets its glyph overhang into the container's `overflow: hidden`. See the long
+   note on `.gl-card__author .pp-markname`. */
+.gl-spotlight__by .pp-markname { max-width: 100%; }
+
+/* ── the reel ────────────────────────────────────────────────────────────────────────────────
+ *
+ * A row of the list's covers that deliberately OVERFLOWS. The cut-off is the point: a strip that
+ * stops short of the edge looks unfinished, where one running under a fade says there is more of
+ * this list. `SPOTLIGHT_COVERS` (8) is chosen to overflow at desktop widths.
+ *
+ * The mask does the fading rather than a gradient overlay, because the band's own background is a
+ * diagonal wash -- an opaque overlay would have to match a gradient that changes across the band,
+ * and would be wrong the moment the accent changed. `-webkit-` first for Safari. */
+.gl-spotlight__reel {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* THE FADE ONLY WHEN THERE IS SOMETHING TO FADE. It was unconditional, and a reel that does not
+   overflow -- a short featured list, or any list at 2xl where the reel box outgrows eight covers --
+   had its LAST, fully-visible cover rendered at ~50% opacity with empty band beside it. That reads
+   as a rendering fault, which is the opposite of the "there is more of this list" the fade is for.
+   `lists-browse.js` measures `scrollWidth > clientWidth` and sets the class; CSS cannot ask. */
+.gl-spotlight__reel.is-overflowing {
+    -webkit-mask-image: linear-gradient(to right, #000 78%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 78%, transparent 100%);
+}
+
+/* `object-cover` + `object-position: top` is the house rule for game art: PSN fallback art is
+   square or 4:3 and crops into a 3:4 well, so anchoring to the top keeps the logo. */
+.gl-spotlight__cover {
+    flex: none;
+    width: 74px;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    object-position: top;
+    border-radius: 8px;
+    background: var(--pp-bg-2);
+    border: 1px solid color-mix(in oklab, var(--pp-text) 7%, transparent);
+    /* OPACITY ONLY -- see the hover block below for why nothing here may change size. */
+    transition: opacity 0.18s ease;
+}
+/* A generic PS placeholder rather than real art: contain it and let it sit on the well. */
+.gl-spotlight__cover--icon { object-fit: contain; padding: 8px; }
+
+@media (min-width: 640px) {
+    /* THE SPLIT AT 640, NOT 768, and this is the one place on the page that earns an `sm:`-width
+       rule: the stacked layout wastes more width the wider it gets, and 640 is where the text
+       column and a useful length of reel both fit. */
+    .gl-spotlight {
+        flex-direction: row;
+        align-items: center;
+        gap: 18px;
+        padding: 16px 0 16px 18px;
+    }
+    /* The text column stops growing; everything past it belongs to the reel. Without the cap the
+       body kept the whole band and the reel was squeezed to a sliver on wide screens. */
+    .gl-spotlight__body {
+        flex: 0 1 clamp(260px, 38%, 460px);
+        padding-right: 0;
+    }
+    .gl-spotlight__reel { flex: 1 1 auto; }
+    .gl-spotlight__cover { width: 88px; }
+}
+
+@media (min-width: 1024px) {
+    .gl-spotlight { gap: 22px; padding: 20px 0 20px 22px; }
+    .gl-spotlight__cover { width: 104px; }
+}
+
+@media (hover: hover) {
+    .gl-spotlight:hover {
+        border-color: color-mix(in oklab, var(--spot-c) 52%, var(--pp-border));
+        box-shadow: 0 14px 30px -18px color-mix(in oklab, var(--spot-c) 60%, #000);
+        transform: translateY(-2px);
+    }
+    /* NO REEL MOTION ON HOVER, deliberately, and this is the third position on it.
+     *
+     * The idea was a nudge that uncovered a little more of the next cover -- anticipation, so the
+     * band hints at where the click goes. It cannot be had cheaply, and two attempts each broke
+     * something:
+     *
+     *   1. `transform` on the REEL moved its `overflow` clip and its mask along with the content,
+     *      so the strip slid as a rigid unit, showed exactly the same pixels, and opened a sliver
+     *      of bare band at the right where the mask had already faded out. It revealed nothing.
+     *   2. `transform` on the COVERS revealed at the right by damaging the left: the row starts
+     *      flush with the reel's left edge, so sliding it left pushed the first cover 10px past
+     *      the clip and sheared a strip off the front of it. Reported from the page.
+     *
+     * Getting it right needs the row inset by the travel distance at rest, which buys a permanent
+     * gap that reads as misalignment against the text beside it. That is a lot of structure for a
+     * hint the fade mask already gives: the reel running off the edge IS the "there is more"
+     * affordance, and it is always visible rather than only on hover. The band lifting and its
+     * border brightening is the gesture; the art holds still. */
+
+    /* THE COVERS ANSWER INDIVIDUALLY INSTEAD, and this is the shape that works.
+     *
+     * The row recedes and the one under the pointer stays full, so the reader's own hand picks
+     * out a game. Paired with `title` on each cover, the hover is INFORMATIVE -- it names what you
+     * are pointing at -- which is what earns it, since the covers are not separately clickable and
+     * a purely decorative flourish would promise a target that does not exist.
+     *
+     * OPACITY, NOT SIZE, and that constraint is the whole reason this works where the row nudge
+     * did not. The first cover sits flush against the reel's `overflow` clip, so ANY geometric
+     * change -- a scale, a lift, a drop shadow -- pushes its leading edge past that clip and
+     * shears a strip off it. Opacity has no geometry, so cover one behaves exactly like cover five.
+     *
+     * Scoped to the REEL, not the band: hovering the title or the blurb should not dim the art,
+     * because nothing there is being picked out. */
+    .gl-spotlight__reel:hover .gl-spotlight__cover { opacity: 0.55; }
+    .gl-spotlight__reel .gl-spotlight__cover:hover { opacity: 1; }
+}
+
+.gl-spotlight:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* The covers no longer MOVE, but they do fade, so their transition is switched off too. The
+       dim itself stays: it is a state change rather than motion, and it is what makes the hover
+       legible -- removing it would leave a reduced-motion reader with a tooltip and no visual
+       answer to "which one am I on". */
+    .gl-spotlight,
+    .gl-spotlight__cover { transition: none; }
+    .gl-spotlight:hover { transform: none; }
+}

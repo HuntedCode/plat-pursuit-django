@@ -7,9 +7,19 @@ does not tear out the thing watching for the next page.
 elements, so a class added by JS in afterSwap is wiped again and the cards unhide with a flash.
 {% endcomment %}
 {% load humanize %}
-<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}" data-result-count="{{ paginator.count }}">
+{% comment %}`data-has-filters` is how the SERVER tells the client whether the Spotlight should be
+collapsed. The band lives outside this partial, so a swap cannot remove it; `lists-browse.js` reads
+this flag after each swap and collapses or restores the band to match.
+
+Carried here rather than recomputed in JS on purpose: "is a filter on" already has a precise
+definition in the view (a `?q=` under three characters filters nothing and must not count), and a
+second copy in JavaScript is exactly the drift that made the band vanish on the first keystroke of
+live search.{% endcomment %}
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}"
+     data-result-count="{{ paginator.count }}" data-has-filters="{% if has_filters %}1{% else %}0{% endif %}">
     {% for game_list in object_list %}
-    {% include 'gamelists/partials/list_tile.html' with game_list=game_list %}
+    {# `mark_index` desyncs the supporter shimmer per tile; the tile explains why it is passed, not inherited. #}
+    {% include 'gamelists/partials/list_tile.html' with game_list=game_list mark_index=forloop.counter0 %}
     {% empty %}
     <div class="pp-gtile-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

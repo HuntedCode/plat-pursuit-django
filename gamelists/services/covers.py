@@ -58,10 +58,18 @@ def cover_games_for(concept_ids):
     # choose the best one, and cutting mid-concept would make the cover depend on row order. Four
     # per concept covers PS3/PS4/PS5/Vita, which is every real case; beyond that the page is
     # pathological and a slightly-wrong cover is the right trade against an unbounded read.
+    # ORDERED BEFORE THE SLICE. A LIMIT with no ORDER BY lets Postgres return any rows it likes, so
+    # once any concept on the page has more stacks than the budget absorbs, WHICH stacks arrive
+    # varies between two identical requests -- and `_sort_key` below then picks the best of a
+    # different set each time. That is exactly the "same list renders a different cover on two
+    # consecutive loads, reads as a bug and cannot be reproduced on request" failure the pk
+    # tiebreak was added to prevent; the tiebreak made the PICK deterministic and left the FETCH
+    # free to vary. Costs nothing: the filter is already on `concept_id`.
     rows = (
         Game.objects.filter(concept_id__in=ids)
         .select_related('concept', 'concept__igdb_match')
         .defer('concept__igdb_match__raw_response')
+        .order_by('concept_id', 'pk')
         [:len(ids) * 4]
     )
 

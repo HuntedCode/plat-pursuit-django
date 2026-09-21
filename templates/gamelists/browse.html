@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load humanize %}
+{% load mark_tags %}
 {% block title %}Game Lists{% endblock %}
 {% comment %}Same guard Franchises uses, and for the same reason: this toolbar produces
 an unbounded number of filter permutations, and every one of them is a near-duplicate of
@@ -128,6 +129,128 @@ the canonical page. `follow` so the tiles still pass authority to the lists them
 
     {# Sentinel: once the toolbar scrolls under the chrome, StickyReveal pins the mini-bar. Outside the swap. #}
     <span id="gl-minibar-sentinel" class="pp-sentinel" aria-hidden="true"></span>
+
+    {% comment %} ── The Spotlight: one featured list, above the grid. ──────────────────────────────
+
+    OUTSIDE `#browse-results`, with the mini-bar and the scroll sentinel, and for the same reason
+    they are: everything inside that div is replaced on every filter swap and every infinite-scroll
+    page. A band that re-rendered on each keystroke of live search would flicker, and re-running its
+    query to build markup nobody sees is work paid for on every request. The view will not even
+    fetch it on a partial render -- see `BrowseListsView._spotlight`.
+
+    It is also absent whenever a filter is on. A staff pick above your search results is noise; you
+    asked for something specific and this is not it.
+
+    `display_name` / `display_description`, never the raw fields. The admin refuses to feature a
+    list whose words a moderator has hidden, so this should be unreachable -- but "should be
+    unreachable" is how the `profile_views.py:670` leak happened, and the readers cost nothing.
+
+    A DELIBERATE DUPLICATE. The featured list is public, so it also appears in the grid below. Left
+    that way on purpose: excluding one row mid-pagination drifts the offsets InfiniteScroller pages
+    on, which makes page two skip or repeat a list. A band and a tile read as different objects.
+    {% endcomment %}
+    {% comment %}THE COLLAPSE WRAPPER exists because the band is outside the swap target.
+
+    Filtering replaces only `#browse-results`, so nothing the server sends can remove the band once
+    it is on the page -- the first cut simply left it sitting above the reader's search results. The
+    server now always sends it on a full render and marks the starting state here; `lists-browse.js`
+    toggles `is-collapsed` as filters come and go.
+
+    `grid-template-rows: 1fr -> 0fr` rather than `display: none`, so the space closes smoothly
+    instead of the grid jumping up the page. The exit deserves the same care as the entrance the
+    band just grew, and a hard cut under a search box reads as a glitch.
+
+    `inert` is NOT decoration. The collapsed band is 0px tall and transparent but its link is still
+    focusable and clickable without it -- opacity is not hit-testing, which this project has been
+    caught by before.{% endcomment %}
+    {% if spotlight %}
+    <div class="gl-spotwrap{% if has_filters %} is-collapsed{% endif %}"
+         data-spotlight-wrap {% if has_filters %}inert{% endif %}>
+    {% comment %}NO `aria-label`, DELIBERATELY, and unlike the tile next door.
+
+    An `aria-label` REPLACES the contents-derived name, so every part not restated in it becomes
+    invisible to a screen reader. The first cut had one, and it had already dropped two things: the
+    author's mark (whose glyph carries its own `role="img"` label -- "Staff", "PlatPursuit Backer")
+    and the blurb, which is the entire reason this band exists. That is the same omission the tile's
+    own comment records making with its Private chip, arrived at again by the same route.
+
+    The tile needs a label because its contents are a mosaic plus loose chips that read as noise.
+    This band's contents are already a sentence: eyebrow, title, pitch, byline, count -- in that
+    order. Letting them speak for themselves means the name cannot fall out of step with what is on
+    screen, because it IS what is on screen. The separator is `aria-hidden`.{% endcomment %}
+    <a href="{% url 'list_detail' spotlight.id %}" class="gl-spotlight">
+        <span class="gl-spotlight__body">
+            <span class="gl-spotlight__eyebrow">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.6l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 16.4 6.4 19.7l1.4-6.3L3 9.1l6.4-.6z"/></svg>
+                Our pick
+            </span>
+            {% comment %}A HEADING, not a span -- but `h3`, the SAME level as a grid tile.
+
+            A span left the most prominent list on the page out of the heading outline entirely, so
+            heading navigation jumped from the page title straight into the grid. The first fix
+            made it an `h2`, which solved that and created a worse problem: the outline became
+            `h1 Game Lists` -> `h2 <this list's name>` -> `h3 <every tile>`, so all twenty-four
+            grid tiles read as SUBSECTIONS of the featured list. An `h2` here would have to label
+            the band ("Our pick"), not name one list -- and the eyebrow already says that in text.
+            The featured list is a peer of the tiles, so it sits at their level.
+
+            A heading inside an `<a>` is valid: the anchor's content model is transparent, and the
+            tile does exactly this.{% endcomment %}
+            <h3 class="gl-spotlight__name">{{ spotlight.display_name }}</h3>
+            {% comment %}The list's OWN description is the pitch -- there is no second editorial
+            blurb field, because that would be a second thing to write for every pick and the first
+            one already exists. Clamped rather than truncated in Python so the full text still
+            reaches the page for anyone who styles it away.{% endcomment %}
+            {% if spotlight.display_description %}
+            <span class="gl-spotlight__blurb">{{ spotlight.display_description }}</span>
+            {% endif %}
+            <span class="gl-spotlight__foot">
+                <span class="gl-spotlight__by">{% name_mark name=spotlight.owner.display_psn_username|default:spotlight.owner.psn_username mark=spotlight.owner.display_mark size='sm' %}</span>
+                <span class="gl-spotlight__dot" aria-hidden="true">&middot;</span>
+                <span class="gl-spotlight__count">{{ spotlight.game_count|intcomma }} game{{ spotlight.game_count|pluralize }}</span>
+            </span>
+        </span>
+
+        {% comment %}THE REEL: the list's actual covers, running off the right edge under a fade.
+
+        It replaced a four-cover mosaic, which was the tile's treatment at a slightly larger size --
+        so the band read as a wide tile with a lot of tinted gradient beside it, and on a desktop
+        width most of the band was empty. The identity doc's rule for the Frame applies here too:
+        the art should be the loudest element. A reel fills the width by construction at every
+        breakpoint, it shows the list's substance instead of implying it, and it reads as a
+        different KIND of object from the tiles below rather than a bigger one.
+
+        `aria-hidden`, like the tile's mosaic: these are decorative crops that name no game, and
+        eight alt texts would be noise in the middle of the band's sentence. The list itself is one
+        click away.
+
+        `loading="eager"`: this is the top of the page's content and the thing a reader looks at
+        first, so deferring it just delays the first impression.{% endcomment %}
+        {% if spotlight.cover_items %}
+        <span class="gl-spotlight__reel" aria-hidden="true">
+            {% for item in spotlight.cover_items %}
+            {% comment %}`eager` ONLY WHEN THE BAND IS OPEN. It is the top of the page's content
+            when expanded, so deferring it delays the first thing a reader looks at -- but on a
+            filtered full render (a direct link to `?q=`, or an Enter press) the band ships
+            collapsed and inert, and eagerly fetching eight covers nobody will see just competes
+            with the grid's own art for the connection.{% endcomment %}
+            {% comment %}`title` NAMES THE GAME ON HOVER, which is what earns the cover a hover
+            state at all. The art is decorative to a screen reader (`aria-hidden` on the reel) and
+            stays that way -- eight game names in the link's accessible name would bury the
+            sentence the band is actually making. This is a visual affordance for a visual reader,
+            and the list itself is one click away.
+
+            `item.concept` is already joined by `cover_games_for`, so the name is free.{% endcomment %}
+            <img src="{{ item.display_image_url }}" alt=""
+                 title="{{ item.concept.unified_title }}"
+                 loading="{% if has_filters %}lazy{% else %}eager{% endif %}"
+                 class="gl-spotlight__cover{% if not item.has_cover_art %} gl-spotlight__cover--icon{% endif %}" />
+            {% endfor %}
+        </span>
+        {% endif %}
+    </a>
+    </div>
+    {% endif %}
 
     {# ── Browse results (HTMX filter-swap target = just the grid) ── #}
     <div id="browse-results">
