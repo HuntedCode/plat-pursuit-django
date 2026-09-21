@@ -214,12 +214,26 @@ def test_the_follow_button_says_follow(client):
     button = body[body.index('data-gl-follow'):]
     button = button[:button.index('</button>')]
 
+    # `'Following' CONTAINS 'Follow'`, so `assert 'Follow' in button` passed against a button
+    # hardcoded to the followed state -- and the sibling test only checks the followed case, so
+    # between them the whole round-trip was untested. The fresh state has to be asserted as what it
+    # is NOT, plus the pressed state, which is what the Like test three functions up already does.
     assert 'Follow' in button
+    assert 'Following' not in button, 'a fresh viewer is shown as already following'
+    assert 'aria-pressed="false"' in button, 'the follow button does not report its state'
     assert 'Save' not in button
 
     # No claim of alerts anywhere on the page while there is nowhere for one to arrive.
+    #
+    # SCANNED AS VISIBLE TEXT, not as raw HTML. This is about what the page SAYS to a reader, and
+    # against the raw markup it also matched `role="alert"` on the report dialog's error line --
+    # an ARIA role, not a promise, and exactly the kind of false positive that gets a correct
+    # attribute deleted to make a test green. Scripts and styles come out first so a library's
+    # internals cannot trip it either.
+    text = re.sub(r'<(script|style)\b.*?</\1>', ' ', body, flags=re.S | re.I)
+    text = re.sub(r'<[^>]+>', ' ', text).lower()
     for promise in ('notify', 'notified', 'alert', "we'll let you know", 'get updates'):
-        assert promise not in body.lower(), f'the page promises {promise!r} with no surface for it'
+        assert promise not in text, f'the page promises {promise!r} with no surface for it'
 
 
 def test_a_followed_list_reads_as_following(client):
@@ -918,12 +932,18 @@ def test_cancelling_the_editor_restores_the_type_too(client):
     """
     js = _decommented(_read('static/js/list-detail.js'))
 
-    # Sliced FORWARD from `reset()`, because `var opener = root.querySelector(` also appears inside
-    # `close()` higher up -- searching from 0 found that one, produced an empty slice, and made this
-    # test fail for a reason that had nothing to do with what it checks. A mutation run reported it
-    # as "killed" on that basis, which is a false pass hiding inside a false failure.
+    # Sliced FORWARD from `reset()`, because the end-marker also appears inside `close()` higher up
+    # -- searching from 0 found that one, produced an empty slice, and made this test fail for a
+    # reason that had nothing to do with what it checks. A mutation run reported it as "killed" on
+    # that basis, which is a false pass hiding inside a false failure.
+    #
+    # The marker used to be `var opener = root.querySelector(`, which stopped existing when the
+    # three opener lookups were routed through one document-scoped `editOpener()` helper -- the
+    # button had moved out of `root` and was silently never bound. Borrowing a neighbouring line as
+    # a boundary is fragile exactly like this; kept because the alternative is brace-matching, but
+    # now anchored on the line this test is actually adjacent to.
     start = js.index('function reset() {')
-    reset_body = js[start:js.index('var opener = root.querySelector(', start)]
+    reset_body = js[start:js.index('var opener = editOpener();', start)]
     assert "form.querySelector('[name=\"list_type\"][value=\"'" in reset_body, \
         'reset() leaves an abandoned type selection checked'
     assert 'current.checked = true' in reset_body
@@ -1115,12 +1135,14 @@ def test_the_owner_gets_the_adder_and_a_visitor_never_does(client):
     # The control it must NOT be confused with: the visitor does still get the social acts.
     assert 'data-gl-like' in visitor
 
-    # Staff, because every gamelists surface is still behind `_DevelopmentGate`. Without this the
-    # request redirects and `owner_body` is '' -- where every `not in` assertion passes vacuously.
-    author.user.role = 'admin'
-    author.user.save()
+    # AN ORDINARY OWNER, not a staff one. This granted `role = 'admin'` because every gamelists
+    # surface used to sit behind `_DevelopmentGate` and an un-elevated request redirected -- which
+    # would have made every `not in` assertion below pass against an empty body. The gate is gone,
+    # and leaving the elevation in actively weakened the test: it asserts the OWNER's controls
+    # render, so running it as an admin would let a regression that showed them only to staff pass.
     client.force_login(author.user)
     owner_resp = client.get(_url(game_list))
+    # The status check is what the elevation was really protecting against; it stays.
     assert owner_resp.status_code == 200
     owner_body = owner_resp.content.decode()
     assert 'data-gl-adder' in owner_body
@@ -1314,6 +1336,13 @@ def test_no_gl_class_is_used_without_a_rule():
     used = set()
     for path in glob.glob(str(root / 'templates' / 'gamelists' / '**' / '*.html'), recursive=True):
         for attr in re.findall(r'class="([^"]+)"', Path(path).read_text(encoding='utf-8')):
+            # TEMPLATE TAGS OUT FIRST. A conditional class is written butted straight against the
+            # name before it -- `class="gl-x{% if flag %} gl-x--icon{% endif %}"` -- so splitting
+            # the raw attribute on whitespace yields the token `gl-x{%`, which matches no rule and
+            # reported a false orphan for markup that was completely fine. Replacing tags with a
+            # space recovers the real names. `{{ ... }}` goes too: a class built from a variable
+            # cannot be checked against the stylesheet either way.
+            attr = re.sub(r'\{%.*?%\}|\{\{.*?\}\}', ' ', attr)
             used.update(c for c in attr.split() if c.startswith('gl-'))
 
     assert used, 'found no gl-* classes at all -- the scan is broken, not the CSS'
@@ -1357,11 +1386,25 @@ def test_owner_actions_have_somewhere_to_announce(client):
         'the owner status region does not announce'
     )
 
-    # Not rendered for someone who cannot act.
+    # RENDERED FOR A NON-OWNER TOO, which is the opposite of what this asserted before.
+    #
+    # The old line read "Not rendered for someone who cannot act" and pinned a real hole. Reporting
+    # is an action available precisely to somebody who is NOT the owner -- `can_act` is literally
+    # "not is_owner" -- so gating the only live region on `is_owner` made the two populations
+    # disjoint: every announcement the report dialog made, success and refusals alike, wrote into
+    # an element that was never on the page. A blind reporter pressed Send and heard nothing, with
+    # no fallback, because the toast carries no `aria-live` either.
     author = ProfileFactory(is_linked=True, psn_username='author')
     theirs = _list(author, 1)
     _staff(client, psn='reader')
-    assert 'data-gl-status' not in client.get(_url(theirs)).content.decode()
+    reader_body = client.get(_url(theirs)).content.decode()
+
+    assert re.search(r'<p[^>]*aria-live="polite"[^>]*data-gl-status', reader_body), (
+        'a non-owner has no live region, so the report dialog announces into nothing'
+    )
+    # And the thing that needs it is actually on their page, so the assertion above is about the
+    # pairing rather than about an empty element nobody writes to.
+    assert 'data-gl-report-form' in reader_body
 
 
 def test_the_adder_lives_in_the_toolbar_card_and_uses_the_shared_field(client):
@@ -1564,17 +1607,92 @@ def test_the_adder_panel_is_reachable_with_a_keyboard_up_and_above_the_tabbar():
     assert z and int(z.group(1)) > 40, f'the panel paints under the mobile tabbar: {declarations}'
 
 
-def test_the_rename_control_is_a_real_touch_target():
-    """26px, in a file that bumps a less consequential control to 44 citing the design system, and
-    that explains two hundred lines later why every button needs an explicit `cursor: pointer`."""
-    built = _read('staticfiles/css/output.css')
+def test_the_edit_control_is_a_labelled_action_not_an_inline_pencil(client):
+    """It opens the WHOLE editing state, so it has to look like it does.
 
-    blocks = re.findall(r'\.gl-edit-open\{([^}]*)\}', built)
-    assert blocks, 'the rename control has no rule in the built CSS'
-    declarations = ''.join(blocks)
+    This was a 44px icon-only button beside the `h1`, and a bare pencil next to a field is the
+    inline field-edit idiom -- the one you meet a dozen times down a settings form, each editing
+    the value it sits beside. So it read as "rename this heading" and went unfound, while what it
+    actually opens is name, description, sections and arrange mode.
 
-    assert 'width:44px' in declarations, f'the pencil is under the 44px minimum: {declarations}'
-    assert 'cursor:pointer' in declarations
+    The 44px rule it used to be pinned on was the right rule for a bare glyph and does not apply to
+    a labelled button: it now sits in `.gl-actions` at exactly the size of Like, Follow, Report and
+    Publish, which is the page's own standard for an action.
+
+    What is pinned instead: it carries a WORD, it lives in the actions band, and it states the
+    panel it controls.
+    """
+    owner = _staff(client, psn='owner')
+    game_list = _list(owner, 1)
+
+    body = client.get(_url(game_list)).content.decode()
+    band = body[body.index('class="gl-actions"'):]
+    band = band[:band.index('</div>')]
+
+    assert 'data-gl-edit-open' in band, 'the edit control is not in the actions band'
+    assert 'Edit list' in band, 'the edit control is still unlabelled'
+    # Named state, so it is not an anonymous toggle to a screen reader.
+    # `max(0, ...)`: Edit is the FIRST control in the band, so a bare `- 200` went negative and
+    # Python read it as "200 from the end" -- slicing the tail of the band instead of the button.
+    start = max(0, band.index('data-gl-edit-open') - 200)
+    opener = band[start:]
+    opener = opener[:opener.index('</button>')]
+    assert 'aria-expanded' in opener and 'aria-controls="gl-edit-panel"' in opener, (
+        'the edit control does not say what it opens'
+    )
+    # And the panel it names exists, so `aria-controls` is not pointing at nothing.
+    assert 'id="gl-edit-panel"' in body
+
+
+def test_the_edit_opener_is_looked_up_where_it_actually_lives(client):
+    """THE CONTROL SHIPPED DEAD, and every other test on this page passed.
+
+    `wireIdentityEditor` scopes its lookups to `[data-gl-identity]`, which was correct while the
+    opener was a pencil inside that block. Moving it into the `.gl-actions` band made it a SIBLING
+    of that element, so `root.querySelector` returned null, no click listener was ever bound, and
+    the button did nothing. Nothing caught it: every assertion here reads rendered HTML, and no
+    server-side test can see that a listener was not attached.
+
+    So the pairing is pinned directly -- the opener lives outside the identity root, therefore the
+    lookup must be document-scoped. Either half moving without the other fails here.
+    """
+    owner = _staff(client, psn='owner')
+    game_list = _list(owner, 1)
+    body = client.get(_url(game_list)).content.decode()
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    # Half one: the button really is outside the block the editor scopes itself to.
+    #
+    # The `assert identity` is not decoration. If the actions band ever moves ABOVE the identity
+    # block, `start > stop` and Python hands back an empty string -- so the membership check below
+    # becomes trivially true and this half of a two-half pairing stops constraining anything,
+    # while the docstring still claims "either half moving without the other fails here".
+    start, stop = body.index('data-gl-identity'), body.index('class="gl-actions"')
+    identity = body[start:stop]
+    assert identity, 'the actions band no longer follows the identity block; the slice is empty'
+    assert 'data-gl-edit-open' not in identity, (
+        'the opener moved back inside the identity root; this guard no longer describes the page')
+
+    # Half two: so no lookup may be scoped to that root.
+    assert "root.querySelector('[data-gl-edit-open]')" not in js, (
+        'the opener is looked up inside a root it does not live in -- the button will not bind')
+    assert "document.querySelector('[data-gl-edit-open]')" in js, (
+        'the opener is not looked up from the document')
+
+
+def test_the_edit_control_keeps_its_expanded_state_honest():
+    """`aria-expanded` that never changes is worse than none -- it states a fact and then lies.
+    Both edges are wired, and both are pinned, because the close path is the easy one to forget."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    # BOTH VALUES, not a headcount. `js.count(...) == 2` is the idiom this very file rejects two
+    # hundred lines up ("the count cannot tell a new GUARDED write from a new UNGUARDED one; both
+    # move it by one"). Here it could not tell which element was being written, nor that one call
+    # sets `true` and the other `false` -- two `'true'` calls passed just as happily.
+    assert "setAttribute('aria-expanded', 'true')" in js, 'opening never marks the panel expanded'
+    assert "setAttribute('aria-expanded', 'false')" in js, 'closing never marks it collapsed'
+    # And both are written against the opener the template actually renders, not some other node.
+    assert 'editOpener()' in js, 'the aria state is no longer maintained on the edit opener'
 
 
 def test_the_header_card_holds_no_page_action(client):

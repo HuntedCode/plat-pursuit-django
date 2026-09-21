@@ -6,8 +6,7 @@ Handles all REST endpoints for game lists: CRUD, items, reordering, likes, and g
 import logging
 
 from django.db import IntegrityError, transaction
-from django.db.models import F, Q, Exists, OuterRef
-from django.db.models.functions import Lower
+from django.db.models import F
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from rest_framework import status
@@ -20,7 +19,6 @@ from trophies.models import (
     Game, GameList, GameListItem, GameListLike,
     GAME_LIST_FREE_MAX_LISTS, GAME_LIST_FREE_MAX_ITEMS,
 )
-from trophies.util_modules.constants import ALL_PLATFORMS, REGIONS
 from api.utils import safe_int
 
 logger = logging.getLogger('psn_api')

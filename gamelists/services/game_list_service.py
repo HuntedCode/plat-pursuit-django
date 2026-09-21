@@ -316,6 +316,24 @@ def create_list(profile, *, name, description='', is_public=False,
         list_type=list_type)
 
 
+def _update_list_gates(profile):
+    """`update_list`'s own gates, which were the one text-writing path missing the linked check.
+
+    Not reachable over HTTP today -- `UpdateListView` inherits `_LinkedProfileRequired` -- but this
+    module's first line says it is "the ONLY writer", binding the shell, the admin and the future
+    importer as much as the view. Name and description are the largest public strings the feature
+    ships, and every other function that writes one calls this.
+
+    NO `@transaction.atomic` HERE, and that is the point rather than an omission. This is a pure
+    check that writes nothing. Inserting it once carried the decorator off `update_list` -- the
+    helper landed BETWEEN the decorator and the function it belonged to -- which left `update_list`
+    bare, and its `select_for_update` then raised `TransactionManagementError` on every rename,
+    publish and un-publish. Adding a helper directly above a decorated function is how that
+    happens; keeping this one undecorated makes the mistake visible next time.
+    """
+    _refuse_if_unlinked(profile)
+
+
 @transaction.atomic
 def update_list(game_list, profile, *, name=None, description=None, is_public=None,
                 list_type=None, restart_numbering=None):
@@ -340,6 +358,7 @@ def update_list(game_list, profile, *, name=None, description=None, is_public=No
     `is_public is False` still passes, deliberately. Un-publishing is a hunter taking their OWN
     content down, which restriction exists to encourage rather than prevent.
     """
+    _update_list_gates(profile)
     _require_owner(game_list, profile)
 
     # `bool(is_public)` and not `is not None`: None means "not passed" and False means "take it
@@ -347,6 +366,15 @@ def update_list(game_list, profile, *, name=None, description=None, is_public=No
     publishing = is_public is not None and bool(is_public)
     if name is not None or description is not None or publishing:
         _refuse_if_restricted(profile)
+
+    # THE LOCK, which this and `delete_list` were the only list writes to skip -- breaking the rule
+    # stated at the top of this module ("the lock comes before the value it protects, and the
+    # precondition is re-asserted on the row that came back"). Concretely: a POST carrying
+    # `is_public=1` racing a POST to delete committed `is_deleted=True, is_public=True`. `.public()`
+    # filters deleted rows so nothing renders -- a consistency defect rather than an exposure -- but
+    # it is precisely the window `_lock_list` was written for, and concurrent renames were
+    # last-writer-wins off two stale instances.
+    game_list = _lock_list(game_list)
 
     changed = []
     if name is not None:
@@ -383,8 +411,20 @@ def delete_list(game_list, profile):
     """
     if game_list.owner_id != profile.id:
         raise ListError('That is not your list.')
-    if game_list.is_deleted:
-        return game_list
+
+    # LOCKED, THEN RE-READ. `_lock_list` refuses an already-deleted row, and deleting twice has to
+    # stay a no-op rather than an error -- so the precondition is re-asserted here against the
+    # locked instance instead. Without the lock this read `is_deleted` off the caller's stale
+    # object, which is the same race `update_list` above carried.
+    # `.first()`, NOT `.get()`. This used to read `is_deleted` off the in-memory object with no DB
+    # hit, so a row that had been HARD-deleted elsewhere simply returned. Locking turned that into
+    # an unhandled `DoesNotExist` -> 500. The admin forbids hard deletes, so it is only reachable
+    # from a shell or a cascade -- but "delete is idempotent" should not stop being true because
+    # the row went away entirely, which is the one case where it most obviously has.
+    locked = GameList.objects.select_for_update().filter(pk=game_list.pk).first()
+    if locked is None or locked.is_deleted:
+        return locked or game_list
+    game_list = locked
 
     game_list.is_deleted = True
     game_list.deleted_at = timezone.now()
@@ -738,10 +778,18 @@ def report_list(game_list, profile, *, reason, details=''):
     """A hunter objects to a list's name or description.
 
     REPORTING IS NOT PUBLISHING, and the gate list reflects that. A reporter must be signed in and
-    linked -- accountability, and the same bar every other report on the site sets -- but a
-    RESTRICTED account may still report. A restriction stops somebody writing content other people
-    read; it is not a reason to stop them flagging something. The same asymmetry `_set_social`
-    already draws for withdrawing a like.
+    linked -- accountability, and the same bar every other report on the site sets -- and an
+    account restricted from WRITING may still report. A restriction on content stops somebody
+    writing things other people read; it is not a reason to stop them flagging something. The same
+    asymmetry `_set_social` already draws for withdrawing a like.
+
+    THE `reports` SCOPE IS A DIFFERENT QUESTION, and this dropped it along with the other. That
+    scope exists precisely to stop somebody who abuses report queues, and every other report
+    surface on the site honours it -- `comment_service.can_interact`, `game_flag_service`, the two
+    roadmap services. Ignoring it here made list reports the one door left open to an account
+    sanctioned for exactly this, which is a bypass of a standing decision rather than a kindness.
+    `unique(game_list, reporter)` and the 10/m limit cap the volume; what they do not do is honour
+    the sanction.
 
     NOT YOUR OWN LIST. An author who dislikes their own name can edit it; a self-report is either a
     mistake or an attempt to put a moderator's time somewhere it is not needed.
@@ -755,8 +803,23 @@ def report_list(game_list, profile, *, reason, details=''):
     follows just because its audience is staff.
     """
     from gamelists.models import GameListReport
+    from users.services import restriction_service
 
     _refuse_if_unlinked(profile)
+    # THE NARROW SCOPE, not `is_restricted_from(profile, 'reports')`.
+    #
+    # That helper resolves through `SCOPE_COVERS`, where `reports` covers `{'reports', 'all_ugc'}`
+    # -- so calling it would ALSO refuse the content-restricted hunter this function deliberately
+    # admits, reversing the decision above rather than completing it. Asking `active_scopes_for`
+    # directly is the only way to honour a sanction aimed at report abuse while leaving one aimed
+    # at writing alone.
+    #
+    # NOTE FOR WHOEVER REVISITS THIS: it makes list reports the one surface on the site that
+    # accepts an `all_ugc`-restricted reporter. Every other report path (`comment_service`,
+    # `game_flag_service`, both roadmap services) blocks them via the covering helper. That
+    # divergence is deliberate and argued above, but it IS a divergence.
+    if 'reports' in restriction_service.active_scopes_for(profile):
+        raise ListError('Your account cannot send reports at the moment.')
 
     if game_list.owner_id == profile.id:
         raise ListError('That is your own list. Edit it instead.')

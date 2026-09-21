@@ -57,9 +57,26 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options['dry_run']
 
+        # EMPTY OF GAMES **AND** UNREFERENCED BY ANY LIST.
+        #
+        # `GameListItem.concept` is CASCADE, so deleting a concept a hunter has in a list silently
+        # takes the row with it -- outside the service, which means `game_count` is never recounted
+        # and `position` is never re-compacted. Both failures are quiet and permanent:
+        # `PositiveIntegerField` means the service can never walk an inflated count back down, and
+        # the browse grid SORTS and FILTERS on it; a `position` gap breaks
+        # `attach_cover_games`'s `position__lt=N` bound, so a four-game list renders three covers.
+        #
+        # Reachable, not theoretical: the adder searches concepts by title alone, and a concept
+        # with no trophy list is a perfectly ordinary list entry (`covers.py` says so). A `PP_*`
+        # stub with no games and no IGDB canonical falls straight through to the bare `c.delete()`
+        # below.
+        #
+        # Excluded rather than repaired with a `post_delete` receiver: a concept somebody has
+        # curated into a list is not "empty" in the sense this command means, and a signal on a
+        # hot model to undo a delete that should not happen is the weaker of the two fixes.
         qs = Concept.objects.annotate(
             game_count=Count('games')
-        ).filter(game_count=0)
+        ).filter(game_count=0).filter(list_entries__isnull=True)
 
         if options['concept_id']:
             qs = qs.filter(concept_id=options['concept_id'])

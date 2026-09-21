@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static humanize %}
+{% load static humanize mark_tags %}
 {% block title %}{{ game_list.display_name }}{% endblock %}
 {% comment %}A private list must never be indexed, and a public one is worth indexing -- but not once
 per sort permutation, which is the same guard the browse page and Franchises carry.{% endcomment %}
@@ -60,18 +60,6 @@ below with no outer wrapper.
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                 Private
                             </span>
-                            {% if is_owner %}
-                            {% comment %}THE NAME COVERS THE WHOLE PANEL, not just the form. This
-                            said "Edit this list's name and description", and the panel it opens also
-                            carries the arrange mode and the section controls -- so the one route to
-                            making a section was behind a button that named two other things, and a
-                            hunter looking for shelves had no reason to press it. Broadened rather
-                            than adding a second entry point: they are one editing state.{% endcomment %}
-                            <button type="button" class="gl-edit-open" data-gl-edit-open
-                                    aria-label="Edit this list">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                            </button>
-                            {% endif %}
                         </div>
 
                         {% comment %}Always rendered, hidden when empty: a description added in place
@@ -79,14 +67,22 @@ below with no outer wrapper.
                         <p class="text-xs md:text-sm text-base-content/60 mt-1 max-w-prose"
                            data-gl-description {% if not game_list.description %}hidden{% endif %}>{% if is_owner %}{{ game_list.description }}{% else %}{{ game_list.display_description }}{% endif %}</p>
 
+                        {% comment %}The owner wears their mark here too, so the author of a list reads
+                        the same on its own page as it does on the browse grid.
+
+                        `font-semibold` WITHOUT a colour class when marked: the mark paints the name in
+                        its own register (`--sup-t`), and a `link` colour on the anchor would override
+                        the very thing the mark exists to say. Unmarked names keep `link` so they still
+                        read as a link. This is the comment.html idiom.{% endcomment %}
                         <p class="text-xs text-base-content/50 mt-2">
                             by <a href="{% url 'profile_detail' game_list.owner.psn_username %}"
-                                  class="link link-hover font-semibold">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</a>
+                                  class="link-hover font-semibold{% if not game_list.owner.display_mark %} link{% endif %}">{% name_mark name=game_list.owner.display_psn_username|default:game_list.owner.psn_username mark=game_list.owner.display_mark size='sm' %}</a>
                         </p>
                     </div>
 
                     {% if is_owner %}
-                    <form data-gl-identity-edit hidden class="gl-edit">
+                    {# `id` so the Edit button's `aria-controls` points at something real. #}
+                    <form id="gl-edit-panel" data-gl-identity-edit hidden class="gl-edit">
                         <div class="stg-field">
                             <label class="stg-field__label" for="gl-edit-name">Name</label>
                             <input type="text" id="gl-edit-name" name="name" class="stg-input" required
@@ -226,6 +222,31 @@ below with no outer wrapper.
                 {% endif %}
 
                 {% if is_owner %}
+                {% comment %}EDIT, AS A LABELLED ACTION IN THIS BAND rather than a pencil welded to
+                the title.
+
+                It was a 44px icon-only button sitting beside the `h1`, and that is the INLINE
+                FIELD-EDIT idiom -- the little pencil you meet a dozen times down a settings form,
+                each one editing the one value it sits next to. So it read as "rename this heading"
+                and got lost, when what it actually opens is the whole editing state: name,
+                description, sections and arrange mode. The affordance was promising a fraction of
+                what the control does.
+
+                Here it is the owner's counterpart to Publish, which this band already treats as a
+                real action that "says what it does rather than being a checkbox on a form somewhere
+                else". Same argument, same place. A text label is also simply the biggest
+                findability win available -- an icon has to be recognised, a word only read.
+
+                GHOST, not filled, and FIRST. Publish is the act the page wants a new owner to take,
+                so it keeps the only filled treatment; two primaries side by side would compete and
+                neither would lead. First because editing is the everyday action and publishing is
+                the deliberate one -- frequency before consequence, left to right.{% endcomment %}
+                <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-open
+                        aria-expanded="false" aria-controls="gl-edit-panel">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    <span>Edit list</span>
+                </button>
+
                 {% comment %}Publishing is the deliberate second act, so it gets a real affordance and
                 says what it does rather than being a checkbox on a form somewhere else.
 
@@ -389,11 +410,22 @@ below with no outer wrapper.
     </div>
     {% endif %}
 
-    {% comment %}Owner actions announce here. Separate from the adder's own status region, which is
-    scoped to search results: adding and removing are page-level changes, and the toast that reports
-    them is not an announcement -- `#toast-container` in base.html carries no `aria-live`, so nothing
-    ToastManager writes is read out at all.{% endcomment %}
-    {% if is_owner %}<p class="sr-only" aria-live="polite" data-gl-status></p>{% endif %}
+    {% comment %}Page-level actions announce here. Separate from the adder's own status region,
+    which is scoped to search results: adding and removing are page-level changes, and the toast
+    that reports them is not an announcement -- `#toast-container` in base.html carries no
+    `aria-live`, so nothing ToastManager writes is read out at all.
+
+    NOT `{% templatetag openblock %} if is_owner {% templatetag closeblock %}` ANY MORE, and that
+    gate was a silent hole rather than a saving. Reporting is the one action on this page available
+    to somebody who is NOT the owner (`can_act` is explicitly "not is_owner"), so the two audiences
+    were disjoint by construction: every `announce()` the report dialog made -- the success line and
+    every refusal, including "you have already reported this list" -- wrote into an element that had
+    not been rendered. A blind reporter pressed Send and was told nothing at all, with no toast
+    fallback because the toast is not announced either.
+
+    An empty `sr-only` paragraph costs nothing for the owner-less case, so it renders unconditionally
+    rather than growing a second gate that the next action has to remember to join.{% endcomment %}
+    <p class="sr-only" aria-live="polite" data-gl-status></p>
 
     {% include 'gamelists/partials/detail_positions.html' %}
 
@@ -423,7 +455,17 @@ an error and lose what was typed.
 WHAT IT DOES NOT SAY is as deliberate as what it does. No count of existing reports, no "this list
 has been reported before" -- that is a moderator's information, and showing it tells somebody
 organising a pile-on whether it is working.{% endcomment %}
-<dialog id="gl-report" class="gd-modal gl-dialog" aria-labelledby="gl-report-title">
+{% comment %}`gl-dialog` ALONE, not `gd-modal gl-dialog`. Both files are imported after Tailwind and
+so are unlayered, and `gamelists.css` comes second, so every `.gl-dialog` declaration already won on
+source order -- width, border, entrance animation. `gd-modal` contributed nothing visible and one
+active harm: it made a reader believe `.gd-modal.is-closing`'s exit was in play on an element whose
+exit was not wired at all. The create dialog next door is `gl-dialog` alone.{% endcomment %}
+{% comment %}`tabindex="-1"` so the dialog is a focusable area and `dialog.focus()` in the opener
+actually lands. Without it a `<dialog>` is not focusable, `.focus()` is a silent no-op, and focus
+stays where `showModal()` put it -- which in Firefox and Safari is the first focusable descendant,
+i.e. the reason `<select>` the focus move exists to avoid. Chrome 117+ focuses the dialog itself,
+which made the fix look correct on the browser it was written in.{% endcomment %}
+<dialog id="gl-report" class="gl-dialog" tabindex="-1" aria-labelledby="gl-report-title">
     <form data-gl-report-form data-url="{% url 'list_report' game_list.id %}">
         <div class="gl-dialog__head">
             <div>
@@ -436,7 +478,13 @@ organising a pile-on whether it is working.{% endcomment %}
         <div class="gl-dialog__body stg-form">
             <label class="stg-field">
                 <span class="stg-field__label">What is wrong with it?</span>
+                {% comment %}A DISABLED PLACEHOLDER, SELECTED BY DEFAULT. The first real option was
+                auto-selected, so opening the dialog and pressing Send with no thought at all filed
+                a Spam report against somebody's list -- and `required` on a select that is never
+                empty can never fire, so nothing stopped it. Now the form refuses to submit until a
+                reason is actually chosen, which is what `required` was there to mean.{% endcomment %}
                 <select name="reason" class="stg-input" required data-gl-report-reason>
+                    <option value="" disabled selected>Choose a reason&hellip;</option>
                     {% for value, label in report_reasons %}
                     <option value="{{ value }}">{{ label }}</option>
                     {% endfor %}
@@ -445,12 +493,21 @@ organising a pile-on whether it is working.{% endcomment %}
 
             <label class="stg-field">
                 <span class="stg-field__label">Anything else?</span>
+                {% comment %}`data-charcount` wires the shared `PlatPursuit.wireCharCounters`, which
+                this page already calls for the identity editor. Without it `maxlength` swallows
+                keystrokes silently at 500 -- the create dialog's own comment makes the same
+                argument.{% endcomment %}
                 <textarea name="details" rows="3" maxlength="500" class="stg-input"
-                          data-gl-report-details
+                          id="gl-report-details" data-gl-report-details data-charcount
                           placeholder="What should a moderator look at?"></textarea>
+                <span class="gl-countchars" id="gl-report-details-count"
+                      data-charcount-for="gl-report-details" aria-live="polite"></span>
             </label>
 
-            <p class="gl-dialog__error" data-gl-report-error hidden></p>
+            {% comment %}`role="alert"` so a refusal is spoken the moment it appears. The status
+            region above announces it too; this is the one that works if the dialog's own content is
+            all a screen reader is tracking.{% endcomment %}
+            <p class="gl-dialog__error" role="alert" data-gl-report-error hidden></p>
         </div>
 
         <div class="gl-dialog__foot">

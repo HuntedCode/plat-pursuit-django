@@ -410,8 +410,19 @@
         // does not yank focus away from a mouse user reading elsewhere on the page.
         if (document.activeElement === btn) {
             var all = Array.prototype.slice.call(
-                document.querySelectorAll('#gl-items [data-gl-remove]'));
-            pendingFocusIndex = all.indexOf(btn);
+                // `#gl-items-root`, NOT `#gl-items`. The latter is rendered only on a FLAT list
+                // (`detail_group.html` gates it on `not groups`), so on a sectioned one this
+                // matched nothing and `indexOf` returned -1. That is the same bug
+                // `restoreRemoveFocus` documents having fixed for ITS selector two hundred lines
+                // down -- the capture half was missed, so the restore half was handed an index
+                // that could never be right and focus fell to `<body>` on every removal.
+                document.querySelectorAll('#gl-items-root [data-gl-remove]'));
+            var found = all.indexOf(btn);
+            // -1 IS NOT null, and the restore guard only checks for null -- so a miss here used to
+            // flow through as `buttons[-1]`, which is `undefined`, and the focus call silently did
+            // nothing. Normalised at the source so a future miss degrades to "no restore" loudly
+            // rather than to "restore the wrong thing" quietly.
+            pendingFocusIndex = found < 0 ? null : found;
         }
 
         postJson(btn.dataset.removeUrl, new FormData())
@@ -545,25 +556,156 @@
         var send = dialog.querySelector('[data-gl-report-send]');
         if (!form) { return; }
 
-        function closeReport() { if (dialog.open) { dialog.close(); } }
+        // Captured BEFORE anything mutates it, so the busy label can be restored without a second
+        // copy of the string living in the JS and drifting from the template's.
+        var sendLabel = send ? send.textContent : '';
+
+        // CHOREOGRAPHED EXIT, the routine `gamelists.js` and `game-flag.js` already run. The CSS for
+        // it was written with this dialog (`.gl-dialog.is-closing` -> `glDialogOut`, plus the scrim's
+        // `glScrimOut`) and the comment above it claimed the JS waits for `animationend` -- but
+        // nothing here ever added the class, so both animations were dead and every close was a hard
+        // cut. An exit written and not played is worse than no exit: the next reader believes it.
+        // `after` runs once the dialog is ACTUALLY closed, which matters more than it looks.
+        //
+        // The exit made this asynchronous, and the success path was still firing its toast and its
+        // `announce()` on the line after the call -- i.e. while the modal was still open. A modal
+        // `<dialog>` makes everything outside it inert and takes it out of the accessibility tree,
+        // and the status region lives outside; a live region updated while it is hidden from AT
+        // announces nothing, and by the time the dialog went the text had already changed. So the
+        // one confirmation a blind reporter gets was landing in a dead region on every non-reduced
+        // -motion path. The toast had a milder version of the same problem: it renders behind the
+        // top-layer `::backdrop` until the exit finishes.
+        // Callbacks waiting on the CURRENT close, and the fallback timer that belongs to it.
+        //
+        // A QUEUE, not a single `after`, because the first version dropped it. Its early return
+        // for "a close is already running" was the one exit that did not invoke the callback --
+        // so: press Send, then press Escape while the request is in flight; the response lands
+        // 180-400ms later, calls `closeReport(cb)`, hits that return, and the reporter is never
+        // told their report was filed. No toast, and no `announce()`, which is the entire failure
+        // this callback refactor existed to fix, re-created inside the fix.
+        var pendingAfter = [];
+        var closeTimer = null;
+
+        function closeReport(after) {
+            if (typeof after === 'function') { pendingAfter.push(after); }
+            var drain = function () {
+                var queued = pendingAfter;
+                pendingAfter = [];
+                queued.forEach(function (fn) { fn(); });
+            };
+            if (!dialog.close || !dialog.open) { drain(); return; }
+            var reduced = window.matchMedia
+                && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduced) { dialog.close(); drain(); return; }
+            // Already closing: the callback is queued above and the in-flight `done()` will drain
+            // it. Returning here is right; returning WITHOUT having queued was the bug.
+            if (dialog.classList.contains('is-closing')) { return; }
+            dialog.classList.add('is-closing');
+            var done = function () {
+                // CLEARED, or a stale fallback from a previous close fires inside a later one --
+                // cutting that exit short and draining a queue that is no longer its own.
+                if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+                dialog.classList.remove('is-closing');
+                dialog.close();
+                drain();
+            };
+            // TARGET-GUARDED, and `pseudoElement`-guarded too. `animationend` bubbles, so any
+            // descendant animation finishing mid-exit would end the close early -- and the
+            // `::backdrop`'s own `glScrimOut` fires on THIS element with a `pseudoElement` set, so
+            // checking the target alone is not enough. Both are 0.18s today, so nothing truncates;
+            // shortening the scrim later would have silently halved the dialog's exit.
+            var onEnd = function (e) {
+                if (e.target !== dialog || e.pseudoElement) { return; }
+                dialog.removeEventListener('animationend', onEnd);
+                done();
+            };
+            dialog.addEventListener('animationend', onEnd);
+            // A dropped `animationend` would strand the dialog open and un-closable.
+            closeTimer = setTimeout(function () {
+                closeTimer = null;
+                if (dialog.classList.contains('is-closing')) {
+                    dialog.removeEventListener('animationend', onEnd);
+                    done();
+                }
+            }, 400);
+        }
 
         open.addEventListener('click', function () {
             if (error) { error.hidden = true; error.textContent = ''; }
+            // A FRESH FORM EACH TIME, like both sibling report dialogs. Without it a refused report
+            // reopens carrying the words that were just rejected, which reads as the refusal having
+            // been ignored.
+            form.reset();
+            // `reset()` fires a `reset` event, never `input`, and `wireCharCounters` renders only
+            // on `input` -- so a refused report with 312 typed characters reopened with an empty
+            // textarea above a counter still reading "312/500", warning colour and all. The
+            // identity editor's own `reset()` dispatches exactly this for exactly this reason.
+            var details = dialog.querySelector('[data-gl-report-details]');
+            if (details) { details.dispatchEvent(new Event('input', { bubbles: true })); }
+            if (send) {
+                send.disabled = false;
+                send.textContent = sendLabel;
+                send.removeAttribute('aria-busy');
+            }
             dialog.showModal();
-            var reason = dialog.querySelector('[data-gl-report-reason]');
-            if (reason) { reason.focus(); }
+            // THE DIALOG, not the `<select>`. Focusing the select made the first arrow keypress
+            // silently change which reason is being reported -- a keyboard user who orients with
+            // arrow keys files a different report than the one they read.
+            dialog.focus();
         });
 
         Array.prototype.forEach.call(
             dialog.querySelectorAll('[data-gl-report-close]'),
             function (button) { button.addEventListener('click', closeReport); });
 
-        if (PP.dismissableSheet) { PP.dismissableSheet(dialog, { onClose: closeReport }); }
+        // Escape, routed through the choreographed close rather than the browser's instant one.
+        dialog.addEventListener('cancel', function (e) { e.preventDefault(); closeReport(); });
+
+        // `handle:` IS THE DATA-LOSS FIX. `dismissableSheet`'s own contract: "Omit on a sheet you
+        // READ; pass one on a sheet you OPERATE, where an accidental dismiss costs unsaved work."
+        // This sheet holds up to 500 typed characters and passed nothing, so on touch a downward
+        // flick starting anywhere that is not the textarea itself -- the header, a field label, the
+        // error box -- armed the drag and threw the draft away past 90px. Both sibling dialogs pass
+        // one and both record fixing this same bug.
+        if (PP.dismissableSheet) {
+            PP.dismissableSheet(dialog, {
+                handle: '.gl-dialog__head',
+                // A DIRECT close, not the choreographed one, and `game-flag.js` does the same.
+                // The helper has already animated the sheet off-screen by the time it calls this,
+                // and it clears the transform first -- so handing it `closeReport` made a flicked
+                // sheet slide away, POP BACK into view, then play a second 180ms exit. The
+                // swipe IS the exit; buttons, Escape and the backdrop still get the choreographed
+                // one below.
+                onClose: function () { if (dialog.close && dialog.open) { dialog.close(); } },
+            });
+        }
+
+        // Backdrop click, which both siblings honour and this one did not. On a native `<dialog>`
+        // a click on the backdrop reports the dialog itself as the target.
+        dialog.addEventListener('click', function (e) { if (e.target === dialog) { closeReport(); } });
 
         form.addEventListener('submit', function (e) {
             e.preventDefault();
+            // REFUSED ONCE THE EXIT HAS STARTED. The dialog stays interactive for up to 400ms while
+            // it fades, and the `finally` below re-enables the button immediately -- so a second
+            // press (or Enter, with focus still on Send) fired a second request. The service's row
+            // lock makes that safe on the server, but it comes back as "You have already reported
+            // this list" and paints that refusal over the success toast for the one press the
+            // reporter actually made.
+            if (dialog.classList.contains('is-closing') || !dialog.open) { return; }
             if (error) { error.hidden = true; }
-            if (send) { send.disabled = true; }
+            // BUSY, NOT BLOCKED. Disabling alone renders as `opacity: .55` plus a not-allowed
+            // cursor, which reads as "you may not do this" rather than "this is happening" -- the
+            // only feedback for the whole round trip was the button going dim and forbidding. Both
+            // sibling report dialogs change the label instead.
+            //
+            // NO `aria-busy`, which the first cut added: it tells a screen reader the element is
+            // mid-update and can cause it to SUPPRESS reporting the contents -- which is the
+            // "Sending..." label that is the entire point. The label already says it, to everyone.
+            if (send) {
+                send.disabled = true;
+                send.textContent = 'Sending…';
+            }
 
             var body = new FormData();
             var reason = dialog.querySelector('[data-gl-report-reason]');
@@ -573,20 +715,37 @@
 
             postJson(form.dataset.url, body)
                 .then(function () {
-                    closeReport();
-                    if (PP.ToastManager) {
-                        PP.ToastManager.show('Report sent. A moderator will take a look.', 'success');
-                    }
-                    // The toast carries no `aria-live`, as this file notes elsewhere, so the status
-                    // line is what actually announces it.
-                    announce('Report sent. A moderator will take a look.');
+                    // BOTH AFTER THE CLOSE COMPLETES. `ratings-tab.js` states the rule for the
+                    // toast ("Toast AFTER close") because a toast raised while a dialog is open can
+                    // die with it; the announcement needs it for a stronger reason, since a live
+                    // region outside an open modal is inert and says nothing at all.
+                    closeReport(function () {
+                        if (PP.ToastManager) {
+                            PP.ToastManager.show('Report sent. A moderator will take a look.', 'success');
+                        }
+                        // The toast carries no `aria-live`, as this file notes elsewhere, so the
+                        // status line is what actually announces it.
+                        announce('Report sent. A moderator will take a look.');
+                    });
                 })
                 .catch(function (err) {
                     logFailure('report', err);
                     if (!error) { return; }
                     var show = function (msg) {
-                        error.textContent = msg || 'That report could not be sent.';
+                        // UNHIDDEN FIRST, THEN WRITTEN. Setting text into a `hidden` `role="alert"`
+                        // and revealing it afterwards is announced inconsistently across screen
+                        // readers -- some never see a change, because the node was out of the tree
+                        // when it happened. Revealing an empty alert announces nothing, so this
+                        // order is safe and is the one that reliably speaks.
                         error.hidden = false;
+                        error.textContent = msg || 'That report could not be sent.';
+                        // The error sits at the bottom of the dialog's ONLY scroll region, so with
+                        // a soft keyboard up it could land off-screen: the reporter saw the button
+                        // re-enable and nothing else. `nearest` so it does not yank a short form
+                        // that was already showing it.
+                        if (error.scrollIntoView) {
+                            error.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                        }
                         announce(error.textContent);
                     };
                     if (err && err.signedOut) {
@@ -601,7 +760,17 @@
                         show(null);
                     }
                 })
-                .finally(function () { if (send) { send.disabled = false; } });
+                .finally(function () {
+                    // ONLY WHILE THE DIALOG IS STILL HERE. On success the exit is already running,
+                    // and restoring the label there flickers "Sending..." back to "Send report"
+                    // mid-fade. Reopening calls `form.reset()` and restores the label anyway, so
+                    // the failure path is the only one that needs it.
+                    if (send && dialog.open && !dialog.classList.contains('is-closing')) {
+                        send.disabled = false;
+                        send.textContent = sendLabel;
+                        send.removeAttribute('aria-busy');
+                    }
+                });
         });
     }
 
@@ -615,6 +784,19 @@
      */
     function wireIdentityEditor() {
         var root = document.querySelector('[data-gl-identity]');
+
+        // DOCUMENT-SCOPED, NOT `root`-scoped, and that is load-bearing.
+        //
+        // The opener used to be a pencil inside `[data-gl-identity]`, so `root.querySelector` found
+        // it. It now lives in the `.gl-actions` band -- a sibling of that element, not a descendant
+        // -- because a bare pencil beside the title read as an inline field edit rather than as the
+        // way into the whole editor. The move left all three lookups returning null, so no click
+        // listener was ever bound and the button did nothing at all.
+        //
+        // Looked up through one named helper rather than three call sites, so the next person who
+        // moves this control breaks one line instead of silently unbinding it again. Not cached:
+        // the header can be re-rendered underneath this.
+        function editOpener() { return document.querySelector('[data-gl-edit-open]'); }
         if (!root || wired.has(root)) { return; }
         var form = root.querySelector('[data-gl-identity-edit]');
         var view = root.querySelector('[data-gl-identity-view]');
@@ -625,6 +807,24 @@
         var descField = form.querySelector('[name="description"]');
 
         function open() {
+            // RE-ENTRY DESTROYS UNSAVED WORK, and this guard is the whole of what stops it.
+            //
+            // The opener used to be a pencil INSIDE `[data-gl-identity-view]`, which the next line
+            // hides -- so while the editor was open the control was simply gone and could not be
+            // pressed again. Moving it into the `.gl-actions` band made it permanently visible,
+            // and `open()` begins by calling `reset()`, which overwrites both fields from the
+            // server-rendered DOM. So: open the editor, retype the name and a long description,
+            // press "Edit list" again because it is sitting right there -- and everything typed is
+            // silently discarded. A screen reader is led straight into it, because the button now
+            // says `aria-expanded="true"`.
+            //
+            // Also refused MID-SAVE, for the reason `dismiss()` writes down for itself: `reset()`
+            // would read the pre-save heading back into the fields, the response would then write
+            // the new name into the heading, and the two would disagree until somebody pressed
+            // Save again and renamed it back. That guard existed on two of the three entry points.
+            var saving = form.querySelector('[data-gl-edit-save]');
+            if (editorOpen || (saving && saving.dataset.busy === '1')) { return; }
+
             // RESYNC on the way in, not only on cancel. The save writes the SERVER's normalized
             // values to the heading (`_check_name` trims and sanitizes) but left the fields holding
             // whatever was typed -- so saving "  My List  " and reopening showed the padded string
@@ -636,6 +836,11 @@
             syncPositionsVisibility();
             var tallies = document.querySelector('[data-gl-tallies]');
             if (tallies) { tallies.hidden = true; }
+            // The opener now states the panel's state rather than being an anonymous pencil, so it
+            // has to be kept honest on both edges. Looked up here rather than closed over, because
+            // the header can be re-rendered underneath this.
+            var openBtn = editOpener();
+            if (openBtn) { openBtn.setAttribute('aria-expanded', 'true'); }
             nameField.focus();
             nameField.setSelectionRange(nameField.value.length, nameField.value.length);
         }
@@ -650,8 +855,11 @@
             view.hidden = false;
             var tallies = document.querySelector('[data-gl-tallies]');
             if (tallies) { tallies.hidden = false; }
-            var opener = root.querySelector('[data-gl-edit-open]');
-            if (opener) { opener.focus(); }       // focus goes back where it came from
+            var opener = editOpener();
+            if (opener) {
+                opener.setAttribute('aria-expanded', 'false');
+                opener.focus();                   // focus goes back where it came from
+            }
         }
 
         function reset() {
@@ -676,7 +884,7 @@
             });
         }
 
-        var opener = root.querySelector('[data-gl-edit-open]');
+        var opener = editOpener();
         if (opener) { opener.addEventListener('click', open); }
 
         // Both dismissals refuse while a save is in flight. Neither was guarded, and the response
