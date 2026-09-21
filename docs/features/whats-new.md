@@ -25,9 +25,13 @@ Entry(
     title='What shipped',
     beats=(('Label', 'A sentence.'), ('Label', 'Another.')),
     link_label='Take a look',          # optional
-    link_url='/somewhere/',            # optional, must be a path we own
+    link_url='/somewhere/',            # optional, must be a path we own AND resolve
 )
 ```
+
+Check the copy against the code rather than against memory — the caps, the defaults and the wording
+of a gate are exactly the details that drift between writing a feature and announcing it. The entry
+is reviewed in the same PR as the thing it describes precisely so that is cheap to do.
 
 The modal shows **only the newest** entry a hunter has not dismissed. Older ones live on the archive
 page, which the modal links to.
@@ -294,8 +298,15 @@ was the lobby's only modal.
   cancelled on unload, so the dismissal is lost and the reader meets the same notice again having
   already clicked it). It holds the navigation until the write settles, capped at 600ms so a hung
   request never strands anybody. Modified and middle clicks are left to the browser and only recorded.
-- **The archive page must not mark anything seen.** Reading the record is not dismissing the notice; a
-  hunter who arrives from a link should still meet the modal on Home.
+- **An entry's link must RESOLVE, not merely look like a path.** The on-site check is a shape
+  allowlist, so `/community/list/` satisfies every rule in `safe_link_url` and ships a 404 inside a
+  modal that opened itself over the reader's page. Pinned separately by
+  `test_entry_links_actually_go_somewhere`.
+- ~~**The archive page must not mark anything seen.**~~ **Reversed** — see
+  [Reading the archive clears it](#reading-the-archive-clears-it) above. This said the opposite
+  ("reading the record is not dismissing the notice") and was left behind when the dot started
+  sharing the modal's single marker, which made a read-only archive a dead end: click the dot, read
+  the page, come back, dot still there, nothing able to clear it.
 - **Entry links must stay on-site.** The modal opens itself, unasked, over the page — a link out of it is
   the shape of a phishing lure. Pinned by test.
 - **`ENTRIES` order IS the ordering.** `latest()` is `ENTRIES[0]`, not a `max()`, so an entry appended to
