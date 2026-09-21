@@ -1435,12 +1435,19 @@ class RecentlyAddedView(HtmxListMixin, ListView):
     partial_template_name = 'trophies/partials/recently_added/browse_results.html'
     paginate_by = 30
 
-    def _serving_partial(self):
-        """True when this request gets a swap partial rather than the full page. The header
-        guard below MUST share this exact decision: an htmx request with an unrecognized (or
-        absent) target -- e.g. a history-restore, which sends HX-Request with no HX-Target --
-        falls through to the FULL page, and gating its header stats on bare `request.htmx`
-        would render a zeroed header (the audit's catch)."""
+    def is_partial_render(self):
+        """THE MIXIN'S HOOK, overridden, because this view routes by HX-TARGET.
+
+        True when this request gets a swap partial rather than the full page. The header guard
+        below MUST share this exact decision: an htmx request with an unrecognized (or absent)
+        target -- e.g. a history-restore, which sends HX-Request with no HX-Target -- falls
+        through to the FULL page, and gating its header stats on bare `request.htmx` would render
+        a zeroed header (the audit's catch).
+
+        It used to be a private helper under its own name, which is why it sat beside the mixin's
+        hook rather than on it. `HtmxListMixin` asks every `get_template_names` overrider to
+        override the hook: the inherited answer is True for ANY htmx request, so a caller trusting
+        it here would re-create exactly the zeroed header above."""
         htmx = getattr(self.request, 'htmx', False)
         if htmx and self.request.htmx.target in ('ra-view', 'browse-results'):
             return True
@@ -1453,7 +1460,7 @@ class RecentlyAddedView(HtmxListMixin, ListView):
         htmx = getattr(self.request, 'htmx', False)
         if htmx and self.request.htmx.target == 'ra-view':
             return ['trophies/partials/recently_added/view.html']
-        if self._serving_partial():
+        if self.is_partial_render():
             return [self.partial_template_name]
         return [self.template_name]
 
@@ -1618,9 +1625,9 @@ class RecentlyAddedView(HtmxListMixin, ListView):
         # header/switcher markup, and the island/grid swaps were paying these four indexed
         # queries per swap for nothing. Cheap enough to stay live (no heartbeat lag on the
         # captions), too cheap to keep paying on the infinite-scroll path. The guard MUST
-        # mirror get_template_names (via _serving_partial): a bare `not htmx` check would zero
+        # mirror get_template_names (via is_partial_render): a bare `not htmx` check would zero
         # the header on an htmx history-restore, which renders the full page.
-        if not self._serving_partial():
+        if not self.is_partial_render():
             window_start = self.get_window_start()
             dlc_qs = TrophyGroup.objects.exclude(trophy_group_id='default')
             context['category_counts'] = {

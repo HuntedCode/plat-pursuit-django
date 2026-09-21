@@ -227,13 +227,45 @@ class HtmxListMixin:
     """
     partial_template_name = None  # e.g. 'trophies/partials/game_list/browse_results.html'
 
-    def get_template_names(self):
-        # Return the rows-only partial for BOTH django-htmx filter swaps (HX-Request) and plain XHR page
-        # fetches (X-Requested-With) -- the latter is how InfiniteScroller pulls the next ?page. Without the
-        # XHR branch the scroller would receive the full page and never append. Harmless to the pager-based
-        # grids (they only ever send HX-Request today).
+    def is_partial_render(self):
+        """Is THIS mixin going to answer with `partial_template_name` rather than the whole page?
+
+        True for BOTH django-htmx filter swaps (HX-Request) and plain XHR page fetches
+        (X-Requested-With) -- the latter is how InfiniteScroller pulls the next ?page -- and only
+        when there is a partial to serve.
+
+        PUBLIC, and separate from `get_template_names`, because subclasses need to ask it too.
+        `get_context_data` runs for partial renders as well, so anything it builds that lives only
+        in the FULL page -- a page-header stat, a featured band outside the swap target -- is work
+        paid for and thrown away on every keystroke of live search. Those callers were writing their
+        own copy of this test, which is a copy that can drift from the one that picks the template.
+
+        IT SPEAKS ONLY FOR THIS MIXIN'S OWN DECISION, and the first version's docstring overstated
+        that into "the decision", which is false for any subclass that overrides
+        `get_template_names`. Two subclasses do -- `genre_views.GenreThemeListView` and
+        `game_views.RecentlyAddedView` -- and both route by HX-TARGET, deliberately falling
+        through to the FULL page on an unrecognised or absent target. (A history restore sends
+        `HX-Request` with no `HX-Target`.) A caller trusting the inherited answer there would skip
+        work the full render still needs, which is the zeroed-header bug `RecentlyAddedView`
+        records hitting.
+
+        SO: IF YOU OVERRIDE `get_template_names` AND THEN WANT TO ASK THIS, override it too.
+        `RecentlyAddedView` does, because it gates its header stats on the answer.
+        `GenreThemeListView` does NOT and should not -- it asks nothing, so an override there would
+        be a method with no call sites, correct today and free to drift tomorrow.
+
+        The `partial_template_name` clause is included here for the same reason the rest of this is
+        narrow: without it the answer is about the request alone and not about what this class will
+        actually send.
+        """
         is_xhr = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-        if (self.request.htmx or is_xhr) and self.partial_template_name:
+        return bool((self.request.htmx or is_xhr) and self.partial_template_name)
+
+    def get_template_names(self):
+        # Without the XHR branch the scroller would receive the full page and never append. Harmless
+        # to the pager-based grids (they only ever send HX-Request today).
+        # `is_partial_render()` already folds in the `partial_template_name` check.
+        if self.is_partial_render():
             return [self.partial_template_name]
         return super().get_template_names()
 
@@ -278,10 +310,16 @@ class HtmxListMixin:
         # from the count it already paid for. XHR only; a filter swap's response is consumed by
         # htmx, which ignores it.
         response = super().render_to_response(context, **response_kwargs)
-        # The same URL serves two bodies (full page vs partial) keyed on this header, so any
-        # shared cache must partition on it -- the central hook is the right place to say so
+        # The same URL serves two bodies (full page vs partial) keyed on these headers, so any
+        # shared cache must partition on them -- the central hook is the right place to say so
         # once for every consumer.
-        patch_vary_headers(response, ('X-Requested-With',))
+        #
+        # `HX-Request` WAS MISSING, and it is the one that actually drives most of these pages.
+        # `get_template_names` branches on `request.htmx` (which reads `HX-Request`) as well as on
+        # `X-Requested-With`, so declaring only the latter left a shared cache free to serve a
+        # stored grid partial -- no chrome, no header, no toolbar, no Spotlight -- to somebody
+        # loading the page fresh.
+        patch_vary_headers(response, ('X-Requested-With', 'HX-Request'))
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             page_obj = context.get('page_obj')
             if page_obj is not None:
