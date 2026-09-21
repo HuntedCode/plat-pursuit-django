@@ -629,6 +629,50 @@ runs the raw `section` through `safe_int` before that filter, because `filter(pk
 
 ---
 
+## Where a list is discoverable
+
+| Surface | Scope | Notes |
+|---|---|---|
+| `/community/lists/` | every public list | Search, game-count filters, five sorts, the Spotlight band |
+| `/my-lists/` | **yours, public and private** | The management surface. The only place private lists render |
+| `/hunters/<psn>/?tab=lists` | that hunter's **public** lists | Author-scoped. See below |
+
+### The profile Lists tab (2026-09)
+
+Added when Lists went public, and the gap it closes is the one the Spotlight creates: before it,
+nothing on the site answered *"what else has this person written?"* — browse filters on text, game
+count and a follow scope, never on a person — so meeting a list and clicking its author landed on a
+profile that never mentioned lists.
+
+Four decisions, each of which has a test pinning it (`tests/engine/test_profile_lists_tab.py`):
+
+- **Public only, including on your own profile.** `/my-lists/` owns private lists and the whole
+  management surface. Two places managing one thing is the failure being avoided, so this tab answers
+  only "what has this hunter put out" — the same question for the owner as for a visitor.
+- **The chip is conditional**, rendered only when the hunter has at least one public list (an indexed
+  `.exists()`, served by `glst_owner_idx`). At launch that is almost nobody, and a chip that is empty
+  for everybody is chrome on every profile render plus crowding on a switcher that must survive
+  375px. The `card` chip is already conditional, on ownership, so the switcher handles it.
+- **`?tab=lists` normalizes back to Games when that check fails**, exactly as `?tab=card` does for a
+  visitor. Without it a hand-typed URL (or a chip gone stale because the list was unpublished between
+  renders) selects a tab that has no chip, leaving the switcher with nothing marked active.
+- **Not paginated, and the render still carries its own bound.** `MEMBER_MAX_LISTS` caps an account
+  at 25, so the wall has no second page and the panel deliberately renders no `lists-sentinel` — which
+  is how `profile_detail.html` knows not to build an `InfiniteScroller`. The view slices to that cap
+  anyway, per the rule in `gamelists/models.py`: the cap is enforced by the *service*, so a row that
+  arrived another way must not be able to make a public page unbounded.
+
+It reuses `list_tile.html` and `attach_cover_games` wholesale (two queries for the wall regardless of
+size), and passes no `show_privacy`, because every list on it is public by definition. It does **not**
+`select_related('owner')` the way browse does: every row belongs to the profile being viewed, so the
+view assigns the already-loaded owner instead of joining a wide row once per list.
+
+Privacy rides on the page's existing `_history_visible` guard, which covers the HTMX path as well as
+the full render — the bug class this page has hit before, where a check living only in
+`profile_detail.html` is bypassed by a request that never renders the parent.
+
+---
+
 ## Integration Points
 
 - **`Concept.absorb()`** — the `GameListItem` branch. Its dedup is load-bearing and cannot be a bare

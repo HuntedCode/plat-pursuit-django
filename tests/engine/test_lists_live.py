@@ -428,27 +428,42 @@ def test_the_legacy_rows_survive_and_are_unreachable(client):
         'a legacy list id renders in the rebuilt app')
 
 
-def test_no_profile_tab_leads_into_lists(client):
+def test_no_profile_tab_leads_into_the_LEGACY_lists(client):
     """The door this guard did not cover. A profile carried a Lists tab whose cards linked to
     /lists/<id>/ -- routes that redirect home -- so following one from a profile bounced the reader to
     the homepage. Chrome, ads, the sitemap and game cards were all checked; a per-profile tab was not.
 
-    Hidden, not deleted -- but that was scoped too narrowly. Removing the CHIP left the tab still
-    RENDERING for anyone who typed `?tab=lists`, with cards whose links bounce home. The builder and
-    the template map entry are gone as of 2026-09; the rebuilt system brings its own tab.
+    NARROWED IN 2026-09, WHEN THE REBUILT TAB SHIPPED. This used to assert that the profile carried no
+    Lists tab AT ALL (`'?tab=lists' not in body`), which is now the opposite of the intended
+    behaviour -- and it kept passing only because the fixture writes a row to the LEGACY table while
+    the rebuilt tab reads `gamelists`. A fixture that cannot tell "there is no Lists tab" from "the
+    Lists tab ignores legacy rows" is not testing either one.
+
+    What survives is the half that was always the point: a legacy row must not reach the profile.
+    The rebuilt tab has its own file, `test_profile_lists_tab.py`.
     """
     owner = ProfileFactory(is_linked=True)
-    GameList.objects.create(profile=owner, name='Public list', is_public=True, game_count=2)
+    GameList.objects.create(profile=owner, name='Legacy public list', is_public=True, game_count=2)
 
-    body = client.get(f'/hunters/{owner.psn_username}/', HTTP_CF_RAY='8f0000000000abcd-LHR').content.decode()
+    resp = client.get(f'/hunters/{owner.psn_username}/', HTTP_CF_RAY='8f0000000000abcd-LHR')
+    body = resp.content.decode()
 
-    assert 'data-tab="lists"' not in body, 'the profile still offers a Lists tab'
-    assert '?tab=lists' not in body, 'something on the profile still links into lists'
+    assert resp.status_code == 200, 'the profile did not render; the assertions below prove nothing'
+    assert 'Legacy public list' not in body, 'a legacy list row reached the profile page'
+    # And no legacy ROUTE is linked. `/lists/<id>/` redirects home; `/community/lists/<id>/` is the
+    # rebuilt app and is a legitimate link for a REBUILT row, so the old path is what is banned.
+    assert f'/lists/{GameList.objects.get().id}/"' not in body, (
+        'something on the profile still links into the parked list routes'
+    )
 
 
-def test_typing_the_lists_tab_does_not_render_it(client):
+def test_typing_the_lists_tab_does_not_surface_a_legacy_row(client):
     """The chip was removed and the tab still answered. Asserted on the RESPONSE, not the chrome:
-    the previous guard passed the whole time this was live, because it only looked for a way in."""
+    the previous guard passed the whole time this was live, because it only looked for a way in.
+
+    Narrowed with its sibling above. `?tab=lists` is a real tab again, so what this pins now is that
+    it reads the REBUILT table -- a legacy row with the same class name must not appear on it.
+    """
     owner = ProfileFactory(is_linked=True)
     GameList.objects.create(profile=owner, name='Bounced list', is_public=True, game_count=2)
 
@@ -462,7 +477,7 @@ def test_typing_the_lists_tab_does_not_render_it(client):
         # satisfies "the list is absent" while proving nothing, which is how the guard this replaced
         # managed to pass for the whole time the tab was live.
         assert resp.status_code == 200, f'{label} answered {resp.status_code}, so this proves nothing'
-        assert 'Bounced list' not in resp.content.decode(), f'{label} still renders the lists tab'
+        assert 'Bounced list' not in resp.content.decode(), f'{label} rendered a LEGACY list row'
 
 
 def test_an_unknown_tab_gets_a_fragment_not_the_whole_site(client):
@@ -504,7 +519,13 @@ def test_no_profile_render_counts_a_parked_systems_rows(client):
     # A 404 runs no queries at all, so "no query mentions gamelist" would be trivially true.
     assert resp.status_code == 200, 'the profile did not render; the query assertion is vacuous'
 
-    listy = [q['sql'] for q in captured.captured_queries if 'gamelist' in q['sql'].lower()]
+    # `trophies_gamelist`, NOT the bare substring `gamelist`. This said `'gamelist' in sql` and
+    # therefore also matched `gamelists_gamelist` -- the REBUILT app's table, which the profile
+    # began querying legitimately in 2026-09 when the Lists tab came back. So the guard failed the
+    # moment a live feature did the right thing, and its message blamed "the parked list tables"
+    # for it. The parked system is the `trophies_*` one; that is what this is about.
+    listy = [q['sql'] for q in captured.captured_queries
+             if 'trophies_gamelist' in q['sql'].lower()]
     assert not listy, f'the profile still queries the parked list tables: {listy}'
 
 

@@ -121,7 +121,10 @@ surfaces (tier chips, become-preview) keep the flat run at every size.
 - **Comments render the full partial** (glyph included -- a moderator's authority must not be
   hue-alone, and staff crimson sits near `--pp-error`). **Game-list surfaces now wear the mark
   too** -- the list card, the detail byline and the Spotlight band all render `{% name_mark %}`
-  (`tests/engine/test_list_author_mark.py`). The earlier decision to render them plain, on the
+  (`tests/engine/test_list_author_mark.py`), and so does the profile's Lists tab, which renders the
+  same tile. That one wall is the exception to the rule's usefulness: every byline on it names the
+  profile's own owner, so the mark repeats down the grid. Left as-is rather than given a suppress
+  flag, because the tile is shared with two grids where the byline earns its place. The earlier decision to render them plain, on the
   grounds that a grid of twenty cards would carry twenty marks and the card's job is to identify
   the LIST, was reversed when Game Lists went public in 2026-09: without it a staff-written list
   and a stranger's were indistinguishable on the grid, which is precisely what the editorial

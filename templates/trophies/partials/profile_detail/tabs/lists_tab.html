@@ -1,14 +1,61 @@
-{% load custom_filters humanize %}
+{% comment %}
+The lists this hunter has PUBLISHED. Rebuilt 2026-09 against `gamelists`; the file this replaced
+was the legacy panel, which included the pre-rebuild `partials/game_list_card.html` and still wore
+DaisyUI classes. Nothing referenced it -- the view stopped knowing how to build this tab in 2026-09
+-- so it was a trap rather than a starting point.
+
+PUBLIC ONLY, INCLUDING ON YOUR OWN PROFILE. `/my-lists/` is the management surface and already shows
+private lists; rendering them here too would make two places to manage one thing, and the profile's
+job is to answer what this hunter has put OUT. So no `show_privacy` on the tile: every list on this
+wall is public by definition, and a "public" chip on all of them is noise (the browse grid makes the
+same argument).
+
+NOT PAGINATED, and that is a property of the model rather than an omission. `MEMBER_MAX_LISTS` caps
+an account at 25 lists, so this wall is bounded by a small constant no matter whose profile it is.
+There is deliberately no `#lists-sentinel`: profile_detail.html builds an InfiniteScroller only when
+it finds `<tab>-grid` AND `<tab>-sentinel`, so leaving the sentinel out is what tells it not to.
+If that cap is ever raised, this needs a real paginated tab, not a bigger wall.
+
+The grid id MUST stay `lists-grid`. The same script reads `<tab>-grid` to find what `staggerReveal`
+animates, and the tab's `revealSel` branch (`.pp-gcard`) has to be there too -- without it the
+selector falls through to the default `.card`, which matches nothing here, and
+`.pp-reveal .pp-gcard { opacity: 0 }` then hides every tile with nothing left to un-hide it.
+{% endcomment %}
 <div id="tab-results">
-    {% if profile_lists %}
-        <div id="lists-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
-            {% for game_list in profile_lists %}
-                {% include 'partials/game_list_card.html' with game_list=game_list %}
-            {% endfor %}
+    {% comment %}`pp-reveal` on HTMX swaps ONLY, matching every other tab partial here.
+
+    The settle-step rationale the gamelists grids carry does NOT apply to this file, and the version
+    of this comment that repeated it was wrong. There, the swap target IS the id'd grid, so htmx
+    restores the outgoing node's attributes onto the incoming one and a class added in afterSwap is
+    wiped. Here the target is `#tab-content` with `innerHTML` and the outgoing child is a DIFFERENT
+    id (`games-grid`, `ratings-grid`), so nothing is restored onto `lists-grid`.
+
+    The class is baked server-side anyway because that is what the other four tab partials do and
+    because `staggerReveal` expects to find it already there; the reason is consistency, not
+    settle.{% endcomment %}
+    <div id="lists-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}">
+        {% for game_list in profile_lists %}
+        {# `mark_index` desyncs the supporter shimmer per tile; the tile explains why it is passed, not inherited. #}
+        {% include 'gamelists/partials/list_tile.html' with game_list=game_list mark_index=forloop.counter0 %}
+        {% empty %}
+        {% comment %}A SAFETY NET, not a designed state, and it should be unreachable in practice:
+        the view normalizes `?tab=lists` back to Games whenever the same check that draws the chip
+        says there is nothing here, so both routes in (a hand-typed URL, a chip that went stale
+        because the list was unpublished between renders) land on Games instead.
+
+        It stays because an unguarded `{% templatetag openblock %} for {% templatetag closeblock %}`
+        over an empty queryset renders a bare grid with no explanation, and "unreachable" is a claim
+        about today's callers. Deliberately ONE state rather than an owner/visitor pair: the pair had
+        two copies of the same title to drift apart, and the owner half could not be reached at
+        all.{% endcomment %}
+        <div class="pp-gtile-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <p class="pp-gtile-empty__title">No public lists</p>
+            <p class="pp-gtile-empty__hint">Nothing published here yet.</p>
+            <div class="pp-gtile-empty__action">
+                <a href="{% url 'lists_browse' %}" class="pp-cta pp-cta--ghost">Browse lists</a>
+            </div>
         </div>
-    {% else %}
-        <div class="text-center py-8">
-            <p class="text-base-content/50 italic text-sm">No public lists yet.</p>
-        </div>
-    {% endif %}
+        {% endfor %}
+    </div>
 </div>
