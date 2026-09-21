@@ -26,6 +26,7 @@ and `display_image_url` needs a Game, so the pick happens in the service rather 
 also why the loop reads `item.display_image_url` and not `item.game.*`.
 {% endcomment %}
 {% load humanize %}
+{% load mark_tags %}
 <a href="{% url 'list_detail' game_list.id %}" class="pp-gcard pp-gcard--list" data-gcard
    {% comment %}`aria-label` REPLACES the contents-derived name rather than adding to it, so anything
    omitted here is invisible to a screen reader no matter how prominent it looks. The Private chip was
@@ -63,7 +64,21 @@ also why the loop reads `item.display_image_url` and not `item.game.*`.
     <div class="pp-gcard__body">
         {# `display_name`, so a list whose words a moderator hid does not show them on the grid. #}
         <h3 class="pp-gcard__title">{{ game_list.display_name }}</h3>
-        <p class="gl-card__author">{{ game_list.owner.display_psn_username|default:game_list.owner.psn_username }}</p>
+        {% comment %}THE MARK (components/name_mark.html): supporter stars, the staff wrench, the mod
+        shield -- one object wherever you meet a name. This byline was the one on the site rendering an
+        author as bare text, so a staff list and a hunter's were indistinguishable on the grid.
+
+        `index` desynchronises the supporter shimmer per tile; without it twenty-four marked names on a
+        page pulse in lockstep. It is passed in by the including loop rather than read from `forloop`
+        here, because this partial is included from two different grids and an implicit inherited
+        `forloop` is a dependency neither of them states.
+
+        The truncation stays on THIS `<p>` and does not move onto a flex container: `.gl-card__author`
+        is `nowrap` + `ellipsis` with a bare text node for the ~99% of names that carry no mark, and a
+        bare text node inside a flex parent becomes an anonymous flex item at min-content width, which
+        cannot ellipsize -- the failure leaderboards.css:203 records. The marked case is handled by
+        capping `.pp-markname` instead; see gamelists.css.{% endcomment %}
+        <p class="gl-card__author">{% name_mark name=game_list.owner.display_psn_username|default:game_list.owner.psn_username mark=game_list.owner.display_mark size='sm' index=mark_index %}</p>
 
         {% comment %} The shared foot: a hairline above the facts, so the counts read as metadata rather
         than as a third line of the title. {% endcomment %}
