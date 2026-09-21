@@ -172,6 +172,31 @@ class GameListQuerySet(models.QuerySet):
             return self.public()
         return self.visible().filter(Q(is_public=True) | Q(owner=profile))
 
+    def featured(self):
+        """Lists eligible for the browse Spotlight, most recently chosen first.
+
+        Built on `public()` rather than `visible()` deliberately: featuring is an editorial act, but
+        a list that was un-published or deleted after being featured must drop out of the Spotlight
+        on its own. Stacking the predicates here means the page cannot promote a list its own browse
+        grid would refuse to show.
+
+        `text_hidden` is NOT in this predicate, and that is the one exception worth stating. A
+        moderator hiding a featured list's words leaves it in the band, rendering `HIDDEN_NAME` and
+        no description -- exactly as the same list renders in the grid below. Hiding words is not
+        un-publishing, `public()` does not filter it anywhere else on the site, and adding it only
+        here would make the band disagree with the grid about what exists. The admin refuses to
+        newly feature a hidden list, which covers the case that is actually a mistake.
+
+        Ordering lives in the vocabulary, not at the call site, because "the featured list" means
+        "the one chosen most recently" everywhere -- see `featured_at`.
+        """
+        # `-pk` AS A TIEBREAK. Two lists featured inside the same timestamp otherwise resolve by
+        # whatever order Postgres felt like, so the Spotlight could flip between page loads -- the
+        # same non-determinism `covers._sort_key` documents adding a pk tiebreak to prevent. The
+        # admin refuses bulk featuring so it is unlikely, and it is free: the partial index on
+        # `-featured_at` still serves the ordering as a prefix.
+        return self.public().filter(featured_at__isnull=False).order_by('-featured_at', '-pk')
+
 
 class GameListManager(models.Manager.from_queryset(GameListQuerySet)):
     """Deliberately NOT filtering in `get_queryset`.
@@ -252,6 +277,26 @@ class GameList(models.Model):
         help_text="A moderator hid this list's name and description. The list itself is untouched.",
     )
 
+    #: CHOSEN FOR THE BROWSE SPOTLIGHT, and when. Null means not featured, which is almost every row.
+    #:
+    #: ONE TIMESTAMP RATHER THAN THE `Featured*` SHAPE. `trophies` already holds three curation
+    #: models -- `FeaturedGuide`, `FeaturedGame`, `FeaturedProfile` -- each an FK plus `priority`
+    #: plus a `start_date`/`end_date` window, and TWO of the three have no consumer outside the
+    #: admin. The scheduling machinery was built three times and used once. A nullable timestamp
+    #: says the same thing for the one question the page actually asks ("what is featured now?"),
+    #: answers ordering with the same column, and records when the choice was last made.
+    #:
+    #: NOT RESTRICTED TO STAFF-OWNED LISTS, in the model or in a service guard. Curation is the act
+    #: of setting this field, and the set of people who can set it is already the set of people with
+    #: admin access. Encoding "staff-authored" a second time as a constraint would have to be
+    #: unpicked -- along with its tests -- on the day a hunter's list deserves the slot, which is a
+    #: direction this is expected to go.
+    featured_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Set to feature this list in the Spotlight on the Game Lists browse page. The '
+                  'most recently set wins. Clear it to remove the Spotlight.',
+    )
+
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
@@ -277,6 +322,19 @@ class GameList(models.Model):
             # wide as the rows a crawler may see.
             models.Index(fields=['-updated_at'], name='glst_public_upd_idx',
                          condition=Q(is_deleted=False, is_public=True)),
+            # The Spotlight, whose predicate is `GameListQuerySet.featured()` exactly. Partial on
+            # `featured_at__isnull=False` as well as the public rule, so the index holds the handful
+            # of rows ever featured rather than the whole table.
+            #
+            # NOT an index-only scan, despite the shape inviting that claim: the caller selects every
+            # column and joins `Profile` for the byline's mark, so this is an index scan plus a heap
+            # fetch plus a nested loop. What the partial index buys is that the scan walks a
+            # handful-of-rows index instead of filtering the table -- which is the whole win, and is
+            # worth stating accurately so the next person tuning it does not chase a plan that
+            # cannot happen.
+            models.Index(fields=['-featured_at'], name='glst_featured_idx',
+                         condition=Q(is_deleted=False, is_public=True,
+                                     featured_at__isnull=False)),
         ]
         constraints = [
             # A name is how you tell two of your own lists apart, so an EMPTY one is refused in the
