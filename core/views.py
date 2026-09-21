@@ -87,6 +87,16 @@ class ChallengesComingSoonView(TemplateView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Challenges'},
         ]
+        # THE SHARE CARD MATTERS MORE HERE THAN ON AN INDEXED PAGE, which is the opposite of the
+        # intuition. `base.html` falls back to the site name and the generic site blurb, so a link
+        # pasted into Discord rendered "Platinum Pursuit" and a description about trophy tracking --
+        # telling a reader nothing about why it was sent to them. This page is `noindex`, so being
+        # passed around by hand is the ONLY way it travels, and the answer people want ("are my A-Z
+        # runs gone?") is the one thing worth putting in the preview.
+        context['seo_title'] = 'Challenges are coming back'
+        context['seo_description'] = (
+            'Challenges are being rebuilt from the ground up. Your past A-Z runs are safe.'
+        )
         return context
 
 

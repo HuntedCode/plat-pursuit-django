@@ -48,6 +48,13 @@ class HubSubnavItem:
                                        # which costs provider queries on every request)
     group: str = ''  # the rail group this item belongs to (e.g. 'Catalog' / 'Curation'). Items are
                      # defined in group order so the template can {% regroup %} consecutive runs.
+    #: How the tag is SPOKEN, when it is not simply the tag word. The pill's `aria-label` replaces
+    #: its contents-derived name, so this is the whole of what a screen reader hears about the chip.
+    #: It exists because that phrase was hardcoded to "coming soon" and fired on `{% if item.tag %}`
+    #: rather than on the tag's VALUE -- so a `tag='New'` pill, the other value the field documents,
+    #: would have announced "Game Lists, coming soon" while sighted readers saw NEW. Backwards, not
+    #: merely wrong. Left empty, the tag word itself is spoken.
+    tag_aria: str = ''
     tag: str = ''    # a short chip on the pill itself ('Soon', 'New'). SHORT, because a rail pill is
                      # `white-space: nowrap` and a long one pushes its neighbours into the overflow
                      # sheet -- the tag has to cost less room than the item it is labelling.
@@ -82,6 +89,7 @@ class RenderedSubnavItem:
     icon: str | None = None
     group: str = ''
     tag: str = ''
+    tag_aria: str = ''
 
 
 @dataclass(frozen=True)
@@ -278,7 +286,8 @@ COMMUNITY_HUB = HubSubnavConfig(
         # the one you cannot; tagged because a pill that looks like its neighbours promises a
         # destination like its neighbours, and somebody clicking it deserves to know before they do.
         # Dropping the tag is what marks the feature as shipped.
-        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag', tag='Soon'),
+        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag', tag='Soon',
+                      tag_aria='coming soon'),
     ),
 )
 
@@ -471,6 +480,6 @@ def build_rendered_items(
             continue
         rendered.append(RenderedSubnavItem(
             slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group,
-            tag=item.tag))
+            tag=item.tag, tag_aria=item.tag_aria))
     rendered.extend(extras)
     return tuple(rendered)

@@ -37,7 +37,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                 when there IS a tag, so an ordinary pill keeps its natural name.{% endcomment %}
                 <a href="{{ item.url }}" class="pp-subpill{% if item.slug == hub_subnav_active_slug %} is-active{% endif %}"
                    data-subnav-pill data-group="{{ group.grouper }}"
-                   {% if item.tag %}aria-label="{{ item.label }}, coming soon"{% endif %}
+                   {% if item.tag %}aria-label="{{ item.label }}, {% firstof item.tag_aria item.tag %}"{% endif %}
                    {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}{% if item.tag %}<span class="pp-subpill__tag">{{ item.tag }}</span>{% endif %}</a>
                 {% endfor %}
             </div>
@@ -70,7 +70,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                     {% for item in group.list %}
                     {# The overflow sheet renders the same pill; see the rail above for the aria note. #}
                     <a href="{{ item.url }}" class="pp-subpill{% if item.slug == hub_subnav_active_slug %} is-active{% endif %}"
-                       {% if item.tag %}aria-label="{{ item.label }}, coming soon"{% endif %}
+                       {% if item.tag %}aria-label="{{ item.label }}, {% firstof item.tag_aria item.tag %}"{% endif %}
                        {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}{% if item.tag %}<span class="pp-subpill__tag">{{ item.tag }}</span>{% endif %}</a>
                     {% endfor %}
                 </div>

@@ -9,6 +9,7 @@ launch. What these tests hold is that the placeholder behaves like a page rather
 and, critically, that it does not become a permanent thin search result once the real browse
 replaces it at the same URL.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -73,6 +74,15 @@ def test_it_costs_no_queries(client):
     offenders = [q['sql'] for q in ctx.captured_queries if 'challenge' in q['sql'].lower()]
     assert offenders == [], f'the placeholder queried the challenge tables: {offenders}'
 
+    # AND A CEILING ON THE TOTAL, because the check above is a negative with a narrow matcher: a
+    # view that grew an unrelated read -- a profile lookup, a count against a renamed table -- is
+    # invisible to it while the test's name still claims the page "costs no queries". The bound is
+    # deliberately loose (it is chrome, not this page) and only has to catch a page that started
+    # reading. Raise it consciously if the chrome genuinely grows.
+    assert len(ctx.captured_queries) <= 12, (
+        f'the placeholder now runs {len(ctx.captured_queries)} queries; it used to read nothing'
+    )
+
 
 def test_it_is_in_the_community_rail(client):
     """The rail is how somebody learns what a hub contains. A hub of two while a third is weeks away
@@ -124,19 +134,34 @@ def test_it_invents_no_css_that_will_outlive_it():
 
     markup = (ROOT / 'templates' / 'pages' / 'challenges_coming_soon.html').read_text(encoding='utf-8')
 
-    # CLASS ATTRIBUTES ONLY. The first cut scanned the whole file and matched the COMMENT that
-    # explains why this block does not exist -- a string assertion finding the wrong copy of itself,
-    # which is the exact failure mode this project keeps re-learning.
+    # CLASS ATTRIBUTES, OUT OF COMMENT BLOCKS FIRST. Two rounds of the same mistake got us here:
+    # the original scanned the whole file and matched prose; scoping to `class="..."` was not
+    # enough either, because the template's comments QUOTE the markup they replaced
+    # (`class="scard p-4 md:p-6"`), and a regex over raw text cannot tell a quoted attribute from a
+    # live one. Stripping `{% comment %}` and `{# #}` first is what actually makes this read the
+    # page rather than the commentary about the page.
+    live = re.sub(r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', ' ', markup, flags=re.S)
+    live = re.sub(r'\{#.*?#\}', ' ', live, flags=re.S)
+
     used = set()
-    for attr in re.findall(r'class="([^"]+)"', markup):
+    for attr in re.findall(r'class="([^"]+)"', live):
         used.update(attr.split())
+
+    assert used, 'no class attributes found at all -- the scan is broken, not the page'
 
     invented = sorted(name for name in used if name.startswith('pp-soon'))
     assert not invented, f'a throwaway block came back: {invented}'
     # It reuses the shell every rebuilt page opens with, so it does not look half-finished beside
     # Game Lists in the same rail.
-    assert 'pp-head-cascade' in markup
-    assert 'scard' in markup
+    #
+    # ASSERTED AS CLASS TOKENS, from the `used` set built above. These read `in markup` -- the raw
+    # file including comments -- and the template carries a long comment explaining why it is NOT
+    # on `.scard` any more. So `assert 'scard' in markup` was satisfied purely by the prose about
+    # removing it, and would have passed with the whole card deleted. Its sibling three tests down
+    # asserts the opposite (`'scard' not in classes`); only the comment reconciled them.
+    assert 'card' in used and 'card-body' in used, 'the page no longer uses the house card shell'
+    assert 'pp-head-cascade' in used, 'the page lost the opening beat every rebuilt page has'
+    assert 'scard' not in used, 'the prose block is back on the stat-cell primitive'
 
 
 def test_the_tag_is_distinguishable_from_the_label_beside_it():
@@ -163,8 +188,129 @@ def test_the_tag_is_distinguishable_from_the_label_beside_it():
         'the tag is coloured with the same grey as the label beside it')
 
     # And nothing re-colours it to match the active label further down.
-    after = css[start:]
-    active = [line for line in after.splitlines()
-              if 'is-active' in line and 'pp-subpill__tag' in line]
-    assert not active or all('--pp-primary' not in line for line in active), (
-        'the tag turns primary on the active pill, where the label is already primary')
+    #
+    # THE RULE BODY, NOT THE SELECTOR LINE. This filtered lines containing both `is-active` and
+    # `pp-subpill__tag` and then checked those lines for `--pp-primary` -- but a CSS rule in this
+    # project's house style puts the selector on one line and each declaration on its own, so the
+    # only line that ever matched was the SELECTOR, which will essentially never contain a colour.
+    # The declaration was in a different list element and was never looked at. Adding
+    # `.pp-subpill.is-active .pp-subpill__tag { color: var(--pp-primary) }` in the normal form --
+    # the precise regression named above -- sailed straight through.
+    for block in re.finditer(r'([^{}]*is-active[^{}]*pp-subpill__tag[^{}]*)\{([^}]*)\}', css):
+        assert '--pp-primary' not in block.group(2), (
+            'the tag turns primary on the active pill, where the label is already primary')
+
+
+# ── polish-pass guards ───────────────────────────────────────────────────────────────────────────
+
+def test_the_page_offers_somewhere_to_go(client):
+    """A coming-soon page with no onward path is a bounce.
+
+    It offered less than the browse grid's own empty state does, and that is a throwaway state
+    rather than a whole page. The roadmap is the honest destination -- it already carries Challenges
+    in its `in the works` tier and its content rules forbid dates, so it answers "when?" without
+    this page promising anything.
+    """
+    body = client.get(reverse('challenges')).content.decode()
+
+    # SCOPED TO THE PAGE'S OWN NAV. Against the whole document this passed with the links deleted,
+    # because the site FOOTER also links the roadmap -- the assertion was reading the chrome.
+    nav = body[body.index('aria-label="While you wait"'):]
+    nav = nav[:nav.index('</nav>')]
+
+    assert reverse('support_roadmap') in nav, 'no way to follow the rebuild'
+    assert reverse('lists_browse') in nav, 'no route to the thing in this hub that exists'
+
+
+def test_the_prose_block_is_not_a_stat_cell(client):
+    """`.scard` sets `padding: 12px 8px` from an unlayered component file, and an unlayered
+    declaration beats one inside `@layer utilities` whatever its specificity -- so the `p-4 md:p-6`
+    written beside it never applied and the prose rendered at 8px of side padding on a phone,
+    under a header card with 16px. `.scard` is the site's STAT CELL everywhere else; this was the
+    only place it wrapped prose."""
+    body = client.get(reverse('challenges')).content.decode()
+
+    # MATCHED AS A CLASS TOKEN, not as a substring. `'scard' not in body` failed on the word
+    # "Discard" in the unsaved-changes modal the chrome includes -- di-SCARD. A substring test
+    # against a whole rendered document is almost always matching something you did not mean.
+    classes = set()
+    for attr in re.findall(r'class="([^"]+)"', body):
+        classes.update(attr.split())
+
+    assert 'scard' not in classes, (
+        'the prose block is back on .scard, whose padding silently overrides the utilities beside it')
+    assert 'card-body p-3 md:p-5 lg:p-7' in body, (
+        'the prose block is not on the documented content-module progression')
+
+
+def test_the_body_arrives_on_the_same_beat_as_the_header(client):
+    """The header opened with the house cascade and the block the reader came for hard-cut in
+    beneath it. The site animates its EMPTY STATES in; its coming-soon page should not just
+    appear."""
+    body = client.get(reverse('challenges')).content.decode()
+
+    assert body.count('pp-head-cascade') == 2, (
+        'the body block does not join the page entrance')
+
+
+def test_the_share_card_says_what_the_page_says(client):
+    """`noindex` means being passed around by hand is the only way this page travels, so the
+    preview is the whole of its first impression. It fell back to the site name and the generic
+    site blurb -- telling a reader nothing about why the link was sent to them."""
+    body = client.get(reverse('challenges')).content.decode()
+
+    # THE OG TAGS SPECIFICALLY. This first asserted the strings appeared anywhere in the body and
+    # was vacuous on arrival: the page already carried a `meta_description` block containing both,
+    # so it passed with no `seo_title`/`seo_description` set at all -- which is precisely the gap
+    # it was written to close, since `og:*` reads those two and not `meta_description`.
+    og_title = re.search(r'<meta[^>]+property="og:title"[^>]+content="([^"]*)"', body)
+    og_desc = re.search(r'<meta[^>]+property="og:description"[^>]+content="([^"]*)"', body)
+
+    assert og_title and 'coming back' in og_title.group(1), (
+        f'og:title falls back to the site default: {og_title and og_title.group(1)!r}')
+    assert og_desc and 'runs are safe' in og_desc.group(1), (
+        f'og:description does not answer the real worry: {og_desc and og_desc.group(1)!r}')
+
+
+def test_the_overflow_menu_keeps_the_tag_as_markup():
+    """`subnav.js` rebuilt folded pills with `textContent`, which flattens
+    `Challenges<span …>Soon</span>` into the literal unstyled string `ChallengesSoon` -- and dropped
+    the `aria-label`, so it was announced that way too. Latent while Community is three pills, live
+    the moment a tagged item lands on a rail that folds."""
+    js = (Path(__file__).resolve().parents[2]
+          / 'static' / 'js' / 'subnav.js').read_text(encoding='utf-8')
+    # COMMENTS STRIPPED FIRST. The fix's own comment quotes the broken line it replaced, so scanning
+    # the raw source found the string it was asserting the absence of -- a test failing on the
+    # documentation of the bug it was written to prevent.
+    code = re.sub(r'//[^\n]*', '', re.sub(r'/\*.*?\*/', '', js, flags=re.S))
+
+    assert 'a.textContent = p.textContent' not in code, 'the overflow menu flattens pill markup again'
+    assert 'cloneNode' in js, 'the overflow menu no longer copies the pill children'
+    assert "getAttribute('aria-label')" in js, 'the overflow menu drops the pill accessible name'
+
+
+def test_the_tag_is_announced_by_its_own_value():
+    """The spoken phrase fired on "a tag exists" rather than on the tag's VALUE, hardcoded to
+    "coming soon". The field documents 'New' as the other value, and a `tag='New'` pill would have
+    announced "coming soon" while sighted readers saw NEW -- backwards, not merely wrong."""
+    from core.hub_subnav import COMMUNITY_HUB
+
+    template = (Path(__file__).resolve().parents[2]
+                / 'templates' / 'partials' / 'hub_subnav.html').read_text(encoding='utf-8')
+
+    assert 'coming soon"' not in template, 'the spoken tag phrase is hardcoded again'
+    assert 'item.tag_aria' in template, 'the pill no longer speaks the tag its config declares'
+
+    # THE FALLBACK, RENDERED. This asserted `HubSubnavItem(..., tag='New').tag_aria == ''` -- the
+    # dataclass default equals the dataclass default, which is true by declaration and tests
+    # nothing. The behaviour it claimed to pin lives in the template's `{% firstof %}`, which it
+    # never touched: swapping that for a bare `{{ item.tag_aria }}` renders `aria-label="X, "` for
+    # any tag without an explicit phrase, and the old assertion stayed green.
+    # BOTH RENDER SITES, like the `aria-label` count two tests up. The pill is drawn twice -- once
+    # in the rail, once in the overflow sheet -- so `in template` was satisfied by either one, and
+    # a mutation that dropped the fallback from the rail alone left this green.
+    assert template.count('{% firstof item.tag_aria item.tag %}') == 2, (
+        'a tag with no spoken phrase announces nothing on one of the two pills')
+    # And the config still carries an explicit phrase where the tag word alone would read oddly.
+    challenges = next(i for i in COMMUNITY_HUB.items if i.slug == 'challenges')
+    assert challenges.tag_aria == 'coming soon'
