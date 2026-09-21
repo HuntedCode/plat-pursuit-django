@@ -554,6 +554,87 @@ def _undo_game_flag_dismissed(action, moderator):
     return {'game_flag': flag}, {'status': [was, 'pending']}, {}
 
 
+def _list_behind(action):
+    """The GameList an entry was about, LOCKED, or a message saying why it cannot be undone.
+
+    Resolved through the report where there is one and by `target_id` where there is not, because
+    `GameListReport.game_list` is CASCADE while `ModerationAction.list_report` is SET_NULL -- so a
+    hard-deleted list leaves an entry whose report is gone. That entry should say so plainly rather
+    than raise.
+    """
+    from gamelists.models import GameList
+
+    report = action.list_report
+    pk = report.game_list_id if report is not None else action.target_id
+    try:
+        return GameList.objects.select_for_update().select_related('owner').get(pk=pk)
+    except ObjectDoesNotExist:
+        raise ModerationError(
+            'The list behind this decision has been deleted, so it cannot be undone here.')
+
+
+def _undo_list_text_hidden(action, moderator):
+    """Put a hidden list's words back, and reopen the report that hid them.
+
+    The previous value comes out of the log rather than being hardcoded: `hide_list_text` records
+    `changed={}` when the list was ALREADY hidden, and un-hiding on the strength of that would
+    reverse a decision the entry never made.
+    """
+    game_list = _list_behind(action)
+    if not action.changed.get('text_hidden'):
+        raise ModerationError(
+            'That decision did not hide anything, so there is nothing to put back.')
+    if not game_list.text_hidden:
+        raise ModerationError("That list's words are already showing.")
+
+    # AND THE CHECK THE VALUE COMPARISON CANNOT MAKE, which `_restore_hidden` spells out for the
+    # blurb path and this was missing. Two decisions can hide one list: the second finds the words
+    # already gone and writes `changed={}`, which makes it deliberately irreversible. So reversing
+    # the FIRST one finds exactly what it left, happily un-hides -- and puts the words back over a
+    # standing decision nobody disputed, with no entry left that could take them down again.
+    # Comparing values cannot see this; only asking whether somebody else's call still stands can.
+    standing = (ModerationAction.objects
+                .filter(target_id=game_list.pk, action='list_text_hidden',
+                        reversed_by_action__isnull=True)
+                .exclude(pk=action.pk).exists())
+    if standing:
+        raise ModerationError(
+            'Another decision to hide this list has not been reversed. Reverse that one first.')
+
+    game_list.text_hidden = False
+    game_list.save(update_fields=['text_hidden'])
+
+    links = {}
+    report = action.list_report
+    if report is not None:
+        # The standing decision is now this person's, exactly as the blurb undo argues.
+        report.status = 'reviewed'
+        report.reviewed_by = moderator
+        report.reviewed_at = timezone.now()
+        report.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+        links['list_report'] = report
+    return links, {'text_hidden': [True, False]}, {}
+
+
+def _undo_list_report_dismissed(action, moderator):
+    """Reopen a dismissed list report: it goes back into the queue for somebody to decide again.
+
+    `reviewed_by` / `reviewed_at` are CLEARED rather than reassigned, for the reason the blurb
+    version writes down -- a row reading "dismissed by X" while sitting in the pending queue is a
+    contradiction on the page, and who dismissed it survives in the entry being reversed.
+    """
+    report = action.list_report
+    if report is None:
+        raise ModerationError(
+            'The report behind this decision has been deleted, so it cannot be undone here.')
+    was = report.status
+    report.status = 'pending'
+    report.reviewed_by = None
+    report.reviewed_at = None
+    report.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+    return {'list_report': report}, {'status': [was, 'pending']}, {}
+
+
 #: action -> (the callable that undoes it, what the resulting REVERSAL is called).
 #:
 #: A DICT, not a set of names: the first cut gated on a set while the body was hardcoded to the blurb
@@ -565,6 +646,14 @@ def _undo_game_flag_dismissed(action, moderator):
 #: logged as a quick take being restored. The name of the result belongs beside the thing producing
 #: it. A key with no handler is a KeyError at edit time; a handler with no name is impossible.
 _UNDO = {
+    # LIST DECISIONS ARE REVERSIBLE TOO, and until this entry existed they were not reversible at
+    # all. `restore_list_text` was written with `hide_list_text` and then had no caller anywhere:
+    # no view, no URL, no admin action, and no `_UNDO` key -- so the Reverse button never rendered
+    # for a hidden list, and `reverse_action` refused it by name if it was ever reached. The only
+    # remaining route was a shell write, which bypasses the audit log this whole module exists to
+    # guarantee. Hiding somebody's words was a one-way door.
+    'list_text_hidden': (_undo_list_text_hidden, 'list_text_restored'),
+    'list_report_dismissed': (_undo_list_report_dismissed, 'list_report_reopened'),
     'blurb_hidden': (_undo_blurb_hidden, 'blurb_restored'),
     # Its OWN reversal name. Both hides reversing to `blurb_restored` re-created exactly the
     # ambiguity `blurb_hidden_proactive` exists to remove: a `blurb_restored` row with a null report
@@ -628,8 +717,14 @@ def reverse_action(action, moderator, reason):
     return reversal
 
 
-# -- how much is waiting -------------------------------------------------------------------------
+# ── list reports ─────────────────────────────────────────────────────────────────────────────────
+#
+# THESE THREE WERE APPENDED UNDER THE "how much is waiting" HEADING and read as part of the counting
+# section rather than as decisions. They are decisions, and they were missing the one decorator
+# every other decision in this file carries -- see below.
 
+
+@transaction.atomic
 def hide_list_text(report, moderator, reason):
     """Hide the reported list's name and description, and close the report.
 
@@ -665,10 +760,20 @@ def hide_list_text(report, moderator, reason):
         list_report=report, target_id=game_list.pk,
         target_label=f'List "{game_list.name}"'[:255],
         changed={'text_hidden': [was_hidden, True]} if not was_hidden else {},
+        # THE WORDS THEMSELVES, which this recorded nowhere. `hide_blurb` captures the hidden text
+        # for the reason the field's own help_text gives -- "an appeal needs the words" -- and here
+        # they lived only on the `GameList` row. `GameListReport.game_list` is CASCADE while
+        # `ModerationAction.list_report` is SET_NULL, so a hard-deleted list left an orphan entry
+        # whose only trace of what was moderated was a 255-character label. `already_hidden` marks
+        # the no-op case, so an entry with an empty `changed` still says why.
+        evidence=({'name': game_list.name, 'description': game_list.description,
+                   'already_hidden': True} if was_hidden
+                  else {'name': game_list.name, 'description': game_list.description}),
     )
     return action
 
 
+@transaction.atomic
 def dismiss_list_report(report, moderator, reason):
     """Close the report and leave the list alone -- the report was wrong, or the name is fine."""
     reason = _require_reason(reason)
@@ -690,27 +795,21 @@ def dismiss_list_report(report, moderator, reason):
     )
 
 
-def restore_list_text(game_list, moderator, reason):
-    """Put a hidden list's words back. The reverse of `hide_list_text`, and the reason the stored
-    name is kept rather than blanked."""
-    reason = _require_reason(reason)
+# DELETED: `restore_list_text`.
+#
+# It shipped alongside `hide_list_text` and never gained a caller -- no view, no URL, no admin
+# action -- which is what made hiding a one-way door in the first place. Putting a list's words
+# back now goes through `reverse_action` and `_undo_list_text_hidden`, like every other decision
+# in this module, so the Reverse button on the decisions page is the route.
+#
+# Removed rather than left sitting there, and the reason is not tidiness. It wrote
+# `list_text_restored` with no `reverses` link and none of the standing-decision guard the undo
+# path carries, so a future caller reaching for the obvious-looking name would have re-created
+# exactly the bug the verification audit found: un-hiding a list over a second moderator's hide
+# that nobody disputed. Two writers of one outcome, one of them unguarded, is how that returns.
 
-    from gamelists.models import GameList
 
-    locked = GameList.objects.select_for_update().select_related('owner').get(pk=game_list.pk)
-    if not locked.text_hidden:
-        raise ModerationError('That list\'s words are already showing.')
-
-    locked.text_hidden = False
-    locked.save(update_fields=['text_hidden'])
-
-    return ModerationAction.objects.create(
-        actor=moderator, actor_label=_label(moderator), action='list_text_restored', reason=reason,
-        **_subject(locked.owner),
-        target_id=locked.pk, target_label=f'List "{locked.name}"'[:255],
-        changed={'text_hidden': [True, False]},
-    )
-
+# ── how much is waiting ──────────────────────────────────────────────────────────────────────────
 
 def queue_counts():
     """Per queue: how much is waiting, and how much there has ever been.

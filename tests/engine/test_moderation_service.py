@@ -798,11 +798,25 @@ def test_every_action_that_can_be_reversed_names_its_reversal():
 
 def test_every_decision_the_service_makes_can_be_reversed():
     """The owner asked for "reverse any decision". A decision the log records but cannot undo is a
-    gap that only shows up the day somebody needs it."""
-    decisions = {'blurb_hidden', 'blurb_report_dismissed', 'game_flag_approved',
-                 'game_flag_dismissed'}
+    gap that only shows up the day somebody needs it.
 
-    assert decisions <= set(mod._UNDO), f'no undo for {decisions - set(mod._UNDO)}'
+    DERIVED FROM `ModerationAction.ACTIONS`, not listed. This hardcoded the four decisions that
+    existed when it was written, so it went on passing when the list-report decisions shipped with
+    no reversal path whatever -- `restore_list_text` had no caller, no URL and no `_UNDO` key, and
+    hiding somebody's words was a one-way door out of the audit log. A set typed by hand cannot
+    fail for the thing it exists to catch: the arrival of a NEW decision.
+
+    The reversal outcomes are excluded by name, since a reversal is deliberately not itself
+    reversible (`reverse_action` refuses one, and says why).
+    """
+    outcomes = {name for name, _label in ModerationAction.ACTIONS
+                if name.endswith(('_restored', '_restored_proactive', '_reopened', '_reversed'))}
+    decisions = {name for name, _label in ModerationAction.ACTIONS} - outcomes
+
+    # A floor, so a rename that empties `decisions` cannot turn this into a test of nothing.
+    assert len(decisions) >= 6, f'only found {len(decisions)} decisions ({decisions})'
+    assert decisions <= set(mod._UNDO), (
+        f'these decisions can be logged but not undone: {sorted(decisions - set(mod._UNDO))}')
 
 
 # ── what the audit of P2 found ───────────────────────────────────────────────────────────────────

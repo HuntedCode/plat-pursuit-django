@@ -8052,6 +8052,10 @@ class ModerationAction(models.Model):
         ('list_text_hidden', 'List name and description hidden'),
         ('list_text_restored', 'List name and description restored'),
         ('list_report_dismissed', 'List report dismissed'),
+        # The reversal of a dismissal, mirroring `blurb_report_reopened`. Added when the list
+        # decisions were wired into `_UNDO`: they shipped with no reversal path at all, so hiding
+        # somebody's words was a one-way door whose only exit bypassed this log.
+        ('list_report_reopened', 'List report reopened'),
         ('game_flag_approved', 'Game flag approved'),
         ('game_flag_dismissed', 'Game flag dismissed'),
         ('game_flag_reversed', 'Game flag approval reversed'),

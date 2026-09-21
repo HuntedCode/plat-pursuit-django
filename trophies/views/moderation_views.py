@@ -228,6 +228,13 @@ class HideListTextView(_ActionView):
         moderation_service.hide_list_text(
             get_object_or_404(GameListReport, pk=pk), user, reason)
 
+    def default_redirect(self):
+        # Back to the queue the moderator was working, like every other _ActionView. These two were
+        # the only subclasses without it, so when `next` is absent -- or rejected by `_safe_next`,
+        # which is exactly the case the fallback exists for -- they dropped the moderator on the
+        # Mod Center index instead of the list they were part-way through.
+        return reverse_lazy('mod_list_reports')
+
 
 class DismissListReportView(_ActionView):
     success_message = 'List report dismissed.'
@@ -237,6 +244,9 @@ class DismissListReportView(_ActionView):
 
         moderation_service.dismiss_list_report(
             get_object_or_404(GameListReport, pk=pk), user, reason)
+
+    def default_redirect(self):
+        return reverse_lazy('mod_list_reports')
 
 
 class HideBlurbView(_ActionView):
