@@ -35,7 +35,7 @@ from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST
                               list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
-from gamelists.services.game_search import SearchRefused, search_concepts
+from gamelists.services.game_search import SearchRefused, page_key_expression, search_concepts
 from trophies.mixins import HtmxListMixin
 from trophies.models import Concept
 
@@ -1475,12 +1475,27 @@ class MyListsForConceptView(LoginRequiredMixin, _LinkedProfileRequired, View):
         profile = request.user.profile
         game_lists = list(GameList.objects.owned_by(profile))
 
-        # ONE query for membership across every list, keyed on the concept being asked about --
-        # never a count per list, which is the N+1 a picker invites.
+        # KEYED ON THE GAME PAGE, not the concept pk. A list holding a SIBLING of this concept holds
+        # this game -- `add_concept` refuses it on exactly that ground -- so asking by pk offered Add
+        # on a list that would then refuse, and offered no Remove for the row actually on it. The
+        # same defect as `ListGameSearchView`'s, reached from the other direction.
+        #
+        # One bounded lookup for the asked-about concept's identity, then ONE query for membership
+        # across every list -- never a count per list, which is the N+1 a picker invites. A concept
+        # that does not exist yields no key, and the `IN` then matches nothing, which is the same
+        # empty answer this returned before.
+        page_key = (
+            Concept.objects.filter(pk=concept_id)
+            .annotate(_page_key=page_key_expression())
+            .values_list('_page_key', flat=True)
+            .first()
+        )
         held = {
             row['game_list_id']: row['id']
             for row in GameListItem.objects
-            .filter(game_list__in=game_lists, concept_id=concept_id)
+            .filter(game_list__in=game_lists)
+            .annotate(_page_key=page_key_expression('concept__'))
+            .filter(_page_key=page_key)
             .values('game_list_id', 'id')
         }
 
@@ -1631,13 +1646,28 @@ class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
         # database that question returns at most twelve rows. The `WHERE concept_id IN (...)` is
         # served by the `unique(game_list, concept)` index, so it is a bounded indexed seek rather
         # than a scan of the hunter's list.
-        already = set(
+        # ASKED BY PAGE IDENTITY, not by concept pk, because that is what the search elected by.
+        #
+        # This keyed on `concept_id` while `search_concepts` collapsed siblings onto one row, so when
+        # the elected representative was the sibling NOT on the list, the row rendered as addable and
+        # `add_concept` then refused it -- a dead end, on roughly half of the split games, created by
+        # collapsing the read side without the membership side. Both now read
+        # `page_key_expression`, which is why it takes a prefix rather than being written twice.
+        held = set(
             GameListItem.objects
-            .filter(game_list=game_list, concept_id__in=[row['concept_id'] for row in cached])
-            .values_list('concept_id', flat=True)
+            .filter(game_list=game_list)
+            .annotate(_page_key=page_key_expression('concept__'))
+            .filter(_page_key__in=[row['page_key'] for row in cached])
+            .values_list('_page_key', flat=True)
         )
         # Marked rather than filtered out: a hunter searching for something already on the list
         # should be told it is there, not left wondering why it does not appear.
-        return JsonResponse({'results': [
-            dict(row, already_added=row['concept_id'] in already) for row in cached
-        ]})
+        #
+        # `page_key` is stripped: it is how the server recognises a game, not something the client
+        # has any use for.
+        results = []
+        for row in cached:
+            out = {key: value for key, value in row.items() if key != 'page_key'}
+            out['already_added'] = row['page_key'] in held
+            results.append(out)
+        return JsonResponse({'results': results})
