@@ -202,8 +202,9 @@ controls, which on a list that visibly has sections reads as a bug.
 
 `_grouped()` returns `[(section_or_None, [items])]` — the **ungrouped bucket first**, then sections in
 their own `position`. Ungrouped leads because a list that has just gained its first section has
-everything in it, so burying it would hide the games somebody is about to file; it is omitted only
-when empty. The chosen sort orders *within* each group, so sorting a sectioned list A-Z sorts inside
+everything in it, so burying it would hide the games somebody is about to file. **It is omitted
+whenever it is empty**, for readers and owners alike — see the Gotchas for why that stopped being an
+owner exception in 2026-09. The chosen sort orders *within* each group, so sorting a sectioned list A-Z sorts inside
 each section rather than flattening the grouping away. **One extra query** for the whole page
 (`game_list.sections.all()`), and the grouping is done in Python over rows already fetched.
 
@@ -365,30 +366,50 @@ runs all the way out to `data-section-id=""` on the ungrouped grid.
   open whenever this mode is, and an arrow key moving the caret through the list's name must not also
   move a card.
 
-### Position editing is a mode
+### One mode (rebuilt 2026-09)
 
-Reordering is **entered deliberately**, not always live. `data-gl-reorder` is the server saying it is
-POSSIBLE here; the mode is the hunter saying they want to do it now. Conflating the two shipped
-first, and it made rearranging a list something you could do by accident.
+There is **one** editing state and one control: **Edit list** / **Done** in the page header.
 
-Open the editor → **Edit list positions** → grips appear → drag or arrow-key → a pill reads *Saving*
-then *Saved* → press **Done**, or close the editor, and it ends. The hint states that moves save
-immediately, because the editor's Cancel button cannot undo a write that already happened.
+It replaced three answers to "can I change this list right now". Adding and removing games worked
+always; renaming and sections needed *Edit list*; moving a game needed *Edit list* **and** a second
+toggle inside the bar that revealed. The owner's report was that the tool was "awkward in displaying
+what state it's in", which it was.
 
-**The bar sits directly above the grid**, not in the edit panel, where it started and was hard to
-find: the one control the Ranked type exists for was the quietest thing on the page. It is still
-gated on the editor being open — that is the deliberate-entry half — but it lives next to the thing
-it changes, is full-width, and the whole surface changes colour when the mode is on rather than only
-a button label.
+Entering the mode brings the identity panel, the section controls, the per-section adders, the
+remove rows and the dragging on together. Leaving takes them all away.
 
-Its visibility is the **server's answer plus one client condition**: `can_reorder` decides whether
-the bar exists at all, and the JS shows it only while the editor is open.
+**Two flags, one mode**, and not collapsing these was the load-bearing call:
 
-There was briefly a third condition — whether the *selected* type radio was still Ranked — because
-saving a type change meant a full page reload, so between switching the radio and saving, the bar
-would have offered to reorder a list the hunter had just called a shelf. **Saving refreshes the bar's
-slot instead**, so that condition is gone along with the reload, and what is left is more honest: the
-list really is still ranked until the save lands.
+| Flag | On `#gl-items-panel` | Means |
+|---|---|---|
+| `data-gl-editing` | the mode | rename, sections, add, remove |
+| `data-gl-arranging` | **derived** | drag actually attached: grips, grab cursors, the tray, the lift |
+
+`arranging` is never toggled by anybody. The mode can be on over a grid with nothing draggable: a
+Collection with no sections has nothing to file, a ranked list sorted A-Z has no position a drop
+could mean, and SortableJS may simply have failed to load. Keying the tray and the grab cursor off
+`editing` would promise a drag the page cannot honour on exactly those three surfaces — which the old
+two-mode split had been preventing by accident.
+
+`data-gl-arranging` is the old `data-positioning` renamed, with its selector **shape** deliberately
+unchanged (`#gl-items-panel[...]`, never flattened): the sortable-ghost rule depends on winning a
+(1,4,0) vs (1,3,0) specificity fight that a shorter selector loses silently, and the stylesheet
+records having lost it once already.
+
+**Deliberate entry survived the collapse.** `data-gl-reorder` is still the server saying reordering
+is POSSIBLE here; the mode is still the hunter saying they want it now. Conflating the two shipped
+first and made rearranging a list something you could do by accident.
+
+**Remove and rearrange now coexist on a card.** The old CSS hid the remove button whenever the
+arrange mode was on, which with one mode would mean hiding it always. Deleting that rule exposed a
+real bug: both controls were anchored `top: 6px; right: 6px` and had "never collided" only because
+one was hidden, so on touch their 44px hit areas were fully coincident — a tap meant for *reorder*
+would delete a game. They are separated by geometry instead (grip at `right: 38px`, `44px` on touch,
+so the two targets abut rather than overlap).
+
+The hint copy is the mode's, not an instruction for getting into it, and it has three states because
+the capabilities are independent: nothing draggable, filing only, and full ordering. Naming a gesture
+the page will refuse is worse than naming none.
 
 ### Saving a type change refreshes in place
 
@@ -452,8 +473,12 @@ submits no content, so it sits with un-publishing and deleting on the allowed si
 ### Getting into the editor
 
 One entry point, `[data-gl-edit-open]`, and it opens the **whole** editing state: name, description,
-sections and arrange mode. There is deliberately no second door — they are one state, not four
-controls.
+sections, the per-section adders, the remove rows and the dragging. There is deliberately no second
+door — they are one state, not four controls.
+
+That sentence was aspirational until 2026-09. The control opened a panel and revealed a bar, and a
+second press *inside* that bar turned on dragging, while adding and removing worked regardless of
+either. See *One mode* above.
 
 It lives in the `.gl-actions` band beside Publish, as a labelled `Edit list` button. It used to be a
 44px icon-only pencil welded to the `h1`, and that was the wrong idiom twice over: a bare pencil
@@ -463,9 +488,93 @@ while what it opens is the entire editor. The band is where the page already put
 "act on the very thing the header describes", which is exactly what this does.
 
 Ghost, and first: Publish keeps the only filled treatment because it is the act a new owner should
-take, and editing goes first because it is the everyday one. It carries `aria-expanded` and
-`aria-controls="gl-edit-panel"`, toggled on both edges — an `aria-expanded` that never changes is
-worse than none, since it states a fact and then lies.
+take, and editing goes first because it is the everyday one.
+
+It carried `aria-expanded` and `aria-controls="gl-edit-panel"` until 2026-09, and **both were removed
+deliberately** when it became the single mode toggle. The rule behind them is the reason they went,
+not a casualty of it: a control must not state a fact about itself it will not maintain. It used to
+disclose one panel, so *expanded* was honest. It now enters a mode reaching the cards, the section
+headers and the adders — `aria-expanded="true"` would describe the identity panel while the hunter
+watches grips appear over every card, which is the same lie told about a bigger thing. The **label**
+carries the state instead (`Edit list` / `Done`), which is also why there is no `aria-pressed`: a
+toggle must not carry both a pressed state and a changing label. Both attributes are actively
+*removed* on paint rather than merely unset, because an out-of-band chrome swap re-renders this
+button and a stale attribute from an older template would otherwise survive with nothing to clear
+it.
+
+### Per-card actions: the `...` menu
+
+Every card carries one menu trigger opening **Move to <section>** rows plus **Remove from list**.
+
+It replaced a bare remove button, and the corner is why. Remove sat at `right: 6px` and the grip at
+the same coordinate; adding a third control for "move to" would have put ~90px of buttons across the
+top of a ~170px card at 375px. One trigger instead, and the grip keeps its own place because it has
+to be **grabbable** rather than chosen.
+
+It also protects the destructive action better than the rule it replaced. The old CSS hid Remove
+while dragging so an irreversible action was not under a moving cursor; hiding it meant it could not
+be reached at all. A menu gets the protection and stays reachable.
+
+**The three-way fork lives in one function.** Which endpoint a move posts to depends on what a
+position means on the page: at the real sequence the order and the section go in ONE write to
+`list_reorder`; everywhere else it is `list_item_assign` with no order at all. A menu that always
+assigned would silently diverge a ranked list's ordering — silent because the card still lands under
+the right header and the damage only shows on the next load. `moveItemToSection` is that function,
+extracted out of the drag handler, and both callers go through it.
+
+Destinations are read from the **rendered** grouping — the headers the cards already sit under —
+rather than assembled client-side, because a second source for the grouping is how a menu comes to
+offer a section deleted in the swap that just landed. The id is parsed from the header's own `id`
+and never from its text: two sections may share a name, so a name identifies nothing.
+
+**"No section" is appended by the client**, not read from the page, and that is load-bearing. The
+loose bucket is omitted when empty, so once a hunter files their last loose card there is no header
+left to drop onto. See *The ungrouped bucket* below.
+
+### Section headers: add here, and reorder
+
+Each header carries a labelled **+ Add game** and a `...` menu (rename / move up / move down /
+delete).
+
+"+ Add game" is the one labelled action because it is what the header exists to make easy: filing a
+game used to mean adding it at the toolbar and then dragging it down, which on a long list is a drag
+past everything in between. Everything else went into a menu for the same arithmetic the card solved
+one element up — there were two 28px icon buttons here with a load-bearing `margin-left: 8px` keeping
+their 44px hit areas apart, and five would not have fitted beside a name and a count.
+
+**Sections can be reordered at last.** `reorder_sections`, `ReorderSectionsView` and
+`list_sections_reorder` had all been live since sections shipped, with a service test and no client
+anywhere — which is why a section could be renamed and deleted but never moved. Move up / Move down
+post the **whole** order, because the service refuses a partial one for the same reason `reorder`
+does for items, so "move up" cannot be a delta. The rendered order *is* the order (`position` is
+dense and the server sorts on it), so it is read back from the page rather than kept twice.
+
+Rename stays member-gated by being **rendered or not** — an empty `data-rename-url` — rather than by
+rendering a row the service refuses, which is the remedy-that-refuses shape this project has fixed
+three times.
+
+> **Naming trap, recorded because it cost three test failures.** The add button was
+> `data-gl-section-add-game`, which *contains* `data-gl-section-add`, the section-CREATION form in
+> the controls strip — so three member-gate tests asserting that form is absent for a free owner
+> started matching this button instead. It is `data-gl-add-to-section` now. Same hazard the
+> `[data-gl-delete]` ordering comment in `list-detail.js` warns about, arriving as a substring.
+
+### The adder is moved, never duplicated
+
+There is **one** `GameAdder` on the page. Pressing "+ Add game" on a header relocates that node under
+the header and sets `data-section` on it; pressing it again sends it home.
+
+One instance because `GameAdder` binds a document listener and has **no teardown**, so an adder per
+header on a panel that re-swaps on every write is a leak that grows for the life of the tab. Moving
+the node keeps its listeners, its WeakSet guard and any in-flight search. `GameAdder` reads
+`root.dataset.section` at **send** time rather than capturing it at wire time, and this is the reason:
+the root's destination changes as it moves.
+
+**It must be parked before anything replaces the panel.** The headers live inside `#gl-items-panel`
+and are replaced wholesale, so a docked adder is destroyed mid-type. `refreshItems()` parks it — and
+so does an `htmx:beforeSwap` hook, which is the half that is easy to miss, because the sort toolbar
+submits through htmx **directly** and never passes through `refreshItems`. Sorting with the adder
+docked would otherwise leave the page with no way to add a game until reload.
 
 ### Publishing
 
@@ -795,11 +904,21 @@ human, which is the thing `all_ugc` names.
 - **The arrange bar is not gated on the drag.** It also carries "Add a section", so tying the whole
   bar to whether a drag is possible hid the only control that could make one possible — a member with
   a section-less Collection had no way in.
-- **The ungrouped bucket stays when empty, for whoever can arrange.** A reader never sees a header
-  over nothing; the owner always does, because it is the only way back *out* of a section. Filing the
-  last loose card used to remove the bucket and take the drop target with it, so nothing could be
-  un-filed by pointer (no grid to drop onto) or by keyboard (no group before the first section) until
-  the owner deleted a whole section to get their game back.
+- **The ungrouped bucket is omitted when empty, for everybody** (changed 2026-09). It used to stay
+  for an owner who could arrange, because it was the only way back *out* of a section: filing the
+  last loose card removed the bucket and took the drop target with it, so nothing could be un-filed
+  by pointer (no grid to drop onto) or by keyboard (no group before the first section) until the
+  owner deleted a whole section to get their game back.
+
+  The card menu ended that argument — "No section" is a row on every card, appended by the client
+  precisely so it is offered when this bucket is not rendered. What was left was a permanent "Not in
+  a section" header over nothing on every fully-filed list, which is what the owner reported.
+
+  **The cost, stated rather than glossed:** a card can no longer be *dragged* out of every section,
+  because there is nothing to drag it onto. The menu is the route. If a drop target is ever wanted
+  back it belongs behind `[data-gl-arranging]` — on screen only while a drag is actually live — and
+  not on every render of every sectioned list. `test_un_filing_survives_the_bucket_being_gone` is
+  what stops that trade being broken quietly.
 - **`:empty` does not tolerate whitespace.** The empty-section drop box is a `::before` gated on
   `:empty`, so the grid's tags must close up tight against the `{% for %}` — laid out over separate
   lines an empty grid still holds `"
