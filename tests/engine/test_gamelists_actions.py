@@ -1581,55 +1581,16 @@ def test_the_popover_shows_what_the_server_actually_said(client):
     assert js.count('failureMessage(err).then(') == 2
 
 
-def test_the_popover_survives_the_gestures_a_phone_makes(client):
-    """Two closes that fired on the most ordinary mobile actions. Android raises `resize` when the
-    virtual keyboard opens -- and the popover focuses its "New list" field on open for a hunter with
-    no lists yet, so it could vanish on the frame it appeared. And the inner row list chained its
-    scroll to the document, whose `scroll` listener shut the panel mid-flick."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    resize = js[js.index("window.addEventListener('resize'"):]
-    resize = resize[:resize.index('});') + 3]
-    assert 'place(openTrigger)' in resize, 'a resize still closes rather than repositions'
-
-    css = _read('static/css/components/quick-add.css')
-    assert 'overscroll-behavior: contain' in css, 'the inner scroll still chains to the document'
-
-
-def test_the_popover_lets_go_of_the_page_it_was_anchored_to(client):
-    """Browse Games swaps its grid on every filter change. The panel went on floating over the new
-    results, anchored to a button no longer in the document -- and a row click still posted, filing a
-    game the hunter could no longer see."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    assert "htmx:afterSwap" in js, 'a filter change orphans the popover'
-    assert 'openTrigger.isConnected' in js
-
-
-def test_focus_comes_back_when_it_was_inside(client):
-    """Every close path but Escape passed `restoreFocus = false`, so a keyboard user who scrolled or
-    clicked away had the focused row deleted out from under them and focus reset to <body> -- the next
-    Tab restarting at the top of the document. Whether focus needs restoring is a fact about the DOM,
-    not a decision for the caller."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    fn = js[js.index('function close('):js.index('function rowHtml(')]
-    assert 'pop.contains(document.activeElement)' in fn, 'the caller still decides'
-    # ...and read BEFORE the content is thrown away, or the answer is always false.
-    assert fn.index('document.activeElement') < fn.index("pop.innerHTML = ''")
-
-
-def test_the_trigger_does_not_swallow_the_click_other_menus_listen_for(client):
-    """`stopPropagation` was left over from when the button lived inside the card's `<a>`. Stopping
-    the click one node below `document` is where the site's other outside-click closers listen, so
-    opening this left the nav search, the sub-nav menu and Browse Games' own discipline popovers
-    hanging open behind it."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    handler = js[js.index("var trigger = e.target.closest && e.target.closest('[data-quick-add]')"):]
-    handler = handler[:handler.index('var row =')]
-    assert 'stopPropagation' not in handler
-    assert 'preventDefault' not in handler, 'a type=button outside a form has nothing to prevent'
+# ── the panel mechanics moved ───────────────────────────────────────────────────────────────────
+#
+# Five tests lived here and are now in `test_anchored_menu.py`: the Android resize, the iOS keyboard
+# scroll, the htmx detach, the focus restore and the non-swallowed click. They were always claims
+# about the PANEL rather than about adding a game to a list, and in 2026-09 that panel became
+# `PlatPursuit.AnchoredMenu` with three consumers. Leaving them here would have meant quick-add
+# alone guarding behaviour the list editor also depends on.
+#
+# `test_quick_add_delegates_to_the_primitive`, in that file, is what stops the extraction being
+# undone quietly.
 
 
 def test_the_full_row_is_reachable_and_announced(client):
@@ -1882,35 +1843,6 @@ def test_the_button_is_hidden_and_inert_until_its_card_reveals():
     # and a reduced-motion viewer never gets `.pp-reveal` at all.
     before = css[:css.index('.pp-reveal .pp-gcard:not(.is-revealed) ~ .pp-gcard__add')]
     assert before.rstrip().endswith('@media (prefers-reduced-motion: no-preference) {')
-
-
-def test_the_popover_survives_the_ios_keyboard_raising():
-    """A hunter with NO lists gets the New list field focused on open. On iOS that raises the keyboard,
-    which SCROLLS the document to lift the field clear of it -- and the scroll handler closed on any
-    scroll, so the panel vanished on the frame it appeared. Every time, for exactly the first-run
-    hunter the empty-state copy is written for.
-
-    The `resize` handler one block down was already written for this same keyboard; the reasoning was
-    never carried across to `scroll`."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    handler = js[js.index('function onScrollSettled()'):]
-    handler = handler[:handler.index("window.addEventListener('resize'")]
-
-    # THE TRIGGER'S VISIBILITY IS THE TEST. Not the scroll (which the keyboard causes by itself), and
-    # NOT whether the focus is ours -- `open()` focuses the panel on every open, mouse included, so
-    # that test is true for every loaded popover and scroll-to-close stops existing altogether.
-    assert 'getBoundingClientRect()' in handler
-    assert 'r.bottom <= 0 || r.top >= vh' in handler, \
-        'the panel follows its card off the screen instead of closing'
-    assert 'place(openTrigger)' in handler
-
-    # The branch `resize` has always had and this one was missing: an anchor that no longer exists
-    # cannot be followed, and the panel must not be left floating against a detached node.
-    assert 'if (!openTrigger || !openTrigger.isConnected) { close(false); return; }' in handler
-
-    # `place()` forces two reflows, so a raw scroll listener calling it is a per-event reflow storm.
-    assert 'requestAnimationFrame(onScrollSettled)' in js
 
 
 def test_an_arriving_cell_is_inert_until_its_animation_finishes():
