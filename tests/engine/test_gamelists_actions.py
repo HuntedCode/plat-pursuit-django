@@ -2426,6 +2426,64 @@ def test_the_picker_knows_a_list_holds_this_game_under_a_sibling(client):
         'the row on the list cannot be removed from the surface that shows it'
 
 
+def test_a_list_already_holding_both_siblings_still_works(client):
+    """WHAT A LIST AUTHORED BEFORE THE GUARD DOES ON THE DAY THIS DEPLOYS.
+
+    The guard refuses new adds and nothing migrates existing rows, so any list that already holds one
+    game under two concepts keeps holding it. That is deliberate -- a migration that silently deleted
+    a hunter's hand-curated entry is the worse failure, the same reasoning that makes `absorb()`
+    re-point `GameListItem` rather than let it cascade.
+
+    So this pins the whole of what such a list does, because "nothing breaks" is a claim and this is
+    the evidence: it renders, it counts what it holds, the adder marks the game held rather than
+    offering it, and BOTH rows can be removed from the page they appear on.
+    """
+    owner = _member(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    first, second = _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+
+    # Straight to the rows, because the service now refuses the second one -- which is the point.
+    kept = svc.add_concept(game_list, owner, first)
+    duplicate = GameListItem.objects.create(game_list=game_list, concept=second, position=1)
+    # `game_count` SET TO MATCH THE ROWS, because the real lists this is about got both entries
+    # through `add_concept` before the guard existed, so their count reads 2. Leaving the fixture at
+    # the 1 that `add_concept` wrote would let the final assertion below pass without the recount
+    # ever doing anything.
+    GameList.objects.filter(pk=game_list.pk).update(game_count=2)
+    game_list.refresh_from_db()
+    assert game_list.game_count == 2
+
+    page = client.get(reverse('list_detail', args=[game_list.id]))
+    assert page.status_code == 200, 'a list holding both siblings does not render'
+    assert GameListItem.objects.filter(game_list=game_list).count() == 2
+
+    # The adder answers HELD rather than offering it again, so the state cannot grow.
+    _bust('colossus')
+    rows = client.get(reverse('list_game_search', args=[game_list.id]),
+                      {'q': 'colossus'}).json()['results']
+    assert len(rows) == 1 and rows[0]['already_added'] is True
+
+    # The quick-add picker answers "on it" and offers ONE of the two rows to remove. Which one is
+    # not defined -- both are this game, and either is a correct answer -- so this pins that it is
+    # one of them rather than a crash or a None.
+    picked = {row['name']: row for row in
+              client.get(reverse('lists_for_concept', args=[first.id])).json()['lists']}
+    assert picked['Backlog']['has_concept'] is True
+    assert picked['Backlog']['remove_url'] in {
+        reverse('list_remove_game', args=[game_list.id, kept.id]),
+        reverse('list_remove_game', args=[game_list.id, duplicate.id]),
+    }, 'the picker offers no way to remove a game the list holds twice'
+
+    # And the way out is the ordinary one: remove the row, from the page that shows it.
+    removed = client.post(reverse('list_remove_game', args=[game_list.id, duplicate.id]))
+    assert removed.status_code == 200, f'the duplicate row cannot be removed ({removed.status_code})'
+    assert list(GameListItem.objects.filter(game_list=game_list)
+                .values_list('id', flat=True)) == [kept.id]
+
+    game_list.refresh_from_db()
+    assert game_list.game_count == 1, 'the count did not settle after the duplicate was removed'
+
+
 # ── trust is the gate on the write side too (2026-09) ────────────────────────────────────────────
 #
 # BOTH OF THESE KILL A MUTATION THAT SURVIVED THE WHOLE SUITE. The search side pinned trust; the add
