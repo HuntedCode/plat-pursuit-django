@@ -2749,41 +2749,89 @@ def test_the_numbering_toggle_has_exactly_one_writer(client):
     assert "'on'" in body
 
 
-def test_a_group_change_refreshes_and_a_plain_reorder_does_not(client):
-    """A card CHANGING GROUP changes things the optimistic repaint cannot reach: the count beside each
-    header, and whether the group it left still exists at all (the loose bucket is omitted when empty,
-    so emptying it by hand leaves a header reading 0 over nothing).
+def test_a_group_change_repaints_in_place_and_so_does_a_plain_reorder(client):
+    """WAS `test_a_group_change_refreshes_and_a_plain_reorder_does_not`, and the rename is the
+    finding. A plain reorder repainted in place; a card changing GROUP re-rendered the whole list.
+    The owner noticed the asymmetry -- "why do games reload when swapping between sections?" -- which
+    is the tell that the refresh was never about the move.
 
-    A plain reorder must NOT refresh: it would spend a round trip redrawing forty covers that did not
-    change and tear down the Sortable instance mid-interaction. The rank text is the only thing a
-    reorder alters on screen, which is why `renumber` exists."""
+    It was about two things the old repaint could not reach: the count beside each heading, and the
+    ungrouped bucket vanishing as it empties. The refresh's own failure message said so out loud
+    ("Reload the page to see the counts update"). Both are reachable now.
+
+    THE ONE CASE STILL TAKING A REFRESH is the mirror of the second: filing a card out of every
+    section when no ungrouped bucket is rendered means a whole GROUP has to appear, with a heading,
+    a grid, its `role`/`aria-labelledby` pair and the server-owned reorder endpoint. Hand-assembling
+    that in JS is what this codebase has been bitten by repeatedly, so it takes the round trip.
+    """
     js = _decommented(_read('static/js/list-detail.js'))
 
     # `moveItemToSection` rather than `onCrossSectionDrop`: the fork was extracted when the card
-    # menu arrived, so that both callers post to the same endpoint under the same rule. The hazard
-    # is unchanged -- it just lives one function further in.
+    # menu arrived, so that both callers post to the same endpoint under the same rule.
     move = _fn(js, 'moveItemToSection')
-    assert 'refresh: true' in move, 'a cross-group move leaves both section counts stale'
+    assert 'refresh: true' in move, 'a cross-group move no longer asks for the group repaint'
+    # `placed` says whether the node is ALREADY where it belongs -- true after a drag, false from
+    # the menu. Without it the menu posts a move the page never shows.
+    assert 'placed: !!evt' in move, 'the repaint cannot tell a drag from a menu move'
 
-    # ...and the drop handler must actually go through it. Reading `evt.to` and posting directly
-    # would restore the second, divergent path this extraction exists to prevent.
+    # ...and the drop handler must go through it. Reading `evt.to` and posting directly would
+    # restore the second, divergent path the extraction exists to prevent.
     drop = _fn(js, 'onCrossSectionDrop')
     assert 'moveItemToSection(' in drop, 'the drag has its own move path again'
-    assert 'saveAssignment(' not in drop and 'saveOrder(' not in drop,         'the drag posts directly instead of through the shared fork'
+    assert 'saveAssignment(' not in drop and 'saveOrder(' not in drop, \
+        'the drag posts directly instead of through the shared fork'
 
-    save = js[js.index('function saveOrder('):js.index('function renumber(')]
-    assert 'move.refresh' in save, 'the flag is set and never read'
-    # Guarded on the flag, so the ordinary drag keeps its cheap repaint.
-    assert 'if (move && move.refresh)' in save
+    # THE REPAINT IS TRIED FIRST, and the refresh is what happens when it reports it could not.
+    save = _fn(js, 'saveOrder')
+    assert 'repaintAfterGroupChange(' in save, 'a group change still re-renders the list'
+    assert save.index('repaintAfterGroupChange(') < save.index('refreshItems()'), \
+        'the refresh runs before the repaint is even attempted'
 
-    # The within-grid path sends no move at all, so it cannot ask for one.
+    # The filing-only fork gets the same treatment; it was the other half of the asymmetry.
+    assign = _fn(js, 'saveAssignment')
+    assert 'repaintAfterGroupChange(' in assign, 'a filing-only move still re-renders the list'
+
+    # The within-grid path sends no move at all, so it cannot ask for one -- unchanged, and still
+    # the reason a plain reorder costs nothing.
     attach = _fn(js, 'attachDragTo')
     reorder_cb = attach[attach.index('onReorder: function'):attach.index('onEnd: function')]
     assert 'refresh' not in reorder_cb, 'a plain reorder must not round-trip the whole grid'
 
 
-# -- the audit round ------------------------------------------------------------------------------
+def test_the_group_repaint_updates_the_counts_and_drops_the_empty_bucket():
+    """The two things the refresh was actually buying, done in the client instead.
 
+    Order matters: the prune runs BEFORE `renumber`, because restart-per-section numbering counts
+    grids, and a bucket about to disappear would otherwise be numbered as a group.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'repaintAfterGroupChange')
+
+    assert 'syncGroupCounts()' in fn, 'the heading counts go stale'
+    assert 'pruneEmptyLooseBucket()' in fn, 'an emptied bucket is left as a heading over nothing'
+    assert fn.index('pruneEmptyLooseBucket()') < fn.index('renumber()'), \
+        'the ranks are computed over a group that is about to be removed'
+
+    # It must be able to REFUSE, or the one case it cannot handle silently does nothing.
+    assert 'return false' in fn, 'the repaint cannot report that it could not finish'
+
+    counts = _fn(js, 'syncGroupCounts')
+    assert 'groupGridFor(head)' in counts, 'the count reads the wrong element for its heading'
+
+    prune = _fn(js, 'pruneEmptyLooseBucket')
+    assert 'gl-section__head--loose' in prune, 'a named section is pruned when it empties'
+
+
+def test_the_group_grid_lookup_steps_over_a_docked_adder():
+    """`head.nextElementSibling` is the naive read and it is wrong exactly when somebody is using
+    the feature: the adder docks BETWEEN a header and its grid, so the naive version returns the
+    adder and the heading's count stops updating while a game is being added to it."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'groupGridFor')
+
+    assert "classList.contains('gl-group__grid')" in fn, 'the lookup trusts adjacency'
+    # ...and it must not run past its own section into the next one's grid.
+    assert "classList.contains('gl-section__head')" in fn, 'the walk crosses into the next section'
 def test_a_cross_section_drop_reads_where_the_card_LANDED(client):
     """THE WORST BUG THE AUDIT FOUND, and it made the whole feature a no-op.
 

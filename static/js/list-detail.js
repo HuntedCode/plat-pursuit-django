@@ -1793,8 +1793,12 @@
             // things the optimistic repaint cannot reach: the count beside each header, and whether
             // the group it left still exists at all (the loose bucket is omitted when empty, so
             // emptying it by hand leaves a header reading 0 over nothing).
+            // `placed` -- is the node ALREADY where it belongs? True after a drag, because
+            // SortableJS moved it before this was ever called; false for the card menu, which moves
+            // nothing and needs the repaint to do it. Without this the menu posted a move the page
+            // never showed, and the drag would have had its card appended a second time.
             saveOrder(grid, fullOrder(), 'Moved.',
-                      { movedItem: itemId, section: sectionId, refresh: true });
+                      { movedItem: itemId, section: sectionId, refresh: true, placed: !!evt });
             return;
         }
         saveAssignment(itemId, sectionId, evt);
@@ -2160,7 +2164,10 @@
                 // `onCrossSectionDrop`. A plain reorder deliberately does not: refreshing would spend
                 // a round trip redrawing forty covers that did not change, and the rank text is the
                 // only thing a reorder can alter on screen.
-                if (move && move.refresh) {
+                if (move && move.refresh
+                        && !repaintAfterGroupChange(move.movedItem, move.section, move.placed)) {
+                    // Only when the repaint could not finish the job -- today that means a card
+                    // leaving its last section with no ungrouped bucket rendered to receive it.
                     return refreshItems().catch(function (err) {
                         // The write LANDED; only the view is stale. Saying it was not saved would
                         // send somebody to redo a move they already made.
@@ -2197,6 +2204,95 @@
     // Both modes count DOWN THE PAGE; only the reset differs. A per-grid `i + 1` was what this did
     // before sections, and on a sectioned list it would restart at 1 under every header regardless of
     // the setting -- silently showing the restart mode to somebody who chose continue-through.
+    /**
+     * The grid belonging to a group header, skipping anything docked between them.
+     *
+     * Not `nextElementSibling`: the adder docks BETWEEN a header and its grid, so the naive read
+     * returns the adder whenever somebody is adding to that section.
+     */
+    function groupGridFor(head) {
+        var next = head.nextElementSibling;
+        while (next && !next.classList.contains('gl-group__grid')) {
+            if (next.classList.contains('gl-section__head')) { return null; }
+            next = next.nextElementSibling;
+        }
+        return next;
+    }
+
+    function gridForSection(sectionId) {
+        return document.querySelector(
+            '#gl-items-root [data-gl-arrange][data-section-id="' + (sectionId || '') + '"]');
+    }
+
+    /** The number beside each heading, recounted from the rows actually under it. */
+    function syncGroupCounts() {
+        var heads = document.querySelectorAll('#gl-items-root .gl-section__head');
+        Array.prototype.forEach.call(heads, function (head) {
+            var grid = groupGridFor(head);
+            var badge = head.querySelector('.gl-section__count');
+            if (!grid || !badge) { return; }
+            // No thousands separator to reproduce: `MAX_ITEMS_PER_LIST` is 200, so `intcomma` in the
+            // template is a no-op at every reachable value. If that cap ever rises this has to learn
+            // the same formatting, or the count will disagree with itself across a refresh.
+            badge.textContent = String(grid.querySelectorAll('.gl-item').length);
+        });
+    }
+
+    /**
+     * Drop the ungrouped bucket once it is empty, which is what the server does.
+     *
+     * The bucket renders only when it holds something (2026-09), so a client that files the last
+     * loose card and leaves the heading behind is showing a state the next page load will not
+     * reproduce. Only the LOOSE bucket: a named section is a real thing that legitimately sits empty.
+     */
+    function pruneEmptyLooseBucket() {
+        var head = document.querySelector('#gl-items-root .gl-section__head--loose');
+        if (!head) { return; }
+        var grid = groupGridFor(head);
+        if (!grid || grid.querySelector('.gl-item')) { return; }
+        if (grid.parentNode) { grid.parentNode.removeChild(grid); }
+        if (head.parentNode) { head.parentNode.removeChild(head); }
+    }
+
+    /**
+     * Bring the page up to date after a card changed group, WITHOUT re-rendering it.
+     *
+     * Returns false when it cannot, and the caller falls back to a refresh.
+     *
+     * WHY THIS EXISTS: a cross-group move used to end in `refreshItems()`, so moving one card
+     * between two headings re-rendered every card in the list and re-fetched every cover -- while
+     * reordering a card WITHIN a section repainted in place and did not. The owner noticed the
+     * asymmetry, which is the tell that the refresh was never about the move itself.
+     *
+     * It was about two things the old optimistic repaint could not reach, and both are reachable
+     * now: the count beside each heading, and the ungrouped bucket vanishing as it empties. The
+     * failure message the refresh carried said as much -- "Reload the page to see the counts update".
+     *
+     * THE ONE CASE IT STILL CANNOT DO is the mirror of that last one: filing a card OUT of every
+     * section when no ungrouped bucket is on the page means a whole group has to appear, with a
+     * heading, a grid, its `role`/`aria-labelledby` pair and the reorder endpoint the server owns.
+     * Hand-assembling that markup in JS is the thing this codebase has been bitten by repeatedly, so
+     * that case returns false and takes the refresh it needs.
+     *
+     * `placed` is whether the node is already where it belongs: true after a DRAG, because SortableJS
+     * moved it before the write was ever queued, and false for the card menu, which moves nothing.
+     */
+    function repaintAfterGroupChange(itemId, sectionId, placed) {
+        var dest = gridForSection(sectionId);
+        if (!dest) { return false; }
+        if (!placed) {
+            var row = document.querySelector('.gl-item[data-item-id="' + itemId + '"]');
+            if (!row) { return false; }
+            dest.appendChild(row);
+        }
+        syncGroupCounts();
+        pruneEmptyLooseBucket();
+        // AFTER the prune, because restart-per-section numbering counts grids and a bucket that is
+        // about to disappear would otherwise be counted as a group.
+        renumber();
+        return true;
+    }
+
     function renumber() {
         var restart = restartNumbering();
         var running = 0;
@@ -2325,6 +2421,11 @@
                 if (generation !== orderGen || result === null) { return; }
                 if (pendingSaves <= 1) { setPositionsStatus('Saved'); }
                 announce('Moved.');
+                // SAME TREATMENT AS THE ORDERING PATH. This is the filing-only fork -- a Collection,
+                // or a ranked list being read A-Z -- and it was re-rendering the whole list for a
+                // card changing heading, which is the asymmetry the owner reported: reordering
+                // within a section repainted in place and moving between sections did not.
+                if (repaintAfterGroupChange(itemId, sectionId, !!evt)) { return; }
                 return refreshItems().catch(function (err) {
                     // The write LANDED; only the view is stale. Say so rather than implying the move
                     // was lost, which would send somebody to redo a move they already made.
