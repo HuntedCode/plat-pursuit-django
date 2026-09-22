@@ -1245,7 +1245,9 @@ def test_every_entry_carries_its_own_remove_endpoint(client):
     assert len(item_ids) == 3
     for item_id in item_ids:
         assert f'/community/lists/{game_list.id}/items/{item_id}/remove/' in body
-    assert body.count('data-gl-remove') == 3
+    # The endpoint moved onto the menu trigger when the bare remove button was folded into the
+    # card's action menu (2026-09). Still one per row, still rendered by the server.
+    assert body.count('data-gl-card-menu') == 3
 
 
 def test_a_visitor_gets_no_remove_controls(client):
@@ -1255,7 +1257,7 @@ def test_a_visitor_gets_no_remove_controls(client):
 
     body = client.get(_url(game_list)).content.decode()
 
-    assert 'data-gl-remove' not in body
+    assert 'data-gl-card-menu' not in body
     assert '/remove/' not in body
     # The games themselves are still there -- this is not an empty page passing by accident.
     # `data-gcard`, since the detail games moved onto the shared game card. This is the POSITIVE
@@ -1280,8 +1282,8 @@ def test_the_remove_control_sits_beside_the_tile_and_not_inside_it(client):
     # the recurring failure on this branch, so the search starts inside the thing under test.
     region = body[body.index('class="gl-item"'):]
     anchor_close = region.index('</a>')
-    remove_at = region.index('data-gl-remove')
-    assert anchor_close < remove_at, 'the remove button is inside the tile anchor'
+    remove_at = region.index('data-gl-card-menu')
+    assert anchor_close < remove_at, 'the card menu trigger is inside the tile anchor'
 
 
 def test_the_social_buttons_carry_their_own_endpoints(client):
@@ -2182,7 +2184,7 @@ def test_the_drag_manager_defaults_its_touch_threshold(client):
 
 def test_remove_and_rearrange_share_a_card_without_contesting_it(client):
     """WAS `test_the_remove_control_steps_aside_while_arranging`, which pinned
-    `[data-gl-arranging] .gl-item__remove { display: none; }`. That rule is DELETED, and it had to
+    `[data-gl-arranging] .gl-item__menu { display: none; }`. That rule is DELETED, and it had to
     be: it hid the remove button whenever the mode was on, and with one mode "whenever the mode is
     on" became "whenever you are editing" -- so removing a game, the most ordinary edit there is,
     would have had nowhere to happen.
@@ -2197,8 +2199,8 @@ def test_remove_and_rearrange_share_a_card_without_contesting_it(client):
     """
     css = _decommented_css(_read('static/css/components/gamelists.css'))
 
-    assert '#gl-items-panel[data-gl-arranging] .gl-item__remove { display: none; }' not in css,         'the remove button is hidden while editing again, which is now always'
-    assert '#gl-items-panel:not([data-gl-editing]) .gl-item__remove { display: none; }' in css,         'remove is offered outside the mode'
+    assert '#gl-items-panel[data-gl-arranging] .gl-item__menu { display: none; }' not in css,         'the remove button is hidden while editing again, which is now always'
+    assert '#gl-items-panel:not([data-gl-editing]) .gl-item__menu { display: none; }' in css,         'remove is offered outside the mode'
     assert '#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { display: none; }' in css,         'the grip is offered where nothing can be dragged'
 
     # THEY DO NOT SHARE A COORDINATE. Both are 26px circles that expand to 44px hit areas on touch,
@@ -2213,7 +2215,7 @@ def test_remove_and_rearrange_share_a_card_without_contesting_it(client):
         at = css.index('\n' + name + ' {')
         return css[at:css.index('}', at)]
 
-    remove, grab = _rule('.gl-item__remove'), _rule('.gl-item__grab')
+    remove, grab = _rule('.gl-item__menu'), _rule('.gl-item__grab')
     assert 'right: 6px' in remove, 'the remove control moved; this test no longer knows where it is'
     assert 'right: 38px' in grab, 'the grip sits on top of the remove control'
 
@@ -2711,8 +2713,17 @@ def test_a_group_change_refreshes_and_a_plain_reorder_does_not(client):
     reorder alters on screen, which is why `renumber` exists."""
     js = _decommented(_read('static/js/list-detail.js'))
 
-    drop = js[js.index('function onCrossSectionDrop('):js.index('function fullOrder(')]
-    assert 'refresh: true' in drop, 'a cross-group drop leaves both section counts stale'
+    # `moveItemToSection` rather than `onCrossSectionDrop`: the fork was extracted when the card
+    # menu arrived, so that both callers post to the same endpoint under the same rule. The hazard
+    # is unchanged -- it just lives one function further in.
+    move = _fn(js, 'moveItemToSection')
+    assert 'refresh: true' in move, 'a cross-group move leaves both section counts stale'
+
+    # ...and the drop handler must actually go through it. Reading `evt.to` and posting directly
+    # would restore the second, divergent path this extraction exists to prevent.
+    drop = _fn(js, 'onCrossSectionDrop')
+    assert 'moveItemToSection(' in drop, 'the drag has its own move path again'
+    assert 'saveAssignment(' not in drop and 'saveOrder(' not in drop,         'the drag posts directly instead of through the shared fork'
 
     save = js[js.index('function saveOrder('):js.index('function renumber(')]
     assert 'move.refresh' in save, 'the flag is set and never read'
@@ -2720,7 +2731,7 @@ def test_a_group_change_refreshes_and_a_plain_reorder_does_not(client):
     assert 'if (move && move.refresh)' in save
 
     # The within-grid path sends no move at all, so it cannot ask for one.
-    attach = js[js.index('function attachDragTo('):js.index('function onCrossSectionDrop(')]
+    attach = _fn(js, 'attachDragTo')
     reorder_cb = attach[attach.index('onReorder: function'):attach.index('onEnd: function')]
     assert 'refresh' not in reorder_cb, 'a plain reorder must not round-trip the whole grid'
 
@@ -2840,7 +2851,7 @@ def test_the_add_field_keeps_focus_across_its_own_refresh(client):
     # And the remove-focus helper stopped keying on the flat grid's id, which a sectioned list has
     # never rendered -- so focus fell to <body> after every removal there.
     restore = js[js.index('function restoreRemoveFocus('):js.index('function restoreSectionFocus(')]
-    assert "'#gl-items-root [data-gl-remove]'" in restore
+    assert "'#gl-items-root [data-gl-card-menu]'" in restore
 
 
 def test_a_labelled_grid_carries_a_role_that_can_hold_the_label(client):
@@ -3760,3 +3771,149 @@ def test_the_phone_reorder_is_withheld_where_nothing_competes(client):
 
     populated = client.get(_url(_list(owner, 2, name='Has games'))).content.decode()
     assert 'pp-gbrowse__toolbar gl-toolbar' in populated
+
+
+# ── the card's action menu (2026-09) ─────────────────────────────────────────────────────────────
+
+def test_the_card_menu_replaces_the_bare_remove_button(client):
+    """The corner could not hold three controls. Remove sat at `right: 6px`, the grip at the same
+    coordinate, and they never collided only because the old arrange mode hid one -- a trick that
+    died with the single mode. Adding a third for "move to" would have put ~90px of buttons across
+    the top of a ~170px card at 375px.
+
+    So the two chosen actions share one trigger and the grip keeps its own place, because it has to
+    be GRABBABLE rather than picked."""
+    _owner, game_list, _items, _first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-card-menu' in body
+    assert 'data-gl-remove' not in body, 'the bare remove button is back in the contested corner'
+    # The endpoint still rides the row: the server owns URL shapes.
+    assert f'/community/lists/{game_list.id}/items/' in body and '/remove/' in body
+
+
+def test_the_menu_carries_the_cards_current_section(client):
+    """`data-current` is what the menu ticks, and it comes from the server rather than being derived
+    client-side -- the page is already rendered from that grouping, and a second source for it is how
+    a menu comes to disagree with the headers it sits among.
+
+    EMPTY IS A REAL ANSWER, not a missing one: a card in no section carries `data-current=""`, the
+    same distinction `data-section-id` draws on the grids and `resolve_section` on the endpoint."""
+    owner, game_list, items, first, _second = _sectioned(client)
+    # `_sectioned` files all four, so one is un-filed here to get BOTH states on one page -- a
+    # fixture that could only show the filed case would pass with the empty branch deleted.
+    svc.assign_item(game_list, owner, items[0], None)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert f'data-current="{first.pk}"' in body, 'a filed card does not report its section'
+    assert 'data-current=""' in body, 'an unfiled card reports no section at all'
+
+
+def test_a_list_with_no_sections_gets_a_menu_with_nothing_to_move_to(client):
+    """The trigger is still rendered -- it carries Remove -- but it must not offer a destination on a
+    list that has one bucket. `data-current` is the flag the JS reads for that, and it is absent
+    rather than empty, because empty means "the loose bucket" and would render a menu whose every
+    option is a no-op."""
+    owner = _staff(client, psn='plain')
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-card-menu' in body, 'a section-less list loses its remove control'
+    assert 'data-current' not in body, 'a list with one bucket offers to move between buckets'
+
+
+def test_the_menu_move_takes_the_same_fork_the_drag_does():
+    """THE DEFECT THIS MENU WAS MOST LIKELY TO INTRODUCE. Which endpoint a move goes to depends on
+    what a POSITION means on the page: at the real sequence the order and the section go in ONE
+    write to `list_reorder`, and everywhere else it is `list_item_assign` with no order at all.
+
+    A menu that always posted an assignment would silently diverge a ranked list's ordering -- silent
+    because the card still lands under the right header, and the damage only shows on the next load.
+    So both callers go through one function, and neither is allowed its own path."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    wire = _fn(js, 'wireCardMenu')
+    assert 'moveItemToSection(' in wire, 'the menu posts its own move'
+    assert 'saveAssignment(' not in wire and 'saveOrder(' not in wire and 'postJson(' not in wire, \
+        'the menu has a second write path'
+
+    # ...and the fork itself still makes both choices, so sharing it is worth something.
+    move = _fn(js, 'moveItemToSection')
+    assert 'orderingLive(' in move, 'the shared move no longer forks'
+    assert 'saveOrder(' in move and 'saveAssignment(' in move
+
+
+def test_the_menu_reads_its_destinations_from_the_rendered_grouping():
+    """One source of truth. The sections, their order and their names are already rendered as the
+    headers the cards sit under; a client-side list assembled from somewhere else is how a menu comes
+    to offer a section that was deleted in the swap that just landed.
+
+    Parsed from the header's ID and not its text, because two sections MAY share a name -- the model
+    says so in its own constraint comment -- so a name identifies nothing."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'sectionChoices')
+
+    assert '.gl-section__name' in fn, 'the destinations are no longer read from the page'
+    assert "replace('gl-section-', '')" in fn, 'the section id is derived from something else'
+    assert "id === 'none'" in fn, 'the loose bucket is offered twice'
+
+
+def test_un_filing_is_always_offered_even_with_the_bucket_off_screen():
+    """The one move with no header to drop onto. The loose bucket is omitted when it is empty, so
+    once a hunter files their last loose card there is no target left -- and before this menu the
+    only way back out of a section was to delete the whole section.
+
+    Appended by the JS rather than read from the page for exactly that reason: it has to be offered
+    when the bucket is NOT rendered."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'cardMenuHtml')
+
+    assert "rowHtml('', 'No section'" in fn, 'there is no way out of a section'
+
+
+def test_the_current_section_is_marked_and_inert():
+    """A row that looks pressable and does nothing is worse than one that says it is the answer.
+    `disabled` is what makes it inert, `aria-current` is what says why, and the CSS has to agree --
+    the two were separately capable of drifting."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'rowHtml')
+
+    assert "aria-current=\"true\" disabled" in fn, 'the current section is still pressable'
+    assert 'is-current' in fn
+
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+    assert '.gl-menu__item.is-current' in css, 'the marked row has no treatment'
+    # A tick that renders as nothing is indistinguishable from "not current", which is the one thing
+    # the mark exists to say. The first cut reached for a `var(--pp-tick)` that does not exist.
+    assert 'pp-tick' not in css.replace('--pp-tick`', ''), 'the tick is drawn with a token that does not exist'
+
+
+def test_the_menu_escapes_a_section_name_as_text_and_its_id_as_an_attribute():
+    """TWO DIFFERENT ESCAPERS, and the difference is not cosmetic. `HTMLUtils.escape` runs the HTML
+    fragment serializer, which deliberately leaves QUOTES alone because a text node has no need of
+    them -- correct for the name between the tags, and wrong one character later inside an attribute's
+    quotes, where an unescaped `"` closes it.
+
+    A section name is hunter-authored and reaches this menu on every open, so it is the one string
+    here that an attacker controls."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'rowHtml')
+
+    assert 'escapeAttr(id)' in fn, 'the section id is escaped for the wrong context'
+    assert 'escape(name)' in fn and 'escapeAttr(name)' not in fn
+
+
+def test_the_menu_is_wired_once_and_not_per_swap():
+    """`AnchoredMenu` registers a document-delegated trigger and keeps ONE panel, so a second
+    instance is a second panel and a second registry entry for the same selector -- and this page
+    re-swaps its items panel on every sort, add, remove and section change.
+
+    Guarded on the handle rather than on a WeakSet because there is no per-node element to key: the
+    trigger is a selector, not an instance."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'wireCardMenu')
+
+    assert 'if (cardMenu' in fn, 'a swap builds a second menu over the first'

@@ -419,6 +419,113 @@
 
     /* ------------------------------------------------------------------ remove ---- */
 
+    /* ─── the card's action menu ───────────────────────────────────────────────────────────────
+     *
+     * One trigger per card, opening `Move to…` plus `Remove`. Built on `PlatPursuit.AnchoredMenu`,
+     * which owns the panel, the flip-and-clamp positioning, the focus restore and the four document
+     * listeners -- all of it extracted from quick-add rather than written a ninth time.
+     */
+    var cardMenu = null;
+
+    /**
+     * The destinations, read from the RENDERED grouping rather than rebuilt.
+     *
+     * The server already decided what the sections are and what order they are in; the page is
+     * rendered from that decision, so reading it back is one source of truth rather than two. A
+     * client-side list assembled from somewhere else is how a menu comes to offer a section that was
+     * deleted in the swap that just landed.
+     *
+     * Each header carries `id="gl-section-<pk>"`, and the loose bucket's is `gl-section-none` --
+     * which is why the id is parsed rather than the name trusted: two sections MAY share a name
+     * (the model's own constraint comment says so), so names cannot identify anything.
+     */
+    function sectionChoices() {
+        var out = [];
+        var heads = document.querySelectorAll('#gl-items-root .gl-section__name');
+        Array.prototype.forEach.call(heads, function (h) {
+            var id = (h.id || '').replace('gl-section-', '');
+            if (!id || id === 'none') { return; }     // the loose bucket is appended below, always
+            out.push({ id: id, name: h.textContent.trim() });
+        });
+        return out;
+    }
+
+    function cardMenuHtml(trigger) {
+        var rows = '';
+        // `data-current` is absent when the card cannot be filed at all -- a list with no sections,
+        // or a viewer the server did not give `can_arrange`. Then the menu is just the remove row,
+        // which is still worth a menu: the alternative is a bare destructive button back in the
+        // corner the grip is trying to share.
+        if (trigger.hasAttribute('data-current')) {
+            var current = trigger.dataset.current || '';
+            var choices = sectionChoices();
+            if (choices.length) {
+                rows += '<p class="gl-menu__head">Move to</p>';
+                choices.forEach(function (c) {
+                    rows += rowHtml(c.id, c.name, current === c.id);
+                });
+                // ALWAYS OFFERED, even when the loose bucket is not on screen. Un-filing is the one
+                // move that has no header to drop onto once the bucket hides itself, and before this
+                // menu existed the only way out of a section was to delete the whole section.
+                rows += rowHtml('', 'No section', current === '');
+            }
+        }
+        rows += '<div class="gl-menu__sep"></div>'
+            + '<button type="button" class="gl-menu__item gl-menu__item--danger" data-gl-menu-remove>'
+            + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>'
+            + 'Remove from list</button>';
+        return rows;
+    }
+
+    function rowHtml(id, name, isCurrent) {
+        // `aria-current` rather than `aria-selected`, which belongs to listbox/tab roles this is not
+        // using; and `disabled` rather than a click that quietly does nothing, so the one row that
+        // cannot act says so to a screen reader instead of only to the eye.
+        //
+        // TWO DIFFERENT ESCAPERS, and the difference is not cosmetic. `escape` runs the HTML
+        // fragment serializer, which deliberately leaves QUOTES alone because a text node has no
+        // need of them -- correct for the name between the tags, and wrong one character later
+        // inside an attribute's quotes, where an unescaped `"` closes it. `escapeAttr` is the one
+        // its own docstring points at for that; the first cut of this used `escape` for both.
+        return '<button type="button" class="gl-menu__item' + (isCurrent ? ' is-current' : '') + '"'
+            + ' data-gl-menu-section="' + PP.HTMLUtils.escapeAttr(id) + '"'
+            + (isCurrent ? ' aria-current="true" disabled' : '')
+            + '>' + PP.HTMLUtils.escape(name) + '</button>';
+    }
+
+    function wireCardMenu() {
+        if (cardMenu || !PP.AnchoredMenu) { return; }
+        cardMenu = PP.AnchoredMenu({
+            trigger: '[data-gl-card-menu]',
+            className: 'gl-menu',
+            label: 'Card actions',
+            item: '.gl-menu__item',
+            onOpen: function (trigger, el) {
+                el.innerHTML = cardMenuHtml(trigger);
+                var first = el.querySelector('.gl-menu__item:not([disabled])');
+                if (first) { first.focus(); }
+            },
+            onItem: function (row, trigger) {
+                if (row.hasAttribute('data-gl-menu-remove')) {
+                    cardMenu.close(false);
+                    onRemove(trigger);
+                    return;
+                }
+                var target = row.getAttribute('data-gl-menu-section');
+                if (target === null) { return; }
+                var tile = trigger.closest('.gl-item');
+                var grid = tile && tile.closest('[data-gl-arrange]');
+                cardMenu.close(false);
+                if (!tile || !grid) { return; }
+                // THE SAME FORK THE DRAG TAKES. `moveItemToSection` decides between the reorder
+                // endpoint and the assign one; posting `list_item_assign` directly from here would
+                // silently diverge a ranked list's ordering, which is the defect this menu was most
+                // likely to introduce.
+                moveItemToSection(grid, tile.dataset.itemId, target);
+            },
+        });
+    }
+
     function onRemove(btn) {
         if (btn.dataset.busy === '1') { return; }
         btn.dataset.busy = '1';
@@ -435,7 +542,7 @@
                 // `restoreRemoveFocus` documents having fixed for ITS selector two hundred lines
                 // down -- the capture half was missed, so the restore half was handed an index
                 // that could never be right and focus fell to `<body>` on every removal.
-                document.querySelectorAll('#gl-items-root [data-gl-remove]'));
+                document.querySelectorAll('#gl-items-root [data-gl-card-menu]'));
             var found = all.indexOf(btn);
             // -1 IS NOT null, and the restore guard only checks for null -- so a miss here used to
             // flow through as `buttons[-1]`, which is `undefined`, and the focus call silently did
@@ -1091,8 +1198,10 @@
             if (btn) { onToggle(btn, TOGGLES[i]); return; }
         }
 
-        var remove = target.closest('[data-gl-remove]');
-        if (remove) { onRemove(remove); return; }
+        // The remove control moved INTO the card menu (`onItem` calls `onRemove` with the trigger,
+        // which is the element carrying `data-remove-url`). The trigger's own click is
+        // `AnchoredMenu`'s, delegated from `document.body`, so nothing is handled here any more --
+        // and nothing should be, or two handlers would open and immediately close the panel.
 
         // Section controls live inside the swapped panel and are replaced by the very refresh their
         // own handler triggers, so they are delegated for exactly the reason the remove control is.
@@ -1264,7 +1373,7 @@
         // `#gl-items-root`, because `#gl-items` exists only on a FLAT list -- so on a sectioned one
         // this selector matched nothing and focus fell to <body> after every removal, which is the
         // bug this function exists to prevent.
-        var buttons = document.querySelectorAll('#gl-items-root [data-gl-remove]');
+        var buttons = document.querySelectorAll('#gl-items-root [data-gl-card-menu]');
         if (!buttons.length) { return; }
         // The row that took the removed one's place, or the new last row if it was the last.
         var next = buttons[Math.min(index, buttons.length - 1)];
@@ -1552,7 +1661,13 @@
             // items when their group names match exactly.
             group: 'gl-items',
             sort: ordering,
-            onMove: function (itemId, evt) { onCrossSectionDrop(grid, itemId, evt, ordering); },
+            // `ordering` is no longer passed: `moveItemToSection` derives it, so the drag and the
+            // card menu cannot disagree about which endpoint a move goes to. Reading it at move
+            // time rather than at attach time is also the stricter of the two -- `data-gl-reorder`
+            // is server-rendered and stable through a drag, so the answer is the same, but a grid
+            // re-rendered under a live manager would now be read correctly rather than from a
+            // value captured before the swap.
+            onMove: function (itemId, evt) { onCrossSectionDrop(grid, itemId, evt); },
             // NO `handleSelector`: the whole card drags. A grip-only drag was the safe first cut --
             // the card is an <a>, so anything else risked a tap being read as the wrong gesture --
             // but it makes the one action the mode exists for a 26px target on a 166px card, and
@@ -1609,28 +1724,46 @@
      * loose bucket is a real destination ("in no section"), and treating empty as missing is what
      * would make un-filing a card impossible.
      */
-    function onCrossSectionDrop(grid, itemId, evt, ordering) {
-        var landed = (evt && evt.to) || grid;
-        var sectionId = landed.dataset.sectionId || '';
-        if (ordering) {
-            // One write. The order AND the filing changed, and sending them separately leaves a
-            // window where the card sits in the right place under the wrong header -- which looks
-            // correct until the page is reloaded. `svc.reorder` takes both and applies the assignment
-            // first, so a refused section leaves the order untouched.
-            //
+    /**
+     * Move one card into a section, whatever asked for it.
+     *
+     * THE THREE-WAY FORK LIVES HERE AND NOWHERE ELSE. Which endpoint a move goes to depends on what
+     * a POSITION means on this page, and getting it wrong is silent:
+     *
+     *   ordering live  -> `list_reorder`, carrying the order AND the section in ONE write. Sending
+     *                     them separately leaves a window where the card sits in the right place
+     *                     under the wrong header, which looks correct until a reload.
+     *   filing only    -> `list_item_assign`. There is no order to send: the drop index is wherever
+     *                     the cursor happened to be over a grid the SERVER sorts, and posting it
+     *                     would overwrite the author's sequence with the shape of a view.
+     *
+     * Extracted from `onCrossSectionDrop` when the card menu arrived, because a menu that always
+     * posted an assignment would silently diverge a ranked list's ordering -- and the two callers
+     * would have had to agree about a rule neither of them stated.
+     *
+     * `fullOrder()` is the CURRENT DOM order, which for a menu move is the unchanged one: "move to
+     * Playing" is not a request to reshuffle. Positions stay global and the grouping is a render-time
+     * overlay, so the card keeps its rank and simply appears under a different header.
+     */
+    function moveItemToSection(grid, itemId, sectionId, evt) {
+        if (orderingLive(arrangeGrids())) {
             // `refresh: true` unlike a within-grid reorder, because a card CHANGING GROUP changes
             // things the optimistic repaint cannot reach: the count beside each header, and whether
             // the group it left still exists at all (the loose bucket is omitted when empty, so
-            // emptying it by hand leaves a header reading 0 over nothing). Renumbering alone was
-            // enough while a drag could only move a card within one grid.
+            // emptying it by hand leaves a header reading 0 over nothing).
             saveOrder(grid, fullOrder(), 'Moved.',
                       { movedItem: itemId, section: sectionId, refresh: true });
             return;
         }
-        // Filing only. There is no order to send: `sort: false` means the drop index is wherever the
-        // cursor happened to be over a grid the SERVER sorts, and posting it would overwrite the
-        // author's sequence with the shape of a view.
         saveAssignment(itemId, sectionId, evt);
+    }
+
+    function onCrossSectionDrop(grid, itemId, evt) {
+        // WHERE IT LANDED, not where it started: the `end` event fires on the SOURCE manager, so
+        // `this.container` is the grid the drag began in. `evt.to` is the destination, and an empty
+        // `data-section-id` there is a real answer -- the loose bucket -- rather than a missing one.
+        var landed = (evt && evt.to) || grid;
+        moveItemToSection(grid, itemId, landed.dataset.sectionId || '', evt);
     }
 
     /**
@@ -2396,6 +2529,7 @@
         pendingSectionFocus = false;
         pendingPickId = null;
         wireAdder();
+        wireCardMenu();
         wireIdentityEditor();
         wireVisibility();
         wireReport();

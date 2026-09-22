@@ -200,7 +200,7 @@
 /* Quiet at rest, per the design conversation's "an icon, not a labelled button". Hidden from the
    pointer until hover, but ALWAYS present for the keyboard: `:focus-visible` opens it, so tabbing a
    list reaches every control. `opacity`/`transform` only -- no `filter` on a tile-sized element. */
-.gl-item__remove {
+.gl-item__menu {
     position: absolute; top: 6px; right: 6px; z-index: 2;
     display: grid; place-items: center;
     width: 26px; height: 26px;
@@ -217,15 +217,15 @@
     transform: scale(0.9);
     transition: opacity 0.16s ease, transform 0.16s ease, color 0.16s ease, border-color 0.16s ease;
 }
-.gl-item__remove svg { width: 13px; height: 13px; }
-.gl-item:hover .gl-item__remove,
-.gl-item__remove:focus-visible { opacity: 1; transform: none; }
-.gl-item__remove:focus-visible {
+.gl-item__menu svg { width: 13px; height: 13px; }
+.gl-item:hover .gl-item__menu,
+.gl-item__menu:focus-visible { opacity: 1; transform: none; }
+.gl-item__menu:focus-visible {
     outline: 2px solid var(--pp-primary); outline-offset: 2px;
     color: var(--pp-text);
 }
 @media (hover: hover) {
-    .gl-item__remove:hover {
+    .gl-item__menu:hover {
         color: var(--pp-error);
         border-color: color-mix(in oklab, var(--pp-error) 55%, var(--pp-border));
         transform: scale(1.06);
@@ -239,19 +239,19 @@
    ~166x222px. The argument survives the move, the number did not.) The visual circle stays 30px --
    the extra is transparent padding, so the target grows without the button getting heavier. */
 @media (hover: none) {
-    .gl-item__remove {
+    .gl-item__menu {
         opacity: 1; transform: none;
         width: 44px; height: 44px;
         top: 0; right: 0;
         background: none; border: none;
     }
-    .gl-item__remove::before {
+    .gl-item__menu::before {
         content: ''; position: absolute; inset: 7px;
         border-radius: 999px;
         border: 1px solid var(--pp-border);
         background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
     }
-    .gl-item__remove svg { position: relative; }
+    .gl-item__menu svg { position: relative; }
 }
 
 /* The button is a SIBLING of the card (a <button> inside an <a> is invalid), so
@@ -272,17 +272,17 @@
    while it does. `pointer-events` travels with the opacity because a hidden control that still catches
    taps is the freeze bug this project has now written down three times. */
 @media (prefers-reduced-motion: no-preference) {
-    .pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ .gl-item__remove { opacity: 0; pointer-events: none; }
+    .pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ .gl-item__menu { opacity: 0; pointer-events: none; }
 }
 
 /* The new transforms above are gated, like the dialog's are and like every sibling component's
    are. Without this a reduced-motion reader still gets the scale-in and the hover pop. */
 @media (prefers-reduced-motion: reduce) {
-    .gl-item__remove { transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease; }
-    .gl-item__remove,
-    .gl-item:hover .gl-item__remove,
-    .gl-item__remove:focus-visible,
-    .gl-item__remove:hover { transform: none; }
+    .gl-item__menu { transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease; }
+    .gl-item__menu,
+    .gl-item:hover .gl-item__menu,
+    .gl-item__menu:focus-visible,
+    .gl-item__menu:hover { transform: none; }
 }
 
 
@@ -422,13 +422,13 @@
  * attributes. On `#gl-items` it would be wiped on settle -- the trap documented twice in
  * list-detail.js. */
 #gl-items-panel:not([data-gl-arranging]) .gl-item__grab { display: none; }
-/* REMOVE AND REARRANGE NOW COEXIST. This used to be `display: none` on `.gl-item__remove` whenever
+/* REMOVE AND REARRANGE NOW COEXIST. This used to be `display: none` on `.gl-item__menu` whenever
    the mode was on, because the mode was a SECOND state entered from inside the editor and a card
    could not sensibly be both dragged and deleted by the same press.
 
    One mode ended that. Editing is now the only state, so hiding the remove button while editing
    would hide it always -- and removing a game is the most ordinary edit there is. The two controls
-   are separated by position and by hit area instead (see `.gl-item__remove` / `.gl-item__grab`
+   are separated by position and by hit area instead (see `.gl-item__menu` / `.gl-item__grab`
    above, each with its own 44px `::before`), which is what kept them apart on touch anyway. */
 
 /* ── the one mode ────────────────────────────────────────────────────────────────────────────────
@@ -449,7 +449,7 @@
  * `data-gl-arranging` is the old `data-positioning` renamed, selector shape untouched. Every rule
  * below it is written `#gl-items-panel[...]` rather than flattened, because the ghost rule further
  * down depends on winning a (1,4,0) vs (1,3,0) fight that a shorter selector loses silently. */
-#gl-items-panel:not([data-gl-editing]) .gl-item__remove { display: none; }
+#gl-items-panel:not([data-gl-editing]) .gl-item__menu { display: none; }
 
 /* The grip. Mirrors the remove control across the card (top-LEFT to its top-right) and shares its
    geometry, but is visible at rest WITHIN the mode: once you have said you are arranging the list,
@@ -1020,7 +1020,7 @@
                 0 22px 46px -12px rgba(0, 0, 0, 0.65);
 }
 .gl-item.sortable-fallback .gl-item__grab,
-.gl-item.sortable-fallback .gl-item__remove { opacity: 0; }
+.gl-item.sortable-fallback .gl-item__menu { opacity: 0; }
 
 /* The per-entry note, under the title rather than over the art. Clamped so one hunter's essay
    cannot make its card twice the height of its neighbours and break the grid's rhythm. */
@@ -1283,7 +1283,7 @@
 /* The pencil beside the title. Quiet at rest like the remove control, but never hover-only -- it is
    the only route to renaming, so it stays reachable by keyboard and visible on touch. */
 /* 44px, not the 26px this shipped with -- and this file already makes both arguments against
-   itself: it bumps `.gl-item__remove` to 44 on touch citing the design system, and it explains that
+   itself: it bumps `.gl-item__menu` to 44 on touch citing the design system, and it explains that
    Tailwind v4's preflight sets no `cursor: pointer` on buttons so every comparable control must
    declare it. The pencil is the ONLY route to renaming and had neither. The visible circle stays
    26px; the rest is transparent padding, so the target grows without the button gaining weight. */
@@ -1820,3 +1820,87 @@
     .gl-spotlight__cover { transition: none; }
     .gl-spotlight:hover { transform: none; }
 }
+
+
+/* ── the card's action menu ──────────────────────────────────────────────────────────────────────
+ *
+ * The panel `AnchoredMenu` builds and positions. It is `position: fixed` on <body> -- set by the
+ * primitive, not here -- because the trigger sits in a grid cell with `overflow` ancestors and a
+ * transform-capable page wrapper, and an absolute panel is clipped by the first of those it meets.
+ * Everything below is appearance only; nothing here may set `position`, `top` or `left`, which the
+ * primitive writes per open. */
+.gl-menu {
+    position: fixed;
+    z-index: 60;
+    min-width: 200px;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+    box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.6);
+    /* `contain`, so a flick inside a long section list does not chain to the document -- whose own
+       scroll handler follows the anchor and then closes the panel mid-gesture. quick-add's
+       stylesheet carries the same rule for the same reason. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.gl-menu__head {
+    padding: 6px 10px 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.gl-menu__item {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%;
+    /* 38px, not 44: this is a row in a list of rows, where the neighbours ARE the separation --
+       the 44px minimum is about isolated targets with nothing above or below to absorb a near miss.
+       The same argument the design system makes for menu rows generally. */
+    min-height: 38px;
+    padding: 0 10px;
+    border: 0; border-radius: 8px;
+    background: none;
+    color: var(--pp-text);
+    font-size: 0.86rem;
+    text-align: left;
+    cursor: pointer;
+}
+.gl-menu__item svg { width: 14px; height: 14px; flex: none; }
+.gl-menu__item:hover { background: color-mix(in oklab, var(--pp-primary) 14%, transparent); }
+.gl-menu__item:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: -2px;
+}
+/* THE CURRENT SECTION, marked and inert. `disabled` is what the JS renders, so the styling has to
+   agree that it is not a target -- a row that looks pressable and refuses is worse than one that
+   says so. The tick is a `::after` so the label stays left-aligned with its neighbours. */
+.gl-menu__item.is-current {
+    color: var(--pp-text-mute);
+    cursor: default;
+}
+.gl-menu__item.is-current::after {
+    /* THE SITE'S EXISTING TICK, the character `.rp-pop__item.is-selected` already uses for exactly
+       this -- "which of these am I on" in an anchored menu. The first cut of this reached for a
+       `var(--pp-tick)` mask, which is a token that does not exist anywhere in the stylesheet: it
+       would have rendered a blank 14px box, and blank is indistinguishable from "not current",
+       which is the one thing this mark exists to say. */
+    content: '¹3';
+    margin-left: auto;
+    padding-left: 8px;
+    color: var(--pp-primary);
+    font-weight: 700;
+}
+.gl-menu__item--danger { color: var(--pp-error); }
+.gl-menu__item--danger:hover {
+    background: color-mix(in oklab, var(--pp-error) 16%, transparent);
+}
+.gl-menu__sep {
+    height: 1px;
+    margin: 5px 8px;
+    background: var(--pp-border);
+}
+/* No separator above the FIRST thing in the panel: a card that cannot be filed renders the remove
+   row alone, and a rule hanging above it reads as a missing section list. */
+.gl-menu__sep:first-child { display: none; }

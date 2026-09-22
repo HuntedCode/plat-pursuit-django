@@ -1965,7 +1965,10 @@ def test_the_list_detail_controls_ride_their_tile_and_do_not_stick_on():
     hover -- a rule meant to last 500ms quietly disabling the control's whole resting design."""
     css = _decommented_css(_read('static/css/components/gamelists.css'))
 
-    for control in ('.gl-item__remove', '.gl-item__grab'):
+    # `.gl-item__menu` was `.gl-item__remove` until the bare remove button was folded into the
+    # card's action menu (2026-09). The reveal-coupling hazard is about the CONTROL riding its tile,
+    # not about what the control does, so it follows the rename unchanged.
+    for control in ('.gl-item__menu', '.gl-item__grab'):
         assert f'.pp-reveal .gl-item .pp-gcard.is-revealed ~ {control}' not in css, \
             f'{control} is released by a class that outranks its own hover rule forever'
         rule = css[css.index(f'.pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ {control}'):]
