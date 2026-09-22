@@ -2292,31 +2292,37 @@ def test_a_sectioned_list_groups_its_games_under_their_headers(client):
     assert 'id="gl-items"' not in body
 
 
-def test_the_ungrouped_bucket_leads_and_stays_for_whoever_can_file(client):
-    """A list that has just gained sections has EVERYTHING unassigned, so this is the normal state on
-    the way in rather than an error. Burying it under the named sections would hide the games somebody
-    is about to file.
+def test_the_ungrouped_bucket_leads_when_it_holds_something_and_goes_when_it_does_not(client):
+    """A list that has just gained sections has EVERYTHING unassigned, so leading is the normal state
+    on the way in rather than an error. Burying it under the named sections would hide the games
+    somebody is about to file. That half is unchanged.
 
-    IT ALSO STAYS WHEN EMPTY, but only for somebody who can arrange. A header for nothing is noise to
-    a reader, so they never see it -- but for the owner it is the only way back OUT of a section:
-    filing the last loose card used to remove the bucket and take the drop target with it, so nothing
-    could be un-filed by pointer (no grid to drop onto) or by keyboard (no group before the first
-    section) until they deleted a whole section to get their game back."""
+    WHAT CHANGED (2026-09): it no longer stays when EMPTY. It used to, for an owner who could
+    arrange, because it was the only way back out of a section -- filing the last loose card removed
+    the bucket and took the drop target with it, so nothing could be un-filed by pointer or by
+    keyboard until the owner deleted a whole section to get their game back.
+
+    The card menu ended that. "No section" is a row on every card, appended by the client rather than
+    read from the page precisely so it is offered when this bucket is not rendered. What was left was
+    a permanent "Not in a section" header over nothing on every fully-filed list, which is what the
+    owner reported.
+
+    The cost is stated in `_grouped` and asserted here: a card can no longer be DRAGGED out of every
+    section, because there is nothing to drag it onto.
+    """
     owner, game_list, items, first, _second = _sectioned(client)
 
-    # Everything is filed. The OWNER keeps the empty bucket...
+    # Everything is filed, so nobody gets the bucket -- owner included.
     owner_groups = client.get(_url(game_list)).context['groups']
-    assert [s.name if s else None for s, _ in owner_groups] == [None, 'Finished', 'Playing']
-    assert owner_groups[0][1] == [], 'the kept bucket should be the empty one'
-    assert 'Not in a section' in client.get(_url(game_list)).content.decode()
-
-    # ...and a READER does not, because for them it is a header over nothing.
-    client.logout()
-    assert [s.name for s, _ in client.get(_url(game_list)).context['groups']] == \
-        ['Finished', 'Playing']
+    assert [s.name if s else None for s, _ in owner_groups] == ['Finished', 'Playing'],         'an empty bucket is still rendered for the owner'
     assert 'Not in a section' not in client.get(_url(game_list)).content.decode()
 
-    # Un-file one, and the bucket carries it, still FIRST, for everyone.
+    # ...and a reader still does not, which never depended on the drop-target argument.
+    client.logout()
+    assert [s.name for s, _ in client.get(_url(game_list)).context['groups']] ==         ['Finished', 'Playing']
+    assert 'Not in a section' not in client.get(_url(game_list)).content.decode()
+
+    # Un-file one, and the bucket comes back carrying it, still FIRST, for everyone.
     svc.assign_item(game_list, owner, items[0], None)
 
     groups = client.get(_url(game_list)).context['groups']
@@ -2324,6 +2330,28 @@ def test_the_ungrouped_bucket_leads_and_stays_for_whoever_can_file(client):
     assert [i.concept.unified_title for i in groups[0][1]] == ['Alpha']
     assert 'Not in a section' in client.get(_url(game_list)).content.decode()
 
+
+def test_un_filing_survives_the_bucket_being_gone(client):
+    """THE TRADE THIS PHASE MADE, pinned so it cannot be quietly broken. Hiding the empty bucket is
+    only safe because the card menu offers "No section" whether or not a loose header is rendered --
+    remove that and a fully-filed list becomes a list whose games can never leave their sections.
+
+    The endpoint half, proving the destination is reachable with no bucket on the page at all."""
+    owner, game_list, items, first, _second = _sectioned(client)
+    body = client.get(_url(game_list)).content.decode()
+    assert 'Not in a section' not in body, 'the fixture is not in the state this test is about'
+
+    # The client-side half: "No section" is appended rather than read from the rendered headers.
+    js = _decommented(_read('static/js/list-detail.js'))
+    assert "rowHtml('', 'No section'" in _fn(js, 'cardMenuHtml'),         'the only route out of a section is gone'
+
+    # And the server still accepts it, from a page that renders no loose bucket.
+    resp = client.post(
+        reverse('list_item_assign', args=[game_list.id, items[0].pk]), {'section': ''})
+    assert resp.status_code == 200
+    items[0].refresh_from_db()
+    assert items[0].section_id is None
+    assert 'Not in a section' in client.get(_url(game_list)).content.decode(),         'the bucket did not come back for the card that left its section'
 
 def test_numbering_runs_through_the_whole_list_by_default(client):
     """Continue-through is the default because it is what a ranked list already MEANS: adding
@@ -2422,10 +2450,14 @@ def test_a_sectioned_ranked_list_can_be_both_ordered_and_filed(client):
     body = resp.content.decode()
     assert 'data-gl-grab' in body
     # Every group is a drop target, and the SECTION each one stands for travels with it -- without
-    # that a drop has nowhere to report it landed. THREE, not two: the owner also keeps the empty
-    # ungrouped bucket, which is the only way back OUT of a section.
-    assert body.count('data-gl-arrange') == 3
-    assert 'data-gl-arrange data-section-id=""' in body, 'no way back out of a section'
+    # that a drop has nowhere to report it landed.
+    #
+    # TWO, not three. It was three while the owner kept an empty ungrouped bucket as the only way
+    # back OUT of a section; the card menu carries "No section" now, so the bucket renders only when
+    # it holds something and this fixture files everything. `test_un_filing_survives_the_bucket_
+    # being_gone` is what stops that trade being broken silently.
+    assert body.count('data-gl-arrange') == 2
+    assert 'data-gl-arrange data-section-id=""' not in body,         'an empty ungrouped bucket is still rendered as a drop target'
     assert f'data-section-id="{_first.id}"' in body and f'data-section-id="{_second.id}"' in body
 
 

@@ -551,19 +551,32 @@ class GameListDetailView(DetailView):
         return GameList.objects.readable_by(self._viewer()).select_related('owner')
 
     @staticmethod
-    def _grouped(items, sections, *, keep_empty_bucket=False):
+    def _grouped(items, sections):
         """`[(section_or_None, [items])]`, ungrouped first and then sections in their own order.
 
         UNGROUPED LEADS, and always renders when it has anything in it. A list that gains sections
         has every item unassigned, so this bucket is the normal state on the way in rather than an
         error -- putting it last would hide the games somebody is about to file.
 
-        IT ALSO RENDERS EMPTY FOR SOMEBODY WHO CAN ARRANGE, which is `keep_empty_bucket`. A header
-        for nothing is noise to a READER, so they still never see it -- but for the owner it is the
-        only way back out of a section. File the last loose card and the bucket disappeared, taking
-        the drop target with it: nothing could be un-filed by pointer (no grid to drop onto) or by
-        keyboard (no group before the first section), until the owner deleted a whole section to get
-        their game back.
+        IT NO LONGER RENDERS WHEN EMPTY, for anybody. It used to, for an owner who could arrange,
+        and the reason was real at the time: filing the last loose card made the bucket disappear and
+        took the drop target with it, so nothing could be un-filed by pointer (no grid to drop onto)
+        or by keyboard (no group before the first section) until the owner deleted a whole section to
+        get their game back.
+
+        The 2026-09 card menu ended that. "No section" is a row on every card's menu and is appended
+        by the client rather than read from the page, specifically so it is offered when this bucket
+        is NOT rendered -- so un-filing has a home that does not depend on a header existing.
+
+        What is left is the owner's actual complaint: a list whose games are all filed showed a
+        permanent "Not in a section" header over nothing. A header for nothing was always noise to a
+        reader; it turns out it was noise to the owner too, and the drop target was the only thing
+        buying it.
+
+        THE COST, STATED: a card can no longer be dragged out of every section, because there is
+        nothing to drag it onto. The menu is the route. If a drop target is ever wanted back, it
+        belongs behind `[data-gl-arranging]` -- on screen only while a drag is actually live -- and
+        not on every render of every sectioned list.
 
         Sections keep their own `position`; the chosen SORT orders within each one. That falls out of
         iterating `items`, which arrives already sorted -- so sorting a sectioned list A-Z sorts
@@ -578,7 +591,7 @@ class GameListDetailView(DetailView):
             buckets.get(item.section_id, ungrouped).append(item)
 
         groups = []
-        if ungrouped or keep_empty_bucket:
+        if ungrouped:
             groups.append((None, ungrouped))
         groups.extend((section, buckets[section.id]) for section in sections)
         return groups
@@ -743,10 +756,11 @@ class GameListDetailView(DetailView):
         # this is one bounded query either way -- an empty result IS the answer.
         sections = list(game_list.sections.all())
         context['sections'] = sections
-        # `arrangeable` is settled HERE rather than further down where the flags are assembled,
-        # because the grouping needs it: an owner who can arrange keeps the ungrouped bucket even
-        # when it is empty, since it is the only way back out of a section. The two flags below are
-        # derived from this same local, so there is still one source for the answer.
+        # `arrangeable` is settled HERE rather than further down where the flags are assembled. It
+        # used to be the grouping's business too -- an owner who could arrange kept the ungrouped
+        # bucket even when empty, because it was the only way back out of a section -- and it is not
+        # any more: the card menu carries "No section" whether or not the bucket is rendered. The two
+        # flags below still derive from this same local, so there is one source for the answer.
         arrangeable = (
             viewer is not None
             and game_list.owner_id == viewer.id
@@ -754,7 +768,7 @@ class GameListDetailView(DetailView):
             and bool(items)
         )
         context['groups'] = (
-            self._grouped(items, sections, keep_empty_bucket=arrangeable) if sections else None)
+            self._grouped(items, sections) if sections else None)
 
         # THE RANK EACH CARD SHOWS, computed here rather than in the template, because one of the two
         # modes cannot be expressed there: continue-through is `position + 1`, which a filter can do,
