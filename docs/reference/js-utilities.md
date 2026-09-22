@@ -298,8 +298,12 @@ each page keeps its own switch logic and just hands the tabs to these.
 `wireTablist` **automatic** activation (default) activates on click OR arrow — for cheap client-side
 switches (Career tabs, Badges Series/Gallery). **Manual** (`opts.manual`) moves focus
 only, letting the tab's own click/Enter activate — for expensive swaps (the Badges Series/Gallery HTMX
-`<a>` chips, where auto-activating per arrow would fire a request each keypress). Call the returned
-`syncTabindex()` after the active tab changes elsewhere (e.g. an HTMX `afterSwap`). → [motion-patterns.md](../reference/motion-patterns.md) (tab ignite).
+`<a>` chips, and the profile tab strip, where auto-activating per arrow would fire a request each
+keypress). Manual is also the only safe mode for `hx-get` chips for a second reason: the automatic
+handler binds click and `preventDefault()`s anchors, so htmx and the helper would both act on one
+press. Call the returned `syncTabindex()` after the active tab changes elsewhere (e.g. an HTMX
+`afterSwap`) — it reads `.is-active`, so leaving it unsynced strands the tab stop on whichever chip
+was active at load. → [motion-patterns.md](../reference/motion-patterns.md) (tab ignite).
 
 ### PlatPursuit.virtualBoard / wireBoard / boardEntrance
 

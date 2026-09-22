@@ -33,7 +33,10 @@ privacy leak (SEO Lane 0). The sitemap's quality floor agrees with this stamp.{%
         <div class="flex items-center justify-end mt-3 md:mt-4 mb-3">
             <div class="pp-switch" role="tablist" aria-label="Profile sections" id="profile-tab-bar">
                 {% for slug, label in profile_tabs %}
-                <a href="?tab={{ slug }}"
+                {% comment %}`id` so the PANEL can name the tab back. `aria-controls` already pointed
+                this way; without an id on the chip the relationship could only ever be declared in
+                one direction, and the panel had no accessible name at all.{% endcomment %}
+                <a href="?tab={{ slug }}" id="profile-tab-{{ slug }}"
                    hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab={{ slug }}"
                    hx-target="#tab-content" hx-swap="innerHTML" hx-push-url="true"
                    role="tab" data-tab="{{ slug }}" aria-controls="tab-content"
@@ -50,7 +53,21 @@ privacy leak (SEO Lane 0). The sitemap's quality floor agrees with this stamp.{%
         {# Tab content panel (swapped by HTMX on tab click and filter change) #}
         {% comment %}No outer card: site-wide rule is STACKED chrome, FREE content. These panels hold
         paginated, infinite-scrolling grids, and a bordered box around them grows forever.{% endcomment %}
-        <div id="tab-content">
+        {% comment %}`role="tabpanel"` because the chips above already claim `role="tab"` and point
+        here with `aria-controls`. Without it the strip promised the ARIA tabs pattern and delivered
+        half of one: the tabs named a panel that did not say it was a panel.
+
+        NO `tabindex="0"`. The APG asks for it only when a panel holds nothing focusable, and these
+        panels are grids of links and buttons -- adding it would insert a tab stop in front of every
+        one of them for no gain. `career.html`'s panels omit it for the same reason.
+
+        `aria-labelledby` is UNCONDITIONAL, and that is safe because of a guarantee the view already
+        makes rather than by luck: `get_context_data` normalizes every conditional tab back to
+        `games` before it gets here -- `lists` when there are no public lists, `card` when it is not
+        your profile -- so a resolved `current_tab` always has a chip. Re-deriving that here would be
+        a second source of truth for it, and the two could disagree. The guarantee itself is pinned
+        by `test_every_resolved_tab_has_a_chip_to_name`.{% endcomment %}
+        <div id="tab-content" role="tabpanel" aria-labelledby="profile-tab-{{ current_tab }}">
             {% include tab_template %}
         </div>
     {% endif %}
@@ -460,14 +477,51 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
         // The switcher lives OUTSIDE the swapped panel, so its active state is ours to maintain --
         // htmx replaces the content, not the chips. `aria-selected` moves with the class: the chip is a
         // tab, and a sighted-only active state would leave assistive tech on the previous section.
+        // ROVING TABINDEX + Arrow/Home/End, via the shared helper rather than a fourth copy.
+        //
+        // The chips already carried `role="tab"`, which PROMISES this: arrows move between tabs and
+        // the strip is one tab stop. None of it was wired, so arrows did nothing and every chip sat
+        // in the tab order -- a reader who trusted the role was worse off than if it had never been
+        // claimed.
+        //
+        // `manual: true` is the right mode here and not merely the safe one. It leaves activation
+        // entirely to htmx (the helper adds no click handler, so nothing races `hx-get`), and it
+        // makes arrows MOVE focus without activating -- which is what the APG asks for when
+        // activating a tab is expensive, and here each one is a network fetch. Enter on the focused
+        // chip activates it, the ordinary anchor behaviour.
+        //
+        // Guarded like every other shared-helper call on the site: an unguarded throw here would
+        // take the rest of this block with it.
+        var profileTablist = (window.PlatPursuit && PlatPursuit.wireTablist)
+            ? PlatPursuit.wireTablist(
+                document.querySelectorAll('#profile-tab-bar .pp-switch__chip'), { manual: true })
+            : null;
+
         function updateActiveTab() {
             var tab = getTabFromUrl();
+            var active = null;
             document.querySelectorAll('#profile-tab-bar .pp-switch__chip').forEach(function (el) {
                 var on = el.dataset.tab === tab;
                 el.classList.toggle('is-active', on);
                 el.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) { active = el; }
                 if (on && window.PlatPursuit && PlatPursuit.igniteTab) { PlatPursuit.igniteTab(el); }
             });
+
+            // THE PANEL'S NAME FOLLOWS THE TAB. There is one panel and htmx swaps its contents, so
+            // an `aria-labelledby` rendered once would go on naming the tab the page LOADED with --
+            // silently wrong from the first swap onwards, and only to a screen reader.
+            var panel = document.getElementById('tab-content');
+            if (panel) {
+                // Removed rather than left stale when nothing matched: a tab can be valid and
+                // unchipped (`?tab=card` on someone else's profile), and a dangling reference is
+                // worse than no name. Same rule the server applies on first render.
+                if (active) { panel.setAttribute('aria-labelledby', active.id); }
+                else { panel.removeAttribute('aria-labelledby'); }
+            }
+
+            // `.is-active` moved above, and that is what the roving tabindex reads.
+            if (profileTablist) { profileTablist.syncTabindex(); }
         }
 
         // Initial setup
