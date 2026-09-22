@@ -4320,3 +4320,71 @@ def test_the_section_add_button_clears_the_touch_floor():
     block = css[css.index('.gl-section__add::after'):]
     block = block[:block.index('}')]
     assert 'height: 44px' in block, 'the add button is still under the touch floor'
+
+
+def test_moving_a_section_repaints_in_place_instead_of_re_rendering_the_list():
+    """THE OWNER CALLED IT "JUMPY", and the cause was a full re-render for a two-heading change.
+
+    `moveSection` ended in `refreshItems(true)`, which `innerHTML`-swaps the whole items panel plus
+    the out-of-band chrome: every card in every section re-rendered, every cover re-fetched, the
+    arrival reveal re-ran and every Sortable was torn down and rebuilt -- to learn an arrangement
+    the client had just decided.
+
+    The item drag had already reached the opposite conclusion, in its own words: a plain reorder
+    must not refresh because it would "redraw forty covers that did not change". Sections were the
+    one write still doing it.
+
+    Nothing else needed to change with it: `position` is global and per-ITEM, so a section move does
+    not touch it, and neither numbering mode reads group order.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'moveSection')
+
+    assert 'slideSectionBlock(' in fn, 'the move no longer repaints in place'
+    # The SUCCESS path must not re-render. The failure path still must.
+    success = fn[fn.index('.then(function'):fn.index('.catch(function')]
+    assert 'refreshItems' not in success, 'a successful section move still re-renders the list'
+    failure = fn[fn.index('.catch(function'):]
+    assert 'refreshItems(true)' in failure, \
+        'a refused move leaves the page showing an order the server does not have'
+
+
+def test_the_optimistic_move_happens_against_the_dom_it_posted():
+    """Both inside the queued callback, and in that order. The payload is read from the DOM and the
+    DOM is then moved to match it -- doing the move at click time would repaint against a list a
+    queued rename or delete is about to replace, so the page and the payload would describe
+    different arrangements."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'moveSection')
+
+    assert fn.index('queueSectionWrite(') < fn.index('slideSectionBlock('), \
+        'the optimistic move happens before the write joins the queue'
+    assert fn.index('sectionTriggers()') < fn.index('slideSectionBlock('), \
+        'the move happens before the order it is supposed to match is read'
+
+
+def test_a_section_moves_with_everything_it_owns():
+    """A section is not one element: the header and the grid are SIBLINGS, deliberately, because the
+    grid's `:empty::before` drop box needs the grid to have no element children and so cannot be
+    wrapped. Moving a section therefore means moving a run of siblings -- and the run has to include
+    a docked adder, which is pointed at this section and would otherwise be left under somebody
+    else's heading, still filing games into the one that moved away."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'sectionBlock')
+
+    assert "!next.classList.contains('gl-section__head')" in fn, \
+        'the block stops at the grid and leaves anything docked behind'
+    assert 'nextElementSibling' in fn
+
+
+def test_the_section_slide_respects_reduced_motion():
+    """The settle exists so the eye can follow the section rather than re-find it. Somebody who has
+    asked for less motion gets the move without the travel -- not the move without the move."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'slideSectionBlock')
+
+    assert "prefers-reduced-motion: reduce" in fn
+    # The nodes are STILL moved; only the animation is skipped. A version that returned early would
+    # leave the section where it was while the server was told it had moved.
+    assert fn.index('insertBefore') < fn.index('if (!firsts'), \
+        'reduced motion skips the move itself, not just the animation'

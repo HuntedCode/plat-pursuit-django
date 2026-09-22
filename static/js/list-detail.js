@@ -2472,6 +2472,78 @@
      * all existed with a test against the service and no client anywhere, which is why sections
      * could be renamed and deleted but never reordered.
      */
+    /**
+     * The nodes one section owns: its header, its grid, and anything docked between them.
+     *
+     * A section is NOT one element -- `detail_group.html` renders the header and the grid as
+     * siblings, deliberately (the grid's `:empty::before` drop box needs the grid to have no element
+     * children, so it cannot be wrapped). So "move a section" means moving a run of siblings, and
+     * the run is however many nodes sit between this header and the next one: today that is the
+     * grid, plus the adder when it is docked here, which should travel with the section it is
+     * pointed at rather than being left behind under somebody else's heading.
+     */
+    function sectionBlock(trigger) {
+        var head = trigger.closest('.gl-section__head');
+        if (!head) { return []; }
+        var nodes = [head];
+        var next = head.nextElementSibling;
+        while (next && !next.classList.contains('gl-section__head')) {
+            nodes.push(next);
+            next = next.nextElementSibling;
+        }
+        return nodes;
+    }
+
+    /**
+     * Slide a section past its neighbour, in the DOM, with a FLIP settle.
+     *
+     * WHY NOT JUST REFRESH: it used to, through `refreshItems(true)`, which `innerHTML`-swaps the
+     * whole items panel plus the out-of-band chrome. So moving one header re-rendered every card in
+     * every section, re-fetched every cover, re-ran the arrival reveal and tore down every Sortable
+     * -- for a change that is two headings trading places. The owner's word for it was "jumpy", and
+     * the item drag had already reached the opposite conclusion for the same reason: a plain reorder
+     * repaints in place precisely so it does not "redraw forty covers that did not change".
+     *
+     * Nothing else has to change. `position` is global and per-ITEM, so a section move does not
+     * touch it -- continue-through ranks are `position + 1` and restart-per-section ranks are the
+     * index within the group, and neither is affected by which order the groups are drawn in. The
+     * menu's own disabled states are computed from DOM order when it opens, so they follow for free.
+     *
+     * FLIP, because an instant jump is the other half of what "jumpy" meant: measure, move, then
+     * animate from the old box to the new one so the eye can follow the section rather than having
+     * to re-find it. Reduced motion skips straight to the moved state.
+     */
+    function slideSectionBlock(block, before) {
+        var reduced = window.matchMedia
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var firsts = reduced ? null : block.map(function (n) {
+            return n.getBoundingClientRect().top;
+        });
+        var parent = block[0].parentNode;
+        block.forEach(function (n) { parent.insertBefore(n, before); });
+        if (!firsts || !block[0].animate) { return; }
+        block.forEach(function (n, i) {
+            var delta = firsts[i] - n.getBoundingClientRect().top;
+            if (!delta) { return; }
+            n.animate(
+                [{ transform: 'translateY(' + delta + 'px)' }, { transform: 'none' }],
+                { duration: 260, easing: 'cubic-bezier(0.34, 1.2, 0.64, 1)' }
+            );
+        });
+    }
+
+    /**
+     * The node that follows a section's whole block, for inserting AFTER it.
+     *
+     * `null` when it is the last section, which `insertBefore(n, null)` reads as "append" -- exactly
+     * what moving to the end should do.
+     */
+    function nextHeadAfter(trigger) {
+        var block = sectionBlock(trigger);
+        if (!block.length) { return null; }
+        return block[block.length - 1].nextElementSibling;
+    }
+
     function moveSection(trigger, delta) {
         var sectionId = trigger.dataset.sectionId;
         var reorderUrl = trigger.dataset.reorderUrl;
@@ -2514,6 +2586,17 @@
             var body = new FormData();
             ids.forEach(function (id) { body.append('section_ids[]', id); });
 
+            // MOVED HERE, INSIDE THE QUEUED CALLBACK, not at click time. The optimistic repaint has
+            // to happen against the same DOM the payload was read from, or the two describe
+            // different lists -- and a rename or delete queued ahead of this one will have landed
+            // and re-rendered by now. The queue is empty in the ordinary case, so this is still the
+            // frame after the press.
+            var block = sectionBlock(all[at]);
+            var target = all[to].closest('.gl-section__head');
+            if (block.length && target) {
+                slideSectionBlock(block, delta < 0 ? target : nextHeadAfter(all[to]));
+            }
+
             setPositionsStatus('Saving…');
             return postJson(reorderUrl, body)
                 .then(function () {
@@ -2522,15 +2605,17 @@
                     // the exact bug that guard was added for on the other two writers.
                     if (pendingSaves <= 1) { setPositionsStatus('Saved'); }
                     announce('Section moved.');
-                    // `true` -- the chrome as well. Moving a section changes the order the
-                    // out-of-band slot renders, and a swap of the grid alone leaves the numbering
-                    // checkbox and the strip describing the previous arrangement.
-                    return refreshItems(true).catch(function (err) {
-                        logFailure('items refresh after a section move', err);
-                        announce('Section moved. Reload the page to see it in order.');
-                    });
+                    // NO REFRESH. The DOM already shows the move, and the server was only ever
+                    // going to send back the same arrangement -- re-rendering every card in the
+                    // list to learn that is what made this feel jumpy. The chrome does not need it
+                    // either: the number of sections has not changed, so the numbering choice and
+                    // the strip are describing exactly what they were.
+                    return null;
                 })
                 .catch(function (err) {
+                    // THE REFRESH IS THE FAILURE PATH NOW, and it has to be: the DOM was moved
+                    // optimistically, so a refusal leaves the page showing an order the server does
+                    // not have. Re-rendering is how it gets back to the truth.
                     setPositionsStatus('Not saved');
                     toastError(err, 'That section could not be moved.');
                     return refreshItems(true).catch(function () {});
