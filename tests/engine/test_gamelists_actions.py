@@ -579,11 +579,17 @@ def test_the_search_is_cached_so_the_catalogue_scan_is_not_per_keystroke(client)
     with CaptureQueriesContext(connection) as second:
         client.get(url, {'q': 'cached'})
 
-    def catalogue_queries(ctx):
-        return len([q for q in ctx.captured_queries if 'trophies_concept' in q['sql']])
+    # THE SCAN, not merely the table. This counted every query mentioning `trophies_concept`, which
+    # stopped meaning what it says the moment the membership check started joining Concept to read a
+    # game's page identity -- an uncached query, correctly uncached, that the old detector would have
+    # reported as a cache miss. What is cached here is the `unified_title` LIKE pass the module
+    # docstring calls a sequential scan, and nothing else references that column.
+    def catalogue_scans(ctx):
+        return len([q for q in ctx.captured_queries
+                    if 'unified_title' in q['sql'] and 'LIKE' in q['sql'].upper()])
 
-    assert catalogue_queries(first) >= 1
-    assert catalogue_queries(second) == 0, 'the catalogue is scanned again on an identical query'
+    assert catalogue_scans(first) >= 1
+    assert catalogue_scans(second) == 0, 'the catalogue is scanned again on an identical query'
     cache.clear()
 
 
@@ -2017,6 +2023,20 @@ def _titled(*titles):
     return made
 
 
+def _bust(term):
+    """Drop the shared catalogue answer for `term`, READING THE PREFIX FROM THE MODULE.
+
+    It held a copy of the literal, so bumping the prefix (the row shape changed) would have left
+    every test here reading a key nothing writes -- silently restoring the cross-test bleed this
+    helper exists to prevent, with the suite still green.
+    """
+    from django.core.cache import cache
+
+    from gamelists.services.game_search import _CACHE_PREFIX
+
+    cache.delete(_CACHE_PREFIX + term.lower())
+
+
 def _search(client, game_list, term):
     """The typeahead's titles for `term`, WITHOUT another test's cached answer.
 
@@ -2030,9 +2050,7 @@ def _search(client, game_list, term):
     rather than added to that autouse fixture because this key is per-TERM: a pattern delete is not
     something LocMemCache does well, and the tests that care are all in this file.
     """
-    from django.core.cache import cache
-
-    cache.delete('adder:search:' + term.lower())
+    _bust(term)
     response = client.get(reverse('list_game_search', args=[game_list.id]), {'q': term})
     assert response.status_code == 200, f'the search answered {response.status_code}'
     return [row['title'] for row in response.json()['results']]
@@ -2264,3 +2282,182 @@ def test_the_refusal_does_not_explain_our_schema(client):
 
     assert str(sibling.value) == str(same.value), \
         'the two duplicate paths refuse in different words'
+
+
+# ── the membership half of the same identity rule (2026-09) ──────────────────────────────────────
+
+def test_the_adder_marks_a_game_held_under_a_sibling(client):
+    """THE DEAD END COLLAPSING ONLY THE READ SIDE CREATED.
+
+    The search elects one row per game page; `already_added` keyed on the concept pk. So when the
+    elected representative was the sibling NOT on the list, the row rendered as addable, the hunter
+    clicked, and `add_concept` answered "already on this list" -- on roughly half the split games,
+    decided by which sibling won the election.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    # THE ELECTED ONE MUST BE THE ONE NOT ON THE LIST, or this passes under the old code too: if the
+    # election happened to return the held sibling, matching on the concept pk gets the right answer
+    # for the wrong reason. `_match_rank` decides it, so the fixture decides it -- "Colossus" is an
+    # exact match (rank 0) and always wins, and the list holds the other one.
+    elected, held = _split_game('Colossus', 'Shadow of the Colossus')
+    svc.add_concept(game_list, owner, held)
+
+    _bust('colossus')
+    rows = client.get(reverse('list_game_search', args=[game_list.id]),
+                      {'q': 'colossus'}).json()['results']
+
+    assert rows and rows[0]['concept_id'] == elected.pk, \
+        'the fixture did not elect the sibling that is off the list, so this proves nothing'
+
+    assert len(rows) == 1, f'the election stopped collapsing: {rows}'
+    assert rows[0]['already_added'] is True, \
+        'the adder offers a game the list already holds, and the add would refuse it'
+
+
+def test_the_adder_does_not_leak_how_it_recognises_a_game(client):
+    """`page_key` is how the server matches a row against a list, not something the client can use.
+
+    It rides in the cached row because the membership check needs it; it has no place in the JSON,
+    where it would be a second, undocumented id for a game.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Solotitle')
+
+    _bust('solotitle')
+    rows = client.get(reverse('list_game_search', args=[game_list.id]),
+                      {'q': 'solotitle'}).json()['results']
+
+    assert rows, 'the fixture did not match'
+    assert 'page_key' not in rows[0], 'an internal key reached the client'
+
+
+def test_the_picker_knows_a_list_holds_this_game_under_a_sibling(client):
+    """The same defect from the other direction.
+
+    The quick-add popover asked `concept_id=<this concept>`, so a list holding the SIBLING answered
+    "not on it" -- offering Add, which `add_concept` then refuses, and offering no Remove for the row
+    that is actually there. A hunter could neither add it nor get rid of it from this surface.
+    """
+    owner = _member(client)
+    first, second = _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+    holds_sibling = svc.create_list(owner, name='Has it')
+    item = svc.add_concept(holds_sibling, owner, second)
+
+    rows = {row['name']: row for row in
+            client.get(reverse('lists_for_concept', args=[first.id])).json()['lists']}
+
+    assert rows['Has it']['has_concept'] is True, \
+        'the picker offers Add for a game this list already holds'
+    assert rows['Has it']['remove_url'] == \
+        reverse('list_remove_game', args=[holds_sibling.id, item.id]), \
+        'the row on the list cannot be removed from the surface that shows it'
+
+
+# ── trust is the gate on the write side too (2026-09) ────────────────────────────────────────────
+#
+# BOTH OF THESE KILL A MUTATION THAT SURVIVED THE WHOLE SUITE. The search side pinned trust; the add
+# side pinned nothing, so deleting `match.is_trusted` or the status clause from the sibling `Q` ran
+# clean. They are two directions of one rule, which is why there are two tests: each mutation is
+# only reachable from one side.
+
+def _matched(title, igdb_id, status):
+    """A concept whose IGDB match is in a named state -- trusted or not."""
+    concept = ConceptFactory(unified_title=title)
+    GameFactory(concept=concept, title_platform=['PS5'])
+    IGDBMatchFactory(concept=concept, igdb_id=igdb_id, status=status)
+    return concept
+
+
+def test_a_rejected_match_on_the_list_does_not_block_a_real_game(client):
+    """A REJECTED match keeps the `igdb_id` it was rejected FOR.
+
+    That id is the record of a WRONG guess -- it means "this concept is not that game" -- so a list
+    holding it must not make the game it names unaddable. Without the status clause on the sibling
+    `Q`, the rejected row matches and the real game is refused, with no way for the hunter to see
+    why.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    wrongly_guessed = _matched('Some Other Game', 77777, 'rejected')
+    the_real_one = _matched('The Actual Game', 77777, 'auto_accepted')
+
+    svc.add_concept(game_list, owner, wrongly_guessed)
+    svc.add_concept(game_list, owner, the_real_one)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 2, \
+        'a rejected guess blocked the game it was wrong about'
+
+
+def test_a_rejected_match_being_added_is_not_a_duplicate(client):
+    """The mirror, and the one that pins `match.is_trusted` on the INCOMING concept.
+
+    Same reasoning, other direction: the concept arriving carries a rejected id, so that id says
+    nothing about what it is. Refusing it because a list holds the game it was wrongly guessed to be
+    would be the dedupe hiding a game rather than a duplicate.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    the_real_one = _matched('The Actual Game', 88888, 'auto_accepted')
+    wrongly_guessed = _matched('Some Other Game', 88888, 'rejected')
+
+    svc.add_concept(game_list, owner, the_real_one)
+    svc.add_concept(game_list, owner, wrongly_guessed)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 2, \
+        'a rejected guess was refused as a duplicate of the game it was wrong about'
+
+
+def test_the_best_matching_sibling_represents_the_page(client):
+    """WHICH sibling is elected was unpinned: reversing the window's order survived the suite.
+
+    It does not matter for navigation -- both route to the same page -- but it is the title the
+    hunter reads, so electing the worse match makes a correct result look like the wrong game. The
+    fixture is built so ONLY `_match_rank` ascending can produce the right answer: the decoy sorts
+    first alphabetically AND holds the lower `concept_id`, so every other ordering elects it.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    decoy = ConceptFactory(unified_title='Aaa Zorblex Edition', concept_id='CUSA-00001')
+    GameFactory(concept=decoy, title_platform=['PS5'])
+    IGDBMatchFactory(concept=decoy, igdb_id=55555, status='auto_accepted')
+    best = ConceptFactory(unified_title='Zorblex', concept_id='CUSA-99999')
+    GameFactory(concept=best, title_platform=['PS5'])
+    IGDBMatchFactory(concept=best, igdb_id=55555, status='auto_accepted')
+
+    titles = _search(client, game_list, 'zorblex')
+
+    assert titles == ['Zorblex'], f'the worse match represents the page: {titles}'
+
+
+def test_the_election_sorts_a_narrow_row(client):
+    """THE ELECTION IS SPLIT FROM THE DISPLAY READ FOR A MEASURED REASON, and nothing else pins it.
+
+    The outer `LIMIT` cannot push into the sort, because the `_page_rank = 1` filter sits between
+    them -- so this sorts the whole MATCHED SET, not the top 20. At `SELECT *` width that drags every
+    JSONField on Concept through it: on 8,000 rows that measured as two `external merge` sorts
+    spilling ~25 MB to disk, where the un-elected query used an 81 kB top-N heapsort. On a
+    per-keystroke endpoint, over a catalogue far larger than 8,000, with `MIN_QUERY` at 3 -- "the"
+    and "war" both reach it. It is the whale shape CLAUDE.md names.
+
+    Collapsing the two queries back into one reads better and reintroduces all of it, silently,
+    because every functional test still passes. This is the only thing that would notice.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Narrowcheck One', 'Narrowcheck Two')
+
+    _bust('narrowcheck')
+    with CaptureQueriesContext(connection) as captured:
+        client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'narrowcheck'})
+
+    elections = [q['sql'] for q in captured.captured_queries if 'ROW_NUMBER' in q['sql'].upper()]
+    assert len(elections) == 1, f'expected one election query, got {len(elections)}'
+
+    # A sample of the wide columns, named rather than counted so a failure says WHICH one came back.
+    # `raw_response` is the ~30 KB blob; the rest are Concept's own JSONFields, which is the payload
+    # the defer never covered.
+    wide = [column for column in ('raw_response', 'descriptions', 'media', 'content_rating')
+            if column in elections[0]]
+    assert not wide, f'the election sorts full rows again, carrying: {", ".join(wide)}'

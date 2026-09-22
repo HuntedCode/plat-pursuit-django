@@ -1499,3 +1499,35 @@ through `public()`, so prod is its own staging area and nothing half-built is ev
       is live, linked in the rail, and empty. That is the cold-start problem the pick exists to
       solve and it cannot solve it before it exists. Shrink it by deploying and authoring in one
       sitting; close it entirely only if it is worth a seeding command.
+
+## Game Lists: one entry per game page (2026-09, branch `chore/gamelists/raise-section-cap`)
+
+The adder and `add_concept` now treat concepts sharing a trusted `igdb_id` as **one game** — see
+[game-lists.md](../../features/game-lists.md#one-row-per-game-page). Nothing here blocks the deploy;
+both items are about knowing the blast radius before hunters find it.
+
+- [ ] **Count the split games before this is live.** How many trusted `igdb_id`s are held by more than
+      one Concept decides whether this change is invisible or noticeable:
+
+      ```python
+      from django.db.models import Count
+      from trophies.models import IGDBMatch
+      (IGDBMatch.objects
+          .filter(status__in=IGDBMatch.TRUSTED_STATUSES, igdb_id__isnull=False)
+          .values('igdb_id')
+          .annotate(n=Count('concept_id', distinct=True))
+          .filter(n__gt=1)
+          .count())
+      ```
+
+      Splits do not create this state (`concept_split_service.split_compilation` deletes the parent's
+      match and re-enriches each child), so the population should be deliberate splits only. A number
+      in the low hundreds is expected; a number in the thousands means something is mis-matching and
+      is worth understanding before the adder starts hiding rows.
+- [ ] **Know the one-way door.** Two genuinely DIFFERENT games erroneously sharing a trusted
+      `igdb_id` were already routed to one `/games/<igdb_id>/` page, so this is consistent — but it
+      converts a cosmetic catalogue-quality issue into a user-facing "I cannot add this game." The
+      remedy is to fix the bad match, not to loosen the rule. The census above is how to find them.
+- [ ] **Expect one minute of cold typeahead.** `_CACHE_PREFIX` moved to `adder:search:2:` because the
+      cached row shape gained `page_key`. Old entries are simply never read and expire on their own
+      60-second TTL. No flush needed; no action if the graph shows a brief bump in catalogue scans.
