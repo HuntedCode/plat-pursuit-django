@@ -56,12 +56,31 @@
     var reorderManagers = [];
     // The grids those wrappers are attached to, so their click listeners come off with them.
     var dragGrids = [];
-    // Whether the hunter has turned position editing ON. Distinct from whether the server
-    // allows it (`data-gl-reorder`), which is a capability rather than an intent.
-    var positioning = false;
-    // Whether the in-place editor is open. The position bar is gated on it, so entering the mode is
-    // always a deliberate second step rather than something a stray drag can start.
-    var editorOpen = false;
+    // ONE MODE, replacing the `editorOpen` + `positioning` pair (2026-09).
+    //
+    // There used to be two, nested: "Edit list" opened the identity panel and revealed a bar, and a
+    // second press inside that bar turned on dragging. Meanwhile adding and removing games worked
+    // whether either was on. Three different answers to "can I change this list right now", which is
+    // what the rebuild was asked to fix.
+    //
+    // `editing` is the hunter's intent and the only thing they toggle.
+    var editing = false;
+    // Whether drag is actually attached, which is DERIVED and never toggled. The mode can be on over
+    // a grid nothing can be dragged in -- a Collection with no sections has nothing to file, a ranked
+    // list sorted A-Z has no position a drop could mean, and SortableJS may have failed to load. The
+    // tray, the grips and the grab cursor follow THIS; the rest of editing follows `editing`.
+    //
+    // Keeping them apart is deliberate. Collapsing to one flag was the obvious reading of "one mode"
+    // and it promises a drag the page cannot honour on exactly those three surfaces -- which the old
+    // two-mode split was, by accident, preventing.
+    var arranging = false;
+    // The identity panel's own show/hide, published by `wireIdentityEditor` so the mode can drive
+    // it. It is no longer a mode: it is one of the things entering the mode reveals.
+    var identityShow = null;
+    var identityHide = null;
+    // The single toggle. Looked up rather than closed over, because the header is re-rendered
+    // underneath this on a save -- the bug `editOpener` was written for.
+    function editToggle() { return document.querySelector('[data-gl-edit-open]'); }
     // The card the arrow keys act on -- picked up by clicking it. Not "selected": you are holding it,
     // and it moves when you press a key.
     var pickedRow = null;
@@ -796,7 +815,6 @@
         // Looked up through one named helper rather than three call sites, so the next person who
         // moves this control breaks one line instead of silently unbinding it again. Not cached:
         // the header can be re-rendered underneath this.
-        function editOpener() { return document.querySelector('[data-gl-edit-open]'); }
         if (!root || wired.has(root)) { return; }
         var form = root.querySelector('[data-gl-identity-edit]');
         var view = root.querySelector('[data-gl-identity-view]');
@@ -823,7 +841,7 @@
             // the new name into the heading, and the two would disagree until somebody pressed
             // Save again and renamed it back. That guard existed on two of the three entry points.
             var saving = form.querySelector('[data-gl-edit-save]');
-            if (editorOpen || (saving && saving.dataset.busy === '1')) { return; }
+            if (saving && saving.dataset.busy === '1') { return; }
 
             // RESYNC on the way in, not only on cancel. The save writes the SERVER's normalized
             // values to the heading (`_check_name` trims and sanitizes) but left the fields holding
@@ -832,34 +850,23 @@
             reset();
             view.hidden = true;
             form.hidden = false;
-            editorOpen = true;
-            syncPositionsVisibility();
             var tallies = document.querySelector('[data-gl-tallies]');
             if (tallies) { tallies.hidden = true; }
-            // The opener now states the panel's state rather than being an anonymous pencil, so it
-            // has to be kept honest on both edges. Looked up here rather than closed over, because
-            // the header can be re-rendered underneath this.
-            var openBtn = editOpener();
-            if (openBtn) { openBtn.setAttribute('aria-expanded', 'true'); }
             nameField.focus();
             nameField.setSelectionRange(nameField.value.length, nameField.value.length);
         }
 
         function close() {
-            // Leaving the editor leaves position editing, because the mode was entered FROM here:
-            // a hunter who closes the panel has finished editing the list, and handles left live on
-            // a page with no visible sign of why is how a drag happens by accident again.
-            editorOpen = false;
-            syncPositionsVisibility();
+            // JUST THE PANEL NOW. Leaving the mode is `exitEditing`, which calls this -- the panel
+            // no longer decides anything about dragging, because it is not a mode. The comment that
+            // stood here explained why closing the editor also left position editing; there is only
+            // one thing to leave now, so the coupling it described has nothing left to describe.
             form.hidden = true;
             view.hidden = false;
             var tallies = document.querySelector('[data-gl-tallies]');
             if (tallies) { tallies.hidden = false; }
-            var opener = editOpener();
-            if (opener) {
-                opener.setAttribute('aria-expanded', 'false');
-                opener.focus();                   // focus goes back where it came from
-            }
+            var toggle = editToggle();
+            if (toggle) { toggle.focus(); }        // focus goes back where it came from
         }
 
         function reset() {
@@ -884,8 +891,8 @@
             });
         }
 
-        var opener = editOpener();
-        if (opener) { opener.addEventListener('click', open); }
+        identityShow = open;
+        identityHide = close;
 
         // Both dismissals refuse while a save is in flight. Neither was guarded, and the response
         // does not care that the form closed: press Save then Escape and `reset()` read the
@@ -1189,9 +1196,9 @@
         var target = (e.detail && e.detail.target) || e.target;
         if (!target || target.id !== 'gl-items-panel') { return; }
         // The position slot may have been replaced out-of-band by the same response, so the toggle
-        // is a new node with no listener. `wirePositioning` is WeakSet-guarded on that node, so this
+        // is a new node with no listener. `wireEditToggle` is WeakSet-guarded on that node, so this
         // is a no-op when nothing was swapped.
-        wirePositioning();
+        wireEditToggle();
         // The add-section form and the numbering checkbox live in that same out-of-band slot and are
         // replaced with it, so they need the same treatment and carry the same WeakSet guard. They
         // are NOT delegated like the header controls because both are form elements whose own events
@@ -1206,14 +1213,14 @@
         restorePick();
     }
 
-    function wirePositioning() {
-        var toggle = document.querySelector('[data-gl-positions-toggle]');
+    function wireEditToggle() {
+        var toggle = editToggle();
         if (!toggle || wired.has(toggle)) { return; }
         wired.add(toggle);
         toggle.addEventListener('click', function () {
-            if (positioning) { exitPositioning(); } else { enterPositioning(); }
+            if (editing) { exitEditing(); } else { enterEditing(); }
         });
-        paintPositionsToggle();
+        paintEditToggle();
     }
 
     /**
@@ -1232,7 +1239,7 @@
         // a drop EXCEPT on Chrome for Android, where a drag begun on the grip would otherwise pick
         // the card straight back up the moment it landed.
         if (justDragged) { return; }
-        if (!positioning) { return; }
+        if (!arranging) { return; }
         var grab = e.target.closest && e.target.closest('[data-gl-grab]');
         if (!grab) { return; }
         var row = grab.closest('.gl-item');
@@ -1302,7 +1309,7 @@
         if (pendingPickId === null) { return; }
         var id = pendingPickId;
         pendingPickId = null;
-        if (!positioning) { return; }
+        if (!arranging) { return; }
         var row = document.querySelector('.gl-item[data-item-id="' + id + '"]');
         if (!row) { return; }
         togglePicked(row);
@@ -1350,102 +1357,136 @@
         return !!(grids.length && grids[0].hasAttribute('data-gl-reorder'));
     }
 
-    function enterPositioning() {
+    /**
+     * Attach dragging if this page can honour it. Called BY the mode, never by the hunter.
+     *
+     * Separated from entering the mode because the two can disagree: a hunter can be editing a list
+     * that has nothing draggable in it, and must still be able to rename it, add to it and remove
+     * from it. The old code could not express that -- entering the mode WAS attaching the drag, so a
+     * failure to attach had to refuse the whole thing.
+     */
+    function startArranging() {
         var grids = arrangeGrids();
         // BOTH refusals happen before any state changes. `attachDrag` bails when SortableJS is
-        // missing, and it used to do so AFTER `positioning` and `[data-positioning]` were already
-        // set -- leaving the tray, the "Done" label and the hidden remove buttons over a grid with
-        // no drag, no pick-up, and cards that still navigate.
-        if (!grids.length || !PP.DragReorderManager) {
-            // Not silent: the bar is on screen offering this, so if it cannot be honoured the bar is
-            // wrong and should correct itself rather than the press appearing to do nothing.
-            syncPositionsVisibility();
-            return;
-        }
-        positioning = true;
+        // missing, and it used to do so AFTER the flag and the tray were already on -- leaving a
+        // grid with no drag, no pick-up, and cards that still navigate, dressed as if it had all
+        // three. Now a refusal simply means the mode runs without dragging, which is a state the
+        // page can render honestly.
+        if (arranging || !grids.length || !PP.DragReorderManager) { return; }
+        arranging = true;
         var panel = document.getElementById('gl-items-panel');
         // The flag lives on the PANEL, not on a grid. The panel is the swap TARGET, so its own
         // attributes survive; the grids are swapped content, and htmx would restore their
         // server-rendered attributes on settle and silently drop the flag -- the trap this file
         // already documents twice.
-        if (panel) { panel.dataset.positioning = '1'; }
+        if (panel) { panel.dataset.glArranging = '1'; }
         attachDrag(grids);
-        paintPositionsToggle();
-        setPositionsStatus('');
-        announce(orderingLive(grids)
-            ? ('Arranging on. Drag a card, or click one to pick it up and move it with the arrow '
-               + 'keys.')
-            : ('Arranging on. Drag a card onto another section, or click one to pick it up and move '
-               + 'it between sections with the arrow keys.'));
     }
 
-    function exitPositioning(silent) {
-        if (!positioning) { return; }
-        positioning = false;
+    function stopArranging() {
+        if (!arranging) { return; }
+        arranging = false;
         var panel = document.getElementById('gl-items-panel');
-        if (panel) { delete panel.dataset.positioning; }
+        if (panel) { delete panel.dataset.glArranging; }
         detachDrag();
-        paintPositionsToggle();
-        setPositionsStatus('');
-        if (!silent) { announce('Arranging off.'); }
     }
 
-    function paintPositionsToggle() {
-        var toggle = document.querySelector('[data-gl-positions-toggle]');
-        if (!toggle) { return; }
-        // NOT `aria-pressed`. This carried both a pressed state AND a changing label, which APG
-        // says a toggle button must not do: the two describe the same fact twice and disagree about
-        // what the word means -- "Done, pressed" leaves a reader unsure whether "Done" is the state
-        // or the action. The label change is the more useful half on a control this size, so the
-        // button is an ACTION button naming what it will do next, and the mode change itself is
-        // announced through the live region.
-        toggle.removeAttribute('aria-pressed');
-        var label = toggle.querySelector('[data-gl-positions-label]');
-        // The off-state word depends on what the mode can actually do here, and it has to match the
-        // server-rendered string in `detail_positions.html` -- otherwise the button says one thing on
-        // load and another the first frame after boot, which is a bug this file already shipped once.
-        // `data-gl-arrange-only` is the server's own answer, carried on the button rather than
-        // re-derived from the grids, so the two cannot disagree.
-        var arrangeOnly = toggle.hasAttribute('data-gl-arrange-only');
-        if (label) {
-            label.textContent = positioning
-                ? 'Done'
-                : (arrangeOnly ? 'Move games between sections' : 'Edit list positions');
+    /**
+     * THE MODE. One toggle, everything inside it.
+     *
+     * The identity form, the section controls, the per-section adders, the remove buttons and the
+     * dragging all arrive together and leave together, so "can I change this list right now" has one
+     * answer the page states in one place.
+     */
+    function enterEditing() {
+        if (editing) { return; }
+        editing = true;
+        var panel = document.getElementById('gl-items-panel');
+        if (panel) { panel.dataset.glEditing = '1'; }
+
+        // The controls strip: section add, numbering, the save status. Revealed by the mode rather
+        // than gated behind a second press, which is what made "add a section" undiscoverable.
+        var block = document.querySelector('[data-gl-positions]');
+        if (block) { block.hidden = false; }
+
+        if (identityShow) { identityShow(); }
+        startArranging();
+        paintEditToggle();
+        setPositionsStatus('');
+        announce(arranging
+            ? (orderingLive(arrangeGrids())
+                ? 'Editing on. Drag a card, or click one to pick it up and move it with the arrow keys.'
+                : 'Editing on. Drag a card onto another section, or click one to pick it up and move it between sections with the arrow keys.')
+            : 'Editing on.');
+    }
+
+    function exitEditing(silent) {
+        if (!editing) { return; }
+        editing = false;
+        var panel = document.getElementById('gl-items-panel');
+        if (panel) { delete panel.dataset.glEditing; }
+        var block = document.querySelector('[data-gl-positions]');
+        if (block) { block.hidden = true; }
+
+        if (identityHide) { identityHide(); }
+        stopArranging();
+        paintEditToggle();
+        setPositionsStatus('');
+        if (!silent) { announce('Editing off.'); }
+    }
+
+    function paintEditToggle() {
+        var toggle = editToggle();
+        if (toggle) {
+            // NOT `aria-pressed`. This carried both a pressed state AND a changing label, which APG
+            // says a toggle button must not do: the two describe the same fact twice and disagree
+            // about what the word means -- "Done, pressed" leaves a reader unsure whether "Done" is
+            // the state or the action. The label change is the more useful half on a control this
+            // size, so the button is an ACTION button naming what it will do next, and the mode
+            // change itself is announced through the live region.
+            //
+            // `aria-expanded` goes for the same reason, and it is a CHANGE: the control used to
+            // disclose a panel, so expanded was honest. It now enters a mode that reaches the whole
+            // page -- the cards, the section headers, the adders -- and "expanded" describes none of
+            // that. A control cannot be both a disclosure and a mode switch.
+            toggle.removeAttribute('aria-pressed');
+            toggle.removeAttribute('aria-expanded');
+            var label = toggle.querySelector('[data-gl-edit-label]');
+            // Must match the server-rendered string in detail.html, or the button says one thing on
+            // load and another the first frame after boot -- a bug this file already shipped once.
+            if (label) { label.textContent = editing ? 'Done' : 'Edit list'; }
         }
 
         // The BAR carries the state, not just the button. A label flipping between two words is easy
         // to miss; a full-width surface changing colour is not, and it is the difference between
         // knowing the mode is on and inferring it from the grips.
         var block = document.querySelector('[data-gl-positions]');
-        if (block) { block.classList.toggle('is-on', positioning); }
+        if (block) { block.classList.toggle('is-on', editing); }
 
         var hint = document.querySelector('[data-gl-positions-hint]');
-        if (hint) {
-            // THREE STATES, because the middle one is what was missing: the old copy said "use the
-            // arrow keys on its grip", which required tabbing to a 26px control nobody had reason to
-            // suspect -- so it described a key that, as far as anyone could tell, did nothing.
-            if (arrangeOnly) {
-                // THREE STATES HERE TOO, now that the arrow keys work in this mode. The comment that
-                // stood here said there was no pick-up "because the arrow keys move a card through an
-                // ORDER and this mode has none" -- true of the order, and wrong about the keys, which
-                // cross HEADERS here. With no grip rendered (that is a `can_reorder` affordance) the
-                // hint is the only place the keyboard path is mentioned at all.
-                if (!positioning) {
-                    hint.textContent = 'Then drag a card onto another section.';
-                } else if (pickedRow) {
-                    hint.textContent = 'Arrow keys move it to the next section. '
-                        + 'Click it again or press Escape to drop it.';
-                } else {
-                    hint.textContent = 'Drag a card onto another section, or click one to pick it '
-                        + 'up. Moves save as you make them.';
-                }
-            } else if (!positioning) {
-                hint.textContent = 'Then drag a card, or click one to move it with the arrow keys.';
-            } else if (pickedRow) {
-                hint.textContent = 'Arrow keys move it. Click it again or press Escape to drop it.';
+        if (!hint) { return; }
+        // WHAT THIS MODE CAN ACTUALLY DO HERE, which is not the same on every list. The three
+        // capabilities are independent: sections may be manageable with nothing draggable, and a
+        // drag may file without ordering. Naming a gesture the page will refuse is worse than
+        // naming none.
+        if (!arranging) {
+            // Editing with nothing to drag: a Collection with no sections, or a list of one game.
+            // The mode is still doing something -- rename, add, remove -- so it says so.
+            hint.textContent = 'Rename it, add games, or remove them. Changes save as you make them.';
+        } else if (!orderingLive(arrangeGrids())) {
+            // Filing only: a drop POSITION is an artefact of the sort, so the copy must not promise
+            // ordering the server will discard.
+            if (pickedRow) {
+                hint.textContent = 'Arrow keys move it to the next section. '
+                    + 'Click it again or press Escape to drop it.';
             } else {
-                hint.textContent = 'Drag a card, or click one to pick it up. Moves save as you make them.';
+                hint.textContent = 'Drag a card onto another section, or click one to pick it '
+                    + 'up. Moves save as you make them.';
             }
+        } else if (pickedRow) {
+            hint.textContent = 'Arrow keys move it. Click it again or press Escape to drop it.';
+        } else {
+            hint.textContent = 'Drag a card, or click one to pick it up. Moves save as you make them.';
         }
     }
 
@@ -1633,7 +1674,7 @@
      * you should never have to hunt for the way out of a selection you made by accident.
      */
     function onCardClick(e) {
-        if (!positioning || justDragged) { return; }
+        if (!arranging || justDragged) { return; }
         var card = e.target.closest && e.target.closest('.pp-gcard');
         if (!card) { return; }
         // The navigation, not the event -- the grip's own click still has to reach it.
@@ -1661,7 +1702,7 @@
         var card = row.querySelector('.pp-gcard');
         var name = (card && card.getAttribute('aria-label')) || 'Card';
         announce(name + ' picked up. Arrow keys move it, Escape drops it.');
-        paintPositionsToggle();
+        paintEditToggle();
     }
 
     function dropPicked(silent) {
@@ -1670,7 +1711,7 @@
         setGrabPressed(pickedRow, false);
         pickedRow = null;
         if (!silent) { announce('Dropped.'); }
-        paintPositionsToggle();
+        paintEditToggle();
     }
 
     /**
@@ -1685,9 +1726,9 @@
      */
     function syncPositioning() {
         var grids = arrangeGrids();
-        syncPositionsVisibility();
+        syncArranging();
         if (!grids.length) { return; }
-        if (positioning) { attachDrag(grids); }
+        if (arranging) { attachDrag(grids); }
     }
 
     /**
@@ -1706,26 +1747,28 @@
      * gone along with the reload -- and what is left is more honest, because the list really is
      * still ranked until the save lands.
      */
-    function syncPositionsVisibility() {
-        // THE GRID DECIDES, NOT THE BAR. This used to bail when `[data-gl-positions]` was missing --
-        // and switching Ranked -> Collection DELETES it, because the slot renders the bar only under
-        // `can_reorder`. `exitPositioning` is the only thing that turns the mode off, so it became
-        // unreachable in exactly the case that most needs it, and the mode stayed on forever:
-        // `[data-positioning]` kept every remove button hidden on a Collection, the keydown listener
-        // stayed bound, and `pickedRow` went on pointing at a detached row whose grid still carried
-        // `data-reorder-url` -- so arrow keys silently rewrote positions on a list nobody could see.
+    function syncArranging() {
+        // THE GRID DECIDES, AND IT STILL HAS TO. The hazard this function was written for survives
+        // the collapse to one mode, only renamed: switching Ranked -> Collection, or sorting A-Z,
+        // removes every `[data-gl-arrange]` from the page WHILE THE MODE IS STILL ON. Nothing else
+        // turns dragging off, so without this it stayed on over a grid that no longer exists --
+        // the keydown listener stayed bound, and `pickedRow` went on pointing at a detached row
+        // whose grid still carried `data-reorder-url`, so arrow keys silently rewrote positions on
+        // a list nobody could see.
         //
-        // Reordering the two halves is the whole fix: leave the mode FIRST, then update the bar if
-        // there still is one.
-        var show = arrangeGrids().length > 0 && editorOpen;
-        if (!show) { exitPositioning(true); }
+        // What CHANGED is that it no longer decides whether the hunter is editing. Losing the
+        // draggable grids used to end the whole editing session, because the two were one state;
+        // now it ends only the dragging, and the rename, the sections and the remove buttons stay
+        // exactly where they were. A sort should not close the editor.
+        if (!arrangeGrids().length) { stopArranging(); }
+        else if (editing) { startArranging(); }
 
-        // The bar can be on screen with NO arrangeable grid behind it: a member owner of an empty or
+        // The controls strip follows the MODE, not the grids. A member owner of an empty or
         // section-less list still gets the "Add a section" row, which is not a drag affordance and
-        // must not vanish with one. So the block's own visibility follows the editor, and only the
-        // MODE follows the grids.
+        // must not vanish with one.
         var block = document.querySelector('[data-gl-positions]');
-        if (block) { block.hidden = !editorOpen; }
+        if (block) { block.hidden = !editing; }
+        paintEditToggle();
     }
 
     //: Arrow keys move an entry one place through the ORDER, which is the axis a ranked list is
@@ -1745,7 +1788,7 @@
     }
 
     function onPositionKey(e) {
-        if (!positioning || isTyping(e.target)) { return; }
+        if (!arranging || isTyping(e.target)) { return; }
 
         if (e.key === 'Escape' && pickedRow) {
             e.preventDefault();
@@ -2338,12 +2381,16 @@
         handledGrid = null;
         // THE MODE'S STATE TOO. This file's header commits to honouring the `onPageReady` restore
         // contract even though the current htmx config never fires it -- and under that contract
-        // these six carried over: a restored page would paint "Done" on a toggle whose panel has no
-        // `[data-positioning]`, show the bar over a CLOSED editor, and keep a live Sortable and a
-        // document keydown bound to a discarded grid.
+        // these carried over: a restored page would paint "Done" on a toggle whose panel has no
+        // `[data-gl-editing]`, show the controls strip over a closed panel, and keep a live Sortable
+        // and a document keydown bound to a discarded grid.
+        //
+        // BOTH FLAGS, still. One mode to the hunter does not mean one variable: `arranging` is
+        // derived, and a restore that reset only `editing` would leave a stale Sortable attached
+        // with nothing able to detach it, which is the same leak by a shorter route.
         detachDrag();
-        positioning = false;
-        editorOpen = false;
+        editing = false;
+        arranging = false;
         orderChain = Promise.resolve();
         pendingSaves = 0;
         pendingSectionFocus = false;
@@ -2352,7 +2399,7 @@
         wireIdentityEditor();
         wireVisibility();
         wireReport();
-        wirePositioning();
+        wireEditToggle();
         wireSections();
         initReveal();
         if (PP.wireCharCounters) { PP.wireCharCounters(); }

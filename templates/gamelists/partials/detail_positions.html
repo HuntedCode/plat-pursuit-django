@@ -11,9 +11,9 @@ otherwise have sat there offering to reorder a list the hunter had just said was
 refreshes this slot instead, so the bar simply reflects what the list IS -- which is also more honest
 while the radio is changed but unsaved, since the list really is still ranked until you save.
 
-The JS still hides it while the editor is closed. That is the deliberate-entry half: the handles used
-to be live whenever a ranked list was viewed by its owner, which made rearranging something you could
-do by accident.
+The JS hides it while the mode is off, which is the deliberate-entry half: the handles used to be
+live whenever a ranked list was viewed by its owner, which made rearranging something you could do by
+accident. That is now the ONLY gate -- there is no second press inside this strip any more.
 
 ONE BAR, TWO CAPABILITIES, and they are not the same one. `can_arrange` is "cards can be dragged at
 all", which on a sectioned list means FILING one under a header; `can_reorder` is the stricter "a drop
@@ -31,39 +31,27 @@ not the second, which is why the toggle inside is gated separately from the bar 
     says so, because Cancel undoes a rename and cannot undo a move that was already written.{% endcomment %}
     <div class="gl-positions" data-gl-positions hidden>
         <div class="gl-positions__row">
-            {% if can_reorder %}
-            {% comment %}NO `aria-pressed`. `paintPositionsToggle` removes it on boot and explains
-            why at length (a toggle must not carry both a pressed state and a changing label), so
-            rendering it here meant AT saw a state the design rejects for every frame between paint
-            and boot, and again after each out-of-band swap.{% endcomment %}
-            <button type="button" class="pp-cta gl-positions__btn" data-gl-positions-toggle>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 8 2-2 2 2"/><path d="m3 16 2 2 2-2"/>
-                </svg>
-                <span data-gl-positions-label>Edit list positions</span>
-            </button>
-            {% elif can_arrange %}
-            {% comment %}THE SAME MODE, NAMED FOR WHAT IT ACTUALLY DOES HERE. On a Collection, or on a
-            Ranked list being viewed A-Z, a drop position is an artefact of the sort -- so the mode
-            offers filing and nothing else, and the button must not promise ordering it will refuse.
-            Two labels rather than two modes: the gesture, the bar and the exit are identical, and
-            only the payload differs (see `AssignItemView`).{% endcomment %}
-            <button type="button" class="pp-cta gl-positions__btn"
-                    data-gl-positions-toggle data-gl-arrange-only>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>
-                </svg>
-                <span data-gl-positions-label>Move games between sections</span>
-            </button>
-            {% endif %}
+            {% comment %}THE SECOND TOGGLE IS GONE (2026-09). Two buttons stood here -- "Edit list
+            positions" and, on a list that can only be filed, "Move games between sections" -- and
+            pressing one was the second step of a two-step mode. Everything they turned on now
+            arrives with the single "Edit list" control in the header, so this strip carries the
+            mode's hint and its save status rather than a way in.
 
-            {% comment %}Must match `paintPositionsToggle`'s off-state string, which replaces it
-            on boot. This shipped as "use the arrow keys on its grip" -- the phrasing the JS
+            The two labels are not lost, only demoted: the distinction they drew (ordering versus
+            filing) is real and still drives what the hint below says, which is where it belonged --
+            it describes a capability, and a capability is a fact about the page rather than a
+            button.{% endcomment %}
+            {% comment %}Must match `paintEditToggle`'s corresponding string, which replaces it on
+            boot. This shipped once saying "use the arrow keys on its grip" -- the phrasing the JS
             deliberately abandoned, because it described a key that appeared to do nothing -- so the
-            server-rendered copy contradicted the copy that replaced it a frame later.{% endcomment %}
+            server-rendered copy contradicted the copy that replaced it a frame later.
+
+            The strip is only ever on screen while the mode is, so the copy is the MODE'S hint now
+            rather than an instruction for getting into it: "Then drag a card" described a second
+            press that no longer exists.{% endcomment %}
             <p class="gl-positions__hint" data-gl-positions-hint>
-                {% if can_reorder %}Then drag a card, or click one to move it with the arrow keys.
-                {% else %}Then drag a card onto another section.{% endif %}
+                {% if can_reorder %}Drag a card, or click one to pick it up. Moves save as you make them.
+                {% else %}Drag a card onto another section, or click one to pick it up. Moves save as you make them.{% endif %}
             </p>
             {% comment %}`aria-hidden`: this is the SIGHTED signal. The spoken one goes through the
             page's existing status region, which says what happened once rather than narrating every
@@ -72,9 +60,12 @@ not the second, which is why the toggle inside is gated separately from the bar 
         </div>
 
         {% if can_manage_sections %}
-        {% comment %}SECTION CONTROLS, on their own row beneath the mode. They are available whether
-        or not the mode is on, because making a header is not a drag: a hunter who has just decided
-        their backlog needs a "Playing" shelf should not have to discover an arrange mode first.
+        {% comment %}SECTION CONTROLS, on their own row beneath the hint. The comment that stood
+        here claimed they were "available whether or not the mode is on", which was true of the
+        ARRANGE mode and false of the page: they sat inside this strip, and this strip was hidden
+        until the editor was opened -- so making a header did require discovering a mode first,
+        exactly as the note said it should not. One mode makes the claim true, because there is now
+        only one thing to be inside.
 
         The numbering choice appears only once there is something to number ACROSS -- a ranked list
         with at least one section. On a flat list the two modes are the same answer, so offering the

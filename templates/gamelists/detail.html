@@ -241,10 +241,20 @@ below with no outer wrapper.
                 so it keeps the only filled treatment; two primaries side by side would compete and
                 neither would lead. First because editing is the everyday action and publishing is
                 the deliberate one -- frequency before consequence, left to right.{% endcomment %}
-                <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-open
-                        aria-expanded="false" aria-controls="gl-edit-panel">
+                {% comment %}THE ONE TOGGLE, as of 2026-09. It used to open a disclosure -- hence the
+                `aria-expanded` / `aria-controls` pair that stood here -- and a second button inside
+                the bar below then turned dragging on. Three different answers to "can I change this
+                list right now", since adding and removing games worked regardless of either.
+
+                It is a MODE SWITCH now, not a disclosure, so both ARIA attributes are gone: they
+                described one panel, and what this opens is the whole page's editing state. The label
+                carries the state instead, which is also why there is no `aria-pressed` -- a toggle
+                must not carry both a pressed state and a changing label (`paintEditToggle` argues
+                this at length). "Edit list" / "Done" must match that function's strings byte for
+                byte, or the button says one thing on load and another a frame after boot.{% endcomment %}
+                <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-open>
                     <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                    <span>Edit list</span>
+                    <span data-gl-edit-label>Edit list</span>
                 </button>
 
                 {% comment %}Publishing is the deliberate second act, so it gets a real affordance and

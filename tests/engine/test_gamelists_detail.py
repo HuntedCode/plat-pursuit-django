@@ -47,6 +47,42 @@ def _url(game_list):
     return f'/community/lists/{game_list.id}/'
 
 
+#: A named JS function's body, sliced to the NEXT top-level function rather than to a NAMED one.
+#:
+#: Every slice in this file used to name its neighbour, which made a test about one thing fail with
+#: `ValueError: substring not found` when an UNRELATED function was renamed -- four of them did
+#: exactly that during the single-mode rebuild, and one silently produced an EMPTY slice instead
+#: (the named neighbour happened to be defined earlier in the file, so `index()` found the wrong
+#: occurrence and the assertion ran against ''). An empty slice fails loudly here only because the
+#: assertions are positive; a negative one would have passed vacuously.
+#:
+#: `test_profile_badges_tab` reached the same conclusion independently. What must not appear in a
+#: slice is the caller's business; this only has to find the end.
+def _decommented_css(source):
+    """The same, for CSS, which has only the block form.
+
+    Separate from `_decommented` so a caller cannot accidentally strip `//` from a stylesheet, where
+    it is not a comment at all -- a URL contains one.
+    """
+    return re.sub(r'/\*.*?\*/', '', source, flags=re.S)
+
+
+def _fn(js, name, indent=4):
+    """The body of `function <name>(`, up to whatever is defined at the same indent after it.
+
+    `indent` because this file slices nested functions too -- the identity editor's `open`, `close`
+    and `reset` live inside `wireIdentityEditor` at eight spaces, and a four-space boundary would
+    run straight past them to the end of the enclosing closure.
+    """
+    nxt_re = re.compile(r'\n' + ' ' * indent + r'(?:function |/\*\*|\}\))')
+    start = js.index('function ' + name + '(')
+    nxt = nxt_re.search(js, start + 10)
+    assert nxt, f'{name} has no following definition; the slice would swallow the file'
+    body = js[start:nxt.start()]
+    assert body.strip(), f'{name} sliced to nothing'
+    return body
+
+
 def _read(relative):
     return (Path(__file__).resolve().parents[2] / relative).read_text(encoding='utf-8')
 
@@ -503,8 +539,8 @@ def test_the_drag_is_wired_after_settle_not_after_swap(client):
     # ...and the settle handler must actually DO the wiring. Asserting only that a listener for the
     # event name exists left `onAfterSettle` free to be emptied to `return;` -- which kills the mode
     # across every sort swap and every chrome refresh -- with this test still green.
-    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
-    assert 'syncPositioning()' in settle and 'wirePositioning()' in settle, \
+    settle = js[js.index('function onAfterSettle('):js.index('function wireEditToggle(')]
+    assert 'syncPositioning()' in settle and 'wireEditToggle()' in settle, \
         'the settle handler is registered but does no wiring'
 
 
@@ -620,63 +656,105 @@ def test_the_grip_is_operable_from_a_keyboard(client):
 
 def test_reordering_is_a_mode_you_have_to_enter(client):
     """Handles on by default made dragging something you could do by ACCIDENT. The capability
-    (`data-gl-reorder`) and the intent (the mode) are now separate: the server still says where
-    reordering is possible, and the hunter says when."""
+    (`data-gl-reorder`) and the intent (the mode) are still separate: the server says where
+    reordering is possible, and the hunter says when.
+
+    REWRITTEN FOR THE SINGLE MODE (2026-09). What this guards did not change -- deliberate entry --
+    but the control did. There used to be two presses, "Edit list" and then a second toggle inside
+    the bar; there is one now, and the assertions follow it rather than the button that is gone.
+    """
     owner = _staff(client)
     game_list = _ranked(owner, 3)
 
     body = client.get(_url(game_list)).content.decode()
 
-    # The toggle is offered...
-    assert 'data-gl-positions-toggle' in body
-    assert 'Edit list positions' in body
-    # ...next to the grid it acts on, not buried in the edit panel above it. Asserted by position,
-    # because "it is on the page somewhere" is what let it ship somewhere nobody could find it.
-    assert body.index('data-gl-positions') > body.index('data-gl-identity-edit'), \
-        'the bar belongs below the editor, beside the list'
-    assert body.index('data-gl-positions') < body.index('id="gl-items-panel"'), \
-        'the bar belongs directly above the grid'
-    # The save model is stated once the mode is on; the JS owns that copy because it swaps with state.
+    # ONE toggle, and it is the header's. The second one is gone rather than renamed.
+    assert 'data-gl-edit-open' in body
+    assert 'data-gl-positions-toggle' not in body, 'the second mode toggle came back'
+    # The label the JS flips must be the label the server renders, or the button says one thing on
+    # load and another a frame after boot.
+    assert 'data-gl-edit-label' in body and '>Edit list<' in body
+
+    # The controls strip still sits next to the grid it acts on, not buried in the edit panel above
+    # it. Asserted by position, because "it is on the page somewhere" is what let it ship somewhere
+    # nobody could find it.
+    assert body.index('data-gl-positions') > body.index('data-gl-identity-edit'),         'the strip belongs below the editor, beside the list'
+    assert body.index('data-gl-positions') < body.index('id="gl-items-panel"'),         'the strip belongs directly above the grid'
+
+    # The save model is stated while the mode is on; the JS owns that copy because it swaps with
+    # state. It matters MORE now: one mode means a rename waits for Save while a drag does not, so
+    # the page has to say which kind of change it just took.
     js = _decommented(_read('static/js/list-detail.js'))
     assert 'Moves save as you make them.' in js, 'the save model has to be stated, not discovered'
-    # ...and the grips are rendered but inert until the mode is on, which is CSS, not markup.
+
+    # ...and the grips are rendered but inert until dragging is actually live, which is CSS, not
+    # markup. `data-gl-arranging` is the old `data-gl-arranging`, renamed when it stopped being the
+    # name of a mode the hunter enters and became a fact about whether drag attached.
     css = _read('static/css/components/gamelists.css')
-    assert '#gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }' in css
+    assert '#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { display: none; }' in css
     # `display: none` and not `opacity: 0` -- an invisible button is still a tab stop that announces
     # itself, which is the bug this is avoiding rather than a detail of how it looks.
-    #
-    # Written as a slice, both anchors landed on the SAME LINE of the stylesheet and the end anchor
-    # was searched from 0, so this examined a 40-character fragment of one selector and could not
-    # fail under any edit. The whole-file negative below says the same thing and can.
-    assert '#gl-items-panel:not([data-positioning]) .gl-item__grab { opacity: 0' not in css
+    assert '#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { opacity: 0' not in css
 
 
-def test_the_mode_is_not_offered_where_reordering_is_impossible(client):
-    """The toggle lives in the page header, which the sort swap does not re-render, so it must not be
-    rendered for a list that cannot be reordered at all."""
+def test_the_mode_never_promises_a_drag_the_page_cannot_honour(client):
+    """WAS `test_the_mode_is_not_offered_where_reordering_is_impossible`, and the rename is the
+    point. The old rule -- do not render the toggle on a list that cannot be reordered -- stopped
+    making sense when the toggle became the way to RENAME a list too: refusing it on a Collection
+    would refuse editing altogether.
+
+    So the hazard moved rather than went. The mode is offered everywhere the owner can edit; what
+    must not happen is the mode dressing a grid as draggable when nothing can be dragged. That is
+    `arranging`, which is derived from the grids and never toggled, and this pins the server half of
+    it: no `data-gl-arrange` grid means `startArranging` has nothing to attach to.
+    """
     owner = _staff(client)
 
     plain = _list(owner, 2)
-    assert 'data-gl-positions-toggle' not in client.get(_url(plain)).content.decode()
+    body = client.get(_url(plain)).content.decode()
+    assert 'data-gl-edit-open' in body, 'a Collection owner can still rename their list'
+    assert 'data-gl-arrange' not in body, 'a section-less Collection offers a drag with no meaning'
 
     ranked = _ranked(owner, 2)
     sorted_away = client.get(_url(ranked), {'sort': 'name'}).content.decode()
-    assert 'data-gl-positions-toggle' not in sorted_away
+    assert 'data-gl-edit-open' in sorted_away
+    # Sorted A-Z a drop POSITION is an artefact of the sort, so the reorder capability is withdrawn
+    # even though the list really is ranked.
+    assert 'data-gl-reorder' not in sorted_away, 'a sorted list still offers to reorder'
 
 
-def test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor(client):
-    """Three ways the mode could outlive its own preconditions, all pinned at the source because none
-    is reachable from a server test: a sort that removes the capability, a swap that replaces the grid
-    the drag manager is bound to, and closing the panel the mode was entered from."""
+def test_dragging_never_outlives_the_grid_or_the_mode(client):
+    """WAS `test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor`. Three ways
+    dragging could outlive its own preconditions, all pinned at the source because none is reachable
+    from a server test.
+
+    Two are unchanged: a sort that removes the capability, and a swap that replaces the grid the drag
+    manager is bound to.
+
+    THE THIRD WAS REVERSED, deliberately. It used to be "closing the editor must end the mode it
+    started", because the arrange mode was entered from inside the identity panel. One mode deleted
+    that coupling -- a sort no longer closes the editor, and closing the editor IS leaving the mode.
+    The danger it guarded did not go anywhere though: it just arrives from the other direction, as a
+    live Sortable and a bound document keydown surviving the mode that created them. So the
+    assertion now runs the other way round.
+    """
     js = _decommented(_read('static/js/list-detail.js'))
 
-    sync = js[js.index('function syncPositioning() {'):js.index('function syncPositionsVisibility() {')]
+    sync = _fn(js, 'syncPositioning')
     assert 'attachDrag(grids)' in sync, 'a replaced grid must be re-attached while the mode is on'
-    assert 'syncPositionsVisibility()' in sync, 'the bar must follow the grid below it'
+    assert 'syncArranging()' in sync, 'the strip must follow the grid below it'
 
-    close_body = js[js.index('function close() {'):js.index('function reset() {')]
-    assert 'editorOpen = false' in close_body and 'syncPositionsVisibility()' in close_body, \
-        'closing the editor must end the mode it started'
+    # The capability can vanish under a mode that is still on -- Ranked -> Collection, or a sort to
+    # A-Z, removes every `[data-gl-arrange]`. Nothing else stops dragging, so this must.
+    arr = _fn(js, 'syncArranging')
+    assert 'stopArranging()' in arr, 'losing the grids leaves a Sortable bound to nothing'
+    # ...and it must NOT end the editing session with them. A sort closing the editor was the old
+    # coupling, and it is the thing being fixed.
+    assert 'exitEditing' not in arr, 'a sort still closes the editor'
+
+    # Leaving the mode takes the dragging with it, which is where `detachDrag` now hangs.
+    exit_body = _fn(js, 'exitEditing')
+    assert 'stopArranging()' in exit_body, 'leaving the mode leaves a live Sortable behind'
 
 
 def test_the_whole_card_drags_and_does_not_navigate_while_arranging(client):
@@ -697,7 +775,7 @@ def test_the_whole_card_drags_and_does_not_navigate_while_arranging(client):
     # `dropPicked` too, so moving the mode guard out of the click handler and into one of those --
     # which breaks it, leaving every card unclickable outside the mode -- kept this green.
     guard = js[js.index('function onCardClick('):js.index('function togglePicked(')]
-    assert 'if (!positioning' in guard, \
+    assert 'if (!arranging' in guard, \
         'a click guard that outlives the mode makes the list unclickable'
     # ...and a post-drop synthetic click must not toggle the pick. Sortable eats that click on every
     # platform except Chrome for Android, where it skips registering the listener entirely.
@@ -769,11 +847,11 @@ def test_arranging_quiets_the_card_hover_and_shows_the_cards_are_loose(client):
     # `[data-gl-arrange]` and NOT `#gl-items`: that id is rendered only by a FLAT list, so scoping
     # the tray to it left every SECTIONED list with cards lifting off nothing at all -- half a
     # two-part signal, on exactly the lists sections introduced.
-    assert '#gl-items-panel[data-positioning] [data-gl-arrange] {' in mode
+    assert '#gl-items-panel[data-gl-arranging] [data-gl-arrange] {' in mode
     assert '#gl-items {' not in mode, 'the tray still keys on the flat-list id'
     assert 'inset 0 1px 3px' in mode, 'the tray has no recess, so nothing is raised relative to it'
-    assert '#gl-items-panel[data-positioning] .gl-item .pp-gcard {' in mode
-    lifted = mode[mode.index('#gl-items-panel[data-positioning] .gl-item .pp-gcard {'):]
+    assert '#gl-items-panel[data-gl-arranging] .gl-item .pp-gcard {' in mode
+    lifted = mode[mode.index('#gl-items-panel[data-gl-arranging] .gl-item .pp-gcard {'):]
     assert 'box-shadow' in lifted[:400], 'the cards carry no elevation, only a border'
 
     # It arrives as a transition, so there is one moment of change and no loop -- and the END state is
@@ -937,13 +1015,16 @@ def test_cancelling_the_editor_restores_the_type_too(client):
     # reason that had nothing to do with what it checks. A mutation run reported it as "killed" on
     # that basis, which is a false pass hiding inside a false failure.
     #
-    # The marker used to be `var opener = root.querySelector(`, which stopped existing when the
-    # three opener lookups were routed through one document-scoped `editOpener()` helper -- the
-    # button had moved out of `root` and was silently never bound. Borrowing a neighbouring line as
-    # a boundary is fragile exactly like this; kept because the alternative is brace-matching, but
-    # now anchored on the line this test is actually adjacent to.
-    start = js.index('function reset() {')
-    reset_body = js[start:js.index('var opener = editOpener();', start)]
+    # THIRD BOUNDARY, and the last hand-picked one. It was `var opener = root.querySelector(`, which
+    # stopped existing when the opener lookups were routed through `editOpener()`; then
+    # `var opener = editOpener();`, which stopped existing when one mode removed that helper
+    # altogether. The comment that stood here said borrowing a neighbouring line is "fragile exactly
+    # like this" and kept it anyway "because the alternative is brace-matching".
+    #
+    # `_fn` is that alternative, written after the same fragility broke four tests in one change. It
+    # finds the end by indentation instead of by name, so nothing this test is not about can break
+    # it -- which is the whole complaint the two previous comments were making.
+    reset_body = _fn(js, 'reset', indent=8)
     assert "form.querySelector('[name=\"list_type\"][value=\"'" in reset_body, \
         'reset() leaves an abandoned type selection checked'
     assert 'current.checked = true' in reset_body
@@ -1631,16 +1712,23 @@ def test_the_edit_control_is_a_labelled_action_not_an_inline_pencil(client):
 
     assert 'data-gl-edit-open' in band, 'the edit control is not in the actions band'
     assert 'Edit list' in band, 'the edit control is still unlabelled'
-    # Named state, so it is not an anonymous toggle to a screen reader.
     # `max(0, ...)`: Edit is the FIRST control in the band, so a bare `- 200` went negative and
     # Python read it as "200 from the end" -- slicing the tail of the band instead of the button.
     start = max(0, band.index('data-gl-edit-open') - 200)
     opener = band[start:]
     opener = opener[:opener.index('</button>')]
-    assert 'aria-expanded' in opener and 'aria-controls="gl-edit-panel"' in opener, (
-        'the edit control does not say what it opens'
-    )
-    # And the panel it names exists, so `aria-controls` is not pointing at nothing.
+
+    # THE LABEL IS THE STATE, and it has to be addressable for the JS to flip it. This used to
+    # assert `aria-expanded` + `aria-controls="gl-edit-panel"` -- "it says what it opens" -- which
+    # was right while the control disclosed one panel. It opens a MODE now, reaching the cards, the
+    # section headers and the adders, so naming the identity panel would understate it by most of
+    # the page. `test_the_edit_control_never_states_a_state_it_does_not_keep` carries the other half
+    # of that argument and pins that both attributes are actively removed.
+    assert 'data-gl-edit-label' in opener, 'nothing for the mode to flip between Edit list and Done'
+    assert 'aria-controls' not in opener, 'the control names one panel while governing the page'
+
+    # The panel still exists and is still what the mode opens first; it is simply no longer the
+    # whole of what the control means.
     assert 'id="gl-edit-panel"' in body
 
 
@@ -1680,19 +1768,38 @@ def test_the_edit_opener_is_looked_up_where_it_actually_lives(client):
         'the opener is not looked up from the document')
 
 
-def test_the_edit_control_keeps_its_expanded_state_honest():
-    """`aria-expanded` that never changes is worse than none -- it states a fact and then lies.
-    Both edges are wired, and both are pinned, because the close path is the easy one to forget."""
-    js = _decommented(_read('static/js/list-detail.js'))
+def test_the_edit_control_never_states_a_state_it_does_not_keep():
+    """WAS `test_the_edit_control_keeps_its_expanded_state_honest`, which pinned `aria-expanded` on
+    both edges. The attribute is GONE as of 2026-09 and that is deliberate, so the assertion had to
+    change -- but the rule it enforced is the reason it went, not a casualty of it.
 
-    # BOTH VALUES, not a headcount. `js.count(...) == 2` is the idiom this very file rejects two
-    # hundred lines up ("the count cannot tell a new GUARDED write from a new UNGUARDED one; both
-    # move it by one"). Here it could not tell which element was being written, nor that one call
-    # sets `true` and the other `false` -- two `'true'` calls passed just as happily.
-    assert "setAttribute('aria-expanded', 'true')" in js, 'opening never marks the panel expanded'
-    assert "setAttribute('aria-expanded', 'false')" in js, 'closing never marks it collapsed'
-    # And both are written against the opener the template actually renders, not some other node.
-    assert 'editOpener()' in js, 'the aria state is no longer maintained on the edit opener'
+    The rule: a control must not state a fact about itself that it will not maintain. It used to
+    disclose one panel, so `expanded` was honest. It now enters a mode that reaches the cards, the
+    section headers and the adders -- `aria-expanded="true"` would describe the identity panel while
+    the hunter is looking at grips appearing over every card, which is the same lie the original
+    test was written to prevent, told about a bigger thing.
+
+    What carries the state instead is the LABEL, which is also why there is no `aria-pressed`: a
+    toggle must not carry both a pressed state and a changing label. So the guard is now that the
+    control maintains its label on both edges and claims neither ARIA state.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    paint = _fn(js, 'paintEditToggle')
+
+    # BOTH WORDS, not a headcount. `js.count(...) == 2` is the idiom this very file rejects ("the
+    # count cannot tell a new GUARDED write from a new UNGUARDED one"), and here it could not tell
+    # that one branch says "Done" and the other "Edit list" -- two "Done"s would pass just as well.
+    assert "'Done'" in paint and "'Edit list'" in paint, 'the label no longer reports both states'
+    assert 'editing ?' in paint, 'the label is not driven by the mode'
+
+    # ...and the abandoned states are actively removed, not merely unset. The template renders this
+    # button on every load and an out-of-band chrome swap re-renders it, so a stale attribute left
+    # by an older template would otherwise survive in the DOM with nothing to clear it.
+    assert "removeAttribute('aria-pressed')" in paint
+    assert "removeAttribute('aria-expanded')" in paint,         'a control that no longer discloses a panel still claims to'
+
+    # And it is written against the control the template actually renders.
+    assert 'editToggle()' in js, 'the label is no longer maintained on the edit toggle'
 
 
 def test_the_header_card_holds_no_page_action(client):
@@ -1779,29 +1886,45 @@ def test_the_reveal_observer_follows_the_card_class(client):
 
 # ── coverage the audit found missing ─────────────────────────────────────────────────────────────
 
-def test_opening_the_editor_is_what_reveals_the_bar(client):
-    """The whole feature hangs off two lines nothing pinned.
+def test_entering_the_mode_reveals_everything_it_governs():
+    """WAS `test_opening_the_editor_is_what_reveals_the_bar`. The two lines it pinned were the whole
+    coupling between the editor and the arrange bar, and that coupling is gone -- there is one mode
+    now, so nothing has to reveal anything else.
 
-    `syncPositionsVisibility` gates on `editorOpen`, and `close()` setting it false WAS asserted --
-    but `open()` setting it true was not. Delete those two lines and the position bar is `hidden`
-    forever, the mode is unreachable, and every test stays green.
+    What replaced it is a stronger claim, and the one the rebuild was asked for: entering the mode
+    brings the identity panel, the controls strip and the dragging ON TOGETHER. Three things that
+    used to arrive at three different times, from two different presses and no press at all.
     """
     js = _decommented(_read('static/js/list-detail.js'))
+    enter = _fn(js, 'enterEditing')
 
-    open_body = js[js.index('function open() {'):js.index('function close() {')]
-    assert 'editorOpen = true' in open_body
-    assert 'syncPositionsVisibility()' in open_body, 'opening the editor never reveals the bar'
+    assert 'identityShow()' in enter, 'the rename panel no longer opens with the mode'
+    assert 'block.hidden = false' in enter, 'the section controls stay hidden inside the mode'
+    assert 'startArranging()' in enter, 'dragging is still a second press'
+    assert "panel.dataset.glEditing = '1'" in enter, 'the CSS is never told the mode is on'
+
+    # ...and it is idempotent, because the toggle is now the only way in and a double press must not
+    # re-run `identityShow`, which resets the fields from the DOM and would discard typing.
+    assert 'if (editing) { return; }' in enter, 'entering twice destroys unsaved work'
 
 
-def test_something_actually_calls_enter_positioning(client):
-    """The only call site is the toggle's click handler. Remove the listener and a rendered button
-    does nothing -- and the one test that mentions `enterPositioning()` asserts it is ABSENT from the
-    swap handler, so nothing anywhere required it to be reachable."""
+def test_something_actually_calls_the_mode():
+    """WAS `test_something_actually_calls_enter_positioning`. The only call site is the toggle's
+    click handler, so removing the listener leaves a rendered button that does nothing -- and every
+    other test that mentions the mode asserts it is ABSENT from somewhere, so nothing else requires
+    it to be reachable at all.
+
+    Now more load-bearing than before, not less: this button is the single way into editing, where
+    it used to be the second of two.
+    """
     js = _decommented(_read('static/js/list-detail.js'))
+    wire = _fn(js, 'wireEditToggle')
 
-    wire = js[js.index('function wirePositioning('):js.index('function onGrabClick(')]
     assert "toggle.addEventListener('click'" in wire
-    assert 'enterPositioning()' in wire and 'exitPositioning()' in wire
+    assert 'enterEditing()' in wire and 'exitEditing()' in wire
+    # WeakSet-guarded rather than attribute-guarded: htmx's history snapshot is
+    # `cloneNode(true).innerHTML`, so a `data-` marker would be restored on a node with no listener.
+    assert 'wired.has(toggle)' in wire and 'wired.add(toggle)' in wire
 
 
 def test_the_grip_does_something_when_pressed(client):
@@ -1827,9 +1950,11 @@ def test_the_picked_state_is_reported_to_assistive_tech(client):
     assert "setAttribute('aria-pressed'" in setter
     assert 'setGrabPressed(row, true)' in js and 'setGrabPressed(pickedRow, false)' in js
 
-    # ...and the BAR's toggle must NOT also carry `aria-pressed`, because its label changes with
+    # ...and the MODE's toggle must NOT also carry `aria-pressed`, because its label changes with
     # state. Doing both makes "Done, pressed" ambiguous about whether Done is the state or the act.
-    paint = js[js.index('function paintPositionsToggle('):js.index('function setPositionsStatus(')]
+    # It is the header's single Edit control now rather than a second button in the bar; the rule it
+    # is held to did not change with the button that carries it.
+    paint = js[js.index('function paintEditToggle('):js.index('function setPositionsStatus(')]
     assert "removeAttribute('aria-pressed')" in paint
 
 
@@ -1908,29 +2033,30 @@ def test_an_empty_ranked_list_is_not_offered_a_reorder_mode(client):
     assert 'data-gl-positions' not in resp.content.decode()
 
 
-def test_the_mode_ends_when_the_list_stops_being_ranked(client):
-    """THE WORST BUG THIS AUDIT FOUND. `syncPositionsVisibility` bailed when `[data-gl-positions]`
-    was absent -- and switching Ranked -> Collection DELETES it, because the slot renders the bar only
-    under `can_reorder`. `exitPositioning` is the only thing that turns the mode off, so it became
-    unreachable in exactly the case that needs it.
+def test_dragging_ends_when_the_list_stops_being_draggable():
+    """WAS `test_the_mode_ends_when_the_list_stops_being_ranked` -- THE WORST BUG THAT AUDIT FOUND,
+    and the hazard is unchanged by the rebuild even though every name in it moved.
 
-    The mode then stayed on forever: every remove button hidden on a Collection, the document keydown
-    still bound, and `pickedRow` still pointing at a detached row whose grid kept `data-reorder-url`
-    -- so arrow keys silently rewrote positions on a list nobody could see.
+    Switching Ranked -> Collection, or sorting A-Z, removes every `[data-gl-arrange]` from the page
+    while the mode is still on. Nothing else stops dragging, so the Sortable stayed bound, the
+    document keydown stayed bound, and `pickedRow` went on pointing at a detached row whose grid
+    still carried `data-reorder-url` -- so arrow keys silently rewrote positions on a list nobody
+    could see.
+
+    The original fix was an ORDERING one: leave the mode first, then touch the bar, because bailing
+    early on a missing bar made the exit unreachable in exactly the case that needed it. That shape
+    survives here -- `stopArranging` is unconditional on the grids being gone, and the strip is
+    updated afterwards rather than being a precondition for it.
     """
     js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'syncArranging')
 
-    # Ends at the next thing DEFINED BELOW it. `attachDrag` sits 150 lines ABOVE, so searching
-    # from 0 returned an earlier index and the slice came back empty -- the same slice-direction
-    # mistake this file has now made four times, which is why the order is checked, not assumed.
-    start = js.index('function syncPositionsVisibility(')
-    fn = js[start:js.index('var GRAB_EARLIER', start)]
-    assert fn.index('exitPositioning(true)') < fn.index("querySelector('[data-gl-positions]')"), \
-        'the mode can only be left while the bar still exists -- which is not when it must be left'
-    # `!editorOpen` and not `!show`: the bar carries the section controls too, and a member owner of
-    # a list with nothing to drag still gets the "Add a section" row. Tying the whole bar to whether
-    # a DRAG is possible hid the only way to create the sections that would make one possible.
-    assert 'if (block) { block.hidden = !editorOpen; }' in fn, 'a missing bar must not abort the sync'
+    assert fn.index('stopArranging()') < fn.index("querySelector('[data-gl-positions]')"),         'a missing strip can still abort the teardown'
+    assert 'if (block) { block.hidden = !editing; }' in fn, 'a missing strip must not abort the sync'
+    # AND THE HALF THAT IS NEW: losing the grids must not close the editor. The two used to be one
+    # state, so a sort ended the whole session; a hunter mid-rename should not lose the panel
+    # because they changed the sort order.
+    assert 'exitEditing' not in fn, 'a sort still ends the editing session'
 
 
 def test_a_failed_reorder_is_not_re_applied_by_the_one_queued_behind_it(client):
@@ -1977,29 +2103,44 @@ def test_the_adder_results_do_not_also_move_the_picked_card(client):
         'the arrow and Escape branches must both stop the position handler seeing the key'
 
 
-def test_boot_resets_the_modes_state_not_just_the_grid(client):
+def test_boot_resets_the_modes_state_not_just_the_grid():
     """The file commits to honouring the `onPageReady` restore contract even though this site's htmx
-    config never fires it. Under that contract a restored page painted "Done" on a toggle whose panel
-    has no `[data-positioning]`, showed the bar over a CLOSED editor, and kept a live Sortable and a
-    document keydown bound to a discarded grid."""
-    js = _decommented(_read('static/js/list-detail.js'))
+    config never fires it. Under that contract a restored page would paint "Done" on a toggle whose
+    panel has no `[data-gl-editing]`, show the controls strip over a closed panel, and keep a live
+    Sortable and a document keydown bound to a discarded grid.
 
+    BOTH FLAGS, and that is the point of listing them separately. One mode to the hunter is still two
+    variables underneath: `arranging` is derived, and a reset that cleared only `editing` would leave
+    a Sortable attached with nothing able to detach it -- the same leak by a shorter route.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
     fn = js[js.index('function boot(first) {'):js.index('if (PP.onPageReady)')]
-    for reset in ('detachDrag()', 'positioning = false', 'editorOpen = false',
-                  'orderChain = Promise.resolve()'):
+
+    for reset in ('detachDrag()', 'editing = false', 'arranging = false',
+                  'orderChain = Promise.resolve()', 'pendingSaves = 0', 'pendingPickId = null'):
         assert reset in fn, f'{reset} is not reset on boot'
 
 
-def test_exiting_the_mode_actually_clears_the_flag(client):
-    """`exitPositioning` is the only thing that sets `positioning` back to false, and nothing pinned
-    that it does. Without it every later `if (!positioning) return` guard passes forever."""
+def test_exiting_the_mode_actually_clears_the_flag():
+    """`exitEditing` and `stopArranging` are the only things that set their flags back, and nothing
+    pinned that they do. Without it every later `if (!editing) return` / `if (!arranging) return`
+    guard passes forever.
+
+    Both halves, because they are separate functions now: leaving the mode must clear the mode AND
+    take the dragging down with it. A version that cleared `editing` and left `arranging` set would
+    leave the grips rendered over a page with no editor.
+    """
     js = _decommented(_read('static/js/list-detail.js'))
 
-    start = js.index('function exitPositioning(')
-    fn = js[start:js.index('function paintPositionsToggle(', start)]
-    assert 'positioning = false' in fn
-    assert 'detachDrag()' in fn, 'leaving the mode must tear the drag down with it'
-    assert "delete panel.dataset.positioning" in fn, 'the CSS state outlives the JS state'
+    exit_body = _fn(js, 'exitEditing')
+    assert 'editing = false' in exit_body
+    assert 'stopArranging()' in exit_body, 'leaving the mode must tear the drag down with it'
+    assert 'delete panel.dataset.glEditing' in exit_body, 'the CSS state outlives the JS state'
+
+    stop = _fn(js, 'stopArranging')
+    assert 'arranging = false' in stop
+    assert 'detachDrag()' in stop, 'the Sortable outlives the flag'
+    assert 'delete panel.dataset.glArranging' in stop, 'the CSS state outlives the JS state'
 
 
 def test_an_unlinked_owner_is_not_offered_the_reorder_handles(client):
@@ -2039,12 +2180,49 @@ def test_the_drag_manager_defaults_its_touch_threshold(client):
     assert 'sortableConfig.touchStartThreshold = this.touchStartThreshold;' in utils,         'the default is re-applied at the point of use, so 0 can never reach SortableJS'
 
 
-def test_the_remove_control_steps_aside_while_arranging(client):
-    """Documented in three places and asserted nowhere. It is also what made the HIGH bug above
-    damaging rather than merely untidy: with the mode stuck on, this hid every remove button on a
-    Collection."""
-    css = _read('static/css/components/gamelists.css')
-    assert '#gl-items-panel[data-positioning] .gl-item__remove { display: none; }' in css
+def test_remove_and_rearrange_share_a_card_without_contesting_it(client):
+    """WAS `test_the_remove_control_steps_aside_while_arranging`, which pinned
+    `[data-gl-arranging] .gl-item__remove { display: none; }`. That rule is DELETED, and it had to
+    be: it hid the remove button whenever the mode was on, and with one mode "whenever the mode is
+    on" became "whenever you are editing" -- so removing a game, the most ordinary edit there is,
+    would have had nowhere to happen.
+
+    The reasoning behind the old rule was that the corner must never be contested and the mode
+    should offer one action rather than two. The corner still must not be contested; what changed is
+    that hiding one control is no longer an available way to achieve it. Separation does it instead,
+    which is what kept the two apart on touch anyway.
+
+    So: remove follows the MODE (it is an edit), the grip follows whether dragging is actually live,
+    and the two never occupy the same place.
+    """
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    assert '#gl-items-panel[data-gl-arranging] .gl-item__remove { display: none; }' not in css,         'the remove button is hidden while editing again, which is now always'
+    assert '#gl-items-panel:not([data-gl-editing]) .gl-item__remove { display: none; }' in css,         'remove is offered outside the mode'
+    assert '#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { display: none; }' in css,         'the grip is offered where nothing can be dragged'
+
+    # THEY DO NOT SHARE A COORDINATE. Both are 26px circles that expand to 44px hit areas on touch,
+    # anchored to the same corner -- so "separated" has to mean measured, not assumed. This failed
+    # when the hiding rule was first deleted, which is the whole reason the rule could not simply go.
+    #
+    # Sliced on the newline-anchored declaration so `.gl-item__grab {` cannot match the tail of
+    # `...:not([data-gl-arranging]) .gl-item__grab {`, which is the longer selector two hundred
+    # lines up -- it does, and the first attempt at this assertion read that rule's `display: none`
+    # and reported the two as unanchored.
+    def _rule(name):
+        at = css.index('\n' + name + ' {')
+        return css[at:css.index('}', at)]
+
+    remove, grab = _rule('.gl-item__remove'), _rule('.gl-item__grab')
+    assert 'right: 6px' in remove, 'the remove control moved; this test no longer knows where it is'
+    assert 'right: 38px' in grab, 'the grip sits on top of the remove control'
+
+    # ...and the touch targets, which is where the real collision would be: 26px circles do not
+    # overlap at 32px apart, but the 44px `::before` boxes both anchor to `right: 0` unless told
+    # otherwise, and the overlapping strip belongs to whichever paints last.
+    touch = css[css.index('@media (hover: none) {', css.index('.gl-item__grab {')):]
+    touch = touch[:touch.index('.gl-item__grab::before')]
+    assert 'right: 44px' in touch, 'the two 44px hit areas overlap on touch'
 
 
 # ── sections ─────────────────────────────────────────────────────────────────────────────────────
@@ -2654,7 +2832,7 @@ def test_the_add_field_keeps_focus_across_its_own_refresh(client):
     js = _decommented(_read('static/js/list-detail.js'))
 
     assert 'function restoreSectionFocus(' in js
-    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
+    settle = js[js.index('function onAfterSettle('):js.index('function wireEditToggle(')]
     assert 'restoreSectionFocus()' in settle
     # AFTER the re-wiring, or the field being focused is the node about to be replaced.
     assert settle.index('wireSections()') < settle.index('restoreSectionFocus()')
@@ -2752,9 +2930,9 @@ def test_a_keyboard_move_across_a_header_keeps_the_card_picked_up(client):
     assert 'grab.focus()' not in branch, 'focus is put on a row that is about to be replaced'
 
     assert 'function restorePick(' in js
-    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
-    # AFTER `syncPositioning`, whose `detachDrag` drops any pick -- restoring before it is undone one
-    # line later.
+    settle = js[js.index('function onAfterSettle('):js.index('function wireEditToggle(')]
+    # AFTER `syncPositioning`, whose `stopArranging` drops any pick -- restoring before it is undone
+    # one line later.
     assert settle.index('syncPositioning()') < settle.index('restorePick()')
 
 

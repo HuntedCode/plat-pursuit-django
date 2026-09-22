@@ -421,21 +421,56 @@
  * The flag is read from the PANEL, which is htmx's swap target and therefore keeps its own
  * attributes. On `#gl-items` it would be wiped on settle -- the trap documented twice in
  * list-detail.js. */
-#gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }
-/* ...and the destructive control steps aside while positioning, so the corner is never contested and
-   the mode offers one action rather than two. Arranging a list and deleting from it are different
-   jobs, and the one that cannot be undone is not the one to leave under a moving cursor. */
-#gl-items-panel[data-positioning] .gl-item__remove { display: none; }
+#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { display: none; }
+/* REMOVE AND REARRANGE NOW COEXIST. This used to be `display: none` on `.gl-item__remove` whenever
+   the mode was on, because the mode was a SECOND state entered from inside the editor and a card
+   could not sensibly be both dragged and deleted by the same press.
+
+   One mode ended that. Editing is now the only state, so hiding the remove button while editing
+   would hide it always -- and removing a game is the most ordinary edit there is. The two controls
+   are separated by position and by hit area instead (see `.gl-item__remove` / `.gl-item__grab`
+   above, each with its own 44px `::before`), which is what kept them apart on touch anyway. */
+
+/* ── the one mode ────────────────────────────────────────────────────────────────────────────────
+ *
+ * TWO FLAGS, ONE MODE, and the distinction is the whole reason this did not collapse into a single
+ * attribute when the two modes did.
+ *
+ *   [data-gl-editing]    the hunter pressed Edit. Rename, sections, add, remove.
+ *   [data-gl-arranging]  ...and drag actually attached. Grips, grab cursors, the tray, the lift.
+ *
+ * The second is DERIVED, never toggled: it is set when the mode opens over a grid that can be
+ * dragged, and left off when it cannot -- a Collection with no sections has nothing to rearrange, a
+ * ranked list sorted A-Z has no position a drop could mean, and SortableJS may simply have failed to
+ * load. Keying the tray and the grab cursor off `editing` instead would promise a drag the page
+ * cannot honour on exactly those three surfaces, which is the defect the old two-mode split was
+ * accidentally preventing.
+ *
+ * `data-gl-arranging` is the old `data-positioning` renamed, selector shape untouched. Every rule
+ * below it is written `#gl-items-panel[...]` rather than flattened, because the ghost rule further
+ * down depends on winning a (1,4,0) vs (1,3,0) fight that a shorter selector loses silently. */
+#gl-items-panel:not([data-gl-editing]) .gl-item__remove { display: none; }
 
 /* The grip. Mirrors the remove control across the card (top-LEFT to its top-right) and shares its
    geometry, but is visible at rest WITHIN the mode: once you have said you are arranging the list,
    the thing you arrange it with should not also have to be discovered, and a hover-only grip does
    not exist at all on touch. */
 .gl-item__grab {
-    /* TOP-RIGHT, because the rank plate owns the top-left now. It shares this corner with the remove
-       control and never collides with it: `.gl-item__remove` is hidden while positioning (below), so
-       a card offers exactly one control per mode. */
-    position: absolute; top: 6px; right: 6px; z-index: 2;
+    /* TOP-RIGHT, INBOARD OF THE REMOVE CONTROL, because the rank plate owns the top-left.
+       `6px + 26px + 6px` clears the remove button's 26px circle and leaves the same 6px gutter
+       between them that each has to the card edge.
+
+       THIS USED TO BE `right: 6px`, coincident with remove, and the comment here said the two "never
+       collide" because remove was hidden while positioning -- so a card offered exactly one control
+       per mode. One mode ended that: remove now follows `[data-gl-editing]` and the grip follows
+       `[data-gl-arranging]`, and arranging only ever happens INSIDE editing, so whenever the grip is
+       on screen the remove button is too. Hiding one is no longer available as a way to keep the
+       corner uncontested, so they are separated instead.
+
+       Caught by a test rather than by looking: `test_remove_and_rearrange_share_a_card_without_
+       contesting_it` was rewritten from the one that pinned the old hiding rule, and it failed on
+       the stacked corner the moment that rule came out. */
+    position: absolute; top: 6px; right: 38px; z-index: 2;
     display: grid; place-items: center;
     width: 26px; height: 26px;
     border-radius: 999px;
@@ -467,7 +502,11 @@
 @media (hover: none) {
     .gl-item__grab {
         width: 44px; height: 44px;
-        top: 0; right: 0;
+        /* `right: 44px`, so the two 44px targets ABUT rather than overlap. At the pointer offset of
+           38px they would share 6px of hit area, and the overlapping strip belongs to whichever
+           paints last -- which is how a tap meant for "reorder" deletes a game. The section header
+           controls solve the same arithmetic with their `margin-left: 8px`. */
+        top: 0; right: 44px;
         background: none; border: none;
     }
     .gl-item__grab::before {
@@ -830,7 +869,7 @@
 /* While arranging, it is a TARGET and says so. Outside the mode it is just a statement of fact, and
    an accent-dashed box inviting a drop nobody can perform is the kind of affordance that teaches
    people the page is broken. */
-#gl-items-panel[data-positioning] .gl-group__grid:empty::before {
+#gl-items-panel[data-gl-arranging] .gl-group__grid:empty::before {
     border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
     color: var(--pp-text-dim);
     background: color-mix(in oklab, var(--pp-primary) 6%, transparent);
@@ -854,22 +893,22 @@
        specificity as the resting-elevation rule further down and earlier in source -- so the
        elevation won and these never applied. The end state was right by accident; the rules were
        dead, and their presence implied a defence that was not there. */
-    #gl-items-panel[data-positioning] .pp-gcard:hover .pp-gcard__art { transform: none; }
-    #gl-items-panel[data-positioning] .pp-gcard:hover .pp-gcard__title { color: var(--pp-text); }
+    #gl-items-panel[data-gl-arranging] .pp-gcard:hover .pp-gcard__art { transform: none; }
+    #gl-items-panel[data-gl-arranging] .pp-gcard:hover .pp-gcard__title { color: var(--pp-text); }
 }
 /* The press-dip too: a card you are picking up should not also flinch. */
-#gl-items-panel[data-positioning] .pp-gcard:active { transform: none; }
+#gl-items-panel[data-gl-arranging] .pp-gcard:active { transform: none; }
 
 /* 2. THE CURSOR SAYS GRAB, over the whole card rather than over the grip alone. */
-#gl-items-panel[data-positioning] .gl-item,
-#gl-items-panel[data-positioning] .pp-gcard { cursor: grab; }
-#gl-items-panel[data-positioning] .gl-item:active,
-#gl-items-panel[data-positioning] .pp-gcard:active { cursor: grabbing; }
+#gl-items-panel[data-gl-arranging] .gl-item,
+#gl-items-panel[data-gl-arranging] .pp-gcard { cursor: grab; }
+#gl-items-panel[data-gl-arranging] .gl-item:active,
+#gl-items-panel[data-gl-arranging] .pp-gcard:active { cursor: grabbing; }
 
 /* 3. TOUCH MUST NOT TREAT A HELD CARD AS TEXT OR AS A LINK. Long-press on a phone otherwise raises
  *    the selection handles or the link preview sheet, both of which land at roughly the moment the
  *    drag arms -- so the gesture that picks a card up also opens a menu over it. */
-#gl-items-panel[data-positioning] .gl-item {
+#gl-items-panel[data-gl-arranging] .gl-item {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
@@ -905,7 +944,7 @@
     border-radius: 14px;
     transition: background 0.2s ease, box-shadow 0.2s ease;
 }
-#gl-items-panel[data-positioning] [data-gl-arrange] {
+#gl-items-panel[data-gl-arranging] [data-gl-arrange] {
     padding: 12px;
     /* Tinted with the accent rather than merely darkened: it is the same language the position bar
        above it speaks, so the two read as one mode rather than as two unrelated highlights. */
@@ -917,7 +956,7 @@
 /* The cards come UP off that surface. `.pp-gcard` already transitions border-color and box-shadow
    for its hover state, so this inherits the easing it was tuned with. The shadow is the load-bearing
    half -- the accent border alone reads as "selected", which is a different and wrong idea. */
-#gl-items-panel[data-positioning] .gl-item .pp-gcard {
+#gl-items-panel[data-gl-arranging] .gl-item .pp-gcard {
     border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
                 0 10px 22px -8px rgba(0, 0, 0, 0.55);
@@ -935,7 +974,7 @@
 
    `outline` rather than `border`, deliberately: a border would change the card's box and shift the
    grid by a pixel as cards are picked up and dropped. */
-#gl-items-panel[data-positioning] .gl-item.is-picked .pp-gcard {
+#gl-items-panel[data-gl-arranging] .gl-item.is-picked .pp-gcard {
     /* 3px at 3px offset, NOT the 2px/2px that `.pp-gcard:focus-visible` already draws. Identical
        rings meant a keyboard user tabbing the grid saw the "held" mark on every card they passed. */
     outline: 3px solid var(--pp-primary);
@@ -956,11 +995,11 @@
    every card is taken back off this one, so the hole looks like the hole.
 
    ID-SCOPED, because it has to outrank the mode's own resting elevation. Written as
-   `.gl-item.sortable-ghost .pp-gcard` (0,3,0) it lost to `#gl-items-panel[data-positioning]
+   `.gl-item.sortable-ghost .pp-gcard` (0,3,0) it lost to `#gl-items-panel[data-gl-arranging]
    .gl-item .pp-gcard` (1,3,0), so `box-shadow: none` never applied and the "hole" was a lifted,
    glowing card with a dashed ring on it -- the opposite of the intent, and invisible in review
    because the outline and the opacity DID land. */
-#gl-items-panel[data-positioning] .gl-item.sortable-ghost .pp-gcard {
+#gl-items-panel[data-gl-arranging] .gl-item.sortable-ghost .pp-gcard {
     outline: 2px dashed color-mix(in oklab, var(--pp-primary) 60%, transparent);
     outline-offset: -2px;
     box-shadow: none;
