@@ -2250,13 +2250,6 @@
     }
 
     /**
-     * Drop the ungrouped bucket once it is empty, which is what the server does.
-     *
-     * The bucket renders only when it holds something (2026-09), so a client that files the last
-     * loose card and leaves the heading behind is showing a state the next page load will not
-     * reproduce. Only the LOOSE bucket: a named section is a real thing that legitimately sits empty.
-     */
-    /**
      * Drop the drag wiring for ONE grid that is about to leave the document.
      *
      * `detachDrag` tears down every manager at once and is right when arrange mode ends. This is the
@@ -2282,7 +2275,28 @@
         }
     }
 
+    /**
+     * Drop the ungrouped bucket once it is empty, which is what the server does.
+     *
+     * The bucket renders only when it holds something (2026-09), so a client that files the last
+     * loose card and leaves the heading behind is showing a state the next page load will not
+     * reproduce. Only the LOOSE bucket: a named section is a real thing that legitimately sits empty.
+     *
+     * NOT WHILE A DRAG IS LIVE, and this is the sharp edge rather than the tidying above.
+     * `Sortable.destroy()` calls `_onDrop()` unconditionally, and that reaches `_offMoveEvents()`,
+     * `_offUpEvents()` and `_nulling()` -- all MODULE-level and shared by every instance. So
+     * destroying any grid's Sortable mid-gesture unbinds the document move/up listeners belonging to
+     * whatever drag is currently running and nulls `Sortable.active`, leaving a `forceFallback`
+     * clone parented to <body> with no mouseup to clear it.
+     *
+     * The window is real even though this runs after the POST resolves: file the last loose card,
+     * then pick up another while the request is in flight -- which touch makes MORE likely, since
+     * the 320ms delay lengthens the gesture. Skipping is free: the bucket is pruned on the next
+     * repaint, and a heading that lingers for one interaction is nothing next to a drag that dies
+     * under the hunter's finger.
+     */
     function pruneEmptyLooseBucket() {
+        if (window.Sortable && window.Sortable.active) { return; }
         var head = document.querySelector('#gl-items-root .gl-section__head--loose');
         if (!head) { return; }
         var grid = groupGridFor(head);

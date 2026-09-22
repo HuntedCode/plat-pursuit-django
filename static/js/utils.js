@@ -3590,8 +3590,13 @@ window.PlatPursuit.discPopovers = discPopovers;
  *
  * `current()` is the trigger the open panel belongs to and `stale(seq)` says whether an async
  * `onOpen` was overtaken -- both are what a consumer needs after an await. The list used to advertise
- * `isOpen()` and `panel()`, which no consumer ever called and which have been removed; all three
- * consumers use the five above.
+ * `isOpen()` and `panel()`, which no consumer ever called and which have been removed.
+ *
+ * `destroy()` has no caller either and is kept deliberately, which is the distinction: it is the
+ * teardown half of a registry, and a primitive that can be registered with no way to deregister is a
+ * leak waiting for its first consumer. It costs nothing today because every consumer guards against
+ * re-instantiation (`if (cardMenu) { return; }`), so `_anchoredMenus` holds one entry per menu for
+ * the life of the page rather than one per htmx swap.
  */
 
 //: Every registered menu. Module-level so the document listeners below are bound once no matter how
