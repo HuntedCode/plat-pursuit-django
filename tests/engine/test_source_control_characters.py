@@ -15,36 +15,29 @@ characters they name. Neither is visible in a diff, in review, or in an editor. 
 
 Text files only, and the tracked tree only: this makes no claim about images, fonts or the venv.
 """
-import pathlib
 import re
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+from tests.engine._tree import ROOT, source_files
 
 #: Everything below 0x20 except tab, newline and carriage return, which are legitimate whitespace.
 CONTROL = re.compile('[\x00-\x08\x0b\x0c\x0e-\x1f]')
 
 SUFFIXES = {'.py', '.html', '.css', '.js', '.md', '.txt', '.json', '.yml', '.yaml', '.toml'}
 
-SKIP_DIRS = {'node_modules', 'venv', '.venv', '.git', 'staticfiles', '__pycache__', '.pytest_cache',
-             'htmlcov', 'dist', 'build', '.ruff_cache'}
-
 #: Third-party bundles we ship but did not write. A minified vendor file may legitimately carry
-#: anything; the point of this guard is OUR source.
-SKIP_PATHS = {'static/vendor'}
+#: anything; the point of this guard is OUR source. A PREFIX rather than a directory name, so this
+#: does not quietly become "any directory called vendor, anywhere".
+SKIP_PATHS = ('static/vendor',)
 
 
 def _tracked_text_files():
-    for path in ROOT.rglob('*'):
-        if not path.is_file() or path.suffix.lower() not in SUFFIXES:
-            continue
-        rel = path.relative_to(ROOT).as_posix()
-        if any(part in SKIP_DIRS for part in path.relative_to(ROOT).parts):
-            continue
-        if any(rel.startswith(skip) for skip in SKIP_PATHS):
-            continue
-        yield path, rel
+    """Our own text source. "Tracked" is the claim in the docstring above, and it was not quite true:
+    this walked into `.claude/` and read `settings.local.json`, which is untracked local config that
+    happens to end in `.json`. `_tree.SKIP_DIRS` is where that is now excluded, once, for every guard
+    that walks the repo."""
+    return source_files('*', suffixes=SUFFIXES, skip_paths=SKIP_PATHS)
 
 
 def test_no_control_characters_in_source():
