@@ -2280,11 +2280,22 @@
     function repaintAfterGroupChange(itemId, sectionId, placed) {
         var dest = gridForSection(sectionId);
         if (!dest) { return false; }
-        if (!placed) {
-            var row = document.querySelector('.gl-item[data-item-id="' + itemId + '"]');
-            if (!row) { return false; }
-            dest.appendChild(row);
+        var row = document.querySelector('.gl-item[data-item-id="' + itemId + '"]');
+        if (!row) { return false; }
+        if (!placed) { dest.appendChild(row); }
+
+        // THE CARD'S OWN MENU HAS TO BE TOLD. `data-current` is server-rendered per card and is what
+        // the menu ticks and disables; it was always correct before, because the only way a card
+        // changed group was a re-render that rebuilt the attribute with it.
+        //
+        // Skipping this is silent and confusing rather than broken: the card moves, and then its
+        // menu still shows the section it LEFT as the current one -- ticked and unpressable -- while
+        // offering the section it is actually in as somewhere to move to.
+        var trigger = row.querySelector('[data-gl-card-menu]');
+        if (trigger && trigger.hasAttribute('data-current')) {
+            trigger.dataset.current = sectionId || '';
         }
+
         syncGroupCounts();
         pruneEmptyLooseBucket();
         // AFTER the prune, because restart-per-section numbering counts grids and a bucket that is

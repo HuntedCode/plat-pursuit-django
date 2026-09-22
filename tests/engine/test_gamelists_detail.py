@@ -4436,3 +4436,28 @@ def test_the_section_slide_respects_reduced_motion():
     # leave the section where it was while the server was told it had moved.
     assert fn.index('insertBefore') < fn.index('if (!firsts'), \
         'reduced motion skips the move itself, not just the animation'
+
+
+def test_the_repaint_tells_the_card_which_section_it_is_in_now():
+    """`data-current` is server-rendered per card and is what the menu ticks and DISABLES. It was
+    always right before, because the only way a card changed group was a re-render that rebuilt the
+    attribute along with the card.
+
+    Dropping the re-render broke that, silently: the card moves, and then its own menu shows the
+    section it LEFT as current -- ticked and unpressable -- while offering the section it is
+    actually in as somewhere to move to.
+
+    This is the class of defect an optimistic repaint invites: the server used to own a piece of
+    state, the client took over moving the thing that state describes, and the state stayed behind.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'repaintAfterGroupChange')
+
+    assert 'trigger.dataset.current' in fn, "the card's menu keeps pointing at its old section"
+    # The row is needed for this even when the node was already placed by a drag, so the lookup
+    # cannot sit inside the `!placed` branch.
+    assert fn.index("querySelector('.gl-item[data-item-id=\"'") < fn.index('if (!placed)'), \
+        'the card is only looked up when the repaint has to move it'
+    # Only where the server rendered one: a list that cannot be filed has no `data-current`, and
+    # adding one would make a menu offer destinations on a page that has none.
+    assert "hasAttribute('data-current')" in fn, 'the repaint invents the attribute where there is none'
