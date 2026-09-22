@@ -85,7 +85,7 @@ class Entry:
 ENTRIES: tuple[Entry, ...] = (
     Entry(
         id='2026-09-game-lists',
-        published=date(2026, 9, 21),
+        published=date(2026, 9, 22),
         title='Game Lists are here',
         beats=(
             ('Make a list',
