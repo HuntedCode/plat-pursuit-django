@@ -46,7 +46,7 @@ from gamelists.models import (
     GameListLike,
     GameListSection,
 )
-from trophies.models import Profile
+from trophies.models import IGDBMatch, Profile
 from trophies.services.comment_service import CommentService
 from users.services import restriction_service
 
@@ -458,7 +458,29 @@ def add_concept(game_list, profile, concept, *, note='', section=None):
     _refuse_banned_words(note, field='note')
 
     locked = _lock_list(game_list)
-    if GameListItem.objects.filter(game_list=locked, concept=concept).exists():
+    # THE DUPLICATE IS A GAME, NOT A CONCEPT, and those are not the same thing.
+    #
+    # `unique(game_list, concept)` catches the obvious case and misses the one that matters:
+    # `Concept.game_page_url` states that "deliberately-split concepts sharing an igdb_id share one
+    # page", so two concepts can BE the same game. A list could therefore hold it twice, under two
+    # ids, which is exactly the defect keying on Concept was introduced to end -- the old `Game`
+    # keying let one backlog hold Elden Ring once per stack.
+    #
+    # Reaching the catalogue's own identity rule rather than re-deriving it: a trusted match's
+    # `igdb_id` IS the page, and everything untrusted stands for itself, which is what the `Q` below
+    # says. One query either way -- the sibling clause is only added when there is a match to add it
+    # for, and it is served by the index on `igdb_id`.
+    #
+    # The message is deliberately the same in both cases. To the hunter it IS the same game, and
+    # explaining that the site models it as two concepts would be telling them about our schema.
+    duplicate = models.Q(concept=concept)
+    match = getattr(concept, 'igdb_match', None)
+    if match is not None and match.is_trusted and match.igdb_id is not None:
+        duplicate |= models.Q(
+            concept__igdb_match__igdb_id=match.igdb_id,
+            concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+        )
+    if GameListItem.objects.filter(game_list=locked).filter(duplicate).exists():
         raise ListError('That game is already on this list.')
 
     # COUNTED UNDER THE LOCK, the same shape `create_list` and `create_section` use and for the same

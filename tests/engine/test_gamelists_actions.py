@@ -19,7 +19,8 @@ from pathlib import Path
 
 from gamelists.services import game_list_service as svc
 from gamelists.services.game_search import LIMIT
-from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
+from tests.factories import (ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+                             UserFactory)
 from users.models import UserRestriction
 
 pytestmark = pytest.mark.django_db
@@ -2149,3 +2150,117 @@ def test_the_panel_says_when_it_had_to_stop(client):
     assert 'Add more of the title to narrow' in js, 'the reader is not told what to do about it'
     # Inert, so the arrow keys that walk the result rows do not land on it.
     assert "more.className = prefix + '__note'" in js
+
+
+# ── a game is one row and one entry, however many concepts it is split across (2026-09) ──────────
+
+def _split_game(title_a, title_b, igdb_id=90210):
+    """Two concepts that are the SAME GAME: different rows, one trusted IGDB id, one Game page.
+
+    `Concept.game_page_url` is the rule this fixture exists to exercise -- "deliberately-split
+    concepts sharing an igdb_id share one page" -- and it is reachable in real data, which is why
+    `game_page_canonicals` elects between them on Browse Games.
+    """
+    made = []
+    for title in (title_a, title_b):
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        IGDBMatchFactory(concept=concept, igdb_id=igdb_id, status='auto_accepted')
+        made.append(concept)
+    return made
+
+
+def test_the_search_offers_one_row_per_game_page(client):
+    """Browse Games collapses split concepts and the adder did not, so the catalogue showed one card
+    where the adder offered two rows for the same game -- with the same title, and no way to tell
+    which to pick."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+
+    titles = _search(client, game_list, 'colossus')
+
+    assert len(titles) == 1, f'one game offered as {len(titles)} rows: {titles}'
+
+
+def test_concepts_with_no_trusted_match_still_stand_for_themselves(client):
+    """The partition falls back to the concept id, so the unmatched tail -- PP_* stubs and PSN-only
+    concepts -- is NOT collapsed. Two genuinely different games that happen to lack matches must
+    still be two rows, or the dedupe would be hiding games rather than duplicates."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Colossus Down', 'Colossus Rising')       # no IGDB match at all
+
+    titles = _search(client, game_list, 'colossus')
+
+    assert len(titles) == 2, f'two different games were collapsed into one: {titles}'
+
+
+def test_an_untrusted_match_does_not_collapse_two_games(client):
+    """`TRUSTED_STATUSES` gates the identity, not the mere presence of an igdb_id. A rejected or
+    pending match is a GUESS, and collapsing two games on a guess would make the better-known one
+    unreachable from the adder."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    for title in ('Colossus Down', 'Colossus Rising'):
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        IGDBMatchFactory(concept=concept, igdb_id=77777, status='rejected')
+
+    titles = _search(client, game_list, 'colossus')
+
+    assert len(titles) == 2, f'an untrusted match collapsed two games: {titles}'
+
+
+def test_a_game_cannot_be_added_twice_under_two_concepts(client):
+    """THE DEFECT KEYING ON CONCEPT WAS MEANT TO END, arriving through a door nobody checked.
+
+    `unique(game_list, concept)` catches the obvious duplicate and misses this one: the two rows
+    really are different concepts, so the constraint is satisfied while the list holds one game
+    twice -- exactly what the old `Game` keying did with one stack per platform.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    first, second = _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+
+    svc.add_concept(game_list, owner, first)
+    with pytest.raises(svc.ListError):
+        svc.add_concept(game_list, owner, second)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 1, \
+        'the same game is on the list twice'
+
+
+def test_two_different_games_are_still_both_addable(client):
+    """The guard must refuse a DUPLICATE, not a coincidence. Two concepts with no trusted match --
+    or with different ids -- are two games, and refusing the second would be worse than the bug."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    a, b = _split_game('Colossus Down', 'Colossus Rising', igdb_id=11111)
+    # ...but give them DIFFERENT identities, which is the ordinary case.
+    b.igdb_match.igdb_id = 22222
+    b.igdb_match.save(update_fields=['igdb_id'])
+
+    svc.add_concept(game_list, owner, a)
+    svc.add_concept(game_list, owner, b)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 2, \
+        'two different games were treated as one'
+
+
+def test_the_refusal_does_not_explain_our_schema(client):
+    """To the hunter it IS the same game. Saying "a sibling concept of this game is already on the
+    list" would be telling them about our data model to explain something they already understand,
+    so both paths refuse in the same words."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    first, second = _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+    svc.add_concept(game_list, owner, first)
+
+    with pytest.raises(svc.ListError) as sibling:
+        svc.add_concept(game_list, owner, second)
+    with pytest.raises(svc.ListError) as same:
+        svc.add_concept(game_list, owner, first)
+
+    assert str(sibling.value) == str(same.value), \
+        'the two duplicate paths refuse in different words'

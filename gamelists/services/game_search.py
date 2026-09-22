@@ -27,10 +27,11 @@ What this module CAN do, and does, is bound the damage: a rate limit at each vie
 on the normalized query, and an upper bound on the term.
 """
 from django.core.cache import cache
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, CharField, F, IntegerField, Value, When, Window
+from django.db.models.functions import Cast, Concat, RowNumber
 
 from gamelists.services.covers import cover_games_for
-from trophies.models import Concept
+from trophies.models import Concept, IGDBMatch
 
 #: How many rows a typeahead answers with. Also the bound every caller's membership check must respect
 #: -- the answer only ever needs to be known for the rows being rendered.
@@ -108,6 +109,25 @@ def search_concepts(query):
     #
     # No index is lost by this. The `icontains` cannot use one either way (see the module docstring),
     # so the sort was always over the matched set.
+    # ONE ROW PER GAME PAGE, not per Concept.
+    #
+    # `Concept.game_page_url` states the identity rule: "deliberately-split concepts sharing an
+    # igdb_id share one page". So two concepts can be the SAME GAME -- Browse Games collapses them
+    # with `game_page_canonicals`, and this search did not, which meant the adder offered two rows
+    # for one game while the catalogue showed one card. The same partition key, computed on Concept
+    # rather than on Game.
+    #
+    # WHICH ONE REPRESENTS THE PAGE barely matters for navigation -- both route to the same place --
+    # so the tiebreak is chosen for the READER: the concept whose title matches the query best, then
+    # the lowest id so the answer is stable across requests and therefore cacheable.
+    page_key = Case(
+        When(igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+             igdb_match__igdb_id__isnull=False,
+             then=Concat(Value('igdb:'), Cast('igdb_match__igdb_id', CharField()))),
+        default=Concat(Value('concept:'), F('concept_id')),
+        output_field=CharField(),
+    )
+
     concepts = list(
         Concept.objects.filter(unified_title__icontains=query)
         .exclude(unified_title='')
@@ -118,6 +138,17 @@ def search_concepts(query):
             default=Value(3),
             output_field=IntegerField(),
         ))
+        .annotate(_page_key=page_key)
+        .annotate(_page_rank=Window(
+            expression=RowNumber(),
+            partition_by=[F('_page_key')],
+            order_by=[F('_match_rank').asc(), F('concept_id').asc()],
+        ))
+        # NOTHING NARROWING MAY BE CHAINED AFTER THIS. Django wraps a window filter in a subquery,
+        # so a `.filter()` here lands INSIDE it and silently narrows the election POPULATION rather
+        # than the elected rows -- the trap `GamesListView` documents at length. Only ordering,
+        # `select_related`, `defer` and the slice follow, which are the verified-safe shapes.
+        .filter(_page_rank=1)
         .select_related('igdb_match')
         .defer('igdb_match__raw_response')
         .order_by('_match_rank', 'unified_title')[:LIMIT]
