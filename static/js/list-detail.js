@@ -2256,11 +2256,38 @@
      * loose card and leaves the heading behind is showing a state the next page load will not
      * reproduce. Only the LOOSE bucket: a named section is a real thing that legitimately sits empty.
      */
+    /**
+     * Drop the drag wiring for ONE grid that is about to leave the document.
+     *
+     * `detachDrag` tears down every manager at once and is right when arrange mode ends. This is the
+     * other case: a single grid removed WHILE the mode is still live. Without it the manager, its
+     * SortableJS instance and the grid's own click listener stay bound to a node nobody can reach,
+     * and `reorderManagers` keeps the grid alive along with every card that was in it.
+     *
+     * Bounded rather than serious -- the next mode toggle destroys it either way -- but the array is
+     * right here and a stale entry is a footgun for whoever next iterates it expecting live grids.
+     * Walked backwards because it splices.
+     */
+    function releaseGrid(grid) {
+        for (var i = reorderManagers.length - 1; i >= 0; i--) {
+            if (reorderManagers[i].container === grid) {
+                reorderManagers[i].destroy();
+                reorderManagers.splice(i, 1);
+            }
+        }
+        var at = dragGrids.indexOf(grid);
+        if (at !== -1) {
+            grid.removeEventListener('click', onCardClick);
+            dragGrids.splice(at, 1);
+        }
+    }
+
     function pruneEmptyLooseBucket() {
         var head = document.querySelector('#gl-items-root .gl-section__head--loose');
         if (!head) { return; }
         var grid = groupGridFor(head);
         if (!grid || grid.querySelector('.gl-item')) { return; }
+        releaseGrid(grid);
         if (grid.parentNode) { grid.parentNode.removeChild(grid); }
         if (head.parentNode) { head.parentNode.removeChild(head); }
     }
