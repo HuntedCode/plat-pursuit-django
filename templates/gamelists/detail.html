@@ -363,6 +363,18 @@ below with no outer wrapper.
             magnifier and a sort select beside it, the one control on the page that ADDS anything read
             as a filter and was easy to look straight past. Searching is the means here; adding is the
             act, and a leading icon should say what pressing the thing achieves.{% endcomment %}
+            {% comment %}THE ADDER'S HOME, and it exists so the adder can leave it.
+
+            "+ Add game" on a section header RELOCATES this node into that header rather than
+            building a second adder there. `GameAdder` binds a document listener with no teardown, so
+            one instance per section on a panel that re-swaps on every write is a leak that grows for
+            the life of the tab; moving the node keeps its listeners, its WeakSet guard and its
+            in-flight sequence intact.
+
+            The slot has to be OUTSIDE `#gl-items-panel` -- which this is -- because the section
+            headers are inside it and are replaced wholesale on every swap. An adder sitting in one
+            when that happens is destroyed mid-type, so `parkAdder()` brings it home first.{% endcomment %}
+            <div data-gl-adder-home>
             <div class="pp-bgal__search gl-adder" data-search-wrap data-gl-adder
                  data-search-url="{% url 'list_game_search' game_list.id %}"
                  data-add-url="{% url 'list_add_game' game_list.id %}">
@@ -392,6 +404,7 @@ below with no outer wrapper.
             </div>
             {% comment %}The count goes to a polite live region rather than the results container:
             marking the container live would read all twelve rows aloud on every keystroke.{% endcomment %}
+            </div>
             <p class="sr-only" aria-live="polite" data-gl-adder-status></p>
             {% endif %}
 

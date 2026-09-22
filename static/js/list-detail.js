@@ -249,6 +249,9 @@
      * in JS. It reuses the sort toolbar's own contract: same URL, same target, same partial.
      */
     function refreshItems(withChrome) {
+        // BEFORE THE SWAP. The adder may be docked under a section header inside the panel this is
+        // about to replace; leaving it there destroys the node, its listeners and its WeakSet guard.
+        parkAdder();
         var form = document.getElementById('gl-detail-form');
         var base = (form && form.getAttribute('hx-get')) || window.location.pathname;
         var select = form && form.querySelector('select[name="sort"]');
@@ -1204,12 +1207,19 @@
         // and nothing should be, or two handlers would open and immediately close the panel.
 
         // Section controls live inside the swapped panel and are replaced by the very refresh their
-        // own handler triggers, so they are delegated for exactly the reason the remove control is.
-        var rename = target.closest('[data-gl-section-rename]');
-        if (rename) { onSectionRename(rename); return; }
-
-        var dropSection = target.closest('[data-gl-section-delete]');
-        if (dropSection) { onSectionDelete(dropSection); return; }
+        // own handler triggers, so they are delegated for exactly the reason the card menu is.
+        //
+        // Rename and delete no longer have buttons of their own -- they are rows in the section's
+        // `...` menu, which calls `onSectionRename` / `onSectionDelete` with the TRIGGER, the
+        // element still carrying `data-rename-url`, `data-delete-url` and `data-section-name`. The
+        // menu trigger's own click belongs to `AnchoredMenu`.
+        // `data-gl-add-to-section`, NOT `data-gl-section-add-game`. The latter was the first
+        // name and it CONTAINS `data-gl-section-add`, which is the section-creation form in the
+        // controls strip -- so a negative assertion about a free owner's access to that form started
+        // matching this button instead. Exactly the hazard the `[data-gl-delete]` ordering comment
+        // below warns about, arriving through a substring rather than through `closest`.
+        var addHere = target.closest('[data-gl-add-to-section]');
+        if (addHere) { onSectionAddGame(addHere); return; }
 
         // AFTER the section delete, because `[data-gl-delete]` is a prefix of nothing but reads like
         // one: keeping the whole-list delete last means a future `[data-gl-delete-*]` cannot be
@@ -2403,6 +2413,183 @@
         });
     }
 
+    /* ─── the section header's menu, and its adder ─────────────────────────────────────────────── */
+
+    var sectionMenu = null;
+
+    /**
+     * The section headers in rendered order, which IS their order.
+     *
+     * `position` is dense and the server sorts on it, so the DOM is the ordering -- reading it back
+     * avoids a second copy that can disagree with what the reader is looking at. The same argument
+     * `sectionChoices` makes for the card menu's destinations.
+     */
+    function sectionTriggers() {
+        return Array.prototype.slice.call(
+            document.querySelectorAll('#gl-items-root [data-gl-section-menu]'));
+    }
+
+    /**
+     * Move one section one place, by rewriting the WHOLE order and posting it.
+     *
+     * `reorder_sections` refuses a partial ordering -- deliberately, the same way `reorder` does for
+     * items -- so a "move up" cannot be expressed as a delta. Swapping two entries of the full list
+     * is the whole implementation.
+     *
+     * THIS ENDPOINT HAS BEEN LIVE AND UNCALLED SINCE IT SHIPPED. The service, the view and the URL
+     * all existed with a test against the service and no client anywhere, which is why sections
+     * could be renamed and deleted but never reordered.
+     */
+    function moveSection(trigger, delta) {
+        var all = sectionTriggers();
+        var at = all.indexOf(trigger);
+        var to = at + delta;
+        if (at < 0 || to < 0 || to >= all.length) { return; }
+
+        var ids = all.map(function (b) { return b.dataset.sectionId; });
+        var moved = ids.splice(at, 1)[0];
+        ids.splice(to, 0, moved);
+
+        var body = new FormData();
+        ids.forEach(function (id) { body.append('section_ids[]', id); });
+
+        // THROUGH THE SAME QUEUE as every other section write. Reordering while a rename or a delete
+        // is in flight would otherwise race: the refresh from one lands over the other's optimistic
+        // state, and the order posted here was read from a DOM the other write is about to replace.
+        queueSectionWrite(function () {
+            setPositionsStatus('Saving…');
+            return postJson(trigger.dataset.reorderUrl, body)
+                .then(function () {
+                    setPositionsStatus('Saved');
+                    announce('Section moved.');
+                    // `true` -- the chrome as well. Moving a section changes the order the
+                    // out-of-band slot renders, and a swap of the grid alone leaves the numbering
+                    // checkbox and the strip describing the previous arrangement.
+                    return refreshItems(true).catch(function (err) {
+                        logFailure('items refresh after a section move', err);
+                        announce('Section moved. Reload the page to see it in order.');
+                    });
+                })
+                .catch(function (err) {
+                    setPositionsStatus('Not saved');
+                    toastError(err, 'That section could not be moved.');
+                    return refreshItems(true).catch(function () {});
+                });
+        });
+    }
+
+    function sectionMenuHtml(trigger) {
+        var all = sectionTriggers();
+        var at = all.indexOf(trigger);
+        var rows = '';
+
+        // RENDERED OR NOT, never rendered-and-refusing. `data-rename-url` is empty for a lapsed
+        // member, because `rename_section` is the member gate and a row that exists to be refused is
+        // the "remedy that refuses" shape this project has now fixed three times.
+        if (trigger.dataset.renameUrl) {
+            rows += menuRow('rename', 'Rename', ICON_PENCIL);
+        }
+        // Disabled at the ends rather than hidden, so the menu does not change height between the
+        // first section and the middle ones -- a menu whose rows move as you go down the page is
+        // harder to use than one with a greyed row in it.
+        rows += menuRow('up', 'Move up', ICON_UP, at <= 0);
+        rows += menuRow('down', 'Move down', ICON_DOWN, at < 0 || at >= all.length - 1);
+        rows += '<div class="gl-menu__sep"></div>'
+            + menuRow('delete', 'Delete section', ICON_X, false, 'gl-menu__item--danger');
+        return rows;
+    }
+
+    var ICON_PENCIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+    var ICON_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+    var ICON_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
+    var ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+
+    function menuRow(action, label, icon, disabled, extra) {
+        return '<button type="button" class="gl-menu__item' + (extra ? ' ' + extra : '') + '"'
+            + ' data-gl-section-do="' + action + '"'
+            + (disabled ? ' disabled' : '')
+            + '>' + icon + PP.HTMLUtils.escape(label) + '</button>';
+    }
+
+    function wireSectionMenu() {
+        if (sectionMenu || !PP.AnchoredMenu) { return; }
+        sectionMenu = PP.AnchoredMenu({
+            trigger: '[data-gl-section-menu]',
+            className: 'gl-menu',
+            label: 'Section actions',
+            item: '.gl-menu__item',
+            onOpen: function (trigger, el) {
+                el.innerHTML = sectionMenuHtml(trigger);
+                var first = el.querySelector('.gl-menu__item:not([disabled])');
+                if (first) { first.focus(); }
+            },
+            onItem: function (row, trigger) {
+                var action = row.getAttribute('data-gl-section-do');
+                sectionMenu.close(false);
+                if (action === 'rename') { onSectionRename(trigger); }
+                else if (action === 'delete') { onSectionDelete(trigger); }
+                else if (action === 'up') { moveSection(trigger, -1); }
+                else if (action === 'down') { moveSection(trigger, 1); }
+            },
+        });
+    }
+
+    /* ─── the adder, relocated rather than duplicated ──────────────────────────────────────────── */
+
+    /**
+     * Bring the adder home, to the slot outside the swapped panel.
+     *
+     * MUST RUN BEFORE ANY SWAP OF `#gl-items-panel`. The section headers live inside it and are
+     * replaced wholesale, so an adder parked in one is destroyed mid-type -- taking its listeners,
+     * its WeakSet guard and any in-flight search with it, and leaving `wireAdder` to find nothing to
+     * re-wire because the node it guarded no longer exists.
+     *
+     * Idempotent, so it is safe to call from both swap paths without either knowing about the other.
+     */
+    function parkAdder() {
+        var adder = document.querySelector('[data-gl-adder]');
+        var home = document.querySelector('[data-gl-adder-home]');
+        if (!adder || !home || adder.parentElement === home) { return; }
+        home.appendChild(adder);
+        delete adder.dataset.section;
+        adder.classList.remove('gl-adder--docked');
+    }
+
+    /**
+     * Put the adder under one section's header and point it there.
+     *
+     * ONE INSTANCE MOVED, not one built per section. `GameAdder` binds a document listener and has
+     * no teardown, so an adder per header on a panel that re-swaps on every write is a leak that
+     * grows for the life of the tab. Moving the node keeps every one of those bindings.
+     *
+     * `data-section` is what `GameAdder` reads at SEND time to file the game on arrival -- see its
+     * comment in utils.js for why it is read then rather than captured at wire time. This function
+     * is that reason.
+     */
+    function dockAdderTo(head, sectionId) {
+        var adder = document.querySelector('[data-gl-adder]');
+        if (!adder || !head) { return; }
+        head.insertAdjacentElement('afterend', adder);
+        adder.dataset.section = sectionId || '';
+        adder.classList.add('gl-adder--docked');
+        var input = adder.querySelector('[data-gl-adder-input]');
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+    }
+
+    function onSectionAddGame(btn) {
+        var head = btn.closest('.gl-section__head');
+        if (!head) { return; }
+        var adder = document.querySelector('[data-gl-adder]');
+        // A SECOND PRESS ON THE SAME HEADER SENDS IT HOME, which every toggle on this page does.
+        // Without it the only way back to adding loose games was a page load.
+        if (adder && adder.previousElementSibling === head) { parkAdder(); return; }
+        dockAdderTo(head, btn.dataset.sectionId);
+        announce('Adding to ' + (head.querySelector('.gl-section__name') || {}).textContent + '.');
+    }
+
     function onSectionRename(btn) {
         // A `prompt()` rather than an inline field, and the same reasoning the delete confirm
         // carries: the site's dialog primitive is for things you are composing, and this is one short
@@ -2530,6 +2717,7 @@
         pendingPickId = null;
         wireAdder();
         wireCardMenu();
+        wireSectionMenu();
         wireIdentityEditor();
         wireVisibility();
         wireReport();
@@ -2540,6 +2728,15 @@
         if (first) {
             document.body.addEventListener('click', onBodyClick);
             document.body.addEventListener('click', onGrabClick);
+            // PARK THE ADDER BEFORE ANYTHING IS REPLACED. `refreshItems` calls `parkAdder` itself,
+            // but the sort toolbar submits through htmx DIRECTLY (`hx-target="#gl-items-panel"`) and
+            // never passes through it -- so sorting a list while the adder was docked under a
+            // section header destroyed the adder, and the page came back with no way to add a game
+            // until it was reloaded. Scoped to that one target, because this listener sees every
+            // swap on the page.
+            document.body.addEventListener('htmx:beforeSwap', function (e) {
+                if (e.target && e.target.id === 'gl-items-panel') { parkAdder(); }
+            });
             document.body.addEventListener('htmx:afterSwap', onAfterSwap);
             document.body.addEventListener('htmx:afterSettle', onAfterSettle);
         }

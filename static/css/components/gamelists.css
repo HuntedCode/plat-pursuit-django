@@ -1904,3 +1904,57 @@
 /* No separator above the FIRST thing in the panel: a card that cannot be filed renders the remove
    row alone, and a rule hanging above it reads as a missing section list. */
 .gl-menu__sep:first-child { display: none; }
+
+
+/* ── the section header's own controls (2026-09) ─────────────────────────────────────────────────
+ *
+ * "+ Add game" is LABELLED and the rest is a menu. There were two 28px icon buttons here with a
+ * load-bearing `margin-left: 8px` keeping their 44px hit areas apart; five would not have fitted
+ * beside a name and a count, which is the same arithmetic the card's menu answered one element up.
+ *
+ * It does NOT hide at rest the way `.gl-section__act` does. The act buttons are quiet because they
+ * sit beside content people are reading; this one is the header's reason for existing in edit mode,
+ * and a control that has to be discovered by hovering is the thing this rebuild was asked to fix.
+ * It is gated on the mode instead, which is a better answer to the same concern. */
+#gl-items-panel:not([data-gl-editing]) .gl-section__add,
+#gl-items-panel:not([data-gl-editing]) .gl-section__act { display: none; }
+
+.gl-section__add {
+    display: inline-flex; align-items: center; gap: 5px;
+    min-height: 28px;
+    margin-left: auto;          /* pushes the pair to the end, past the name and count */
+    padding: 0 9px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: none;
+    color: var(--pp-text-mute);
+    font-size: 0.72rem; font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.gl-section__add svg { width: 12px; height: 12px; }
+.gl-section__add:hover {
+    color: var(--pp-text);
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+}
+.gl-section__add:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* `margin-left: auto` belongs to whichever of the two comes first, so the menu button takes it when
+   the add button is absent -- a lapsed member, or a list where nothing can be filed. */
+.gl-section__add + .gl-section__act { margin-left: 8px; }
+
+/* ── the adder, docked under a section header ────────────────────────────────────────────────────
+ *
+ * The SAME NODE as the toolbar's, moved. It keeps `.gl-adder` and everything that class carries;
+ * this modifier only says where it is, so the two positions cannot drift into two designs.
+ *
+ * The accent rail is the whole point of the treatment: docked, the field is making a claim about
+ * WHERE what you type will land, and that claim needs to read from the header above it rather than
+ * from a placeholder nobody re-reads. */
+.gl-adder--docked {
+    margin: 8px 0 10px;
+    border-left: 3px solid var(--pp-primary);
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+}

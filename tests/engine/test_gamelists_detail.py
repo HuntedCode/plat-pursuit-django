@@ -2539,8 +2539,8 @@ def test_a_member_owner_gets_the_section_controls_and_a_reader_never_does(client
     client.logout()
     reader = client.get(_url(game_list)).content.decode()
     assert 'data-gl-section-add' not in reader
-    assert 'data-gl-section-rename' not in reader
-    assert 'data-gl-section-delete' not in reader
+    assert 'data-gl-section-menu' not in reader
+    assert 'data-rename-url' not in reader
 
 
 def test_a_free_owner_keeps_their_sections_and_is_told_what_changed(client):
@@ -2557,9 +2557,14 @@ def test_a_free_owner_keeps_their_sections_and_is_told_what_changed(client):
     assert resp.context['can_manage_sections'] is False
     assert resp.context['can_arrange'] is True, 'a lapsed member can still tidy their own list'
     assert 'data-gl-section-add' not in body
-    assert 'data-gl-section-rename' not in body
+    # RENAME AND DELETE ARE ROWS IN THE SECTION MENU NOW, not buttons of their own. The gate
+    # moved onto the trigger's URLs: an empty `data-rename-url` is how the JS knows not to
+    # render a row `rename_section` would refuse, which is the remedy-that-refuses shape this
+    # project has fixed three times. Delete is ungated and still carries a real URL.
+    assert 'data-gl-section-menu' in body, 'the owner lost the section controls entirely'
+    assert 'data-rename-url=""' in body, 'a rename that will be refused is offered'
     # DELETE SURVIVES: removing your own thing is not the act the perk covers.
-    assert 'data-gl-section-delete' in body
+    assert '/delete/' in body, 'removing your own section is not the gated act'
     # `gl-lockup`, not `gl-sections__locked`: the lapsed-member line moved OUT of the arrange bar and
     # became the second state of the CTA block, because the bar it lived in is hidden until the
     # editor is opened and does not render at all for a section-less Collection.
@@ -2981,8 +2986,10 @@ def test_a_doomed_section_stops_being_a_drop_target_at_once(client):
 
     owner, game_list, _items, first, _second = _sectioned(client)
     rendered = client.get(_url(game_list)).content.decode()
-    assert f'data-gl-section-delete\n            data-section-id="{first.id}"' in rendered \
-        or f'data-section-id="{first.id}"' in rendered, 'the client cannot find the doomed grid'
+    # `data-section-id` rides the SECTION MENU trigger now -- delete stopped being a button of its
+    # own when the header's controls became one menu -- but the client still has to be able to find
+    # the doomed section's grid from whatever it was handed.
+    assert f'data-section-id="{first.id}"' in rendered \
 
 
 def test_the_section_field_does_not_steal_a_caret_that_moved_on(client):
@@ -3074,7 +3081,7 @@ def test_a_free_owner_gets_no_section_controls_but_is_told_they_exist(client):
     for page in (ranked_body, collection_body):
         # No CONTROL they cannot use...
         for hook in ('gl-section__head', 'data-gl-section-add', 'data-gl-numbering',
-                     'data-gl-section-rename'):
+                     'data-rename-url="/'):
             assert hook not in page, f'a free owner is shown {hook} after all'
         # ...and the OFFER, which is the half that has to be asserted positively.
         assert 'gl-lockup' in page, 'the perk is invisible to the hunter who might buy it'
@@ -3098,10 +3105,15 @@ def test_the_preview_renders_the_page_as_a_non_member_sees_it(client):
     assert preview.context['can_manage_sections'] is False
     body = preview.content.decode()
     assert 'data-gl-section-add' not in body, 'the member control survived the preview'
-    assert 'data-gl-section-rename' not in body
+    # RENAME AND DELETE ARE ROWS IN THE SECTION MENU NOW, not buttons of their own. The gate
+    # moved onto the trigger's URLs: an empty `data-rename-url` is how the JS knows not to
+    # render a row `rename_section` would refuse, which is the remedy-that-refuses shape this
+    # project has fixed three times. Delete is ungated and still carries a real URL.
+    assert 'data-gl-section-menu' in body, 'the owner lost the section controls entirely'
+    assert 'data-rename-url=""' in body, 'a rename that will be refused is offered'
     # EVERYTHING UNGATED STAYS. A preview that also withdrew the ungated controls would answer a
     # different question than the one it is asked.
-    assert 'data-gl-section-delete' in body, 'deleting your own section is not the gated act'
+    assert '/delete/' in body, 'deleting your own section is not the gated act'
     assert preview.context['can_arrange'] is True
     assert 'gl-lockup' in body, 'the lapsed-member line is part of what they see'
 
@@ -3242,7 +3254,7 @@ def test_a_lapsed_member_is_told_what_they_keep_first(client):
     assert 'min-height: 44px' in go
     # Their sections and the ungated controls are all still there, which is what the copy promises.
     assert 'gl-section__head' in body
-    assert 'data-gl-section-delete' in body
+    assert '/delete/' in body, 'removing your own section is not the gated act'
 
 
 def test_the_cta_is_never_shown_to_somebody_it_cannot_help(client):
@@ -3917,3 +3929,165 @@ def test_the_menu_is_wired_once_and_not_per_swap():
     fn = _fn(js, 'wireCardMenu')
 
     assert 'if (cardMenu' in fn, 'a swap builds a second menu over the first'
+
+
+# ── the section header's controls (2026-09) ──────────────────────────────────────────────────────
+
+def test_a_section_header_offers_to_add_a_game_to_itself(client):
+    """The complaint this phase answers. Filing a game meant adding it at the toolbar and then
+    dragging it down here, which on a long list is a drag past everything in between."""
+    _owner, game_list, _items, first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-add-to-section' in body, 'a section cannot be added to directly'
+    assert f'data-gl-add-to-section\n            data-section-id="{first.id}"' in body \
+        or f'data-section-id="{first.id}"' in body, 'the button does not name its section'
+    # LABELLED, not another icon. It is the one action this header exists to make easy, and the two
+    # controls already here are the reason everything else went into a menu.
+    assert 'Add game' in body
+
+
+def test_the_add_button_is_not_the_section_creation_form():
+    """`data-gl-add-to-section`, NOT `data-gl-section-add-game`, which was the first name and CONTAINS
+    `data-gl-section-add` -- the section-CREATION form in the controls strip.
+
+    That collision is not hypothetical: three member-gate tests assert `data-gl-section-add` is
+    absent for a free owner, and all three started matching this button instead. Exactly the hazard
+    the `[data-gl-delete]` ordering comment in list-detail.js warns about, arriving as a substring
+    rather than through `closest`.
+    """
+    markup = _read('templates/gamelists/partials/detail_group.html')
+
+    assert 'data-gl-add-to-section' in markup
+    assert 'data-gl-section-add' not in markup, 'the add button shadows the section-creation form'
+
+
+def test_the_section_menu_carries_every_action_the_header_used_to_show(client):
+    """Two 28px icon buttons with a load-bearing `margin-left: 8px` keeping their 44px hit areas
+    apart. Five -- add, rename, up, down, delete -- would not have fitted beside a name and a count,
+    which is the arithmetic the card's menu answered one element up."""
+    _owner, game_list, _items, first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-section-menu' in body
+    for url in ('rename', 'delete'):
+        assert f'/sections/{first.id}/{url}/' in body, f'the menu cannot {url} a section'
+    assert f'/lists/{game_list.id}/sections/reorder/' in body, 'the menu cannot reorder'
+
+
+def test_moving_a_section_posts_the_whole_order():
+    """`reorder_sections` refuses a PARTIAL ordering, deliberately and the same way `reorder` does
+    for items -- so "move up" cannot be expressed as a delta. Swapping two entries of the full list
+    and posting all of them is the whole implementation.
+
+    THE ENDPOINT HAD BEEN LIVE AND UNCALLED SINCE IT SHIPPED: the service, the view and the URL all
+    existed, with a test against the service and no client anywhere, which is why sections could be
+    renamed and deleted but never reordered.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'moveSection')
+
+    # THE WHOLE LIST, which is what the assertion has to say. `"body.append('section_ids[]'" in fn`
+    # was the first version and it survived a mutation that posted the MOVED id alone -- the same
+    # call, one argument, a partial order the server refuses. What distinguishes them is the loop.
+    assert "ids.forEach(function (id) { body.append('section_ids[]', id); });" in fn,         'the move posts something other than the whole order'
+    assert 'ids.splice(at, 1)' in fn and 'ids.splice(to, 0, moved)' in fn, \
+        'the order is not rewritten around the move'
+    # Refuses at the ends rather than posting an out-of-range order the server would reject.
+    assert 'to < 0 || to >= all.length' in fn
+
+    # THROUGH THE SAME QUEUE as every other section write, or it races them: the order posted here
+    # was read from a DOM that a rename or delete refresh is about to replace.
+    assert 'queueSectionWrite(' in fn, 'a section move can race a rename or a delete'
+    # `true`, so the out-of-band chrome re-renders -- the strip and the numbering checkbox describe
+    # an arrangement that just changed.
+    assert 'refreshItems(true)' in fn
+
+
+def test_the_move_rows_disable_at_the_ends_rather_than_vanishing():
+    """A menu whose rows move as you go down the page is harder to use than one with a greyed row.
+    The first section's "Move up" has to be there and inert, not absent."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'sectionMenuHtml')
+
+    assert "menuRow('up', 'Move up', ICON_UP, at <= 0)" in fn, 'move up is not disabled at the top'
+    assert 'at >= all.length - 1' in fn, 'move down is not disabled at the bottom'
+    # ...and the rename row is RENDERED OR NOT, because the member gate is real: a row that exists
+    # to be refused is the remedy-that-refuses shape this project has fixed three times.
+    assert 'trigger.dataset.renameUrl' in fn, 'a lapsed member is offered a rename that refuses'
+
+
+def test_the_section_order_is_read_from_the_page(client):
+    """`position` is dense and the server sorts on it, so the rendered order IS the order. Reading it
+    back means there is no second copy to disagree with what the reader is looking at."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'sectionTriggers')
+
+    assert '#gl-items-root [data-gl-section-menu]' in fn
+    assert 'querySelectorAll' in fn, 'the order comes from somewhere other than the DOM'
+
+
+# ── the adder, relocated ─────────────────────────────────────────────────────────────────────────
+
+def test_the_adder_is_moved_and_not_rebuilt_per_section():
+    """ONE INSTANCE. `GameAdder` binds a document listener and has no teardown, so an adder per
+    section header -- on a panel that re-swaps on every add, remove, sort and section change -- is a
+    leak that grows for the life of the tab.
+
+    Moving the node keeps its listeners, its WeakSet guard and any in-flight search sequence."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    dock = _fn(js, 'dockAdderTo')
+
+    assert 'insertAdjacentElement' in dock, 'the adder is rebuilt rather than moved'
+    assert 'GameAdder' not in dock, 'a second adder is constructed per section'
+    # `data-section` is what `GameAdder` reads at SEND time; this function is the reason it is read
+    # then rather than captured when the adder was wired.
+    assert 'adder.dataset.section' in dock
+
+
+def test_the_adder_comes_home_before_anything_replaces_the_panel():
+    """The section headers live INSIDE `#gl-items-panel` and are replaced wholesale on every swap, so
+    an adder docked in one is destroyed mid-type -- taking its listeners with it and leaving
+    `wireAdder` nothing to re-wire, because the node it guarded no longer exists.
+
+    BOTH SWAP PATHS, and this is the half that is easy to miss: `refreshItems` is ours, but the sort
+    toolbar submits through htmx DIRECTLY (`hx-target="#gl-items-panel"`) and never passes through
+    it. Sorting a list with the adder docked would otherwise leave the page with no way to add a game
+    until it was reloaded.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    refresh = _fn(js, 'refreshItems')
+    assert 'parkAdder()' in refresh, 'a refresh destroys a docked adder'
+
+    assert "addEventListener('htmx:beforeSwap'" in js, 'the sort swap destroys a docked adder'
+    hook = js[js.index("addEventListener('htmx:beforeSwap'"):]
+    hook = hook[:hook.index('});') + 3]
+    assert 'parkAdder()' in hook
+    # Scoped to the one target: this listener sees every swap on the page, and parking on all of
+    # them would yank the adder home whenever anything else on the page updated.
+    assert "id === 'gl-items-panel'" in hook, 'every swap anywhere parks the adder'
+
+
+def test_parking_the_adder_clears_where_it_was_pointing():
+    """`data-section` is what files an added game. An adder that came home still carrying the last
+    section would file the NEXT game there, from a field sitting in the toolbar that says nothing
+    about a section -- a silent wrong destination, which is worse than a refused one."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'parkAdder')
+
+    assert 'delete adder.dataset.section' in fn, 'a parked adder still points at a section'
+    # Idempotent, so both swap paths can call it without either knowing about the other.
+    assert 'adder.parentElement === home' in fn, 'parking twice moves the node twice'
+
+
+def test_pressing_add_on_the_same_header_twice_sends_the_adder_home():
+    """Every other toggle on this page does. Without it the only way back to adding loose games was a
+    page load, because the adder had no visible way out of the section it was docked in."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'onSectionAddGame')
+
+    assert 'parkAdder(); return;' in fn, 'a second press cannot undock the adder'
+    assert 'previousElementSibling === head' in fn, 'the toggle does not check which header it is on'
