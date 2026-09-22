@@ -19,10 +19,13 @@ def test_an_agent_worktree_is_not_part_of_the_source_tree():
     happens to be running.
     """
     nested = ROOT / '.claude' / 'worktrees' / '_probe' / 'core'
-    nested.mkdir(parents=True, exist_ok=True)
     probe = nested / 'views.py'
-    probe.write_text("GET.get('preview')\n", encoding='utf-8')
+    # INSIDE the try, so a failure to create the probe still runs the cleanup. Outside it, a write
+    # that raised after `mkdir` succeeded left the directories behind in a developer's checkout.
     try:
+        nested.mkdir(parents=True, exist_ok=True)
+        probe.write_text("GET.get('preview')\n", encoding='utf-8')
+
         found = [rel for _, rel in source_files('*.py')]
         assert not any(rel.startswith('.claude/') for rel in found), \
             'the walk descends into .claude, so every repo guard sees a second copy of the repo'
@@ -32,11 +35,14 @@ def test_an_agent_worktree_is_not_part_of_the_source_tree():
         assert 'core/previews.py' in found, 'the walk no longer reaches our own source'
     finally:
         probe.unlink(missing_ok=True)
-        for directory in (nested, nested.parent):
+        # Up to and INCLUDING `worktrees/`, which the first version left behind empty. `rmdir` only
+        # removes an empty directory, so a real agent worktree living alongside stops the walk up
+        # dead rather than being touched -- which is why this breaks rather than continues.
+        for directory in (nested, nested.parent, nested.parent.parent):
             try:
                 directory.rmdir()
             except OSError:
-                break                      # somebody else's worktree lives here; leave it alone
+                break
 
 
 def test_the_skip_list_matches_at_every_depth_not_just_the_top():
@@ -87,3 +93,21 @@ def test_skip_paths_are_prefixes_and_do_not_become_global_rules():
         'nothing lives under static/vendor any more, so this proves nothing'
     assert not any(rel.startswith('static/vendor') for rel in walked)
     assert any(rel.startswith('static/js/') for rel in walked), 'the walk missed our own JS'
+
+
+def test_the_suffix_filter_is_a_gate_and_not_documentation():
+    """`suffixes` must actually exclude, rather than describe what callers happen to pass.
+
+    Deleting the filter left every guard green: the control-character scan reads with
+    `read_text(encoding='utf-8')` and swallows `UnicodeDecodeError`, so binaries fall out anyway, and
+    its companion asserts only a floor of 500 files. So the one caller that passes `suffixes` could
+    not tell whether the argument did anything -- which makes it a comment with a parameter's syntax.
+    """
+    walked = {rel for _, rel in source_files('*', suffixes={'.py'})}
+
+    assert walked, 'the walk found no Python at all'
+    assert all(rel.endswith('.py') for rel in walked), \
+        'the suffix filter does not filter: ' + ', '.join(sorted(walked)[:5])
+    # The tree genuinely holds other text, so the assertion above had something to exclude.
+    assert any(rel.endswith('.html') for rel in (r for _, r in source_files('*'))), \
+        'nothing but Python was walkable, so the filter had nothing to prove'

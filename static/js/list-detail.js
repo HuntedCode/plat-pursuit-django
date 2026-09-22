@@ -1438,6 +1438,14 @@
         var id = pendingPickId;
         pendingPickId = null;
         if (!arranging) { return; }
+        // NO `CSS.escape` HERE, AND THE REASON IS THE DATA, NOT AN OVERSIGHT. Every value
+        // interpolated into a selector on this page is a server-rendered `GameListItem` or
+        // `GameListSection` PRIMARY KEY -- an integer, or `''` for the loose bucket -- read straight
+        // back out of `data-item-id` / `data-section-id`. An integer cannot carry a quote or a
+        // combinator, and these are attribute-value selectors rather than id selectors, so there is
+        // nothing for an escape to do. If either key ever becomes a slug, a uuid or anything
+        // user-supplied, every one of these needs escaping and this comment is the thing that says
+        // so.
         var row = document.querySelector('.gl-item[data-item-id="' + id + '"]');
         if (!row) { return; }
         togglePicked(row);

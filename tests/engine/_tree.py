@@ -15,6 +15,12 @@ THREE TESTS HAD THREE HAND-WRITTEN COPIES OF THIS, and they had already drifted:
 
 `.claude` is in `.gitignore`, which buys nothing here: `rglob` does not read gitignore. A fourth
 walker would have got this wrong too, which is the argument for one list rather than a fourth copy.
+
+ONE THING TO WATCH. Excluding `.claude` is safe only while NOTHING UNDER IT IS TRACKED, which is true
+today. Committing `.claude/settings.json` or `.claude/agents/*.md` is common practice, and `CLAUDE.md`
+is already tracked at the root -- so the day that happens, the control-character guard silently stops
+scanning tracked project config while its docstring still says "the tracked tree only". At that point
+this needs to exclude `.claude/worktrees/` specifically rather than the whole directory.
 """
 import pathlib
 
