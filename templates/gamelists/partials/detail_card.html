@@ -123,20 +123,48 @@ Rendered inside `detail_group.html`, which owns the grid and the section header.
     {% endif %}
 
     {% if is_owner %}
-    {% comment %}Quiet by default and revealed on hover or keyboard focus -- the design conversation
-    asked the card affordance to be "an icon, not a labelled button". It stays reachable without a
-    pointer because `:focus-visible` opens it too, so tabbing through a list surfaces each control in
-    turn. The accessible name carries the game, since "Remove" repeated forty times tells a screen
-    reader nothing about which entry it is on.{% endcomment %}
-    {% comment %}The endpoint is rendered per row rather than assembled in JS from a base path: the
-    server owns URL shapes, and a hand-built string is what breaks silently the day a route moves.
-    (It nearly did here -- the route is `list_remove_game`, not the `list_remove_item` its view class
-    name suggests.){% endcomment %}
-    <button type="button" class="gl-item__remove" data-gl-remove
+    {% comment %}THE CARD'S ACTION MENU, carrying every per-card edit: where to file it, and taking
+    it off the list.
+
+    IT REPLACED A BARE REMOVE BUTTON (2026-09), and the corner is the reason. Remove sat at
+    `right: 6px`, the grip at the same coordinate, and they never collided only because the old
+    arrange mode hid one of them -- a trick that died with the single mode, since "hidden while the
+    mode is on" became "hidden while editing", which is always. Adding a third control for "move to"
+    would have put ~90px of buttons across the top of a ~170px card at 375px.
+
+    One trigger instead. The grip keeps its own place because it has to be GRABBABLE; these two are
+    chosen, not held.
+
+    IT ALSO PROTECTS THE DESTRUCTIVE ONE. The rule the old CSS was reaching for -- do not leave an
+    irreversible action under a moving cursor while cards are being dragged -- is better served by a
+    menu than by hiding the control, because hiding it meant it could not be reached at all.
+
+    Quiet by default and revealed on hover or keyboard focus, which keeps the design conversation's
+    "an icon, not a labelled button". `:focus-visible` opens it too, so tabbing through a list
+    surfaces each card's actions in turn. The accessible name carries the game, since a menu repeated
+    forty times tells a screen reader nothing about which entry it is on.
+
+    The destinations ride the trigger rather than being assembled in JS: the sections, their ids and
+    which one this card is in are facts the server already rendered the grouping from, and a client
+    that rebuilt them would be a second source for the same truth. `data-current` is what the menu
+    ticks, and an empty value is a real answer -- the loose bucket -- rather than a missing one, the
+    same distinction `data-section-id` draws on the grids and `resolve_section` on the endpoint.
+
+    The endpoints are rendered per row for the reason this file already gives twice: the server owns
+    URL shapes, and a hand-built string is what breaks silently the day a route moves. (It nearly did
+    here -- the route is `list_remove_game`, not the `list_remove_item` its view class name
+    suggests.){% endcomment %}
+    <button type="button" class="gl-item__menu" data-gl-card-menu
             data-remove-url="{% url 'list_remove_game' game_list.id item.pk %}"
-            aria-label="Remove {{ item.concept.unified_title }} from this list">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
-            <path d="M18 6 6 18M6 6l12 12"/>
+            {% if can_arrange %}data-current="{{ item.section_id|default_if_none:'' }}"{% endif %}
+            {% comment %}`dialog`, not `true`. `aria-haspopup="true"` is defined as
+            equivalent to "menu", and `AnchoredMenu` builds its panel as `role="dialog"` --
+            so a screen reader announced "has pop-up menu" and then landed the reader in a
+            dialog.{% endcomment %}
+            aria-haspopup="dialog" aria-expanded="false"
+            aria-label="Actions for {{ item.concept.unified_title }}">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>
         </svg>
     </button>
     {% endif %}

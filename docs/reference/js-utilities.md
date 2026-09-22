@@ -98,11 +98,66 @@ PlatPursuit.GameAdder(panelRoot, { prefix: 'gl', minQuery: 3, onAdd: fn });
 > its copy rather than copied. Debounced search, keyboard navigation, an `aria-live` status line, and
 > an `already_added` state bounded to the page of results rather than to the whole list.
 
+**`root.dataset.section`** is read at **send** time, alongside `searchUrl` and `addUrl`, and posted
+as the destination so a game is filed on arrival rather than added-then-moved. Read at send and not
+captured at wire time because Game Lists **relocates one adder** between section headers rather than
+building one per section — the root's destination changes as it moves, and a captured value would
+file every game into whichever header happened to be first.
+
+**No teardown.** Each instance binds a `document` click listener and nothing removes it, which is why
+the one consumer that needs several destinations moves a single instance instead of constructing
+more. Anything that wants N adders on a page that re-renders needs to solve that first.
+
+### PlatPursuit.AnchoredMenu
+
+`AnchoredMenu(config)` -- a menu panel anchored to a trigger inside a card grid.
+
+```js
+const menu = PlatPursuit.AnchoredMenu({
+    trigger: '[data-my-menu]',        // delegated selector for the opener
+    className: 'my-pop',              // the panel's class; the consumer owns its CSS
+    label: 'Card actions',            // aria-label (the panel is role="dialog")
+    item: '.my-pop__row',             // optional: delegated selector for an actionable row
+    onOpen: (trigger, panel, seq) => { panel.innerHTML = '...'; },
+    onItem: (row, trigger) => { /* a row was activated */ },
+    canOpen: (trigger) => true,       // optional refusal
+});
+// -> { close, reposition, isOpen, panel, current, stale, destroy }
+```
+
+> **Extracted from `quick-add.js` in 2026-09**, which held the only correct implementation of this on
+> the site and was not callable — an IIFE with no export. Before it there were eight hand-rolled
+> dropdowns and one other exported primitive, `discPopovers`, which renders its panel as a **sibling
+> of every trigger**: on a 200-game list with ten sections that is two thousand rows of markup.
+
+It owns the panel (one per instance, built lazily on `document.body`), `position: fixed` placement
+with edge flipping, the height cap applied **before** the height is measured, focus restore decided
+by asking the DOM rather than the caller, Escape, outside-click, scroll-follow-then-close, resize
+reposition, and closing when an htmx swap detaches the anchor. Every one of those is a bug that
+shipped; `tests/engine/test_anchored_menu.py` names them.
+
+**One set of document listeners for every instance.** Instances register into a module-level
+registry, the listeners bind once, and `destroy()` deregisters. quick-add bound its own four, which
+was right while it was alone and a leak N times over once a page carries several.
+
+**At most one open panel across all instances**, and Escape is `stopPropagation`'d — two menus now
+share a page with a keyboard handler that also answers Escape, so one press must not both close a
+menu and drop a picked-up card.
+
+Consumers: `quick-add.js` (game cards site-wide), and the card and section menus in `list-detail.js`.
+
 ### PlatPursuit.HTMLUtils
 
 | Method | Parameters | Returns | Purpose |
 |--------|-----------|---------|---------|
-| `escape(text)` | string | string | XSS-safe HTML escaping via `textContent`/`innerHTML` |
+| `escape(text)` | string | string | Escapes for a TEXT context (between tags), via `textContent`/`innerHTML` |
+| `escapeAttr(text)` | string | string | Escapes for an ATTRIBUTE VALUE (inside quotes) |
+
+> **They are not interchangeable, and the docstring says so.** `escape` runs the HTML fragment
+> serializer, which deliberately leaves QUOTES alone because a text node has no need of them —
+> correct between tags, and wrong one character later inside an attribute's quotes, where an
+> unescaped `"` closes it. Anything interpolating hunter-authored text into a built attribute
+> (a section name into a menu row, for instance) wants `escapeAttr`.
 
 ### PlatPursuit.debounce
 

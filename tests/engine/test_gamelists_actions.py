@@ -174,6 +174,90 @@ def test_adding_a_game_returns_the_new_count(client):
     assert GameListItem.objects.filter(game_list=game_list, concept=concept).exists()
 
 
+def test_adding_can_name_a_section_and_the_game_lands_there(client):
+    """The endpoint half of the editor rebuild's one backend change. A per-section adder posts where
+    it wants the game; the toolbar's adder posts nothing and keeps the old behaviour."""
+    owner = _staff(client)
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    game_list = svc.create_list(owner, name='Backlog')
+    section = svc.create_section(game_list, owner, name='Playing')
+    concept = _concept('Filed On Arrival')
+
+    resp = client.post(reverse('list_add_game', args=[game_list.id]),
+                       {'concept_id': concept.pk, 'section': section.pk})
+
+    assert resp.status_code == 200
+    assert resp.json()['section'] == section.pk, 'the response does not say where it landed'
+    assert GameListItem.objects.get(game_list=game_list, concept=concept).section_id == section.pk
+
+
+def test_adding_with_an_empty_section_means_the_loose_bucket(client):
+    """EMPTY IS A DESTINATION, not a missing field -- the same reading `AssignItemView` has always
+    had, now shared between them. A falsy test here would make "" indistinguishable from "unfiled",
+    which happens to be the same answer but for the wrong reason, and stops being so the day the
+    default changes."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    concept = _concept('Loose')
+
+    resp = client.post(reverse('list_add_game', args=[game_list.id]),
+                       {'concept_id': concept.pk, 'section': ''})
+
+    assert resp.status_code == 200
+    assert resp.json()['section'] is None
+    assert GameListItem.objects.get(game_list=game_list, concept=concept).section_id is None
+
+
+def test_adding_into_a_section_of_another_list_is_refused(client):
+    """Scoped to the list, so an id alone cannot answer differently for "another hunter's section"
+    and "no such section" -- which would make the endpoint an oracle over the section id space."""
+    owner = _staff(client)
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    mine = svc.create_list(owner, name='Mine')
+    stranger = ProfileFactory(is_linked=True, psn_username='stranger')
+    theirs = svc.create_list(stranger, name='Theirs')
+    stranger.user_is_premium = True
+    stranger.save(update_fields=['user_is_premium'])
+    foreign = svc.create_section(theirs, stranger, name='Not yours')
+
+    resp = client.post(reverse('list_add_game', args=[mine.id]),
+                       {'concept_id': _concept().pk, 'section': foreign.pk})
+
+    assert resp.status_code == 400
+    assert GameListItem.objects.filter(game_list=mine).count() == 0
+
+    # THE REFUSAL MUST NOT SAY WHICH KIND OF WRONG IT WAS. A foreign section and a section that
+    # never existed have to be indistinguishable, or the pair is an oracle over the global section
+    # id space -- ids a reader never sees.
+    #
+    # Pinned as a byte comparison because this is enforced TWICE, at the view and again in the
+    # service, and the two are only equivalent while their wording agrees. Mutation-checked: dropping
+    # the view's `game_list=` scope changes no observable behaviour, since the service still refuses
+    # -- so what is actually load-bearing is that both refusals read the same, and that is what this
+    # asserts rather than which layer answered.
+    absent = client.post(reverse('list_add_game', args=[mine.id]),
+                         {'concept_id': _concept('Second').pk, 'section': 999999})
+    assert absent.status_code == 400
+    assert absent.json()['error'] == resp.json()['error'], (
+        'a foreign section and a nonexistent one give different answers'
+    )
+
+
+def test_a_junk_section_is_refused_rather_than_raising(client):
+    """`safe_int`, not the raw string: `filter(pk='abc')` raises ValueError, which on a route any
+    logged-in hunter can post to is a 500 rather than the 400 a JSON client can display."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+
+    resp = client.post(reverse('list_add_game', args=[game_list.id]),
+                       {'concept_id': _concept().pk, 'section': 'abc'})
+
+    assert resp.status_code == 400
+    assert GameListItem.objects.filter(game_list=game_list).count() == 0
+
+
 def test_only_the_owner_can_add(client):
     author = ProfileFactory(is_linked=True, psn_username='author')
     game_list = svc.create_list(author, name='Theirs', is_public=True)
@@ -1581,55 +1665,16 @@ def test_the_popover_shows_what_the_server_actually_said(client):
     assert js.count('failureMessage(err).then(') == 2
 
 
-def test_the_popover_survives_the_gestures_a_phone_makes(client):
-    """Two closes that fired on the most ordinary mobile actions. Android raises `resize` when the
-    virtual keyboard opens -- and the popover focuses its "New list" field on open for a hunter with
-    no lists yet, so it could vanish on the frame it appeared. And the inner row list chained its
-    scroll to the document, whose `scroll` listener shut the panel mid-flick."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    resize = js[js.index("window.addEventListener('resize'"):]
-    resize = resize[:resize.index('});') + 3]
-    assert 'place(openTrigger)' in resize, 'a resize still closes rather than repositions'
-
-    css = _read('static/css/components/quick-add.css')
-    assert 'overscroll-behavior: contain' in css, 'the inner scroll still chains to the document'
-
-
-def test_the_popover_lets_go_of_the_page_it_was_anchored_to(client):
-    """Browse Games swaps its grid on every filter change. The panel went on floating over the new
-    results, anchored to a button no longer in the document -- and a row click still posted, filing a
-    game the hunter could no longer see."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    assert "htmx:afterSwap" in js, 'a filter change orphans the popover'
-    assert 'openTrigger.isConnected' in js
-
-
-def test_focus_comes_back_when_it_was_inside(client):
-    """Every close path but Escape passed `restoreFocus = false`, so a keyboard user who scrolled or
-    clicked away had the focused row deleted out from under them and focus reset to <body> -- the next
-    Tab restarting at the top of the document. Whether focus needs restoring is a fact about the DOM,
-    not a decision for the caller."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    fn = js[js.index('function close('):js.index('function rowHtml(')]
-    assert 'pop.contains(document.activeElement)' in fn, 'the caller still decides'
-    # ...and read BEFORE the content is thrown away, or the answer is always false.
-    assert fn.index('document.activeElement') < fn.index("pop.innerHTML = ''")
-
-
-def test_the_trigger_does_not_swallow_the_click_other_menus_listen_for(client):
-    """`stopPropagation` was left over from when the button lived inside the card's `<a>`. Stopping
-    the click one node below `document` is where the site's other outside-click closers listen, so
-    opening this left the nav search, the sub-nav menu and Browse Games' own discipline popovers
-    hanging open behind it."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    handler = js[js.index("var trigger = e.target.closest && e.target.closest('[data-quick-add]')"):]
-    handler = handler[:handler.index('var row =')]
-    assert 'stopPropagation' not in handler
-    assert 'preventDefault' not in handler, 'a type=button outside a form has nothing to prevent'
+# ── the panel mechanics moved ───────────────────────────────────────────────────────────────────
+#
+# Five tests lived here and are now in `test_anchored_menu.py`: the Android resize, the iOS keyboard
+# scroll, the htmx detach, the focus restore and the non-swallowed click. They were always claims
+# about the PANEL rather than about adding a game to a list, and in 2026-09 that panel became
+# `PlatPursuit.AnchoredMenu` with three consumers. Leaving them here would have meant quick-add
+# alone guarding behaviour the list editor also depends on.
+#
+# `test_quick_add_delegates_to_the_primitive`, in that file, is what stops the extraction being
+# undone quietly.
 
 
 def test_the_full_row_is_reachable_and_announced(client):
@@ -1884,35 +1929,6 @@ def test_the_button_is_hidden_and_inert_until_its_card_reveals():
     assert before.rstrip().endswith('@media (prefers-reduced-motion: no-preference) {')
 
 
-def test_the_popover_survives_the_ios_keyboard_raising():
-    """A hunter with NO lists gets the New list field focused on open. On iOS that raises the keyboard,
-    which SCROLLS the document to lift the field clear of it -- and the scroll handler closed on any
-    scroll, so the panel vanished on the frame it appeared. Every time, for exactly the first-run
-    hunter the empty-state copy is written for.
-
-    The `resize` handler one block down was already written for this same keyboard; the reasoning was
-    never carried across to `scroll`."""
-    js = _decommented(_read('static/js/quick-add.js'))
-
-    handler = js[js.index('function onScrollSettled()'):]
-    handler = handler[:handler.index("window.addEventListener('resize'")]
-
-    # THE TRIGGER'S VISIBILITY IS THE TEST. Not the scroll (which the keyboard causes by itself), and
-    # NOT whether the focus is ours -- `open()` focuses the panel on every open, mouse included, so
-    # that test is true for every loaded popover and scroll-to-close stops existing altogether.
-    assert 'getBoundingClientRect()' in handler
-    assert 'r.bottom <= 0 || r.top >= vh' in handler, \
-        'the panel follows its card off the screen instead of closing'
-    assert 'place(openTrigger)' in handler
-
-    # The branch `resize` has always had and this one was missing: an anchor that no longer exists
-    # cannot be followed, and the panel must not be left floating against a detached node.
-    assert 'if (!openTrigger || !openTrigger.isConnected) { close(false); return; }' in handler
-
-    # `place()` forces two reflows, so a raw scroll listener calling it is a per-event reflow storm.
-    assert 'requestAnimationFrame(onScrollSettled)' in js
-
-
 def test_an_arriving_cell_is_inert_until_its_animation_finishes():
     """THE HALF `.is-revealed` CANNOT DO, and the correction to the first attempt at this.
 
@@ -1949,7 +1965,10 @@ def test_the_list_detail_controls_ride_their_tile_and_do_not_stick_on():
     hover -- a rule meant to last 500ms quietly disabling the control's whole resting design."""
     css = _decommented_css(_read('static/css/components/gamelists.css'))
 
-    for control in ('.gl-item__remove', '.gl-item__grab'):
+    # `.gl-item__menu` was `.gl-item__remove` until the bare remove button was folded into the
+    # card's action menu (2026-09). The reveal-coupling hazard is about the CONTROL riding its tile,
+    # not about what the control does, so it follows the rename unchanged.
+    for control in ('.gl-item__menu', '.gl-item__grab'):
         assert f'.pp-reveal .gl-item .pp-gcard.is-revealed ~ {control}' not in css, \
             f'{control} is released by a class that outranks its own hover rule forever'
         rule = css[css.index(f'.pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ {control}'):]

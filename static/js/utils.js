@@ -3557,6 +3557,319 @@ function discPopovers(root) {
 }
 window.PlatPursuit.discPopovers = discPopovers;
 
+/* ─── AnchoredMenu ──────────────────────────────────────────────────────────────────────────────
+ * A menu panel anchored to a trigger inside a card grid.
+ *
+ * EXTRACTED FROM `quick-add.js` (2026-09), which was the only correct implementation of this on the
+ * site and was not callable -- an IIFE with no export. The extraction was forced by the Game Lists
+ * editor needing two more of these (a per-card "Move to" menu and a per-section actions menu), which
+ * made three concrete consumers and cleared the project's "do not abstract below three" bar. Before
+ * it there were eight hand-rolled dropdowns and no primitive; `discPopovers` is the only other
+ * exported one and it needs its panel rendered as a SIBLING of every trigger, which on a 200-game
+ * list with ten sections is two thousand rows of markup nobody reads.
+ *
+ * Everything below that reads as over-careful is a bug that shipped. The comments say which.
+ *
+ * ONE PANEL PER INSTANCE, appended to `document.body`, built lazily. Not one per trigger: a grid has
+ * hundreds of triggers and at most one open menu.
+ *
+ * ONE SET OF DOCUMENT LISTENERS FOR ALL INSTANCES. `quick-add` bound its own, which was right when
+ * it was the only one; N instances each binding four document/window listeners with no teardown is
+ * the leak this primitive exists to stop happening three times over. Instances register into
+ * `_menus`, the listeners bind once, and `destroy()` deregisters.
+ *
+ * @param {object} config
+ * @param {string} config.trigger      delegated selector for the button that opens the menu
+ * @param {string} config.className    class for the panel element (the consumer owns its CSS)
+ * @param {string} [config.label]      `aria-label` for the panel (it is `role="dialog"`)
+ * @param {function} config.onOpen     (trigger, panel, seq) -> fill the panel; may be async
+ * @param {string} [config.item]       delegated selector for an actionable row inside the panel
+ * @param {function} [config.onItem]   (itemEl, trigger) -> a row was activated
+ * @param {function} [config.canOpen]  (trigger) -> bool; refuse to open (default: always)
+ * @returns {{close: function, reposition: function, isOpen: function, panel: function, destroy: function}}
+ */
+
+//: Every registered menu. Module-level so the document listeners below are bound once no matter how
+//: many instances exist, and so "close the open one" is answerable without asking each in turn.
+var _anchoredMenus = [];
+var _anchoredBound = false;
+//: The instance whose panel is open, or null. AT MOST ONE ACROSS EVERY INSTANCE -- opening a card's
+//: menu must close a section's, or two panels float over each other both claiming the pointer.
+var _anchoredOpen = null;
+
+//: Clearance from every viewport edge.
+var ANCHOR_EDGE = 8;
+
+function _anchoredBindOnce() {
+    if (_anchoredBound) { return; }
+    _anchoredBound = true;
+
+    document.body.addEventListener('click', function (e) {
+        if (!e.target.closest) { return; }
+
+        for (var i = 0; i < _anchoredMenus.length; i++) {
+            var menu = _anchoredMenus[i];
+            var trigger = e.target.closest(menu.cfg.trigger);
+            if (trigger) {
+                // NO `stopPropagation`, and it is load-bearing. It was in quick-add from when the
+                // button lived inside the card's <a>; stopping the click one node below `document`
+                // is exactly where the site's other outside-click closers listen, so opening this
+                // left the nav search, the sub-nav menu and Browse Games' popovers hanging open
+                // behind it.
+                menu.open(trigger);
+                return;
+            }
+        }
+
+        // A row inside the OPEN panel. Asked of the open instance only: two instances may use the
+        // same row selector, and the click belongs to whichever panel is on screen.
+        if (_anchoredOpen && _anchoredOpen.cfg.item && _anchoredOpen.el) {
+            var row = e.target.closest(_anchoredOpen.cfg.item);
+            if (row && _anchoredOpen.el.contains(row)) {
+                if (_anchoredOpen.cfg.onItem) {
+                    _anchoredOpen.cfg.onItem(row, _anchoredOpen.trigger);
+                }
+                return;
+            }
+        }
+
+        // Anywhere else closes, which is what every menu on this site does.
+        // `el.contains`, not a class selector built from `className`. A two-class `className`
+        // would compile to a DESCENDANT selector matching nothing, and the failure mode is
+        // "clicking inside the menu closes it", which reads as a flaky menu rather than a bad
+        // config. Containment is what this check actually means.
+        if (_anchoredOpen && _anchoredOpen.el && !_anchoredOpen.el.contains(e.target)) {
+            _anchoredOpen.close(false);
+        }
+    });
+
+    // CAPTURE PHASE, and that is the whole of why this works.
+    //
+    // The list editor's arrange mode also listens for Escape on `document` to drop a picked-up card,
+    // so one press closed the menu AND dropped the pick. The first fix was `stopPropagation()` from
+    // a BUBBLE listener here, which is inert: propagation is about other NODES on the path, and both
+    // listeners are on `document`. Stopping same-node listeners is `stopImmediatePropagation`, and
+    // that only suppresses handlers registered AFTER this one -- true today by luck of load order
+    // (the editor binds its handler when the mode is entered, long after boot) and not a thing to
+    // rest on.
+    //
+    // A capture listener on `document` runs before every bubble listener anywhere and before any
+    // capture listener below it, so `stopPropagation()` here genuinely ends the dispatch.
+    //
+    // The comment this replaced cited `GameAdder` as precedent for the bubble version. It is not:
+    // that one is bound on the results PANEL, a descendant, where stopping propagation really does
+    // keep the event away from `document`. Same intent, different mechanism, and the primitive had
+    // copied the word rather than the mechanism.
+    //
+    // Guarded on a menu actually being open, so Escape reaches the page untouched the rest of the
+    // time -- including the adder, which must still be able to answer it.
+    document.addEventListener('keydown', function (e) {
+        if (!_anchoredOpen) { return; }
+        if (e.key === 'Escape') {
+            e.stopPropagation();
+            _anchoredOpen.close(true);
+            return;
+        }
+        // ARROWS ARE SWALLOWED WHILE A PANEL IS OPEN, for the reason `GameAdder` swallows them in
+        // its own results: a page's arrange mode listens for the same keys on `document`, and the
+        // rows here are real <button>s, so an `isTyping` check does not exclude them.
+        //
+        // Reachable in the list editor: pick a card up by clicking it, open ANY card's `...`, press
+        // ArrowDown. The picked card moves and a reorder is written while the reader is navigating
+        // a menu. Only stopped, never acted on -- this primitive has no roving-focus model, and Tab
+        // already walks the rows.
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown'
+            || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            if (_anchoredOpen.el && _anchoredOpen.el.contains(e.target)) { e.stopPropagation(); }
+        }
+    }, true);
+
+    // A FIXED panel does not travel with the page, so a scroll would leave it pointing at nothing.
+    //
+    // BUT THE TRIGGER LEAVING IS THE TEST, NOT THE SCROLL. The iOS keyboard scrolls the document on
+    // its own, so a handler that closed on any scroll closed the panel on the frame it appeared for
+    // anyone whose menu focuses a field. Asking "is the focus ours" does not work either: the panel
+    // focuses on every open, so that test is true always and scroll-to-close stops existing, leaving
+    // the panel to ride a wheel scroll off its card and hang over the site header.
+    //
+    // What separates the two is whether the ANCHOR is still on screen. A keyboard raise nudges it;
+    // scrolling away removes it. So: follow while visible, close once not. `reposition` forces two
+    // reflows, so this rides a frame.
+    var scrollPending = false;
+    function onScrollSettled() {
+        scrollPending = false;
+        if (!_anchoredOpen) { return; }
+        _anchoredOpen.followOrClose();
+    }
+    window.addEventListener('scroll', function () {
+        if (!_anchoredOpen || scrollPending) { return; }
+        scrollPending = true;
+        if (window.requestAnimationFrame) { requestAnimationFrame(onScrollSettled); }
+        else { onScrollSettled(); }
+    }, { passive: true });
+
+    // REPOSITIONED, NOT CLOSED. Android fires `resize` when the virtual keyboard opens, so closing
+    // on resize made a panel that focuses a field vanish on the frame it appeared, every time.
+    // A resize is a reason to move, not to give up.
+    window.addEventListener('resize', function () {
+        if (!_anchoredOpen) { return; }
+        if (_anchoredOpen.trigger && _anchoredOpen.trigger.isConnected) {
+            _anchoredOpen.reposition();
+        } else {
+            _anchoredOpen.close(false);
+        }
+    });
+
+    // AN HTMX SWAP REPLACES THE GRID under an open panel -- Browse Games swaps on every filter
+    // change and the list editor swaps its items panel on every write. The panel would go on
+    // floating over the new content, anchored to a button no longer in the document, and a row
+    // click still posted against a card the reader could no longer see.
+    document.body.addEventListener('htmx:afterSwap', function () {
+        if (_anchoredOpen && (!_anchoredOpen.trigger || !_anchoredOpen.trigger.isConnected)) {
+            _anchoredOpen.close(false);
+        }
+    });
+}
+
+function AnchoredMenu(config) {
+    if (!config || !config.trigger || !config.className || !config.onOpen) { return null; }
+
+    var self = {
+        cfg: config,
+        el: null,          // the panel, built on first open
+        trigger: null,     // the trigger the open panel belongs to
+        seq: 0,            // stands down a response that arrives after a close or a re-open
+    };
+
+    function ensure() {
+        // `isConnected`, not just truthy. The panel is appended to `document.body`, and htmx's
+        // history restore replaces the history element's innerHTML -- which defaults to `body`
+        // when no `hx-history-elt` is declared, and none is. So a Back/Forward on any page that
+        // pushes a URL (Browse Games filters, this page's sort) deletes the panel while this
+        // handle goes on pointing at the detached node: `reposition()` then measures something
+        // that is not in the document and the menu silently stops opening until a hard reload.
+        //
+        // Falling through rebuilds it, which is the same work the first open does.
+        if (self.el && self.el.isConnected) { return self.el; }
+        var el = document.createElement('div');
+        el.className = config.className;
+        el.setAttribute('role', 'dialog');
+        if (config.label) { el.setAttribute('aria-label', config.label); }
+        el.hidden = true;
+        document.body.appendChild(el);
+        self.el = el;
+        return el;
+    }
+
+    /**
+     * Put the panel beside its trigger, flipping at the viewport edges.
+     *
+     * `position: fixed` and viewport coordinates rather than absolute-inside-the-card: the trigger
+     * sits in a grid cell with `overflow` ancestors and a transform-capable page wrapper, and an
+     * absolutely-positioned panel is clipped by the first of those it meets.
+     */
+    self.reposition = function () {
+        if (!self.el || !self.trigger) { return; }
+        var el = self.el;
+        var rect = self.trigger.getBoundingClientRect();
+        el.hidden = false;
+
+        // WHICH WAY, decided from the room rather than from a measurement taken under the wrong cap.
+        var below = window.innerHeight - rect.bottom - ANCHOR_EDGE - 6;
+        var above = rect.top - ANCHOR_EDGE - 6;
+        var goUp = above > below;
+        var room = Math.max(0, goUp ? above : below);
+
+        // THE CAP GOES ON BEFORE THE HEIGHT IS READ. It was the other way round: `maxHeight` was
+        // cleared, `offsetHeight` measured against the stylesheet's own cap, `top` computed from
+        // that, and only THEN was the cap raised to the real room -- so a long panel grew downward
+        // from a `top` that assumed it was short, covering its own trigger and running off screen.
+        el.style.maxHeight = room + 'px';
+
+        var width = el.offsetWidth;
+        var height = el.offsetHeight;      // now bounded by the room, so `top` can trust it
+
+        // No minimum height. One was tried to keep the panel usable in a cramped viewport and did
+        // the opposite: on a short screen it forced a height larger than the room just measured,
+        // which is the same overflow by another route. A genuinely tiny gap gets a tiny scroller.
+        var top = goUp ? Math.max(ANCHOR_EDGE, rect.top - height - 6) : rect.bottom + 6;
+        var left = rect.right - width;
+        left = Math.max(ANCHOR_EDGE, Math.min(left, window.innerWidth - width - ANCHOR_EDGE));
+
+        el.style.top = Math.round(top) + 'px';
+        el.style.left = Math.round(left) + 'px';
+    };
+
+    self.followOrClose = function () {
+        // Gone from the DOM entirely: an anchor that does not exist cannot be followed, and a panel
+        // left floating against a detached node is the state the htmx closer exists to prevent.
+        if (!self.trigger || !self.trigger.isConnected) { self.close(false); return; }
+        var r = self.trigger.getBoundingClientRect();
+        var vh = window.innerHeight || document.documentElement.clientHeight;
+        if (r.bottom <= 0 || r.top >= vh) { self.close(false); return; }
+        self.reposition();
+    };
+
+    self.close = function (restoreFocus) {
+        if (!self.el) { return; }
+        // WAS FOCUS IN HERE? Asked rather than passed in. Every path except Escape said "no", so a
+        // keyboard user who scrolled, resized or clicked away had the focused row deleted from under
+        // them and focus reset to <body>, the next Tab restarting at the top of the document.
+        // Whether focus needs restoring is a fact about the DOM, not a decision for the caller.
+        var held = self.el.contains(document.activeElement);
+        self.el.hidden = true;
+        self.el.innerHTML = '';
+        if (self.trigger) {
+            self.trigger.setAttribute('aria-expanded', 'false');
+            // `isConnected`: an htmx swap can replace the grid under an open panel, and focusing a
+            // detached node silently drops focus to <body> instead.
+            if ((restoreFocus || held) && self.trigger.isConnected) { self.trigger.focus(); }
+        }
+        self.trigger = null;
+        self.seq += 1;
+        if (_anchoredOpen === self) { _anchoredOpen = null; }
+    };
+
+    self.open = function (trigger) {
+        if (config.canOpen && !config.canOpen(trigger)) { return; }
+
+        // A second press on the same trigger closes, which is what every menu on the site does.
+        if (self.trigger === trigger) { self.close(true); return; }
+
+        // Any other open panel first, including another instance's.
+        if (_anchoredOpen) { _anchoredOpen.close(false); }
+
+        self.trigger = trigger;
+        trigger.setAttribute('aria-expanded', 'true');
+        _anchoredOpen = self;
+
+        var mine = ++self.seq;
+        var el = ensure();
+        el.innerHTML = '';
+        self.reposition();
+        config.onOpen(trigger, el, mine);
+        self.reposition();
+    };
+
+    self.isOpen = function () { return _anchoredOpen === self; };
+    self.panel = function () { return self.el; };
+    self.current = function () { return self.trigger; };
+    self.stale = function (seq) { return seq !== self.seq; };
+
+    self.destroy = function () {
+        self.close(false);
+        var at = _anchoredMenus.indexOf(self);
+        if (at !== -1) { _anchoredMenus.splice(at, 1); }
+        if (self.el && self.el.parentNode) { self.el.parentNode.removeChild(self.el); }
+        self.el = null;
+    };
+
+    _anchoredMenus.push(self);
+    _anchoredBindOnce();
+    return self;
+}
+window.PlatPursuit.AnchoredMenu = AnchoredMenu;
+
 /**
  * wireSearchField -- shared search-field affordances for ANY search input (the browse-filters.js controller
  * AND bespoke per-page controllers): a `.has-value` class toggle (drives the clear button + `/` hint), a
@@ -4210,6 +4523,16 @@ function GameAdder(root, opts) {
 
         var body = new FormData();
         body.append('concept_id', row.dataset.conceptId);
+        // THE DESTINATION, READ OFF THE ROOT AT SEND TIME -- like `searchUrl` and `addUrl` above,
+        // and for the same reason: the server owns what these mean and the element carries them.
+        // Read now rather than captured at wire time because one adder is REPOSITIONED between
+        // section headers rather than one being built per section (each instance binds a document
+        // listener and there is no teardown, so N adders on a panel that re-swaps is a leak). The
+        // root's `data-section` changes as it moves; a captured value would file every game into
+        // whichever header happened to be first.
+        //
+        // Absent or empty means the loose bucket, which is where an add has always landed.
+        if (root.dataset.section) { body.append('section', root.dataset.section); }
         postJson(root.dataset.addUrl, body)
             .then(function (data) {
                 // The row STAYS and flips to its added state rather than vanishing: somebody adding

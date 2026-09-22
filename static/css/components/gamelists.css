@@ -200,7 +200,7 @@
 /* Quiet at rest, per the design conversation's "an icon, not a labelled button". Hidden from the
    pointer until hover, but ALWAYS present for the keyboard: `:focus-visible` opens it, so tabbing a
    list reaches every control. `opacity`/`transform` only -- no `filter` on a tile-sized element. */
-.gl-item__remove {
+.gl-item__menu {
     position: absolute; top: 6px; right: 6px; z-index: 2;
     display: grid; place-items: center;
     width: 26px; height: 26px;
@@ -211,53 +211,63 @@
     color: var(--pp-text-dim);
     /* Tailwind v4's preflight sets no `cursor: pointer` on buttons, so every control has to declare
        it -- which this file argues explicitly 195 lines down while naming THIS element, and which
-       the sibling controls honour. The destructive control was the one still rendering an arrow. */
+       the sibling controls honour. This element was the one still rendering an arrow, back when it
+       was the remove button. */
     cursor: pointer;
     opacity: 0;
     transform: scale(0.9);
     transition: opacity 0.16s ease, transform 0.16s ease, color 0.16s ease, border-color 0.16s ease;
 }
-.gl-item__remove svg { width: 13px; height: 13px; }
-.gl-item:hover .gl-item__remove,
-.gl-item__remove:focus-visible { opacity: 1; transform: none; }
-.gl-item__remove:focus-visible {
+.gl-item__menu svg { width: 13px; height: 13px; }
+.gl-item:hover .gl-item__menu,
+.gl-item__menu:focus-visible { opacity: 1; transform: none; }
+.gl-item__menu:focus-visible {
     outline: 2px solid var(--pp-primary); outline-offset: 2px;
     color: var(--pp-text);
 }
+/* NEUTRAL, not destructive. This was `--pp-error` -- correct while the control was a remove
+   button, and wrong the moment it became a `...` menu whose first rows are "Move to <section>".
+   The rename was mechanical and the hover came with it, so every card on every owned list flashed
+   red for an action that mostly is not destructive.
+   The one row that IS destructive carries the red, inside the panel: `.gl-menu__item--danger`. */
 @media (hover: hover) {
-    .gl-item__remove:hover {
-        color: var(--pp-error);
-        border-color: color-mix(in oklab, var(--pp-error) 55%, var(--pp-border));
+    .gl-item__menu:hover {
+        color: var(--pp-text);
+        border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
         transform: scale(1.06);
     }
 }
 /* Touch has no hover, so the control would never appear. Show it at rest instead -- and at the
    design system's 44px minimum (design-system.md), which the first cut set to 30px. This file
-   already honours that rule 110 lines up for a merely DISMISSIVE control; the one that deletes a
-   curated entry had the smaller target. A mis-tap here destroys curated work with no confirm step.
+   already honours that rule 110 lines up for a merely DISMISSIVE control.
+
+   The argument used to be that a mis-tap DESTROYS curated work with no confirm step, which was true
+   while this was the remove button. It opens a menu now, so the stake is lower -- and the floor
+   stays anyway, because this menu is how a card is both filed and removed and it sits inside a
+   draggable cell.
    (The ~166x125px figure quoted here was the 4:3 grouping tile's; the card's 3:4 cover at 375px is
    ~166x222px. The argument survives the move, the number did not.) The visual circle stays 30px --
    the extra is transparent padding, so the target grows without the button getting heavier. */
 @media (hover: none) {
-    .gl-item__remove {
+    .gl-item__menu {
         opacity: 1; transform: none;
         width: 44px; height: 44px;
         top: 0; right: 0;
         background: none; border: none;
     }
-    .gl-item__remove::before {
+    .gl-item__menu::before {
         content: ''; position: absolute; inset: 7px;
         border-radius: 999px;
         border: 1px solid var(--pp-border);
         background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
     }
-    .gl-item__remove svg { position: relative; }
+    .gl-item__menu svg { position: relative; }
 }
 
 /* The button is a SIBLING of the card (a <button> inside an <a> is invalid), so
    `.pp-reveal .pp-gcard { opacity: 0 }` (game-card.css) never covered it. On desktop that was masked because it
    rests at opacity 0 anyway -- but on touch it is forced visible, so after every sort, add and
-   remove the grid showed a row of bare floating "x" glyphs hanging over empty space for ~500ms
+   remove the grid showed a row of bare floating glyphs hanging over empty space for ~500ms
    while the tiles faded up beneath them.
 
    RELEASING IT WITH `.is-revealed` WAS THE WRONG HALF OF THE PAIR, twice over. That class lands one
@@ -272,17 +282,17 @@
    while it does. `pointer-events` travels with the opacity because a hidden control that still catches
    taps is the freeze bug this project has now written down three times. */
 @media (prefers-reduced-motion: no-preference) {
-    .pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ .gl-item__remove { opacity: 0; pointer-events: none; }
+    .pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ .gl-item__menu { opacity: 0; pointer-events: none; }
 }
 
 /* The new transforms above are gated, like the dialog's are and like every sibling component's
    are. Without this a reduced-motion reader still gets the scale-in and the hover pop. */
 @media (prefers-reduced-motion: reduce) {
-    .gl-item__remove { transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease; }
-    .gl-item__remove,
-    .gl-item:hover .gl-item__remove,
-    .gl-item__remove:focus-visible,
-    .gl-item__remove:hover { transform: none; }
+    .gl-item__menu { transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease; }
+    .gl-item__menu,
+    .gl-item:hover .gl-item__menu,
+    .gl-item__menu:focus-visible,
+    .gl-item__menu:hover { transform: none; }
 }
 
 
@@ -421,21 +431,58 @@
  * The flag is read from the PANEL, which is htmx's swap target and therefore keeps its own
  * attributes. On `#gl-items` it would be wiped on settle -- the trap documented twice in
  * list-detail.js. */
-#gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }
-/* ...and the destructive control steps aside while positioning, so the corner is never contested and
-   the mode offers one action rather than two. Arranging a list and deleting from it are different
-   jobs, and the one that cannot be undone is not the one to leave under a moving cursor. */
-#gl-items-panel[data-positioning] .gl-item__remove { display: none; }
+#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { display: none; }
+/* REMOVE AND REARRANGE NOW COEXIST. This used to be `display: none` on `.gl-item__menu` whenever
+   the mode was on, because the mode was a SECOND state entered from inside the editor and a card
+   could not sensibly be both dragged and deleted by the same press.
 
-/* The grip. Mirrors the remove control across the card (top-LEFT to its top-right) and shares its
-   geometry, but is visible at rest WITHIN the mode: once you have said you are arranging the list,
+   One mode ended that. Editing is now the only state, so hiding the remove button while editing
+   would hide it always -- and removing a game is the most ordinary edit there is. The two controls
+   are separated by position and by hit area instead (see `.gl-item__menu` / `.gl-item__grab`
+   above, each with its own 44px `::before`), which is what kept them apart on touch anyway. */
+
+/* ── the one mode ────────────────────────────────────────────────────────────────────────────────
+ *
+ * TWO FLAGS, ONE MODE, and the distinction is the whole reason this did not collapse into a single
+ * attribute when the two modes did.
+ *
+ *   [data-gl-editing]    the hunter pressed Edit. Rename, sections, add, remove.
+ *   [data-gl-arranging]  ...and drag actually attached. Grips, grab cursors, the tray, the lift.
+ *
+ * The second is DERIVED, never toggled: it is set when the mode opens over a grid that can be
+ * dragged, and left off when it cannot -- a Collection with no sections has nothing to rearrange, a
+ * ranked list sorted A-Z has no position a drop could mean, and SortableJS may simply have failed to
+ * load. Keying the tray and the grab cursor off `editing` instead would promise a drag the page
+ * cannot honour on exactly those three surfaces, which is the defect the old two-mode split was
+ * accidentally preventing.
+ *
+ * `data-gl-arranging` is the old `data-positioning` renamed, selector shape untouched. Every rule
+ * below it is written `#gl-items-panel[...]` rather than flattened, because the ghost rule further
+ * down depends on winning a (1,4,0) vs (1,3,0) fight that a shorter selector loses silently. */
+#gl-items-panel:not([data-gl-editing]) .gl-item__menu { display: none; }
+
+/* The grip. Sits INBOARD of the card's `...` menu rather than opposite it -- the placement comment
+   inside the rule below is the live one, and this line said "top-LEFT to its top-right" from when
+   the two controls were mirrored across the card. It shares that control's geometry, but is visible
+   at rest WITHIN the mode: once you have said you are arranging the list,
    the thing you arrange it with should not also have to be discovered, and a hover-only grip does
    not exist at all on touch. */
 .gl-item__grab {
-    /* TOP-RIGHT, because the rank plate owns the top-left now. It shares this corner with the remove
-       control and never collides with it: `.gl-item__remove` is hidden while positioning (below), so
-       a card offers exactly one control per mode. */
-    position: absolute; top: 6px; right: 6px; z-index: 2;
+    /* TOP-RIGHT, INBOARD OF THE REMOVE CONTROL, because the rank plate owns the top-left.
+       `6px + 26px + 6px` clears the remove button's 26px circle and leaves the same 6px gutter
+       between them that each has to the card edge.
+
+       THIS USED TO BE `right: 6px`, coincident with remove, and the comment here said the two "never
+       collide" because remove was hidden while positioning -- so a card offered exactly one control
+       per mode. One mode ended that: remove now follows `[data-gl-editing]` and the grip follows
+       `[data-gl-arranging]`, and arranging only ever happens INSIDE editing, so whenever the grip is
+       on screen the remove button is too. Hiding one is no longer available as a way to keep the
+       corner uncontested, so they are separated instead.
+
+       Caught by a test rather than by looking: `test_remove_and_rearrange_share_a_card_without_
+       contesting_it` was rewritten from the one that pinned the old hiding rule, and it failed on
+       the stacked corner the moment that rule came out. */
+    position: absolute; top: 6px; right: 38px; z-index: 2;
     display: grid; place-items: center;
     width: 26px; height: 26px;
     border-radius: 999px;
@@ -467,7 +514,11 @@
 @media (hover: none) {
     .gl-item__grab {
         width: 44px; height: 44px;
-        top: 0; right: 0;
+        /* `right: 44px`, so the two 44px targets ABUT rather than overlap. At the pointer offset of
+           38px they would share 6px of hit area, and the overlapping strip belongs to whichever
+           paints last -- which is how a tap meant for "reorder" deletes a game. The section header
+           controls solve the same arithmetic with their `margin-left: 8px`. */
+        top: 0; right: 44px;
         background: none; border: none;
     }
     .gl-item__grab::before {
@@ -735,7 +786,7 @@
 /* ── Section header controls ─────────────────────────────────────────────────────────────────────
  *
  * Quiet until the header is hovered or something inside it takes focus -- the same restraint the
- * card's remove control uses, and for the same reason: these sit beside content people are reading.
+ * card's own `...` menu uses, and for the same reason: these sit beside content people are reading.
  *
  * `:focus-within` and not `:hover` alone, so tabbing through the page surfaces each header's controls
  * in turn rather than leaving a keyboard user pressing buttons they cannot see. */
@@ -754,12 +805,14 @@
     transition: opacity 0.16s ease, color 0.16s ease, background 0.16s ease;
 }
 .gl-section__act svg { width: 14px; height: 14px; }
-/* THE TWO TARGETS MUST NOT OVERLAP. The visible buttons are 28px with a 10px gap, so their centres
-   sit 38px apart while each `::before` is 44px wide -- a 6px overlap, won by whichever paints last.
-   That is Delete, so a thumb landing just right of the PENCIL opened "delete this section". Eight
-   more pixels puts the centres 46px apart and the boxes side by side with room to spare. The confirm
-   dialog was the only thing standing between that mis-tap and a deleted header. */
-.gl-section__act + .gl-section__act { margin-left: 8px; }
+/* THE TWO TARGETS MUST NOT OVERLAP, and the pair that needed keeping apart has changed.
+   It was `.gl-section__act + .gl-section__act`, when this header carried a rename button and a
+   delete button: 28px buttons 10px apart put their centres 38px apart while each `::before` is
+   44px wide, a 6px overlap won by whichever painted last -- Delete -- so a thumb landing just right
+   of the pencil opened "delete this section".
+   The header carries ONE `.gl-section__act` now (the `...` menu), so that selector can never match.
+   The live adjacency is `.gl-section__add + .gl-section__act`, spaced where those two are defined
+   further down. */
 
 .gl-section__head:hover .gl-section__act,
 .gl-section__head:focus-within .gl-section__act { opacity: 1; }
@@ -786,10 +839,8 @@
         color: var(--pp-text);
         background: color-mix(in oklab, var(--pp-text) 9%, transparent);
     }
-    .gl-section__act--danger:hover {
-        color: var(--pp-error);
-        background: color-mix(in oklab, var(--pp-error) 12%, transparent);
-    }
+    /* `.gl-section__act--danger:hover` lived here and went with the delete BUTTON it styled.
+       Deleting a section is a row in the `...` menu now, carrying `.gl-menu__item--danger`. */
     .gl-sections__numbering:hover { color: var(--pp-text); }
 }
 .gl-section__act:focus-visible { opacity: 1; outline: 2px solid var(--pp-primary); outline-offset: 2px; }
@@ -830,7 +881,7 @@
 /* While arranging, it is a TARGET and says so. Outside the mode it is just a statement of fact, and
    an accent-dashed box inviting a drop nobody can perform is the kind of affordance that teaches
    people the page is broken. */
-#gl-items-panel[data-positioning] .gl-group__grid:empty::before {
+#gl-items-panel[data-gl-arranging] .gl-group__grid:empty::before {
     border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
     color: var(--pp-text-dim);
     background: color-mix(in oklab, var(--pp-primary) 6%, transparent);
@@ -854,22 +905,22 @@
        specificity as the resting-elevation rule further down and earlier in source -- so the
        elevation won and these never applied. The end state was right by accident; the rules were
        dead, and their presence implied a defence that was not there. */
-    #gl-items-panel[data-positioning] .pp-gcard:hover .pp-gcard__art { transform: none; }
-    #gl-items-panel[data-positioning] .pp-gcard:hover .pp-gcard__title { color: var(--pp-text); }
+    #gl-items-panel[data-gl-arranging] .pp-gcard:hover .pp-gcard__art { transform: none; }
+    #gl-items-panel[data-gl-arranging] .pp-gcard:hover .pp-gcard__title { color: var(--pp-text); }
 }
 /* The press-dip too: a card you are picking up should not also flinch. */
-#gl-items-panel[data-positioning] .pp-gcard:active { transform: none; }
+#gl-items-panel[data-gl-arranging] .pp-gcard:active { transform: none; }
 
 /* 2. THE CURSOR SAYS GRAB, over the whole card rather than over the grip alone. */
-#gl-items-panel[data-positioning] .gl-item,
-#gl-items-panel[data-positioning] .pp-gcard { cursor: grab; }
-#gl-items-panel[data-positioning] .gl-item:active,
-#gl-items-panel[data-positioning] .pp-gcard:active { cursor: grabbing; }
+#gl-items-panel[data-gl-arranging] .gl-item,
+#gl-items-panel[data-gl-arranging] .pp-gcard { cursor: grab; }
+#gl-items-panel[data-gl-arranging] .gl-item:active,
+#gl-items-panel[data-gl-arranging] .pp-gcard:active { cursor: grabbing; }
 
 /* 3. TOUCH MUST NOT TREAT A HELD CARD AS TEXT OR AS A LINK. Long-press on a phone otherwise raises
  *    the selection handles or the link preview sheet, both of which land at roughly the moment the
  *    drag arms -- so the gesture that picks a card up also opens a menu over it. */
-#gl-items-panel[data-positioning] .gl-item {
+#gl-items-panel[data-gl-arranging] .gl-item {
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
@@ -905,7 +956,7 @@
     border-radius: 14px;
     transition: background 0.2s ease, box-shadow 0.2s ease;
 }
-#gl-items-panel[data-positioning] [data-gl-arrange] {
+#gl-items-panel[data-gl-arranging] [data-gl-arrange] {
     padding: 12px;
     /* Tinted with the accent rather than merely darkened: it is the same language the position bar
        above it speaks, so the two read as one mode rather than as two unrelated highlights. */
@@ -917,7 +968,7 @@
 /* The cards come UP off that surface. `.pp-gcard` already transitions border-color and box-shadow
    for its hover state, so this inherits the easing it was tuned with. The shadow is the load-bearing
    half -- the accent border alone reads as "selected", which is a different and wrong idea. */
-#gl-items-panel[data-positioning] .gl-item .pp-gcard {
+#gl-items-panel[data-gl-arranging] .gl-item .pp-gcard {
     border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
                 0 10px 22px -8px rgba(0, 0, 0, 0.55);
@@ -935,7 +986,7 @@
 
    `outline` rather than `border`, deliberately: a border would change the card's box and shift the
    grid by a pixel as cards are picked up and dropped. */
-#gl-items-panel[data-positioning] .gl-item.is-picked .pp-gcard {
+#gl-items-panel[data-gl-arranging] .gl-item.is-picked .pp-gcard {
     /* 3px at 3px offset, NOT the 2px/2px that `.pp-gcard:focus-visible` already draws. Identical
        rings meant a keyboard user tabbing the grid saw the "held" mark on every card they passed. */
     outline: 3px solid var(--pp-primary);
@@ -956,11 +1007,11 @@
    every card is taken back off this one, so the hole looks like the hole.
 
    ID-SCOPED, because it has to outrank the mode's own resting elevation. Written as
-   `.gl-item.sortable-ghost .pp-gcard` (0,3,0) it lost to `#gl-items-panel[data-positioning]
+   `.gl-item.sortable-ghost .pp-gcard` (0,3,0) it lost to `#gl-items-panel[data-gl-arranging]
    .gl-item .pp-gcard` (1,3,0), so `box-shadow: none` never applied and the "hole" was a lifted,
    glowing card with a dashed ring on it -- the opposite of the intent, and invisible in review
    because the outline and the opacity DID land. */
-#gl-items-panel[data-positioning] .gl-item.sortable-ghost .pp-gcard {
+#gl-items-panel[data-gl-arranging] .gl-item.sortable-ghost .pp-gcard {
     outline: 2px dashed color-mix(in oklab, var(--pp-primary) 60%, transparent);
     outline-offset: -2px;
     box-shadow: none;
@@ -981,7 +1032,7 @@
                 0 22px 46px -12px rgba(0, 0, 0, 0.65);
 }
 .gl-item.sortable-fallback .gl-item__grab,
-.gl-item.sortable-fallback .gl-item__remove { opacity: 0; }
+.gl-item.sortable-fallback .gl-item__menu { opacity: 0; }
 
 /* The per-entry note, under the title rather than over the art. Clamped so one hunter's essay
    cannot make its card twice the height of its neighbours and break the grid's rhythm. */
@@ -1244,7 +1295,7 @@
 /* The pencil beside the title. Quiet at rest like the remove control, but never hover-only -- it is
    the only route to renaming, so it stays reachable by keyboard and visible on touch. */
 /* 44px, not the 26px this shipped with -- and this file already makes both arguments against
-   itself: it bumps `.gl-item__remove` to 44 on touch citing the design system, and it explains that
+   itself: it bumps `.gl-item__menu` to 44 on touch citing the design system, and it explains that
    Tailwind v4's preflight sets no `cursor: pointer` on buttons so every comparable control must
    declare it. The pencil is the ONLY route to renaming and had neither. The visible circle stays
    26px; the rest is transparent padding, so the target grows without the button gaining weight. */
@@ -1780,4 +1831,194 @@
     .gl-spotlight,
     .gl-spotlight__cover { transition: none; }
     .gl-spotlight:hover { transform: none; }
+}
+
+
+/* A TRIGGER WITH ITS MENU OPEN STAYS VISIBLE. Both of these are `opacity: 0` at rest and lifted by
+   hover or focus-within on their container -- and the panel is a child of `document.body`, so the
+   moment it takes focus the container's `:focus-within` is false and the trigger disappears while
+   its own menu is on screen. `quick-add.css` solves this on the identical control with the same
+   hook; neither new consumer had ported it.
+
+   `aria-expanded` is written by the primitive on every open, so the hook already existed unused. */
+.gl-item__menu[aria-expanded="true"],
+.gl-section__act[aria-expanded="true"] { opacity: 1; }
+
+/* ── the card's action menu ──────────────────────────────────────────────────────────────────────
+ *
+ * The panel `AnchoredMenu` builds and positions. It is `position: fixed` on <body> -- set by the
+ * primitive, not here -- because the trigger sits in a grid cell with `overflow` ancestors and a
+ * transform-capable page wrapper, and an absolute panel is clipped by the first of those it meets.
+ * Everything below is appearance only; nothing here may set `position`, `top` or `left`, which the
+ * primitive writes per open. */
+.gl-menu {
+    position: fixed;
+    /* 100, matching every other anchored panel on the site -- `.qa-pop`, the nav search, the sub-nav
+       more-menu, the badge-detail popover, and `.gl-adder__panel` ON THIS PAGE. 60 cleared the
+       chrome, so nothing broke against it, but the docked adder opens its results downward from a
+       section header into exactly the band this menu opens into, and at 60 the menu paints behind
+       them. Being the one panel at a different depth is the defect; the collision is the symptom. */
+    z-index: 100;
+    min-width: 200px;
+    max-width: min(280px, calc(100vw - 16px));
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+    box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.6);
+    /* `contain`, so a flick inside a long section list does not chain to the document -- whose own
+       scroll handler follows the anchor and then closes the panel mid-gesture. quick-add's
+       stylesheet carries the same rule for the same reason. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.gl-menu__head {
+    padding: 6px 10px 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.gl-menu__item {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%;
+    /* 38px, not 44: this is a row in a list of rows, where the neighbours ARE the separation --
+       the 44px minimum is about isolated targets with nothing above or below to absorb a near miss.
+       The same argument the design system makes for menu rows generally. */
+    min-height: 38px;
+    padding: 0 10px;
+    border: 0; border-radius: 8px;
+    background: none;
+    color: var(--pp-text);
+    font-size: 0.86rem;
+    text-align: left;
+    cursor: pointer;
+}
+.gl-menu__item svg { width: 14px; height: 14px; flex: none; }
+.gl-menu__item { transition: background 0.14s ease, color 0.14s ease; }
+/* GUARDED, like every other hover-background in this file (see the rule above `.gl-group__grid`).
+   On touch an unguarded `:hover` STICKS after the tap. It matters least here -- the panel closes and
+   clears its own markup -- and most on `.gl-section__add` below, which stays lit until something
+   else is tapped. Guarding all three keeps one rule rather than one rule and an exception. */
+@media (hover: hover) {
+    .gl-menu__item:hover { background: color-mix(in oklab, var(--pp-primary) 14%, transparent); }
+}
+.gl-menu__item:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: -2px;
+}
+/* THE CURRENT SECTION, marked and inert. `disabled` is what the JS renders, so the styling has to
+   agree that it is not a target -- a row that looks pressable and refuses is worse than one that
+   says so. The tick is a `::after` so the label stays left-aligned with its neighbours. */
+.gl-menu__item.is-current {
+    color: var(--pp-text-mute);
+    cursor: default;
+}
+.gl-menu__item.is-current::after {
+    /* THE SITE'S EXISTING TICK, the character `.rp-pop__item.is-selected` already uses for exactly
+       this -- "which of these am I on" in an anchored menu. The first cut of this reached for a
+       `var(--pp-tick)` mask, which is a token that does not exist anywhere in the stylesheet: it
+       would have rendered a blank 14px box, and blank is indistinguishable from "not current",
+       which is the one thing this mark exists to say.
+
+       AND THE SECOND CUT SHIPPED WORSE THAN BLANK: `¹3`, in the accent colour, announced aloud as
+       "superscript one three". The CSS escape was written into this file through a generated Python
+       string where `\2713` with ONE backslash is an OCTAL escape -- chr(0o271) is `¹` -- so the
+       character never survived to the stylesheet. It reached `output.css` and `staticfiles/` before
+       an audit caught it.
+
+       Written as the CSS escape `\2713`, exactly as `elements.css` writes it, and never as a literal
+       ✓: the literal depends on every tool between here and the browser agreeing about encoding, and
+       this one did not. */
+    content: '\2713';
+    margin-left: auto;
+    padding-left: 8px;
+    color: var(--pp-primary);
+    font-weight: 700;
+}
+.gl-menu__item--danger { color: var(--pp-error); }
+@media (hover: hover) {
+    .gl-menu__item--danger:hover {
+        background: color-mix(in oklab, var(--pp-error) 16%, transparent);
+    }
+}
+.gl-menu__sep {
+    height: 1px;
+    margin: 5px 8px;
+    background: var(--pp-border);
+}
+/* No separator above the FIRST thing in the panel: a card that cannot be filed renders the remove
+   row alone, and a rule hanging above it reads as a missing section list. */
+.gl-menu__sep:first-child { display: none; }
+
+
+/* ── the section header's own controls (2026-09) ─────────────────────────────────────────────────
+ *
+ * "+ Add game" is LABELLED and the rest is a menu. There were two 28px icon buttons here with a
+ * load-bearing `margin-left: 8px` keeping their 44px hit areas apart; five would not have fitted
+ * beside a name and a count, which is the same arithmetic the card's menu answered one element up.
+ *
+ * It does NOT hide at rest the way `.gl-section__act` does. The act buttons are quiet because they
+ * sit beside content people are reading; this one is the header's reason for existing in edit mode,
+ * and a control that has to be discovered by hovering is the thing this rebuild was asked to fix.
+ * It is gated on the mode instead, which is a better answer to the same concern. */
+#gl-items-panel:not([data-gl-editing]) .gl-section__add,
+#gl-items-panel:not([data-gl-editing]) .gl-section__act { display: none; }
+
+.gl-section__add {
+    display: inline-flex; align-items: center; gap: 5px;
+    min-height: 28px;
+    margin-left: auto;          /* pushes the pair to the end, past the name and count */
+    padding: 0 9px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: none;
+    color: var(--pp-text-mute);
+    font-size: 0.72rem; font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.gl-section__add svg { width: 12px; height: 12px; }
+@media (hover: hover) {
+    .gl-section__add:hover {
+        color: var(--pp-text);
+        border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+        background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    }
+}
+.gl-section__add:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* THE 44px FLOOR, the same transparent-padding trick `.gl-item__menu`, `.gl-item__grab`,
+   `.gl-section__act` and the adder's input all carry. This was the only control in the feature
+   below it -- and the primary action of the header in edit mode, which is the worst one to leave
+   short. The drawn pill stays its own size; only the hit area grows.
+
+   `::after`, not `::before`: `.gl-section__act` uses `::before` for its own target and these two
+   sit adjacent, so keeping them on different pseudo-elements means a future rule aimed at one
+   cannot silently catch the other. */
+@media (hover: none) {
+    .gl-section__add { position: relative; }
+    .gl-section__add::after {
+        content: ''; position: absolute; left: 0; right: 0;
+        top: 50%; transform: translateY(-50%);
+        height: 44px;
+    }
+}
+/* `margin-left: auto` belongs to whichever of the two comes first, so the menu button takes it when
+   the add button is absent -- a lapsed member, or a list where nothing can be filed. */
+.gl-section__add + .gl-section__act { margin-left: 8px; }
+
+/* ── the adder, docked under a section header ────────────────────────────────────────────────────
+ *
+ * The SAME NODE as the toolbar's, moved. It keeps `.gl-adder` and everything that class carries;
+ * this modifier only says where it is, so the two positions cannot drift into two designs.
+ *
+ * The accent rail is the whole point of the treatment: docked, the field is making a claim about
+ * WHERE what you type will land, and that claim needs to read from the header above it rather than
+ * from a placeholder nobody re-reads. */
+.gl-adder--docked {
+    margin: 8px 0 10px;
+    border-left: 3px solid var(--pp-primary);
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
 }

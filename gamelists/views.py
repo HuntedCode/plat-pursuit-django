@@ -551,19 +551,32 @@ class GameListDetailView(DetailView):
         return GameList.objects.readable_by(self._viewer()).select_related('owner')
 
     @staticmethod
-    def _grouped(items, sections, *, keep_empty_bucket=False):
+    def _grouped(items, sections):
         """`[(section_or_None, [items])]`, ungrouped first and then sections in their own order.
 
         UNGROUPED LEADS, and always renders when it has anything in it. A list that gains sections
         has every item unassigned, so this bucket is the normal state on the way in rather than an
         error -- putting it last would hide the games somebody is about to file.
 
-        IT ALSO RENDERS EMPTY FOR SOMEBODY WHO CAN ARRANGE, which is `keep_empty_bucket`. A header
-        for nothing is noise to a READER, so they still never see it -- but for the owner it is the
-        only way back out of a section. File the last loose card and the bucket disappeared, taking
-        the drop target with it: nothing could be un-filed by pointer (no grid to drop onto) or by
-        keyboard (no group before the first section), until the owner deleted a whole section to get
-        their game back.
+        IT NO LONGER RENDERS WHEN EMPTY, for anybody. It used to, for an owner who could arrange,
+        and the reason was real at the time: filing the last loose card made the bucket disappear and
+        took the drop target with it, so nothing could be un-filed by pointer (no grid to drop onto)
+        or by keyboard (no group before the first section) until the owner deleted a whole section to
+        get their game back.
+
+        The 2026-09 card menu ended that. "No section" is a row on every card's menu and is appended
+        by the client rather than read from the page, specifically so it is offered when this bucket
+        is NOT rendered -- so un-filing has a home that does not depend on a header existing.
+
+        What is left is the owner's actual complaint: a list whose games are all filed showed a
+        permanent "Not in a section" header over nothing. A header for nothing was always noise to a
+        reader; it turns out it was noise to the owner too, and the drop target was the only thing
+        buying it.
+
+        THE COST, STATED: a card can no longer be dragged out of every section, because there is
+        nothing to drag it onto. The menu is the route. If a drop target is ever wanted back, it
+        belongs behind `[data-gl-arranging]` -- on screen only while a drag is actually live -- and
+        not on every render of every sectioned list.
 
         Sections keep their own `position`; the chosen SORT orders within each one. That falls out of
         iterating `items`, which arrives already sorted -- so sorting a sectioned list A-Z sorts
@@ -578,7 +591,7 @@ class GameListDetailView(DetailView):
             buckets.get(item.section_id, ungrouped).append(item)
 
         groups = []
-        if ungrouped or keep_empty_bucket:
+        if ungrouped:
             groups.append((None, ungrouped))
         groups.extend((section, buckets[section.id]) for section in sections)
         return groups
@@ -743,10 +756,11 @@ class GameListDetailView(DetailView):
         # this is one bounded query either way -- an empty result IS the answer.
         sections = list(game_list.sections.all())
         context['sections'] = sections
-        # `arrangeable` is settled HERE rather than further down where the flags are assembled,
-        # because the grouping needs it: an owner who can arrange keeps the ungrouped bucket even
-        # when it is empty, since it is the only way back out of a section. The two flags below are
-        # derived from this same local, so there is still one source for the answer.
+        # `arrangeable` is settled HERE rather than further down where the flags are assembled. It
+        # used to be the grouping's business too -- an owner who could arrange kept the ungrouped
+        # bucket even when empty, because it was the only way back out of a section -- and it is not
+        # any more: the card menu carries "No section" whether or not the bucket is rendered. The two
+        # flags below still derive from this same local, so there is one source for the answer.
         arrangeable = (
             viewer is not None
             and game_list.owner_id == viewer.id
@@ -754,7 +768,7 @@ class GameListDetailView(DetailView):
             and bool(items)
         )
         context['groups'] = (
-            self._grouped(items, sections, keep_empty_bucket=arrangeable) if sections else None)
+            self._grouped(items, sections) if sections else None)
 
         # THE RANK EACH CARD SHOWS, computed here rather than in the template, because one of the two
         # modes cannot be expressed there: continue-through is `position + 1`, which a filter can do,
@@ -974,6 +988,44 @@ class _ListActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
 
     def fail(self, exc, status=400):
         return JsonResponse({'error': str(exc)}, status=status)
+
+    def resolve_section(self, request, game_list, field='section'):
+        """The posted section, `None` for the loose bucket, raising `SectionNotOnList` for a bad id.
+
+        SHARED BY THE TWO WRITES THAT TAKE A DESTINATION -- filing an existing game (`AssignItemView`)
+        and adding one straight into a section (`AddConceptView`). It was one view's inline block
+        until the second needed it; copying twelve lines carrying three separate security arguments
+        is how the two quietly come to disagree about which of them is the careful one.
+
+        EMPTY IS A DESTINATION, not a missing field: "" means the loose bucket, which is the only way
+        to un-file a game. So this cannot use a falsy test to mean "not supplied".
+
+        Scoped to the list, like `_SectionActionView.get_section` and for the same reason: an id
+        alone must not answer differently for "another hunter's section" and "no such section". The
+        service refuses a foreign section too; this is what stops the refusal having to say which
+        kind of wrong it was.
+
+        `safe_int` and not the raw string: `filter(pk='abc')` raises ValueError, so a junk value
+        would be a 500 on a route any logged-in hunter can post to.
+        """
+        raw = (request.POST.get(field) or '').strip()
+        if not raw:
+            return None
+        section = GameListSection.objects.filter(
+            pk=safe_int(raw), game_list=game_list).first()
+        if section is None:
+            raise SectionNotOnList('That section is not on this list.')
+        return section
+
+
+class SectionNotOnList(Exception):
+    """A posted section id that does not name a section of the list being written to.
+
+    An exception rather than a sentinel return, because `resolve_section` has THREE outcomes and two
+    of them are ordinary: a section, the loose bucket (`None`), and "that is not a section of this
+    list". Returning `None` for the middle one and `False` for the last is exactly the shape that
+    gets read as a boolean by the next caller.
+    """
 
 
 class UpdateListView(_ListActionView):
@@ -1289,9 +1341,16 @@ class AddConceptView(_ListActionView):
                    if concept_id is not None else None)
         if concept is None:
             return self.fail('That game could not be found.', status=404)
+        # THE DESTINATION, optional. A per-section adder posts one; the toolbar's adder does not, and
+        # an absent field reads as the loose bucket, which is where an add has always landed.
+        try:
+            section = self.resolve_section(request, game_list)
+        except SectionNotOnList as exc:
+            return self.fail(exc)
+
         try:
             item = svc.add_concept(game_list, self._viewer(request), concept,
-                                   note=request.POST.get('note', ''))
+                                   note=request.POST.get('note', ''), section=section)
         except svc.ListError as exc:
             return self.fail(exc)
         game_list.refresh_from_db()
@@ -1304,6 +1363,11 @@ class AddConceptView(_ListActionView):
             # hand-assembling a route, which this project has been bitten by often enough that the
             # list card's own comment warns about it. The server owns URL shapes; it can say one.
             'remove_url': reverse_lazy('list_remove_game', args=[game_list.id, item.pk]),
+            # WHERE IT LANDED, echoed back the way `AssignItemView` echoes it. The caller knows what
+            # it asked for, but not what the service settled on -- the section is re-resolved under
+            # the list lock, so a header deleted mid-request refuses rather than silently filing the
+            # game loose. A client that repaints optimistically needs to be told which happened.
+            'section': item.section_id,
         })
 
 
@@ -1367,21 +1431,12 @@ class AssignItemView(_ListActionView):
         if item is None:
             return self.fail('That entry is no longer on this list.', status=404)
 
-        # EMPTY IS A DESTINATION -- the loose bucket -- so this reads "" as None rather than as a
-        # missing field. Dragging a card out of every section is the only way to un-file one.
-        raw = (request.POST.get('section') or '').strip()
-        section = None
-        if raw:
-            # Scoped to the list, like `_SectionActionView.get_section` and for the same reason: an
-            # id alone must not answer differently for "another hunter's section" and "no such
-            # section". `assign_item` refuses a foreign section too; this is what stops the refusal
-            # having to say which kind of wrong it was.
-            # `safe_int` and not the raw string: `filter(pk='abc')` raises ValueError, so a junk
-            # `section` would be a 500 on a route any logged-in hunter can post to.
-            section = GameListSection.objects.filter(
-                pk=safe_int(raw), game_list=game_list).first()
-            if section is None:
-                return self.fail('That section is not on this list.')
+        # EMPTY IS A DESTINATION -- the loose bucket. `resolve_section` owns that reading, and the
+        # three security arguments behind it, for this view and for `AddConceptView`.
+        try:
+            section = self.resolve_section(request, game_list)
+        except SectionNotOnList as exc:
+            return self.fail(exc)
 
         try:
             svc.assign_item(game_list, viewer, item, section)

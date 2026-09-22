@@ -47,6 +47,42 @@ def _url(game_list):
     return f'/community/lists/{game_list.id}/'
 
 
+#: A named JS function's body, sliced to the NEXT top-level function rather than to a NAMED one.
+#:
+#: Every slice in this file used to name its neighbour, which made a test about one thing fail with
+#: `ValueError: substring not found` when an UNRELATED function was renamed -- four of them did
+#: exactly that during the single-mode rebuild, and one silently produced an EMPTY slice instead
+#: (the named neighbour happened to be defined earlier in the file, so `index()` found the wrong
+#: occurrence and the assertion ran against ''). An empty slice fails loudly here only because the
+#: assertions are positive; a negative one would have passed vacuously.
+#:
+#: `test_profile_badges_tab` reached the same conclusion independently. What must not appear in a
+#: slice is the caller's business; this only has to find the end.
+def _decommented_css(source):
+    """The same, for CSS, which has only the block form.
+
+    Separate from `_decommented` so a caller cannot accidentally strip `//` from a stylesheet, where
+    it is not a comment at all -- a URL contains one.
+    """
+    return re.sub(r'/\*.*?\*/', '', source, flags=re.S)
+
+
+def _fn(js, name, indent=4):
+    """The body of `function <name>(`, up to whatever is defined at the same indent after it.
+
+    `indent` because this file slices nested functions too -- the identity editor's `open`, `close`
+    and `reset` live inside `wireIdentityEditor` at eight spaces, and a four-space boundary would
+    run straight past them to the end of the enclosing closure.
+    """
+    nxt_re = re.compile(r'\n' + ' ' * indent + r'(?:function |/\*\*|\}\))')
+    start = js.index('function ' + name + '(')
+    nxt = nxt_re.search(js, start + 10)
+    assert nxt, f'{name} has no following definition; the slice would swallow the file'
+    body = js[start:nxt.start()]
+    assert body.strip(), f'{name} sliced to nothing'
+    return body
+
+
 def _read(relative):
     return (Path(__file__).resolve().parents[2] / relative).read_text(encoding='utf-8')
 
@@ -503,8 +539,8 @@ def test_the_drag_is_wired_after_settle_not_after_swap(client):
     # ...and the settle handler must actually DO the wiring. Asserting only that a listener for the
     # event name exists left `onAfterSettle` free to be emptied to `return;` -- which kills the mode
     # across every sort swap and every chrome refresh -- with this test still green.
-    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
-    assert 'syncPositioning()' in settle and 'wirePositioning()' in settle, \
+    settle = js[js.index('function onAfterSettle('):js.index('function wireEditToggle(')]
+    assert 'syncPositioning()' in settle and 'wireEditToggle()' in settle, \
         'the settle handler is registered but does no wiring'
 
 
@@ -620,63 +656,105 @@ def test_the_grip_is_operable_from_a_keyboard(client):
 
 def test_reordering_is_a_mode_you_have_to_enter(client):
     """Handles on by default made dragging something you could do by ACCIDENT. The capability
-    (`data-gl-reorder`) and the intent (the mode) are now separate: the server still says where
-    reordering is possible, and the hunter says when."""
+    (`data-gl-reorder`) and the intent (the mode) are still separate: the server says where
+    reordering is possible, and the hunter says when.
+
+    REWRITTEN FOR THE SINGLE MODE (2026-09). What this guards did not change -- deliberate entry --
+    but the control did. There used to be two presses, "Edit list" and then a second toggle inside
+    the bar; there is one now, and the assertions follow it rather than the button that is gone.
+    """
     owner = _staff(client)
     game_list = _ranked(owner, 3)
 
     body = client.get(_url(game_list)).content.decode()
 
-    # The toggle is offered...
-    assert 'data-gl-positions-toggle' in body
-    assert 'Edit list positions' in body
-    # ...next to the grid it acts on, not buried in the edit panel above it. Asserted by position,
-    # because "it is on the page somewhere" is what let it ship somewhere nobody could find it.
-    assert body.index('data-gl-positions') > body.index('data-gl-identity-edit'), \
-        'the bar belongs below the editor, beside the list'
-    assert body.index('data-gl-positions') < body.index('id="gl-items-panel"'), \
-        'the bar belongs directly above the grid'
-    # The save model is stated once the mode is on; the JS owns that copy because it swaps with state.
+    # ONE toggle, and it is the header's. The second one is gone rather than renamed.
+    assert 'data-gl-edit-open' in body
+    assert 'data-gl-positions-toggle' not in body, 'the second mode toggle came back'
+    # The label the JS flips must be the label the server renders, or the button says one thing on
+    # load and another a frame after boot.
+    assert 'data-gl-edit-label' in body and '>Edit list<' in body
+
+    # The controls strip still sits next to the grid it acts on, not buried in the edit panel above
+    # it. Asserted by position, because "it is on the page somewhere" is what let it ship somewhere
+    # nobody could find it.
+    assert body.index('data-gl-positions') > body.index('data-gl-identity-edit'),         'the strip belongs below the editor, beside the list'
+    assert body.index('data-gl-positions') < body.index('id="gl-items-panel"'),         'the strip belongs directly above the grid'
+
+    # The save model is stated while the mode is on; the JS owns that copy because it swaps with
+    # state. It matters MORE now: one mode means a rename waits for Save while a drag does not, so
+    # the page has to say which kind of change it just took.
     js = _decommented(_read('static/js/list-detail.js'))
     assert 'Moves save as you make them.' in js, 'the save model has to be stated, not discovered'
-    # ...and the grips are rendered but inert until the mode is on, which is CSS, not markup.
+
+    # ...and the grips are rendered but inert until dragging is actually live, which is CSS, not
+    # markup. `data-gl-arranging` is the old `data-gl-arranging`, renamed when it stopped being the
+    # name of a mode the hunter enters and became a fact about whether drag attached.
     css = _read('static/css/components/gamelists.css')
-    assert '#gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }' in css
+    assert '#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { display: none; }' in css
     # `display: none` and not `opacity: 0` -- an invisible button is still a tab stop that announces
     # itself, which is the bug this is avoiding rather than a detail of how it looks.
-    #
-    # Written as a slice, both anchors landed on the SAME LINE of the stylesheet and the end anchor
-    # was searched from 0, so this examined a 40-character fragment of one selector and could not
-    # fail under any edit. The whole-file negative below says the same thing and can.
-    assert '#gl-items-panel:not([data-positioning]) .gl-item__grab { opacity: 0' not in css
+    assert '#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { opacity: 0' not in css
 
 
-def test_the_mode_is_not_offered_where_reordering_is_impossible(client):
-    """The toggle lives in the page header, which the sort swap does not re-render, so it must not be
-    rendered for a list that cannot be reordered at all."""
+def test_the_mode_never_promises_a_drag_the_page_cannot_honour(client):
+    """WAS `test_the_mode_is_not_offered_where_reordering_is_impossible`, and the rename is the
+    point. The old rule -- do not render the toggle on a list that cannot be reordered -- stopped
+    making sense when the toggle became the way to RENAME a list too: refusing it on a Collection
+    would refuse editing altogether.
+
+    So the hazard moved rather than went. The mode is offered everywhere the owner can edit; what
+    must not happen is the mode dressing a grid as draggable when nothing can be dragged. That is
+    `arranging`, which is derived from the grids and never toggled, and this pins the server half of
+    it: no `data-gl-arrange` grid means `startArranging` has nothing to attach to.
+    """
     owner = _staff(client)
 
     plain = _list(owner, 2)
-    assert 'data-gl-positions-toggle' not in client.get(_url(plain)).content.decode()
+    body = client.get(_url(plain)).content.decode()
+    assert 'data-gl-edit-open' in body, 'a Collection owner can still rename their list'
+    assert 'data-gl-arrange' not in body, 'a section-less Collection offers a drag with no meaning'
 
     ranked = _ranked(owner, 2)
     sorted_away = client.get(_url(ranked), {'sort': 'name'}).content.decode()
-    assert 'data-gl-positions-toggle' not in sorted_away
+    assert 'data-gl-edit-open' in sorted_away
+    # Sorted A-Z a drop POSITION is an artefact of the sort, so the reorder capability is withdrawn
+    # even though the list really is ranked.
+    assert 'data-gl-reorder' not in sorted_away, 'a sorted list still offers to reorder'
 
 
-def test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor(client):
-    """Three ways the mode could outlive its own preconditions, all pinned at the source because none
-    is reachable from a server test: a sort that removes the capability, a swap that replaces the grid
-    the drag manager is bound to, and closing the panel the mode was entered from."""
+def test_dragging_never_outlives_the_grid_or_the_mode(client):
+    """WAS `test_the_mode_follows_the_grid_across_swaps_and_ends_with_the_editor`. Three ways
+    dragging could outlive its own preconditions, all pinned at the source because none is reachable
+    from a server test.
+
+    Two are unchanged: a sort that removes the capability, and a swap that replaces the grid the drag
+    manager is bound to.
+
+    THE THIRD WAS REVERSED, deliberately. It used to be "closing the editor must end the mode it
+    started", because the arrange mode was entered from inside the identity panel. One mode deleted
+    that coupling -- a sort no longer closes the editor, and closing the editor IS leaving the mode.
+    The danger it guarded did not go anywhere though: it just arrives from the other direction, as a
+    live Sortable and a bound document keydown surviving the mode that created them. So the
+    assertion now runs the other way round.
+    """
     js = _decommented(_read('static/js/list-detail.js'))
 
-    sync = js[js.index('function syncPositioning() {'):js.index('function syncPositionsVisibility() {')]
+    sync = _fn(js, 'syncPositioning')
     assert 'attachDrag(grids)' in sync, 'a replaced grid must be re-attached while the mode is on'
-    assert 'syncPositionsVisibility()' in sync, 'the bar must follow the grid below it'
+    assert 'syncArranging()' in sync, 'the strip must follow the grid below it'
 
-    close_body = js[js.index('function close() {'):js.index('function reset() {')]
-    assert 'editorOpen = false' in close_body and 'syncPositionsVisibility()' in close_body, \
-        'closing the editor must end the mode it started'
+    # The capability can vanish under a mode that is still on -- Ranked -> Collection, or a sort to
+    # A-Z, removes every `[data-gl-arrange]`. Nothing else stops dragging, so this must.
+    arr = _fn(js, 'syncArranging')
+    assert 'stopArranging()' in arr, 'losing the grids leaves a Sortable bound to nothing'
+    # ...and it must NOT end the editing session with them. A sort closing the editor was the old
+    # coupling, and it is the thing being fixed.
+    assert 'exitEditing' not in arr, 'a sort still closes the editor'
+
+    # Leaving the mode takes the dragging with it, which is where `detachDrag` now hangs.
+    exit_body = _fn(js, 'exitEditing')
+    assert 'stopArranging()' in exit_body, 'leaving the mode leaves a live Sortable behind'
 
 
 def test_the_whole_card_drags_and_does_not_navigate_while_arranging(client):
@@ -697,7 +775,7 @@ def test_the_whole_card_drags_and_does_not_navigate_while_arranging(client):
     # `dropPicked` too, so moving the mode guard out of the click handler and into one of those --
     # which breaks it, leaving every card unclickable outside the mode -- kept this green.
     guard = js[js.index('function onCardClick('):js.index('function togglePicked(')]
-    assert 'if (!positioning' in guard, \
+    assert 'if (!arranging' in guard, \
         'a click guard that outlives the mode makes the list unclickable'
     # ...and a post-drop synthetic click must not toggle the pick. Sortable eats that click on every
     # platform except Chrome for Android, where it skips registering the listener entirely.
@@ -769,11 +847,11 @@ def test_arranging_quiets_the_card_hover_and_shows_the_cards_are_loose(client):
     # `[data-gl-arrange]` and NOT `#gl-items`: that id is rendered only by a FLAT list, so scoping
     # the tray to it left every SECTIONED list with cards lifting off nothing at all -- half a
     # two-part signal, on exactly the lists sections introduced.
-    assert '#gl-items-panel[data-positioning] [data-gl-arrange] {' in mode
+    assert '#gl-items-panel[data-gl-arranging] [data-gl-arrange] {' in mode
     assert '#gl-items {' not in mode, 'the tray still keys on the flat-list id'
     assert 'inset 0 1px 3px' in mode, 'the tray has no recess, so nothing is raised relative to it'
-    assert '#gl-items-panel[data-positioning] .gl-item .pp-gcard {' in mode
-    lifted = mode[mode.index('#gl-items-panel[data-positioning] .gl-item .pp-gcard {'):]
+    assert '#gl-items-panel[data-gl-arranging] .gl-item .pp-gcard {' in mode
+    lifted = mode[mode.index('#gl-items-panel[data-gl-arranging] .gl-item .pp-gcard {'):]
     assert 'box-shadow' in lifted[:400], 'the cards carry no elevation, only a border'
 
     # It arrives as a transition, so there is one moment of change and no loop -- and the END state is
@@ -937,13 +1015,16 @@ def test_cancelling_the_editor_restores_the_type_too(client):
     # reason that had nothing to do with what it checks. A mutation run reported it as "killed" on
     # that basis, which is a false pass hiding inside a false failure.
     #
-    # The marker used to be `var opener = root.querySelector(`, which stopped existing when the
-    # three opener lookups were routed through one document-scoped `editOpener()` helper -- the
-    # button had moved out of `root` and was silently never bound. Borrowing a neighbouring line as
-    # a boundary is fragile exactly like this; kept because the alternative is brace-matching, but
-    # now anchored on the line this test is actually adjacent to.
-    start = js.index('function reset() {')
-    reset_body = js[start:js.index('var opener = editOpener();', start)]
+    # THIRD BOUNDARY, and the last hand-picked one. It was `var opener = root.querySelector(`, which
+    # stopped existing when the opener lookups were routed through `editOpener()`; then
+    # `var opener = editOpener();`, which stopped existing when one mode removed that helper
+    # altogether. The comment that stood here said borrowing a neighbouring line is "fragile exactly
+    # like this" and kept it anyway "because the alternative is brace-matching".
+    #
+    # `_fn` is that alternative, written after the same fragility broke four tests in one change. It
+    # finds the end by indentation instead of by name, so nothing this test is not about can break
+    # it -- which is the whole complaint the two previous comments were making.
+    reset_body = _fn(js, 'reset', indent=8)
     assert "form.querySelector('[name=\"list_type\"][value=\"'" in reset_body, \
         'reset() leaves an abandoned type selection checked'
     assert 'current.checked = true' in reset_body
@@ -1164,7 +1245,9 @@ def test_every_entry_carries_its_own_remove_endpoint(client):
     assert len(item_ids) == 3
     for item_id in item_ids:
         assert f'/community/lists/{game_list.id}/items/{item_id}/remove/' in body
-    assert body.count('data-gl-remove') == 3
+    # The endpoint moved onto the menu trigger when the bare remove button was folded into the
+    # card's action menu (2026-09). Still one per row, still rendered by the server.
+    assert body.count('data-gl-card-menu') == 3
 
 
 def test_a_visitor_gets_no_remove_controls(client):
@@ -1174,7 +1257,7 @@ def test_a_visitor_gets_no_remove_controls(client):
 
     body = client.get(_url(game_list)).content.decode()
 
-    assert 'data-gl-remove' not in body
+    assert 'data-gl-card-menu' not in body
     assert '/remove/' not in body
     # The games themselves are still there -- this is not an empty page passing by accident.
     # `data-gcard`, since the detail games moved onto the shared game card. This is the POSITIVE
@@ -1199,8 +1282,8 @@ def test_the_remove_control_sits_beside_the_tile_and_not_inside_it(client):
     # the recurring failure on this branch, so the search starts inside the thing under test.
     region = body[body.index('class="gl-item"'):]
     anchor_close = region.index('</a>')
-    remove_at = region.index('data-gl-remove')
-    assert anchor_close < remove_at, 'the remove button is inside the tile anchor'
+    remove_at = region.index('data-gl-card-menu')
+    assert anchor_close < remove_at, 'the card menu trigger is inside the tile anchor'
 
 
 def test_the_social_buttons_carry_their_own_endpoints(client):
@@ -1631,16 +1714,23 @@ def test_the_edit_control_is_a_labelled_action_not_an_inline_pencil(client):
 
     assert 'data-gl-edit-open' in band, 'the edit control is not in the actions band'
     assert 'Edit list' in band, 'the edit control is still unlabelled'
-    # Named state, so it is not an anonymous toggle to a screen reader.
     # `max(0, ...)`: Edit is the FIRST control in the band, so a bare `- 200` went negative and
     # Python read it as "200 from the end" -- slicing the tail of the band instead of the button.
     start = max(0, band.index('data-gl-edit-open') - 200)
     opener = band[start:]
     opener = opener[:opener.index('</button>')]
-    assert 'aria-expanded' in opener and 'aria-controls="gl-edit-panel"' in opener, (
-        'the edit control does not say what it opens'
-    )
-    # And the panel it names exists, so `aria-controls` is not pointing at nothing.
+
+    # THE LABEL IS THE STATE, and it has to be addressable for the JS to flip it. This used to
+    # assert `aria-expanded` + `aria-controls="gl-edit-panel"` -- "it says what it opens" -- which
+    # was right while the control disclosed one panel. It opens a MODE now, reaching the cards, the
+    # section headers and the adders, so naming the identity panel would understate it by most of
+    # the page. `test_the_edit_control_never_states_a_state_it_does_not_keep` carries the other half
+    # of that argument and pins that both attributes are actively removed.
+    assert 'data-gl-edit-label' in opener, 'nothing for the mode to flip between Edit list and Done'
+    assert 'aria-controls' not in opener, 'the control names one panel while governing the page'
+
+    # The panel still exists and is still what the mode opens first; it is simply no longer the
+    # whole of what the control means.
     assert 'id="gl-edit-panel"' in body
 
 
@@ -1680,19 +1770,38 @@ def test_the_edit_opener_is_looked_up_where_it_actually_lives(client):
         'the opener is not looked up from the document')
 
 
-def test_the_edit_control_keeps_its_expanded_state_honest():
-    """`aria-expanded` that never changes is worse than none -- it states a fact and then lies.
-    Both edges are wired, and both are pinned, because the close path is the easy one to forget."""
-    js = _decommented(_read('static/js/list-detail.js'))
+def test_the_edit_control_never_states_a_state_it_does_not_keep():
+    """WAS `test_the_edit_control_keeps_its_expanded_state_honest`, which pinned `aria-expanded` on
+    both edges. The attribute is GONE as of 2026-09 and that is deliberate, so the assertion had to
+    change -- but the rule it enforced is the reason it went, not a casualty of it.
 
-    # BOTH VALUES, not a headcount. `js.count(...) == 2` is the idiom this very file rejects two
-    # hundred lines up ("the count cannot tell a new GUARDED write from a new UNGUARDED one; both
-    # move it by one"). Here it could not tell which element was being written, nor that one call
-    # sets `true` and the other `false` -- two `'true'` calls passed just as happily.
-    assert "setAttribute('aria-expanded', 'true')" in js, 'opening never marks the panel expanded'
-    assert "setAttribute('aria-expanded', 'false')" in js, 'closing never marks it collapsed'
-    # And both are written against the opener the template actually renders, not some other node.
-    assert 'editOpener()' in js, 'the aria state is no longer maintained on the edit opener'
+    The rule: a control must not state a fact about itself that it will not maintain. It used to
+    disclose one panel, so `expanded` was honest. It now enters a mode that reaches the cards, the
+    section headers and the adders -- `aria-expanded="true"` would describe the identity panel while
+    the hunter is looking at grips appearing over every card, which is the same lie the original
+    test was written to prevent, told about a bigger thing.
+
+    What carries the state instead is the LABEL, which is also why there is no `aria-pressed`: a
+    toggle must not carry both a pressed state and a changing label. So the guard is now that the
+    control maintains its label on both edges and claims neither ARIA state.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    paint = _fn(js, 'paintEditToggle')
+
+    # BOTH WORDS, not a headcount. `js.count(...) == 2` is the idiom this very file rejects ("the
+    # count cannot tell a new GUARDED write from a new UNGUARDED one"), and here it could not tell
+    # that one branch says "Done" and the other "Edit list" -- two "Done"s would pass just as well.
+    assert "'Done'" in paint and "'Edit list'" in paint, 'the label no longer reports both states'
+    assert 'editing ?' in paint, 'the label is not driven by the mode'
+
+    # ...and the abandoned states are actively removed, not merely unset. The template renders this
+    # button on every load and an out-of-band chrome swap re-renders it, so a stale attribute left
+    # by an older template would otherwise survive in the DOM with nothing to clear it.
+    assert "removeAttribute('aria-pressed')" in paint
+    assert "removeAttribute('aria-expanded')" in paint,         'a control that no longer discloses a panel still claims to'
+
+    # And it is written against the control the template actually renders.
+    assert 'editToggle()' in js, 'the label is no longer maintained on the edit toggle'
 
 
 def test_the_header_card_holds_no_page_action(client):
@@ -1779,29 +1888,45 @@ def test_the_reveal_observer_follows_the_card_class(client):
 
 # ── coverage the audit found missing ─────────────────────────────────────────────────────────────
 
-def test_opening_the_editor_is_what_reveals_the_bar(client):
-    """The whole feature hangs off two lines nothing pinned.
+def test_entering_the_mode_reveals_everything_it_governs():
+    """WAS `test_opening_the_editor_is_what_reveals_the_bar`. The two lines it pinned were the whole
+    coupling between the editor and the arrange bar, and that coupling is gone -- there is one mode
+    now, so nothing has to reveal anything else.
 
-    `syncPositionsVisibility` gates on `editorOpen`, and `close()` setting it false WAS asserted --
-    but `open()` setting it true was not. Delete those two lines and the position bar is `hidden`
-    forever, the mode is unreachable, and every test stays green.
+    What replaced it is a stronger claim, and the one the rebuild was asked for: entering the mode
+    brings the identity panel, the controls strip and the dragging ON TOGETHER. Three things that
+    used to arrive at three different times, from two different presses and no press at all.
     """
     js = _decommented(_read('static/js/list-detail.js'))
+    enter = _fn(js, 'enterEditing')
 
-    open_body = js[js.index('function open() {'):js.index('function close() {')]
-    assert 'editorOpen = true' in open_body
-    assert 'syncPositionsVisibility()' in open_body, 'opening the editor never reveals the bar'
+    assert 'identityShow()' in enter, 'the rename panel no longer opens with the mode'
+    assert 'block.hidden = false' in enter, 'the section controls stay hidden inside the mode'
+    assert 'startArranging()' in enter, 'dragging is still a second press'
+    assert "panel.dataset.glEditing = '1'" in enter, 'the CSS is never told the mode is on'
+
+    # ...and it is idempotent, because the toggle is now the only way in and a double press must not
+    # re-run `identityShow`, which resets the fields from the DOM and would discard typing.
+    assert 'if (editing) { return; }' in enter, 'entering twice destroys unsaved work'
 
 
-def test_something_actually_calls_enter_positioning(client):
-    """The only call site is the toggle's click handler. Remove the listener and a rendered button
-    does nothing -- and the one test that mentions `enterPositioning()` asserts it is ABSENT from the
-    swap handler, so nothing anywhere required it to be reachable."""
+def test_something_actually_calls_the_mode():
+    """WAS `test_something_actually_calls_enter_positioning`. The only call site is the toggle's
+    click handler, so removing the listener leaves a rendered button that does nothing -- and every
+    other test that mentions the mode asserts it is ABSENT from somewhere, so nothing else requires
+    it to be reachable at all.
+
+    Now more load-bearing than before, not less: this button is the single way into editing, where
+    it used to be the second of two.
+    """
     js = _decommented(_read('static/js/list-detail.js'))
+    wire = _fn(js, 'wireEditToggle')
 
-    wire = js[js.index('function wirePositioning('):js.index('function onGrabClick(')]
     assert "toggle.addEventListener('click'" in wire
-    assert 'enterPositioning()' in wire and 'exitPositioning()' in wire
+    assert 'enterEditing()' in wire and 'exitEditing()' in wire
+    # WeakSet-guarded rather than attribute-guarded: htmx's history snapshot is
+    # `cloneNode(true).innerHTML`, so a `data-` marker would be restored on a node with no listener.
+    assert 'wired.has(toggle)' in wire and 'wired.add(toggle)' in wire
 
 
 def test_the_grip_does_something_when_pressed(client):
@@ -1827,9 +1952,11 @@ def test_the_picked_state_is_reported_to_assistive_tech(client):
     assert "setAttribute('aria-pressed'" in setter
     assert 'setGrabPressed(row, true)' in js and 'setGrabPressed(pickedRow, false)' in js
 
-    # ...and the BAR's toggle must NOT also carry `aria-pressed`, because its label changes with
+    # ...and the MODE's toggle must NOT also carry `aria-pressed`, because its label changes with
     # state. Doing both makes "Done, pressed" ambiguous about whether Done is the state or the act.
-    paint = js[js.index('function paintPositionsToggle('):js.index('function setPositionsStatus(')]
+    # It is the header's single Edit control now rather than a second button in the bar; the rule it
+    # is held to did not change with the button that carries it.
+    paint = js[js.index('function paintEditToggle('):js.index('function setPositionsStatus(')]
     assert "removeAttribute('aria-pressed')" in paint
 
 
@@ -1908,29 +2035,30 @@ def test_an_empty_ranked_list_is_not_offered_a_reorder_mode(client):
     assert 'data-gl-positions' not in resp.content.decode()
 
 
-def test_the_mode_ends_when_the_list_stops_being_ranked(client):
-    """THE WORST BUG THIS AUDIT FOUND. `syncPositionsVisibility` bailed when `[data-gl-positions]`
-    was absent -- and switching Ranked -> Collection DELETES it, because the slot renders the bar only
-    under `can_reorder`. `exitPositioning` is the only thing that turns the mode off, so it became
-    unreachable in exactly the case that needs it.
+def test_dragging_ends_when_the_list_stops_being_draggable():
+    """WAS `test_the_mode_ends_when_the_list_stops_being_ranked` -- THE WORST BUG THAT AUDIT FOUND,
+    and the hazard is unchanged by the rebuild even though every name in it moved.
 
-    The mode then stayed on forever: every remove button hidden on a Collection, the document keydown
-    still bound, and `pickedRow` still pointing at a detached row whose grid kept `data-reorder-url`
-    -- so arrow keys silently rewrote positions on a list nobody could see.
+    Switching Ranked -> Collection, or sorting A-Z, removes every `[data-gl-arrange]` from the page
+    while the mode is still on. Nothing else stops dragging, so the Sortable stayed bound, the
+    document keydown stayed bound, and `pickedRow` went on pointing at a detached row whose grid
+    still carried `data-reorder-url` -- so arrow keys silently rewrote positions on a list nobody
+    could see.
+
+    The original fix was an ORDERING one: leave the mode first, then touch the bar, because bailing
+    early on a missing bar made the exit unreachable in exactly the case that needed it. That shape
+    survives here -- `stopArranging` is unconditional on the grids being gone, and the strip is
+    updated afterwards rather than being a precondition for it.
     """
     js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'syncArranging')
 
-    # Ends at the next thing DEFINED BELOW it. `attachDrag` sits 150 lines ABOVE, so searching
-    # from 0 returned an earlier index and the slice came back empty -- the same slice-direction
-    # mistake this file has now made four times, which is why the order is checked, not assumed.
-    start = js.index('function syncPositionsVisibility(')
-    fn = js[start:js.index('var GRAB_EARLIER', start)]
-    assert fn.index('exitPositioning(true)') < fn.index("querySelector('[data-gl-positions]')"), \
-        'the mode can only be left while the bar still exists -- which is not when it must be left'
-    # `!editorOpen` and not `!show`: the bar carries the section controls too, and a member owner of
-    # a list with nothing to drag still gets the "Add a section" row. Tying the whole bar to whether
-    # a DRAG is possible hid the only way to create the sections that would make one possible.
-    assert 'if (block) { block.hidden = !editorOpen; }' in fn, 'a missing bar must not abort the sync'
+    assert fn.index('stopArranging()') < fn.index("querySelector('[data-gl-positions]')"),         'a missing strip can still abort the teardown'
+    assert 'if (block) { block.hidden = !editing; }' in fn, 'a missing strip must not abort the sync'
+    # AND THE HALF THAT IS NEW: losing the grids must not close the editor. The two used to be one
+    # state, so a sort ended the whole session; a hunter mid-rename should not lose the panel
+    # because they changed the sort order.
+    assert 'exitEditing' not in fn, 'a sort still ends the editing session'
 
 
 def test_a_failed_reorder_is_not_re_applied_by_the_one_queued_behind_it(client):
@@ -1977,29 +2105,44 @@ def test_the_adder_results_do_not_also_move_the_picked_card(client):
         'the arrow and Escape branches must both stop the position handler seeing the key'
 
 
-def test_boot_resets_the_modes_state_not_just_the_grid(client):
+def test_boot_resets_the_modes_state_not_just_the_grid():
     """The file commits to honouring the `onPageReady` restore contract even though this site's htmx
-    config never fires it. Under that contract a restored page painted "Done" on a toggle whose panel
-    has no `[data-positioning]`, showed the bar over a CLOSED editor, and kept a live Sortable and a
-    document keydown bound to a discarded grid."""
-    js = _decommented(_read('static/js/list-detail.js'))
+    config never fires it. Under that contract a restored page would paint "Done" on a toggle whose
+    panel has no `[data-gl-editing]`, show the controls strip over a closed panel, and keep a live
+    Sortable and a document keydown bound to a discarded grid.
 
+    BOTH FLAGS, and that is the point of listing them separately. One mode to the hunter is still two
+    variables underneath: `arranging` is derived, and a reset that cleared only `editing` would leave
+    a Sortable attached with nothing able to detach it -- the same leak by a shorter route.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
     fn = js[js.index('function boot(first) {'):js.index('if (PP.onPageReady)')]
-    for reset in ('detachDrag()', 'positioning = false', 'editorOpen = false',
-                  'orderChain = Promise.resolve()'):
+
+    for reset in ('detachDrag()', 'editing = false', 'arranging = false',
+                  'orderChain = Promise.resolve()', 'pendingSaves = 0', 'pendingPickId = null'):
         assert reset in fn, f'{reset} is not reset on boot'
 
 
-def test_exiting_the_mode_actually_clears_the_flag(client):
-    """`exitPositioning` is the only thing that sets `positioning` back to false, and nothing pinned
-    that it does. Without it every later `if (!positioning) return` guard passes forever."""
+def test_exiting_the_mode_actually_clears_the_flag():
+    """`exitEditing` and `stopArranging` are the only things that set their flags back, and nothing
+    pinned that they do. Without it every later `if (!editing) return` / `if (!arranging) return`
+    guard passes forever.
+
+    Both halves, because they are separate functions now: leaving the mode must clear the mode AND
+    take the dragging down with it. A version that cleared `editing` and left `arranging` set would
+    leave the grips rendered over a page with no editor.
+    """
     js = _decommented(_read('static/js/list-detail.js'))
 
-    start = js.index('function exitPositioning(')
-    fn = js[start:js.index('function paintPositionsToggle(', start)]
-    assert 'positioning = false' in fn
-    assert 'detachDrag()' in fn, 'leaving the mode must tear the drag down with it'
-    assert "delete panel.dataset.positioning" in fn, 'the CSS state outlives the JS state'
+    exit_body = _fn(js, 'exitEditing')
+    assert 'editing = false' in exit_body
+    assert 'stopArranging()' in exit_body, 'leaving the mode must tear the drag down with it'
+    assert 'delete panel.dataset.glEditing' in exit_body, 'the CSS state outlives the JS state'
+
+    stop = _fn(js, 'stopArranging')
+    assert 'arranging = false' in stop
+    assert 'detachDrag()' in stop, 'the Sortable outlives the flag'
+    assert 'delete panel.dataset.glArranging' in stop, 'the CSS state outlives the JS state'
 
 
 def test_an_unlinked_owner_is_not_offered_the_reorder_handles(client):
@@ -2039,12 +2182,53 @@ def test_the_drag_manager_defaults_its_touch_threshold(client):
     assert 'sortableConfig.touchStartThreshold = this.touchStartThreshold;' in utils,         'the default is re-applied at the point of use, so 0 can never reach SortableJS'
 
 
-def test_the_remove_control_steps_aside_while_arranging(client):
-    """Documented in three places and asserted nowhere. It is also what made the HIGH bug above
-    damaging rather than merely untidy: with the mode stuck on, this hid every remove button on a
-    Collection."""
-    css = _read('static/css/components/gamelists.css')
-    assert '#gl-items-panel[data-positioning] .gl-item__remove { display: none; }' in css
+def test_remove_and_rearrange_share_a_card_without_contesting_it(client):
+    """WAS `test_the_remove_control_steps_aside_while_arranging`, which pinned
+    `[data-gl-arranging] .gl-item__menu { display: none; }`. That rule is DELETED, and it had to
+    be: it hid the remove button whenever the mode was on, and with one mode "whenever the mode is
+    on" became "whenever you are editing" -- so removing a game, the most ordinary edit there is,
+    would have had nowhere to happen.
+
+    The reasoning behind the old rule was that the corner must never be contested and the mode
+    should offer one action rather than two. The corner still must not be contested; what changed is
+    that hiding one control is no longer an available way to achieve it. Separation does it instead,
+    which is what kept the two apart on touch anyway.
+
+    So: remove follows the MODE (it is an edit), the grip follows whether dragging is actually live,
+    and the two never occupy the same place.
+    """
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    assert '#gl-items-panel[data-gl-arranging] .gl-item__menu { display: none; }' not in css,         'the remove button is hidden while editing again, which is now always'
+    assert '#gl-items-panel:not([data-gl-editing]) .gl-item__menu { display: none; }' in css,         'remove is offered outside the mode'
+    assert '#gl-items-panel:not([data-gl-arranging]) .gl-item__grab { display: none; }' in css,         'the grip is offered where nothing can be dragged'
+
+    # THEY DO NOT SHARE A COORDINATE. Both are 26px circles that expand to 44px hit areas on touch,
+    # anchored to the same corner -- so "separated" has to mean measured, not assumed. This failed
+    # when the hiding rule was first deleted, which is the whole reason the rule could not simply go.
+    #
+    # Sliced on the newline-anchored declaration so `.gl-item__grab {` cannot match the tail of
+    # `...:not([data-gl-arranging]) .gl-item__grab {`, which is the longer selector two hundred
+    # lines up -- it does, and the first attempt at this assertion read that rule's `display: none`
+    # and reported the two as unanchored.
+    def _rule(name):
+        at = css.index('\n' + name + ' {')
+        return css[at:css.index('}', at)]
+
+    remove, grab = _rule('.gl-item__menu'), _rule('.gl-item__grab')
+    assert 'right: 6px' in remove, 'the remove control moved; this test no longer knows where it is'
+    assert 'right: 38px' in grab, 'the grip sits on top of the remove control'
+
+    # ...and the touch targets, which is where the real collision would be: 26px circles do not
+    # overlap at 32px apart, but the 44px `::before` boxes both anchor to `right: 0` unless told
+    # otherwise, and the overlapping strip belongs to whichever paints last.
+    # NEWLINE-ANCHORED, for the reason `_rule` above exists: `.gl-item__grab {` also matches the
+    # tail of `...:not([data-gl-arranging]) .gl-item__grab {` seventy-odd lines earlier, and this
+    # slice then starts from the wrong place. It works today only because no `@media (hover: none)`
+    # sits between the two -- which is a fact about the file's current order, not a guarantee.
+    touch = css[css.index('@media (hover: none) {', css.index('\n.gl-item__grab {')):]
+    touch = touch[:touch.index('.gl-item__grab::before')]
+    assert 'right: 44px' in touch, 'the two 44px hit areas overlap on touch'
 
 
 # ── sections ─────────────────────────────────────────────────────────────────────────────────────
@@ -2112,31 +2296,37 @@ def test_a_sectioned_list_groups_its_games_under_their_headers(client):
     assert 'id="gl-items"' not in body
 
 
-def test_the_ungrouped_bucket_leads_and_stays_for_whoever_can_file(client):
-    """A list that has just gained sections has EVERYTHING unassigned, so this is the normal state on
-    the way in rather than an error. Burying it under the named sections would hide the games somebody
-    is about to file.
+def test_the_ungrouped_bucket_leads_when_it_holds_something_and_goes_when_it_does_not(client):
+    """A list that has just gained sections has EVERYTHING unassigned, so leading is the normal state
+    on the way in rather than an error. Burying it under the named sections would hide the games
+    somebody is about to file. That half is unchanged.
 
-    IT ALSO STAYS WHEN EMPTY, but only for somebody who can arrange. A header for nothing is noise to
-    a reader, so they never see it -- but for the owner it is the only way back OUT of a section:
-    filing the last loose card used to remove the bucket and take the drop target with it, so nothing
-    could be un-filed by pointer (no grid to drop onto) or by keyboard (no group before the first
-    section) until they deleted a whole section to get their game back."""
+    WHAT CHANGED (2026-09): it no longer stays when EMPTY. It used to, for an owner who could
+    arrange, because it was the only way back out of a section -- filing the last loose card removed
+    the bucket and took the drop target with it, so nothing could be un-filed by pointer or by
+    keyboard until the owner deleted a whole section to get their game back.
+
+    The card menu ended that. "No section" is a row on every card, appended by the client rather than
+    read from the page precisely so it is offered when this bucket is not rendered. What was left was
+    a permanent "Not in a section" header over nothing on every fully-filed list, which is what the
+    owner reported.
+
+    The cost is stated in `_grouped` and asserted here: a card can no longer be DRAGGED out of every
+    section, because there is nothing to drag it onto.
+    """
     owner, game_list, items, first, _second = _sectioned(client)
 
-    # Everything is filed. The OWNER keeps the empty bucket...
+    # Everything is filed, so nobody gets the bucket -- owner included.
     owner_groups = client.get(_url(game_list)).context['groups']
-    assert [s.name if s else None for s, _ in owner_groups] == [None, 'Finished', 'Playing']
-    assert owner_groups[0][1] == [], 'the kept bucket should be the empty one'
-    assert 'Not in a section' in client.get(_url(game_list)).content.decode()
-
-    # ...and a READER does not, because for them it is a header over nothing.
-    client.logout()
-    assert [s.name for s, _ in client.get(_url(game_list)).context['groups']] == \
-        ['Finished', 'Playing']
+    assert [s.name if s else None for s, _ in owner_groups] == ['Finished', 'Playing'],         'an empty bucket is still rendered for the owner'
     assert 'Not in a section' not in client.get(_url(game_list)).content.decode()
 
-    # Un-file one, and the bucket carries it, still FIRST, for everyone.
+    # ...and a reader still does not, which never depended on the drop-target argument.
+    client.logout()
+    assert [s.name for s, _ in client.get(_url(game_list)).context['groups']] ==         ['Finished', 'Playing']
+    assert 'Not in a section' not in client.get(_url(game_list)).content.decode()
+
+    # Un-file one, and the bucket comes back carrying it, still FIRST, for everyone.
     svc.assign_item(game_list, owner, items[0], None)
 
     groups = client.get(_url(game_list)).context['groups']
@@ -2144,6 +2334,28 @@ def test_the_ungrouped_bucket_leads_and_stays_for_whoever_can_file(client):
     assert [i.concept.unified_title for i in groups[0][1]] == ['Alpha']
     assert 'Not in a section' in client.get(_url(game_list)).content.decode()
 
+
+def test_un_filing_survives_the_bucket_being_gone(client):
+    """THE TRADE THIS PHASE MADE, pinned so it cannot be quietly broken. Hiding the empty bucket is
+    only safe because the card menu offers "No section" whether or not a loose header is rendered --
+    remove that and a fully-filed list becomes a list whose games can never leave their sections.
+
+    The endpoint half, proving the destination is reachable with no bucket on the page at all."""
+    owner, game_list, items, first, _second = _sectioned(client)
+    body = client.get(_url(game_list)).content.decode()
+    assert 'Not in a section' not in body, 'the fixture is not in the state this test is about'
+
+    # The client-side half: "No section" is appended rather than read from the rendered headers.
+    js = _decommented(_read('static/js/list-detail.js'))
+    assert "rowHtml('', 'No section'" in _fn(js, 'cardMenuHtml'),         'the only route out of a section is gone'
+
+    # And the server still accepts it, from a page that renders no loose bucket.
+    resp = client.post(
+        reverse('list_item_assign', args=[game_list.id, items[0].pk]), {'section': ''})
+    assert resp.status_code == 200
+    items[0].refresh_from_db()
+    assert items[0].section_id is None
+    assert 'Not in a section' in client.get(_url(game_list)).content.decode(),         'the bucket did not come back for the card that left its section'
 
 def test_numbering_runs_through_the_whole_list_by_default(client):
     """Continue-through is the default because it is what a ranked list already MEANS: adding
@@ -2242,10 +2454,14 @@ def test_a_sectioned_ranked_list_can_be_both_ordered_and_filed(client):
     body = resp.content.decode()
     assert 'data-gl-grab' in body
     # Every group is a drop target, and the SECTION each one stands for travels with it -- without
-    # that a drop has nowhere to report it landed. THREE, not two: the owner also keeps the empty
-    # ungrouped bucket, which is the only way back OUT of a section.
-    assert body.count('data-gl-arrange') == 3
-    assert 'data-gl-arrange data-section-id=""' in body, 'no way back out of a section'
+    # that a drop has nowhere to report it landed.
+    #
+    # TWO, not three. It was three while the owner kept an empty ungrouped bucket as the only way
+    # back OUT of a section; the card menu carries "No section" now, so the bucket renders only when
+    # it holds something and this fixture files everything. `test_un_filing_survives_the_bucket_
+    # being_gone` is what stops that trade being broken silently.
+    assert body.count('data-gl-arrange') == 2
+    assert 'data-gl-arrange data-section-id=""' not in body,         'an empty ungrouped bucket is still rendered as a drop target'
     assert f'data-section-id="{_first.id}"' in body and f'data-section-id="{_second.id}"' in body
 
 
@@ -2359,8 +2575,8 @@ def test_a_member_owner_gets_the_section_controls_and_a_reader_never_does(client
     client.logout()
     reader = client.get(_url(game_list)).content.decode()
     assert 'data-gl-section-add' not in reader
-    assert 'data-gl-section-rename' not in reader
-    assert 'data-gl-section-delete' not in reader
+    assert 'data-gl-section-menu' not in reader
+    assert 'data-rename-url' not in reader
 
 
 def test_a_free_owner_keeps_their_sections_and_is_told_what_changed(client):
@@ -2377,9 +2593,19 @@ def test_a_free_owner_keeps_their_sections_and_is_told_what_changed(client):
     assert resp.context['can_manage_sections'] is False
     assert resp.context['can_arrange'] is True, 'a lapsed member can still tidy their own list'
     assert 'data-gl-section-add' not in body
-    assert 'data-gl-section-rename' not in body
+    # RENAME AND DELETE ARE ROWS IN THE SECTION MENU NOW, not buttons of their own. The gate
+    # moved onto the trigger's URLs: an empty `data-rename-url` is how the JS knows not to
+    # render a row `rename_section` would refuse, which is the remedy-that-refuses shape this
+    # project has fixed three times. Delete is ungated and still carries a real URL.
+    assert 'data-gl-section-menu' in body, 'the owner lost the section controls entirely'
+    assert 'data-rename-url=""' in body, 'a rename that will be refused is offered'
     # DELETE SURVIVES: removing your own thing is not the act the perk covers.
-    assert 'data-gl-section-delete' in body
+    # THE SECTION'S OWN DELETE URL, not the substring `/delete/`. That is what this said, and
+    # every owner's page also renders the LIST delete button at `/community/lists/<id>/delete/`
+    # -- so the assertion was true for any owner whether or not the section menu carried a
+    # delete at all. An audit proved it by deleting the whole section-delete affordance and
+    # watching all three copies of this line stay green.
+    assert f'/sections/{first.id}/delete/' in body, 'removing your own section is not the gated act'
     # `gl-lockup`, not `gl-sections__locked`: the lapsed-member line moved OUT of the arrange bar and
     # became the second state of the CTA block, because the bar it lived in is hidden until the
     # editor is opened and does not render at all for a section-less Collection.
@@ -2523,32 +2749,89 @@ def test_the_numbering_toggle_has_exactly_one_writer(client):
     assert "'on'" in body
 
 
-def test_a_group_change_refreshes_and_a_plain_reorder_does_not(client):
-    """A card CHANGING GROUP changes things the optimistic repaint cannot reach: the count beside each
-    header, and whether the group it left still exists at all (the loose bucket is omitted when empty,
-    so emptying it by hand leaves a header reading 0 over nothing).
+def test_a_group_change_repaints_in_place_and_so_does_a_plain_reorder(client):
+    """WAS `test_a_group_change_refreshes_and_a_plain_reorder_does_not`, and the rename is the
+    finding. A plain reorder repainted in place; a card changing GROUP re-rendered the whole list.
+    The owner noticed the asymmetry -- "why do games reload when swapping between sections?" -- which
+    is the tell that the refresh was never about the move.
 
-    A plain reorder must NOT refresh: it would spend a round trip redrawing forty covers that did not
-    change and tear down the Sortable instance mid-interaction. The rank text is the only thing a
-    reorder alters on screen, which is why `renumber` exists."""
+    It was about two things the old repaint could not reach: the count beside each heading, and the
+    ungrouped bucket vanishing as it empties. The refresh's own failure message said so out loud
+    ("Reload the page to see the counts update"). Both are reachable now.
+
+    THE ONE CASE STILL TAKING A REFRESH is the mirror of the second: filing a card out of every
+    section when no ungrouped bucket is rendered means a whole GROUP has to appear, with a heading,
+    a grid, its `role`/`aria-labelledby` pair and the server-owned reorder endpoint. Hand-assembling
+    that in JS is what this codebase has been bitten by repeatedly, so it takes the round trip.
+    """
     js = _decommented(_read('static/js/list-detail.js'))
 
-    drop = js[js.index('function onCrossSectionDrop('):js.index('function fullOrder(')]
-    assert 'refresh: true' in drop, 'a cross-group drop leaves both section counts stale'
+    # `moveItemToSection` rather than `onCrossSectionDrop`: the fork was extracted when the card
+    # menu arrived, so that both callers post to the same endpoint under the same rule.
+    move = _fn(js, 'moveItemToSection')
+    assert 'refresh: true' in move, 'a cross-group move no longer asks for the group repaint'
+    # `placed` says whether the node is ALREADY where it belongs -- true after a drag, false from
+    # the menu. Without it the menu posts a move the page never shows.
+    assert 'placed: !!evt' in move, 'the repaint cannot tell a drag from a menu move'
 
-    save = js[js.index('function saveOrder('):js.index('function renumber(')]
-    assert 'move.refresh' in save, 'the flag is set and never read'
-    # Guarded on the flag, so the ordinary drag keeps its cheap repaint.
-    assert 'if (move && move.refresh)' in save
+    # ...and the drop handler must go through it. Reading `evt.to` and posting directly would
+    # restore the second, divergent path the extraction exists to prevent.
+    drop = _fn(js, 'onCrossSectionDrop')
+    assert 'moveItemToSection(' in drop, 'the drag has its own move path again'
+    assert 'saveAssignment(' not in drop and 'saveOrder(' not in drop, \
+        'the drag posts directly instead of through the shared fork'
 
-    # The within-grid path sends no move at all, so it cannot ask for one.
-    attach = js[js.index('function attachDragTo('):js.index('function onCrossSectionDrop(')]
+    # THE REPAINT IS TRIED FIRST, and the refresh is what happens when it reports it could not.
+    save = _fn(js, 'saveOrder')
+    assert 'repaintAfterGroupChange(' in save, 'a group change still re-renders the list'
+    assert save.index('repaintAfterGroupChange(') < save.index('refreshItems()'), \
+        'the refresh runs before the repaint is even attempted'
+
+    # The filing-only fork gets the same treatment; it was the other half of the asymmetry.
+    assign = _fn(js, 'saveAssignment')
+    assert 'repaintAfterGroupChange(' in assign, 'a filing-only move still re-renders the list'
+
+    # The within-grid path sends no move at all, so it cannot ask for one -- unchanged, and still
+    # the reason a plain reorder costs nothing.
+    attach = _fn(js, 'attachDragTo')
     reorder_cb = attach[attach.index('onReorder: function'):attach.index('onEnd: function')]
     assert 'refresh' not in reorder_cb, 'a plain reorder must not round-trip the whole grid'
 
 
-# -- the audit round ------------------------------------------------------------------------------
+def test_the_group_repaint_updates_the_counts_and_drops_the_empty_bucket():
+    """The two things the refresh was actually buying, done in the client instead.
 
+    Order matters: the prune runs BEFORE `renumber`, because restart-per-section numbering counts
+    grids, and a bucket about to disappear would otherwise be numbered as a group.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'repaintAfterGroupChange')
+
+    assert 'syncGroupCounts()' in fn, 'the heading counts go stale'
+    assert 'pruneEmptyLooseBucket()' in fn, 'an emptied bucket is left as a heading over nothing'
+    assert fn.index('pruneEmptyLooseBucket()') < fn.index('renumber()'), \
+        'the ranks are computed over a group that is about to be removed'
+
+    # It must be able to REFUSE, or the one case it cannot handle silently does nothing.
+    assert 'return false' in fn, 'the repaint cannot report that it could not finish'
+
+    counts = _fn(js, 'syncGroupCounts')
+    assert 'groupGridFor(head)' in counts, 'the count reads the wrong element for its heading'
+
+    prune = _fn(js, 'pruneEmptyLooseBucket')
+    assert 'gl-section__head--loose' in prune, 'a named section is pruned when it empties'
+
+
+def test_the_group_grid_lookup_steps_over_a_docked_adder():
+    """`head.nextElementSibling` is the naive read and it is wrong exactly when somebody is using
+    the feature: the adder docks BETWEEN a header and its grid, so the naive version returns the
+    adder and the heading's count stops updating while a game is being added to it."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'groupGridFor')
+
+    assert "classList.contains('gl-group__grid')" in fn, 'the lookup trusts adjacency'
+    # ...and it must not run past its own section into the next one's grid.
+    assert "classList.contains('gl-section__head')" in fn, 'the walk crosses into the next section'
 def test_a_cross_section_drop_reads_where_the_card_LANDED(client):
     """THE WORST BUG THE AUDIT FOUND, and it made the whole feature a no-op.
 
@@ -2654,7 +2937,7 @@ def test_the_add_field_keeps_focus_across_its_own_refresh(client):
     js = _decommented(_read('static/js/list-detail.js'))
 
     assert 'function restoreSectionFocus(' in js
-    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
+    settle = js[js.index('function onAfterSettle('):js.index('function wireEditToggle(')]
     assert 'restoreSectionFocus()' in settle
     # AFTER the re-wiring, or the field being focused is the node about to be replaced.
     assert settle.index('wireSections()') < settle.index('restoreSectionFocus()')
@@ -2662,7 +2945,7 @@ def test_the_add_field_keeps_focus_across_its_own_refresh(client):
     # And the remove-focus helper stopped keying on the flat grid's id, which a sectioned list has
     # never rendered -- so focus fell to <body> after every removal there.
     restore = js[js.index('function restoreRemoveFocus('):js.index('function restoreSectionFocus(')]
-    assert "'#gl-items-root [data-gl-remove]'" in restore
+    assert "'#gl-items-root [data-gl-card-menu]'" in restore
 
 
 def test_a_labelled_grid_carries_a_role_that_can_hold_the_label(client):
@@ -2752,9 +3035,9 @@ def test_a_keyboard_move_across_a_header_keeps_the_card_picked_up(client):
     assert 'grab.focus()' not in branch, 'focus is put on a row that is about to be replaced'
 
     assert 'function restorePick(' in js
-    settle = js[js.index('function onAfterSettle('):js.index('function wirePositioning(')]
-    # AFTER `syncPositioning`, whose `detachDrag` drops any pick -- restoring before it is undone one
-    # line later.
+    settle = js[js.index('function onAfterSettle('):js.index('function wireEditToggle(')]
+    # AFTER `syncPositioning`, whose `stopArranging` drops any pick -- restoring before it is undone
+    # one line later.
     assert settle.index('syncPositioning()') < settle.index('restorePick()')
 
 
@@ -2792,8 +3075,16 @@ def test_a_doomed_section_stops_being_a_drop_target_at_once(client):
 
     owner, game_list, _items, first, _second = _sectioned(client)
     rendered = client.get(_url(game_list)).content.decode()
-    assert f'data-gl-section-delete\n            data-section-id="{first.id}"' in rendered \
-        or f'data-section-id="{first.id}"' in rendered, 'the client cannot find the doomed grid'
+    # `data-section-id` rides the SECTION MENU trigger now -- delete stopped being a button of its
+    # own when the header's controls became one menu -- but the client still has to be able to find
+    # the doomed section's grid from whatever it was handed.
+    # SCOPED TO THE TRIGGER. The bare `data-section-id="<id>" in rendered` this replaced was the
+    # weak half of an old `A or B`, and it is satisfied by the group GRID, which renders the same
+    # attribute -- so it did not check what the comment above it says it checks. (It also left an
+    # orphaned line continuation behind when the other half was deleted.)
+    menu = rendered[rendered.index('data-gl-section-menu'):]
+    menu = menu[:menu.index('>')]
+    assert f'data-section-id="{first.id}"' in menu, 'the client cannot find the doomed grid'
 
 
 def test_the_section_field_does_not_steal_a_caret_that_moved_on(client):
@@ -2885,7 +3176,7 @@ def test_a_free_owner_gets_no_section_controls_but_is_told_they_exist(client):
     for page in (ranked_body, collection_body):
         # No CONTROL they cannot use...
         for hook in ('gl-section__head', 'data-gl-section-add', 'data-gl-numbering',
-                     'data-gl-section-rename'):
+                     'data-rename-url="/'):
             assert hook not in page, f'a free owner is shown {hook} after all'
         # ...and the OFFER, which is the half that has to be asserted positively.
         assert 'gl-lockup' in page, 'the perk is invisible to the hunter who might buy it'
@@ -2897,7 +3188,7 @@ def test_the_preview_renders_the_page_as_a_non_member_sees_it(client):
     flag is the whole surface."""
     owner = _member(client, psn='member')
     game_list = _ranked(owner, 3)
-    svc.create_section(game_list, owner, name='Playing')
+    section = svc.create_section(game_list, owner, name='Playing')
 
     normal = client.get(_url(game_list))
     assert normal.context['can_manage_sections'] is True
@@ -2909,10 +3200,20 @@ def test_the_preview_renders_the_page_as_a_non_member_sees_it(client):
     assert preview.context['can_manage_sections'] is False
     body = preview.content.decode()
     assert 'data-gl-section-add' not in body, 'the member control survived the preview'
-    assert 'data-gl-section-rename' not in body
+    # RENAME AND DELETE ARE ROWS IN THE SECTION MENU NOW, not buttons of their own. The gate
+    # moved onto the trigger's URLs: an empty `data-rename-url` is how the JS knows not to
+    # render a row `rename_section` would refuse, which is the remedy-that-refuses shape this
+    # project has fixed three times. Delete is ungated and still carries a real URL.
+    assert 'data-gl-section-menu' in body, 'the owner lost the section controls entirely'
+    assert 'data-rename-url=""' in body, 'a rename that will be refused is offered'
     # EVERYTHING UNGATED STAYS. A preview that also withdrew the ungated controls would answer a
     # different question than the one it is asked.
-    assert 'data-gl-section-delete' in body, 'deleting your own section is not the gated act'
+    # THE SECTION'S OWN DELETE URL, not the substring `/delete/`. That is what this said, and
+    # every owner's page also renders the LIST delete button at `/community/lists/<id>/delete/`
+    # -- so the assertion was true for any owner whether or not the section menu carried a
+    # delete at all. An audit proved it by deleting the whole section-delete affordance and
+    # watching all three copies of this line stay green.
+    assert f'/sections/{section.id}/delete/' in body, 'deleting your own section is not the gated act'
     assert preview.context['can_arrange'] is True
     assert 'gl-lockup' in body, 'the lapsed-member line is part of what they see'
 
@@ -3053,7 +3354,12 @@ def test_a_lapsed_member_is_told_what_they_keep_first(client):
     assert 'min-height: 44px' in go
     # Their sections and the ungated controls are all still there, which is what the copy promises.
     assert 'gl-section__head' in body
-    assert 'data-gl-section-delete' in body
+    # THE SECTION'S OWN DELETE URL, not the substring `/delete/`. That is what this said, and
+    # every owner's page also renders the LIST delete button at `/community/lists/<id>/delete/`
+    # -- so the assertion was true for any owner whether or not the section menu carried a
+    # delete at all. An audit proved it by deleting the whole section-delete affordance and
+    # watching all three copies of this line stay green.
+    assert f'/sections/{_first.id}/delete/' in body, 'removing your own section is not the gated act'
 
 
 def test_the_cta_is_never_shown_to_somebody_it_cannot_help(client):
@@ -3562,13 +3868,25 @@ def test_the_two_wrapping_bodies_take_the_space_that_is_left(client):
 
 
 def test_the_section_controls_hit_areas_do_not_overlap(client):
-    """The visible buttons are 28px with a 10px gap, so their centres sit 38px apart while each 44px
-    `::before` is 44 wide -- 6px of overlap, won by whichever paints last. That is DELETE, so a thumb
-    landing just right of the pencil opened "delete this section"."""
-    css = _read('static/css/components/gamelists.css')
+    """Two adjacent controls in a header, each with a hit area wider than itself.
 
-    assert '.gl-section__act + .gl-section__act { margin-left: 8px; }' in css, \
-        'the two 44px targets overlap again, and the overlap belongs to Delete'
+    THE PAIR CHANGED, which is why this was rewritten rather than deleted. It pinned
+    `.gl-section__act + .gl-section__act`, from when the header carried a rename button and a delete
+    button: 28px buttons 10px apart put their centres 38px apart while each `::before` is 44px wide,
+    a 6px overlap won by whichever painted last -- Delete -- so a thumb landing just right of the
+    pencil opened "delete this section", with a confirm dialog the only thing in the way.
+
+    The header carries ONE `.gl-section__act` now, so that selector can never match and the test was
+    pinning a rule with no job. The live adjacency is `.gl-section__add + .gl-section__act`, and the
+    hazard is identical: a labelled pill beside an icon button, both reaching past their own edges.
+    """
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    assert '.gl-section__add + .gl-section__act { margin-left: 8px; }' in css, \
+        'the add button and the section menu can overlap on touch'
+    # ...and the rule it replaced is gone rather than left behind, since nothing can match it.
+    assert '.gl-section__act + .gl-section__act' not in css, \
+        'a dead selector is still being kept alive'
 
 
 def test_the_phone_reorder_is_withheld_where_nothing_competes(client):
@@ -3582,3 +3900,601 @@ def test_the_phone_reorder_is_withheld_where_nothing_competes(client):
 
     populated = client.get(_url(_list(owner, 2, name='Has games'))).content.decode()
     assert 'pp-gbrowse__toolbar gl-toolbar' in populated
+
+
+# ── the card's action menu (2026-09) ─────────────────────────────────────────────────────────────
+
+def test_the_card_menu_replaces_the_bare_remove_button(client):
+    """The corner could not hold three controls. Remove sat at `right: 6px`, the grip at the same
+    coordinate, and they never collided only because the old arrange mode hid one -- a trick that
+    died with the single mode. Adding a third for "move to" would have put ~90px of buttons across
+    the top of a ~170px card at 375px.
+
+    So the two chosen actions share one trigger and the grip keeps its own place, because it has to
+    be GRABBABLE rather than picked."""
+    _owner, game_list, _items, _first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-card-menu' in body
+    assert 'data-gl-remove' not in body, 'the bare remove button is back in the contested corner'
+    # The endpoint still rides the row: the server owns URL shapes.
+    assert f'/community/lists/{game_list.id}/items/' in body and '/remove/' in body
+
+
+def test_the_menu_carries_the_cards_current_section(client):
+    """`data-current` is what the menu ticks, and it comes from the server rather than being derived
+    client-side -- the page is already rendered from that grouping, and a second source for it is how
+    a menu comes to disagree with the headers it sits among.
+
+    EMPTY IS A REAL ANSWER, not a missing one: a card in no section carries `data-current=""`, the
+    same distinction `data-section-id` draws on the grids and `resolve_section` on the endpoint."""
+    owner, game_list, items, first, _second = _sectioned(client)
+    # `_sectioned` files all four, so one is un-filed here to get BOTH states on one page -- a
+    # fixture that could only show the filed case would pass with the empty branch deleted.
+    svc.assign_item(game_list, owner, items[0], None)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert f'data-current="{first.pk}"' in body, 'a filed card does not report its section'
+    assert 'data-current=""' in body, 'an unfiled card reports no section at all'
+
+
+def test_a_list_with_no_sections_gets_a_menu_with_nothing_to_move_to(client):
+    """The trigger is still rendered -- it carries Remove -- but it must not offer a destination on a
+    list that has one bucket. `data-current` is the flag the JS reads for that, and it is absent
+    rather than empty, because empty means "the loose bucket" and would render a menu whose every
+    option is a no-op."""
+    owner = _staff(client, psn='plain')
+    game_list = _list(owner, 2)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-card-menu' in body, 'a section-less list loses its remove control'
+    assert 'data-current' not in body, 'a list with one bucket offers to move between buckets'
+
+
+def test_the_menu_move_takes_the_same_fork_the_drag_does():
+    """THE DEFECT THIS MENU WAS MOST LIKELY TO INTRODUCE. Which endpoint a move goes to depends on
+    what a POSITION means on the page: at the real sequence the order and the section go in ONE
+    write to `list_reorder`, and everywhere else it is `list_item_assign` with no order at all.
+
+    A menu that always posted an assignment would silently diverge a ranked list's ordering -- silent
+    because the card still lands under the right header, and the damage only shows on the next load.
+    So both callers go through one function, and neither is allowed its own path."""
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    wire = _fn(js, 'wireCardMenu')
+    assert 'moveItemToSection(' in wire, 'the menu posts its own move'
+    assert 'saveAssignment(' not in wire and 'saveOrder(' not in wire and 'postJson(' not in wire, \
+        'the menu has a second write path'
+
+    # ...and the fork itself still makes both choices, so sharing it is worth something.
+    move = _fn(js, 'moveItemToSection')
+    assert 'orderingLive(' in move, 'the shared move no longer forks'
+    assert 'saveOrder(' in move and 'saveAssignment(' in move
+
+
+def test_the_menu_reads_its_destinations_from_the_rendered_grouping():
+    """One source of truth. The sections, their order and their names are already rendered as the
+    headers the cards sit under; a client-side list assembled from somewhere else is how a menu comes
+    to offer a section that was deleted in the swap that just landed.
+
+    Parsed from the header's ID and not its text, because two sections MAY share a name -- the model
+    says so in its own constraint comment -- so a name identifies nothing."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'sectionChoices')
+
+    assert '.gl-section__name' in fn, 'the destinations are no longer read from the page'
+    assert "replace('gl-section-', '')" in fn, 'the section id is derived from something else'
+    assert "id === 'none'" in fn, 'the loose bucket is offered twice'
+
+
+def test_un_filing_is_always_offered_even_with_the_bucket_off_screen():
+    """The one move with no header to drop onto. The loose bucket is omitted when it is empty, so
+    once a hunter files their last loose card there is no target left -- and before this menu the
+    only way back out of a section was to delete the whole section.
+
+    Appended by the JS rather than read from the page for exactly that reason: it has to be offered
+    when the bucket is NOT rendered."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'cardMenuHtml')
+
+    assert "rowHtml('', 'No section'" in fn, 'there is no way out of a section'
+
+
+def test_the_current_section_is_marked_and_inert():
+    """A row that looks pressable and does nothing is worse than one that says it is the answer.
+    `disabled` is what makes it inert, `aria-current` is what says why, and the CSS has to agree --
+    the two were separately capable of drifting."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'rowHtml')
+
+    assert "aria-current=\"true\" disabled" in fn, 'the current section is still pressable'
+    assert 'is-current' in fn
+
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+    assert '.gl-menu__item.is-current' in css, 'the marked row has no treatment'
+    # A tick that renders as nothing is indistinguishable from "not current", which is the one thing
+    # the mark exists to say. The first cut reached for a `var(--pp-tick)` that does not exist.
+    # THE TICK IS A CSS ESCAPE AND IT RENDERS. The old assertion (`'pp-tick' not in css`) was a
+    # tautology: `_decommented_css` had already stripped the only `--pp-tick` in the file, which
+    # lives in a comment. Nothing checked that the mark drew anything -- and while that assertion
+    # was green the rule shipped `content: '¹3'` (superscript one, then a 3) all the way into
+    # `output.css`, because a single-backslash `¹3` in a generated Python string is an OCTAL
+    # escape. `test_source_control_characters.py` now guards the class; this guards the character.
+    rule = css[css.index('.gl-menu__item.is-current::after'):]
+    rule = rule[:rule.index('}')]
+    # A RAW STRING, so the backslash reaches the comparison. Written as `"content: '\2713'"` this
+    # assertion is itself the bug it is testing for: Python reads `\271` as an octal escape and the
+    # test then looks for the very mojibake it exists to forbid. It failed loudly against correct
+    # CSS, which is the good outcome -- but the same slip written into a NEGATIVE assertion would
+    # have passed silently.
+    assert r"content: '\2713'" in rule, 'the current-section tick is not the escaped check mark'
+
+
+def test_the_menu_escapes_a_section_name_as_text_and_its_id_as_an_attribute():
+    """TWO DIFFERENT ESCAPERS, and the difference is not cosmetic. `HTMLUtils.escape` runs the HTML
+    fragment serializer, which deliberately leaves QUOTES alone because a text node has no need of
+    them -- correct for the name between the tags, and wrong one character later inside an attribute's
+    quotes, where an unescaped `"` closes it.
+
+    A section name is hunter-authored and reaches this menu on every open, so it is the one string
+    here that an attacker controls."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'rowHtml')
+
+    assert 'escapeAttr(id)' in fn, 'the section id is escaped for the wrong context'
+    assert 'escape(name)' in fn and 'escapeAttr(name)' not in fn
+
+
+def test_the_menu_is_wired_once_and_not_per_swap():
+    """`AnchoredMenu` registers a document-delegated trigger and keeps ONE panel, so a second
+    instance is a second panel and a second registry entry for the same selector -- and this page
+    re-swaps its items panel on every sort, add, remove and section change.
+
+    Guarded on the handle rather than on a WeakSet because there is no per-node element to key: the
+    trigger is a selector, not an instance."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'wireCardMenu')
+
+    assert 'if (cardMenu || !PP.AnchoredMenu) { return; }' in fn,         'a swap builds a second menu over the first'
+
+    # THE SECTION MENU TOO, which had no coverage at all -- and it is the second consumer the whole
+    # extraction was done for. Same guard, same leak on every `#gl-items-panel` swap.
+    section_fn = _fn(js, 'wireSectionMenu')
+    assert 'if (sectionMenu || !PP.AnchoredMenu) { return; }' in section_fn,         'a swap builds a second section menu over the first'
+
+
+# ── the section header's controls (2026-09) ──────────────────────────────────────────────────────
+
+def test_a_section_header_offers_to_add_a_game_to_itself(client):
+    """The complaint this phase answers. Filing a game meant adding it at the toolbar and then
+    dragging it down here, which on a long list is a drag past everything in between."""
+    _owner, game_list, _items, first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-add-to-section' in body, 'a section cannot be added to directly'
+    # SCOPED TO THE BUTTON. This was an `A or B` whose B (`data-section-id="<id>" in body`) is
+    # satisfied by the group GRID, which renders the same attribute under `can_arrange` -- so
+    # the claim in the message was unguarded, and an audit proved it by stripping the attribute
+    # off the button and watching this stay green. The A half matched on exact whitespace and
+    # broke the first time a comment was inserted nearby.
+    #
+    # Sliced to the element instead, which survives both failure modes.
+    btn = body[body.index('data-gl-add-to-section'):]
+    btn = btn[:btn.index('>')]
+    assert f'data-section-id="{first.id}"' in btn, 'the add button does not name its section'
+    # LABELLED, not another icon. It is the one action this header exists to make easy, and the two
+    # controls already here are the reason everything else went into a menu.
+    assert 'Add game' in body
+
+
+def test_the_add_button_is_not_the_section_creation_form():
+    """`data-gl-add-to-section`, NOT `data-gl-section-add-game`, which was the first name and CONTAINS
+    `data-gl-section-add` -- the section-CREATION form in the controls strip.
+
+    That collision is not hypothetical: three member-gate tests assert `data-gl-section-add` is
+    absent for a free owner, and all three started matching this button instead. Exactly the hazard
+    the `[data-gl-delete]` ordering comment in list-detail.js warns about, arriving as a substring
+    rather than through `closest`.
+    """
+    markup = _read('templates/gamelists/partials/detail_group.html')
+
+    assert 'data-gl-add-to-section' in markup
+    assert 'data-gl-section-add' not in markup, 'the add button shadows the section-creation form'
+
+
+def test_the_section_menu_carries_every_action_the_header_used_to_show(client):
+    """Two 28px icon buttons with a load-bearing `margin-left: 8px` keeping their 44px hit areas
+    apart. Five -- add, rename, up, down, delete -- would not have fitted beside a name and a count,
+    which is the arithmetic the card's menu answered one element up."""
+    _owner, game_list, _items, first, _second = _sectioned(client)
+
+    body = client.get(_url(game_list)).content.decode()
+
+    assert 'data-gl-section-menu' in body
+    for url in ('rename', 'delete'):
+        assert f'/sections/{first.id}/{url}/' in body, f'the menu cannot {url} a section'
+    assert f'/lists/{game_list.id}/sections/reorder/' in body, 'the menu cannot reorder'
+
+
+def test_moving_a_section_posts_the_whole_order():
+    """`reorder_sections` refuses a PARTIAL ordering, deliberately and the same way `reorder` does
+    for items -- so "move up" cannot be expressed as a delta. Swapping two entries of the full list
+    and posting all of them is the whole implementation.
+
+    THE ENDPOINT HAD BEEN LIVE AND UNCALLED SINCE IT SHIPPED: the service, the view and the URL all
+    existed, with a test against the service and no client anywhere, which is why sections could be
+    renamed and deleted but never reordered.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'moveSection')
+
+    # THE WHOLE LIST, which is what the assertion has to say. `"body.append('section_ids[]'" in fn`
+    # was the first version and it survived a mutation that posted the MOVED id alone -- the same
+    # call, one argument, a partial order the server refuses. What distinguishes them is the loop.
+    assert "ids.forEach(function (id) { body.append('section_ids[]', id); });" in fn,         'the move posts something other than the whole order'
+    assert 'ids.splice(at, 1)' in fn and 'ids.splice(to, 0, moved)' in fn, \
+        'the order is not rewritten around the move'
+    # Refuses at the ends rather than posting an out-of-range order the server would reject.
+    assert 'to < 0 || to >= all.length' in fn
+
+    # THROUGH THE SAME QUEUE as every other section write, or it races them: the order posted here
+    # was read from a DOM that a rename or delete refresh is about to replace.
+    assert 'queueSectionWrite(' in fn, 'a section move can race a rename or a delete'
+    # `true`, so the out-of-band chrome re-renders -- the strip and the numbering checkbox describe
+    # an arrangement that just changed.
+    assert 'refreshItems(true)' in fn
+
+
+def test_the_move_rows_disable_at_the_ends_rather_than_vanishing():
+    """A menu whose rows move as you go down the page is harder to use than one with a greyed row.
+    The first section's "Move up" has to be there and inert, not absent."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'sectionMenuHtml')
+
+    assert "menuRow('up', 'Move up', ICON_UP, at <= 0)" in fn, 'move up is not disabled at the top'
+    assert 'at >= all.length - 1' in fn, 'move down is not disabled at the bottom'
+    # ...and the rename row is RENDERED OR NOT, because the member gate is real: a row that exists
+    # to be refused is the remedy-that-refuses shape this project has fixed three times.
+    assert 'trigger.dataset.renameUrl' in fn, 'a lapsed member is offered a rename that refuses'
+
+
+def test_the_section_order_is_read_from_the_page(client):
+    """`position` is dense and the server sorts on it, so the rendered order IS the order. Reading it
+    back means there is no second copy to disagree with what the reader is looking at."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'sectionTriggers')
+
+    assert '#gl-items-root [data-gl-section-menu]' in fn
+    assert 'querySelectorAll' in fn, 'the order comes from somewhere other than the DOM'
+
+
+# ── the adder, relocated ─────────────────────────────────────────────────────────────────────────
+
+def test_the_adder_is_moved_and_not_rebuilt_per_section():
+    """ONE INSTANCE. `GameAdder` binds a document listener and has no teardown, so an adder per
+    section header -- on a panel that re-swaps on every add, remove, sort and section change -- is a
+    leak that grows for the life of the tab.
+
+    Moving the node keeps its listeners, its WeakSet guard and any in-flight search sequence."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    dock = _fn(js, 'dockAdderTo')
+
+    assert 'insertAdjacentElement' in dock, 'the adder is rebuilt rather than moved'
+    assert 'GameAdder' not in dock, 'a second adder is constructed per section'
+    # `data-section` is what `GameAdder` reads at SEND time; this function is the reason it is read
+    # then rather than captured when the adder was wired.
+    assert 'adder.dataset.section' in dock
+
+
+def test_the_adder_comes_home_before_anything_replaces_the_panel():
+    """The section headers live INSIDE `#gl-items-panel` and are replaced wholesale on every swap, so
+    an adder docked in one is destroyed mid-type -- taking its listeners with it and leaving
+    `wireAdder` nothing to re-wire, because the node it guarded no longer exists.
+
+    BOTH SWAP PATHS, and this is the half that is easy to miss: `refreshItems` is ours, but the sort
+    toolbar submits through htmx DIRECTLY (`hx-target="#gl-items-panel"`) and never passes through
+    it. Sorting a list with the adder docked would otherwise leave the page with no way to add a game
+    until it was reloaded.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    refresh = _fn(js, 'refreshItems')
+    assert 'parkAdder()' in refresh, 'a refresh destroys a docked adder'
+
+    assert "addEventListener('htmx:beforeSwap'" in js, 'the sort swap destroys a docked adder'
+    hook = js[js.index("addEventListener('htmx:beforeSwap'"):]
+    hook = hook[:hook.index('});') + 3]
+    assert 'parkAdder()' in hook
+    # Scoped to the one target: this listener sees every swap on the page, and parking on all of
+    # them would yank the adder home whenever anything else on the page updated.
+    assert "id === 'gl-items-panel'" in hook, 'every swap anywhere parks the adder'
+
+
+def test_parking_the_adder_clears_where_it_was_pointing():
+    """`data-section` is what files an added game. An adder that came home still carrying the last
+    section would file the NEXT game there, from a field sitting in the toolbar that says nothing
+    about a section -- a silent wrong destination, which is worse than a refused one."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'parkAdder')
+
+    assert 'delete adder.dataset.section' in fn, 'a parked adder still points at a section'
+    # Idempotent, so both swap paths can call it without either knowing about the other.
+    assert 'adder.parentElement === home' in fn, 'parking twice moves the node twice'
+
+
+def test_pressing_add_on_the_same_header_twice_sends_the_adder_home():
+    """Every other toggle on this page does. Without it the only way back to adding loose games was a
+    page load, because the adder had no visible way out of the section it was docked in."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'onSectionAddGame')
+
+    assert 'parkAdder(); return;' in fn, 'a second press cannot undock the adder'
+    assert 'previousElementSibling === head' in fn, 'the toggle does not check which header it is on'
+
+
+# ── what the audits found, pinned so it cannot come back (2026-09) ───────────────────────────────
+
+def test_a_multi_add_session_keeps_its_section():
+    """THE DOCKED ADDER WORKED EXACTLY ONCE. `GameAdder` leaves its results open after an add so
+    several games can go in from one search -- and `onAdded` returns `refreshItems()`, whose first
+    act is `parkAdder()`. So the first game was filed into the section, the adder was yanked home
+    with its `data-section` deleted, and the SECOND game from that same list of results went into
+    the loose bucket. Silently: no error, no toast, nothing said.
+
+    Parking is unavoidable (the header is about to be replaced); what was missing is the other half.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    park = _fn(js, 'parkAdder')
+    assert 'pendingDockSection = adder.dataset.section' in park, \
+        'parking forgets where the adder was, so a refresh cannot put it back'
+
+    redock = _fn(js, 'redockAdder')
+    assert 'dockAdderTo(' in redock, 'nothing puts the adder back after a refresh'
+    # Only while the mode is on, and only if the header survived the round trip.
+    assert '!editing' in redock, 'the adder re-docks onto a page that has left the mode'
+    assert 'if (!head) { return; }' in redock, 'it re-docks to a section that was deleted'
+
+    # ...and the re-dock must run after the swap has settled, next to the other restores.
+    settle = _fn(js, 'onAfterSettle')
+    assert 'redockAdder()' in settle, 'the adder never comes back'
+
+
+def test_leaving_the_mode_takes_the_menus_and_the_adder_with_it():
+    """Both live OUTSIDE the gated subtree, so the CSS cannot do it for them.
+
+    The menus are panels on `document.body`: their triggers go `display: none` with the mode, but an
+    OPEN panel keeps floating -- anchored to a trigger that is still `isConnected`, holding focus,
+    offering "Remove from list" on a page that has left edit mode.
+
+    The adder is worse because it is actionable: docked under a header it keeps its accent rail and
+    its `data-section` while the "+ Add game" toggle that would send it home is now hidden, so it
+    claims a destination and files games into that section from outside the mode.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'exitEditing')
+
+    assert 'cardMenu.close(false)' in fn, 'the card menu floats on over a page that left the mode'
+    assert 'sectionMenu.close(false)' in fn, 'the section menu floats on'
+    assert 'parkAdder()' in fn, 'the adder stays docked, pointed at a section, outside the mode'
+    # Leaving is not a refresh, so it must not come back docked on the next swap.
+    assert 'pendingDockSection = null' in fn
+
+
+def test_boot_clears_the_dom_flags_and_not_just_the_variables():
+    """`data-gl-editing` and `data-gl-arranging` are ATTRIBUTES, so they serialise into htmx's
+    history snapshot (`cloneNode(true)`) and come back SET on a restored page -- where the CSS gates
+    read them, not the booleans. The previous version reset the two variables and claimed that fixed
+    the restore case; it left grips, grab cursors, drop boxes and card menus over a page with no
+    editor, no Sortable and no keydown listener.
+
+    Same for the strip's `hidden`, which `enterEditing` REMOVED, and for the adder, which a restore
+    would otherwise bring back docked with its home slot empty -- so `wireAdder` would bind a second
+    `GameAdder`, leaking one per restore.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = js[js.index('function boot(first) {'):js.index('if (PP.onPageReady)')]
+
+    assert 'delete panel.dataset.glEditing' in fn, 'a restored page keeps the editing flag'
+    assert 'delete panel.dataset.glArranging' in fn, 'a restored page keeps the arranging flag'
+    assert 'strip.hidden = true' in fn, 'a restored page shows the controls strip over no mode'
+    assert 'parkAdder()' in fn, 'a restored page comes back with the adder docked'
+
+
+def test_the_menu_trigger_is_not_a_drag_handle():
+    """With `forceFallback: true` and no mouse delay, a mousedown plus three pixels on the `...`
+    starts dragging the card instead of opening it.
+
+    The grip is deliberately NOT excluded -- a drag starting on it is exactly what a control saying
+    "this thing moves" should do. The comment that stood here said nothing needed excluding "while
+    the remove control is hidden in this mode", which stopped being true when one mode flipped that
+    CSS from hiding-while-arranging to hiding-while-not-editing.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'attachDragTo')
+
+    assert "dragExclude: '.gl-item__menu'" in fn, 'pressing the card menu starts a drag'
+    assert "dragExclude: '.gl-item__grab'" not in fn, 'the grip stopped being draggable'
+
+
+def test_a_section_move_reads_the_order_inside_the_queue():
+    """THE RACE ITS OWN COMMENT CLAIMED TO HAVE FIXED. The first version read the order and built the
+    FormData at click time and queued only the POST -- but joining the chain delays the SEND, and the
+    body was already frozen.
+
+    Delete section B, then Move up on section C: the captured order still contains B, B's delete
+    lands, and the queued POST carries a section that no longer exists. `reorder_sections` refuses a
+    set that does not match the list, so the owner is told a move they made failed, after a delete
+    that worked.
+
+    Asserted as an ORDERING, because the token was present in the broken version too -- which is
+    exactly why the original test passed.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'moveSection')
+
+    assert fn.index('queueSectionWrite(') < fn.index('sectionTriggers()'), \
+        'the order is read before the write joins the queue'
+    assert fn.index('queueSectionWrite(') < fn.index('new FormData()'), \
+        'the payload is built before the write joins the queue'
+    # The trigger may have been replaced by a refresh that ran while this was queued, so the
+    # position is found by section id rather than by node identity.
+    assert 'dataset.sectionId === sectionId' in fn, 'the move matches on a node that may be stale'
+    # ...and the status pill respects the shared in-flight count, like the other two writers.
+    assert 'if (pendingSaves <= 1)' in fn, 'a section move reports Saved over an outstanding write'
+
+
+def test_an_open_menu_keeps_its_trigger_visible():
+    """Both triggers are `opacity: 0` at rest, lifted by hover or `:focus-within` on their container
+    -- and the panel is a child of `document.body`, so the moment it takes focus the container's
+    `:focus-within` is false and the trigger vanishes while its own menu is on screen.
+
+    `quick-add.css` solves this on the identical control with the same hook, which the primitive
+    already writes on every open. Neither new consumer had ported it."""
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    assert '.gl-item__menu[aria-expanded="true"]' in css, 'the card trigger hides under its own menu'
+    assert '.gl-section__act[aria-expanded="true"]' in css, 'the section trigger hides under its own menu'
+
+
+def test_the_menu_panel_sits_at_the_sites_panel_depth():
+    """Every other anchored panel is 100 -- including `.gl-adder__panel` on this very page, which
+    opens downward from a section header into exactly the band this menu opens into. At 60 the menu
+    painted behind a docked adder's results."""
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    menu = css[css.index('.gl-menu {'):]
+    menu = menu[:menu.index('}')]
+    assert 'z-index: 100' in menu, 'the card menu is at a different depth from every sibling panel'
+
+
+def test_the_section_add_button_clears_the_touch_floor():
+    """The only control in this feature below 44px, and the primary action of the header in edit
+    mode. Its three neighbours all carry the transparent-padding trick; this one did not."""
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    block = css[css.index('.gl-section__add::after'):]
+    block = block[:block.index('}')]
+    assert 'height: 44px' in block, 'the add button is still under the touch floor'
+
+
+def test_moving_a_section_repaints_in_place_instead_of_re_rendering_the_list():
+    """THE OWNER CALLED IT "JUMPY", and the cause was a full re-render for a two-heading change.
+    `moveSection` ended in `refreshItems(true)`, which `innerHTML`-swaps the whole items panel: every
+    card re-rendered, every cover re-fetched, the reveal re-ran, every Sortable rebuilt.
+
+    THE FIRST FIX WAS WRONG ABOUT THE RANKS, and this test's own docstring said so confidently:
+    "neither numbering mode reads group order". `_number` in `gamelists/views.py` records
+    `position + 1` as "the first cut" and abandons it for sectioned lists -- once a list has
+    sections the sections are part of the sequence, so continue-through runs ONE counter across the
+    groups in their order. Moving a section up renumbers everything after it. The test was therefore
+    encoding the defect it was supposed to guard.
+
+    So the slide stays and the ranks are recomputed: `renumber()` where the client can reproduce
+    `_number` (the `rank` sort, where DOM order IS canonical order), and a round trip where it
+    cannot.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'moveSection')
+
+    assert 'slideSectionBlock(' in fn, 'the move no longer repaints in place'
+    # The ranks are a function of group order, so something has to answer for them.
+    assert 'renumber()' in fn, 'a section move leaves continue-through ranks stale'
+    assert 'orderingLive(' in fn, 'the renumber is not gated on the sort that makes it correct'
+    # ...and the case it cannot compute takes the round trip instead of guessing.
+    assert 'pendingSectionRenumber' in fn, 'a ranked list read out of order is left with wrong ranks'
+
+    # The failure path still resyncs -- it must, because the DOM was moved optimistically.
+    failure = fn[fn.index('.catch(function'):]
+    assert 'refreshItems(true)' in failure, \
+        'a refused move leaves the page showing an order the server does not have'
+
+
+def test_the_optimistic_move_happens_against_the_dom_it_posted():
+    """Both inside the queued callback, and in that order. The payload is read from the DOM and the
+    DOM is then moved to match it -- doing the move at click time would repaint against a list a
+    queued rename or delete is about to replace, so the page and the payload would describe
+    different arrangements."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'moveSection')
+
+    assert fn.index('queueSectionWrite(') < fn.index('slideSectionBlock('), \
+        'the optimistic move happens before the write joins the queue'
+    assert fn.index('sectionTriggers()') < fn.index('slideSectionBlock('), \
+        'the move happens before the order it is supposed to match is read'
+
+
+def test_a_section_moves_with_everything_it_owns():
+    """A section is not one element: the header and the grid are SIBLINGS, deliberately, because the
+    grid's `:empty::before` drop box needs the grid to have no element children and so cannot be
+    wrapped. Moving a section therefore means moving a run of siblings -- and the run has to include
+    a docked adder, which is pointed at this section and would otherwise be left under somebody
+    else's heading, still filing games into the one that moved away."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'sectionBlock')
+
+    assert "!next.classList.contains('gl-section__head')" in fn, \
+        'the block stops at the grid and leaves anything docked behind'
+    assert 'nextElementSibling' in fn
+
+    # ...AND EVERYTHING WALKED IS COLLECTED. The terminator alone does not say that: a version that
+    # pushed only `.gl-group__grid` would satisfy it and still strand a docked adder, which is what
+    # this test is entirely about. The push has to be unconditional inside the walk.
+    loop = fn[fn.index('while ('):fn.index('return nodes')]
+    assert 'nodes.push(next);' in loop, 'the walk visits nodes without collecting them'
+    assert 'if (' not in loop, 'the walk collects only some of what it visits'
+
+
+def test_the_section_slide_respects_reduced_motion():
+    """The settle exists so the eye can follow the section rather than re-find it. Somebody who has
+    asked for less motion gets the move without the travel -- not the move without the move."""
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'slideSectionBlock')
+
+    assert "prefers-reduced-motion: reduce" in fn
+    # The nodes are STILL moved; only the animation is skipped. A version that returned early would
+    # leave the section where it was while the server was told it had moved.
+    assert fn.index('insertBefore') < fn.index('if (!firsts'), \
+        'reduced motion skips the move itself, not just the animation'
+
+    # ...AND THE MOVE IS UNCONDITIONAL. The ordering assertion above holds even when the
+    # `insertBefore` sits inside a branch that never runs, so an audit was able to make the whole
+    # section-move feature inert with this test still green. Nothing may guard the move.
+    between = fn[fn.index('var parent'):fn.index('if (!firsts')]
+    assert 'if (' not in between, 'the move itself is behind a condition'
+    # And the reduced-motion read is a real query, not a constant somebody wired to false.
+    assert 'window.matchMedia' in fn and 'false &&' not in fn
+
+
+def test_the_repaint_tells_the_card_which_section_it_is_in_now():
+    """`data-current` is server-rendered per card and is what the menu ticks and DISABLES. It was
+    always right before, because the only way a card changed group was a re-render that rebuilt the
+    attribute along with the card.
+
+    Dropping the re-render broke that, silently: the card moves, and then its own menu shows the
+    section it LEFT as current -- ticked and unpressable -- while offering the section it is
+    actually in as somewhere to move to.
+
+    This is the class of defect an optimistic repaint invites: the server used to own a piece of
+    state, the client took over moving the thing that state describes, and the state stayed behind.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'repaintAfterGroupChange')
+
+    # THE WHOLE ASSIGNMENT, not the property name. `'trigger.dataset.current' in fn` was the first
+    # version and it is satisfied by `trigger.dataset.currentXX = ...` (the name is a PREFIX of the
+    # mutant) and by the no-op `trigger.dataset.current = trigger.dataset.current || ''`. An audit
+    # killed both against it. The value being written is the thing under test.
+    assert "trigger.dataset.current = sectionId || ''" in fn, \
+        "the card's menu keeps pointing at its old section"
+    # The row is needed for this even when the node was already placed by a drag, so the lookup
+    # cannot sit inside the `!placed` branch.
+    assert fn.index("querySelector('.gl-item[data-item-id=\"'") < fn.index('if (!placed)'), \
+        'the card is only looked up when the repaint has to move it'
+    # Only where the server rendered one: a list that cannot be filed has no `data-current`, and
+    # adding one would make a menu offer destinations on a page that has none.
+    assert "hasAttribute('data-current')" in fn, 'the repaint invents the attribute where there is none'
