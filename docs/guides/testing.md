@@ -59,6 +59,36 @@ pytest path/to/test_x.py::test_name   # a single test
 pytest --create-db          # force a fresh test DB (default reuses it for speed)
 ```
 
+### Run what you changed, not everything
+
+The full suite is around **seven minutes**. Running it after every edit is the single easiest way to
+spend an afternoon re-proving code nobody touched, and it buys no confidence that the targeted run
+did not already give.
+
+**Default:** the test files covering what changed, plus `python manage.py check`. That is enough to
+commit on.
+
+**Run the whole suite when one of these is true:**
+
+| Trigger | Why |
+|---|---|
+| An audit round's fixes are going in | Audits touch several areas at once, by design |
+| The change is in shared infrastructure | `static/js/utils.js`, a service many pages read, `urls.py`, `settings.py`, a model, a migration |
+| Right before pushing a branch for PR | Once, at the end — not once per commit |
+| A targeted run failed oddly | Something further out may have moved |
+
+**The trigger is BREADTH, not risk.** This is worth stating because the habit creeps back in through
+risk: a change that *feels* dangerous invites a full run even when it touches one file, while a
+boring edit to a shared service is the one that actually needs it. A scary one-file change still only
+needs its own tests.
+
+Not worth a full run: template or copy tweaks, CSS, comments, docs, a single test file, or "the last
+one passed so this probably does too".
+
+If you are not sure which files cover an area, `grep -rl "<symbol>" tests/` answers faster than the
+suite does. The same applies to subagents — an audit agent should be told to run targeted files
+unless it is doing a final pass.
+
 ## Conventions
 
 - **Location.** Cross-cutting / engine tests go in the top-level `tests/` package.
