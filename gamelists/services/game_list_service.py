@@ -435,11 +435,20 @@ def delete_list(game_list, profile):
 # ── items ────────────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
-def add_concept(game_list, profile, concept, *, note=''):
-    """Append a game, up to `MAX_ITEMS_PER_LIST`.
+def add_concept(game_list, profile, concept, *, note='', section=None):
+    """Append a game, up to `MAX_ITEMS_PER_LIST`, optionally straight into a section.
 
     THE ONE ENFORCEMENT POINT for the size cap, so the shell, the admin and the future importer are
     all bound by it rather than only the page. `max_lists_for` above owns the other cap the same way.
+
+    `section` ARRIVES FILED RATHER THAN BEING MOVED AFTERWARDS. The two-write alternative (add, then
+    `assign_item`) was rejected: it leaves a window in which the game sits in the loose bucket, which
+    on a sectioned list means it appears under "Not in a section" and then jumps, and if the second
+    write fails it stays there with nothing to say why. One write, one destination.
+
+    UNGATED BY MEMBERSHIP, matching `assign_item` rather than `create_section`. Filing a game into a
+    header you already have is arranging, not authoring; a lapsed member can still tidy their list.
+    A free hunter simply has no sections to pass.
     """
     _require_owner(game_list, profile)
     _refuse_if_unlinked(profile)
@@ -467,10 +476,18 @@ def add_concept(game_list, profile, concept, *, note=''):
             remedy = 'Remove one to make room, or start another list.'
         raise ListError(f'A list holds {MAX_ITEMS_PER_LIST} games. {remedy}')
 
+    # RE-RESOLVED UNDER THE LOCK, exactly as `assign_item` does and for the same reason: the caller
+    # resolved this section before the transaction, so it may have been deleted while this request
+    # waited on the list lock -- and writing the FK then raises IntegrityError, which reaches a JSON
+    # client as a 500 HTML page instead of the 400 it knows how to display. The two are the same act
+    # and must not disagree about how careful it is.
+    if section is not None:
+        section = _lock_section(section, locked)
+
     highest = GameListItem.objects.filter(game_list=locked).aggregate(
         top=models.Max('position'))['top']
     item = GameListItem.objects.create(
-        game_list=locked, concept=concept, note=note,
+        game_list=locked, concept=concept, note=note, section=section,
         position=0 if highest is None else highest + 1)
 
     _recount(locked)

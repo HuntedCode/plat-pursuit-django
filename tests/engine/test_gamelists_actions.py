@@ -174,6 +174,90 @@ def test_adding_a_game_returns_the_new_count(client):
     assert GameListItem.objects.filter(game_list=game_list, concept=concept).exists()
 
 
+def test_adding_can_name_a_section_and_the_game_lands_there(client):
+    """The endpoint half of the editor rebuild's one backend change. A per-section adder posts where
+    it wants the game; the toolbar's adder posts nothing and keeps the old behaviour."""
+    owner = _staff(client)
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    game_list = svc.create_list(owner, name='Backlog')
+    section = svc.create_section(game_list, owner, name='Playing')
+    concept = _concept('Filed On Arrival')
+
+    resp = client.post(reverse('list_add_game', args=[game_list.id]),
+                       {'concept_id': concept.pk, 'section': section.pk})
+
+    assert resp.status_code == 200
+    assert resp.json()['section'] == section.pk, 'the response does not say where it landed'
+    assert GameListItem.objects.get(game_list=game_list, concept=concept).section_id == section.pk
+
+
+def test_adding_with_an_empty_section_means_the_loose_bucket(client):
+    """EMPTY IS A DESTINATION, not a missing field -- the same reading `AssignItemView` has always
+    had, now shared between them. A falsy test here would make "" indistinguishable from "unfiled",
+    which happens to be the same answer but for the wrong reason, and stops being so the day the
+    default changes."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    concept = _concept('Loose')
+
+    resp = client.post(reverse('list_add_game', args=[game_list.id]),
+                       {'concept_id': concept.pk, 'section': ''})
+
+    assert resp.status_code == 200
+    assert resp.json()['section'] is None
+    assert GameListItem.objects.get(game_list=game_list, concept=concept).section_id is None
+
+
+def test_adding_into_a_section_of_another_list_is_refused(client):
+    """Scoped to the list, so an id alone cannot answer differently for "another hunter's section"
+    and "no such section" -- which would make the endpoint an oracle over the section id space."""
+    owner = _staff(client)
+    owner.user_is_premium = True
+    owner.save(update_fields=['user_is_premium'])
+    mine = svc.create_list(owner, name='Mine')
+    stranger = ProfileFactory(is_linked=True, psn_username='stranger')
+    theirs = svc.create_list(stranger, name='Theirs')
+    stranger.user_is_premium = True
+    stranger.save(update_fields=['user_is_premium'])
+    foreign = svc.create_section(theirs, stranger, name='Not yours')
+
+    resp = client.post(reverse('list_add_game', args=[mine.id]),
+                       {'concept_id': _concept().pk, 'section': foreign.pk})
+
+    assert resp.status_code == 400
+    assert GameListItem.objects.filter(game_list=mine).count() == 0
+
+    # THE REFUSAL MUST NOT SAY WHICH KIND OF WRONG IT WAS. A foreign section and a section that
+    # never existed have to be indistinguishable, or the pair is an oracle over the global section
+    # id space -- ids a reader never sees.
+    #
+    # Pinned as a byte comparison because this is enforced TWICE, at the view and again in the
+    # service, and the two are only equivalent while their wording agrees. Mutation-checked: dropping
+    # the view's `game_list=` scope changes no observable behaviour, since the service still refuses
+    # -- so what is actually load-bearing is that both refusals read the same, and that is what this
+    # asserts rather than which layer answered.
+    absent = client.post(reverse('list_add_game', args=[mine.id]),
+                         {'concept_id': _concept('Second').pk, 'section': 999999})
+    assert absent.status_code == 400
+    assert absent.json()['error'] == resp.json()['error'], (
+        'a foreign section and a nonexistent one give different answers'
+    )
+
+
+def test_a_junk_section_is_refused_rather_than_raising(client):
+    """`safe_int`, not the raw string: `filter(pk='abc')` raises ValueError, which on a route any
+    logged-in hunter can post to is a 500 rather than the 400 a JSON client can display."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+
+    resp = client.post(reverse('list_add_game', args=[game_list.id]),
+                       {'concept_id': _concept().pk, 'section': 'abc'})
+
+    assert resp.status_code == 400
+    assert GameListItem.objects.filter(game_list=game_list).count() == 0
+
+
 def test_only_the_owner_can_add(client):
     author = ProfileFactory(is_linked=True, psn_username='author')
     game_list = svc.create_list(author, name='Theirs', is_public=True)

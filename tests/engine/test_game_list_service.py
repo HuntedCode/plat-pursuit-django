@@ -14,6 +14,7 @@ from gamelists.models import (
     FREE_MAX_LISTS,
     LIST_TYPE_COLLECTION,
     LIST_TYPE_RANKED,
+    MAX_ITEMS_PER_LIST,
     MAX_SECTIONS_PER_LIST,
     MEMBER_MAX_LISTS,
     GameList,
@@ -1037,3 +1038,97 @@ def test_filing_into_a_deleted_section_is_refused_rather_than_a_500(client):
 
     item.refresh_from_db()
     assert item.section_id is None
+
+
+# ── adding straight into a section (2026-09) ─────────────────────────────────────────────────────
+
+def test_a_game_can_be_added_straight_into_a_section():
+    """The editor rebuild's one backend change. Adding to the list and then moving the game was the
+    only route, which on a long list meant scrolling back to a global control and then filing what
+    you had just added."""
+    profile = _hunter(premium=True)
+    game_list = svc.create_list(profile, name='Backlog')
+    section = svc.create_section(game_list, profile, name='Playing')
+
+    item = svc.add_concept(game_list, profile, ConceptFactory(), section=section)
+
+    assert item.section_id == section.id
+
+
+def test_adding_without_a_section_still_lands_in_the_loose_bucket():
+    """The default has to stay exactly what it was: the toolbar adder sends no section, and every
+    list that has no sections at all goes through this path."""
+    profile = _hunter(premium=True)
+    game_list = svc.create_list(profile, name='Backlog')
+
+    item = svc.add_concept(game_list, profile, ConceptFactory())
+
+    assert item.section_id is None
+
+
+def test_adding_into_another_lists_section_is_refused():
+    """The section must belong to THIS list. Without the check a game could be filed under another
+    hunter's section id -- it would render nowhere and leak the existence of a section on a list the
+    caller may not be able to see."""
+    profile = _hunter(premium=True)
+    mine = svc.create_list(profile, name='Mine')
+    theirs = svc.create_list(_hunter(psn='stranger', premium=True), name='Theirs')
+    foreign = svc.create_section(theirs, theirs.owner, name='Not yours')
+
+    with pytest.raises(svc.ListError):
+        svc.add_concept(mine, profile, ConceptFactory(), section=foreign)
+
+    assert GameListItem.objects.filter(game_list=mine).count() == 0, 'the refusal still wrote a row'
+
+
+def test_filing_on_the_way_in_is_not_member_gated():
+    """Matching `assign_item` rather than `create_section`. Filing a game into a header you already
+    have is arranging, not authoring -- a lapsed member can still tidy their list. They cannot make
+    another header, which is the thing membership actually buys."""
+    profile = _hunter(premium=True)
+    game_list = svc.create_list(profile, name='Backlog')
+    section = svc.create_section(game_list, profile, name='Playing')
+
+    profile.user_is_premium = False
+    profile.save(update_fields=['user_is_premium'])
+
+    item = svc.add_concept(game_list, profile, ConceptFactory(), section=section)
+
+    assert item.section_id == section.id
+
+
+def test_a_section_deleted_mid_request_refuses_rather_than_filing_loose():
+    """Re-resolved UNDER THE LOCK, exactly as `assign_item` does. The caller resolves the section
+    before the transaction, so it can be deleted while the request waits on the list lock -- and
+    writing the FK then raises IntegrityError, which reaches a JSON client as a 500 HTML page
+    instead of the 400 it knows how to display.
+
+    Simulated by deleting the row and handing the service the stale in-memory object, which is
+    exactly the state a real interleaving produces.
+    """
+    profile = _hunter(premium=True)
+    game_list = svc.create_list(profile, name='Backlog')
+    section = svc.create_section(game_list, profile, name='Doomed')
+    GameListSection.objects.filter(pk=section.pk).delete()
+
+    with pytest.raises(svc.ListError):
+        svc.add_concept(game_list, profile, ConceptFactory(), section=section)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 0, (
+        'the game was filed loose instead of the add being refused'
+    )
+
+
+def test_the_size_cap_still_binds_when_a_section_is_given():
+    """The cap is the reason this function exists rather than `GameListItem.objects.create`. A new
+    argument must not become a way round it."""
+    profile = _hunter(premium=True)
+    game_list = svc.create_list(profile, name='Backlog')
+    section = svc.create_section(game_list, profile, name='Playing')
+    GameListItem.objects.bulk_create([
+        GameListItem(game_list=game_list, concept=ConceptFactory(), position=n)
+        for n in range(MAX_ITEMS_PER_LIST)
+    ])
+
+    with pytest.raises(svc.ListError):
+        svc.add_concept(game_list, profile, ConceptFactory(), section=section)

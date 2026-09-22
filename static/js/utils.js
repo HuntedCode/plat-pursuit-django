@@ -4481,6 +4481,16 @@ function GameAdder(root, opts) {
 
         var body = new FormData();
         body.append('concept_id', row.dataset.conceptId);
+        // THE DESTINATION, READ OFF THE ROOT AT SEND TIME -- like `searchUrl` and `addUrl` above,
+        // and for the same reason: the server owns what these mean and the element carries them.
+        // Read now rather than captured at wire time because one adder is REPOSITIONED between
+        // section headers rather than one being built per section (each instance binds a document
+        // listener and there is no teardown, so N adders on a panel that re-swaps is a leak). The
+        // root's `data-section` changes as it moves; a captured value would file every game into
+        // whichever header happened to be first.
+        //
+        // Absent or empty means the loose bucket, which is where an add has always landed.
+        if (root.dataset.section) { body.append('section', root.dataset.section); }
         postJson(root.dataset.addUrl, body)
             .then(function (data) {
                 // The row STAYS and flips to its added state rather than vanishing: somebody adding
