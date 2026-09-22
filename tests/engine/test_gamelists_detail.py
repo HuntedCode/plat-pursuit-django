@@ -2959,6 +2959,39 @@ def test_the_spoken_rank_matches_the_printed_one(client):
     assert 'restart ? rows.length : fullOrder().length' in rank
 
 
+def test_the_spoken_section_name_survives_a_docked_adder(client):
+    """The other half of the spoken rank, and it went quiet for the one person who needs it.
+
+    `sectionNameFor` read `grid.previousElementSibling` -- which is the exact mistake `groupGridFor`
+    twenty lines above carries a comment about, because **the adder docks BETWEEN a header and its
+    grid**. So with the adder open under a header, the previous sibling is the adder, there is no
+    `.gl-section__name` inside it, and the announcement dropped from "3 of 7 in Finished" to "3 of
+    7". Silently, and only for a reader who cannot see which header they are under -- i.e. the only
+    person the announcement exists for.
+
+    BOTH ENDS ARE PINNED, because the fix is that the JS reads a fact the TEMPLATE states: the grid's
+    `aria-labelledby` names the `<h2>` by id. Asserting only the JS would let the markup drop the
+    attribute and leave the function reading nothing; asserting only the markup would let the JS go
+    back to walking siblings. That split is how half a shared pattern ships.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    # Bounded by the NEXT definition, never to end-of-file: `previousElementSibling` is a legitimate
+    # read elsewhere in this file, so an unbounded slice would make the first assertion below fail on
+    # correct code -- and someone would then "fix" it by deleting the assertion.
+    body = js[js.index('function sectionNameFor('):js.index('function saveAssignment(')]
+
+    assert 'previousElementSibling' not in body, \
+        'the spoken section name is back to DOM adjacency, which the docked adder breaks'
+    assert 'aria-labelledby' in body and 'getElementById' in body, \
+        'it no longer reads the label the markup declares'
+
+    group = _read('templates/gamelists/partials/detail_group.html')
+    assert 'aria-labelledby="gl-section-{{ section.id }}"' in group, \
+        'the grid no longer names its heading, so the JS above reads nothing'
+    assert 'id="gl-section-{{ section.id }}"' in group, \
+        'the heading lost the id its grid points at'
+
+
 def test_section_writes_queue_behind_the_arrangement_writes(client):
     """A queued `saveOrder` carries a body captured from the DOM as it was. A section delete that
     lands first leaves that reorder posting a deleted section id: the server refuses, the pill flips

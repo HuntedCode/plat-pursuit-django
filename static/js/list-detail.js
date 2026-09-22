@@ -2422,12 +2422,25 @@
         return null;
     }
 
-    // The heading immediately above a grid, which is how `detail_group.html` lays a group out. Used
-    // only to make a restarted number unambiguous when it is spoken.
+    /**
+     * The name of the section a grid belongs to, for the spoken form of a restarted number.
+     *
+     * READ FROM THE LABEL THE MARKUP ALREADY DECLARES, not from DOM adjacency. This was
+     * `grid.previousElementSibling`, which is the exact mistake `groupGridFor` above carries a
+     * comment about: the adder DOCKS BETWEEN a header and its grid, so the moment somebody is adding
+     * to this section the previous sibling is the adder. There is no `.gl-section__name` inside it,
+     * so this returned null and a keyboard move announced "3 of 7" instead of "3 of 7 in Finished"
+     * -- silently, and only for the one person who cannot see which header they are under.
+     *
+     * `aria-labelledby` points at the `<h2>` by id (`detail_group.html`), which is the same fact the
+     * screen reader itself is using to name this group. Reading it means the announcement cannot
+     * disagree with the accessible name, and nothing between the header and the grid can break it.
+     * A flat list has no label and therefore no section, which is the correct null.
+     */
     function sectionNameFor(grid) {
-        var head = grid.previousElementSibling;
-        var name = head && head.querySelector && head.querySelector('.gl-section__name');
-        return name ? name.textContent.trim() : null;
+        var labelId = grid.getAttribute('aria-labelledby');
+        var head = labelId && document.getElementById(labelId);
+        return head ? head.textContent.trim() : null;
     }
 
     /**
