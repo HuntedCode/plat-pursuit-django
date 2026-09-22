@@ -18,6 +18,7 @@ from gamelists.models import (FREE_MAX_LISTS, NAME_MAX_LENGTH, LIST_TYPE_COLLECT
 from pathlib import Path
 
 from gamelists.services import game_list_service as svc
+from gamelists.services.game_search import LIMIT
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 from users.models import UserRestriction
 
@@ -405,13 +406,18 @@ def test_an_enormous_query_is_refused_rather_than_becoming_a_like_pattern(client
 def test_the_search_is_bounded(client):
     owner = _staff(client)
     game_list = svc.create_list(owner, name='Backlog')
-    for n in range(20):
+    # `LIMIT + 8`, so the fixture is always larger than the bound rather than larger than a number
+    # that happened to be the bound when this was written.
+    for n in range(LIMIT + 8):
         _concept(f'Bounded Game {n:02d}')
 
     results = client.get(reverse('list_game_search', args=[game_list.id]),
                          {'q': 'bounded'}).json()['results']
 
-    assert len(results) == 12
+    # READ FROM THE CONSTANT. This asserted a literal 12, so raising the bound to 20 failed a test
+    # about BOUNDEDNESS for the one reason that is not a defect -- the bound changing. What it is
+    # here to catch is the bound going missing.
+    assert len(results) == LIMIT
 
 
 def test_the_search_does_not_fetch_the_igdb_blob(client):
@@ -1996,3 +2002,150 @@ def test_no_stylesheet_shows_a_control_on_is_revealed():
             if '.is-revealed ~' in line and 'opacity: 1' in line:
                 offenders.append(f'{path.name}: {line.strip()}')
     assert not offenders, 'a control is shown by .is-revealed: ' + '; '.join(offenders)
+
+
+# ── the typeahead ranks by match quality, not by the alphabet (2026-09) ──────────────────────────
+
+def _titled(*titles):
+    """Concepts with these titles, each with a trophy list so the cover lookup has something."""
+    made = []
+    for title in titles:
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        made.append(concept)
+    return made
+
+
+def _search(client, game_list, term):
+    """The typeahead's titles for `term`, WITHOUT another test's cached answer.
+
+    `search_concepts` caches on the normalized query and nothing else -- deliberately, so the
+    expensive half is shared across every adder on the site. Under `settings_test` that is a
+    LocMemCache which lives for the whole run, so the first test to search "myst" fixes the answer
+    for every test after it: three of these were written against a result set assembled by their
+    own neighbours, and two of them failed for it.
+
+    The same shape `conftest` documents for `rarity:community_size`, one key along. Deleted here
+    rather than added to that autouse fixture because this key is per-TERM: a pattern delete is not
+    something LocMemCache does well, and the tests that care are all in this file.
+    """
+    from django.core.cache import cache
+
+    cache.delete('adder:search:' + term.lower())
+    response = client.get(reverse('list_game_search', args=[game_list.id]), {'q': term})
+    assert response.status_code == 200, f'the search answered {response.status_code}'
+    return [row['title'] for row in response.json()['results']]
+
+
+def test_the_search_ranks_the_exact_title_first(client):
+    """The whole title BEING the term is the strongest possible signal.
+
+    THE FIRST VERSION OF THIS TEST COULD NOT FAIL, and the reason is worth keeping: it searched
+    "myst" against "Myst" / "Mysterium" / "Mystery Case Files", where the exact title is also
+    alphabetically first -- because an exact match is always a prefix of the titles that extend it.
+    Every ordering under test agreed, so it proved nothing.
+
+    An exact match only has something to prove against a title that sorts BEFORE it and merely
+    contains the term. Hence "Amazed".
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Amazed', 'Zed Adventures', 'Zed')
+
+    titles = _search(client, game_list, 'zed')
+
+    assert titles[0] == 'Zed', f'the exact title is not first: {titles}'
+
+
+def test_a_term_at_a_word_boundary_outranks_one_buried_mid_word(client):
+    """THE REPORTED BUG. Searching "myst" never reached "Riven: The Sequel to Myst", because a dozen
+    titles beginning with those four letters sort ahead of anything starting with R -- the search
+    looked broken on exactly the query a series had flooded.
+
+    A term that begins a WORD is almost always the game somebody means. It was previously
+    indistinguishable from a mid-word coincidence, and both lost to the alphabet.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Amystified Journey', 'Riven: The Sequel to Myst')
+
+    titles = _search(client, game_list, 'myst')
+
+    assert titles.index('Riven: The Sequel to Myst') < titles.index('Amystified Journey'), \
+        f'a mid-word match outranks a word-boundary one: {titles}'
+
+
+def test_a_prefix_flood_still_outranks_a_word_boundary_match(client):
+    """WHAT THE RANKING DOES NOT FIX, pinned so it is a decision rather than a surprise.
+
+    The report was a series flooding the results and pushing the wanted game out. The tiers help
+    when the wanted game matches BETTER than the flood -- exactly, or at a word boundary against a
+    flood that matches mid-word. They do not help when the flood matches better: fifteen titles
+    starting with "Myst" are all tier 1, and "Riven: The Sequel to Myst" is tier 2, so the flood
+    still wins and still fills the page.
+
+    That is the right default -- a title that STARTS with what you typed is usually what you meant --
+    and it is why the panel tells the reader the results were capped and asks for more of the title.
+    Reserving slots for weaker tiers was considered and rejected: it would push out matches that are
+    genuinely more relevant, to rescue a case the hint already covers.
+
+    A version of this test that asserted the opposite passed for a while, because its fixture held
+    sixteen titles against a limit of twenty -- every ordering returned all of them.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled(*['Mystery Case Files %02d' % n for n in range(1, LIMIT + 6)])
+    _titled('Riven: The Sequel to Myst')
+
+    titles = _search(client, game_list, 'myst')
+
+    assert len(titles) == LIMIT
+    assert 'Riven: The Sequel to Myst' not in titles, \
+        'a weaker match is being rescued at the expense of stronger ones; if that is now wanted, ' \
+        'the panel hint and this test both need rewriting together'
+
+
+def test_a_word_boundary_match_survives_a_flood_it_can_outrank(client):
+    """The half the ranking DOES fix. Same shape as above, but the flood matches mid-word -- so the
+    wanted game is tier 2 against a tier 3 flood and surfaces no matter how much noise there is.
+
+    Alphabetically it was hopeless: "Amystified" sorts before "Riven", so twenty of them filled the
+    page and the answer never appeared.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled(*['Amystified Journey %02d' % n for n in range(1, LIMIT + 6)])
+    _titled('Riven: The Sequel to Myst')
+
+    titles = _search(client, game_list, 'myst')
+
+    assert 'Riven: The Sequel to Myst' in titles, \
+        'a word-boundary match is still buried under mid-word noise'
+    assert titles[0] == 'Riven: The Sequel to Myst', 'it surfaced but did not lead'
+
+
+def test_the_search_still_answers_at_most_one_page(client):
+    """The ranking widened the window it ranks into; it did not remove the window. This is also the
+    bound every caller's "already on this list" check respects, so it cannot quietly grow."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled(*['Mystery Case Files %02d' % n for n in range(1, LIMIT + 8)])
+
+    titles = _search(client, game_list, 'myst')
+
+    assert len(titles) == LIMIT, f'the typeahead answered with {len(titles)} rows'
+
+
+def test_the_panel_says_when_it_had_to_stop(client):
+    """A full page of results is not "all the results", and without saying so the panel looks
+    authoritative while the game somebody wants is simply not in it -- which is what the ranking
+    alone cannot fix.
+
+    A ROW rather than only the live region: the reader who needs this is the one scanning the list
+    and not finding it, and a spoken-only message reaches everybody except them."""
+    js = _decommented(_read('static/js/utils.js'))
+
+    assert 'results.length >= limit' in js, 'a capped result set is indistinguishable from a full one'
+    assert 'Add more of the title to narrow' in js, 'the reader is not told what to do about it'
+    # Inert, so the arrow keys that walk the result rows do not land on it.
+    assert "more.className = prefix + '__note'" in js

@@ -3117,7 +3117,14 @@ def test_the_adder_is_raised_without_forking_the_shared_field(client):
 
     css = _read('static/css/components/gamelists.css')
     block = css[css.index('.gl-adder {'):css.index('.gl-adder__panel {')]
-    assert 'flex: 1 1 320px' in block, 'it does not take the bar\'s slack'
+    # THE RELATIONSHIP, not the number. This pinned `flex: 1 1 320px` and broke when the basis was
+    # raised to 420 -- a change that makes the claim MORE true. What the comment beside the rule
+    # actually argues is that the adder is the widest thing in the row wherever there is room, which
+    # means a basis larger than the shared field's 200px and a `flex-grow` that takes the slack.
+    basis = re.search(r'flex: 1 1 (\d+)px', block)
+    assert basis, "it does not take the bar's slack"
+    assert int(basis.group(1)) > 200, \
+        'the adder is no wider than the shared field, so it cannot lead the row'
 
     # THE REST RULE ONLY. Slicing to the whole block swept in `:hover` and `:focus`, which carry the
     # same accent declaration -- so the assertion passed with the resting accent removed, which is
@@ -3845,13 +3852,17 @@ def test_the_adder_actually_wins_the_cascade(client):
     later in the sheet (so an equal-specificity tie breaks our way)."""
     css = _read('static/css/output.css')
 
+    # THE BASIS IS READ, not asserted. This named `flex:320px` twice and broke when the basis was
+    # raised -- a test about CASCADE ORDER failing for a change to a VALUE it does not care about.
     shared = css.index('.pp-gbrowse__bar>.pp-bgal__search{flex:200px}')
-    ours = css.index('.gl-toolbar .gl-adder{flex:320px}')
+    ours_rule = re.search(r'\.gl-toolbar \.gl-adder\{flex:(\d+)px\}', css)
+    assert ours_rule, 'the adder rule lost its qualifying class or its basis'
+    ours = ours_rule.start()
 
     assert ours > shared, 'the adder rule is compiled BEFORE the shared one and loses the tie'
     # Two classes, matching the shared selector rather than being outranked by it. A single-class
     # selector here is the bug, whatever its source position.
-    assert '.gl-toolbar .gl-adder{flex:320px}' in css, 'the rule lost its qualifying class'
+    assert int(ours_rule.group(1)) > 200, 'the adder no longer out-bases the shared field'
 
 
 def test_the_two_wrapping_bodies_take_the_space_that_is_left(client):

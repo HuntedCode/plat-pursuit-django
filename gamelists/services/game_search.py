@@ -27,13 +27,20 @@ What this module CAN do, and does, is bound the damage: a rate limit at each vie
 on the normalized query, and an upper bound on the term.
 """
 from django.core.cache import cache
+from django.db.models import Case, IntegerField, Value, When
 
 from gamelists.services.covers import cover_games_for
 from trophies.models import Concept
 
 #: How many rows a typeahead answers with. Also the bound every caller's membership check must respect
 #: -- the answer only ever needs to be known for the rows being rendered.
-LIMIT = 12
+#:
+#: 20, up from 12 (2026-09). The panel scrolls, so the cost of more rows is bytes rather than layout,
+#: and 12 was demonstrably too few the moment a series shared a substring with the thing being looked
+#: for: searching "myst" returned twelve titles beginning with it and never reached
+#: "Riven: The Sequel to Myst". The ranking below is the real fix; this widens the window it ranks
+#: into.
+LIMIT = 20
 
 #: THREE, not two. pg_trgm extracts no trigrams from a two-character pattern, so a 2-char query is a
 #: guaranteed full pass even once the index question above is settled.
@@ -79,12 +86,41 @@ def search_concepts(query):
     # `display_image_url` reads the IGDB cover FIRST on every render -- without the select_related
     # that is a query per row, and without the defer each one drags the ~30 KB API blob that caused
     # the May 2026 web-server OOM. CLAUDE.md requires the pairing; neither half is optional.
+    # RANKED BY HOW WELL THE TITLE MATCHES, then alphabetically inside each tier.
+    #
+    # This was `order_by('unified_title')[:LIMIT]` -- the alphabet, truncated. Which means a title
+    # that CONTAINS the term but does not START with it competes on spelling against every title
+    # that does, and loses. The reported case: "myst" never reached "Riven: The Sequel to Myst",
+    # because a dozen titles beginning with those four letters sort ahead of anything starting with
+    # R. The result was a search that looked broken on exactly the query a series had flooded.
+    #
+    # Four tiers, cheapest first to read:
+    #   0  the whole title IS the term          -- "Myst"
+    #   1  the title begins with it             -- "Myst III", "Mystery Case Files"
+    #   2  it begins a WORD inside the title    -- "Riven: The Sequel to Myst"
+    #   3  it appears mid-word                  -- "Pathologic" for "logi"
+    #
+    # Tier 2 is the one that earns this. A term at a word boundary is almost always the game
+    # somebody means, and it was previously indistinguishable from a mid-word coincidence. It is
+    # approximated with a leading space rather than a regex: `~*` would cost a per-row regex match
+    # on a scan that is already the expensive part, and the space catches every real title because
+    # the alternative -- a word starting mid-token -- is what tier 3 is for.
+    #
+    # No index is lost by this. The `icontains` cannot use one either way (see the module docstring),
+    # so the sort was always over the matched set.
     concepts = list(
         Concept.objects.filter(unified_title__icontains=query)
         .exclude(unified_title='')
+        .annotate(_match_rank=Case(
+            When(unified_title__iexact=query, then=Value(0)),
+            When(unified_title__istartswith=query, then=Value(1)),
+            When(unified_title__icontains=' ' + query, then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        ))
         .select_related('igdb_match')
         .defer('igdb_match__raw_response')
-        .order_by('unified_title')[:LIMIT]
+        .order_by('_match_rank', 'unified_title')[:LIMIT]
     )
     covers = cover_games_for([concept.pk for concept in concepts])
     results = [
