@@ -1411,6 +1411,13 @@ def test_no_gl_class_is_used_without_a_rule():
 
     Checked against the BUILT stylesheet, because that is what the browser loads and this project has
     been bitten before by markup that disagreed with the compiled CSS.
+
+    AND AGAINST THE JAVASCRIPT, which this scanned for a while without: it read `templates/gamelists`
+    only, so six `gl-*` names that exist NOWHERE ELSE -- `gl-menu`, `gl-menu__head`, `gl-menu__sep`,
+    `gl-menu__item--danger`, `gl-published`, `gl-adder--docked` -- were outside the guard entirely.
+    Those are the card/section popovers and two state classes, i.e. exactly the kind of thing a
+    refactor deletes a rule for while leaving the `classList.add` behind. The original `.gl-adder__field`
+    failure, one file over.
     """
     import glob
 
@@ -1430,7 +1437,39 @@ def test_no_gl_class_is_used_without_a_rule():
             used.update(c for c in attr.split() if c.startswith('gl-'))
 
     assert used, 'found no gl-* classes at all -- the scan is broken, not the CSS'
-    orphaned = sorted(name for name in used if f'.{name}' not in built)
+
+    # THREE SIGNALS THAT UNAMBIGUOUSLY MEAN "JS APPLIES THIS CLASS", and nothing looser.
+    #
+    # The obvious approach -- harvest every string literal that looks like class names -- was tried
+    # and produces false positives of three different kinds: element ids (`gl-items-root`), a
+    # SortableJS GROUP name (`group: 'gl-items'`), and concatenation fragments. Suppressing those
+    # needs a hand-maintained exception list, which is a thing that drifts and then hides a real
+    # orphan. These three patterns need no exception list at all, because an id is never passed to
+    # `classList.add` and a drag group is never written into a `class="..."`.
+    #
+    # Decommented first: this file discusses `#gl-items` at length in prose.
+    js_used = set()
+    for name in ('list-detail.js', 'quick-add.js'):
+        source = _decommented((root / 'static' / 'js' / name).read_text(encoding='utf-8'))
+        applied = []
+        for args in re.findall(r'classList\.(?:add|remove|toggle)\(([^)]*)\)', source):
+            applied += [a or b for a, b in re.findall(r"'([^'\n]*)'|\"([^\"\n]*)\"", args)]
+        applied += re.findall(r'class="([^"\n]*)"', source)
+        applied += re.findall(r"""className\s*[:=]\s*['"]([^'"\n]*)['"]""", source)
+        for value in applied:
+            for token in value.split():
+                # Trimmed to the class, because a conditional is written butted against the quote:
+                # `'class="gl-menu__item' + (flag ? ' is-current' : '') + '"'` yields the token
+                # `gl-menu__item'`, which matches no rule and reports a false orphan.
+                hit = re.match(r'^(gl-[\w-]+)', token)
+                if hit:
+                    js_used.add(hit.group(1))
+
+    assert js_used, 'found no gl-* classes in the JS at all -- the scan is broken, not the CSS'
+    assert 'gl-menu' in js_used, \
+        'the JS scan no longer sees the popover classes, which live nowhere else'
+
+    orphaned = sorted(name for name in used | js_used if f'.{name}' not in built)
     assert not orphaned, f'gl-* classes with no rule in the built CSS: {orphaned}'
 
 
