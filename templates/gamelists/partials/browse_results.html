@@ -1,0 +1,47 @@
+{% comment %} Game list browse results -- grid only. Returned on HTMX filter swaps AND on the
+InfiniteScroller's ?page fetches (X-Requested-With, via the HtmxListMixin XHR guard). The scroll sentinel
+and spinner live in the host page (gamelists/browse.html), OUTSIDE this partial, so a filter change swaps only the grid and
+does not tear out the thing watching for the next page.
+
+`pp-reveal` is baked in on HTMX swaps only: htmx's settle step restores server attributes on id'd swapped
+elements, so a class added by JS in afterSwap is wiped again and the cards unhide with a flash.
+{% endcomment %}
+{% load humanize %}
+{% comment %}`data-has-filters` is how the SERVER tells the client whether the Spotlight should be
+collapsed. The band lives outside this partial, so a swap cannot remove it; `lists-browse.js` reads
+this flag after each swap and collapses or restores the band to match.
+
+Carried here rather than recomputed in JS on purpose: "is a filter on" already has a precise
+definition in the view (a `?q=` under three characters filters nothing and must not count), and a
+second copy in JavaScript is exactly the drift that made the band vanish on the first keystroke of
+live search.{% endcomment %}
+<div id="items-grid" class="pp-gtile-grid{% if request.htmx %} pp-reveal{% endif %}"
+     data-result-count="{{ paginator.count }}" data-has-filters="{% if has_filters %}1{% else %}0{% endif %}">
+    {% for game_list in object_list %}
+    {# `mark_index` desyncs the supporter shimmer per tile; the tile explains why it is passed, not inherited. #}
+    {% include 'gamelists/partials/list_tile.html' with game_list=game_list mark_index=forloop.counter0 %}
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        {% if query %}
+        <p class="pp-gtile-empty__title">No lists match &ldquo;{{ query }}&rdquo;</p>
+        <p class="pp-gtile-empty__hint">Try a different term, or widen the game-count range.</p>
+        {% else %}
+        <p class="pp-gtile-empty__title">No public lists yet</p>
+        <p class="pp-gtile-empty__hint">Lists are how hunters share a backlog, a ranking, or a run. Be the first to publish one.</p>
+        {% endif %}
+
+        {% comment %}"Try a different term" is advice; this is the button that follows it. A reader who
+        has narrowed to nothing should not have to work out WHICH of four controls did it -- the
+        Career page goes further and names the filter to drop, which is the bar this is reaching
+        toward. Plain navigation rather than an htmx reset, because it must also clear the URL.{% endcomment %}
+        <div class="pp-gtile-empty__action">
+            {% if has_filters %}
+            <a href="{% url 'lists_browse' %}" class="pp-cta pp-cta--ghost">Clear filters</a>
+            {% elif user.is_authenticated and user.profile %}
+            <a href="{% url 'my_lists' %}" class="pp-cta">Make a list</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>

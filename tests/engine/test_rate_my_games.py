@@ -76,7 +76,7 @@ def test_it_sits_with_the_other_personal_tools():
     assert match['hub'].key == 'my_pursuit', 'the page no longer resolves to the personal hub'
     assert match['active_slug'] == 'rate_my_games'
     tools = [i.slug for i in match['hub'].items if i.group == 'Tools']
-    assert tools == ['shareables', 'recap', 'rate_my_games'], tools
+    assert tools == ['shareables', 'recap', 'rate_my_games', 'my_lists'], tools
 
 
 # ── One form, two hosts ───────────────────────────────────────────────────────────────────────────

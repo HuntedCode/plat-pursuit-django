@@ -8,8 +8,8 @@ from django.contrib.postgres.indexes import GinIndex
 from django.core.serializers.json import DjangoJSONEncoder
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
 from django.db import transaction
-from django.db.models import F, IntegerField, Max, Min, Q
-from django.db.models.functions import Cast, Substr
+from django.db.models import Count, F, IntegerField, Max, Min, OuterRef, Q, Subquery
+from django.db.models.functions import Cast, Coalesce, Substr
 import logging
 
 logger = logging.getLogger("psn_api")
@@ -1642,6 +1642,77 @@ class Concept(models.Model):
                 self.title_ids.append(tid)
         if other.title_ids:
             self.save(update_fields=['title_ids'])
+
+        # Game list entries (gamelists.GameListItem -> Concept, added 2026-09 when the rebuilt lists
+        # moved from Game keying to Concept keying).
+        #
+        # DELIBERATELY LAST. absorb() is not transactional, so a branch that raises commits
+        # everything above it, skips everything below it, and stops the caller's `other.delete()` --
+        # leaving a half-migrated orphan Concept. That risk is real here and not theoretical:
+        # `gamelists` is a new app, so during a rolling deploy a worker running new code before
+        # `migrate` has created the table raises `ProgrammingError` on the first query below. The
+        # PSN branch above answers the same risk by swallowing, which is right for a capture table
+        # nothing reads and wrong for hand-curated user content -- so this one is positioned instead
+        # of silenced. A raise here costs only the list re-point.
+        #
+        # Re-pointed rather than left to cascade, because a cascade deletes a hunter's curation: they
+        # added a game to their backlog and a catalogue merge they never saw would remove it.
+        #
+        # The dedup cannot be a bare `.update()`: a list may already hold the SURVIVOR, and
+        # `unique(game_list, concept)` would then raise mid-merge. A subquery rather than a
+        # materialized set of ids, both to keep it one statement and to narrow the window in which a
+        # hunter adding the survivor between the read and the write reintroduces that collision.
+        from gamelists.models import GameList, GameListItem
+
+        # ONLY the lists that actually lose a row. A list holding just `other` has its entry
+        # re-pointed and nothing deleted, so its positions stay dense and its count is unchanged --
+        # walking it would be pure work. Collecting every list holding EITHER concept meant a popular
+        # concept dragged thousands of untouched lists through a full re-walk.
+        #
+        # `unique(game_list, concept)` bounds this to exactly ONE deletion per colliding list, which
+        # is what makes the repair below a single shift rather than a renumber.
+        collisions = list(
+            GameListItem.objects
+            .filter(concept=other,
+                    game_list_id__in=GameListItem.objects.filter(concept=self).values('game_list_id'))
+            .values_list('game_list_id', 'position')
+        )
+        GameListItem.objects.filter(
+            pk__in=GameListItem.objects.filter(
+                concept=other,
+                game_list_id__in=GameListItem.objects.filter(concept=self).values('game_list_id'),
+            ).values('pk')
+        ).delete()
+        GameListItem.objects.filter(concept=other).update(concept=self)
+
+        # Both denormalized invariants have to be restored, and neither is optional. `game_count` is
+        # what the browse grid shows and sorts on, and a drop above leaves it high FOREVER (nothing
+        # recomputes it, and the service's own decrements can never bring an inflated counter back
+        # down past zero). Positions are consumed as dense by the cover prefetch, so the hole a drop
+        # leaves shows three covers on a four-game list.
+        #
+        # SET-BASED, because this runs inside `Game.add_concept()` and therefore inside SYNC. The
+        # first version materialized every row of every touched list and issued one `save()` per
+        # shifted item: removing position 0 of a 50,000-item list was ~50,000 UPDATE statements in
+        # the sync path, and a list can hold up to `gamelists.MAX_ITEMS_PER_LIST` rows. Exactly the shape
+        # CLAUDE.md's whale rule forbids, in the worst place to put it.
+        #
+        # One shift per colliding list -- the same single-decrement `remove_concept` already uses --
+        # and one COUNT-driven statement for every count, rather than a query per list.
+        for game_list_id, gap in collisions:
+            GameListItem.objects.filter(game_list_id=game_list_id, position__gt=gap).update(
+                position=F('position') - 1)
+
+        if collisions:
+            GameList.objects.filter(pk__in={lid for lid, _ in collisions}).update(
+                game_count=Coalesce(
+                    Subquery(
+                        GameListItem.objects.filter(game_list=OuterRef('pk'))
+                        .values('game_list').annotate(c=Count('pk')).values('c')[:1]
+                    ),
+                    0,
+                )
+            )
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.5), retry=retry_if_exception_type(OperationalError))
     def add_title_id(self, title_id: str):
@@ -7975,6 +8046,16 @@ class ModerationAction(models.Model):
         ('blurb_restored_proactive', 'Quick take restored (was hidden without a report)'),
         ('blurb_report_dismissed', 'Quick take report dismissed'),
         ('blurb_report_reopened', 'Quick take report reopened'),
+        # A LIST'S WORDS, not the list. `GameList.text_hidden` hides the name and description and
+        # leaves the games, the likes and the owner's curation alone -- the same call `blurb_hidden`
+        # makes, so the vocabulary mirrors it rather than inventing a second shape.
+        ('list_text_hidden', 'List name and description hidden'),
+        ('list_text_restored', 'List name and description restored'),
+        ('list_report_dismissed', 'List report dismissed'),
+        # The reversal of a dismissal, mirroring `blurb_report_reopened`. Added when the list
+        # decisions were wired into `_UNDO`: they shipped with no reversal path at all, so hiding
+        # somebody's words was a one-way door whose only exit bypassed this log.
+        ('list_report_reopened', 'List report reopened'),
         ('game_flag_approved', 'Game flag approved'),
         ('game_flag_dismissed', 'Game flag dismissed'),
         ('game_flag_reversed', 'Game flag approval reversed'),
@@ -8010,6 +8091,13 @@ class ModerationAction(models.Model):
     )
     game_flag = models.ForeignKey(
         'GameFlag', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='moderation_actions',
+    )
+    # A STRING REFERENCE ACROSS APPS. `gamelists` imports `trophies.models`, so a real import here
+    # would close the loop; Django resolves the label lazily and the dependency keeps running one
+    # way, which is the direction `Concept.absorb` already reaches in.
+    list_report = models.ForeignKey(
+        'gamelists.GameListReport', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='moderation_actions',
     )
     subject_user = models.ForeignKey(

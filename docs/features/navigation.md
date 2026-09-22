@@ -166,7 +166,7 @@ The profile page has **4 tabs**, switchable via the `?tab=` URL parameter:
 | Ratings | Yes | Yes | Sort, plus a Games/DLC switcher |
 
 Three tabs were retired rather than rebuilt, and the reasons are in the
-[rebuild playbook](../design/rebuild/rebuild-playbook.md): **Lists** (Game Lists is hidden pending a
+[rebuild playbook](../design/rebuild/rebuild-playbook.md): **Lists** (Game Lists was rebuilt in 2026-09 and is staff-gated pending
 revamp, so the tab linked to cards whose links bounced you home), **Challenges** (the system was
 retired), and **Reviews** (text reviews were archived in 2026-05 — the ratings that survived them are
 what the Ratings tab shows). All three builders are gone: `_build_lists_tab_context` went in 2026-09,

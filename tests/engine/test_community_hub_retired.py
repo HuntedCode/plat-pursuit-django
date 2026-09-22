@@ -1,12 +1,17 @@
-"""The Community hub was retired (2026-08).
+"""The Community hub PAGE was retired (2026-08) and has not come back.
 
-It was not retired because community failed -- it was retired because everything in it had gone
-somewhere else: Challenges retired, Reviews archived, Lists hidden pending a revamp, Profiles moved to
-Browse, Rate My Games to My Pursuit > Tools, and Leaderboards promoted to their own hub. What was left
-was a landing page with nothing of its own to land on.
+The hub itself returned in 2026-09 as a nav grouping -- see `test_community_hub_returned.py` -- but
+the LANDING PAGE did not, and these still pin that. The distinction is the whole point of the file
+now: a hub here is a grouping of destinations, not an address, so `/community/` can 301 away forever
+while the hub above it is perfectly alive.
 
-These pin the teardown: the door still opens for anyone holding the old link, nothing on the site leads
-back to a page that no longer exists, and the code behind it is actually gone rather than orphaned.
+It was retired because everything in it had gone somewhere else: Challenges retired, Reviews archived,
+Lists hidden pending a revamp, Profiles moved to Browse, Rate My Games to My Pursuit > Tools, and
+Leaderboards promoted to their own hub. What was left was a landing page with nothing of its own to
+land on.
+
+These pin: the door still opens for anyone holding the old link, and the code behind it is gone rather
+than orphaned.
 """
 from pathlib import Path
 
@@ -46,13 +51,22 @@ def test_the_code_behind_it_is_gone_not_orphaned():
     assert 'build_community_hub_context' not in views
 
 
-def test_no_hub_config_claims_the_community_prefix():
+def test_only_the_community_hub_claims_the_community_prefix():
     from core.hub_subnav import HUB_SUBNAV_CONFIG
 
     keys = {h.key for h in HUB_SUBNAV_CONFIG}
-    assert 'community' not in keys
+    # INVERTED 2026-09: a hub DOES claim the prefix again. What this now pins is the thing that
+    # did not change -- the hub owns the prefix for chrome purposes while `/community/` itself
+    # still 301s away, because a hub here is a grouping of destinations and not an address.
+    assert 'community' in keys
     assert 'leaderboards' in keys
-    assert not [p for h in HUB_SUBNAV_CONFIG for p in h.prefixes if p.startswith('/community/')]
+    # The prefix belongs to Community and to nothing else -- the failure this half still guards
+    # against is a SECOND hub quietly claiming it, which would make the match order decide the
+    # chrome.
+    owners = [h.key for h in HUB_SUBNAV_CONFIG for pre in h.prefixes if pre.startswith('/community/')]
+    # A SET: `/community/lists/` is the documented next prefix to land here, and list-equality
+    # would have failed on that purely for being a second entry.
+    assert set(owners) == {'community'}, owners
 
 
 def test_nothing_in_the_chrome_or_the_sitemap_points_at_it():
@@ -70,10 +84,14 @@ def test_nothing_in_the_chrome_or_the_sitemap_points_at_it():
 
 
 def test_what_remains_under_community_still_answers(client):
-    """The prefix is not dead -- the reviews tombstone and the hidden-lists redirects still live under
-    it, and they must keep working now that the hub above them has gone."""
-    assert client.get('/community/reviews/').status_code == 200
-    assert client.get('/community/lists/').status_code in (301, 302)
+    """The prefix is not dead. It was never dead — only the landing page was — and as of 2026-09 it
+    holds a live feature again: `/community/lists/` is the public Game Lists browse, and the reviews
+    tombstone still answers beside it.
+
+    This asserted the lists path REDIRECTED, which was true only while the system was gated.
+    """
+    assert client.get('/community/reviews/').status_code == 200, 'the tombstone stopped answering'
+    assert client.get('/community/lists/').status_code == 200, 'the lists browse is not live'
 
 
 def test_live_javascript_builds_no_stale_profile_links():

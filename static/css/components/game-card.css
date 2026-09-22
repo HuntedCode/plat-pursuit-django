@@ -7,6 +7,23 @@
  * the Flagged / Recently Added / Tag grids -- those don't set show_game_hooks, so they get the card sans band.
  * Depth-pass card per playbook section 4.
  * ============================================================ */
+/* PRESS AND HOLD MUST NOT START A DRAG. A link wrapping an image is draggable by default, so
+   holding the mouse on a card begins a native drag of the link -- and while one is in flight the
+   browser suppresses page clicks AND keyboard shortcuts, so the page reads as frozen: the card stuck
+   in `:active`, taps landing nowhere, Ctrl+R swallowed, and only the browser's own refresh button
+   still working. Reported from a desktop browser at mobile width, which is where a long-press IS a
+   held mouse button.
+
+   Nobody drags a card deliberately -- it is a tile you scan and click -- so the capability is worth
+   less than the lockup costs. The image needs its own rule because images drag independently of the
+   link around them, and the `draggable="false"` attributes in the template cover the engines that do
+   not implement this property. `-webkit-user-drag` is already used this way on the badge medallions.
+
+   NOT `-webkit-touch-callout`: on a real phone a long-press raises a dismissible sheet rather than
+   locking anything, and that sheet is how somebody opens a game in a new tab from a catalogue. The
+   list page suppresses it only inside the arrange mode you deliberately enter. */
+.pp-gcard, .pp-gcard__art { -webkit-user-drag: none; }
+
 .pp-gcard {
     display: flex; flex-direction: column; height: 100%;
     border-radius: 13px; overflow: hidden;
@@ -68,22 +85,16 @@
 .pp-gcard__players svg { width: 13px; height: 13px; color: var(--pp-info); flex-shrink: 0; }
 
 /* Quick-add to a list (signed in): a small info-tinted circle, revealed on hover (always visible on touch). */
-.pp-gcard__add {
-    position: absolute; top: 6px; right: 6px; z-index: 3;
-    display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px;
-    border-radius: 50%; border: none; cursor: pointer;
-    background: color-mix(in oklab, var(--pp-info) 88%, var(--pp-bg-0)); color: var(--pp-text);
-    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
-    opacity: 0; transform: scale(0.82); transition: opacity 0.16s ease, transform 0.16s ease;
-}
-.pp-gcard__add svg { width: 13px; height: 13px; }
-@media (hover: hover) { .pp-gcard:hover .pp-gcard__add { opacity: 1; transform: none; } }
-@media (hover: none) { .pp-gcard__add { opacity: 0.92; transform: none; } }
-.pp-gcard__add:focus-visible { opacity: 1; transform: none; outline: 2px solid var(--pp-text); outline-offset: 1px; }
-/* Press dip (wins over the hover/touch reveal rules by specificity). */
-@media (hover: hover) { .pp-gcard:hover .pp-gcard__add:active { transform: scale(0.9); } }
-@media (hover: none) { .pp-gcard__add:active { transform: scale(0.9); } }
-@media (prefers-reduced-motion: reduce) { .pp-gcard__add:active { transform: none; } }
+/* `.pp-gcard__add` LIVES IN `quick-add.css` NOW. A block for the 2019 quick-add button stood here
+   and outlived the markup it styled, then collided with the rebuilt button, which reuses the class:
+   its `transform: scale(.82)` still applied (the new sheet never sets `transform`) while the two
+   rules that used to cancel it could not, because they matched the button as a DESCENDANT of
+   `.pp-gcard` and it is now a sibling. The result was a button drawn at 82% with a 36px hit area on
+   every hover-capable device, under a comment claiming a 44px floor -- and it snapped to full size
+   on focus, where the old sheet still supplied `transform: none`.
+
+   The lesson is the one already recorded about class collisions: grep the built CSS for a block name
+   before minting it. `gl-*` names were checked that way; this one was reused from memory. */
 
 /* Body */
 .pp-gcard__body { display: flex; flex-direction: column; gap: 6px; padding: 8px 9px 9px; flex: 1; }

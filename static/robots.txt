@@ -69,6 +69,39 @@ Disallow: /mod/
 Disallow: /guides/
 Disallow: /my-guides/
 
+# Game Lists (2026-09). The browse index and the public detail pages ARE crawlable and are in the
+# sitemap -- these are the parts of the feature that have nothing to offer a crawler:
+#
+#   /my-lists/       personal and login-only, so a crawler gets a redirect to login, every time
+#   .../search/      the adder's typeahead: bare JSON, no <html>, and an unbounded query space
+#   the write paths  create/update/reorder/like/follow/add/remove are POST-only, so a GET is a 405
+#
+# The write paths are listed individually rather than as a `/community/lists/*` wildcard, because
+# that pattern would also match the DETAIL pages -- `*` matches zero or more characters in robots
+# syntax, and there is no way to say "exactly one more segment". That is the same mistake the
+# /games/*/* rules made in 2026-08, when three sitemaps advertised pages this file was blocking.
+Disallow: /my-lists/
+Disallow: /community/lists/create/
+Disallow: /community/lists/*/search/
+Disallow: /community/lists/*/update/
+Disallow: /community/lists/*/reorder/
+Disallow: /community/lists/*/like/
+Disallow: /community/lists/*/follow/
+Disallow: /community/lists/*/add/
+Disallow: /community/lists/*/items/
+# Quick-add: a per-concept read and a POST-only create. Login-gated and useless to a crawler.
+Disallow: /community/lists/for-game/
+Disallow: /community/lists/new-with-game/
+# Sections (2026-09), same reasoning as the rest of this block: POST-only, so a GET is a 405, and
+# nothing here is a page. Enumerated rather than wildcarded for the same reason too -- a
+# `/community/lists/*/sections*` rule would also match nothing useful while risking the detail
+# pages, which `*` matching zero characters makes easy to get wrong.
+Disallow: /community/lists/*/sections/
+# `/edit/` is an address the rebuilt app deliberately does not have: it 302s to the homepage for any
+# id, so it is an infinite soft-404 space over an unbounded integer. Every other id-keyed sub-path is
+# blocked and the detail pages are in a sitemap, which makes the shape guessable.
+Disallow: /community/lists/*/edit/
+
 # Profile-scoped variants of canonical pages (/games/<np>/<user>/ etc.) are NOT
 # handled here any more (2026-08-23, SEO Lane 0). The old wildcard rules
 # (/games/*/*) ALSO matched the canonical pages themselves: in robots syntax `*`

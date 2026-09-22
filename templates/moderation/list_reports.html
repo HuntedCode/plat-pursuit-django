@@ -1,0 +1,92 @@
+{% extends 'moderation/_queue_shell.html' %}
+{# `load` is not inherited from a parent template -- each file that uses a filter loads it. #}
+{% load humanize %}
+
+{% comment %}
+The List Reports queue.
+
+A row answers the same three questions the Quick Takes queue does before a moderator can decide
+anything: what was written, who wrote it, and why somebody objected. THE WORDS LEAD, quoted and
+unstyled, because every other fact is context for them -- and a moderator deciding from a reason code
+alone is not moderating, they are rubber-stamping the reporter.
+
+WHAT IS REPORTED IS THE TEXT, NOT THE LIST. A list is also a set of games, and none of that is what a
+report is about, so the row does not show it. A moderator who wants to see the list itself follows
+the link.
+
+THE STORED NAME IS SHOWN EVEN WHEN IT IS HIDDEN. That is the point of `text_hidden` keeping the
+original rather than blanking it: a second report on an already-hidden list, and any appeal
+afterwards, both need to see what was actually objected to.
+
+Both the owner and the reporter are named, for the reason the Quick Takes queue gives: a reporter who
+reports everything is as much a pattern as an owner who writes slurs, and neither is visible if the
+row shows only one side.
+{% endcomment %}
+
+{% block queue_blurb %}
+Reported list names and descriptions. Hiding removes the WORDS only &mdash; the list keeps its games,
+its likes and its followers, because a bad title should not destroy somebody's curation.
+{% endblock %}
+
+{% block row %}
+{# The words themselves: the name, and the description under it when there is one. #}
+<blockquote class="text-base text-base-content leading-relaxed border-l-4 border-base-300 pl-3 pr-1">
+    <span class="font-bold italic">&ldquo;{{ row.game_list.name }}&rdquo;</span>
+    {% if row.game_list.description %}
+    <span class="block text-sm text-base-content/70 italic mt-1">&ldquo;{{ row.game_list.description }}&rdquo;</span>
+    {% endif %}
+</blockquote>
+
+{% if row.game_list.text_hidden %}
+<div class="text-xs font-bold text-warning">Words currently hidden from the site.</div>
+{% endif %}
+{% if row.game_list.is_deleted %}
+<div class="text-xs font-bold text-base-content/60">This list has since been deleted by its owner.</div>
+{% endif %}
+
+{# Who, where, and what was claimed. #}
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/70">
+    <span>
+        {% comment %}The list, if it can still be reached. A deleted list has no page, and linking to
+        a 404 from a queue row wastes the one click a moderator has.{% endcomment %}
+        {% if not row.game_list.is_deleted %}
+        <a class="link" href="{% url 'list_detail' row.game_list.id %}">open the list</a>
+        {% else %}deleted list{% endif %}
+    </span>
+    <span>&middot;</span>
+    <span>built by <a class="link" href="{% url 'profile_detail' row.game_list.owner.psn_username %}">{{ row.game_list.owner.display_psn_username|default:row.game_list.owner.psn_username }}</a></span>
+    <span>&middot;</span>
+    <span>reported by <a class="link" href="{% url 'profile_detail' row.reporter.psn_username %}">{{ row.reporter.display_psn_username|default:row.reporter.psn_username }}</a></span>
+    <span>&middot;</span>
+    <span>{{ row.created_at|naturaltime }}</span>
+</div>
+
+<div class="flex flex-wrap items-center gap-2">
+    <span class="badge badge-sm badge-error font-bold">{{ row.get_reason_display }}</span>
+    {% if row.details %}<span class="text-xs text-base-content/70 italic pr-1">&ldquo;{{ row.details }}&rdquo;</span>{% endif %}
+</div>
+
+{% if row.status == 'pending' %}
+{% comment %}The reason field is REQUIRED at the service, so `required` here is the honest mirror of
+that rather than a UI nicety -- a mod who submits without one gets an error message, so the browser
+should say so first.{% endcomment %}
+<form method="post" class="flex flex-col sm:flex-row gap-2 pt-1" data-mod-form>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.path }}?status={{ status }}&amp;page={{ page }}">
+    <input type="text" name="reason" required maxlength="500" class="input input-sm input-bordered flex-1"
+           placeholder="Reason (recorded with your name)" aria-label="Reason for this decision">
+    <div class="flex gap-2">
+        <button type="submit" class="btn btn-sm btn-error"
+                formaction="{% url 'mod_hide_list_text' row.pk %}">Hide words</button>
+        <button type="submit" class="btn btn-sm btn-ghost"
+                formaction="{% url 'mod_dismiss_list_report' row.pk %}">Dismiss report</button>
+    </div>
+</form>
+{% else %}
+<div class="text-xs text-base-content/60 border-t border-base-300/70 pt-2">
+    {{ row.get_status_display }}
+    {% if row.reviewed_by %}by {{ row.reviewed_by.display_name }}{% endif %}
+    {% if row.reviewed_at %}&middot; {{ row.reviewed_at|naturaltime }}{% endif %}
+</div>
+{% endif %}
+{% endblock %}

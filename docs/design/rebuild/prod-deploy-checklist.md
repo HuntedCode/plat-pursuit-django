@@ -1428,3 +1428,74 @@ paying. See [badge-system.md](../architecture/badge-system.md) for the rules.
       denorm verbatim, including a legitimate 0. A badge whose `recompute_required_stages` has not run
       since its stages were authored will read as having no requirements. The nightly covers it; a
       same-day authoring session does not.
+
+---
+
+## Game Lists: reports + the Spotlight (2026-09)
+
+Two migrations ship with the public launch of Game Lists. Neither needs a backfill command, and
+neither is destructive.
+
+- [ ] **Migrate BEFORE any worker picks up the new code.** This is the one ordering constraint in the
+      section, and it is not the usual web-tier one: `gamelists` is an entirely new app on prod, and
+      two paths that run *outside* a web request now query its tables unconditionally. A worker on
+      new code against a pre-migrate database raises `ProgrammingError: relation
+      "gamelists_gamelistitem" does not exist`, at the point of the query, not at import.
+      - `Concept.absorb()` (`trophies/models.py`) — reached from the sync path whenever a concept
+        reassignment orphans the old Concept. `absorb()` is **not transactional**, so a raise commits
+        every branch above it, skips everything below, and stops the caller's `other.delete()`,
+        leaving a half-migrated orphan Concept. The list branch is deliberately positioned LAST to
+        cap that blast radius at the list re-point, but "last" is damage control, not immunity.
+      - `cleanup_empty_concepts` (cron) — its queryset filters `list_entries__isnull=True`, so the
+        command does not start rather than deleting the wrong thing. The safe failure of the two.
+      If the deploy platform cannot order it, taking the sync worker down for the migrate window is
+      cheaper than an orphaned Concept nobody is watching for.
+- [ ] **Run `gamelists/0007_list_reports` and `trophies/0338_list_report_moderation`.** The report
+      table and the three `ModerationAction` kinds that record what a moderator did about one. The
+      report button 500s without them, and the `list-reports` queue count reads as an unknown key.
+- [ ] **Run `gamelists/0008_spotlight` and `gamelists/0009_spotlight_index`, in that order.** The
+      column and its partial index, deliberately **split into two migrations**. They shipped as one
+      at first, and an audit caught that pairing them is worse than either alone: `AddField` takes
+      `ACCESS EXCLUSIVE` and an atomic migration holds it until commit, so a plain `CREATE INDEX` in
+      the same transaction builds while *reads* are still locked out. Apart, 0008 is a metadata-only
+      nullable column (no row rewrite on PG 11+) and 0009 is `atomic = False` +
+      `AddIndexConcurrently`, the same pattern as 0257 / 0260 / 0262 / 0307.
+- [ ] **If 0009 fails partway, drop the INVALID index before re-running.** A failed `CONCURRENTLY`
+      build leaves one behind: `DROP INDEX CONCURRENTLY IF EXISTS glst_featured_idx;`
+- [ ] **0338 stays as one atomic migration, and that is a decision, not an oversight.** It adds a
+      nullable FK to `trophies_moderationaction`, which IS populated on prod — the same shape the
+      0008/0009 split was made to avoid. It does not get the same treatment because the argument
+      there was about table size, and this table has none: it is the moderator audit log, written
+      only by an explicit moderator action from a team of about ten. The implicit FK index builds in
+      milliseconds, so the `ACCESS EXCLUSIVE` the `AddField` holds until commit is held for
+      milliseconds. `blurb_report` and `game_flag` were added to this same table the same way. Split
+      it if the log ever reaches a scale where that stops being true; it is nowhere near.
+- [ ] **Run `trophies/0339_list_report_reopened`.** One new `ModerationAction.ACTIONS` choice, added
+      when the list decisions were wired into the reversal machinery. A `choices` change is a
+      no-op at the database level (Django does not constrain them in Postgres), so this is
+      metadata only and safe in any order relative to the `gamelists` three.
+- [ ] **Nothing is featured until somebody features it, and that is not a bug.** The Spotlight band
+      simply does not render while `featured_at` is null everywhere, so the browse page deploys
+      looking exactly as it does today. Expect this — an empty band is not a broken one.
+### Getting the first pick live
+
+The `gamelists` app is **entirely new to prod** — there is no table before this deploy, so the launch
+pick cannot be pre-authored, and a list authored on dev stays on dev. `BrowseListsView` carries no
+gate and `lists` is already in the Community rail, so browse is public the moment it deploys.
+
+Author it **on prod, as a private draft**. A list is private until published and the Spotlight reads
+through `public()`, so prod is its own staging area and nothing half-built is ever visible.
+
+- [ ] **Create the list on prod at `/my-lists/`, left PRIVATE.** The owner must be PSN-linked
+      (`create_list` calls `_refuse_if_unlinked`) and it spends one of their list slots — 3 free,
+      25 for members — alongside their own personal lists.
+- [ ] **Write the description before publishing.** The band's blurb IS the list's own `description`;
+      there is no separate editorial field, so a pick without one renders a title and no pitch.
+- [ ] **Publish, then feature, back to back.** `/admin/gamelists/gamelist/` → select exactly one row
+      → *Feature in the browse Spotlight*. The action refuses a multi-row selection and refuses
+      anything private, deleted or moderated. Django admin is superuser-only, so this is the owner's
+      job. Doing the two within a few seconds means the tile and the band appear together.
+- [ ] **Accept (or close) the empty-browse window.** Between the migrations and the publish, browse
+      is live, linked in the rail, and empty. That is the cold-start problem the pick exists to
+      solve and it cannot solve it before it exists. Shrink it by deploying and authoring in one
+      sitting; close it entirely only if it is worth a seeding command.

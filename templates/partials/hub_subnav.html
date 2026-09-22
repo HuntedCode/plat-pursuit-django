@@ -30,9 +30,15 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             <div class="pp-sub__group" data-subnav-group data-group-label="{{ group.grouper }}">
                 {% if group.grouper %}<span class="pp-sub__gl">{{ group.grouper }}</span>{% endif %}
                 {% for item in group.list %}
+                {% comment %}`item.tag` is a short chip ON the pill ('Soon'). The `aria-label`
+                REPLACES the contents-derived name rather than adding to it -- the trap the list
+                tile's own comment records -- which is safe here only because the pill's entire
+                contents are the label and the tag, so the replacement says strictly more. Set only
+                when there IS a tag, so an ordinary pill keeps its natural name.{% endcomment %}
                 <a href="{{ item.url }}" class="pp-subpill{% if item.slug == hub_subnav_active_slug %} is-active{% endif %}"
                    data-subnav-pill data-group="{{ group.grouper }}"
-                   {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                   {% if item.tag %}aria-label="{{ item.label }}, {% firstof item.tag_aria item.tag %}"{% endif %}
+                   {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}{% if item.tag %}<span class="pp-subpill__tag">{{ item.tag }}</span>{% endif %}</a>
                 {% endfor %}
             </div>
             {% endfor %}
@@ -62,8 +68,10 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                 {% if group.grouper %}<span class="pp-sub__gl">{{ group.grouper }}</span>{% endif %}
                 <div class="pp-sub__sheetgrid">
                     {% for item in group.list %}
+                    {# The overflow sheet renders the same pill; see the rail above for the aria note. #}
                     <a href="{{ item.url }}" class="pp-subpill{% if item.slug == hub_subnav_active_slug %} is-active{% endif %}"
-                       {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                       {% if item.tag %}aria-label="{{ item.label }}, {% firstof item.tag_aria item.tag %}"{% endif %}
+                       {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}{% if item.tag %}<span class="pp-subpill__tag">{{ item.tag }}</span>{% endif %}</a>
                     {% endfor %}
                 </div>
             </div>

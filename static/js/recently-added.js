@@ -58,7 +58,7 @@
         var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
         var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
         revealHandle = PP.staggerReveal({
-            grid: grid, cardSelector: '.pp-gcard', step: 22,
+            grid: grid, cardSelector: '.pp-gcard', cellSelector: '.pp-gcard-wrap', step: 22,
             reveal: function (el, delayMs) {
                 if (!el.animate) { return; }
                 el.animate([{ opacity: 0 }, { opacity: 1 }],
@@ -79,6 +79,10 @@
         scroller = PP.InfiniteScroller.create({
             gridId: 'items-grid', sentinelId: 'radded-sentinel', loadingId: 'radded-loading',
             paginateBy: 30, cardSelector: '.pp-gcard',   // matches RecentlyAddedView.paginate_by
+                // THE GRID CELL. The quick-add button is a SIBLING of the card inside `.pp-gcard-wrap`,
+                // so cloning the card alone left every appended page without one -- page two onward,
+                // silently, with nothing on screen to show the difference.
+                cellSelector: '.pp-gcard-wrap',
             onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
         });
     }

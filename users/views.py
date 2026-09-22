@@ -233,6 +233,9 @@ class SettingsView(LoginRequiredMixin, View):
         - Blurbs are CLEARED, not hidden -- prose is the one field with the person's voice in
           it, and a hidden state would be retention without a purpose plus a leak-back path.
           Pending reports on those blurbs are dismissed as moot.
+        - Game lists are DELETED outright (names, descriptions and notes are prose, and the
+          profile survives to be re-linked, so leaving them hands a stranger who later
+          verifies that PSN handle the previous owner's private lists).
         - The user row and everything personal cascade away (allauth emails, tenure periods).
 
         Guards: cancel-first membership check re-verified server-side (the template hides the
@@ -240,6 +243,7 @@ class SettingsView(LoginRequiredMixin, View):
         same throttle shape as the password action, CSRF via the normal form path.
         """
         from core.models import EmailLog
+        from gamelists.models import GameList
         from trophies.models import BlurbReport, UserConceptRating
 
         # Staff first, before anything destructive: moderation history PROTECTs its moderator
@@ -292,6 +296,16 @@ class SettingsView(LoginRequiredMixin, View):
                 # hunter's NEW quick take on the same game would be invisible.
                 UserConceptRating.objects.filter(profile=profile).exclude(blurb='').update(
                     blurb='', blurb_hidden=False)
+                # Game lists go entirely, for the same reason blurbs are cleared: names,
+                # descriptions and per-item notes are prose with the person's voice in them.
+                # This one needs deleting rather than clearing because the PROFILE survives and
+                # can be re-linked -- `UserRestriction` documents that hatch (delete, re-register,
+                # re-verify the same PSN account, and `link_profile_to_user` reattaches the same
+                # profile row). Left behind, a stranger who later verifies that handle would
+                # inherit the previous owner's PRIVATE lists. Hard delete, not the soft delete the
+                # service uses: a soft-deleted row is retention with no purpose and a leak-back
+                # path, which is the argument this flow already makes about hidden blurbs.
+                GameList.objects.filter(owner=profile).delete()
                 profile.unlink_user()
             # The address is the personal data in an email log; the log's system value
             # (what sent, when, delivery status) survives the scrub.

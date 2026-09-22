@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Challenges{% endblock %}
+{% block meta_description %}Challenges are coming back to Platinum Pursuit. Your past A-Z runs are safe.{% endblock %}
+{% comment %}NOINDEX. A page whose only content is "not yet" is a thin result that would rank for
+"platinum pursuit challenges" and answer nobody -- and it would keep ranking after the real page
+replaces it, because the URL is the same one. `follow` so the rail still passes authority onward to
+the pages that do have something on them.{% endcomment %}
+{% block robots %}noindex, follow{% endblock %}
+
+{% block content %}
+{% comment %}A REAL PAGE, not a redirect, and that was a deliberate call when Challenges was parked:
+somebody who followed a link to a system that is mid-rebuild deserves to be told so, on a page, in
+the site's own voice. Bouncing them to the homepage reads as a broken link.
+
+THE SHELL IS THE REBUILT ONE -- the accented header card every other rebuilt page opens with --
+because this sits in the Community rail directly beside Game Lists, and a placeholder that skipped
+the house treatment would make the whole tab look half-finished rather than in progress.{% endcomment %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                </svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Challenges</h1>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                Coming back soon.
+            </p>
+        </div>
+    </section>
+
+    {% comment %}A CONTENT-MODULE CARD, not `.scard`.
+
+    This was `class="scard p-4 md:p-6"` and the padding utilities were INERT. `.scard` sets
+    `padding: 12px 8px` from an unlayered component file, and an unlayered declaration beats one
+    inside `@layer utilities` whatever its specificity -- the trap documented three lines under the
+    rule that causes it in `elements.css`. So the intended `p-4 md:p-6` never applied and the prose
+    rendered at 8px of side padding on a phone, running almost to the border beneath a header card
+    with 16px. `.scard` is also the site's STAT CELL (label + tally + sub) everywhere else; this was
+    the only place it wrapped prose.
+
+    The design system's own prose primitive carries no such conflict: a content-module card, with
+    the documented `p-3 md:p-5 lg:p-7` progression. Still no invented `.pp-soon` block -- this page
+    is deleted the day the real browse lands and a bespoke block would outlive it as orphan CSS.
+
+    `pp-head-cascade` HERE TOO, so the block a reader actually came for arrives on the same beat as
+    the header instead of hard-cutting in beneath it. Its two children become the two steps.{% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-3 md:p-5 lg:p-7 pp-head-cascade">
+            <p class="text-sm md:text-base text-base-content/80">
+                Challenges are being rebuilt from the ground up. Hang tight while we make something
+                worth the wait.
+            </p>
+
+            {% comment %}THE ONE CONCRETE THING, and it is the one hunters will actually worry
+            about. `ArchivedAZChallenge` is the only surviving copy of that data and the revival plan
+            re-imports it, so this is a promise the codebase can keep. Everything else about the
+            rebuild is still moving and is deliberately not promised here.{% endcomment %}
+            <p class="text-xs md:text-sm text-base-content/50 mt-3">
+                Your past A&ndash;Z runs are safe. We kept them, and they come with you.
+            </p>
+        </div>
+    </section>
+
+    {% comment %}SOMEWHERE TO GO. Without this the page is a dead end whose only affordance is the
+    back button -- which is less than the browse grid's own empty state offers, and that is a
+    throwaway state rather than a whole page.
+
+    The roadmap is the honest "where do I watch this land?": it already carries Challenges in its
+    `in the works` tier, and its content rules forbid dates, so it answers the question without this
+    page having to promise anything. The other two are simply the things in this hub that DO exist,
+    which is the same argument that put Challenges last in the rail.{% endcomment %}
+    <nav class="flex flex-wrap items-center gap-2 mt-3" aria-label="While you wait">
+        <a href="{% url 'support_roadmap' %}" class="pp-cta">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+            Follow it on the roadmap
+        </a>
+        <a href="{% url 'lists_browse' %}" class="pp-cta pp-cta--ghost">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Browse Game Lists
+        </a>
+        <a href="{% url 'profiles_list' %}" class="pp-cta pp-cta--ghost">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Find hunters
+        </a>
+    </nav>
+</div>
+{% endblock %}

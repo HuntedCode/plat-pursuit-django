@@ -199,6 +199,10 @@
 .pp-gtile-empty svg { width: 40px; height: 40px; margin: 0 auto 8px; opacity: 0.55; }
 .pp-gtile-empty__title { font-size: 15px; font-weight: 700; color: var(--pp-text); }
 .pp-gtile-empty__hint { font-size: 12.5px; margin-top: 2px; }
+/* The way OUT of the empty state. An empty state that names the situation and offers no action is a
+   dead end, and the primary action is usually somewhere the reader is not looking -- on My Lists it
+   was in the page header, past everything they just scrolled through to find nothing. */
+.pp-gtile-empty__action { display: flex; justify-content: center; margin-top: 14px; }
 
 /* Scroll-reveal: staggerReveal drives the per-tile WAAPI motion; these rules only hold hidden/shown states.
    .pp-reveal is added by JS only when it will observe (motion-gated), so tiles never stick hidden. */

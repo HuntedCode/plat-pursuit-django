@@ -84,6 +84,24 @@ class Entry:
 #: NEWEST FIRST. See the module docstring before adding one.
 ENTRIES: tuple[Entry, ...] = (
     Entry(
+        id='2026-09-game-lists',
+        published=date(2026, 9, 22),
+        title='Game Lists are here',
+        beats=(
+            ('Make a list',
+             'Group games however you like: a backlog, a top ten, the ones you keep meaning to get '
+             'back to. Three lists to start with, twenty-five for members.'),
+            ('Publish and browse',
+             'A list is private until you publish it. Once you do it joins the browse page, '
+             'alongside a featured pick, and you can follow the ones you want to come back to.'),
+            ('On every profile',
+             'A hunter who has published a list now has a Lists tab on their profile, so you can '
+             'see what they have put together.'),
+        ),
+        link_label='Browse the lists',
+        link_url='/community/lists/',
+    ),
+    Entry(
         id='2026-09-rarity-score-board',
         published=date(2026, 9, 9),
         title='Two new trophy leaderboards',

@@ -116,6 +116,21 @@
    that is about the reader's own work. Above 1280 the row has the space and both show. */
 @media (max-width: 1279px) {
     .pp-navhub__n ~ .pp-navhub__new { display: none; }
+
+    /* AND THE ICONS GO, in the same band and for the same reason. A fifth hub (Community) plus
+       "Support" becoming "Support Us" added roughly 136px to a row this file documents as having
+       about 80px to spare at the `lg` container step -- so signed in, between 1024 and 1279, the row
+       no longer fit.
+       It did not degrade gracefully either: `.pp-navhub` is `white-space: nowrap` so the items
+       refuse to shrink, while `.pp-nav__hubs` carries `min-width: 0` so the CONTAINER is allowed to
+       be squeezed below its contents. The row therefore overflowed its box and painted on top of the
+       PSN search field rather than compressing it, which is the opposite of what the `min-width: 0`
+       comment above promises.
+       Dropping five 16px icons and their 6px gaps returns ~110px, which puts the row back inside
+       roughly its pre-change budget. Labels alone are unambiguous, and this is the same
+       one-thing-at-a-time trade the pills above already make in this exact band. */
+    .pp-nav__hubs .pp-navhub svg { display: none; }
+    .pp-nav__hubs .pp-navhub { gap: 0; }
 }
 
 /* THE TAB BAR carries the same pair on the ICON rather than the label: four items across a 375px
@@ -489,8 +504,13 @@
 .pp-avbtn:disabled { opacity: 0.5; cursor: default; }
 
 .pp-avmenu { padding: 6px; border-top: 1px solid var(--pp-divider); }
+/* `min-height` for the 44px floor (design-system.md): 8px padding around a 19.7px line box landed
+   at ~36px. It matters more since 2026-09 than it did, because Support Us left the mobile tab bar
+   for this menu -- so below `md` these rows are the only route to a top-level hub, and the tab bar
+   guarantees 56px for the other four. */
 .pp-avmenu a, .pp-avmenu button {
-    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: var(--pp-radius-md);
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; min-height: 44px;
+    border-radius: var(--pp-radius-md);
     font-size: 0.82rem; color: var(--pp-text-dim); text-decoration: none; background: none; border: none; cursor: pointer; text-align: left;
     transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease), transform var(--pp-dur-fast) var(--pp-ease);
 }
@@ -546,6 +566,37 @@
 .pp-subpill { display: inline-flex; align-items: center; padding: 5px 11px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim); text-decoration: none; white-space: nowrap; border: 1px solid transparent; transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease); }
 @media (hover: hover) { .pp-subpill:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.05); } }
 .pp-subpill:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* A SHORT CHIP ON THE PILL ('Soon'), for an item that leads somewhere real but not yet finished.
+   Quiet on purpose -- it is a caveat, not a badge to be proud of -- but quiet is not the same as
+   INVISIBLE, which is what the first cut was.
+   
+   IT HAS TO DIFFER IN HUE, not in lightness. The first version coloured it `--pp-text-mute`
+   (oklch 0.66 0.02 256) next to a label in `--pp-text-dim` (oklch 0.72 0.02 256): the same hue, the
+   same near-zero chroma, six hundredths of lightness apart, at 0.78em. It read as more grey text
+   rather than as a chip. Worse, the active rule turned it `--pp-primary` exactly when the label also
+   turns primary, so it blended in BOTH states.
+   
+   `--pp-warning` is the site's own "not ready yet" colour -- the Draft chip and the unnamed-slot
+   state both use it -- and at 0.17 chroma against the label's 0.02 it separates on the axis the eye
+   actually reads. The treatment is the Draft chip's, sized down for a nav pill.
+   
+   `em`, so it tracks the pill's own size at every breakpoint instead of needing a second media
+   query. */
+.pp-subpill__tag {
+    margin-left: 0.45em;
+    padding: 0.08em 0.42em;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--pp-warning) 18%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 42%, transparent);
+    color: var(--pp-warning);
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+/* UNCHANGED WHEN ACTIVE, deliberately. The label turns primary on the active pill; a chip that
+   turned primary with it would be the same invisibility again, one state over. Amber on the
+   primary-tinted active pill stays legible and stays distinct. */
 .pp-subpill.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 13%, transparent); }
 
 /* Overflow "More" trigger + dropdown (JS shows it only when the rail overflows). */
@@ -652,7 +703,10 @@
     border-top: 1px solid var(--pp-border);
     padding-bottom: env(safe-area-inset-bottom, 0);
 }
-.mobile-tabbar-inner { display: flex; align-items: stretch; justify-content: space-around; height: 56px; }
+/* NO `justify-content`: every child is `flex: 1`, so there is never free space to distribute and
+   `space-around` here did nothing. The even distribution comes from the children -- the header
+   comment in mobile_tabbar.html used to credit this declaration with it. */
+.mobile-tabbar-inner { display: flex; align-items: stretch; height: 56px; }
 .mobile-tabbar-item {
     position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
     min-width: 0; padding: 4px 2px; text-decoration: none; background: none; border: none; cursor: pointer;
@@ -660,6 +714,13 @@
     transition: color var(--pp-dur) var(--pp-ease);
 }
 .mobile-tabbar-item svg { width: 20px; height: 20px; }
+/* The fifth tab, present only where five fit. Mobile-first: absent by default, shown from `md`.
+   A fifth item at 375px takes every tab from ~93px to ~75px, and "Leaderboards" alone is ~68-72px
+   of text before padding -- so below this the avatar dropdown carries Support Us instead. */
+.mobile-tabbar-item--wide { display: none; }
+@media (min-width: 768px) {
+    .mobile-tabbar-item--wide { display: flex; }
+}
 @media (hover: hover) { .mobile-tabbar-item:hover { color: var(--pp-text); } }
 .mobile-tabbar-item:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -3px; border-radius: var(--pp-radius-md); }
 /* Active = cyan (the one brand accent) + a short top indicator bar (glow earned by state, like the navbar). */

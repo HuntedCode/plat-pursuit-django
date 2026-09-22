@@ -11,7 +11,11 @@
                         <a href="{{ item.url }}">{{ item.text }}</a>
                     </li>
                 {% else %}
-                    <li class="text-accent">
+                    {% comment %}The trailing crumb is the page's own subject, so it is the one a
+                    page that RENAMES its subject in place has to be able to update. Marked rather
+                    than found by class, so a restyle of the trail cannot silently break it. Purely
+                    additive: no page is required to use it.{% endcomment %}
+                    <li class="text-accent" data-breadcrumb-current>
                         {{ item.text }}
                     </li>
                 {% endif %}

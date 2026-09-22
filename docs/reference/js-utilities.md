@@ -72,6 +72,32 @@ try {
 
 **Do not migrate binary fetches**: API auto-parses as JSON/text. Use raw `fetch()` for blob/image downloads.
 
+### PlatPursuit.postJson
+
+`postJson(url, formDataOrObject)` -- POST that refuses a redirected HTML response.
+
+```js
+PlatPursuit.postJson(url, body).then(data => ...).catch(err => ...);
+```
+
+> **Why it exists.** `fetch` FOLLOWS redirects, so an expired session arrives as `200 text/html` --
+> a login page that a naive caller reads as success. It printed "Added undefined." and flipped a row
+> to a state the server never reached. This refuses a non-object body and sets `err.signedOut`, so
+> the caller can say "reload and try again" instead of lying. Every write on the Game Lists pages
+> goes through it; `API.postFormData` is called in exactly one place, inside this.
+
+### PlatPursuit.GameAdder
+
+`GameAdder(root, opts)` -- the catalogue typeahead that adds a game to something.
+
+```js
+PlatPursuit.GameAdder(panelRoot, { prefix: 'gl', minQuery: 3, onAdd: fn });
+```
+
+> Extracted from `list-detail.js` when a second caller needed it, and parameterised by `prefix` plus
+> its copy rather than copied. Debounced search, keyboard navigation, an `aria-live` status line, and
+> an `already_added` state bounded to the page of results rather than to the whole list.
+
 ### PlatPursuit.HTMLUtils
 
 | Method | Parameters | Returns | Purpose |
@@ -99,11 +125,20 @@ const scroller = PlatPursuit.InfiniteScroller.create({
     formSelector: '#filter-form',  // Optional: resets page on submit
     scrollKey: 'games_scroll',     // Optional: localStorage key for scroll restore
     cardSelector: '.card',         // Optional: selector for items in fetched HTML
+    cellSelector: '.card-wrap',    // Optional: the WRAPPER to append, when cards are wrapped
 });
 
 // Cleanup
 scroller.destroy();
 ```
+
+> **`cellSelector` and when it is load-bearing.** Some grids wrap each card in a cell that carries
+> sibling controls -- Browse Games and friends wrap `.pp-gcard` in `.pp-gcard-wrap` to hang the
+> quick-add button off it, and only for a signed-in linked hunter. Without `cellSelector` the
+> scroller appends the bare CARD and the wrapper is dropped, so the control vanishes **from page two
+> onward** while page one looks perfect. `staggerReveal` takes the same option for the same reason:
+> the reveal has to ride the cell, or a sibling control is animated independently of the card it
+> belongs to. Whenever one of them gets it, so does the other.
 
 Fetches next page via AJAX with `X-Requested-With: XMLHttpRequest`, parses HTML, appends matching elements to the grid. Automatically stops when a page returns no matching elements or 404.
 
@@ -344,7 +379,7 @@ use it.
 
 | Method | Parameters | Purpose |
 |--------|-----------|---------|
-| `staggerReveal(opts)` | `{grid, cardSelector, reveal, step?, batchCap?, appendCap?, hideClass?}` | Staggered WAAPI grid reveal for HTMX-swapped / infinite-scroll grids |
+| `staggerReveal(opts)` | `{grid, cardSelector, cellSelector?, reveal, step?, batchCap?, appendCap?, hideClass?}` | Staggered WAAPI grid reveal for HTMX-swapped / infinite-scroll grids. `cellSelector`: reveal the WRAPPER rather than the card -- see `InfiniteScroller` above |
 
 > **Never on a virtualized list.** It adds `.pp-reveal` to the container permanently and the paired CSS
 > holds rows at `opacity: 0` until an IntersectionObserver grants `.is-revealed`. Rows mounted and evicted
@@ -585,6 +620,40 @@ To add a new utility: define it above the export block, then add a `window.PlatP
   order re-enabled a button the host had just correctly disabled.
 - **`PlatPursuit.API.request()` throws an `Error` with a `.response` property** (raw Response object) on non-ok status. Extract messages with `await error.response?.json().catch(() => null)`. Pass `{}` as body for no-body POSTs.
 - **Don't migrate binary fetches** (blob/image downloads) to `PlatPursuit.API`. It's designed for JSON APIs.
+
+### `wireCharCounters(root)`
+
+Declarative live character counters. Put `data-charcount` on an input or textarea **with a
+`maxlength`**, and give the counter element `data-charcount-for="<input id>"` — the markup says which
+goes with which, so the JS does not need to know both ids. Defaults to `document`; pass a root to
+scope it.
+
+Bound automatically on `DOMContentLoaded`, so most pages need no call at all.
+
+Shared because it was the **third** copy: `admin-notifications.js` had one bound to three specific
+element ids and `comments.js` had an inline listener that only ever wrote a number. Neither was
+reusable and both re-implemented the same escalation. Those two are candidates to migrate onto this.
+
+Escalation classes are toggled by the helper and live in the Tailwind safelist — if a third is ever
+added, safelist it too.
+
+### `DragReorderManager` — long-press and drag exclusions (2026-09)
+
+Four optional config keys, added for the Ranked game-list grid:
+
+| Key | Does |
+|---|---|
+| `delay` | Hold time in ms before a drag starts |
+| `delayOnTouchOnly` | Apply that hold to touch only (defaults true when `delay` is set), so a mouse stays immediate |
+| `touchStartThreshold` | Pixels of movement that cancel a pending delayed drag (defaults 5) |
+| `dragExclude` | Selector for descendants a drag must not start from; sets SortableJS `filter` with `preventOnFilter: false` |
+
+**`touchStartThreshold` is not optional in practice.** With `delay` alone, a finger that drifts a few
+pixels during the hold still arms the drag — so trying to *scroll* a grid of draggable cards picks
+one up instead. The threshold is what lets a scroll cancel the pending pick-up.
+
+**`preventOnFilter: false` is why `dragExclude` works.** SortableJS otherwise calls `preventDefault`
+on the filtered element, and a `<button>` inside it never receives its click.
 
 ## Related Docs
 

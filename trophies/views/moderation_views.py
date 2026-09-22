@@ -42,11 +42,15 @@ def queue_summaries():
         {**counts['quick-takes'],
          'slug': 'quick-takes', 'name': 'Quick Takes',
          'url': reverse_lazy('mod_quick_takes'),
-         'blurb': 'Reported quick takes, the only free text a hunter can write on the site.'},
+         'blurb': 'Reported quick takes. Free text a hunter writes on a game.'},
         {**counts['game-flags'],
          'slug': 'game-flags', 'name': 'Game Flags',
          'url': reverse_lazy('mod_game_flags'),
          'blurb': 'Reported problems with a game: delisted, unobtainable, shovelware, buggy.'},
+        {**counts['list-reports'],
+         'slug': 'list-reports', 'name': 'List Reports',
+         'url': reverse_lazy('mod_list_reports'),
+         'blurb': 'Reported list names and descriptions. Hiding the words keeps the list.'},
     ]
 
 
@@ -152,6 +156,32 @@ class QuickTakeQueueView(_QueueView):
                 .order_by('status', '-created_at'))
 
 
+class ListReportQueueView(_QueueView):
+    """Reported list names and descriptions.
+
+    The third queue, and it needed no new machinery: `_QueueView` already owns paging, the status
+    filter and the empty state, which is the whole reason that base exists.
+    """
+
+    template_name = 'moderation/list_reports.html'
+    queue_name = 'List Reports'
+    queue_slug = 'list-reports'
+    status_map = {'pending': ['pending'], 'actioned': ['action_taken'],
+                  'dismissed': ['dismissed', 'reviewed']}
+
+    def get_queryset(self):
+        from gamelists.models import GameListReport
+
+        # Everything a row renders, joined once. A row names the list, its owner, the reporter and
+        # -- once handled -- the moderator, whose `display_name` reaches through to their profile.
+        # Without these that is four queries a row on a page of 25, which is the N+1 shape this
+        # project has a documented history with.
+        return (GameListReport.objects
+                .select_related('game_list', 'game_list__owner', 'reporter',
+                                'reviewed_by', 'reviewed_by__profile')
+                .order_by('status', '-created_at'))
+
+
 class GameFlagQueueView(_QueueView):
     template_name = 'moderation/game_flags.html'
     queue_name = 'Game Flags'
@@ -187,6 +217,36 @@ class _ActionView(ModeratorRequiredMixin, PostActionMixin, View):
 
     def default_redirect(self):
         return reverse_lazy('mod_center')
+
+
+class HideListTextView(_ActionView):
+    success_message = "List name and description hidden. The list itself is untouched."
+
+    def act(self, pk, user, reason):
+        from gamelists.models import GameListReport
+
+        moderation_service.hide_list_text(
+            get_object_or_404(GameListReport, pk=pk), user, reason)
+
+    def default_redirect(self):
+        # Back to the queue the moderator was working, like every other _ActionView. These two were
+        # the only subclasses without it, so when `next` is absent -- or rejected by `_safe_next`,
+        # which is exactly the case the fallback exists for -- they dropped the moderator on the
+        # Mod Center index instead of the list they were part-way through.
+        return reverse_lazy('mod_list_reports')
+
+
+class DismissListReportView(_ActionView):
+    success_message = 'List report dismissed.'
+
+    def act(self, pk, user, reason):
+        from gamelists.models import GameListReport
+
+        moderation_service.dismiss_list_report(
+            get_object_or_404(GameListReport, pk=pk), user, reason)
+
+    def default_redirect(self):
+        return reverse_lazy('mod_list_reports')
 
 
 class HideBlurbView(_ActionView):

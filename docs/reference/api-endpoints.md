@@ -112,9 +112,45 @@ The notification system is **hidden pending its rebuild** ([notification-system.
 | GET | `/api/v1/recap/<year>/<month>/deck/` | Login | Every slide's HTML in one response (what the deck uses) |
 | GET | `/api/v1/recap/<year>/<month>/slide/<type>/` | Login | One slide partial. No in-repo caller |
 
-### Game Lists — RETIRED (2026-08)
+### Game Lists — REBUILT (2026-09), off `/api/v1/`
 
-The Game Lists feature is hidden pending a revamp; all 11 `/api/v1/lists/*` endpoints are unrouted. The
+The rebuilt feature's endpoints live under the PAGE's path, not here: they share the pages' gate,
+they answer one template's fetches, and routing them through DRF would mean a second permission stack
+that has to agree with the first. They are listed in
+[docs/features/game-lists.md](../features/game-lists.md#api-endpoints) with their rate limits.
+
+| Route | Name | Method |
+|---|---|---|
+| `/community/lists/create/` | `list_create` | POST (form) |
+| `/community/lists/<id>/update/` | `list_update` | POST — rename, describe, publish |
+| `/community/lists/<id>/reorder/` | `list_reorder` | POST — Ranked lists only |
+| `/community/lists/<id>/like/` | `list_like` | POST |
+| `/community/lists/<id>/follow/` | `list_follow` | POST |
+| `/community/lists/<id>/add/` | `list_add_game` | POST |
+| `/community/lists/<id>/items/<item>/remove/` | `list_remove_game` | POST |
+| `/community/lists/<id>/items/<item>/section/` | `list_item_assign` | POST — file one entry under a section |
+| `/community/lists/<id>/sections/` | `list_section_create` | POST — **members only** |
+| `/community/lists/<id>/sections/reorder/` | `list_sections_reorder` | POST |
+| `/community/lists/<id>/sections/<s>/rename/` | `list_section_rename` | POST — **members only** |
+| `/community/lists/<id>/sections/<s>/delete/` | `list_section_delete` | POST |
+| `/community/lists/<id>/search/` | `list_game_search` | GET |
+| `/community/lists/for-game/<concept_id>/` | `lists_for_concept` | GET — where can this game go (quick-add) |
+| `/community/lists/new-with-game/<concept_id>/` | `list_create_with_concept` | POST — create a list and file the game, atomically |
+
+A cross-section drag posts to `list_reorder` **or** `list_item_assign` depending on whether the page
+is showing the list's real sequence — see
+[game-lists.md](../features/game-lists.md#filing-a-game-two-payloads-on-purpose) for why that is two
+endpoints rather than one. Sections and items are resolved **within their list**, never by their own
+id, so a sub-resource on somebody else's list 404s exactly as a missing one does.
+
+Every one that takes a list id resolves it through `readable_by()` and answers a uniform 404, so an
+id alone cannot confirm a list exists or whose it is. `list_create` has no list to resolve and
+redirects with a message instead.
+
+The LEGACY `/api/v1/lists/*` endpoints remain unrouted. `GameSearchView` (`/api/v1/games/search/`),
+which outlived that cut, was **deleted in 2026-09**: its last caller died with the legacy templates,
+and its `?exclude_list=` parameter read `GameListItem` for any list id with no ownership or
+visibility check. The
 models and templates are retained.
 
 ### Game Families (Staff Only)

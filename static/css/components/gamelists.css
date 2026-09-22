@@ -1,0 +1,1783 @@
+/* ============================================================
+   Game Lists
+   ============================================================
+   Only what the app needs beyond the shared primitives. Fields are `.stg-field` / `.stg-input`,
+   buttons are `.pp-cta`, tiles are `.pp-gtile` -- all reused rather than re-minted, which is why
+   this file is short.
+
+   THE DIALOG follows `.gd-modal` (`components/game-detail.css`), which is the site's actual native
+   `<dialog>` primitive. Three earlier attempts got this wrong in instructive ways and the record is
+   worth keeping:
+
+   1. It shipped as raw DaisyUI (`modal-box`, `input input-bordered`, `btn btn-ghost`) and read as a
+      different product sitting inside this one.
+   2. Re-skinned with house tokens, it landed in the TOP-LEFT CORNER. A native <dialog> centres via
+      the user agent's `dialog { margin: auto }`, and Tailwind's preflight zeroes it
+      (`*, ::before, ::after, ::backdrop { margin: 0 }`). DaisyUI's `.modal` had been masking that by
+      filling the viewport and centring its box internally, so dropping that class removed the
+      centring with the skin.
+   3. Fixed by filling the viewport and centring with grid -- which worked, and was still wrong.
+      `place-items: center` on a scroll container makes overflow past the BLOCK-START edge
+      unreachable, so with the soft keyboard up on a phone the form's own title scrolled out of
+      reach. And it re-minted a recipe the site already had.
+
+   `.gd-modal` answers all of it: restore `margin: auto` (an author declaration outranks preflight on
+   specificity AND source order, permanently), size the dialog itself, and let the box scroll its
+   BODY with the head and foot pinned. The earlier comment here claimed `margin: auto` was fragile
+   and that `.pp-detail-modal` was the reference; both were wrong -- `.pp-detail-modal` is a
+   div-and-scrim primitive, not a <dialog>, as this file said ten lines above while contradicting it.
+   ============================================================ */
+
+.gl-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;                       /* the centring. Outranks preflight's `* { margin: 0 }`. */
+    width: min(92vw, 30rem);
+    max-width: 30rem;
+    /* `dvh`, not `vh`: on iOS Safari and Chrome Android `vh` is the LARGE viewport and does not
+       shrink for the soft keyboard, so a focused field could push the dialog's own header off an
+       already-shortened screen. */
+    max-height: min(88dvh, 44rem);
+    padding: 0;
+    color: var(--pp-text);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+    /* The DIALOG never scrolls; its body does (see `.gl-dialog__body`). Scrolling here would take
+       the footer actions with it, which is the thing this layout exists to prevent. */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Required, not redundant: an author `display: flex` beats the UA's `dialog:not([open])
+   { display: none }`, so without this the closed dialog paints over the page. */
+.gl-dialog:not([open]) { display: none; }
+
+/* Solid dim, never a `backdrop-filter` -- the blur re-samples the page behind it every frame, which
+   is the documented mobile-GPU trap. Matches `.gd-modal::backdrop` and `.pp-detail-modal__scrim`. */
+.gl-dialog::backdrop { background: rgba(2, 4, 8, 0.8); }
+
+.gl-dialog__head {
+    flex: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 20px 14px;
+    border-bottom: 1px solid var(--pp-divider);
+}
+/* The swipe grabber floats in the top padding on touch; give the head room so the pill sits clear
+   of the title. `dismissableSheet` adds `.pp-dismissable` itself -- the template must NOT also, or
+   two pills render (one on the box, one on the dialog). */
+@media (hover: none) and (pointer: coarse) {
+    .gl-dialog.pp-dismissable .gl-dialog__head { padding-top: 26px; }
+}
+
+.gl-dialog__title { font-size: 1.05rem; font-weight: 700; line-height: 1.2; }
+.gl-dialog__sub { margin-top: 4px; font-size: 0.76rem; color: var(--pp-text-dim); }
+
+.gl-dialog__close {
+    flex: none; background: none; border: none; cursor: pointer;
+    color: var(--pp-text-mute); font-size: 26px; line-height: 1;
+    /* 44px minimum touch target (design-system.md), reached with padding rather than a font bump so
+       the glyph stays the size the other modals draw it. */
+    min-width: 44px; min-height: 44px; margin: -10px -8px -10px 0;
+}
+.gl-dialog__close:hover { color: var(--pp-text); }
+.gl-dialog__close:focus-visible {
+    color: var(--pp-text); outline: 2px solid var(--pp-primary);
+    outline-offset: 2px; border-radius: var(--pp-radius-sm);
+}
+
+/* The ONLY scroll region. Head and foot are `flex: none` siblings, so a long form scrolls between
+   them and the actions stay reachable -- the property the previous version's comment claimed and
+   did not have, because `overflow-y` sat on the box that contained all three. */
+.gl-dialog__body { flex: 1 1 auto; overflow-y: auto; padding: 16px 20px; }
+
+.gl-dialog__foot {
+    flex: none;
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px 18px;
+    border-top: 1px solid var(--pp-divider);
+}
+
+/* THE SERVICE'S REFUSAL, shown beside the fields it is about. The create dialog never needed this
+   because it submits normally and a refusal replaces the page; the report dialog posts JSON so the
+   reporter keeps what they typed, and the refusals are worth reading -- "you have already reported
+   this one" is a different thing to learn than "that failed".
+
+   `hidden` until there is one: an empty error box reserves space for a state that usually never
+   happens. */
+.gl-dialog__error {
+    padding: 8px 10px;
+    border: 1px solid color-mix(in oklab, var(--pp-error) 45%, transparent);
+    border-radius: var(--pp-radius-sm);
+    background: color-mix(in oklab, var(--pp-error) 12%, transparent);
+    color: var(--pp-error);
+    font-size: 0.78rem;
+}
+/* A REFUSAL ARRIVES, it does not blink into existence. This is the only feedback a reporter gets
+   for "you have already reported this list", and it was appearing by having `hidden` removed --
+   shoving the footer down a step with no transition, which reads as a layout glitch rather than as
+   an answer. The same fade-and-rise the rest of the site reveals with (`ppRevealIn`), kept short
+   because an error should not feel leisurely. Gated, like every other motion here. */
+@media (prefers-reduced-motion: no-preference) {
+    .gl-dialog__error:not([hidden]) {
+        animation: glErrorIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+}
+@keyframes glErrorIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* Suggested names: quiet chips, deliberately lighter than a `.pp-cta` so they read as a shortcut
+   past a blank field rather than as actions competing with "Create list". */
+.gl-suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.gl-suggest__chip {
+    padding: 7px 11px; font-size: 0.72rem; cursor: pointer;
+    color: var(--pp-text-mute);
+    background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+    border-radius: 999px;
+    transition: color 140ms ease, border-color 140ms ease;
+}
+.gl-suggest__chip:hover {
+    color: var(--pp-text);
+    /* `in oklab`, matching `switcher.css`'s identical recipe and the other ~1100 uses in this
+       codebase. `oklch` interpolates along the hue arc and produces a visibly different mid. */
+    border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border));
+}
+.gl-suggest__chip:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px; color: var(--pp-text);
+}
+/* Below `md:` the eight chips wrap to four rows, ~114px of a phone dialog, and they are the largest
+   contributor to a cramped form. The reference standard's instruction for exactly this is to omit
+   the expendable block on mobile rather than introduce a scroll -- so the tail is hidden and the
+   first four remain as the shortcut. */
+@media (max-width: 767px) { .gl-suggest__chip:nth-child(n + 5) { display: none; } }
+
+/* The live character count. Muted at rest so it reads as a reference and not a warning;
+   `tabular-nums` because a proportional font makes the number jitter sideways as you type, which
+   reads as the layout being unstable. Escalation classes come from the shared `wireCharCounters`
+   and are in the Tailwind safelist -- if a third class is ever toggled there, safelist it too. */
+.gl-countchars { font-size: 0.7rem; font-variant-numeric: tabular-nums; color: var(--pp-text-mute); }
+
+/* Entrance AND exit, both gated on reduced motion and both touching only transform/opacity.
+   `.is-closing` is added by the JS, which waits for `animationend` before calling `close()` -- the
+   standard asks for exits choreographed as carefully as entrances. */
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes glDialogIn {
+        from { opacity: 0; transform: translateY(8px) scale(0.98); }
+        to   { opacity: 1; transform: none; }
+    }
+    @keyframes glDialogOut {
+        from { opacity: 1; transform: none; }
+        to   { opacity: 0; transform: translateY(8px) scale(0.98); }
+    }
+    @keyframes glScrimOut { from { opacity: 1; } to { opacity: 0; } }
+
+    .gl-dialog[open] { animation: glDialogIn 0.22s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+    .gl-dialog.is-closing { animation: glDialogOut 0.18s cubic-bezier(0.4, 0, 1, 1) both; }
+    .gl-dialog.is-closing::backdrop { animation: glScrimOut 0.18s ease both; }
+}
+
+/* ============================================================
+   The owner's edit controls: remove, and the adder
+   ============================================================ */
+
+/* The tile wrapper. Exists ONLY to anchor the remove control, so it deliberately sets nothing that
+   could disturb the grid -- `.pp-gtile-grid` styles no direct children (just columns and gap) and
+   `.pp-gtile` takes its height from `aspect-ratio`, so the wrapper inherits the column's width and
+   the tile fills it. Adding layout here is what would break the grid. */
+/* Holds one `.pp-gcard`, and anchors the remove control that has to sit OUTSIDE the card's <a>.
+   `display: flex` + `flex: 1` is belt-and-braces rather than load-bearing: this is a grid item with
+   `height: auto`, so it stretches to the row either way and `height: 100%` on the card would resolve
+   against that same definite height under `display: block`. An earlier comment here claimed the flex
+   line was what made it work, which is not true and would mislead anyone who tried to simplify it. */
+.gl-item { position: relative; display: flex; }
+.gl-item > .pp-gcard { flex: 1; min-width: 0; }
+
+/* Quiet at rest, per the design conversation's "an icon, not a labelled button". Hidden from the
+   pointer until hover, but ALWAYS present for the keyboard: `:focus-visible` opens it, so tabbing a
+   list reaches every control. `opacity`/`transform` only -- no `filter` on a tile-sized element. */
+.gl-item__remove {
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    display: grid; place-items: center;
+    width: 26px; height: 26px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    /* The house idiom for an opaque chip over cover art (cf. `.pp-gtile__logo`), not a literal. */
+    background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    color: var(--pp-text-dim);
+    /* Tailwind v4's preflight sets no `cursor: pointer` on buttons, so every control has to declare
+       it -- which this file argues explicitly 195 lines down while naming THIS element, and which
+       the sibling controls honour. The destructive control was the one still rendering an arrow. */
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 0.16s ease, transform 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+.gl-item__remove svg { width: 13px; height: 13px; }
+.gl-item:hover .gl-item__remove,
+.gl-item__remove:focus-visible { opacity: 1; transform: none; }
+.gl-item__remove:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+    color: var(--pp-text);
+}
+@media (hover: hover) {
+    .gl-item__remove:hover {
+        color: var(--pp-error);
+        border-color: color-mix(in oklab, var(--pp-error) 55%, var(--pp-border));
+        transform: scale(1.06);
+    }
+}
+/* Touch has no hover, so the control would never appear. Show it at rest instead -- and at the
+   design system's 44px minimum (design-system.md), which the first cut set to 30px. This file
+   already honours that rule 110 lines up for a merely DISMISSIVE control; the one that deletes a
+   curated entry had the smaller target. A mis-tap here destroys curated work with no confirm step.
+   (The ~166x125px figure quoted here was the 4:3 grouping tile's; the card's 3:4 cover at 375px is
+   ~166x222px. The argument survives the move, the number did not.) The visual circle stays 30px --
+   the extra is transparent padding, so the target grows without the button getting heavier. */
+@media (hover: none) {
+    .gl-item__remove {
+        opacity: 1; transform: none;
+        width: 44px; height: 44px;
+        top: 0; right: 0;
+        background: none; border: none;
+    }
+    .gl-item__remove::before {
+        content: ''; position: absolute; inset: 7px;
+        border-radius: 999px;
+        border: 1px solid var(--pp-border);
+        background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    }
+    .gl-item__remove svg { position: relative; }
+}
+
+/* The button is a SIBLING of the card (a <button> inside an <a> is invalid), so
+   `.pp-reveal .pp-gcard { opacity: 0 }` (game-card.css) never covered it. On desktop that was masked because it
+   rests at opacity 0 anyway -- but on touch it is forced visible, so after every sort, add and
+   remove the grid showed a row of bare floating "x" glyphs hanging over empty space for ~500ms
+   while the tiles faded up beneath them.
+
+   RELEASING IT WITH `.is-revealed` WAS THE WRONG HALF OF THE PAIR, twice over. That class lands one
+   frame after the reveal starts, while the animation's `backwards` fill holds the tile down for up to
+   ~950ms more -- so the "x" came back long before its tile did. And a rule that SETS opacity 1 at
+   (0,4,0) outranks the (0,2,0) hover rule above for the rest of the page's life: every tile on desktop
+   wore a permanent "x" instead of showing one on hover.
+
+   Both go away by hiding on the negative instead, which expires cleanly and leaves the resting rules
+   to do their job. The arrival itself is the shared engine's business now -- `staggerReveal` animates
+   the `.gl-item` cell, so these controls ride it, and `.pp-arriving` (motion.css) keeps the cell inert
+   while it does. `pointer-events` travels with the opacity because a hidden control that still catches
+   taps is the freeze bug this project has now written down three times. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ .gl-item__remove { opacity: 0; pointer-events: none; }
+}
+
+/* The new transforms above are gated, like the dialog's are and like every sibling component's
+   are. Without this a reduced-motion reader still gets the scale-in and the hover pop. */
+@media (prefers-reduced-motion: reduce) {
+    .gl-item__remove { transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease; }
+    .gl-item__remove,
+    .gl-item:hover .gl-item__remove,
+    .gl-item__remove:focus-visible,
+    .gl-item__remove:hover { transform: none; }
+}
+
+
+/* ── The type picker ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Radio cards, shared by the create dialog and the detail page's edit panel. A <fieldset> because
+ * the group needs one accessible name across two inputs, and the native radio is kept in the DOM
+ * (visually hidden, not `display: none`) so arrow-key navigation, the label association and form
+ * submission all keep working without a line of JavaScript.
+ */
+.gl-type { border: none; padding: 0; margin: 0; }
+/* `.stg-field` is a flex column with a 5px gap, but a <legend> is not a flex item -- it renders
+   outside the anonymous content box, so "Type" sat flush against the first radio card while every
+   neighbouring field label had air. */
+.gl-type > legend { margin-bottom: 5px; }
+.gl-type__opts { display: grid; gap: 8px; }
+/* Side by side once there is room. At 375px two of these in a row would each hold ~160px of a
+   sentence, which wraps to four lines and makes the taller option set the height of both. */
+@media (min-width: 640px) {
+    .gl-type__opts { grid-template-columns: 1fr 1fr; }
+}
+
+.gl-type__opt {
+    position: relative;
+    display: block;
+    padding: 10px 12px;
+    border-radius: 9px;
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-0) 45%, transparent);
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease;
+}
+/* Hidden from sight, NOT from the accessibility tree or the keyboard: `display: none` would take
+   the input out of the tab order and break the arrow-key group entirely. */
+.gl-type__opt input {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%);
+    white-space: nowrap;
+}
+.gl-type__body { display: block; min-width: 0; }
+.gl-type__name {
+    display: block;
+    font-size: 0.82rem; font-weight: 700; line-height: 1.2;
+    color: var(--pp-text);
+}
+.gl-type__hint {
+    display: block; margin-top: 3px;
+    font-size: 0.7rem; line-height: 1.35;
+    color: var(--pp-text-dim);
+}
+.gl-type__note {
+    margin-top: 7px;
+    font-size: 0.68rem; line-height: 1.35;
+    color: var(--pp-text-dim);
+}
+
+.gl-type__opt:has(input:checked) {
+    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 10%, transparent);
+}
+.gl-type__opt:has(input:checked) .gl-type__name { color: var(--pp-primary); }
+/* The focus ring goes on the LABEL because the input it belongs to is visually hidden -- without
+   this, tabbing into the group moves an invisible focus and the page looks inert. */
+.gl-type__opt:has(input:focus-visible) {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+}
+@media (hover: hover) {
+    .gl-type__opt:hover { border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
+}
+/* The checked state is signalled by colour alone -- border, tint and the name going accent -- and
+   forced colours overrides all three, so under Windows High Contrast NEITHER option looked chosen.
+   The focus ring survives because it is an `outline`, which is exactly the property to reuse: a
+   reader could see where focus was but not what was selected. */
+@media (forced-colors: active) {
+    /* NOT an outline. The checked marker and the focus ring were both outlines at the same
+       specificity, and in a radio group focus and checked are the same element essentially always
+       (arrow keys move focus AND check) -- so the later rule won and the group had no distinguishable
+       focus indicator at all. Border width carries "checked" here, leaving `outline` free to mean
+       focus, and the padding compensates so the box does not shift. */
+    .gl-type__opt { border-width: 2px; padding: 9px 11px; }
+    .gl-type__opt:has(input:checked) { border-width: 5px; padding: 6px 8px; }
+}
+
+
+/* ── Ranked lists ──────────────────────────────────────────────────────────────
+ *
+ * THE NUMERAL IS A PLATE IN THE COVER'S TOP-LEFT CORNER. Owner's call, 2026-09.
+ *
+ * The first version kept it in the text strip beside the title, reasoning that these cards had just
+ * been moved off the overlay tile so that nothing would sit on the art. That reasoning holds for a
+ * TITLE -- long, wrapping, needing a scrim to stay legible, which is what darkened the art it was
+ * printed over -- and it does not transfer to two characters: a small opaque plate occupies a corner
+ * rather than the image. On a ranked list the number is the thing being scanned for, and it was
+ * reading as an afterthought next to the title.
+ *
+ * OPAQUE, NOT TINTED, and that is the load-bearing choice rather than a style preference. A
+ * translucent chip reads well over the dark covers most games ship and disappears over a bright one
+ * and over a high-frequency one. An accent plate with dark text on it reads identically over every
+ * cover, which is what "easy to read" has to mean when the background is arbitrary art nobody
+ * controls.
+ *
+ * Top-LEFT specifically: covers put their logo at the top CENTRE, and the art's focal point is
+ * usually centre or lower-centre. The top-left corner is the quietest region of a game cover.
+ */
+.gl-rank {
+    position: absolute; top: 7px; left: 7px; z-index: 2;
+    display: grid; place-items: center;
+    /* `min-width` + padding rather than a fixed width, so 1 and 10 both sit in a plate that looks
+       deliberate and a three-digit rank grows instead of clipping. `ch` ties that to the digits
+       rather than to a pixel guess a font change would invalidate.
+       The 16px of padding is INSIDE the min-width under `border-box`, so a bare `1.9ch` (~15px) was
+       smaller than the padding alone and never bound -- the plate was always content-width. */
+    min-width: calc(1.9ch + 16px); height: 26px; padding: 0 8px;
+    border-radius: 8px;
+    font-size: 0.92rem; font-weight: 800; line-height: 1;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-bg-0);
+    background: var(--pp-primary);
+    /* Lifts the plate off busy art so its edge stays findable without needing a border. */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+/* Larger where there is room. The plate is what the eye is chasing down the grid, and at `md` the
+   cards are wide enough that 26px starts to read as timid. */
+@media (min-width: 768px) {
+    .gl-rank { top: 8px; left: 8px; height: 29px; font-size: 1.02rem; border-radius: 9px; }
+}
+/* THE GRIPS EXIST ONLY IN POSITION-EDITING MODE.
+ *
+ * `display: none` rather than `opacity: 0`, deliberately: a grip that is merely invisible is still
+ * in the tab order and still announced, so a keyboard reader outside the mode would meet one "Reorder
+ * <game>" button per row that does nothing.
+ *
+ * The flag is read from the PANEL, which is htmx's swap target and therefore keeps its own
+ * attributes. On `#gl-items` it would be wiped on settle -- the trap documented twice in
+ * list-detail.js. */
+#gl-items-panel:not([data-positioning]) .gl-item__grab { display: none; }
+/* ...and the destructive control steps aside while positioning, so the corner is never contested and
+   the mode offers one action rather than two. Arranging a list and deleting from it are different
+   jobs, and the one that cannot be undone is not the one to leave under a moving cursor. */
+#gl-items-panel[data-positioning] .gl-item__remove { display: none; }
+
+/* The grip. Mirrors the remove control across the card (top-LEFT to its top-right) and shares its
+   geometry, but is visible at rest WITHIN the mode: once you have said you are arranging the list,
+   the thing you arrange it with should not also have to be discovered, and a hover-only grip does
+   not exist at all on touch. */
+.gl-item__grab {
+    /* TOP-RIGHT, because the rank plate owns the top-left now. It shares this corner with the remove
+       control and never collides with it: `.gl-item__remove` is hidden while positioning (below), so
+       a card offers exactly one control per mode. */
+    position: absolute; top: 6px; right: 6px; z-index: 2;
+    display: grid; place-items: center;
+    width: 26px; height: 26px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-border);
+    background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    color: var(--pp-text-dim);
+    cursor: grab;
+    /* `opacity` is in the list because the reveal rules below animate it -- the remove control's
+       transition includes it and this one did not, so after every sort and every removal the cards
+       faded up and the grips snapped in. Same pair of rules, two behaviours. */
+    transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+.gl-item__grab svg { width: 14px; height: 14px; }
+.gl-item__grab:active { cursor: grabbing; }
+.gl-item__grab:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px;
+    color: var(--pp-text);
+}
+@media (hover: hover) {
+    .gl-item__grab:hover {
+        color: var(--pp-text);
+        border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+        transform: scale(1.06);
+    }
+}
+/* The same 44px minimum the remove control takes, and for a stronger reason: this one has to be
+   grabbed and held while dragging, not merely hit. The visual circle stays 26px inside transparent
+   padding. */
+@media (hover: none) {
+    .gl-item__grab {
+        width: 44px; height: 44px;
+        top: 0; right: 0;
+        background: none; border: none;
+    }
+    .gl-item__grab::before {
+        content: ''; position: absolute; inset: 9px;
+        border-radius: 999px;
+        border: 1px solid var(--pp-border);
+        background: color-mix(in oklab, var(--pp-bg-0) 82%, transparent);
+    }
+    .gl-item__grab svg { position: relative; }
+}
+/* Same sibling problem the remove control documents above, and the same correction: the grip is
+   outside the card's <a>, so the shared reveal never covers it, and it would hang over empty space
+   while the tiles fade up. Hidden on the negative, released by the cell's own animation. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .gl-item .pp-gcard:not(.is-revealed) ~ .gl-item__grab { opacity: 0; pointer-events: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    /* `opacity` stays: the reveal is a fade, not motion, and the remove control keeps it here too. */
+    .gl-item__grab { transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease; }
+    .gl-item__grab,
+    .gl-item__grab:hover { transform: none; }
+}
+
+/* ── Sections ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * A HEADER, not a card. The page's own rule is that content sits on carded surfaces, and a section
+ * header is the exception that proves it: it is a LABEL for the grid beneath it, and boxing it would
+ * put a card around a card around a game. The hairline rule under it is what does the separating,
+ * which is the same device the rebuilt pages use between stacked chrome and free content.
+ *
+ * Reading order over decoration: the name is the only thing that needs weight, and the count is a
+ * fact beside it rather than a badge. `space-between` puts the count at the far edge where the eye
+ * lands after the name rather than immediately after it, which stops "Finished 12" reading as a
+ * title. */
+/* The group's own grid, which is what the empty-section box keys on. Scoped to this class and
+   NOT to `.pp-gbrowse__grid`: that one is the site's shared browse grid, and an `:empty` rule on it
+   would draw a dashed box with empty content on any childless grid anywhere on the site. */
+
+/* The wrapper around every group. It replaced an `id` that nothing read -- this file's own convention
+   is that a hook exists where something uses it -- and gives the groups a block context of their own
+   so `.gl-section__head:first-child` means "the first header on the page". */
+.gl-groups { display: flex; flex-direction: column; }
+
+.gl-section__head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    margin: 22px 0 9px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid var(--pp-divider);
+}
+/* The first header on the page has the toolbar directly above it and needs no extra air. */
+.gl-section__head:first-child { margin-top: 0; }
+/* The ungrouped bucket gets a little more room BELOW it, because what follows is the first real
+   section header and two rules close together read as one broken rule. */
+.gl-section__head--loose { margin-bottom: 12px; }
+
+.gl-section__name {
+    font-size: 0.94rem; font-weight: 700; line-height: 1.2;
+    color: var(--pp-text);
+    min-width: 0; overflow-wrap: anywhere;
+}
+/* "Not in a section" is a state, not a name the author chose -- so it reads quieter than one they
+   did, and italic marks it as the system talking rather than the hunter. */
+.gl-section__name--muted { color: var(--pp-text-dim); font-weight: 600; font-style: italic; }
+
+.gl-section__count {
+    flex: none;
+    font-size: 0.72rem; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-text-mute);
+}
+@media (min-width: 768px) {
+    .gl-section__head { margin: 28px 0 11px; }
+    .gl-section__name { font-size: 1.02rem; }
+}
+
+/* Delete sits at the FAR END of the editor's action row, away from Save and Cancel. It is the one
+   control there that a second press cannot undo, and putting it next to the button people reach for
+   without looking is how a list goes missing. `margin-left: auto` rather than a wrapper: the row is
+   already a flex line and the gap between the safe pair stays as it was. */
+.gl-edit__delete { margin-left: auto; }
+
+/* THE POSITION BAR, directly above the grid it acts on.
+ *
+ * It began as a small ghost button at the foot of the edit form and was, in the owner's words, hard
+ * to see -- which it was: the single control that the whole Ranked type exists for was the quietest
+ * thing on the page, in a panel you had to scroll past the name and description to reach. Moved out
+ * of the form, given the grid's full width, and promoted to a solid CTA.
+ *
+ * The bar is a SURFACE rather than a floating button, so the mode reads as a state the list is in
+ * rather than as one more control among the sort and filter chrome. When the mode is on, that
+ * surface is what changes -- the accent border and tint carry the state across the full width, which
+ * is much harder to miss than a button label flipping from one word to another. */
+/* A COLUMN, because the bar carries two rows now: the mode, and the section controls beneath it.
+   It was a single `display: flex` row when the mode was all it held. */
+.gl-positions {
+    display: flex; flex-direction: column; gap: 11px;
+    margin: 0 0 12px;
+    padding: 11px 13px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 7%, var(--pp-bg-1));
+    transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+/* ON, and LOUD. The first version tinted this 14% and drew a hairline ring, which the owner could
+   look straight past -- the bar is the only thing on the page that says which mode you are in, so
+   subtlety here is a cost with no benefit. It now reads as a different surface rather than the same
+   surface slightly warmer: a solid accent wash, a full-weight border, and a standing glow.
+
+   This is the one place on the page that is allowed to shout. Everything else the mode does -- the
+   tray, the elevation, the quieted hover -- is deliberately quiet, and works because THIS is not. */
+.gl-positions.is-on {
+    border-color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 22%, var(--pp-bg-1));
+    box-shadow: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 45%, transparent),
+                0 10px 30px -12px color-mix(in oklab, var(--pp-primary) 70%, #000);
+}
+/* The supporting text comes up with it: at rest it is a dim hint, and while the mode is live it is
+   the instructions. */
+.gl-positions.is-on .gl-positions__hint { color: var(--pp-text); }
+
+.gl-positions__row {
+    display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+    width: 100%;
+}
+/* `min-height` because `.pp-cta` sets none: 8+8 padding round an 18.7px line box lands at ~37px,
+   under the 44px floor in design-system.md. This file already enforces that twice for lesser
+   controls, and this is the button the whole Ranked type exists for. */
+.gl-positions__btn {
+    font-size: 0.78rem; padding: 8px 14px; gap: 7px; flex: none;
+    min-height: 44px;
+}
+.gl-positions__btn svg { width: 15px; height: 15px; }
+.gl-positions__hint {
+    margin: 0; flex: 1 1 14ch; min-width: 0;
+    font-size: 0.72rem; line-height: 1.35;
+    color: var(--pp-text-dim);
+}
+/* At 375px the button and the hint side by side leave the hint about twelve characters, so it wraps
+   to three ragged lines under a button that is already self-explanatory once pressed. The hint goes
+   below instead of being squeezed, which is the reference standard's instruction for exactly this. */
+/* Mobile-first, and on the boundary this file already uses (519/520) rather than a second one a
+   pixel away. Base is the stacked layout; the row goes side by side once there is room. */
+.gl-positions__btn { width: 100%; justify-content: center; }
+.gl-positions__hint { flex: 1 1 100%; }
+@media (min-width: 520px) {
+    .gl-positions__btn { width: auto; }
+    .gl-positions__hint { flex: 1 1 14ch; }
+}
+/* The save signal. Sized and coloured to be noticed without competing with the button beside it --
+   this reports on something the hunter already did, rather than inviting an action. */
+.gl-positions__status {
+    display: inline-flex; align-items: center; flex: none;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 0.66rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+}
+.gl-positions__status.is-failed {
+    color: var(--pp-error);
+    background: color-mix(in oklab, var(--pp-error) 12%, transparent);
+    border-color: color-mix(in oklab, var(--pp-error) 35%, var(--pp-border));
+}
+
+/* ── Section controls, the bar's second row ──────────────────────────────────────────────────────
+ *
+ * Divided from the mode above it by a hairline rather than boxed separately: they belong to the same
+ * bar because they are the same job (shaping the list rather than reading it), but making a header is
+ * not entering a mode, and the two must not look like one control with two halves.
+ *
+ * AVAILABLE WHETHER OR NOT THE MODE IS ON, which is the reason this row is not inside `.is-on`: a
+ * hunter who has decided their backlog needs a "Playing" shelf should not have to find an arrange
+ * mode first. */
+.gl-sections__bar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px;
+    padding-top: 10px;
+    border-top: 1px solid color-mix(in oklab, var(--pp-primary) 22%, var(--pp-border));
+}
+/* The field and its button are one control, so they sit on one line and share a growth budget: the
+   input takes the slack and the button never shrinks below its label. */
+.gl-sections__add { display: flex; align-items: center; gap: 8px; flex: 1 1 15rem; min-width: 0; }
+/* `min-height` because `.stg-input` sets none: 8+8 padding round a ~15px line box lands at ~33px,
+   under the 44px floor every control BESIDE it on this bar carries. It is also the one control you
+   have to hit to use the feature at all. */
+.gl-sections__input {
+    flex: 1 1 auto; min-width: 0;
+    font-size: 0.78rem; padding: 8px 11px;
+    min-height: 44px;
+}
+/* The 44px floor this file enforces for every other control on the bar. */
+.gl-sections__go { flex: none; font-size: 0.76rem; padding: 8px 13px; gap: 6px; min-height: 44px; }
+.gl-sections__go svg { width: 14px; height: 14px; }
+
+/* The numbering choice. A real checkbox rather than the page's `.pp-switch`, because this is a
+   SETTING inside a toolbar and not a view the page switches between -- the switcher is the site's
+   answer to "which of these am I looking at", and using it here would promise a change of surface
+   that never arrives. */
+.gl-sections__numbering {
+    display: flex; align-items: center; gap: 8px; flex: none;
+    font-size: 0.72rem; line-height: 1.3;
+    color: var(--pp-text-dim);
+    cursor: pointer;
+    min-height: 44px;
+}
+.gl-sections__numbering input { width: 15px; height: 15px; flex: none; accent-color: var(--pp-primary); }
+
+/* ── The sections lockup ─────────────────────────────────────────────────────────────────────────
+ *
+ * What a free hunter sees where the section controls would be. It replaced a one-line
+ * `.gl-sections__locked` note that lived INSIDE the arrange bar, which meant it reached nobody it was
+ * written for: that bar is hidden until the editor is opened and does not render at all for a free
+ * owner of a section-less Collection.
+ *
+ * CARDED, because the rule this project keeps relearning is that content does not sit bare on the
+ * page background. It is a `.scard`-grammar surface in miniature: one hairline, one radius, an icon
+ * rail and a body, the same anatomy the design system gives a utility card.
+ *
+ * WARM, NOT ACCENT. `--pp-primary` on this page means "this control is live" (the arrange bar, the
+ * adder). An offer is not a control, and dressing it in the same colour makes the page's real
+ * affordances harder to find -- which is the cost an upsell is never allowed to impose here. */
+.gl-lockup {
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 0 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 26%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-warning) 5%, var(--pp-bg-1));
+}
+.gl-lockup__icon {
+    flex: none;
+    display: grid; place-items: center;
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 13%, transparent);
+}
+.gl-lockup__icon svg { width: 17px; height: 17px; }
+/* `flex: 1 1 0`, NOT `1 1 auto`. Flex line-breaking uses each item's hypothetical main size, and
+   `basis: auto` resolves to MAX-CONTENT -- roughly 600px for this hint -- which `min-width: 0` does
+   not reduce, because that is a lower clamp and not a basis. So at 375px the body did not fit beside
+   the 34px icon and broke to its own line, leaving the icon alone on a blank row: three rows where
+   two were designed, and ~46px of dead height on the block whose own comment says the icon "costs
+   34px". A zero basis makes the body take the space that is left rather than ask for what it wants.
+   `.gl-positions__hint` and `.gl-actions__note` in this file already do it this way. */
+.gl-lockup__body { flex: 1 1 0; min-width: 0; }
+.gl-lockup__title { margin: 0; font-size: 0.82rem; font-weight: 700; color: var(--pp-text); }
+.gl-lockup__hint {
+    margin: 2px 0 0;
+    font-size: 0.72rem; line-height: 1.45;
+    color: var(--pp-text-dim);
+}
+/* The 44px floor, like every other control this feature renders. */
+.gl-lockup__go { flex: none; font-size: 0.74rem; padding: 8px 13px; min-height: 44px; }
+
+/* At 375px the icon, two lines of body and a button leave the hint about eight characters a line.
+   The button drops beneath the text and spans the width rather than being squeezed -- the reference
+   standard's instruction for exactly this, on the same 519/520 boundary the bar above already uses.
+   The ICON stays on the first row: it is what makes the block scannable, and it costs 34px. */
+@media (max-width: 519px) {
+    .gl-lockup { flex-wrap: wrap; }
+    .gl-lockup__go { width: 100%; justify-content: center; margin-top: 2px; }
+}
+
+/* ── Section header controls ─────────────────────────────────────────────────────────────────────
+ *
+ * Quiet until the header is hovered or something inside it takes focus -- the same restraint the
+ * card's remove control uses, and for the same reason: these sit beside content people are reading.
+ *
+ * `:focus-within` and not `:hover` alone, so tabbing through the page surfaces each header's controls
+ * in turn rather than leaving a keyboard user pressing buttons they cannot see. */
+.gl-section__act {
+    flex: none;
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+    margin-bottom: -4px;
+    border-radius: 8px;
+    color: var(--pp-text-mute);
+    background: transparent;
+    /* Tailwind v4's preflight does not set this on buttons; this file already says so twice. */
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.16s ease, color 0.16s ease, background 0.16s ease;
+}
+.gl-section__act svg { width: 14px; height: 14px; }
+/* THE TWO TARGETS MUST NOT OVERLAP. The visible buttons are 28px with a 10px gap, so their centres
+   sit 38px apart while each `::before` is 44px wide -- a 6px overlap, won by whichever paints last.
+   That is Delete, so a thumb landing just right of the PENCIL opened "delete this section". Eight
+   more pixels puts the centres 46px apart and the boxes side by side with room to spare. The confirm
+   dialog was the only thing standing between that mis-tap and a deleted header. */
+.gl-section__act + .gl-section__act { margin-left: 8px; }
+
+.gl-section__head:hover .gl-section__act,
+.gl-section__head:focus-within .gl-section__act { opacity: 1; }
+/* THE 44px TOUCH TARGET, drawn at 28px. The same transparent-::before trick `.gl-item__grab` uses,
+   and it matters more here: rename and delete sit ~10px apart, so a 28px tap target means a mis-hit
+   on "Rename" lands on "Delete the section". Pseudo-element rather than padding so the visible
+   button keeps its size and the header keeps its rhythm. */
+.gl-section__act::before {
+    content: '';
+    position: absolute; top: 50%; left: 50%;
+    width: 44px; height: 44px;
+    transform: translate(-50%, -50%);
+}
+/* Always visible on touch, where there is no hover to reveal them and a control nobody can summon is
+   a control that does not exist. */
+@media (hover: none) {
+    .gl-section__act { opacity: 1; }
+}
+/* GUARDED, like every other hover-background in this file. On touch an unguarded `:hover` STICKS
+   after the tap -- so dismissing the delete confirm left the red wash painted on the button until
+   something else was tapped, which reads as "the delete is still armed". */
+@media (hover: hover) {
+    .gl-section__act:hover {
+        color: var(--pp-text);
+        background: color-mix(in oklab, var(--pp-text) 9%, transparent);
+    }
+    .gl-section__act--danger:hover {
+        color: var(--pp-error);
+        background: color-mix(in oklab, var(--pp-error) 12%, transparent);
+    }
+    .gl-sections__numbering:hover { color: var(--pp-text); }
+}
+.gl-section__act:focus-visible { opacity: 1; outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* The name takes the slack so the controls sit against the count rather than drifting with the
+   title's length. `space-between` on the head already puts the count at the far edge. */
+.gl-section__head .gl-section__name { flex: 1 1 auto; }
+
+/* ── An empty section ────────────────────────────────────────────────────────────────────────────
+ *
+ * A grid with no children collapses to zero height, and an empty section's whole purpose is to
+ * RECEIVE the first card -- so without something there is nothing to aim at. This is that box.
+ *
+ * IT IS A ::before ON THE GRID, NOT A CHILD ELEMENT, and that is not a tidiness choice. SortableJS's
+ * `_detectNearestEmptySortable` tests `!lastChild(el)` with NO selector argument, so ANY element
+ * child disqualifies a container from the generous `emptyInsertThreshold` hit band -- meaning the
+ * placeholder added to make an empty section droppable was the very thing switching off the 20px
+ * margin that makes it comfortably droppable. Drawing it as a pseudo-element keeps the box and
+ * leaves the container genuinely empty.
+ *
+ * `:empty` rather than a server-rendered class: the grid empties CLIENT-side too, when the last card
+ * is dragged or keyed out of it, and a class the server put there cannot know that. The rule then
+ * turns itself back on with no JS at all.
+ *
+ * Wrapped so `content` can carry the copy: `attr()` reads a `data-` attribute the template sets, so
+ * the owner's instruction and a reader's statement of fact stay in the template with the rest of the
+ * page's words rather than moving into the stylesheet. */
+.gl-group__grid:empty::before {
+    content: attr(data-empty-label);
+    display: block;
+    grid-column: 1 / -1;
+    padding: 18px 12px;
+    border: 1px dashed var(--pp-border);
+    border-radius: 12px;
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--pp-text-mute);
+}
+/* While arranging, it is a TARGET and says so. Outside the mode it is just a statement of fact, and
+   an accent-dashed box inviting a drop nobody can perform is the kind of affordance that teaches
+   people the page is broken. */
+#gl-items-panel[data-positioning] .gl-group__grid:empty::before {
+    border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-primary) 6%, transparent);
+}
+
+/* ══ POSITION-EDITING MODE: how the grid behaves while you are arranging it ══════════════════════
+ *
+ * The whole card is the drag surface here, so everything the card does when it is a LINK has to stop
+ * doing it. Three separate behaviours, all of them right in browse mode and all of them wrong here.
+ */
+
+/* 1. THE HOVER GOES QUIET. `.pp-gcard:hover` lifts the art 5%, glows the border, throws a coloured
+ *    shadow and recolours the title -- an invitation to click, which is exactly what a card must not
+ *    look like while you are dragging it. Worse, the pointer crosses half a dozen cards during a
+ *    single drag, so the whole grid flickers as each one lights up and drops again.
+ *
+ *    ID specificity, so these outrank `game-card.css`'s own `@media (hover: hover)` rules without
+ *    `!important` and without touching that file, which four other pages depend on. */
+@media (hover: hover) {
+    /* Only the two below do work. A `border-color`/`box-shadow` pair sat here too, at the same
+       specificity as the resting-elevation rule further down and earlier in source -- so the
+       elevation won and these never applied. The end state was right by accident; the rules were
+       dead, and their presence implied a defence that was not there. */
+    #gl-items-panel[data-positioning] .pp-gcard:hover .pp-gcard__art { transform: none; }
+    #gl-items-panel[data-positioning] .pp-gcard:hover .pp-gcard__title { color: var(--pp-text); }
+}
+/* The press-dip too: a card you are picking up should not also flinch. */
+#gl-items-panel[data-positioning] .pp-gcard:active { transform: none; }
+
+/* 2. THE CURSOR SAYS GRAB, over the whole card rather than over the grip alone. */
+#gl-items-panel[data-positioning] .gl-item,
+#gl-items-panel[data-positioning] .pp-gcard { cursor: grab; }
+#gl-items-panel[data-positioning] .gl-item:active,
+#gl-items-panel[data-positioning] .pp-gcard:active { cursor: grabbing; }
+
+/* 3. TOUCH MUST NOT TREAT A HELD CARD AS TEXT OR AS A LINK. Long-press on a phone otherwise raises
+ *    the selection handles or the link preview sheet, both of which land at roughly the moment the
+ *    drag arms -- so the gesture that picks a card up also opens a menu over it. */
+#gl-items-panel[data-positioning] .gl-item {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* ── The tell ────────────────────────────────────────────────────────────────
+ *
+ * DEPTH, NOT MOTION. This was a continuous wobble -- the phone-home-screen idiom -- and it worked,
+ * but a grid of up to 200 cards moving forever is a lot to impose to communicate one bit of state,
+ * and it keeps asking for attention long after it has been understood. Owner's call to drop it.
+ *
+ * The replacement says the same thing structurally: the grid becomes a recessed TRAY and the cards
+ * LIFT OFF IT. Loose objects resting on a surface are things you can pick up -- which is the whole
+ * message -- and unlike the wobble it holds that message without repeating it, reads identically to
+ * somebody who has reduced motion turned on, and costs nothing per frame.
+ *
+ * It arrives as a TRANSITION rather than an animation: a state the grid moves into over ~200ms and
+ * then stays in. There is one moment of change, which is what makes it noticeable, and no loop.
+ */
+/* `[data-gl-arrange]`, NOT `#gl-items`: that id is rendered only by a FLAT list, so on a sectioned
+   one the tray matched nothing -- no padding, no inset, no wash -- while the cards below still
+   lifted, and the mode read as "cards floating over nothing". The two halves are one signal. */
+[data-gl-arrange] {
+    /* Declared unconditionally so entering the mode has something to transition FROM. On a shorthand
+       that is only set in the active state, the first paint jumps.
+
+       `padding` IS NOT IN THE TRANSITION, and that is the point. It is a layout property, and
+       `can_reorder` permits up to `MAX_ITEMS_RENDERED` (200) cards -- at two columns on a phone that
+       is a hundred rows, so easing 12px of padding over 200ms reflows and repaints the whole
+       document every frame for a fifth of a second, and everything below the fold slides while it
+       does. Strictly worse than the `filter`-on-a-page-sized-element case this project bans. The
+       inset snaps in one frame; only the paint-only properties are eased. */
+    border-radius: 14px;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+#gl-items-panel[data-positioning] [data-gl-arrange] {
+    padding: 12px;
+    /* Tinted with the accent rather than merely darkened: it is the same language the position bar
+       above it speaks, so the two read as one mode rather than as two unrelated highlights. */
+    background: color-mix(in oklab, var(--pp-primary) 5%, var(--pp-bg-0));
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45),
+                inset 0 0 0 1px color-mix(in oklab, var(--pp-primary) 18%, transparent);
+}
+
+/* The cards come UP off that surface. `.pp-gcard` already transitions border-color and box-shadow
+   for its hover state, so this inherits the easing it was tuned with. The shadow is the load-bearing
+   half -- the accent border alone reads as "selected", which is a different and wrong idea. */
+#gl-items-panel[data-positioning] .gl-item .pp-gcard {
+    border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 10px 22px -8px rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* The END STATE is identical, so nobody loses the signal -- only the 200ms of easing into it. */
+    [data-gl-arrange] { transition: none; }
+}
+
+/* A PICKED-UP CARD. Clicking one is how the arrow keys get a target, so this has to be unmistakable
+   among up to two hundred cards that are all already lifted -- which is why it is a RING and not
+   more shadow. Elevation is the mode's language and is spoken by every card here; a second, louder
+   elevation would read as "more of the same" rather than as "this one".
+
+   `outline` rather than `border`, deliberately: a border would change the card's box and shift the
+   grid by a pixel as cards are picked up and dropped. */
+#gl-items-panel[data-positioning] .gl-item.is-picked .pp-gcard {
+    /* 3px at 3px offset, NOT the 2px/2px that `.pp-gcard:focus-visible` already draws. Identical
+       rings meant a keyboard user tabbing the grid saw the "held" mark on every card they passed. */
+    outline: 3px solid var(--pp-primary);
+    outline-offset: 3px;
+    border-color: var(--pp-primary);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 16px 34px -10px rgba(0, 0, 0, 0.6),
+                0 0 22px -6px color-mix(in oklab, var(--pp-primary) 55%, transparent);
+}
+
+/* SortableJS states. `forceFallback: true` is set in DragReorderManager, so the thing under the
+   cursor is `.sortable-fallback` (a clone on <body>) and `.sortable-ghost` is the gap left behind --
+   which is why the ghost is styled as a HOLE rather than as a moving card. */
+.gl-item.sortable-ghost {
+    opacity: 0.45;
+}
+/* The gap reads as an EMPTY SLOT in the tray, not as a faded card: the elevation the mode gives
+   every card is taken back off this one, so the hole looks like the hole.
+
+   ID-SCOPED, because it has to outrank the mode's own resting elevation. Written as
+   `.gl-item.sortable-ghost .pp-gcard` (0,3,0) it lost to `#gl-items-panel[data-positioning]
+   .gl-item .pp-gcard` (1,3,0), so `box-shadow: none` never applied and the "hole" was a lifted,
+   glowing card with a dashed ring on it -- the opposite of the intent, and invisible in review
+   because the outline and the opacity DID land. */
+#gl-items-panel[data-positioning] .gl-item.sortable-ghost .pp-gcard {
+    outline: 2px dashed color-mix(in oklab, var(--pp-primary) 60%, transparent);
+    outline-offset: -2px;
+    box-shadow: none;
+    background: transparent;
+}
+.gl-item.sortable-fallback {
+    cursor: grabbing;
+}
+/* The one under the cursor lifts FURTHER than the resting elevation, so the thing being moved is
+   unmistakably distinct from the ones it is moving past. Lifted, not enlarged: a scale here fights
+   the grid it is being dropped back into. */
+/* `fallbackOnBody: true` puts the clone on <body>, OUTSIDE `#gl-items-panel` -- so the mode's
+   accent border cannot reach it and the one card being dragged was the only one on screen without
+   it. Restated here rather than scoped, because the clone genuinely is not in the panel. */
+.gl-item.sortable-fallback .pp-gcard {
+    border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                0 22px 46px -12px rgba(0, 0, 0, 0.65);
+}
+.gl-item.sortable-fallback .gl-item__grab,
+.gl-item.sortable-fallback .gl-item__remove { opacity: 0; }
+
+/* The per-entry note, under the title rather than over the art. Clamped so one hunter's essay
+   cannot make its card twice the height of its neighbours and break the grid's rhythm. */
+.gl-item__note {
+    font-size: 11px; line-height: 1.35; color: var(--pp-text-dim);
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* No trophy list behind the concept at all (a `PP_*` stub, or one whose games were reassigned), so
+   there is no image in the chain to fall back to. The template renders THIS instead of the <img>,
+   filling the same frame with a glyph rather than leaving a broken one.
+
+   Named `gl-noart` rather than `gl-item__noart`: both the detail page's games and the browse/My
+   Lists cards use it, so scoping it to the `gl-item` block was a naming leak. */
+.gl-noart {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    color: var(--pp-text-mute);
+    background: color-mix(in oklab, var(--pp-text) 3%, var(--pp-bg-2));
+}
+.gl-noart svg { width: 34%; height: 34%; opacity: 0.5; }
+
+.gl-item.is-removing { opacity: 0.35; pointer-events: none; transition: opacity 0.18s ease; }
+
+/* ---- The adder ------------------------------------------------------------
+   The FIELD is `.pp-bgal__search` -- the site's search field, shared with the browse toolbars -- with
+   the shared `.pp-search-spin` / `.pp-search-clear` / `.pp-search-kbd` chrome inside it and
+   `PlatPursuit.wireSearchField` driving them. This file used to carry a private
+   `.gl-adder`/`__field`/`__icon`/`__input` set instead, and that went wrong twice over: `__field`
+   ended up with NO rule at all, so the wrapper stayed inline and the absolutely-positioned chrome
+   anchored to a ~19px line box; and the rest had drifted off the shared values on every dimension
+   (padding, radius, icon offset, font-size, background), so two search fields on one feature
+   disagreed about what a search field looks like. All of it is deleted.
+
+   Only the RESULT ROWS below are still this file's, because nothing shared renders a cover + title +
+   state row. They mirror the nav search's structure (`.pp-navsearch__*` in chrome.css) without
+   borrowing its block name: that block belongs to the site FRAME, and a page module reaching into it
+   couples the two. Same grammar, own namespace. */
+
+/* THE TEAM PREVIEW RIBBON. Deliberately unlike anything else on the page -- it is not part of the
+   product, it is a note to one person about what they are looking at, and a preview that blends in
+   is how you forget it is on and file a bug against it. Warm rather than accent, because the accent
+   here means "this control is live" and this control is not one. */
+.gl-preview {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin: 0 0 12px;
+    padding: 10px 13px;
+    border-radius: 12px;
+    border: 1px dashed color-mix(in oklab, var(--pp-warning) 55%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-warning) 9%, var(--pp-bg-1));
+    font-size: 0.74rem; line-height: 1.45;
+    color: var(--pp-text-dim);
+}
+.gl-preview > svg { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--pp-warning); }
+/* `1 1 0` for the reason the lockup's body carries: `basis: auto` is max-content, and this
+   sentence's max-content is ~800px, so it broke to its own line and left the eye glyph alone. */
+.gl-preview__body { flex: 1 1 0; min-width: 0; }
+.gl-preview__body strong { color: var(--pp-text); font-weight: 700; }
+.gl-preview__exit {
+    flex: none;
+    /* The 44px floor, reached with padding so the link keeps its type size. */
+    display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px;
+    font-weight: 700;
+    color: var(--pp-primary);
+}
+/* Guarded, like every other hover in this file: unguarded, the underline STICKS after a tap on
+   touch until something else is tapped. */
+@media (hover: hover) {
+    .gl-preview__exit:hover { text-decoration: underline; }
+}
+.gl-preview__exit:focus-visible {
+    outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: var(--pp-radius-sm);
+}
+/* Below 520px the ribbon's three parts leave the sentence about four words a line, so the exit link
+   drops beneath the text rather than being squeezed -- the reference standard's instruction for
+   exactly this, and the same 519/520 boundary the position bar already uses. */
+@media (max-width: 519px) {
+    .gl-preview { flex-wrap: wrap; }
+    .gl-preview__exit { margin-left: auto; }
+}
+
+/* THE ADDER IS THE TOOLBAR'S FOCAL POINT, and everything below is about earning that.
+ *
+ * It began as the bare shared field, which was correct and too quiet: in a grey bar between a
+ * section title and a sort select, three controls of equal weight, the one that adds a game read as
+ * one more filter. The owner's note was that it "is not really the focal point and can be easily
+ * overlooked", which is exactly what a shared neutral treatment buys you when one of the three
+ * controls is the primary action and the other two are chrome.
+ *
+ * RAISED, NOT REBUILT. Every rule here is scoped to `.gl-adder` and layers over `.pp-bgal__search`
+ * rather than replacing it, so the geometry, the `/` hint, the clear button and the spinner all stay
+ * the shared ones. This file already carries the scar from the other approach: a private field that
+ * drifted off the shared values on every dimension until two search fields on one feature disagreed.
+ *
+ * The accent lives at REST here, which is the one place this page spends it outside the arrange bar.
+ * A field that only lights up on focus cannot be the thing your eye lands on before you have touched
+ * anything. */
+/* QUALIFIED WITH `.gl-toolbar`, AND THAT IS THE WHOLE POINT OF THE SELECTOR. Unqualified this rule
+   never applied: `game-browse.css` sets `.pp-gbrowse__bar > .pp-bgal__search { flex: 1 1 200px }`,
+   which is (0,2,0) against this rule's (0,1,0), and specificity beats source order. So the adder kept
+   the shared 200px basis and went on sitting level with the sort -- exactly the "reads as its twin"
+   state this was written to fix -- for as long as the rule existed.
+   It hid well: below 520 the phone rule (already two classes) wins, and above ~768 the sort stops
+   growing so the adder takes the slack anyway. Only 520-767 showed it, which is no viewport anybody
+   was looking at. The test asserted the DECLARATION was in the file, which was true and proved
+   nothing about the cascade. */
+.gl-toolbar .gl-adder {
+    /* Takes the bar's slack. At the shared 200px basis this sat roughly level with the sort select;
+       the larger basis makes it the widest thing in the row wherever there is room, and the bar's
+       `flex-wrap` still drops it to its own full-width line on a phone. */
+    flex: 1 1 320px;
+}
+.gl-adder > svg {
+    /* The accent, and a touch larger than the shared 16px. The icon is the first thing read in a
+       field with placeholder text, so it carries the "this adds something" message on its own. */
+    width: 18px; height: 18px;
+    left: 12px;
+    color: var(--pp-primary);
+}
+.gl-adder input {
+    /* Taller than the shared field (7px padding lands ~31px, under the 44px floor the design system
+       sets and every other control in this feature's bar now carries) and with room for the wider
+       glyph. */
+    padding: 11px 12px 11px 38px;
+    min-height: 44px;
+    font-size: 13.5px;
+    border-color: color-mix(in oklab, var(--pp-primary) 38%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 6%, var(--pp-bg-2));
+    transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+/* The placeholder is the label here -- there is no visible one, because the toolbar already says
+   "Games" and a second heading over one field is noise -- so it reads at full text weight rather
+   than as the usual muted hint. */
+.gl-adder input::placeholder { color: var(--pp-text-dim); }
+@media (hover: hover) {
+    .gl-adder:hover input {
+        border-color: color-mix(in oklab, var(--pp-primary) 58%, var(--pp-border));
+        background: color-mix(in oklab, var(--pp-primary) 9%, var(--pp-bg-2));
+    }
+}
+/* Focus is a RING rather than a bigger border, so the field does not shift by a pixel when it takes
+   focus -- and it outranks the shared `:focus` rule below it on specificity, not on `!important`. */
+.gl-adder input:focus {
+    border-color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 10%, var(--pp-bg-2));
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 22%, transparent);
+}
+
+/* ON A PHONE THE ADDER TAKES ITS OWN ROW, beneath the title and the sort. Owner's call: with all
+   three controls competing for one line, the adder is squeezed to a few characters and the row reads
+   as three equal fragments rather than a label, a view control and an action.
+ *
+ * `order` ALONE DOES IT, because two things are already true: the shared bar wraps, and
+ * `.pp-gbrowse__sort` is given `flex: 1 1 auto` below 768 by `game-browse.css`, so once the adder
+ * leaves row one the sort grows to fill it. Nothing here needs to restate either.
+ *
+ * 599/600, AND NOT THIS FILE'S USUAL 519/520, because the arithmetic that chose 519 was measured
+ * against the wrong box. The flex container is the toolbar card's CONTENT box, which is the viewport
+ * less 32px of page gutter and 28px of card padding -- so the ~531px this row needs (title ~64 +
+ * sort ~131 + the adder's 320px basis + two 8px gaps) wants a ~591px VIEWPORT, not a 526px one.
+ * At 519/520 the band from 520 to ~585 would have put the adder back on row one and left the sort
+ * alone on row two as a 460px-wide select reading "A-Z". That was invisible only because the basis
+ * above was losing the cascade; fixing one without the other would have shipped it.
+ *
+ * ONE TRADE, stated rather than hidden: this moves the adder visually AFTER the sort while leaving it
+ * BEFORE in the DOM, so a keyboard user on a narrow viewport tabs to the adder (row two) before the
+ * sort (row one). The two are independent controls -- neither's meaning depends on the other's
+ * position -- so operability is preserved, which is the bar WCAG 2.4.3 actually sets. The only
+ * mismatch-free alternative is reordering the DOM, which would move the adder behind the sort on
+ * DESKTOP too, undoing the prominence it was just given. */
+@media (max-width: 599px) {
+    .gl-toolbar .gl-adder { order: 1; flex: 1 1 100%; }
+}
+
+/* An OVERLAY, like `.pp-navsearch__panel` and `.gd-lb__suggest`. In flow it pushed the whole grid
+   down by up to 336px on every debounced keystroke that changed the result count -- on a 375px phone
+   that left about one tile row visible, which contradicts the reason the adder sits above the games
+   at all. Anchors to `.pp-bgal__search`'s own `position: relative`; neither `.pp-toolbar-card` nor
+   `.pp-gbrowse__toolbar` sets `overflow`, so it escapes the card rather than being clipped. */
+.gl-adder__panel {
+    position: absolute;
+    /* Above `.mobile-tabbar` (z-index 40, fixed to the bottom below `lg`), which the previous 30
+       painted underneath. `.pp-navsearch__panel` uses 100 for the same job. */
+    z-index: 100;
+    top: calc(100% + 6px);
+    left: 0; right: 0;
+    /* `dvh`, not a fixed cap. 21rem is 336px; with the soft keyboard up on a 667px phone the
+       visual viewport is around 300px, so a panel anchored below a field that has itself been
+       pushed up was mostly off-screen -- and being `absolute` rather than `fixed`, the only way to
+       reach it was scrolling the page, which drags the input away too. The dialog in this same file
+       already carries this reasoning; the panel had none of it. */
+    max-height: min(21rem, 45dvh);
+    overflow-y: auto;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+.gl-adder__opt {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%;
+    padding: 7px 10px;
+    text-align: left;
+    color: inherit;
+    transition: background 0.14s ease;
+}
+.gl-adder__opt + .gl-adder__opt { border-top: 1px solid var(--pp-divider); }
+/* Guarded, like every other hover-background on the site: on touch an unguarded `:hover` STICKS
+   after a tap, leaving a row lit that is no longer under anything. `.is-active` was copied across
+   from `.pp-navsearch__opt`, which has a roving-active model; this uses real focus instead, so the
+   selector never matched anything and is gone rather than left as decoration. */
+@media (hover: hover) {
+    .gl-adder__opt:hover:not(:disabled) { background: oklch(1 0 0 / 0.06); }
+}
+.gl-adder__opt:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+/* Tailwind v4's preflight does NOT set `cursor: pointer` on buttons (verified in the compiled
+   output), so every comparable row on the site declares it -- `.pp-navsearch__opt`,
+   `.gl-suggest__chip`, `.pp-search-clear`. Without it these read as inert text. The
+   `:disabled { cursor: default }` below was written assuming a pointer that was never there. */
+.gl-adder__opt:not(:disabled) { cursor: pointer; }
+.gl-adder__opt:disabled { cursor: default; }
+
+.gl-adder__thumb {
+    width: 34px; height: 34px; flex-shrink: 0;
+    border-radius: 6px; overflow: hidden;
+    background: var(--pp-bg-2);
+    display: grid; place-items: center;
+    color: var(--pp-text-mute);
+}
+/* `object-cover object-top`, the site's rule for game art: PSN fallback covers are wider than the
+   portrait IGDB ratio and anchoring to the top keeps the game's logo in frame. */
+.gl-adder__thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.gl-adder__thumb svg { width: 15px; height: 15px; }
+
+.gl-adder__name {
+    flex: 1; min-width: 0;
+    font-size: 0.83rem; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gl-adder__state {
+    flex-shrink: 0;
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--pp-text-mute);
+}
+.gl-adder__opt:not(:disabled) .gl-adder__state { color: var(--pp-primary); }
+
+.gl-adder__note {
+    padding: 12px 10px;
+    font-size: 0.76rem;
+    color: var(--pp-text-mute);
+    text-align: center;
+}
+
+/* ============================================================
+   In-place editing: rename and publish
+   ============================================================ */
+
+/* The pencil beside the title. Quiet at rest like the remove control, but never hover-only -- it is
+   the only route to renaming, so it stays reachable by keyboard and visible on touch. */
+/* 44px, not the 26px this shipped with -- and this file already makes both arguments against
+   itself: it bumps `.gl-item__remove` to 44 on touch citing the design system, and it explains that
+   Tailwind v4's preflight sets no `cursor: pointer` on buttons so every comparable control must
+   declare it. The pencil is the ONLY route to renaming and had neither. The visible circle stays
+   26px; the rest is transparent padding, so the target grows without the button gaining weight. */
+.gl-edit { display: flex; flex-direction: column; gap: 10px; max-width: 34rem; }
+.gl-edit__foot { display: flex; align-items: center; gap: 8px; }
+
+/* ---- The publish beat ------------------------------------------------------
+   Publishing is the one moment on this page worth marking. A single sweep across the header card and
+   nothing else -- the standard asks for deliberate restraint, and a list going public is a quiet
+   satisfaction rather than a fanfare.
+
+   `--gl-sweep` is hoisted OUT of the keyframes on purpose: lightningcss drops frames containing
+   `color-mix()`, so a sweep written inline would compile away silently and the beat would simply
+   never play. */
+.gl-published {
+    --gl-sweep: color-mix(in oklab, var(--pp-primary) 26%, transparent);
+    position: relative;
+    /* LOAD-BEARING. The sweep is a pseudo-element the width of the card that travels from -30% to
+       130% of itself, so without a clip it does not sweep the header -- it leaves the header and
+       slides across the whole page. `position: relative` alone was not enough; that establishes the
+       positioning context, not a clipping one. Safe to apply because the class only exists for the
+       ~1s of the animation, and nothing in this card overflows it deliberately (the adder's overlay
+       panel lives in the toolbar card, a different section). An element's own box-shadow and border
+       are not clipped by its own `overflow`, so the card's lift and its left accent rule survive. */
+    overflow: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes glPublishSweep {
+        from { opacity: 0; transform: translateX(-30%); }
+        35%  { opacity: 1; }
+        to   { opacity: 0; transform: translateX(130%); }
+    }
+    .gl-published::after {
+        content: '';
+        position: absolute; inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        /* A narrow band rather than a half-card wash: the gradient is transparent until 34% and
+           again after 66%, so what crosses the card reads as a highlight passing over it instead of
+           a large bright object flying through. */
+        background: linear-gradient(100deg,
+                    transparent 34%, var(--gl-sweep) 50%, transparent 66%);
+        animation: glPublishSweep 900ms cubic-bezier(0.3, 0.7, 0.3, 1) both;
+    }
+}
+
+/* The list's own actions, as a BAND inside the header card rather than a wrap row loose beneath the
+   title. They belong in the header -- they act on the thing it describes, and the toolbar below is
+   about the games -- so the fix was the seam, not the location. A hairline and its own rhythm give
+   the controls a register distinct from the identity block above, which is what stopped them
+   reading as a sentence that had sprouted buttons.
+
+   The explanatory line takes its own row below `sm`, so a phone shows the controls and their caption
+   stacked rather than a button wedged against ten words of prose.
+
+   IT IS TARGETED BY ITS OWN CLASS, not by `> span:not(.contents)`, which is what this rule said
+   first and which matched NOTHING. The caption is a great-grandchild: `.gl-actions` holds a
+   `display: contents` wrapper, which holds another, which holds the caption. `display: contents`
+   promotes an element into the parent's FLEX layout but not into its DOM position, and combinators
+   match the DOM tree -- so the child combinator never reached it and the defect the band was added
+   to fix was still live at 375px. The layout half was right all along; only the selector was wrong,
+   which is why it looked correct. */
+.gl-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--pp-divider);
+}
+@media (max-width: 519px) {
+    .gl-actions__note { flex-basis: 100%; }
+}
+
+/* ============================================================
+   The list card
+   ============================================================
+   `.pp-gcard` with ONE change: a 4:3 cover instead of 3:4. A list's cover is a mosaic of up to four
+   real game covers, and at the card's own portrait ratio each of four gets a quarter of an already
+   narrow box. Wider gives them room -- and usefully makes a list read as a different KIND of object
+   from a game at a glance, which matters wherever the two sit near each other.
+
+   Everything else is inherited on purpose: radius, border, shadow, the hover glow, the focus ring,
+   the two-line clamped title with its min-height (so cards stay level), and the foot's hairline. */
+.pp-gcard--list .pp-gcard__cover { aspect-ratio: 4 / 3; }
+
+/* The mosaic is `position: absolute; inset: 0`, so it drops into the card's cover frame unchanged.
+   Its hover scale was keyed on `.pp-gtile` though, and the card is not one -- without this the art
+   sits still while every other card on the site lifts. */
+@media (hover: hover) {
+    .pp-gcard--list:hover .pp-gtile__mosaic { transform: scale(1.05); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-gcard--list .pp-gtile__mosaic { transition: none; }
+    .pp-gcard--list:hover .pp-gtile__mosaic { transform: none; }
+}
+
+.gl-card__author {
+    font-size: 11px; color: var(--pp-text-mute);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* THE MARK, CAPPED -- the one line that makes a marked byline truncate instead of losing its glyph.
+ *
+ * The rules above ellipsize a BARE text node, which is what ~99% of names are. A marked name is not
+ * a text node: `.pp-markname` is an `inline-flex`, and on a `white-space: nowrap` line nothing
+ * constrains its width, so it lays out at full natural size and the `overflow: hidden` above shears
+ * off whatever sticks out. The glyph sits AFTER the name, so the part sheared off is exactly the
+ * mark -- the staff wrench vanishes on precisely the long PSN IDs that needed the row to truncate.
+ * leaderboards.css:203 records the same failure from the other end ("pushed the supporter mark out
+ * of the row entirely").
+ *
+ * `max-width: 100%` gives the flex container a definite bound, so its own `min-width: 0` can finally
+ * do something: the inner `.pp-supname` (already `overflow: hidden; text-overflow: ellipsis`) absorbs
+ * the shrink, and `.pp-markname__glyph` is `flex: none` so the mark never does.
+ *
+ * Deliberately NOT `display: flex` on `.gl-card__author` itself. That would fix the marked case and
+ * break the unmarked one: a bare text node inside a flex parent becomes an anonymous flex item at
+ * min-content width, which cannot ellipsize at all. The 99% case must keep its block context. */
+.gl-card__author .pp-markname { max-width: 100%; }
+
+/* `margin-top: auto` pins the foot to the bottom of the body, so a one-line title and a two-line
+   title still line their counts up across a row. `.pp-gcard__body` is already a flex column. */
+.pp-gcard--list .pp-gcard__foot { margin-top: auto; }
+
+/* THE FOOT WRAPS BELOW `md`, and this is not precaution -- it CLIPPED.
+ *
+ * `.pp-gcard__foot` is `justify-content: space-between` with no wrap, and both children are nowrap,
+ * so neither can shrink below its text. At 375px the card is 166.5px and the body leaves ~148.5px:
+ * a count ("1,284 games", ~73px) plus a Private chip (~62px) plus a likes chip (~33px) plus the two
+ * gaps needs ~181px. `.pp-gcard` sets `overflow: hidden`, so the excess does not scroll or wrap --
+ * it cuts the like count off.
+ *
+ * game-card.css documents this exact failure, on this exact foot, for `.pp-gcard__facts`: "the row's
+ * floor is ~182px against a 148px body at 2 columns ... it CLIPS the last item." That comment was
+ * already in the file when this was written. Same component, same shape, same mistake, and the fix
+ * is the one it settled on: two lines below the breakpoint where it fits, costing ~18px of height
+ * and losing nothing.
+ *
+ * Reachable on My Lists, where `show_privacy` renders the extra chip -- and a private list can carry
+ * likes, since "Make private" un-publishes without zeroing the count. */
+@media (max-width: 767px) {
+    .pp-gcard--list .pp-gcard__foot { flex-wrap: wrap; row-gap: 6px; }
+    .pp-gcard--list .gl-card__marks { width: 100%; }
+}
+
+.gl-card__count {
+    font-size: 11px; font-weight: 600; color: var(--pp-text-dim);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+    flex-shrink: 0;
+}
+.gl-card__marks { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+
+/* The chip anatomy is `.pp-gcard__plat`'s, VALUE FOR VALUE -- same font-size, weight, tracking,
+   padding, radius, colour, fill and border. It was written a few pixels off on each of those for no
+   reason, and the two now sit in the same foot on a site where a reader sees both, so the wobble
+   would have read as sloppiness rather than as distinction.
+
+   It stays its own class rather than becoming `.pp-gcard--list .pp-gcard__chip`, which the card's
+   own convention would otherwise ask for, because the detail page's header uses it too -- outside
+   any card. A variant-scoped name would break there. */
+.gl-chip {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 3px 6px; border-radius: 4px;
+    font-size: 0.58rem; font-weight: 700; line-height: 1;
+    text-transform: uppercase; letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-bg-0) 55%, transparent);
+    border: 1px solid var(--pp-border);
+    white-space: nowrap;
+}
+.gl-chip svg { width: 10px; height: 10px; }
+/* The state signal must survive a squeeze; the like count is the expendable one. */
+.gl-chip--private { flex-shrink: 0; }
+/* Only the like count takes the accent, and only when there is one to show. */
+.gl-chip--likes { color: var(--pp-primary); border-color: color-mix(in oklab, var(--pp-primary) 35%, var(--pp-border)); }
+
+/* ═══ THE SPOTLIGHT ═══════════════════════════════════════════════════════════════════════════
+ *
+ * One featured list, between the filter toolbar and the browse grid. A band, not a fifth tile:
+ * a row of featured tiles that look like their neighbours says "these are popular", where one
+ * band with a written line says a person chose this. It is also the only place on the page that
+ * speaks in our voice.
+ *
+ * THE FIRST CUT WAS A WIDE TILE and it read as one: a four-cover mosaic beside three short lines,
+ * with most of a desktop-width band left as empty gradient. It looked HIGHLIGHTED rather than
+ * FEATURED. Three things changed, and all three come from the same principle -- the identity doc's
+ * rule for the Frame, that the art should be the loudest element:
+ *
+ *   1. The mosaic became a REEL of the list's real covers, running off the edge under a fade. It
+ *      fills the width by construction at every breakpoint, so the dead space cannot come back, and
+ *      it shows the list's substance instead of implying it with four crops.
+ *   2. The eyebrow became a real chip instead of 9.5px of tracked-out caps.
+ *   3. The title engages Bricolage's `wdth` axis, which visual-identity.md calls load-bearing --
+ *      "wider widths read as headline / monumental". Nothing else on the site used it yet.
+ *
+ * The editorial accent is still `.msc-spot`'s (milestone-cards.css:168): a local `--spot-c`, a
+ * diagonal wash, a tinted border that strengthens on hover.
+ */
+/* THE COLLAPSE WRAPPER. Filtering cannot remove the band from the DOM -- it lives outside the htmx
+ * swap target -- so it closes instead, and closing is a real animation rather than a `display:none`
+ * that drops the grid up the page mid-keystroke.
+ *
+ * `grid-template-rows: 1fr -> 0fr` is the technique: a grid row is animatable where `height: auto`
+ * is not, and the child clips itself (`.gl-spotlight` already sets `overflow: hidden`). The margin
+ * lives HERE rather than on the band so it can close too -- left on the band, a collapsed wrapper
+ * kept 28px of empty gap that read as a rendering fault. */
+.gl-spotwrap {
+    display: grid;
+    grid-template-rows: 1fr;
+    margin: 16px 0 12px;
+    transition: grid-template-rows 0.34s var(--pp-ease, ease),
+                margin 0.34s var(--pp-ease, ease),
+                opacity 0.2s ease;
+}
+.gl-spotwrap > * { min-height: 0; }
+.gl-spotwrap.is-collapsed {
+    grid-template-rows: 0fr;
+    margin-top: 0;
+    margin-bottom: 0;
+    opacity: 0;
+}
+/* THE PADDING AND BORDER HAVE TO GO TOO, and leaving them is why the first cut did not actually
+   collapse. A `0fr` row sizes the item's MARGIN box, and under `box-sizing: border-box` a 0px used
+   height floors the CONTENT box at zero while padding and border keep their own space. The band
+   carries both, so a filtered page kept 32px of invisible gap at base and 42px at `lg` -- exactly
+   the "empty gap that reads as a rendering fault" this wrapper was built to remove, moved from the
+   margin to the padding rather than solved. `min-height: 0` does not help: it answers the flex
+   min-content floor, not the box model. */
+.gl-spotwrap.is-collapsed > * {
+    padding-block: 0;
+    border-block-width: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+    .gl-spotwrap { transition: none; }
+}
+
+.gl-spotlight {
+    /* DECLARED ON THE BASE, not only in a variant. A `color-mix()` reading an undefined custom
+       property invalidates the whole declaration, which empties the wash and the border together --
+       the trap profile-hero.css:990 records having already emptied the badge meters. */
+    --spot-c: var(--spot-accent, var(--pp-primary));
+
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 15px 0 15px 15px;   /* no right padding: the reel runs to the edge and fades */
+    /* 13px, MATCHING THE CARDS, not `--pp-radius-md`. That scale (4/6/8px) is the CONTROL scale --
+       inputs, chips, buttons -- and 6px under a wall of 13px `.pp-gcard` tiles reads as a different
+       component family. `.pp-gtile` is 13px and `.msc-spot` is 12px; this belongs with them. */
+    border-radius: 13px;
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+    background: linear-gradient(135deg, color-mix(in oklab, var(--spot-c) 13%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 72%);
+    border: 1px solid color-mix(in oklab, var(--spot-c) 30%, var(--pp-border));
+    /* 0.18s LITERAL, not `var(--pp-dur)`. The token is 240ms, and every card this band sits beside
+       -- `.pp-gcard`, `.pp-gtile`, `.msc-spot` -- hovers at 0.18s. Using the token made the featured
+       element the slowest-reacting thing on a page of identical gestures. */
+    /* `padding` and `border-width` ride the wrapper's 0.34s collapse, not the 0.18s hover tempo --
+       they only ever change when the band is closing, and they have to finish with it or the gap
+       snaps shut after the height has already gone. */
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease,
+                padding 0.34s var(--pp-ease, ease), border-width 0.34s var(--pp-ease, ease);
+}
+
+/* THE BAND JOINS THE PAGE'S OPENING BEAT.
+ *
+ * This page is already choreographed: the header card plays `.pp-head-cascade`, then the grid
+ * springs in tile by tile (`lists-browse.js` -> `staggerReveal`). The band sat between the two and
+ * simply APPEARED -- the one static element in the middle of a sequence, and the most important
+ * thing on the page. Not restraint; an omission.
+ *
+ * SAME GRAMMAR AS THE TILES, deliberately, because the band must read as part of the same beat and
+ * not as its own effect: identical durations (420 / 500ms) and identical curves to the `reveal()`
+ * in `lists-browse.js`. Two SEPARATE animations, which is the part that is easy to get wrong -- the
+ * spring's overshoot control point is >1, so putting that curve on opacity too spikes it to full
+ * almost immediately and the fade reads as a hard flash instead of a fade. The grid's own comment
+ * records learning that.
+ *
+ * `backwards`, never `both`. `backwards` holds the hidden "from" state through the delay so nothing
+ * flashes before the beat; `both` would PERSIST the final transform, which makes the band a
+ * containing block forever and would quietly break the hover lift below.
+ *
+ * 0.16s lands it after the header's cascade has begun and just before the tiles, so the page reads
+ * top to bottom once rather than as three unrelated animations. */
+@media (prefers-reduced-motion: no-preference) {
+    .gl-spotlight {
+        animation: glSpotFade 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) 0.16s backwards,
+                   glSpotRise 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) 0.16s backwards;
+    }
+}
+/* Transform and opacity only -- no `color-mix()` anywhere near a keyframe, which lightningcss drops
+   silently, taking the whole frame with it. */
+@keyframes glSpotFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes glSpotRise { from { transform: translateY(14px) scale(0.965); } to { transform: none; } }
+
+.gl-spotlight__body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    padding-right: 15px;
+}
+
+/* THE CHIP. It was 9.5px of tracked-out caps, which is the site's label treatment -- correct for a
+   caption, far too quiet for the one line on the page that is us talking. A bordered pill at 11px
+   with the star reads as a mark of selection rather than as a field label. */
+.gl-spotlight__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px 4px 8px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--spot-c) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--spot-c) 38%, transparent);
+    color: var(--spot-c);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1;
+}
+.gl-spotlight__eyebrow svg { width: 12px; height: 12px; flex: none; }
+
+/* MONUMENTAL, via the OPTICAL SIZE axis -- not the width axis, which cannot do it.
+ *
+ * This said `"wdth" 100` and claimed to be reaching for the axis visual-identity.md calls
+ * load-bearing. It was inert: the `@font-face` declares `font-stretch: 75% 100%`, so 100 is the
+ * axis MAXIMUM, and 100 is also CSS's default for normal width. The declaration set the axis to
+ * the value it already had. Worse, the doc's "wider reads as headline" only produces contrast
+ * against something NARROWER, and nothing else on the site sets `wdth` at all -- so there was no
+ * baseline to read wide against even if it had moved.
+ *
+ * `opsz` is the axis that delivers it, and the Tally primitive is the precedent: it tracks optical
+ * size to font-size at every rung so the face reads monumental big and ledger small. At this
+ * title's 20.8-31.2px the matching rung is ~32.
+ *
+ * `font-weight: 800` ALONGSIDE the variation settings, which every other consumer in the project
+ * pairs and this one did not. Tailwind's preflight resets `h1..h6` to `font-weight: inherit`, so
+ * the computed weight was 400 from the anchor and the boldness came only from
+ * `font-variation-settings` -- which applies only once Bricolage loads. With `font-display: swap`
+ * the title painted in the fallback at 400 and then snapped to 800. */
+.gl-spotlight__name {
+    margin: 0;
+    font-family: var(--pp-font-display, inherit);
+    font-size: clamp(1.3rem, 2.4vw, 1.95rem);
+    font-weight: 800;
+    font-variation-settings: "opsz" 32, "wght" 800;
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    color: var(--pp-text);
+    /* Two lines maximum, so a long title wraps rather than pushing the pitch and the byline out of
+       a band whose height the reel is holding open. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.gl-spotlight__blurb {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--pp-text-dim);
+    max-width: 62ch;   /* prose stays readable even when the band is 1200px wide */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.gl-spotlight__foot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 1px;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 11.5px;
+    color: var(--pp-text-mute);
+}
+
+/* The byline is the shrinkable part: the game count is short, fixed and the thing that must not
+ * wrap. `min-width: 0` lets the name give way first.
+ *
+ * ALL THREE TRUNCATION PROPERTIES, not just `overflow`. The first cut copied `overflow: hidden` off
+ * `.gl-card__author` and left `white-space` and `text-overflow` behind, which inverted the bug it
+ * was supposed to prevent: a MARKED name was fine, because `.pp-markname .pp-supname` brings its own
+ * `nowrap` + `ellipsis`, while an UNMARKED one -- the overwhelming majority -- simply wrapped to two
+ * lines and pushed the whole foot row taller. `overflow: hidden` cannot clip that: this is a flex
+ * item with auto height, so it grows rather than overflowing. Half a shared pattern is its own bug. */
+.gl-spotlight__by {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.gl-spotlight__count,
+.gl-spotlight__dot { flex: none; }
+
+/* THE SAME CAP THE TILE BYLINE NEEDS, for the same reason: `.pp-markname` is an `inline-flex` and
+   an unbounded one lets its glyph overhang into the container's `overflow: hidden`. See the long
+   note on `.gl-card__author .pp-markname`. */
+.gl-spotlight__by .pp-markname { max-width: 100%; }
+
+/* ── the reel ────────────────────────────────────────────────────────────────────────────────
+ *
+ * A row of the list's covers that deliberately OVERFLOWS. The cut-off is the point: a strip that
+ * stops short of the edge looks unfinished, where one running under a fade says there is more of
+ * this list. `SPOTLIGHT_COVERS` (8) is chosen to overflow at desktop widths.
+ *
+ * The mask does the fading rather than a gradient overlay, because the band's own background is a
+ * diagonal wash -- an opaque overlay would have to match a gradient that changes across the band,
+ * and would be wrong the moment the accent changed. `-webkit-` first for Safari. */
+.gl-spotlight__reel {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* THE FADE ONLY WHEN THERE IS SOMETHING TO FADE. It was unconditional, and a reel that does not
+   overflow -- a short featured list, or any list at 2xl where the reel box outgrows eight covers --
+   had its LAST, fully-visible cover rendered at ~50% opacity with empty band beside it. That reads
+   as a rendering fault, which is the opposite of the "there is more of this list" the fade is for.
+   `lists-browse.js` measures `scrollWidth > clientWidth` and sets the class; CSS cannot ask. */
+.gl-spotlight__reel.is-overflowing {
+    -webkit-mask-image: linear-gradient(to right, #000 78%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 78%, transparent 100%);
+}
+
+/* `object-cover` + `object-position: top` is the house rule for game art: PSN fallback art is
+   square or 4:3 and crops into a 3:4 well, so anchoring to the top keeps the logo. */
+.gl-spotlight__cover {
+    flex: none;
+    width: 74px;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    object-position: top;
+    border-radius: 8px;
+    background: var(--pp-bg-2);
+    border: 1px solid color-mix(in oklab, var(--pp-text) 7%, transparent);
+    /* OPACITY ONLY -- see the hover block below for why nothing here may change size. */
+    transition: opacity 0.18s ease;
+}
+/* A generic PS placeholder rather than real art: contain it and let it sit on the well. */
+.gl-spotlight__cover--icon { object-fit: contain; padding: 8px; }
+
+@media (min-width: 640px) {
+    /* THE SPLIT AT 640, NOT 768, and this is the one place on the page that earns an `sm:`-width
+       rule: the stacked layout wastes more width the wider it gets, and 640 is where the text
+       column and a useful length of reel both fit. */
+    .gl-spotlight {
+        flex-direction: row;
+        align-items: center;
+        gap: 18px;
+        padding: 16px 0 16px 18px;
+    }
+    /* The text column stops growing; everything past it belongs to the reel. Without the cap the
+       body kept the whole band and the reel was squeezed to a sliver on wide screens. */
+    .gl-spotlight__body {
+        flex: 0 1 clamp(260px, 38%, 460px);
+        padding-right: 0;
+    }
+    .gl-spotlight__reel { flex: 1 1 auto; }
+    .gl-spotlight__cover { width: 88px; }
+}
+
+@media (min-width: 1024px) {
+    .gl-spotlight { gap: 22px; padding: 20px 0 20px 22px; }
+    .gl-spotlight__cover { width: 104px; }
+}
+
+@media (hover: hover) {
+    .gl-spotlight:hover {
+        border-color: color-mix(in oklab, var(--spot-c) 52%, var(--pp-border));
+        box-shadow: 0 14px 30px -18px color-mix(in oklab, var(--spot-c) 60%, #000);
+        transform: translateY(-2px);
+    }
+    /* NO REEL MOTION ON HOVER, deliberately, and this is the third position on it.
+     *
+     * The idea was a nudge that uncovered a little more of the next cover -- anticipation, so the
+     * band hints at where the click goes. It cannot be had cheaply, and two attempts each broke
+     * something:
+     *
+     *   1. `transform` on the REEL moved its `overflow` clip and its mask along with the content,
+     *      so the strip slid as a rigid unit, showed exactly the same pixels, and opened a sliver
+     *      of bare band at the right where the mask had already faded out. It revealed nothing.
+     *   2. `transform` on the COVERS revealed at the right by damaging the left: the row starts
+     *      flush with the reel's left edge, so sliding it left pushed the first cover 10px past
+     *      the clip and sheared a strip off the front of it. Reported from the page.
+     *
+     * Getting it right needs the row inset by the travel distance at rest, which buys a permanent
+     * gap that reads as misalignment against the text beside it. That is a lot of structure for a
+     * hint the fade mask already gives: the reel running off the edge IS the "there is more"
+     * affordance, and it is always visible rather than only on hover. The band lifting and its
+     * border brightening is the gesture; the art holds still. */
+
+    /* THE COVERS ANSWER INDIVIDUALLY INSTEAD, and this is the shape that works.
+     *
+     * The row recedes and the one under the pointer stays full, so the reader's own hand picks
+     * out a game. Paired with `title` on each cover, the hover is INFORMATIVE -- it names what you
+     * are pointing at -- which is what earns it, since the covers are not separately clickable and
+     * a purely decorative flourish would promise a target that does not exist.
+     *
+     * OPACITY, NOT SIZE, and that constraint is the whole reason this works where the row nudge
+     * did not. The first cover sits flush against the reel's `overflow` clip, so ANY geometric
+     * change -- a scale, a lift, a drop shadow -- pushes its leading edge past that clip and
+     * shears a strip off it. Opacity has no geometry, so cover one behaves exactly like cover five.
+     *
+     * Scoped to the REEL, not the band: hovering the title or the blurb should not dim the art,
+     * because nothing there is being picked out. */
+    .gl-spotlight__reel:hover .gl-spotlight__cover { opacity: 0.55; }
+    .gl-spotlight__reel .gl-spotlight__cover:hover { opacity: 1; }
+}
+
+.gl-spotlight:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /* The covers no longer MOVE, but they do fade, so their transition is switched off too. The
+       dim itself stays: it is a state change rather than motion, and it is what makes the hover
+       legible -- removing it would leave a reduced-motion reader with a tooltip and no visual
+       answer to "which one am I on". */
+    .gl-spotlight,
+    .gl-spotlight__cover { transition: none; }
+    .gl-spotlight:hover { transform: none; }
+}

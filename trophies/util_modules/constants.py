@@ -15,6 +15,31 @@ PREFERRED_MEDIA_PLATFORMS = ['PS5']
 # Games and we need to pick one canonical representative (e.g. for IGDB
 # search input selection where we want the most recent release's title).
 PLATFORM_PRIORITY_ORDER = ['PS5', 'PS4', 'PS3', 'PSVITA', 'PSP', 'PS2', 'PS1']
+_PLATFORM_PRIORITY_RANK = {p: i for i, p in enumerate(PLATFORM_PRIORITY_ORDER)}
+_PLATFORM_PRIORITY_FALLBACK = len(PLATFORM_PRIORITY_ORDER)
+
+
+def platform_priority_rank(title_platform):
+    """Return the PRIORITY rank of a game's newest platform. Lower = higher priority.
+
+    The priority-order twin of `platform_display_rank` below, and the same contract: a multi-platform
+    game (PS4+PS5 cross-buy) ranks by its NEWEST entry, and unknown platforms fall to the bottom.
+
+    `title_platform` is a `JSONField(default=list)` -- a LIST, always, even for a single-platform
+    game. That is the whole reason this lives here. Three private copies of this loop already existed
+    (`concept_split_service._platform_rank`, a closure inside `igdb_service`, and the DB-side
+    `_platform_priority_case` in `game_page_views`), a fourth was written for the list covers, and
+    the fourth was the one that forgot and did `RANK.get(game.title_platform)` -- a dict lookup on a
+    list, which is `TypeError: unhashable type: 'list'` on every real row. It 500'd four surfaces.
+
+    Converging the other three is a separate change; this is the shared home when that happens.
+    """
+    if not title_platform:
+        return _PLATFORM_PRIORITY_FALLBACK
+    return min(
+        (_PLATFORM_PRIORITY_RANK.get(p, _PLATFORM_PRIORITY_FALLBACK) for p in title_platform),
+        default=_PLATFORM_PRIORITY_FALLBACK,
+    )
 
 # Platform display order for game lists (badge stages, future browse sorts).
 # Newest first, with VR cohorts grouped between PS4 and PS3.

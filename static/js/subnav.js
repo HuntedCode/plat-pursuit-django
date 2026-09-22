@@ -54,7 +54,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 var a = document.createElement('a');
                 a.className = 'pp-subpill' + (p.classList.contains('is-active') ? ' is-active' : '');
                 a.href = p.href;
-                a.textContent = p.textContent;
+                // THE PILL IS MARKUP, NOT A STRING. This was `a.textContent = p.textContent`, which
+                // flattens a pill carrying a status chip: `Challenges<span class="…__tag">Soon</span>`
+                // rendered as the literal, unstyled word `ChallengesSoon` -- and, because the
+                // `aria-label` was not copied either, announced that way too. Worse than no chip.
+                // Cloning keeps the chip, its styling and any future child markup.
+                for (var i = 0; i < p.childNodes.length; i++) {
+                    a.appendChild(p.childNodes[i].cloneNode(true));
+                }
+                // Carried explicitly: a tagged pill states its own accessible name, and rebuilding
+                // the element would otherwise drop it back to the flattened contents.
+                if (p.hasAttribute('aria-label')) a.setAttribute('aria-label', p.getAttribute('aria-label'));
                 a.setAttribute('role', 'menuitem');
                 if (p.hasAttribute('aria-current')) a.setAttribute('aria-current', 'page');
                 grp.appendChild(a);

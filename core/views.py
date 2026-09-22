@@ -4,6 +4,7 @@ import time
 from django.conf import settings
 from django.contrib.staticfiles.finders import find
 from django.http import HttpResponse
+from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
 from trophies.mixins import StaffRequiredMixin
@@ -61,6 +62,42 @@ class AboutView(TemplateView):
 
 class ContactView(TemplateView):
     template_name = 'pages/contact.html'
+
+
+class ChallengesComingSoonView(TemplateView):
+    """A real page saying Challenges are on the way, not a redirect.
+
+    THE CALL WAS MADE WHEN THE SYSTEM WAS PARKED: somebody following a link into a system that is
+    mid-rebuild gets told so, in the site's own voice, rather than bounced to the homepage -- which
+    reads as a broken link and teaches people the link is dead.
+
+    It also stops the Community rail looking barren at the Game Lists launch. The rail's own comment
+    has said "Challenges and the Hall of Fame join this rail next" since it turned on; this is the
+    first half of that, standing in until the real browse replaces it AT THE SAME URL AND NAME, so
+    nothing that links here has to be updated when it does.
+
+    Costs no queries. It reads nothing and renders a static template.
+    """
+
+    template_name = 'pages/challenges_coming_soon.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Challenges'},
+        ]
+        # THE SHARE CARD MATTERS MORE HERE THAN ON AN INDEXED PAGE, which is the opposite of the
+        # intuition. `base.html` falls back to the site name and the generic site blurb, so a link
+        # pasted into Discord rendered "Platinum Pursuit" and a description about trophy tracking --
+        # telling a reader nothing about why it was sent to them. This page is `noindex`, so being
+        # passed around by hand is the ONLY way it travels, and the answer people want ("are my A-Z
+        # runs gone?") is the one thing worth putting in the preview.
+        context['seo_title'] = 'Challenges are coming back'
+        context['seo_description'] = (
+            'Challenges are being rebuilt from the ground up. Your past A-Z runs are safe.'
+        )
+        return context
 
 
 class WhatsNewView(TemplateView):

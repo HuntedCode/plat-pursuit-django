@@ -409,6 +409,11 @@
 {% endblock %}
 
 {% block js_scripts %}
+    {% comment %}The quick-add popover. Loaded per page rather than from `base.html`: it is only
+    useful where the shared game card renders its trigger, and every page that does not carry one
+    should not pay for the controller. The script itself is delegated from `document.body`, so an
+    htmx grid swap does not need it re-run.{% endcomment %}
+    <script src="{% static 'js/quick-add.js' %}"></script>
 {% if applied_default_query %}
 {% comment %}The bare hub rendered with bound defaults (SEO Lane 1): surface them in the URL
 without a redirect, so the scroller/pagination/filters -- which all read location.search --
@@ -500,7 +505,7 @@ behave exactly as the old redirected flow. Crawlers never run this and index the
             var fadeEase = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
             var springEase = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
             revealHandle = PlatPursuit.staggerReveal({
-                grid: grid, cardSelector: '.pp-gcard', step: 22,
+                grid: grid, cardSelector: '.pp-gcard', cellSelector: '.pp-gcard-wrap', step: 22,
                 reveal: function (el, delayMs) {
                     if (!el.animate) { return; }
                     el.animate([{ opacity: 0 }, { opacity: 1 }],
@@ -523,6 +528,10 @@ behave exactly as the old redirected flow. Crawlers never run this and index the
             scroller = PlatPursuit.InfiniteScroller.create({
                 gridId: 'items-grid', sentinelId: 'gbrowse-sentinel', loadingId: 'gbrowse-loading',
                 paginateBy: 30, cardSelector: '.pp-gcard',   // matches GamesListView.paginate_by
+                // THE GRID CELL. The quick-add button is a SIBLING of the card inside `.pp-gcard-wrap`,
+                // so cloning the card alone left every appended page without one -- page two onward,
+                // silently, with nothing on screen to show the difference.
+                cellSelector: '.pp-gcard-wrap',
                 onAppend: function (nodes) { if (revealHandle) { revealHandle.observe(nodes); } },
             });
         }

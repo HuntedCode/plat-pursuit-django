@@ -1,0 +1,95 @@
+{% comment %}
+The games on a list -- the sort swap's payload, and nothing else.
+
+ON THE SHARED GAME CARD, not the grouping tile. These are single GAMES, and a game should look the
+same everywhere on the site, so this is `.pp-gcard` in `.pp-gbrowse__grid` -- the same card and the
+same column ladder Browse Games uses.
+
+Why it moved off `.pp-gtile`: that tile overlays its title on the art behind a scrim, which works for
+a genre or franchise tile because the image there is ONE backdrop serving as decoration. Here the
+cover IS the content -- you scan the grid looking for a specific game by its art -- and the scrim
+needed to keep white text legible over high-contrast marketing covers darkens the very thing being
+scanned. Protecting the text hid the art; protecting the art lost the text. Separating them ends that
+trade rather than tuning it.
+
+Cards are TALLER this way (a cover plus a text strip, where the text used to sit inside the cover),
+so the column ladder pays it back: `.pp-gbrowse__grid` runs 2/3/4/5/6 against the tile grid's
+2/3/4/5, and its own comment gives the reason -- a catalogue you scan by cover art wants narrow
+columns.
+
+`pp-reveal` is baked in on htmx requests only (settle strips a JS-added class from id'd swapped
+elements), and `list-detail.js` wires the observer that clears it. NOT `gamelists.js`, which this
+said until an audit caught it -- that file is the My Lists page and is deliberately not loaded here,
+so the sentence pointed a reader at the wrong file for exactly the blank-grid bug it describes. Both
+halves, deliberately: baking the class with nothing to reveal it is what left the My Lists panel
+blank.
+{% endcomment %}
+
+{% comment %}GROUPED OR FLAT, and the branch is here rather than inside the grid.
+
+`groups` is None on a list with no sections, which is every list until somebody makes one -- so the
+common path renders exactly the single `#gl-items` grid it always did, and a sectioned list renders
+one grid per group through the same partial. The cards themselves are `detail_card.html` either way.
+
+`#gl-items-root` IS THE SWAP SENTINEL, and it exists so the JS has one element it can count on. Both
+refresh helpers prove a swap actually happened by checking that the node they remembered is not the
+node that is there afterwards -- htmx resolves its promise for every status and maps 4xx/5xx to
+`swap: false`, so a 500 is otherwise indistinguishable from success. They used `#gl-items` for that,
+which a SECTIONED list does not render at all: `null === null`, and every successful refresh of a
+sectioned list would have thrown "the items panel did not swap".
+{% endcomment %}
+{% comment %}`data-restart-numbering` is the SERVER's answer, and it is here rather than only on the
+checkbox because the checkbox is member-gated and the numbering is not. A lapsed member keeps a
+sectioned list that restarts its numbering and keeps arranging it, so the optimistic repaint has to
+know the mode from something they can still see -- reading the absent checkbox returned "continue
+through" and repainted all forty badges into the wrong mode on every drag, which the next page load
+silently undid.{% endcomment %}
+<div id="gl-items-root"{% if game_list.sections_restart_numbering %} data-restart-numbering="1"{% endif %}>
+{% if groups %}
+<div class="gl-groups">
+    {% for section, group_items in groups %}
+    {% include 'gamelists/partials/detail_group.html' with section=section items=group_items %}
+    {% endfor %}
+</div>
+{% elif items %}
+{% include 'gamelists/partials/detail_group.html' with section=None %}
+{% else %}
+<div id="gl-items" class="pp-gbrowse__grid{% if request.htmx %} pp-reveal{% endif %}">
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        {% if is_owner %}
+        <p class="pp-gtile-empty__title">No games yet</p>
+        <p class="pp-gtile-empty__hint">Add the first one and this list starts to look like something.</p>
+        {% else %}
+        <p class="pp-gtile-empty__title">Nothing on this list yet</p>
+        <p class="pp-gtile-empty__hint">Its author has not added any games.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% comment %}Closes `#gl-items-root`. This tag was here BEFORE the root was, left behind by the
+extraction that moved the grid into `detail_group.html` -- so it closed `#gl-items-panel` early, and
+everything below (the truncation line, the out-of-band chrome) rendered outside the panel it was
+meant to travel with while a second `</div>` in `detail.html` closed the page wrapper. The root now
+gives it something to close, which is the fix and not a coincidence: the swap sentinel and the
+missing wrapper turned out to be the same element.{% endcomment %}
+</div>
+
+{% if oob_chrome %}
+{% comment %}OUT-OF-BAND CHROME, sent only when the caller asks for it (`?chrome=1`).
+
+A type switch changes three server-rendered things: the cards (numerals and grips, in the swap
+above), which sorts exist, and whether the position bar exists at all. Those last two live OUTSIDE
+`#gl-items-panel`, so before this they could only be refreshed by reloading the whole page.
+
+A SECTION CHANGE ASKS FOR IT TOO, for the same reason under a different cause: making the first
+section on a Collection turns `can_arrange` on, deleting the last one turns it off, and both decide
+whether the numbering choice is a question worth asking. Same fragment, same round trip.
+
+NOT sent on the sort swap or the add/remove refresh -- those change none of it, and re-sending the
+select mid-sort would replace the control the hunter just used.{% endcomment %}
+{% include 'gamelists/partials/detail_positions.html' with oob=True %}
+{% if items %}{% include 'gamelists/partials/detail_sort_select.html' with oob=True %}{% endif %}
+{% endif %}

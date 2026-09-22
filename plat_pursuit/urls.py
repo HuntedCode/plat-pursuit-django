@@ -22,14 +22,26 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
+
+from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
+                            CreateListWithConceptView, CreateSectionView, DeleteListView,
+                            DeleteSectionView, GameListDetailView, ListGameSearchView,
+                            MyListsForConceptView, MyListsView,
+                            RemoveItemView, RenameSectionView, ReorderItemsView,
+                            ReorderSectionsView, ReportListView, ToggleFollowView,
+                            ToggleLikeView, UpdateListView)
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ChallengesComingSoonView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap,
     ListSitemap,
+    # `ListSitemap` above is TROPHY lists (the `Game` catalogue); this is the hunter-authored
+    # Game Lists system. Two different things whose names are one word apart, which is the same
+    # collision that made the sitemap a landmine in the first place.
+    GameListSitemap,
 )
 
 sitemaps = {
@@ -42,11 +54,16 @@ sitemaps = {
     # 'roadmaps' — withdrawn 2026-08-23 (SEO Lane 0): Roadmaps are hidden from the site with no
     # return promised, and a sitemap must not advertise pages nothing links to. The class stays
     # in core/sitemaps.py; re-register if the system returns.
-    # 'lists': GameListSitemap — dropped while Game Lists is hidden; the class stays in core/sitemaps.py
+    # Game Lists detail pages. Re-enabled 2026-09 when the system came off `_DevelopmentGate`,
+    # and ONLY after `GameListSitemap` was re-pointed from the legacy `trophies.GameList` to the
+    # rebuilt `gamelists.GameList` -- it reversed `list_detail`, which resolves to the new app, so
+    # enabling it unchanged would have published thousands of legacy ids against new-app routes.
+    'lists': GameListSitemap,
     # for the revamp, since nothing else about the system was deleted.
 }
 from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView,
                             HideBlurbView, DismissBlurbReportView, ApproveGameFlagView,
+                            ListReportQueueView, HideListTextView, DismissListReportView,
                             DismissGameFlagView)
 from trophies.views import GamesListView, GameDetailView, GamePageView, GameLeaderboardView, RandomGameView, ProfilesListView, SearchView, ProfileDetailView, ProfileDayView, ToggleSelectionView, BadgeHowItWorksView, BadgeListView, BadgeDetailView, GroupBadgeInspectView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, ProfileSuggestView, SiteSuggestView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeSeriesCreationView, BadgeRanksPanelView, OverallBadgeLeaderboardsView, LeaderboardRowsView, MyTitlesView, RateMyGamesView, ReviewsArchivedView, RoadmapDetailView, RoadmapEditorView, PlatCardsView, RecentlyAddedView, TrophyListsBrowseView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CareerView, JobsBrowseView, JobDetailView, JobRanksPanelView, JobContractsView, ContractsResultsView, ContractModalView, ContractModalPreviewView, CollectionView, CollectionBadgeModalView
 from milestones.views import MilestoneListView   # new milestones app (replaces the legacy trophies view)
@@ -373,22 +390,68 @@ urlpatterns = [
     path('my-guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_guides'),
 
     # Game Lists (canonical paths under /community/lists/)
-    # ── Game Lists: HIDDEN pending a revamp ──────────────────────────────────────────────────────
-    # Every entry point is gone (sub-nav, footer, community hub, sitemap, and the add-to-list button on
-    # game cards), and these send anyone arriving on an old link or bookmark to the homepage instead.
+    # ── Game Lists: LIVE (2026-09) ────────────────────────────────────────────────────────────────
+    # Public browse, public detail, personal My Lists, and eight write endpoints. This block said
+    # "HIDDEN pending a revamp", "every entry point is gone" and "STAFF ONLY" for a commit after all
+    # three stopped being true -- four false sentences in the first place a reader looks to learn who
+    # can reach a route, while `gamelists/views.py`, `core/sitemaps.py`, `core/hub_subnav.py`,
+    # `templates/partials/footer.html` and `robots.txt` had all been updated around it.
     #
-    # TEMPORARY on purpose, so `permanent=False` (302). A 301 is cached by browsers indefinitely and
-    # would keep redirecting to the homepage long after the rebuilt system ships -- for exactly the
-    # people who used lists most, since they are the ones holding the bookmarks.
+    # The PRE-2026 paths below still 302 (not 301) to the homepage: a 301 is cached by browsers
+    # indefinitely and those bookmarks belong to the people who used lists most. `/…/edit/` is among
+    # them deliberately -- the rebuild edits in place and has no such address.
+    path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
+    path('community/lists/create/', CreateListView.as_view(), name='list_create'),
+    # CHALLENGES, as a real page rather than a redirect while the system is rebuilt. Same URL and
+    # same name the real browse will take, so nothing that links here changes when it lands.
+    path('community/challenges/', ChallengesComingSoonView.as_view(), name='challenges'),
+    path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
+    # The list's own write endpoints. Under the page's path rather than /api/v1/, because they are
+    # this page's behaviour and share its gate -- routing them through the API app would mean a
+    # second permission stack that has to agree with the first.
+    # Rename, description and publish are ONE endpoint because they are one service call.
+    path('community/lists/<int:list_id>/update/', UpdateListView.as_view(), name='list_update'),
+    path('community/lists/<int:list_id>/reorder/', ReorderItemsView.as_view(), name='list_reorder'),
+    # Routed 2026-09 when the staff gate came off. The service function had existed and been tested
+    # since the rebuild with nothing calling it -- invisible while only staff could make a list, and
+    # a hard stop at list four for every free hunter the moment they could.
+    path('community/lists/<int:list_id>/delete/', DeleteListView.as_view(), name='list_delete'),
+    # Sections (2026-09). Creating and renaming are members-only, enforced in the service; the rest
+    # is arranging your own content and is open to any owner.
     #
-    # The NAMES stay resolvable. Templates that are no longer reachable still contain
-    # `{% url 'list_detail' %}`, and the views, models, data and the rebuilt browse page are all intact:
-    # this is a curtain, not a demolition. Restoring it is putting these four lines back.
-    path('community/lists/', RedirectView.as_view(url='/', permanent=False), name='lists_browse'),
-    path('community/lists/create/', RedirectView.as_view(url='/', permanent=False), name='list_create'),
-    path('community/lists/<int:list_id>/', RedirectView.as_view(url='/', permanent=False), name='list_detail'),
+    # A CROSS-SECTION DROP HAS TWO ROUTES, which is deliberate and is not a duplicate. At the real
+    # sequence it rides `list_reorder`, because there the drop changes both the order and the filing
+    # and those have to land together or not at all. Under any other sort the position beneath the
+    # cursor belongs to the VIEW rather than to the list, so sending it would rewrite the author's
+    # sequence to match a sort; `list_item_assign` below reports only the filing, which is all the
+    # drag meant. `AssignItemView`'s docstring carries the full argument.
+    path('community/lists/<int:list_id>/sections/', CreateSectionView.as_view(),
+         name='list_section_create'),
+    path('community/lists/<int:list_id>/sections/reorder/', ReorderSectionsView.as_view(),
+         name='list_sections_reorder'),
+    path('community/lists/<int:list_id>/sections/<int:section_id>/rename/',
+         RenameSectionView.as_view(), name='list_section_rename'),
+    path('community/lists/<int:list_id>/sections/<int:section_id>/delete/',
+         DeleteSectionView.as_view(), name='list_section_delete'),
+    path('community/lists/<int:list_id>/like/', ToggleLikeView.as_view(), name='list_like'),
+    path('community/lists/<int:list_id>/report/', ReportListView.as_view(), name='list_report'),
+    path('community/lists/<int:list_id>/follow/', ToggleFollowView.as_view(), name='list_follow'),
+    path('community/lists/<int:list_id>/add/', AddConceptView.as_view(), name='list_add_game'),
+    path('community/lists/<int:list_id>/items/<int:item_id>/remove/',
+         RemoveItemView.as_view(), name='list_remove_game'),
+    path('community/lists/<int:list_id>/items/<int:item_id>/section/',
+         AssignItemView.as_view(), name='list_item_assign'),
+    path('community/lists/<int:list_id>/search/', ListGameSearchView.as_view(),
+         name='list_game_search'),
+    # QUICK-ADD (2026-09): the entry points on the shared game card and the game pages. Keyed on the
+    # CONCEPT rather than a list, because the question they ask is "where can this game go" -- so
+    # these sit beside the list routes rather than under one.
+    path('community/lists/for-game/<int:concept_id>/', MyListsForConceptView.as_view(),
+         name='lists_for_concept'),
+    path('community/lists/new-with-game/<int:concept_id>/', CreateListWithConceptView.as_view(),
+         name='list_create_with_concept'),
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),
-    path('my-lists/', RedirectView.as_view(url='/', permanent=False), name='my_lists'),
+    path('my-lists/', MyListsView.as_view(), name='my_lists'),
 
     # Rate My Games wizard (ratings-only). Rehoused 2026-08 from /community/ to a root path under the
     # My Pursuit hub: it is login-required, noindex, and works only on YOUR library -- a personal tool
@@ -539,10 +602,14 @@ urlpatterns = [
     path('mod/', ModCenterView.as_view(), name='mod_center'),
     path('mod/quick-takes/', QuickTakeQueueView.as_view(), name='mod_quick_takes'),
     path('mod/game-flags/', GameFlagQueueView.as_view(), name='mod_game_flags'),
+    path('mod/list-reports/', ListReportQueueView.as_view(), name='mod_list_reports'),
     # Actions are POST-only (the views enforce it by defining no `get`): each mutates live data, and
     # a GET would be followed by a crawler, a prefetcher, or a bookmark.
     path('mod/quick-takes/<int:pk>/hide/', HideBlurbView.as_view(), name='mod_hide_blurb'),
     path('mod/quick-takes/<int:pk>/dismiss/', DismissBlurbReportView.as_view(), name='mod_dismiss_blurb'),
+    path('mod/list-reports/<int:pk>/hide/', HideListTextView.as_view(), name='mod_hide_list_text'),
+    path('mod/list-reports/<int:pk>/dismiss/', DismissListReportView.as_view(),
+         name='mod_dismiss_list_report'),
     path('mod/game-flags/<int:pk>/approve/', ApproveGameFlagView.as_view(), name='mod_approve_flag'),
     path('mod/game-flags/<int:pk>/dismiss/', DismissGameFlagView.as_view(), name='mod_dismiss_flag'),
 

@@ -33,7 +33,11 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 #: describes the world before the move.
 RETIRED_PATHS = (
     # canonical
-    '/community/challenges/',
+    # `/community/challenges/` IS NOT HERE ANY MORE. It answers a real "coming back soon" page as of
+    # 2026-09-19, holding the URL and the url_name the rebuilt browse will take so nothing that
+    # links to it has to change. `test_challenges_coming_soon.py` pins what it does and that it
+    # stays a placeholder (noindex, no queries). Every other path below is still a 404: the rebuild
+    # is not reusing them.
     '/community/challenges/az/create/',
     '/community/challenges/az/1/',
     '/community/challenges/az/1/setup/',

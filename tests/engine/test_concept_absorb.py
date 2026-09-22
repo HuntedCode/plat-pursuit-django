@@ -185,3 +185,180 @@ def test_rating_dedups_by_profile_and_group_keeping_survivors():
     assert UserConceptRating.objects.filter(profile=profile, concept=survivor).count() == 1
     # the doomed duplicate was not migrated and died with the cascade
     assert not UserConceptRating.objects.filter(pk=doomed_rating.pk).exists()
+
+
+# -- game list entries (gamelists.GameListItem, 2026-09) ------------------------------------------
+#
+# The rebuilt lists moved from Game keying to Concept keying, which put them inside absorb()'s
+# contract. CLAUDE.md is blunt about what happens to a new Concept FK that does not get a branch
+# here, and lists are a case where the loss would be invisible AND personal: a hunter curated a
+# backlog by hand, an admin merged two catalogue rows months later, and the entry is gone with
+# nothing anywhere saying why.
+
+
+def test_absorb_moves_list_entries_to_the_survivor():
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    profile = ProfileFactory(is_linked=True, psn_username='curator')
+    backlog = GameList.objects.create(owner=profile, name='Backlog', game_count=1)
+    entry = GameListItem.objects.create(game_list=backlog, concept=doomed, position=0)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    entry.refresh_from_db()
+    assert entry.concept_id == survivor.pk, 'the merge took a curated entry with it'
+
+
+def test_absorb_drops_a_list_entry_that_would_collide_rather_than_raising():
+    """A list already holding the survivor is the case a bare `.update()` cannot survive.
+
+    `unique(game_list, concept)` would raise mid-merge on the first such list, and absorb() is not
+    transactional -- so the exception lands after several branches have already committed, skips
+    every branch below it, and stops the caller's `other.delete()`. One hunter having both sides of
+    a merge on one list would break an admin's reassignment entirely.
+    """
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    profile = ProfileFactory(is_linked=True, psn_username='hadboth')
+    backlog = GameList.objects.create(owner=profile, name='Backlog', game_count=2)
+    kept = GameListItem.objects.create(game_list=backlog, concept=survivor, position=0)
+    doomed_entry = GameListItem.objects.create(game_list=backlog, concept=doomed, position=1)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    assert GameListItem.objects.filter(pk=kept.pk).exists(), 'the survivor entry was dropped'
+    assert not GameListItem.objects.filter(pk=doomed_entry.pk).exists()
+    assert GameListItem.objects.filter(game_list=backlog).count() == 1
+
+
+def test_absorb_only_drops_the_collision_and_moves_everybody_elses_entry():
+    """The dedup must be per LIST, not global. Somebody else's list that holds only the doomed
+    concept has no collision and must be re-pointed, not swept up with the ones that do."""
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    collider = ProfileFactory(is_linked=True, psn_username='hadboth')
+    innocent = ProfileFactory(is_linked=True, psn_username='hadone')
+
+    collided = GameList.objects.create(owner=collider, name='Both', game_count=2)
+    GameListItem.objects.create(game_list=collided, concept=survivor, position=0)
+    GameListItem.objects.create(game_list=collided, concept=doomed, position=1)
+
+    untouched = GameList.objects.create(owner=innocent, name='Only the doomed one', game_count=1)
+    moved = GameListItem.objects.create(game_list=untouched, concept=doomed, position=0)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    moved.refresh_from_db()
+    assert moved.concept_id == survivor.pk
+    assert GameListItem.objects.filter(game_list=collided).count() == 1
+
+
+def test_absorb_repairs_the_count_and_the_order_it_disturbs():
+    """The collision drop is a DELETE out of the middle of a list, and it broke both denormalized
+    invariants the lists module calls load-bearing.
+
+    `game_count` is what the browse grid shows and sorts on, and nothing recomputes it -- an
+    inflated counter cannot even come back down, because `PositiveIntegerField` is a DB CHECK and
+    the service's decrements floor at zero. Positions are consumed as dense by the cover prefetch
+    (`position__lt=4`), so the hole shows three covers on a four-game list.
+
+    Neither was asserted by the first three absorb tests: they seeded `game_count` by hand and then
+    never looked at it again.
+    """
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    profile = ProfileFactory(is_linked=True, psn_username='hadboth')
+    other = ConceptFactory()
+
+    backlog = GameList.objects.create(owner=profile, name='Backlog', game_count=3)
+    GameListItem.objects.create(game_list=backlog, concept=survivor, position=0)
+    GameListItem.objects.create(game_list=backlog, concept=doomed, position=1)
+    tail = GameListItem.objects.create(game_list=backlog, concept=other, position=2)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    backlog.refresh_from_db()
+    assert backlog.game_count == 2, 'the counter is stranded high and nothing can bring it back'
+
+    tail.refresh_from_db()
+    assert tail.position == 1, 'the merge left a hole in the dense-position contract'
+    assert list(
+        GameListItem.objects.filter(game_list=backlog).order_by('position')
+        .values_list('position', flat=True)
+    ) == [0, 1]
+
+
+def test_absorb_fixes_the_count_on_a_list_that_only_had_the_doomed_concept():
+    """Re-pointing alone changes no counts, but the repair pass must not BREAK the lists it did not
+    have to dedup."""
+    from gamelists.models import GameList, GameListItem
+
+    survivor, doomed = ConceptFactory(), ConceptFactory()
+    profile = ProfileFactory(is_linked=True, psn_username='hadone')
+    game_list = GameList.objects.create(owner=profile, name='Only doomed', game_count=1)
+    entry = GameListItem.objects.create(game_list=game_list, concept=doomed, position=0)
+
+    survivor.absorb(doomed)
+    doomed.delete()
+
+    entry.refresh_from_db()
+    game_list.refresh_from_db()
+    assert entry.concept_id == survivor.pk
+    assert entry.position == 0
+    assert game_list.game_count == 1
+
+
+
+def test_the_list_repair_does_not_scale_with_list_length():
+    """`absorb()` runs inside `Game.add_concept()` and therefore inside SYNC, and list size is
+    uncapped and attacker-controlled -- so the repair must not walk the rows.
+
+    The first version materialized every row of every touched list and issued one `save()` per
+    shifted item. Removing position 0 of a 50,000-item list was ~50,000 UPDATEs in the sync path.
+    Every existing test here passed, because they all use three-item lists where 3 statements and
+    30,000 look the same.
+
+    Query COUNT, not wall time: the point is that the number of statements is flat in list length.
+    """
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from gamelists.services import game_list_service as svc
+
+    def merge_with_a_list_of(size):
+        owner = ProfileFactory(is_linked=True, psn_username=f'curator-{size}')
+        keeper = ConceptFactory(unified_title=f'Keeper {size}')
+        doomed = ConceptFactory(unified_title=f'Doomed {size}')
+        game_list = svc.create_list(owner, name=f'List of {size}')
+        # Both concepts on one list -- the collision the repair exists for -- plus padding after
+        # them, so a re-walk has something to walk.
+        svc.add_concept(game_list, owner, keeper)
+        svc.add_concept(game_list, owner, doomed)
+        for n in range(size):
+            svc.add_concept(game_list, owner, ConceptFactory(unified_title=f'Pad {size}-{n}'))
+
+        with CaptureQueriesContext(connection) as captured:
+            keeper.absorb(doomed)
+        return len(captured.captured_queries), game_list
+
+    small, small_list = merge_with_a_list_of(3)
+    large, large_list = merge_with_a_list_of(40)
+
+    assert small == large, (
+        f'the merge cost grew from {small} to {large} queries between a 5-item and a 42-item list'
+    )
+
+    # And it is still CORRECT -- flatness is worthless if the repair stopped repairing.
+    for game_list in (small_list, large_list):
+        game_list.refresh_from_db()
+        positions = list(game_list.items.order_by('position').values_list('position', flat=True))
+        assert positions == list(range(len(positions))), f'positions are not dense: {positions}'
+        assert game_list.game_count == len(positions), 'game_count drifted from the rows'

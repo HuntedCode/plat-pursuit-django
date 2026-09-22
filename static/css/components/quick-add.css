@@ -1,0 +1,274 @@
+/* ============================================================
+   Quick-add: the button on a game card, and the one popover it opens
+   ============================================================
+   The button appears on the shared game card -- included by FOUR browse pages: Browse Games,
+   Recently Added, tag detail and Trophy Lists browse (Franchise and Company detail render their own
+   templates and get none) -- and on the two game detail pages. The popover is a single detached
+   element moved to whichever trigger was pressed; `static/js/quick-add.js` says why there is one.
+   ============================================================ */
+
+/* THE WRAPPER exists because the card is an `<a>` and a `<button>` inside a link is invalid HTML
+   that swallows the link's own activation. `.gl-item` on the list detail page is the same pattern
+   for the same reason. `.pp-gbrowse__grid` lays out with `grid-template-columns` and no
+   direct-child selectors, so this simply becomes the grid cell. */
+.pp-gcard-wrap { position: relative; display: flex; }
+.pp-gcard-wrap > .pp-gcard { flex: 1; min-width: 0; }
+
+/* THE TRIGGER. Top-right of the cover, mirroring where the list page puts its remove control, and
+   quiet until the card is hovered or the button itself takes focus -- the design conversation asked
+   for "an icon, not a labelled button", and this lands on four grids at once.
+
+   `z-index: 3` clears the community-flag overlay (2) that shares the cover's corners. */
+.pp-gcard__add {
+    position: absolute; top: 6px; right: 6px; z-index: 3;
+    display: grid; place-items: center;
+    width: 28px; height: 28px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-bg-0) 86%, transparent);
+    color: var(--pp-primary);
+    /* Tailwind v4's preflight does not set this on buttons. */
+    cursor: pointer;
+    opacity: 0;
+    /* AN INVISIBLE CONTROL MUST NOT BE TAPPABLE. `opacity: 0` hides a thing and keeps every one of
+       its hit targets, and this button carries a 44px `::before` -- so an unrevealed button sat
+       invisibly over the title, swallowing taps meant for the card. On a phone that reads as the
+       page freezing: nothing visible, nothing responding. Tied to opacity everywhere it changes. */
+    pointer-events: none;
+    transition: opacity 0.16s ease, color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.pp-gcard__add svg { width: 15px; height: 15px; }
+/* A REAL TOUCH TARGET at a 28px drawn size, the same transparent-`::before` trick `.gl-item__grab`
+   and `.gl-section__act` use. At THIS position (the cover's top-right, the desktop one) it has the
+   corner to itself: 22px above the button's centre is 2px past the top of the card, and the grid's
+   own 10-12px gap means it never reaches the card in the row above. The touch position is tighter and
+   biases the box downward -- see the block below. */
+.pp-gcard__add::before {
+    content: '';
+    position: absolute; top: 50%; left: 50%;
+    width: 44px; height: 44px;
+    transform: translate(-50%, -50%);
+}
+.pp-gcard-wrap:hover .pp-gcard__add,
+.pp-gcard__add:focus-visible { opacity: 1; pointer-events: auto; }
+/* ── ON TOUCH IT LEAVES THE ART ──────────────────────────────────────────────────────────────────
+ *
+ * Owner's call: a plus sitting permanently on every cover is noise on a catalogue you scan BY the
+ * cover -- the same argument this card's own template makes about the scrim it removed, where
+ * protecting the text hid the art. With no hover to reveal it, a touch device cannot have the
+ * desktop treatment, so the button moves into the text strip instead of being softened on the image.
+ *
+ * STILL A SIBLING of the anchor, because the title row is INSIDE it and a `<button>` in a link is
+ * the invalid HTML this whole wrapper exists to avoid. So it is positioned into the strip rather
+ * than placed in it.
+ *
+ * MEASURED FROM THE COVER, NOT FROM THE BOTTOM OF THE CARD. The first cut anchored with
+ * `bottom: 32px`, derived from the strip's padding, facts line and gap -- and landed the button at the
+ * bottom-right corner instead of beside the title, because `.pp-gcard__facts` becomes a TWO-ROW grid
+ * in one of its variants (`game-card.css`'s `:has(> .pp-gcard__mid)` block). Anything measured up
+ * from the bottom inherits every row below it, and those rows are not fixed.
+ *
+ * The cover IS fixed: `aspect-ratio: 3 / 4`, so its height is exactly 4/3 of the card's width. A
+ * PERCENTAGE MARGIN resolves against the containing block's WIDTH, which is the one place CSS will
+ * convert a width into a height -- so `margin-top: 133.333%` on a `top: 0` box lands precisely at the
+ * cover's lower edge, whatever the strip below does.
+ *
+ *   cover height        (W - 2px border) x 4/3  =  1.3333W - 2.67px
+ *   + the card's top border                     =  1.3333W - 1.67px   (top of the body)
+ *   + the body's 8px padding-top                =  1.3333W + 6.33px   (top of the title)
+ *   - centring 28px on the title's 15.6px line  =  1.3333W + 0.13px
+ *
+ * which rounds to the bare 133.333%. Written out because it looks like a magic number and is not.
+ *
+ * Long-press was the other candidate and was not taken: it would seize the browser's own long-press
+ * on a link (open in new tab, copy link, the iOS preview) across the main catalogue, it cannot be
+ * discovered, and it leaves a screen-reader user on a phone with no way in at all. */
+@media (hover: none) {
+    .pp-gcard__add {
+        opacity: 1;
+        pointer-events: auto;
+        top: 0;
+        /* The cover's own height, converted from the card's width. See the note above. */
+        margin-top: 133.333%;
+        right: 7px;
+        /* On the card's own surface now, not floating over an image, so it drops the scrim-ish
+           backdrop and reads as one more control in the strip. */
+        background: transparent;
+        border-color: transparent;
+        color: var(--pp-text-mute);
+    }
+    /* THE HIT BOX BIASES DOWN, INTO THE STRIP. Centred, its 44px would reach 22px up from a centre
+       that sits only ~15.8px below the cover's lower edge -- so the bottom 6px of the cover art, and
+       with it the whole right end of the progress bar, would open a list picker instead of the game.
+       On the strip's side there is nothing but the facts row, which is not interactive. The card's
+       art is the primary tap target on a catalogue; the control borrows from the text, not from it. */
+    .pp-gcard__add::before { top: calc(50% + 6px); }
+    /* Room for it, or a two-line title runs underneath. 28px of control plus the 7px inset. */
+    .pp-gcard-wrap .pp-gcard__title { padding-right: 36px; }
+    .pp-gcard__add:active { color: var(--pp-primary); }
+}
+
+/* ── THE ARRIVAL, done the way the earlier attempts should have been ─────────────────────────────
+ *
+ * The button is the card's SIBLING, so it does not inherit the grid's staggered reveal. On touch,
+ * where it is visible at rest, that left a row of grey plus signs hanging in empty space for up to a
+ * second while the cards faded up beneath them -- and because touch also makes it tappable, a tap in
+ * that window opened a list picker for a card that was not on screen yet. The same freeze the
+ * `pointer-events` note above was written about, arriving from the other direction: that fix tied the
+ * button's hit area to ITS OWN opacity, and the opacity that matters here is the CARD's.
+ *
+ * TWO EARLIER ATTEMPTS CHASED `.is-revealed` FROM A SIBLING SELECTOR AND BOTH BROKE something else --
+ * first hiding the button on every desktop grid (the re-hide outranked hover), then leaving it
+ * invisible-but-tappable. They were also aiming at the wrong thing: `.is-revealed` lands on frame 2
+ * for every card in the batch, whereas what actually holds a card invisible through its stagger delay
+ * is the WAAPI animation's `fill: 'backwards'`. A sibling selector cannot see that, so a rule keyed on
+ * `.is-revealed` alone would have shown the button ~950ms early and called the bug fixed.
+ *
+ * So the fix is in the engine, not here: `staggerReveal` takes a `cellSelector` and animates the CELL,
+ * which contains the button. The card and its control are now one moving thing. All this rule does is
+ * cover the one frame BEFORE that animation exists (and an appended cell still waiting on the
+ * observer), which is exactly what `.is-revealed` is good for. Guarded by the same media query as the
+ * card's own hide rule in `game-card.css`, because they are halves of one behaviour. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-gcard:not(.is-revealed) ~ .pp-gcard__add { opacity: 0; pointer-events: none; }
+}
+/* Guarded, or the lit state STICKS after a tap until something else is tapped. */
+@media (hover: hover) {
+    .pp-gcard__add:hover {
+        color: var(--pp-bg-0);
+        background: var(--pp-primary);
+        border-color: var(--pp-primary);
+    }
+}
+.pp-gcard__add[aria-expanded="true"] {
+    opacity: 1;
+    pointer-events: auto;
+    color: var(--pp-bg-0);
+    background: var(--pp-primary);
+    border-color: var(--pp-primary);
+}
+.pp-gcard__add:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ── The popover ─────────────────────────────────────────────────────────────────────────────────
+ *
+ * `position: fixed` and viewport coordinates, set by the JS. The trigger sits inside a grid cell
+ * with `overflow` ancestors and a transform-capable page wrapper, so an absolutely-positioned panel
+ * would be clipped by the first of those it met. z-index clears `.mobile-tabbar` (40), matching what
+ * the nav search and the list adder's own panel use. */
+.qa-pop {
+    position: fixed;
+    z-index: 100;
+    width: min(20rem, calc(100vw - 16px));
+    padding: 8px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+    overflow-y: auto;
+    /* WITHOUT THIS THE PANEL CLOSES ITSELF. Reaching the end of the row list chains the scroll to
+       the document, the window `scroll` listener fires, and the popover shuts mid-flick -- which a
+       hunter with enough lists to scroll hits every single time. */
+    overscroll-behavior: contain;
+    /* Set by the JS from the room the chosen direction actually has; this is the floor it starts
+       from before the first measurement. */
+    max-height: 21rem;
+}
+.qa-pop[hidden] { display: none; }
+
+.qa-pop__head {
+    margin: 0 0 6px; padding: 2px 6px;
+    font-size: 0.72rem; color: var(--pp-text-dim);
+    /* The game's name can be long and this is one line of context, not content. */
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.qa-pop__head strong { color: var(--pp-text); font-weight: 700; }
+
+.qa-pop__rows { display: flex; flex-direction: column; gap: 2px; }
+
+.qa-pop__row {
+    display: flex; align-items: center; gap: 9px;
+    width: 100%;
+    padding: 9px 8px;
+    /* The 44px floor every control in this feature carries. */
+    min-height: 44px;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--pp-text);
+    font-size: 0.78rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+@media (hover: hover) {
+    .qa-pop__row:hover { background: color-mix(in oklab, var(--pp-text) 8%, transparent); }
+}
+.qa-pop__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+
+.qa-pop__icon { flex: none; display: grid; place-items: center; width: 18px; height: 18px; color: var(--pp-text-mute); }
+.qa-pop__icon svg { width: 15px; height: 15px; }
+.qa-pop__row.is-on .qa-pop__icon { color: var(--pp-primary); }
+
+.qa-pop__name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qa-pop__count {
+    flex: none;
+    font-size: 0.68rem; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-text-mute);
+}
+
+/* A FULL list is shown disabled rather than hidden: "no room" and "not a list" are different
+   answers, and a picker that hides the first is lying about where a game can go. */
+.qa-pop__row--full { cursor: not-allowed; opacity: 0.55; }
+.qa-pop__tag {
+    flex: none;
+    padding: 2px 7px; border-radius: 999px;
+    font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 14%, transparent);
+}
+
+.qa-pop__empty,
+.qa-pop__loading,
+.qa-pop__capped {
+    margin: 0; padding: 10px 8px;
+    font-size: 0.72rem; line-height: 1.45;
+    color: var(--pp-text-dim);
+}
+.qa-pop__capped { border-top: 1px solid var(--pp-divider); margin-top: 6px; }
+.qa-pop__capped a { color: var(--pp-primary); font-weight: 700; }
+@media (hover: hover) { .qa-pop__capped a:hover { text-decoration: underline; } }
+
+/* "New list" -- the field and its button on one line, the same shape the sections bar uses. */
+.qa-pop__new {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 6px; padding-top: 8px;
+    border-top: 1px solid var(--pp-divider);
+}
+.qa-pop__input {
+    flex: 1 1 0; min-width: 0;
+    padding: 9px 10px; min-height: 44px;
+    border-radius: 9px;
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-2);
+    color: var(--pp-text);
+    font-size: 0.76rem;
+}
+.qa-pop__input:focus {
+    outline: none;
+    border-color: var(--pp-primary);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--pp-primary) 20%, transparent);
+}
+.qa-pop__go {
+    flex: none;
+    padding: 0 12px; min-height: 44px;
+    border-radius: 9px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    color: var(--pp-primary);
+    font-size: 0.74rem; font-weight: 700;
+    cursor: pointer;
+}
+@media (hover: hover) {
+    .qa-pop__go:hover { background: var(--pp-primary); color: var(--pp-bg-0); }
+}
+.qa-pop__go:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }

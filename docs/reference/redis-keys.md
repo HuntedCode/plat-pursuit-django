@@ -218,6 +218,23 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 
 **Files**: `trophies/services/comment_service.py`, `trophies/services/checklist_service.py`
 
+### Game Adder (Typeahead)
+
+| Key Pattern | TTL | Purpose |
+|-------------|-----|---------|
+| `adder:search:{lowercased query}` | 60s | The catalogue half of a typeahead answer: `[{concept_id, title, cover}]`, capped at 12 rows |
+
+Keyed on the query and **nothing else** -- not the caller, not the container, not the viewer. That is
+what makes the expensive half shareable across every adder on the site, and it is why the
+"already in this list" flag is applied to the cached rows AFTER the lookup rather than being baked
+into them. A viewer-keyed variant would be a cache that is permanently cold for the whole long tail.
+
+The prefix is `adder:` rather than the `gamelists:search:` it shipped as, because the cached value is
+a catalogue answer that was never about lists; a second adder elsewhere should share it. The rename
+costs one minute of cold cache and needs no deploy step.
+
+**Files**: `gamelists/services/game_search.py`
+
 ### Notifications
 
 | Key Pattern | TTL | Purpose |

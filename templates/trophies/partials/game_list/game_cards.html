@@ -15,19 +15,31 @@
     stays the uncondensed game_detail branch. The two flags are mutually exclusive by
     construction: only Browse Games/tag detail set condensed_cards, only Trophy Lists browse
     sets list_identity_cards.{% endcomment %}
-    <a href="{% if condensed_cards and game.concept_id %}{{ game.concept.game_page_url }}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="pp-gcard" data-gcard>
+    {% comment %}THE WRAPPER EXISTS FOR THE QUICK-ADD BUTTON, and only where there is one. The card
+    IS an `<a>`, and a `<button>` nested inside a link is invalid HTML that swallows the link's own
+    activation -- the bug `gamelists/partials/detail_card.html` documents, where the same problem was
+    solved the same way. `.pp-gbrowse__grid` lays out with `grid-template-columns` and no
+    direct-child selectors, so a wrapper simply becomes the grid cell.
+
+    RENDERED ONLY WHEN THE BUTTON IS, so a grid with no button keeps exactly the DOM it had. The
+    button needs a signed-in linked hunter and a CONCEPT: a conceptless row (a trophy list whose games
+    were reassigned) has nothing a list could hold, and offering it would file nothing.
+
+    THIS PARTIAL IS INCLUDED BY FOUR BROWSE PAGES -- Browse Games, Recently Added, tag detail and
+    Trophy Lists browse. Franchise and Company detail render their own templates and get no button;
+    an earlier version of this note claimed them, and the CSS claimed six page types.{% endcomment %}
+    {% with quick_add=game.concept_id %}
+    {% if quick_add and request.user.is_authenticated and request.user.profile.is_linked %}<div class="pp-gcard-wrap">{% endif %}
+    <a href="{% if condensed_cards and game.concept_id %}{{ game.concept.game_page_url }}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}" class="pp-gcard" data-gcard draggable="false">
         {% comment %} Cover: IGDB-first via display_image_url (helper owns the fallback chain). Community flag
-        icons overlay top-left; the quick-add button top-right (signed in); the viewer's progress rides the
-        bottom edge (platinum-tinted once earned). {% endcomment %}
+        icons overlay top-left; the viewer's progress rides the bottom edge (platinum-tinted once
+        earned). The quick-add button also sits top-right but is NOT in here -- it is a sibling of the
+        anchor, for the invalid-HTML reason the wrapper above explains. {% endcomment %}
         <div class="pp-gcard__cover">
-            <img src="{{ game.display_image_url }}" alt="{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}" loading="lazy"
+            <img draggable="false" src="{{ game.display_image_url }}" alt="{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}" loading="lazy"
                  class="pp-gcard__art{% if not game.has_cover_art %} pp-gcard__art--placeholder{% endif %}" />
 
             {% include 'trophies/partials/_game_flags.html' with game=game variant='overlay' %}
-
-            {% comment %}Add-to-list: removed while the Game Lists system is hidden pending its revamp. A
-        button that files a game into somewhere nobody can open is worse than no button -- it
-        collects data the revamp then has to reconcile. Restore with the system.{% endcomment %}
 
             {% comment %} Progress fill colour encodes completion state (5 states): plat+100% = platinum;
             plat earned but <100% (post-plat DLC) = muted teal; 100% w/o a plat = green; a plat available but
@@ -123,6 +135,36 @@
             {% endwith %}
         </div>
     </a>
+    {% if quick_add and request.user.is_authenticated and request.user.profile.is_linked %}
+    {% comment %}OUTSIDE the anchor, positioned by CSS, and it sits in TWO different places: over the
+    cover's top-right corner on a pointer device, quiet until the card is hovered or the button takes
+    focus; and down in the title row, visible at rest, on touch -- where there is no hover to reveal it
+    and a plus permanently on the art is noise on a catalogue you scan BY the art. The design
+    conversation asked the card affordance to be "an icon, not a labelled button". Four browse pages,
+    per the note above; an earlier version of this line said six.
+
+    It carries the CONCEPT and the title and nothing else: the popover fetches the rest when it
+    opens, because a grid of 24 cards must not carry 24 copies of a hunter's list collection.{% endcomment %}
+    <button type="button" class="pp-gcard__add" data-quick-add
+            data-concept-id="{{ game.concept_id }}"
+            {% comment %}THE ROUTES, from the server. The client used to build these paths from
+            string literals, which is what breaks silently the day one moves.{% endcomment %}
+            data-lists-url="{% url 'lists_for_concept' game.concept_id %}"
+            data-create-url="{% url 'list_create_with_concept' game.concept_id %}"
+            {% comment %}THE NAME THE CARD SHOWS, all three ways it can be chosen. This branched on
+            `condensed_cards` alone and fell back to `title_name`, which is wrong in the THIRD mode:
+            Trophy Lists browse titles its cards from the observed PSN list name, so a regional stack
+            reading "Bloodborne (EU)" in the grid announced "Add Bloodborne to a list".{% endcomment %}
+            data-game-name="{% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %}"
+            aria-haspopup="dialog" aria-expanded="false"
+            aria-label="Add {% if list_identity_cards %}{{ list_name_map|dict_get:game.np_communication_id|default:game.title_name }}{% elif condensed_cards and game.concept_id %}{{ game.concept.unified_title|default:game.title_name }}{% else %}{{ game.title_name }}{% endif %} to a list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"/>
+        </svg>
+    </button>
+    </div>
+    {% endif %}
+    {% endwith %}
 {% endwith %}
 {% empty %}
     <div class="pp-gcard-empty">

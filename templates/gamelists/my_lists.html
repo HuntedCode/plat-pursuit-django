@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}My Lists{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% comment %}
+My Lists. Built from scratch: unlike browse and list detail, this page was never rebuilt in 2026-08
+and was still a pre-rebuild DaisyUI shell (plain `card` divs, a raw grid, no head cascade).
+
+Structure follows the site-wide rule -- STACKED chrome cards, then the content flowing FREE. Header
+card, then the segmented switcher, then the tile grid with no outer wrapper around it, because an
+outer card traps a paginated grid inside an ever-growing border.
+
+The switcher EARNS its place here, where the browse page's deliberately does not: there are two real
+kinds of thing to see. "Following" is also the only delivery surface a follow has -- there is no
+notification system this release -- so the tab is the feature, not decoration on it.
+{% endcomment %}
+
+{% block content %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Header: identity, the cap as a fact rather than a surprise, and the one primary action ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">My Lists</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        A backlog, a ranking, a run in order. Yours until you publish one.
+                    </p>
+                    {% if at_cap %}
+                    <p class="text-xs text-warning mt-1">
+                        You are at your limit of {{ list_cap }} lists. Delete one to make room.
+                    </p>
+                    {% endif %}
+                </div>
+
+                {% comment %}The tally alone, as every other rebuilt header has it. The action moved
+                down to the switcher row: a control sharing the display slot sat at the same optical
+                level as the number and the two competed.{% endcomment %}
+                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ list_count }}<span class="text-base-content/40">/{{ list_cap }}</span></span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">lists</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %}The site's one sanctioned tab treatment, with the behaviour that makes it one: the
+    chips HTMX-swap the panel below instead of reloading the page, exactly as Badges' Series|Gallery
+    toggle does. `href` is kept as the no-JS fallback -- the server honours `?scope=` either way --
+    and `wireTablist` supplies the roving tabindex and Arrow/Home/End model.
+
+    An earlier cut used plain links with `role="group"`. That was an honest description of what it
+    did and a dishonest one of what it should do: on this site a segmented switcher swaps.{% endcomment %}
+    {% comment %}A real toolbar row rather than the switcher alone with the page's primary action
+    stranded up in the header's display slot.
+
+    ACTION LEFT, SWITCHER RIGHT. The first arrangement had these the other way round on the general
+    principle that a primary action pins right -- but the principle that actually applies here is the
+    narrower one: every segmented switcher on this site is right-aligned (Career, the badge list, the
+    franchise list, the share picker), and that consistency is worth more than a generic toolbar
+    convention. A reader who has learned where the switcher lives should find it in the same place
+    on every page that has one.{% endcomment %}
+    <div class="flex items-center justify-between gap-3 mt-5 mb-3">
+        {% comment %}`aria-disabled`, NOT `disabled`. A truly disabled button takes no pointer events
+        (so its title never renders as a tooltip) and leaves the tab order (so it can never be focused
+        or announced) -- the at-cap explanation was unreachable by every route including the mouse.
+        This stays focusable and announced, and the reason is rendered as visible text in the header
+        above rather than hidden in an attribute.
+
+        `.pp-cta`, the shared button primitive, rather than DaisyUI's `btn`: it carries the house
+        glow-on-hover and focus ring, and it is what the modal's own actions use, so the button and
+        the thing it opens speak the same language. The label is hidden below `md` because this row
+        also holds the switcher, and two labelled controls do not fit at 375px -- which is why the
+        `aria-label` is unconditional, since `hidden` drops the span from the accessibility tree and
+        would leave the page's primary action announced as a bare "button".{% endcomment %}
+        <button type="button" class="pp-cta shrink-0" data-gl-open
+                aria-label="New list"{% if at_cap %} aria-disabled="true"{% endif %}>
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="hidden md:inline">New list</span>
+        </button>
+
+        <div class="pp-switch" role="tablist" aria-label="Which lists to show" data-gl-scopes>
+            {% for value, label in scopes %}
+            <a href="?scope={{ value }}"
+               hx-get="{% url 'my_lists' %}?scope={{ value }}"
+               hx-target="#my-lists-panel"
+               hx-swap="innerHTML"
+               hx-push-url="true"
+               role="tab" id="gl-scope-{{ value }}"
+               aria-controls="my-lists-panel"
+               aria-selected="{% if scope == value %}true{% else %}false{% endif %}"
+               data-scope="{{ value }}"
+               class="pp-switch__chip{% if scope == value %} is-active{% endif %}">
+                {% if value == 'mine' %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                {% else %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+                {% endif %}
+                <span class="pp-switch__lbl">{{ label }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% comment %}A STABLE WRAPPER as the swap target, with `innerHTML` -- which is what every other
+    switcher on this site does (Badges into `#badge-view`, browse into `#browse-results`). The first
+    cut swapped the grid element itself by its outer HTML, replacing the target node on every switch;
+    that diverged from the one pattern known to work here, and it duplicated the page instead of
+    swapping. A wrapper the swap never destroys is also what lets anything that must OUTLIVE a swap
+    (a sentinel, a spinner) live beside the grid later.{% endcomment %}
+    <div id="my-lists-panel" role="tabpanel"
+         aria-labelledby="gl-scope-{{ scope }}" data-gl-panel>
+        {% include 'gamelists/partials/my_lists_results.html' %}
+    </div>
+
+    {% comment %}Infinite scroll: sentinel + spinner OUTSIDE the swapped panel so they survive every
+    scope switch, exactly as the browse page does it. Not decoration -- `MyListsView` sets
+    `paginate_by`, and Following is UNCAPPED (you can follow any number of lists), so without a
+    scroller the 25th followed list was unreachable by any route: no pager, no page-2 link, and the
+    chip's href carries no page. Shipping `paginate_by` with no way to reach page two is the same
+    half-a-contract mistake as baking `pp-reveal` with nothing to reveal it.{% endcomment %}
+    <div id="gl-my-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="gl-my-loading" class="pp-gbrowse__loading hidden">
+        <span class="pp-gbrowse__spinner" aria-hidden="true"></span>
+    </div>
+</div>
+
+{% comment %}
+Create, in a native <dialog> on the `.gd-modal` recipe -- the house pattern for form sheets, and the
+element that brings a real focus trap, Escape, and focus restoration on close for free.
+
+It wraps a plain form that posts and redirects, which is worth having: no JSON round trip, no
+optimistic DOM, nothing to reconcile when the service refuses. It is NOT progressive enhancement,
+though -- an earlier comment here claimed that and it was false. With JavaScript off the dialog is
+`display: none` and the only opener is a `<button type="button">`, so creating a list is impossible.
+Graceful degradation of the skin over a working endpoint is the honest description.
+
+There is deliberately NO public/private control here. A list is private when it is born, and
+publishing is its own act on the list itself. Offering the toggle at creation would make it a
+checkbox somebody ticks while thinking about a name, which is exactly what makes the state
+meaningless.
+{% endcomment %}
+<dialog id="gl-create" class="gl-dialog" aria-labelledby="gl-create-title"
+        aria-describedby="gl-create-sub">
+    {% comment %}`pp-dismissable` is NOT set here: `dismissableSheet` adds it to the element it is
+    handed, and setting it in the template too rendered a second grab pill floating at the top of the
+    screen on touch.{% endcomment %}
+    <div class="gl-dialog__head">
+        <div>
+            <h2 class="gl-dialog__title" id="gl-create-title">New list</h2>
+            <p class="gl-dialog__sub" id="gl-create-sub">Private to start. You can publish it whenever it is ready.</p>
+        </div>
+        <button type="button" class="gl-dialog__close" data-gl-close aria-label="Close">&times;</button>
+    </div>
+
+    <form method="post" action="{% url 'list_create' %}">
+        {% csrf_token %}
+        <div class="gl-dialog__body stg-form">
+            {% comment %}The counters sit OUTSIDE the <label> and are reached by `aria-describedby`.
+            Inside it they polluted the accessible name ("Name 0/60"), which is why the first version
+            marked them `aria-hidden` -- but that hid the only signal that the field has stopped
+            accepting input, since `maxlength` swallows keystrokes silently. `aria-live="polite"`
+            announces the escalation.
+
+            `maxlength` comes from the model constant, so the number the counter shows is the number
+            the service enforces by construction.{% endcomment %}
+            <div class="stg-field">
+                <label class="stg-field__label" for="gl-name">Name</label>
+                <input type="text" id="gl-name" name="name" class="stg-input" required autofocus
+                       maxlength="{{ name_max_length }}" data-charcount autocomplete="off"
+                       aria-describedby="gl-name-count" placeholder="The Backlog" />
+                <span class="gl-countchars" id="gl-name-count" data-charcount-for="gl-name"
+                      aria-live="polite"></span>
+            </div>
+
+            {% comment %}Suggestions, not a menu of the only options -- naming a list is how you tell
+            two of your own apart, so it stays free text. Grouped and labelled, because otherwise a
+            keyboard or screen-reader user tabbing off Name meets eight unexplained buttons.{% endcomment %}
+            <div class="gl-suggest" role="group" aria-label="Suggested names">
+                {% for suggestion in suggested_names %}
+                <button type="button" class="gl-suggest__chip" data-gl-suggest>{{ suggestion }}</button>
+                {% endfor %}
+            </div>
+
+            <div class="stg-field">
+                <label class="stg-field__label" for="gl-description">
+                    Description <span class="stg-field__hint">optional</span>
+                </label>
+                <textarea id="gl-description" name="description" class="stg-input" rows="3"
+                          maxlength="{{ description_max_length }}" data-charcount
+                          aria-describedby="gl-description-count"
+                          placeholder="What is this list for?"></textarea>
+                <span class="gl-countchars" id="gl-description-count"
+                      data-charcount-for="gl-description" aria-live="polite"></span>
+            </div>
+
+            {% comment %}A FIELDSET of radios, not a <select>. Two options whose difference needs a
+            sentence each: a select hides both the second option and every explanation behind a tap,
+            which is how somebody makes a Collection while meaning to make a Ranked list.
+
+            Radios also mean the dialog still works with no JavaScript, which the whole form already
+            does deliberately -- the modal is enhancement over a form that would submit on its own.
+
+            Options come from the model (`list_type_options`), so this cannot offer a type the
+            service would refuse, and a new type arrives here with its label AND its explanation
+            rather than appearing as a bare value.{% endcomment %}
+            <fieldset class="stg-field gl-type">
+                <legend class="stg-field__label">Type</legend>
+                <div class="gl-type__opts">
+                    {% for value, label, blurb in list_type_options %}
+                    <label class="gl-type__opt">
+                        <input type="radio" name="list_type" value="{{ value }}"
+                               {% if value == default_list_type %}checked{% endif %} />
+                        <span class="gl-type__body">
+                            <span class="gl-type__name">{{ label }}</span>
+                            <span class="gl-type__hint">{{ blurb }}</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% comment %}Said here rather than discovered later: the reason somebody hesitates
+                over this choice is the fear of picking wrong, and the honest answer removes it.{% endcomment %}
+                <p class="gl-type__note">You can switch this later without losing anything.</p>
+            </fieldset>
+        </div>
+
+        <div class="gl-dialog__foot">
+            <button type="button" class="pp-cta pp-cta--ghost" data-gl-close>Cancel</button>
+            <button type="submit" class="pp-cta">Create list</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/gamelists.js' %}"></script>
+{% endblock %}

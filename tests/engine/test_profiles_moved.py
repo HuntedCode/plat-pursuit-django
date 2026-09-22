@@ -75,7 +75,11 @@ def test_the_sitemap_advertises_the_new_location_not_a_redirect():
     assert not location.startswith(('/community/', '/profiles/'))
 
 
-def test_profiles_are_a_browse_surface_now():
+def test_hunters_is_a_community_surface_now():
+    """MOVED AGAIN, 2026-09, and back where it started. It went to Browse in 2026-08 only because the
+    Community hub had been retired ("hunters are another thing you browse"); with that hub back, you
+    look for a community member where the community is. `/hunters/` is unchanged -- this was always a
+    sub-nav move rather than a URL move, which is why this test reads the resolver and not a path."""
     from django.contrib.auth.models import AnonymousUser
     from django.test import RequestFactory
     from django.urls import resolve
@@ -87,15 +91,24 @@ def test_profiles_are_a_browse_surface_now():
     req.user = AnonymousUser()
     match = resolve_hub_subnav(req)
 
-    assert match['hub'].key == 'browse'
+    assert match['hub'].key == 'community'
+    # The rail turned ON in 2026-09, when Game Lists came off its gate and gave the hub a second
+    # destination. It ran `items=()` until then, on the reasoning that a single pill naming the
+    # page you are already on is not navigation.
+    # `challenges` joined 2026-09-19: a coming-soon PAGE, not a redirect, because a hub of two
+    # while a third is weeks away reads as the whole offering. It sits LAST and wears a
+    # `Soon` tag -- the two things you can use should not sit behind the one you cannot. See
+    # `test_challenges_coming_soon.py`.
+    assert [i.slug for i in match['hub'].items] == ['lists', 'profiles', 'challenges']
     assert match['active_slug'] == 'profiles'
-    catalog = [i.slug for i in match['hub'].items if i.group == 'Catalog']
-    # 'jobs' joins Catalog 2026-08: `/jobs/` is the public jobs catalogue (leaderboards rebuild step 7).
-    # It sits beside Games and Badges because those are the three things a hunter pursues; Recently
-    # Added and Hunters keep their positions. 'trophy-lists' joins after games 2026-08-30
-    # (Games/Trophy Lists IA phase 4: the list-level catalogue rides beside the game-level one;
-    # the slug is deliberately NOT 'lists' -- that name belongs to the hidden GameList system).
-    assert catalog == ['games', 'trophy-lists', 'badges', 'jobs', 'recently-added', 'profiles'], catalog
+
+    # ...and Browse's Catalog lost exactly one entry. 'jobs' joined in 2026-08 (`/jobs/` is the public
+    # jobs catalogue) and 'trophy-lists' after games on 2026-08-30 -- the slug is deliberately NOT
+    # 'lists', which belongs to the gated GameList system.
+    from core.hub_subnav import BROWSE_HUB
+    catalog = [i.slug for i in BROWSE_HUB.items if i.group == 'Catalog']
+    assert catalog == ['games', 'trophy-lists', 'badges', 'jobs', 'recently-added'], catalog
+    assert 'profiles' not in [i.slug for i in BROWSE_HUB.items]
 
 
 def test_the_moved_profile_pages_are_still_behind_the_cloudflare_guard():

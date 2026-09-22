@@ -20,10 +20,16 @@ pytestmark = pytest.mark.django_db
 # --- Footer: 4-hub restructure (My Pursuit + Dashboard merged, Support added) ---
 
 def test_footer_has_support_column(client):
+    """The column heading became "Support Us" with the hub in 2026-09, and its first link became
+    "Support" -- matching the sub-nav rail's own first item, where it had said "Support Hub" and
+    named a concept the reader never sees. Both ride the same open naming question; they should at
+    least be wrong in the same words until it is answered."""
     resp = client.get('/support/')
     assert resp.status_code == 200
     assert b'aria-label="Support pages"' in resp.content
-    assert b'>Support Hub</a>' in resp.content
+    assert b'>Support Us</h2>' in resp.content, 'the footer column missed the relabel'
+    assert b'>Support</a>' in resp.content
+    assert b'>Support Hub</a>' not in resp.content, 'the pre-rename link text is back'
 
 
 def test_footer_dropped_standalone_dashboard_column(client):

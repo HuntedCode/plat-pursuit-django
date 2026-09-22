@@ -894,8 +894,13 @@ class DragReorderManager {
      * @param {Function} [config.onStart] - Optional callback when drag starts
      * @param {Function} [config.onEnd] - Optional callback when drag ends
      * @param {string|object} [config.group] - SortableJS group (string or {name, put, pull}). When two managers share a group, items can be dragged between their containers.
-     * @param {Function} [config.onMove] - Callback when an item is dropped into THIS container from ANOTHER (cross-container drop). Signature: (itemId, evt) => Promise. evt.from/evt.to/evt.newIndex available. Replaces the onReorder call for that drop.
+     * @param {Function} [config.onMove] - Callback for a cross-container drop, fired on the manager the drag STARTED in (SortableJS routes `end` to the source, not the destination — see the note in onEnd). Signature: (itemId, evt) => Promise. Read `evt.to` for where the item landed; `this.container` is the origin. `evt.from`/`evt.newIndex` also available. Replaces the onReorder call for that drop.
      * @param {Function} [config.canAccept] - Predicate (draggedEl, toContainer, fromContainer) => bool. Return false to reject the drop. Mirrors SortableJS onMove.
+     * @param {number} [config.delay] - Hold time in ms before a drag starts. Pairs with delayOnTouchOnly (default true), so touch gets long-press-to-drag and a mouse stays immediate.
+     * @param {boolean} [config.delayOnTouchOnly] - Apply `delay` to touch only. Defaults to true when `delay` is set; pass false to delay pointer drags as well.
+     * @param {number} [config.touchStartThreshold] - Pixels of movement that cancel a pending delayed drag, so a scroll gesture does not pick an item up. Defaults to 5.
+     * @param {string} [config.dragExclude] - Selector for descendants a drag must not start from (buttons, links that must stay clickable). Sets SortableJS `filter` with `preventOnFilter: false`.
+     * @param {boolean} [config.sort] - Whether items can be reordered WITHIN this container. Defaults to true. Pass false to keep a container a valid drag source and drop target while refusing in-place reordering -- the shape a bucket has when membership is meaningful and order is not (a list grouped into sections but displayed A-Z, where the drop position belongs to the sort rather than to the data).
      */
     constructor(config) {
         this.container = config.container;
@@ -908,6 +913,17 @@ class DragReorderManager {
         this.group = config.group || null;
         this.onMove = config.onMove || null;
         this.canAccept = config.canAccept || null;
+        this.delay = config.delay || 0;
+        this.delayOnTouchOnly = config.delayOnTouchOnly;
+        // `=== undefined`, not `||`: a caller passing 0 to disable the threshold meant it, and the
+        // falsy default silently gave them 5 instead.
+        this.touchStartThreshold =
+            config.touchStartThreshold === undefined ? 5 : config.touchStartThreshold;
+        this.dragExclude = config.dragExclude || null;
+        // `!== false`, not `||`: the whole point of this option is passing `false`, which `||` would
+        // read as "unset" and silently turn back into the default. The same trap
+        // `touchStartThreshold` above documents for 0.
+        this.sort = config.sort !== false;
         this.sortable = null;
 
         this._initSortable();
@@ -957,10 +973,18 @@ class DragReorderManager {
                 if (this._onEndCallback) this._onEndCallback(evt);
 
                 // Cross-container drop: fire onMove instead of onReorder.
-                // The destination manager owns the post-drop sync (it
-                // knows the new bucket's identity); the source manager
-                // doesn't see this event (SortableJS routes onEnd to the
-                // manager whose container the drop landed in).
+                //
+                // THIS FIRES ON THE **SOURCE** MANAGER, not the destination. That is the opposite of
+                // what this comment claimed for a long time ("the destination manager owns the
+                // post-drop sync … the source manager doesn't see this event"), and the claim was
+                // checked against the vendored bundle rather than inferred: `Sortable.min.js`
+                // dispatches `add` with `rootEl: parentEl` (the destination) but dispatches `end`
+                // with `sortable: this` — `this` being the Sortable whose `_onDrop` ran, which is
+                // the one the drag STARTED in.
+                //
+                // So `this.container` here is `evt.from`. A handler that needs to know where the item
+                // LANDED must read `evt.to`; reading its own container silently reports the origin,
+                // which looks like a working drag that undoes itself on the next render.
                 if (evt.from !== evt.to) {
                     if (this.onMove) {
                         const itemId = evt.item.dataset.itemId;
@@ -984,8 +1008,34 @@ class DragReorderManager {
         if (this.handleSelector) {
             sortableConfig.handle = this.handleSelector;
         }
+        // LONG-PRESS TO DRAG ON TOUCH, immediate with a mouse. Without `delayOnTouchOnly` the same
+        // delay applies to the pointer too, which makes a desktop drag feel broken; with it, touch
+        // gets the hold-to-pick-up gesture people already know from rearranging home screens, and a
+        // mouse keeps its instant grab.
+        //
+        // `touchStartThreshold` is the other half and is not optional: without it a finger that moves
+        // a few pixels during the hold still arms the drag, so trying to SCROLL a grid of draggable
+        // cards picks one up instead. A small movement budget lets a scroll cancel the pending drag.
+        if (this.delay) {
+            sortableConfig.delay = this.delay;
+            sortableConfig.delayOnTouchOnly = this.delayOnTouchOnly !== false;
+            sortableConfig.touchStartThreshold = this.touchStartThreshold;
+        }
+        // Elements a drag must never start from, even when the whole item is draggable -- controls
+        // that do something else when pressed.
+        if (this.dragExclude) {
+            sortableConfig.filter = this.dragExclude;
+            // Without this SortableJS calls preventDefault on the filtered element, and a <button>
+            // inside it never receives its click.
+            sortableConfig.preventOnFilter = false;
+        }
         if (this.group) {
             sortableConfig.group = this.group;
+        }
+        // Set only when false, so a container that never asked keeps SortableJS's own default rather
+        // than having this manager's opinion written over it.
+        if (!this.sort) {
+            sortableConfig.sort = false;
         }
         // SortableJS onMove fires during the drag; returning false rejects
         // the drop. canAccept is the manager's hook for that, used e.g. to
@@ -1017,6 +1067,7 @@ const InfiniteScroller = {
      * Create an infinite scroller instance
      * @param {Object} config - Configuration object
      * @param {string} config.gridId - ID of the grid/container element
+     * @param {string} [config.cellSelector] - When a caller WRAPS its cards, the wrapper's selector. Appended pages clone `card.closest(cellSelector)` instead of the card, so anything the wrapper carries as a SIBLING of the card survives. Without it a wrapped grid silently loses that sibling from page two onward.
      * @param {string} config.sentinelId - ID of the sentinel element to observe
      * @param {string} config.loadingId - ID of the loading indicator element
      * @param {number} config.paginateBy - Number of items per page (used to determine if more pages exist)
@@ -1086,7 +1137,17 @@ const InfiniteScroller = {
                     nextPageUrl = null;
                 } else {
                     const appended = [];
-                    newCards.forEach(card => { const clone = card.cloneNode(true); grid.appendChild(clone); appended.push(clone); });
+                    // THE GRID CELL, not the card inside it. A caller may wrap its cards to hang a
+                    // control beside the card rather than inside it -- the game card does, because
+                    // the card is an `<a>` and a `<button>` within a link is invalid HTML. Cloning
+                    // the card alone dropped that wrapper and the control with it, so page one had
+                    // buttons and every page after it did not, with nothing to show the difference.
+                    newCards.forEach(card => {
+                        const source = (config.cellSelector && card.closest(config.cellSelector)) || card;
+                        const clone = source.cloneNode(true);
+                        grid.appendChild(clone);
+                        appended.push(clone);
+                    });
                     // Optional hook so callers can wire freshly-appended cards (e.g. a scroll-reveal observer).
                     if (typeof config.onAppend === 'function') { try { config.onAppend(appended); } catch (e) { /* non-fatal */ } }
                     page++;
@@ -2238,7 +2299,8 @@ function flipGrid(o) {
  * @param {Object} o
  * @param {HTMLElement} o.grid          the grid container
  * @param {string} o.cardSelector       selects the cards within the grid
- * @param {function(HTMLElement, number)} o.reveal   plays one card's arrival, given (el, delayMs)
+ * @param {string} [o.cellSelector]     if the card sits inside a cell, the CELL is what animates
+ * @param {function(HTMLElement, number)} o.reveal   plays one arrival, given (el, delayMs)
  * @param {number} [o.step=24]          per-card stagger step (ms)
  * @param {number} [o.batchCap=560]     max delay for the initial in-grid batch
  * @param {number} [o.appendCap=200]    max delay within a scroll-appended batch
@@ -2268,7 +2330,39 @@ function staggerReveal(o) {
         // animation then masks the resting state, and at its end the backwards fill reverts to .is-revealed.
         if (el.classList.contains('pp-revealing') || el.classList.contains('is-revealed')) { return; }
         el.classList.add('pp-revealing');
-        o.reveal(el, delay);
+        // THE CELL ANIMATES, NOT THE CARD, wherever a cell exists. A card with a control beside it
+        // (the game card's wrapper, which holds the anchor and a quick-add button as siblings) has a
+        // part that is NOT inside the animated element -- so the button hung motionless while the card
+        // sprang up under it, and worse, was fully opaque and tappable over a card the delayed
+        // animation still holds at zero. `.is-revealed` cannot fix that from CSS: it lands on frame 2
+        // for EVERY card in the batch, while the WAAPI `fill: 'backwards'` is what actually keeps a
+        // card invisible through its stagger delay. Only something inside the animation is hidden by
+        // the animation. Animating the cell puts the control inside it, which is both the correct
+        // motion (one moving thing) and the only place the timing is right.
+        var target = (o.cellSelector && el.closest(o.cellSelector)) || el;
+        // INERT WHILE IT ARRIVES, and this is the half that `.is-revealed` cannot do. OPACITY DOES
+        // NOT AFFECT HIT-TESTING: an element at zero opacity keeps every one of its hit targets. The
+        // class above lands on frame 2 for the whole batch, so any CSS keyed on it releases the cell's
+        // controls almost a second before the animation stops holding them invisible -- and a tap in
+        // that window opened a list picker for a card that was not on screen yet, which on a phone
+        // reads as the page doing something at random. The animation is the only thing that knows when
+        // the cell is really there, so ask IT: mark the cell inert, clear the mark when its own
+        // animations finish. Descendant animations (a progress bar wiping in after the card lands) are
+        // not in `getAnimations()` on the cell, which is what we want -- the cell is usable the moment
+        // it is visible, not when its last flourish ends.
+        target.classList.add('pp-arriving');
+        o.reveal(target, delay);
+        var running = target.getAnimations ? target.getAnimations() : null;
+        if (running && running.length && window.Promise) {
+            // The `catch` is not a swallow: an animation that is CANCELLED rejects, and a cancelled
+            // arrival must still hand the cell back. Both endings clear the mark; nothing else can.
+            Promise.all(running.map(function (a) { return a.finished; }))
+                .then(function () { target.classList.remove('pp-arriving'); })
+                .catch(function () { target.classList.remove('pp-arriving'); });
+        } else {
+            // No WAAPI, or a caller that animates nothing: there is no invisible window to protect.
+            target.classList.remove('pp-arriving');
+        }
         if (window.requestAnimationFrame) { requestAnimationFrame(function () { el.classList.add('is-revealed'); }); }
         else { el.classList.add('is-revealed'); }
     }
@@ -2282,7 +2376,28 @@ function staggerReveal(o) {
         shown.forEach(function (el, j) { play(el, Math.min(j * step, appendCap)); io.unobserve(el); });
     }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
     return {
-        observe: function (nodes) { Array.prototype.forEach.call(nodes, function (nd) { if (nd.matches && nd.matches(sel)) { io.observe(nd); } }); },
+        /**
+         * Observe freshly-appended nodes -- either the cards themselves, or the CELLS that contain
+         * them.
+         *
+         * The container case is not hypothetical and not decoration: `InfiniteScroller` gained a
+         * `cellSelector` so a caller whose card is wrapped (the game card wraps its anchor so a
+         * button can sit beside it rather than inside the link) appends the wrapper. This function
+         * tested `nd.matches(sel)` and silently dropped anything that was not itself a card, so those
+         * pages were never observed, never got `.is-revealed`, and stayed at the `opacity: 0` the
+         * hide class holds them at. The grid grew by thirty correctly-sized, completely blank cells,
+         * with the buttons -- siblings, so not covered by the hide rule -- floating over the voids.
+         *
+         * Anything handed a list of nodes should cope with being handed their containers; that is
+         * cheaper than every caller remembering to unwrap.
+         */
+        observe: function (nodes) {
+            Array.prototype.forEach.call(nodes, function (nd) {
+                if (!nd || !nd.matches) { return; }
+                var target = nd.matches(sel) ? nd : (nd.querySelector && nd.querySelector(sel));
+                if (target) { io.observe(target); }
+            });
+        },
         disconnect: function () { io.disconnect(); }
     };
 }
@@ -3738,3 +3853,385 @@ document.addEventListener('keydown', function (e) {
     if (!input) { return; }
     e.preventDefault(); input.focus(); if (input.select) { input.select(); }
 });
+
+
+/* ── Character counters ──────────────────────────────────────────────────────────────────────────
+ *
+ * Declarative: put `data-charcount` on the input/textarea and give it a `maxlength`. The counter
+ * element is found by `data-charcount-for="<input id>"`, so the markup says which goes with which
+ * rather than the JS knowing both ids.
+ *
+ * SHARED because this is the THIRD copy. `admin-notifications.js` has one bound to three specific
+ * element ids, and `comments.js` has an inline listener that only ever writes a number. Neither is
+ * reusable and both re-implement the same escalation. Those two are candidates to migrate onto this,
+ * but not in this branch -- they belong to other systems.
+ *
+ * The count is what the BROWSER sees. The server sanitizes before it measures, so pasted markup can
+ * shrink server-side and the two disagree. The disagreement is always in the safe direction (the
+ * browser stops you sooner than the server would), and reproducing bleach's rules in JS to close a
+ * gap nobody can hit by typing is not worth the second source of truth.
+ */
+function wireCharCounters(root) {
+    var scope = root || document;
+    var fields = scope.querySelectorAll('[data-charcount]');
+    for (var i = 0; i < fields.length; i++) {
+        (function (field) {
+            var max = parseInt(field.getAttribute('maxlength'), 10);
+            var out = scope.querySelector('[data-charcount-for="' + field.id + '"]');
+            // No max or nowhere to render means nothing to do -- and silently doing nothing is right
+            // here: a missing counter is a cosmetic gap, not a reason to throw inside a form.
+            if (!max || !out) { return; }
+
+            function render() {
+                var len = field.value.length;
+                out.textContent = len + '/' + max;
+                // Quiet until it matters. Warning in the last tenth, error only when the field has
+                // actually stopped accepting input -- which is the moment the counter earns its
+                // place, because `maxlength` otherwise just stops typing with no explanation.
+                // Both classes are in the Tailwind safelist -- this file is not scanned for
+                // classes, so a THIRD one toggled here would be purged from the build silently.
+                out.classList.toggle('text-warning', len >= max * 0.9 && len < max);
+                out.classList.toggle('text-error', len >= max);
+            }
+
+            field.addEventListener('input', render);
+            render();
+        })(fields[i]);
+    }
+}
+
+window.PlatPursuit.wireCharCounters = wireCharCounters;
+document.addEventListener('DOMContentLoaded', function () { wireCharCounters(document); });
+
+
+/**
+ * postJson -- POST, and refuse to call a redirected HTML page a successful write.
+ *
+ * `fetch` follows redirects transparently and reports only the FINAL response, so a bounce from a
+ * login gate, a linked-profile gate or a staff gate -- a session that expired, a sign-out in another
+ * tab, a profile that became unlinked -- arrives here as `200 text/html`. `API.request` sees
+ * `response.ok`, finds no JSON content type, and hands back the page as a STRING. Every caller then
+ * reads a property off it and gets `undefined`, which is how a toast came to say "Added undefined."
+ * while flipping a row to its added state for a game the server never received.
+ *
+ * Server tests cannot see this: Django's test client does not follow redirects unless asked, so a
+ * test asserting 302 passes while the browser gets 200.
+ *
+ * LIVES HERE RATHER THAN IN `API.request`, deliberately. Changing that helper changes every page on
+ * the site at once and is its own decision; this is opt-in for the write paths that have learned they
+ * need it.
+ */
+function postJson(url, body) {
+    return window.PlatPursuit.API.postFormData(url, body).then(function (data) {
+        if (data === null || typeof data !== 'object') {
+            var err = new Error('expected JSON, got a redirected page');
+            err.signedOut = true;
+            throw err;
+        }
+        return data;
+    });
+}
+
+window.PlatPursuit.postJson = postJson;
+
+
+/**
+ * GameAdder -- the catalogue typeahead behind every "add a game to this" control.
+ *
+ * EXTRACTED FROM `list-detail.js` when Tiers/Grids/Polls needed the same adder, and extracted rather
+ * than copied because the body below is not a search box: it is four shipped bug fixes wearing one.
+ * A copy is a place where the fifth does not land.
+ *
+ *   1. `abandon()` exists because the sequence bump was applied to only two of the four exits. Type
+ *      "hol", results render; type "low", the debounce fires and a request goes out; arrow into the
+ *      panel, press Escape. The panel closes, `seq` is untouched, the response lands, passes
+ *      `mine === seq`, and RE-OPENS the panel over a field the reader already dismissed.
+ *   2. The short-query branch bumps `seq` for the same reason: type "hollow", then clear the field
+ *      while the request is in flight, and the in-flight response still renders twelve results for a
+ *      query the field no longer holds.
+ *   3. The redirect trap -- a signed-out session answers the SEARCH with an HTML page too, and
+ *      `(data && data.results) || []` reports "No games match that search" for an expired session.
+ *   4. The status line is looked up from `document` and not from `root`: `sr-only` is absolutely
+ *      positioned, so it is not a flex item in the search bar and is a SIBLING rather than a child.
+ *      Scoped to `root` it silently returned null and every count announcement was dropped.
+ *
+ * CLASS PREFIX IS A PARAMETER so the two callers keep their own stylesheets: the lists page passes
+ * `gl-adder` and stays byte-identical, prompts pass `pp-adder`. The behaviour is shared; the skin is
+ * not. Same for the copy -- "On this list" and "In this prompt" are the same state in two places.
+ *
+ * @param {Element} root      the search wrapper. `data-search-url` and `data-add-url` read from it.
+ * @param {Object}  opts
+ * @param {Element} opts.input    the text field (required)
+ * @param {Element} opts.panel    the results container (required)
+ * @param {Element} [opts.status] the aria-live line
+ * @param {string}  [opts.prefix='pp-adder']  BEM block for the rows this builds
+ * @param {number}  [opts.minQuery=3]  must match the endpoint's floor, or the client fires requests
+ *                                     that can only return nothing
+ * @param {string}  [opts.addLabel='Add']
+ * @param {string}  [opts.addedLabel='Added']
+ * @param {function(string):string} [opts.addAria]    title -> aria-label for an addable row
+ * @param {function(string):string} [opts.addedAria]  title -> aria-label for an added row
+ * @param {function(Object, Element)} [opts.onAdded]  (server data, the row) after a successful add
+ * @param {function(number):string} [opts.failureCopy] status -> what to show in the panel
+ * @param {string}  [opts.logLabel='adder']  console prefix
+ * @returns {Object|null} `{ close }`, or null if the required elements are missing
+ */
+function GameAdder(root, opts) {
+    opts = opts || {};
+    var PP = window.PlatPursuit;
+    var input = opts.input;
+    var panel = opts.panel;
+    if (!root || !input || !panel) { return null; }
+
+    var status = opts.status || null;
+    var prefix = opts.prefix || 'pp-adder';
+    var minQuery = opts.minQuery || 3;
+    var addLabel = opts.addLabel || 'Add';
+    var addedLabel = opts.addedLabel || 'Added';
+    var logLabel = opts.logLabel || 'adder';
+    var optClass = prefix + '__opt';
+    var searchField = null;
+    var seq = 0;
+
+    function addAria(title) {
+        return opts.addAria ? opts.addAria(title) : ('Add ' + title);
+    }
+    function addedAria(title) {
+        return opts.addedAria ? opts.addedAria(title) : (title + ' is already added');
+    }
+    function copyFor(httpStatus) {
+        if (opts.failureCopy) { return opts.failureCopy(httpStatus); }
+        if (httpStatus === 429 || httpStatus === 403) {
+            return 'Too many searches just now. Wait a moment and try again.';
+        }
+        if (httpStatus === 404) { return 'This is no longer available.'; }
+        if (httpStatus === 400) { return 'That search was too long.'; }
+        return 'That search could not be run. Try again in a moment.';
+    }
+    function statusOf(err) {
+        return (err && err.response && err.response.status) || 0;
+    }
+    /* A catch that drops its error converts a diagnosable fault into a mystery while looking like
+       handling. The status is always logged, even when the copy above is deliberately vague. */
+    function logFailure(what, err) {
+        if (!window.console || !window.console.error) { return; }
+        window.console.error('[' + logLabel + '] ' + what + ' failed', {
+            status: statusOf(err) || 'no response (network or CORS)',
+            error: err,
+        });
+    }
+
+    function say(message) { if (status) { status.textContent = message; } }
+
+    function closePanel() {
+        panel.hidden = true;
+        panel.textContent = '';
+    }
+
+    /* Close the results AND orphan whatever is in flight. See note 1 above. */
+    function abandon() {
+        seq++;
+        if (searchField) { searchField.setBusy(false); }
+        closePanel();
+        say('');
+    }
+
+    function note(message) {
+        panel.textContent = '';
+        var p = document.createElement('p');
+        p.className = prefix + '__note';
+        p.textContent = message;
+        panel.appendChild(p);
+        panel.hidden = false;
+    }
+
+    function placeholderIcon() {
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '1.8');
+        svg.setAttribute('aria-hidden', 'true');
+        var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', '2'); rect.setAttribute('y', '3');
+        rect.setAttribute('width', '20'); rect.setAttribute('height', '14');
+        rect.setAttribute('rx', '2');
+        svg.appendChild(rect);
+        return svg;
+    }
+
+    function buildRow(result) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = optClass;
+        btn.dataset.conceptId = result.concept_id;
+
+        var thumb = document.createElement('span');
+        thumb.className = prefix + '__thumb';
+        if (result.cover) {
+            var img = document.createElement('img');
+            img.src = result.cover;
+            img.alt = '';
+            img.loading = 'lazy';
+            thumb.appendChild(img);
+        } else {
+            thumb.appendChild(placeholderIcon());
+        }
+
+        var name = document.createElement('span');
+        name.className = prefix + '__name';
+        name.textContent = result.title;
+
+        var state = document.createElement('span');
+        state.className = prefix + '__state';
+        if (result.already_added) {
+            btn.disabled = true;
+            state.textContent = addedLabel;
+            // Without this the disabled row's only distinction is colour.
+            btn.setAttribute('aria-label', addedAria(result.title));
+        } else {
+            state.textContent = addLabel;
+            btn.setAttribute('aria-label', addAria(result.title));
+        }
+
+        btn.appendChild(thumb);
+        btn.appendChild(name);
+        btn.appendChild(state);
+        return btn;
+    }
+
+    function render(results) {
+        if (!results.length) {
+            note('No games match that search.');
+            say('No games found.');
+            return;
+        }
+        panel.textContent = '';
+        results.forEach(function (result) { panel.appendChild(buildRow(result)); });
+        panel.hidden = false;
+        say(results.length === 1 ? '1 game found.' : results.length + ' games found.');
+    }
+
+    var search = PP.debounce(function () {
+        var query = input.value.trim();
+        if (query.length < minQuery) {
+            seq++;                                  // see note 2 above
+            if (searchField) { searchField.setBusy(false); }
+            closePanel();
+            say('');
+            return;
+        }
+        // Out-of-order responses: a slow request for "hol" must not overwrite the results for
+        // "hollow" typed after it. Only the newest sequence number is allowed to render.
+        var mine = ++seq;
+        if (searchField) { searchField.setBusy(true); }
+        PP.API.get(root.dataset.searchUrl + '?q=' + encodeURIComponent(query))
+            .then(function (data) {
+                if (mine !== seq) { return; }
+                if (data === null || typeof data !== 'object') {     // see note 3 above
+                    var err = new Error('expected JSON, got a redirected page');
+                    err.signedOut = true;
+                    throw err;
+                }
+                render(data.results || []);
+            })
+            .catch(function (err) {
+                if (mine !== seq) { return; }
+                logFailure('search ' + root.dataset.searchUrl, err);
+                note(err && err.signedOut
+                     ? 'You may have been signed out. Reload the page and try again.'
+                     : copyFor(statusOf(err)));
+                say('Search failed.');
+            })
+            .finally(function () {
+                if (mine === seq && searchField) { searchField.setBusy(false); }
+            });
+    }, 220);
+
+    // The shared search chrome: `.has-value` (clear button), Escape-to-clear, and `setBusy` for the
+    // spinner. `onClear: abandon` is required rather than tidiness -- `seq++` orphans any in-flight
+    // request, so its `.finally` fails the `mine === seq` test and never clears the busy flag,
+    // leaving `.is-searching` set: the spinner turns on an empty field AND the clear button is
+    // hidden, so the visible control is stuck until the next keystroke.
+    if (PP.wireSearchField) {
+        searchField = PP.wireSearchField(input, { onClear: abandon });
+    }
+
+    input.addEventListener('input', search);
+
+    // Escape with an empty field closes the results; with text in it, wireSearchField clears first
+    // (and its onClear closes the panel), which is the expected two-step.
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !input.value) { abandon(); return; }
+        if (e.key === 'ArrowDown') {
+            var first = panel.querySelector('.' + optClass + ':not(:disabled)');
+            if (first) { e.preventDefault(); first.focus(); }
+        }
+    });
+
+    // Arrow keys walk the results; Escape anywhere in them returns to the field. Rows are real
+    // buttons, so Tab already works and this only adds the vertical shortcut.
+    // `stopPropagation` as well as `preventDefault`, because a page's own arrange mode may listen for
+    // the same keys on the DOCUMENT. The result rows are <button>s, so an `isTyping` check does not
+    // exclude them, and arrowing through search results ALSO moved the picked card and fired a
+    // reorder write -- Escape likewise both closed the panel and dropped the pick.
+    panel.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.stopPropagation(); input.focus(); abandon(); return; }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') { return; }
+        e.stopPropagation();
+        var rows = Array.prototype.slice.call(
+            panel.querySelectorAll('.' + optClass + ':not(:disabled)'));
+        var at = rows.indexOf(document.activeElement);
+        if (at === -1) { return; }
+        e.preventDefault();
+        if (e.key === 'ArrowUp' && at === 0) { input.focus(); return; }
+        var next = rows[at + (e.key === 'ArrowDown' ? 1 : -1)];
+        if (next) { next.focus(); }
+    });
+
+    // The results FLOAT over the page, so they have to be dismissable by clicking away -- in flow
+    // they merely pushed content down and could be left open harmlessly. Bound on the document and
+    // returning immediately while closed, so it costs nothing at rest.
+    document.addEventListener('click', function (e) {
+        if (panel.hidden) { return; }
+        if (root.contains(e.target)) { return; }
+        abandon();
+    });
+
+    panel.addEventListener('click', function (e) {
+        var row = e.target.closest ? e.target.closest('.' + optClass) : null;
+        if (!row || row.disabled || row.dataset.busy === '1') { return; }
+        row.dataset.busy = '1';
+        // NOT `abandon()` -- the panel stays open on purpose so several games can be added from one
+        // search. But the in-flight search must still be orphaned: its response rebuilds every row
+        // from an `already_added` snapshot taken BEFORE this add, which would undo the flip below and
+        // re-enable a row for a game that has just been added.
+        seq++;
+
+        var body = new FormData();
+        body.append('concept_id', row.dataset.conceptId);
+        postJson(root.dataset.addUrl, body)
+            .then(function (data) {
+                // The row STAYS and flips to its added state rather than vanishing: somebody adding
+                // several games from one search should not have the results move under them.
+                row.disabled = true;
+                var state = row.querySelector('.' + prefix + '__state');
+                if (state) { state.textContent = addedLabel; }
+                row.setAttribute('aria-label', addedAria(data.title || ''));
+                if (opts.onAdded) { opts.onAdded(data, row); }
+            })
+            .catch(function (err) {
+                row.dataset.busy = '';
+                logFailure('add ' + root.dataset.addUrl, err);
+                var message = (err && err.signedOut)
+                    ? 'You may have been signed out. Reload the page and try again.'
+                    : ((err && err.response && err.message) || 'That could not be added.');
+                if (PP.ToastManager) { PP.ToastManager.show(message, 'error'); }
+                say(message);
+            });
+    });
+
+    return { close: abandon };
+}
+
+window.PlatPursuit.GameAdder = GameAdder;

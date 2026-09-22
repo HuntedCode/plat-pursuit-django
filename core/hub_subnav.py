@@ -2,14 +2,14 @@
 Hub-of-Hubs IA: sub-navigation infrastructure.
 
 PlatPursuit's IA is a personal My Pursuit hub (rooted at the logged-in Home /)
-plus Browse, Community, and Support. The global navbar links to each. A
-persistent sub-navigation strip below the main navbar surfaces each hub's
-sub-pages on every URL in that hub's family, URL-prefix matched (the personal
-strip is auth-gated).
+plus Browse, Leaderboards, Community and Support Us. The global navbar links to
+each. A persistent sub-navigation strip below the main navbar surfaces each
+hub's sub-pages on every URL in that hub's family, URL-prefix matched (the
+personal strip is auth-gated).
 
 This module defines:
 
-1. ``HUB_SUBNAV_CONFIG`` — the four hub definitions, each with a list of
+1. ``HUB_SUBNAV_CONFIG`` — the five hub definitions, each with a list of
    sub-nav items and the URL prefixes that activate them.
 2. ``resolve_hub_subnav(request)`` — the matcher that inspects ``request.path``
    and returns the active hub + active sub-nav slug, or ``None`` for pages
@@ -48,6 +48,16 @@ class HubSubnavItem:
                                        # which costs provider queries on every request)
     group: str = ''  # the rail group this item belongs to (e.g. 'Catalog' / 'Curation'). Items are
                      # defined in group order so the template can {% regroup %} consecutive runs.
+    #: How the tag is SPOKEN, when it is not simply the tag word. The pill's `aria-label` replaces
+    #: its contents-derived name, so this is the whole of what a screen reader hears about the chip.
+    #: It exists because that phrase was hardcoded to "coming soon" and fired on `{% if item.tag %}`
+    #: rather than on the tag's VALUE -- so a `tag='New'` pill, the other value the field documents,
+    #: would have announced "Game Lists, coming soon" while sighted readers saw NEW. Backwards, not
+    #: merely wrong. Left empty, the tag word itself is spoken.
+    tag_aria: str = ''
+    tag: str = ''    # a short chip on the pill itself ('Soon', 'New'). SHORT, because a rail pill is
+                     # `white-space: nowrap` and a long one pushes its neighbours into the overflow
+                     # sheet -- the tag has to cost less room than the item it is labelling.
 
 
 @dataclass(frozen=True)
@@ -67,12 +77,19 @@ class RenderedSubnavItem:
 
     ``group`` is the rail group label (e.g. 'Catalog'); the template groups
     consecutive same-group items under a quiet separator.
+
+    ``tag`` is a short chip drawn on the pill itself ('Soon'), carried over from the
+    HubSubnavItem. It has to be repeated here rather than read off the config: the
+    template only ever sees these, which is exactly why the first cut rendered nothing
+    -- the `{% if item.tag %}` was true of the config object the template never gets.
     """
     slug: str
     label: str
     url: str
     icon: str | None = None
     group: str = ''
+    tag: str = ''
+    tag_aria: str = ''
 
 
 @dataclass(frozen=True)
@@ -116,17 +133,14 @@ BROWSE_HUB = HubSubnavConfig(
         # surface, and its relationship to Career's Dossier is the Collection-vs-Browse-Badges split --
         # scope, not pagination.
         '/jobs/',
-        # Both spellings while the /profiles/ -> /hunters/ 301s stand: this is a PATH PREFIX match, so a
-        # visitor landing on an old profile URL would otherwise lose the Browse rail on the way through.
-        '/hunters/',
-        '/profiles/',
+        # `/hunters/` and `/profiles/` moved to COMMUNITY_HUB in 2026-09.
     ),
     # Grouped rail (kept consistent with the other hubs' grouped rails -- Community's Explore/Create,
     # My Pursuit's Progress/Tools): Catalog = the core browse surfaces; Curation = the cross-cutting
     # groupings. Order = group order (regroup-ready).
     items=(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2', group='Catalog'),
-        # SLUG deliberately not bare 'lists' (the hidden GameList system's guard pins that);
+        # SLUG deliberately not bare 'lists' (the gated GameList system's guard pins that);
         # display copy "Trophy Lists" per the IA doc's naming insurance.
         HubSubnavItem('trophy-lists', 'Trophy Lists', 'trophy_lists', 'list', group='Catalog'),
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award', group='Catalog'),
@@ -135,7 +149,6 @@ BROWSE_HUB = HubSubnavConfig(
         # Label is "Hunters" (2026-08); the SLUG stays `profiles`, matching the url names it maps to
         # below -- it is an internal key, and churning it would touch the overrides map and its tests to
         # no visible end.
-        HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user', group='Catalog'),
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers', group='Curation'),
         HubSubnavItem('companies', 'Companies', 'companies_list', 'building', group='Curation'),
         HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag', group='Curation'),
@@ -155,6 +168,13 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     prefixes=(
         '/collection/', '/career/', '/milestones/', '/titles/',
         '/profile-editor/', '/shareables/', '/recap/', '/rate-my-games/',
+        # `/my-lists/` (2026-09). The hub is resolved by PATH PREFIX, so a rail item whose URL sits
+        # outside its own hub's prefixes drops you out of the hub the moment you click it -- the
+        # rail vanishes, or worse, another hub's lights up. `test_nav_reachability` caught this the
+        # moment My Lists joined Tools. The URL is deliberately NOT `/career/lists/` or similar: it
+        # was frozen when the rebuilt pages shipped, and a hub is a nav grouping rather than a URL
+        # namespace -- `/recap/` and `/collection/` are here on the same footing.
+        '/my-lists/',
     ),
     # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
     # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
@@ -166,6 +186,12 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         HubSubnavItem('shareables', 'Plat Cards', 'my_shareables', 'image', auth_required=True, group='Tools'),
         HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True, group='Tools'),
         HubSubnavItem('rate_my_games', 'Rate My Games', 'rate_my_games', 'star', auth_required=True, group='Tools'),
+        # MY LISTS IS PERSONAL, so it sits here rather than in Community with the public browse.
+        # The private side of a public system is still personal and login-gated -- exactly as
+        # *Collection* stays in My Pursuit while *Badges* sits in Browse. A hub is a mode, not a
+        # feature's address. (The un-hide checklist originally put it in Community; the IA
+        # decision that followed put it here, and that decision wins.)
+        HubSubnavItem('my_lists', 'My Lists', 'my_lists', 'list', auth_required=True, group='Tools'),
     ),
 )
 
@@ -200,9 +226,14 @@ LEADERBOARDS_HUB = HubSubnavConfig(
 # membership_required (premium_tier truthiness, the navbar link's own gate) in its 'Yours'
 # group -- a non-member's door is the storefront -- except when it IS the active page, which
 # always names itself.
+# Relabelled "Support Us" in 2026-09: "Support" alone reads as a help desk on most of the web, and
+# this is the one place a confused reader would look for one. Naming the ask is also the more earnest
+# form, which is the site's voice. NOTE the rail still reads "Support Us -> Support" because the first
+# ITEM keeps its name -- that one is an open naming question (Tiers? Ways to Help?) and is not being
+# decided by a rename that was about the hub.
 SUPPORT_HUB = HubSubnavConfig(
     key='support',
-    label='Support',
+    label='Support Us',
     icon='heart',
     prefixes=('/support/', '/fundraiser/'),
     items=(
@@ -215,6 +246,52 @@ SUPPORT_HUB = HubSubnavConfig(
 )
 
 
+# The Community hub, returned 2026-09 after being retired in 2026-08. It exists because the four
+# other hubs sort by the reader's INTENT (find / rank / mine / support) and miss a second axis: who
+# AUTHORED the thing. Everything in Browse and Leaderboards is site-owned -- PSN data, IGDB metadata,
+# PlatPursuit-authored badges and jobs -- and user-generated content is a different class, which the
+# codebase already says by carrying an `all_ugc` restriction scope over comments, reviews, ratings and
+# lists. See docs/architecture/ia-and-subnav.md.
+#
+# THE RAIL TURNED ON in 2026-09, when Game Lists came off its development gate and gave the hub a
+# second destination. Until then it ran `items=()` on the reasoning that emptied the Leaderboards
+# rail -- a single pill naming the page you are already on is not navigation -- and that reasoning
+# expired the moment there were two places to go rather than one.
+#
+# My Lists is NOT here. It is personal and login-gated, so it sits in My Pursuit -> Tools; the public
+# browse is what belongs to the community. Challenges and the Hall of Fame join this rail next.
+#
+# NO LANDING PAGE, and it does not need one. `/community/` 301s permanently to `/leaderboards/` (live
+# since 2026-08 and therefore cached in browsers indefinitely, so it cannot be repointed) -- but a hub
+# here is a nav grouping, not an address, and every page in this one is its own destination. The
+# navbar button points at Hunters until there is a second item.
+COMMUNITY_HUB = HubSubnavConfig(
+    key='community',
+    label='Community',
+    icon='users',
+    # Both spellings while the /profiles/ -> /hunters/ 301s stand: this is a PATH PREFIX match, so a
+    # visitor landing on an old profile URL would otherwise lose the rail on the way through.
+    # `/community/` is here for the Lists and Challenges pages served under it.
+    prefixes=('/community/', '/hunters/', '/profiles/'),
+    items=(
+        HubSubnavItem('lists', 'Game Lists', 'lists_browse', 'list'),
+        HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user'),
+        # A COMING-SOON PAGE EARNS A RAIL ITEM, which is not obvious. It is here because the rail is
+        # how somebody learns what this hub contains, and a hub of two while a third is weeks away
+        # reads as the whole offering. The page it points at is real and says so plainly -- the rule
+        # set when Challenges was parked was a page, never a redirect. It keeps its slug and url_name
+        # when the real browse replaces it.
+        #
+        # LAST, AND TAGGED. Last because the two things you can actually use should not sit behind
+        # the one you cannot; tagged because a pill that looks like its neighbours promises a
+        # destination like its neighbours, and somebody clicking it deserves to know before they do.
+        # Dropping the tag is what marks the feature as shipped.
+        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag', tag='Soon',
+                      tag_aria='coming soon'),
+    ),
+)
+
+
 # Order matters for matching: hubs are checked in this order. Within each
 # hub, prefixes are tried longest-first. Bare '/' is handled separately as
 # an exact-equality check below.
@@ -222,6 +299,7 @@ HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
     MY_PURSUIT_HUB,
     BROWSE_HUB,
     LEADERBOARDS_HUB,
+    COMMUNITY_HUB,
     SUPPORT_HUB,
 )
 
@@ -264,11 +342,18 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'roadmap_edit_ctg': ('browse', 'trophy-lists'),
     'roadmap_detail': ('browse', 'trophy-lists'),
     'roadmap_detail_dlc': ('browse', 'trophy-lists'),
-    # Community
-    'profile_detail': ('browse', 'profiles'),
-    'trophy_case': ('browse', 'profiles'),
-    # Reviews archived 2026-05 and the Community hub retired 2026-08, so the notice page has no hub
-    # to sit in -- it renders without a sub-nav strip, which is right for a tombstone.
+    # Community. A detail page's URL name never matches its rail item's (`list_detail` vs
+    # `lists_browse`), and an item shipping without a line here is SILENT -- the strip still renders,
+    # just with nothing lit. That is the `job_detail` failure documented above, and it is why these
+    # three exist rather than being left to the prefix match.
+    'list_detail': ('community', 'lists'),
+    'profile_detail': ('community', 'profiles'),
+    'trophy_case': ('community', 'profiles'),
+    # Reviews archived 2026-05. The notice page matches the COMMUNITY hub by prefix (2026-09) --
+    # which is where it would have lived -- and still renders no sub-nav strip, because that hub is
+    # empty today. If the rail is ever populated, the tombstone gains one; see
+    # `test_the_retired_community_paths_render_no_strip`, which asserts the RENDERED page rather than
+    # the config so it keeps meaning this after that happens.
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
     # My Pursuit: nested sub-pages of the moved items. Shareables is plat-cards-only as of 2026-08,
     # so its one nested child is the cards browse; profile_card + platinum_grid are retired and their
@@ -394,6 +479,7 @@ def build_rendered_items(
         except NoReverseMatch:
             continue
         rendered.append(RenderedSubnavItem(
-            slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group))
+            slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group,
+            tag=item.tag, tag_aria=item.tag_aria))
     rendered.extend(extras)
     return tuple(rendered)

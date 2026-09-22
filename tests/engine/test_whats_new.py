@@ -88,6 +88,26 @@ def test_entry_links_stay_on_our_own_site():
         assert e.link_label.strip(), f'{e.id} has a link with no label'
 
 
+def test_entry_links_actually_go_somewhere():
+    """The sibling above proves a link is SHAPED like a path we own. It does not prove the path
+    exists, and those are different failures: `/community/list/` passes every check there and ships a
+    404 inside a modal that opened itself over the reader's page, announcing a feature.
+
+    Resolved rather than fetched, so this stays a pure-Python check with no client, no database and
+    no view of its own -- a route that does not exist raises here, and one that exists but 500s is
+    that view's test to write.
+    """
+    from django.urls import Resolver404, resolve
+
+    for e in whats_new.ENTRIES:
+        if not e.link_url:
+            continue
+        try:
+            resolve(e.link_url.split('?', 1)[0].split('#', 1)[0])
+        except Resolver404:
+            raise AssertionError(f'{e.id} links to {e.link_url}, which matches no route')
+
+
 def test_entry_ids_are_slugs():
     """The id is interpolated into a JS string literal and into a localStorage key. `|escapejs` makes any
     id safe, but nothing constrained the charset -- and an id containing an apostrophe would render as

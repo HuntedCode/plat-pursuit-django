@@ -29,7 +29,7 @@ The cross-stack unifier. All regional/platform variants of the same game share o
 
 Key relationships:
 - `family` FK to `GameFamily` (nullable)
-- Reverse: `games` (Game.concept), `comments`, `checklists`, `reviews`, `user_ratings`, `concept_trophy_groups`, `featured_entries`, `stages` (M2M via Stage)
+- Reverse: `games` (Game.concept), `comments`, `checklists`, `reviews`, `user_ratings`, `concept_trophy_groups`, `featured_entries`, `stages` (M2M via Stage), `list_entries` (gamelists.GameListItem.concept)
 
 ### Trophy
 An individual trophy within a Game. Identified by `trophy_id` (integer, positional within the game) and linked to its Game. Tracks both PSN-global rarity (`trophy_earn_rate`) and platform-specific rarity (`earn_rate`). `earned_count` is the denormalized count of PP users who have earned it.
@@ -390,21 +390,98 @@ Key relationships:
 - `profile` FK to `Profile`
 - Unique together on (profile, year, month)
 
-### GameList
-User-created game collection (e.g., "My Backlog", "Favorites"). Free users: up to 3 private lists, 100 games each. Premium users: unlimited, public visibility, notes. Denormalized `game_count` and `like_count`. Supports soft deletion.
+### GameList / GameListItem / GameListLike (trophies) — LEGACY
+
+> **Two systems share these three class names.** `trophies.models.GameList` is the 2019-era system;
+> `gamelists.GameList` is the 2026-09 rebuild described below. The legacy tables are **retained
+> deliberately** — they hold every existing list, and the rebuild offers a per-list importer that
+> reads them — but nothing routes to the legacy views. Import the right one.
+
+Legacy shape, for the importer's sake: `GameList` has a `profile` FK, `GameListItem` has a **`game`
+FK to `Game`** (a trophy list), and `GameListLike` is one like per profile per list.
+
+### gamelists.GameList — the rebuilt system
+
+User-created collection of games. See **[docs/features/game-lists.md](../features/game-lists.md)**
+for the full picture; the model facts that matter elsewhere:
+
+- `owner` FK to `Profile` (**not** `profile` — that is the legacy field name)
+- `list_type` — `collection` or `ranked`, presentation only; switching it moves no rows
+- Denormalized `game_count`, `like_count`, `follower_count`, maintained only by the service
+- Soft delete via `is_deleted` + `deleted_at`
+- `text_hidden` — a moderator hid the name AND description. The list, its games, its likes and its
+  followers are untouched; only the words go. **Never read directly** — `display_name` /
+  `display_description` are the supported readers, and the view context is as much a reader as a
+  template (the breadcrumb and the `og:*` tags leaked the hidden name until they used them). Browse
+  also excludes hidden rows from its text search and sorts them under the placeholder, because the
+  index and the sort order are both channels back to the words.
+- `featured_at` — nullable timestamp; non-null means the list is eligible for the browse Spotlight
+  and the most recent wins. Set only from the Django admin's feature/unfeature action.
+  `GameListQuerySet.featured()` is `public()` + non-null, ordered `-featured_at, -pk`.
+- `sections_restart_numbering` — sectioned RANKED lists only: restart at 1 in each section rather
+  than running 1..N. A display choice that stores nothing else; see `GameListItem.position`.
+- `GameListQuerySet` exposes `visible()` / `public()` / `owned_by()` / `readable_by()` / `featured()`. Only
+  `owned_by()` is unconditionally index-served; `public()` is served when the caller names one of
+  the two browse sorts (`Meta.ordering` matches neither), and `visible()` and `readable_by()` are
+  not. See [game-lists.md](../features/game-lists.md#visibility) for the table.
+
+**Caps: 3 lists free, 25 for members** (`max_lists_for`), and **200 games per list, flat**
+(`MAX_ITEMS_PER_LIST`, enforced in `add_concept`). The size cap arrived 2026-09-14 and reversed the
+"no cap on list SIZE" position this paragraph used to state — that argument was about the membership
+system this one replaced. 200 because it equals `views.MAX_ITEMS_RENDERED`, so no list can outgrow
+one render; flat because a size cap is abuse prevention and abuse prevention must not be purchasable.
+**Anyone writing the importer**: route it through `add_concept` or it is not bound by the cap. See
+[game-lists.md](../features/game-lists.md#caps).
+
+### gamelists.GameListItem
+
+One game on a list.
 
 Key relationships:
-- `profile` FK to `Profile`
+- `game_list` FK to `gamelists.GameList`
+- **`concept` FK to `Concept`** — NOT to `Game`, which is the single most important difference from
+  the legacy model. The site's word "game" is the Concept; a `Game` is one trophy list. Keyed on
+  `Game`, a backlog held Elden Ring twice, once per platform stack.
 
-### GameListItem
-A game entry within a GameList. Tracks position for custom ordering and optional notes.
+Because entries point at `Concept`, **`Concept.absorb()` carries a `GameListItem` branch** — see the
+`absorb()` contract in CLAUDE.md for the dedup rule and why it cannot be a bare `.update()`.
 
-Key relationships:
-- `game_list` FK to `GameList`
-- `game` FK to `Game`
+`position` is **dense** and that is load-bearing beyond ordering: `gamelists.services.covers`
+composes the browse tile's cover mosaic with `position__lt=4`, so a gap renders a three-cover mosaic
+on a four-game list. The service re-compacts on removal and `absorb()` repairs after a merge.
 
-### GameListLike
-Like on a public GameList. One per profile per list.
+### gamelists.GameListSection
+
+An author-named group of games within one list. **A membership perk to CREATE**, never to read: a
+free hunter sees a sectioned list exactly as anyone else does, and a lapsed member keeps the
+sections they have.
+
+- `game_list` FK, `name`, `position` (dense, per list), capped by `MAX_SECTIONS_PER_LIST`
+- `GameListItem.section` is nullable and **SET_NULL** — deleting a section keeps its games, which
+  fall back into the ungrouped bucket. CASCADE here would delete somebody's games because they
+  tidied a header.
+- **Needs no `Concept.absorb()` branch**: it has no relation to `Concept` at all, and its items
+  travel through the `GameListItem` branch that is already there.
+
+### gamelists.GameListReport
+
+A hunter objects to a list's name or description. Mirrors `BlurbReport` field for field.
+
+- `game_list` FK (**CASCADE**), `reporter` FK to `Profile`, `reason` (choices), `details`, `status`,
+  `reviewed_by`, `reviewed_at`
+- `unique_together = ['game_list', 'reporter']` — one report per hunter per list, so the first
+  objector cannot silence the second
+- `trophies.ModerationAction.list_report` is the FK back (**SET_NULL**, cross-app by string label),
+  alongside the `list_text_hidden` / `list_text_restored` / `list_report_dismissed` /
+  `list_report_reopened` action choices. Both hide and dismiss are reversible through `_UNDO`.
+- **Needs no `absorb()` branch**: it FKs the LIST, not a `Concept`, so it follows its list.
+
+### gamelists.GameListLike / gamelists.GameListFollow
+
+Both are `FK(list) + FK(Profile)` with a `UniqueConstraint` on the pair — the shape the four
+existing vote models in `trophies` share, though those spell it as `unique_together`. **`GameListFollow` is the site's first follow relation** — there is no
+follow/follower anything anywhere else — so it is a new abstraction rather than a borrowed one. Its
+only delivery surface today is My Lists' "Following" scope; there is no notification for it.
 
 ### DeveloperReputation
 Tracks the shovelware reputation of IGDB developers. Keyed by `Company` (OneToOne). A concept's shovelware standing keys off its **median** platinum earn rate across versions (robust to a single inflated low-population version). `is_blacklisted` is True when **more than 50%** of the company's platinum-bearing, primary-developed concepts are independently shovelware (median >= threshold, 3-concept floor); when a concept's primary developer is blacklisted, the whole concept is auto-flagged unless its median is below the shield threshold (40%). `is_whitelisted` is an admin full exemption (wins over blacklist): a whitelisted developer's primary-developed concepts are never auto-flagged. The blacklist proportion is **derived live** via `qualifying_concepts_for(company)` (numerator, median computed in Postgres with `percentile_cont`) and `primary_developed_concepts(company)` (denominator); only `is_whitelisted` is stored. Hysteresis lives in the numerator rate: enter at the 80% bar, leave when the proportion drops to <= 50% at the 70% bar. See [docs/reference/shovelware-detection.md](../reference/shovelware-detection.md).
@@ -532,7 +609,10 @@ Profile
   |-- 1:N --> Checklist
   |-- 1:N --> Challenge
   |-- 1:N --> MonthlyRecap
-  |-- 1:N --> GameList
+  |-- 1:N --> GameList          (legacy; the rebuild uses `owner`, see below)
+  |-- 1:N --> gamelists.GameList     (as `owner`)
+  |-- 1:N --> gamelists.GameListFollow
+  |-- 1:N --> gamelists.GameListLike
   |-- 1:N --> UserConceptRating
   |-- 1:N --> UserChecklistProgress
   |-- 1:N --> Donation
@@ -547,6 +627,7 @@ Concept
   |-- 1:N --> UserConceptRating
   |-- 1:N --> ConceptTrophyGroup
   |-- 1:N --> FeaturedGuide
+  |-- 1:N --> gamelists.GameListItem   (as `list_entries`)
   |-- M2M <-> Stage (via Stage.concepts)
 
 Game
@@ -556,7 +637,7 @@ Game
   |-- 1:N --> ProfileGame
   |-- 1:N --> AZChallengeSlot
   |-- 1:N --> CalendarChallengeDay
-  |-- 1:N --> GameListItem
+  |-- 1:N --> GameListItem      (LEGACY only -- the rebuilt item hangs off Concept)
 
 Trophy
   |-- N:1 --> Game
@@ -617,7 +698,7 @@ Notification
 ### Key Design Patterns
 
 - **Denormalized counters**: Most entities store pre-computed counts (`earned_count`, `upvote_count`, `like_count`) updated via signals or service methods, avoiding expensive COUNT queries at read time.
-- **Soft delete**: Comments, Reviews, Checklists, GameLists, and Challenges use `is_deleted` + `deleted_at` fields rather than hard deletion, preserving thread structure and audit trails.
+- **Soft delete**: Comments, Reviews, Checklists, GameLists (both the legacy `trophies` one and the rebuilt `gamelists` one) and Challenges use `is_deleted` + `deleted_at` fields rather than hard deletion, preserving thread structure and audit trails.
 - **Concept as unifier**: Regional/platform stacks are separate Game rows, but all user-facing content (comments, ratings, reviews, checklists) is attached to the shared Concept.
 - **Stage-Badge linkage**: Stages connect to Badges via `series_slug` (a string match) rather than a direct FK, allowing flexible tier-based stage filtering via `required_tiers`.
 - **JSON flexibility**: Fields like `defined_trophies`, `earned_trophies`, `title_platform`, `region`, `title_ids`, `metadata`, and recap data use JSONField for schema-flexible storage.

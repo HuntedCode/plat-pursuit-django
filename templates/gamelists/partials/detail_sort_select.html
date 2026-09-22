@@ -1,0 +1,15 @@
+{% comment %}The sort control's <select>, on its own so a type change can replace it.
+
+THE SELECT AND NOT THE FORM, deliberately. A type switch changes which sorts exist ("List order"
+appears with Ranked and goes with it), so the options have to be re-rendered -- but the FORM carries
+the htmx attributes and the `change` listener `browse-filters.js` binds to it. Replacing the form
+would silently unbind the auto-submit until the next full page load; replacing only the select leaves
+the listener in place, because a `change` event bubbles to the form that is still there.
+
+`id` is what makes it an out-of-band target. `oob` is passed only by the fragment in
+`detail_items.html`; the page's own render includes this with no flag.{% endcomment %}
+<select name="sort" id="gl-sort-select" class="pp-gallery__select"{% if oob %} hx-swap-oob="true"{% endif %}>
+    {% for value, display in sort_choices %}
+    <option value="{{ value }}"{% if sort == value %} selected{% endif %}>{{ display }}</option>
+    {% endfor %}
+</select>

@@ -212,6 +212,9 @@ rich result.{% endcomment %}
 {% endblock %}
 
 {% block js_scripts %}
+    {% comment %}The quick-add popover, for the "Add to list" button in the hero. Loaded per page
+    rather than from `base.html`: only pages that render a trigger should pay for the controller.{% endcomment %}
+    <script src="{% static 'js/quick-add.js' %}"></script>
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script src="{% static 'js/shot-lightbox.js' %}"></script>
     <script src="{% static 'js/trophy-grid.js' %}"></script>

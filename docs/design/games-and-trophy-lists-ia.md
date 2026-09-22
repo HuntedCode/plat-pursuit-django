@@ -29,7 +29,9 @@ segments and code identifiers stay NEUTRAL (`lists`, `list_*`), because copy is 
 change and URLs are a 301 migration. "Trophy Lists" is PlayStation-flavored and will not survive
 Xbox/Steam ("achievements"); when that bridge arrives, per-platform flavoring may even be correct
 (Trophy Lists on a PS tab, Achievement Lists on an Xbox tab), and bare "Lists" becomes available
-if the hidden `GameList` feature revamps under the better name "Collections".
+if the `GameList` feature revamps under the better name "Collections". **Answered
+(2026-09): it did not rename** -- the rebuild kept "Game Lists", because `/collection/`
+is the finished Badge Collection page and the collision would have been worse.
 
 ## The four canonical pages
 
@@ -158,7 +160,7 @@ Page-by-page during the rebuild, never a big-bang rename:
 
 - **2026-08-30 -- PHASE 4: Trophy Lists browse shipped** (7 commits incl. rail pins + audit response) -- the IA's LAST canonical
   page. `/games/lists/` (the neutral `lists` SEGMENT per the naming insurance; url name
-  `trophy_lists`, subnav slug `trophy-lists` -- the parked GameList system's guards forbid bare
+  `trophy_lists`, subnav slug `trophy-lists` -- the GameList system's guards forbid bare
   `lists` in nav slugs and sitemap keys, and hold `lists_browse`/`list_detail`/`my_lists`).
   The TagDetailBaseView sibling-browse shape: plain form, NO browse_defaults dispatch (the bare
   URL must 200 -- it is static-sitemap-advertised), the shared filter -> sort pipeline WITHOUT
@@ -265,7 +267,9 @@ Page-by-page during the rebuild, never a big-bang rename:
 
 ## Gotchas and Pitfalls
 
-- **`GameList` name collision**: the hidden user-collections feature is called Game Lists. Until
+- **`GameList` name collision**: the user-collections feature is called Game Lists, and since
+  its 2026-09 rebuild the name exists TWICE in code (`trophies.GameList` legacy,
+  `gamelists.GameList` live) -- see [game-lists.md](../features/game-lists.md). Until
   it revamps (suggested: "Collections"), never label trophy lists bare "Lists" in nav.
 - **`PP_*` stub concepts** must still render a coherent Game page; the title helper chain and
   `display_image_url` already handle stubs -- keep new surfaces on those helpers.

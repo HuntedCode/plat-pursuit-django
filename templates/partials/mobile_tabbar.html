@@ -3,17 +3,33 @@
 {% comment %}
 Mobile bottom tab bar — the hub navigation for <lg: viewports.
 
-Mirrors the desktop navbar's hub buttons (My Pursuit / Browse / Leaderboards /
-Support) at the bottom of the viewport so mobile users have one-tap access to
-every hub at all scroll positions. The desktop navbar's hub buttons are hidden
+Mirrors the desktop navbar's hub buttons at the bottom of the viewport so mobile
+users have one-tap access at all scroll positions. FOUR of the five BELOW `md`,
+because five do not fit there: the items are `flex: 1` at 0.62rem, so a fifth
+takes each from ~93px to ~75px at 375px while "Leaderboards" alone runs ~68-72px
+of text. From `md` all five show (~153px each at 768px).
+
+Support Us is the one that leaves BELOW `md` (2026-09), demoted by frequency: a
+storefront, a roadmap, a fundraiser page and a membership manager are occasional
+visits, where lists and hunters are habitual. The avatar dropdown carries it
+there, at every width, so somebody who learns where it lives finds it in the
+same place on desktop.
+
+From `md` there is room for all five (~153px each at 768px) and it comes back,
+which is what closes the one real cost of the trade: below `md` no tab
+highlights while you are in Support Us. That is accepted knowingly and is
+smaller than it sounds, because the hub carries its own sub-nav rail showing
+which of its four pages you are on. The desktop navbar's hub buttons are hidden
 on <lg: precisely because this bar takes over. My Pursuit is login-gated (the
-personal hub is), so logged-out visitors see 3 tabs; the flex `justify-around`
-inner distributes 3 or 4 evenly.
+personal hub is), so the tab count runs 3 / 4 / 4 / 5 across anon-below-md,
+anon-from-md, auth-below-md and auth-from-md. The items are `flex: 1`, which is
+what distributes them evenly -- the container's `justify-content` never had
+anything to distribute and has been removed.
 
 The previous mobile chrome (search button + overlay, More drawer) was
 removed in the navbar consolidation: search was dropped site-wide because
 the IA wayfinding handles content discovery, and the More drawer became
-redundant once the bottom tab bar surfaced the 4 hubs directly. The hubs'
+redundant once the bottom tab bar surfaced the hubs directly. The hubs'
 sub-pages are reachable via the hub_subnav strip pinned at top-16.
 
 Active state: each tab compares hub_section (from the hub_subnav context
@@ -27,8 +43,9 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
 <nav class="mobile-tabbar lg:hidden" role="navigation" aria-label="Mobile navigation">
     <div class="mobile-tabbar-inner">
         {% if user.is_authenticated %}
-        <!-- My Pursuit (the logged-in Home / Overview lives at /). Anon-hidden: the personal hub is -->
-        <!-- login-gated, so for logged-out visitors it's just the hero the logo already reaches. -->
+        {% comment %}My Pursuit (the logged-in Home / Overview lives at /). Anon-hidden: the
+        personal hub is login-gated, so for logged-out visitors it is just the hero the logo already
+        reaches.{% endcomment %}
         <a href="{% url 'career' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %} aria-label="My Pursuit{% if career_claimable %}, {{ career_claimable }} contract{{ career_claimable|pluralize }} ready to claim{% endif %}{% if career_new_contracts %}, new contracts on the board{% endif %}">
             {% comment %} The markers ride the ICON, not the label: the bar is 4 items across a
             375px phone, so a badge beside the word would push the row. Same count-plus-NEW pair as
@@ -45,7 +62,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         </a>
         {% endif %}
 
-        <!-- Browse -->
+        {% comment %}Browse{% endcomment %}
         <a href="{% url 'games_list' %}" class="mobile-tabbar-item {% if hub_section == 'browse' %}active{% endif %}" {% if hub_section == 'browse' %}aria-current="page"{% endif %} aria-label="Browse">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
@@ -53,9 +70,9 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             <span>Browse</span>
         </a>
 
-        <!-- Leaderboards -->
+        {% comment %}Leaderboards{% endcomment %}
         <a href="{% url 'overall_badge_leaderboards' %}" class="mobile-tabbar-item {% if hub_section == 'leaderboards' %}active{% endif %}" {% if hub_section == 'leaderboards' %}aria-current="page"{% endif %} aria-label="Leaderboards">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="18" y1="20" x2="18" y2="10"/>
                 <line x1="12" y1="20" x2="12" y2="4"/>
                 <line x1="6" y1="20" x2="6" y2="14"/>
@@ -63,12 +80,35 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             <span>Leaderboards</span>
         </a>
 
-        <!-- Support -->
-        <a href="{% url 'support_hub' %}" class="mobile-tabbar-item {% if hub_section == 'support' %}active{% endif %}" {% if hub_section == 'support' %}aria-current="page"{% endif %} aria-label="Support">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        {% comment %}Community. Points at Hunters, its only member today: `/community/` is a
+        permanent redirect, so the tab targets a real page.{% endcomment %}
+        <a href="{% url 'profiles_list' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" {% if hub_section == 'community' %}aria-current="page"{% endif %} aria-label="Community">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            <span>Community</span>
+        </a>
+
+        {% comment %}Support Us: the FIFTH tab, and the only one conditional on width.
+
+        Below `md` it is not here at all -- five items are `flex: 1` at 0.62rem, so a fifth takes
+        each from ~93px to ~75px at 375px while "Leaderboards" alone runs ~68-72px of text -- and the
+        avatar dropdown carries it instead. From `md` there is room (~153px each at 768px), so it
+        comes back and the hub gets its highlight again on tablets.
+
+        A modifier class rather than a Tailwind `hidden md:flex`, because the item's own
+        `display: flex` would fight the utility depending on source order.
+
+        A `{% templatetag openblock %} comment {% templatetag closeblock %}` and not an HTML one:
+        these ship. The first version was `<!-- -->`, which sent this rationale to every visitor AND
+        defeated a test, because the comment contained the very class name the test was searching
+        the rendered page for.{% endcomment %}
+        <a href="{% url 'support_hub' %}" class="mobile-tabbar-item mobile-tabbar-item--wide {% if hub_section == 'support' %}active{% endif %}" {% if hub_section == 'support' %}aria-current="page"{% endif %} aria-label="Support Us">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>
-            <span>Support</span>
+            <span>Support Us</span>
         </a>
 
     </div>

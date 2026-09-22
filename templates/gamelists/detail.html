@@ -1,0 +1,529 @@
+{% extends 'base.html' %}
+{% load static humanize mark_tags %}
+{% block title %}{{ game_list.display_name }}{% endblock %}
+{% comment %}A private list must never be indexed, and a public one is worth indexing -- but not once
+per sort permutation, which is the same guard the browse page and Franchises carry.{% endcomment %}
+{% block robots %}{% if not game_list.is_public or request.GET %}noindex, nofollow{% else %}{{ block.super }}{% endif %}{% endblock %}
+
+{% comment %}
+List detail. Ported from the 2026-08 rebuild -- which was finished work on the standard -- and
+re-keyed onto the new models, with three changes the design conversation settled:
+
+1. NO SEPARATE EDIT PAGE. Three surfaces, not five: the owner edits here, where the result is
+   visible. The old page's "Edit" button opened a whole other address.
+2. NO COPY BUTTON. Cloning was considered and not chosen; the social layer is follow, like and share.
+3. PUBLISHING IS AN ACT, not a checkbox on a form somewhere else -- so a private list carries its own
+   publish affordance and says what publishing will do.
+
+Structure is the site-wide rule: STACKED chrome cards (header, toolbar), then the games flowing FREE
+below with no outer wrapper.
+{% endcomment %}
+
+{% block content %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Identity ───────────────────────────────────────────────────────────────────────────── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                {% comment %}Both the read view and the edit form are rendered, and JS swaps which is
+                `hidden`. The owner edits HERE, where the result is visible, which is the whole reason
+                there is no separate edit page.{% endcomment %}
+                <div class="min-w-0 flex-1" data-gl-identity
+                     {% comment %}The CURRENT type, so the editor can tell a real switch from a
+                     re-save that left it alone -- only the former needs the reload.{% endcomment %}
+                     data-list-type="{{ game_list.list_type }}"
+                     {% if is_owner %}data-update-url="{% url 'list_update' game_list.id %}"{% endif %}>
+                    <div data-gl-identity-view>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            {% comment %}`display_name` for a READER, the real name for the OWNER.
+                            A moderator can hide a list's words (`text_hidden`); the owner still has
+                            to be able to see and fix what was hidden, so they get their own text
+                            plus the chip below. Everybody else gets the neutral name.{% endcomment %}
+                            <h1 class="text-lg md:text-xl lg:text-2xl font-bold" data-gl-name>{% if is_owner %}{{ game_list.name }}{% else %}{{ game_list.display_name }}{% endif %}</h1>
+                            {% if game_list.text_hidden and is_owner %}
+                            <span class="badge badge-sm badge-warning font-bold" title="A moderator hid this list's name and description. The list itself is untouched.">Hidden by a moderator</span>
+                            {% endif %}
+                            {% comment %}The private state is marked; the public one is not. A list is
+                            private when it is born, so the chip marks the exception. Always rendered
+                            now (hidden when public) so publishing can dissolve it in place rather
+                            than needing a reload to remove it.{% endcomment %}
+                            {% comment %}`.gl-chip`, not `.pp-gtile__stat`. That block belongs to the
+                            grouping TILE and was the only non-tile use of it on the site -- borrowed
+                            when this header had no chip of its own. It is also tinted
+                            `--pp-primary`, which the visual identity reserves for accent and
+                            achievement, so "Private" rendered as a highlight rather than as the
+                            restriction it is. The list card's chip is neutral and purpose-built.{% endcomment %}
+                            <span class="gl-chip gl-chip--private" title="Only you can see this list"
+                                  data-gl-private-chip {% if game_list.is_public %}hidden{% endif %}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                Private
+                            </span>
+                        </div>
+
+                        {% comment %}Always rendered, hidden when empty: a description added in place
+                        needs somewhere to land, and a `{% templatetag openblock %} if {% templatetag closeblock %}` leaves nothing to fill.{% endcomment %}
+                        <p class="text-xs md:text-sm text-base-content/60 mt-1 max-w-prose"
+                           data-gl-description {% if not game_list.description %}hidden{% endif %}>{% if is_owner %}{{ game_list.description }}{% else %}{{ game_list.display_description }}{% endif %}</p>
+
+                        {% comment %}The owner wears their mark here too, so the author of a list reads
+                        the same on its own page as it does on the browse grid.
+
+                        `font-semibold` WITHOUT a colour class when marked: the mark paints the name in
+                        its own register (`--sup-t`), and a `link` colour on the anchor would override
+                        the very thing the mark exists to say. Unmarked names keep `link` so they still
+                        read as a link. This is the comment.html idiom.{% endcomment %}
+                        <p class="text-xs text-base-content/50 mt-2">
+                            by <a href="{% url 'profile_detail' game_list.owner.psn_username %}"
+                                  class="link-hover font-semibold{% if not game_list.owner.display_mark %} link{% endif %}">{% name_mark name=game_list.owner.display_psn_username|default:game_list.owner.psn_username mark=game_list.owner.display_mark size='sm' %}</a>
+                        </p>
+                    </div>
+
+                    {% if is_owner %}
+                    {# `id` so the Edit button's `aria-controls` points at something real. #}
+                    <form id="gl-edit-panel" data-gl-identity-edit hidden class="gl-edit">
+                        <div class="stg-field">
+                            <label class="stg-field__label" for="gl-edit-name">Name</label>
+                            <input type="text" id="gl-edit-name" name="name" class="stg-input" required
+                                   maxlength="{{ name_max_length }}" data-charcount autocomplete="off"
+                                   aria-describedby="gl-edit-name-count" value="{{ game_list.name }}" />
+                            <span class="gl-countchars" id="gl-edit-name-count"
+                                  data-charcount-for="gl-edit-name" aria-live="polite"></span>
+                        </div>
+
+                        <div class="stg-field">
+                            <label class="stg-field__label" for="gl-edit-description">
+                                Description <span class="stg-field__hint">optional</span>
+                            </label>
+                            <textarea id="gl-edit-description" name="description" class="stg-input" rows="2"
+                                      maxlength="{{ description_max_length }}" data-charcount
+                                      aria-describedby="gl-edit-description-count"
+                                      placeholder="What is this list for?">{{ game_list.description }}</textarea>
+                            <span class="gl-countchars" id="gl-edit-description-count"
+                                  data-charcount-for="gl-edit-description" aria-live="polite"></span>
+                        </div>
+
+                        {% comment %}The type belongs in the edit panel rather than in a control of
+                        its own: it is part of what the list IS, alongside its name and description,
+                        and switching it is lossless so it needs no confirmation step of its own.
+                        The same options and the same copy the create dialog shows, from the same
+                        source, so the two cannot describe a type differently.
+
+                        Changing this reloads the page (see `list-detail.js`) because the type
+                        decides the sort options, the numerals and the handles -- three things the
+                        server renders and the client should not try to assemble.{% endcomment %}
+                        <fieldset class="stg-field gl-type">
+                            <legend class="stg-field__label">Type</legend>
+                            <div class="gl-type__opts">
+                                {% for value, label, blurb in list_type_options %}
+                                <label class="gl-type__opt">
+                                    <input type="radio" name="list_type" value="{{ value }}"
+                                           {% if value == game_list.list_type %}checked{% endif %} />
+                                    <span class="gl-type__body">
+                                        <span class="gl-type__name">{{ label }}</span>
+                                        <span class="gl-type__hint">{{ blurb }}</span>
+                                    </span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </fieldset>
+
+                        <div class="gl-edit__foot">
+                            <button type="submit" class="pp-cta" data-gl-edit-save>Save</button>
+                            <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-cancel>Cancel</button>
+                            {% comment %}DELETE, pushed to the far end of the row and styled apart,
+                            because it is the one control here that cannot be undone by pressing the
+                            same button again.
+
+                            It exists at all because the cap refusal promises it -- "Delete one to
+                            make room, or become a member for more" -- and until 2026-09 there was no
+                            route, no button and no way: the service function was written and tested
+                            and never called. Nobody noticed while only staff could make a list,
+                            since staff do not hit a three-list ceiling. Every free hunter does, at
+                            list four.
+
+                            The confirm is a plain `confirm()` rather than a modal: the site's
+                            dialog primitive is for things you are composing, and this is a yes/no
+                            about a thing you already made.{% endcomment %}
+                            <button type="button" class="pp-cta pp-cta--danger gl-edit__delete"
+                                    data-gl-delete
+                                    data-delete-url="{% url 'list_delete' game_list.id %}"
+                                    data-list-name="{{ game_list.name }}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                </svg>
+                                Delete list
+                            </button>
+                        </div>
+                    </form>
+                    {% endif %}
+                </div>
+
+                {% comment %}Yields while the editor is open. At 375px the card body is ~307px and
+                these two tallies plus the gaps take ~136px, leaving the identity column ~171px --
+                so the name field rendered about eleven characters wide for a 60-character limit.
+                The counts are not what somebody is looking at mid-rename, and they come straight
+                back on save or cancel.{% endcomment %}
+                <div class="flex items-center gap-4 shrink-0 text-right" data-gl-tallies>
+                    <div>
+                        <span class="pp-tally text-primary leading-none font-bold text-xl md:text-3xl" data-game-count>{{ game_list.game_count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">games</span>
+                    </div>
+                    {% comment %}Hidden rather than absent while private, so publishing reveals the
+                    tally in place instead of leaving the header a reload behind.{% endcomment %}
+                    <div data-gl-tally-likes {% if not game_list.is_public %}hidden{% endif %}>
+                        <span class="pp-tally leading-none font-bold text-xl md:text-3xl" data-like-count>{{ game_list.like_count|intcomma }}</span>
+                        <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">likes</span>
+                    </div>
+                </div>
+            </div>
+
+            {% comment %}Actions. A visitor gets the two social acts; the owner gets the things only
+            an owner can do. Nobody gets both, because there is no state in which both apply.
+
+            These stay IN the header, unlike the browse and My Lists page actions that moved out to
+            their toolbars -- because these act on the very thing the header describes, and the
+            toolbar below is about the GAMES, not the list. What was wrong was the seam, not the
+            place: a bare wrap row at `mt-5` read as buttons loose under the title rather than as a
+            band, and the explanatory line beside them made it look like a sentence had sprouted
+            controls. A rule and its own rhythm separate the two registers, which is what the header
+            card wanted all along.{% endcomment %}
+            {% if can_act or is_owner %}
+            <div class="gl-actions">
+                {% if can_act %}
+                <button type="button" class="pp-cta{% if not viewer_has_liked %} pp-cta--ghost{% endif %}"
+                        data-gl-like data-url="{% url 'list_like' game_list.id %}"
+                        aria-pressed="{% if viewer_has_liked %}true{% else %}false{% endif %}">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if viewer_has_liked %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <span data-gl-like-label>{% if viewer_has_liked %}Liked{% else %}Like{% endif %}</span>
+                </button>
+
+                {% comment %}"Follow", named for where this is going rather than for what it does
+                today. Notifications are coming; a social verb is a word people LEARN, and renaming
+                one later costs more than the small gap now. What stays honest is the surrounding
+                copy: nothing here claims an alert that cannot yet arrive, so when the notification
+                surface lands there is a feature to add and nothing to walk back.{% endcomment %}
+                <button type="button" class="pp-cta{% if not viewer_follows %} pp-cta--ghost{% endif %}"
+                        data-gl-follow data-url="{% url 'list_follow' game_list.id %}"
+                        aria-pressed="{% if viewer_follows %}true{% else %}false{% endif %}">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="{% if viewer_follows %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    <span data-gl-follow-label>{% if viewer_follows %}Following{% else %}Follow{% endif %}</span>
+                </button>
+
+                {% comment %}REPORT, and it comes LAST on purpose. Like and Follow are what this row
+                is for; a report is the rare act, and putting it beside the two buttons people press
+                constantly is how somebody taps it by accident.
+
+                QUIET BY DEFAULT -- ghost, no icon fill, muted. A prominent Report button reads as an
+                invitation and turns a disagreement about taste into a moderator's afternoon.{% endcomment %}
+                <button type="button" class="pp-cta pp-cta--ghost" data-gl-report-open
+                        aria-haspopup="dialog">Report</button>
+                {% endif %}
+
+                {% if is_owner %}
+                {% comment %}EDIT, AS A LABELLED ACTION IN THIS BAND rather than a pencil welded to
+                the title.
+
+                It was a 44px icon-only button sitting beside the `h1`, and that is the INLINE
+                FIELD-EDIT idiom -- the little pencil you meet a dozen times down a settings form,
+                each one editing the one value it sits next to. So it read as "rename this heading"
+                and got lost, when what it actually opens is the whole editing state: name,
+                description, sections and arrange mode. The affordance was promising a fraction of
+                what the control does.
+
+                Here it is the owner's counterpart to Publish, which this band already treats as a
+                real action that "says what it does rather than being a checkbox on a form somewhere
+                else". Same argument, same place. A text label is also simply the biggest
+                findability win available -- an icon has to be recognised, a word only read.
+
+                GHOST, not filled, and FIRST. Publish is the act the page wants a new owner to take,
+                so it keeps the only filled treatment; two primaries side by side would compete and
+                neither would lead. First because editing is the everyday action and publishing is
+                the deliberate one -- frequency before consequence, left to right.{% endcomment %}
+                <button type="button" class="pp-cta pp-cta--ghost" data-gl-edit-open
+                        aria-expanded="false" aria-controls="gl-edit-panel">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    <span>Edit list</span>
+                </button>
+
+                {% comment %}Publishing is the deliberate second act, so it gets a real affordance and
+                says what it does rather than being a checkbox on a form somewhere else.
+
+                BOTH states are rendered and JS swaps `hidden`, so the act completes on the page it
+                started on. Unpublishing is offered too: the service has always allowed it (its
+                docstring is explicit that a restricted hunter may still take their own list down),
+                and until now nothing in the UI could.{% endcomment %}
+                <span data-gl-visibility data-update-url="{% url 'list_update' game_list.id %}"
+                      class="contents">
+                    <span class="contents" data-gl-private-state {% if game_list.is_public %}hidden{% endif %}>
+                        <button type="button" class="pp-cta" data-gl-publish>
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                            <span>Publish</span>
+                        </button>
+                        <span class="gl-actions__note text-xs text-base-content/50">Only you can see this so far.</span>
+                    </span>
+                    <span class="contents" data-gl-public-state {% if not game_list.is_public %}hidden{% endif %}>
+                        <span class="gl-actions__note text-xs text-base-content/50">Published. Anyone with the link can read it.</span>
+                        <button type="button" class="pp-cta pp-cta--ghost" data-gl-unpublish>
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            <span>Make private</span>
+                        </button>
+                    </span>
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+{% comment %}THE PREVIEW SAYS SO. A door whose whole point is that the page looks like somebody
+    else's needs to announce itself, or you cannot tell "previewing correctly" from "the controls are
+    missing" -- and for a free owner with no sections the honest answer IS that nothing appears,
+    which is indistinguishable from a broken preview without this line.
+
+    Team-only, like the door itself. `previewing()` has already established that, so the template
+    asks nothing further -- a second, weaker check here is how the two drift.
+
+    The exit link drops the querystring rather than toggling anything: no state is written by a
+    preview, so leaving one is just the page's own address.{% endcomment %}
+    {% if free_preview %}
+    <div class="gl-preview" role="note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span class="gl-preview__body">
+            <strong>Previewing as a non-member.</strong>
+            Sections are the only member-gated control on this page, so everything else here is what
+            a free hunter really sees.
+        </span>
+        <a class="gl-preview__exit" href="{% url 'list_detail' game_list.id %}">Exit preview</a>
+    </div>
+    {% endif %}
+
+    {% comment %}ONE toolbar card: title, the owner's adder, and sort -- the same bar the browse pages
+    use (`.pp-toolbar-card` > `.pp-gbrowse__bar`, a flex row that wraps on narrow phones). The adder
+    was previously a hand-rolled card of its own sitting directly beneath this one, which put two
+    control surfaces in two visual languages back to back and read as bolted-on.
+
+    THE ADDER IS DELIBERATELY OUTSIDE THE SORT FORM. `browse-filters.js` wires every input inside a
+    `[data-browse-form]` and auto-submits it, so nesting the adder here would fire a sort request per
+    keystroke AND serialize the search text into the sort URL. Keeping the form around the sort alone
+    is what makes the two coexist in one bar.{% endcomment %}
+    {% if items or is_owner %}
+    {% comment %}`gl-toolbar` SCOPES two rules to this toolbar: the adder's wider flex basis and the
+    phone reorder. `.pp-gbrowse__bar` and `.pp-bgal__search` are shared with twelve browse surfaces, so
+    an unqualified rule would restyle the search field on Browse Games too -- and the basis rule needs
+    the second class for a further reason, since the shared `.pp-gbrowse__bar > .pp-bgal__search` is
+    (0,2,0) and outranks a lone class whatever the source order.
+
+    ONLY WHEN THERE ARE ITEMS, because the sort form is itself `{% templatetag openblock %} if items
+    {% templatetag closeblock %}`: on an empty list the bar holds just the title and the adder, which
+    fit one line at 375px, and reordering would strand "Games" alone on a row above the adder. The one
+    state where the adder is the entire point of the page is not the state to spend a row on.{% endcomment %}
+    <div class="pp-toolbar-card pp-gbrowse__toolbar{% if items %} gl-toolbar {% endif %}">
+        <div class="pp-gbrowse__bar">
+            <span class="pp-ltoolbar__title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                Games
+            </span>
+
+            {% if is_owner %}
+            {% comment %}The adder. One of the three entry points the design conversation settled (the
+            other two are the shared game card and the concept Game page), and the only one that lives
+            on the list itself. Owner-only: `can_act` governs the social acts, and this is not one.
+
+            `.pp-bgal__search` is the site's search field -- the same class browse.html and the share
+            picker use -- rather than a private `.gl-adder__field`. The private one had drifted on
+            every dimension (padding, radius, icon offset, font size, background) so two search fields
+            on one feature disagreed, and it also carried the bug that started this: it had no rule at
+            all, leaving the wrapper inline so the chrome anchored to a 19px line box.
+
+            `data-page-search` opts into the global "/" and Cmd/Ctrl+K shortcut, with the `.pp-search-kbd`
+            hint the other pages show. Safe here: the handler takes the first VISIBLE candidate, and
+            this page has no other -- the sort form holds a select, which the fallback does not
+            match.{% endcomment %}
+            {% comment %}`.gl-adder` ON TOP OF the shared field, never instead of it. The shared
+            class keeps the geometry, the chrome and `wireSearchField`; the modifier does nothing but
+            raise this one instance, so the two search fields on the site still agree about what a
+            search field IS. (The private field this page used to carry is why that matters -- it had
+            drifted on every dimension and is documented in gamelists.css.)
+
+            THE GLYPH IS A PLUS, NOT A MAGNIFIER. Owner's note, 2026-09: sitting in a grey bar with a
+            magnifier and a sort select beside it, the one control on the page that ADDS anything read
+            as a filter and was easy to look straight past. Searching is the means here; adding is the
+            act, and a leading icon should say what pressing the thing achieves.{% endcomment %}
+            <div class="pp-bgal__search gl-adder" data-search-wrap data-gl-adder
+                 data-search-url="{% url 'list_game_search' game_list.id %}"
+                 data-add-url="{% url 'list_add_game' game_list.id %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+                {% comment %}Deliberately NOT `role="combobox"`. The results are real <button>s, so they
+                are already focusable, activatable and announced correctly; layering a combobox on top
+                would mean owning aria-activedescendant and a selection model to describe what the
+                buttons already say for themselves. A half-built combobox reads worse to a screen
+                reader than plain semantics. The count goes to the status line instead.{% endcomment %}
+                <input type="search" id="gl-adder-input" autocomplete="off"
+                       placeholder="Add a game to this list&hellip;"
+                       aria-label="Search for a game to add to this list"
+                       data-page-search data-gl-adder-input />
+                <span class="pp-search-spin" aria-hidden="true"></span>
+                <button type="button" class="pp-search-clear" data-search-clear tabindex="-1"
+                        aria-label="Clear search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+                <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+
+                {% comment %}An OVERLAY, anchored to this wrapper's `position: relative`, the way the
+                nav search and the game page's hunter search do it. In flow it pushed the entire grid
+                down by up to 336px on every debounced keystroke that changed the result count, which
+                on a phone left roughly one tile row visible and contradicted the reason the adder sits
+                above the games at all.{% endcomment %}
+                <div class="gl-adder__panel" id="gl-adder-results" data-gl-adder-results hidden></div>
+            </div>
+            {% comment %}The count goes to a polite live region rather than the results container:
+            marking the container live would read all twelve rows aloud on every keystroke.{% endcomment %}
+            <p class="sr-only" aria-live="polite" data-gl-adder-status></p>
+            {% endif %}
+
+            {% comment %}Sort swaps the items only -- re-sorting a 200-game list should not re-render
+            the header and the chrome. `innerHTML` into a stable wrapper, the pattern that works on
+            this site (the outerHTML variant duplicated the page on My Lists).{% endcomment %}
+            {% if items %}
+            <form data-browse-form id="gl-detail-form" class="pp-gbrowse__sort"
+                  hx-get="{% url 'list_detail' game_list.id %}"
+                  hx-target="#gl-items-panel"
+                  hx-swap="innerHTML"
+                  hx-push-url="true"
+                  hx-trigger="submit"
+                  hx-indicator="#gl-items-panel">
+                {% comment %}A hidden field rather than a JS hook, because this form is submitted by
+                htmx directly: its fields ARE the querystring, and `hx-push-url` then keeps the
+                parameter in the address bar so a reload stays in the preview.{% endcomment %}
+                {% if free_preview %}<input type="hidden" name="preview" value="lists-free" />{% endif %}
+                <label>
+                    <span class="sr-only">Sort games</span>
+                    {% include 'gamelists/partials/detail_sort_select.html' %}
+                </label>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% comment %}Page-level actions announce here. Separate from the adder's own status region,
+    which is scoped to search results: adding and removing are page-level changes, and the toast
+    that reports them is not an announcement -- `#toast-container` in base.html carries no
+    `aria-live`, so nothing ToastManager writes is read out at all.
+
+    NOT `{% templatetag openblock %} if is_owner {% templatetag closeblock %}` ANY MORE, and that
+    gate was a silent hole rather than a saving. Reporting is the one action on this page available
+    to somebody who is NOT the owner (`can_act` is explicitly "not is_owner"), so the two audiences
+    were disjoint by construction: every `announce()` the report dialog made -- the success line and
+    every refusal, including "you have already reported this list" -- wrote into an element that had
+    not been rendered. A blind reporter pressed Send and was told nothing at all, with no toast
+    fallback because the toast is not announced either.
+
+    An empty `sr-only` paragraph costs nothing for the owner-less case, so it renders unconditionally
+    rather than growing a second gate that the next action has to remember to join.{% endcomment %}
+    <p class="sr-only" aria-live="polite" data-gl-status></p>
+
+    {% include 'gamelists/partials/detail_positions.html' %}
+
+    {% comment %}`data-preview` is how the preview SURVIVES a refresh. Every htmx path here rebuilds
+    its querystring from scratch -- `refreshItems` from the sort form's `hx-get`, `refreshAfterTypeChange`
+    from `window.location.pathname` -- so the parameter was dropped on the first add, remove, sort or
+    section change, and the out-of-band chrome came back with the MEMBER controls under a banner still
+    announcing the non-member render. That is exactly the half-open door `core/previews.py` exists to
+    forbid.
+
+    ON THE PANEL, which is htmx's swap TARGET and therefore keeps its own attributes across a swap --
+    the trap this feature has now documented three times. Nothing can change it mid-session either: a
+    preview begins and ends with a navigation.{% endcomment %}
+    <div id="gl-items-panel"{% if free_preview %} data-preview="lists-free"{% endif %}>
+        {% include 'gamelists/partials/detail_items.html' %}
+    </div>
+
+</div>
+{% if can_act %}
+{% comment %}REPORT, in a native <dialog> on the `.gd-modal` recipe -- the house pattern for form
+sheets, and the element that brings a real focus trap, Escape and focus restoration for free.
+
+IT POSTS JSON rather than submitting, because the refusals are worth reading: you have already
+reported this one, that is your own list, pick a reason. A plain submit would replace the page with
+an error and lose what was typed.
+
+WHAT IT DOES NOT SAY is as deliberate as what it does. No count of existing reports, no "this list
+has been reported before" -- that is a moderator's information, and showing it tells somebody
+organising a pile-on whether it is working.{% endcomment %}
+{% comment %}`gl-dialog` ALONE, not `gd-modal gl-dialog`. Both files are imported after Tailwind and
+so are unlayered, and `gamelists.css` comes second, so every `.gl-dialog` declaration already won on
+source order -- width, border, entrance animation. `gd-modal` contributed nothing visible and one
+active harm: it made a reader believe `.gd-modal.is-closing`'s exit was in play on an element whose
+exit was not wired at all. The create dialog next door is `gl-dialog` alone.{% endcomment %}
+{% comment %}`tabindex="-1"` so the dialog is a focusable area and `dialog.focus()` in the opener
+actually lands. Without it a `<dialog>` is not focusable, `.focus()` is a silent no-op, and focus
+stays where `showModal()` put it -- which in Firefox and Safari is the first focusable descendant,
+i.e. the reason `<select>` the focus move exists to avoid. Chrome 117+ focuses the dialog itself,
+which made the fix look correct on the browser it was written in.{% endcomment %}
+<dialog id="gl-report" class="gl-dialog" tabindex="-1" aria-labelledby="gl-report-title">
+    <form data-gl-report-form data-url="{% url 'list_report' game_list.id %}">
+        <div class="gl-dialog__head">
+            <div>
+                <h2 class="gl-dialog__title" id="gl-report-title">Report this list</h2>
+                <p class="gl-dialog__sub">A moderator reads every report. The owner is not told who sent it.</p>
+            </div>
+            <button type="button" class="gl-dialog__close" data-gl-report-close aria-label="Close">&times;</button>
+        </div>
+
+        <div class="gl-dialog__body stg-form">
+            <label class="stg-field">
+                <span class="stg-field__label">What is wrong with it?</span>
+                {% comment %}A DISABLED PLACEHOLDER, SELECTED BY DEFAULT. The first real option was
+                auto-selected, so opening the dialog and pressing Send with no thought at all filed
+                a Spam report against somebody's list -- and `required` on a select that is never
+                empty can never fire, so nothing stopped it. Now the form refuses to submit until a
+                reason is actually chosen, which is what `required` was there to mean.{% endcomment %}
+                <select name="reason" class="stg-input" required data-gl-report-reason>
+                    <option value="" disabled selected>Choose a reason&hellip;</option>
+                    {% for value, label in report_reasons %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label class="stg-field">
+                <span class="stg-field__label">Anything else?</span>
+                {% comment %}`data-charcount` wires the shared `PlatPursuit.wireCharCounters`, which
+                this page already calls for the identity editor. Without it `maxlength` swallows
+                keystrokes silently at 500 -- the create dialog's own comment makes the same
+                argument.{% endcomment %}
+                <textarea name="details" rows="3" maxlength="500" class="stg-input"
+                          id="gl-report-details" data-gl-report-details data-charcount
+                          placeholder="What should a moderator look at?"></textarea>
+                <span class="gl-countchars" id="gl-report-details-count"
+                      data-charcount-for="gl-report-details" aria-live="polite"></span>
+            </label>
+
+            {% comment %}`role="alert"` so a refusal is spoken the moment it appears. The status
+            region above announces it too; this is the one that works if the dialog's own content is
+            all a screen reader is tracking.{% endcomment %}
+            <p class="gl-dialog__error" role="alert" data-gl-report-error hidden></p>
+        </div>
+
+        <div class="gl-dialog__foot">
+            <button type="button" class="pp-cta pp-cta--ghost" data-gl-report-close>Cancel</button>
+            <button type="submit" class="pp-cta" data-gl-report-send>Send report</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block js_scripts %}
+    {% comment %}`browse-filters.js` is what auto-submits the sort select (the form itself only
+    listens for `submit`). `list-detail.js` replaces `gamelists.js` here: that file is the My Lists
+    page -- a create dialog and a scope switcher -- and this page loaded all of it to use none of
+    it.{% endcomment %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/list-detail.js' %}"></script>
+{% endblock %}
