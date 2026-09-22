@@ -3586,7 +3586,12 @@ window.PlatPursuit.discPopovers = discPopovers;
  * @param {string} [config.item]       delegated selector for an actionable row inside the panel
  * @param {function} [config.onItem]   (itemEl, trigger) -> a row was activated
  * @param {function} [config.canOpen]  (trigger) -> bool; refuse to open (default: always)
- * @returns {{close: function, reposition: function, isOpen: function, panel: function, destroy: function}}
+ * @returns {{close: function, reposition: function, current: function, stale: function, destroy: function}}
+ *
+ * `current()` is the trigger the open panel belongs to and `stale(seq)` says whether an async
+ * `onOpen` was overtaken -- both are what a consumer needs after an await. The list used to advertise
+ * `isOpen()` and `panel()`, which no consumer ever called and which have been removed; all three
+ * consumers use the five above.
  */
 
 //: Every registered menu. Module-level so the document listeners below are bound once no matter how
@@ -3851,8 +3856,6 @@ function AnchoredMenu(config) {
         self.reposition();
     };
 
-    self.isOpen = function () { return _anchoredOpen === self; };
-    self.panel = function () { return self.el; };
     self.current = function () { return self.trigger; };
     self.stale = function (seq) { return seq !== self.seq; };
 

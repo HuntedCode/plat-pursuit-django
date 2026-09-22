@@ -1732,7 +1732,12 @@ def test_the_edit_control_is_a_labelled_action_not_an_inline_pencil(client):
 
     # The panel still exists and is still what the mode opens first; it is simply no longer the
     # whole of what the control means.
-    assert 'id="gl-edit-panel"' in body
+    #
+    # PINNED ON THE HOOK THE JS USES, not on the id. This asserted `id="gl-edit-panel"`, which was
+    # added for the `aria-controls` two lines above -- and once that attribute was removed on purpose
+    # the id had no consumer at all: no JS, no CSS, no ARIA. `list-detail.js` finds this form by
+    # `[data-gl-identity-edit]`, so that is the attribute whose loss would actually break the page.
+    assert 'data-gl-identity-edit' in body
 
 
 def test_the_edit_opener_is_looked_up_where_it_actually_lives(client):

@@ -219,7 +219,12 @@ def test_only_one_menu_is_open_across_every_instance():
     both answering Escape."""
     src = _menu_source()
 
-    open_fn = src[src.index('self.open = function'):src.index('self.isOpen = function')]
+    # BOUNDED BY A METHOD SOMETHING CALLS. This sliced to `self.isOpen`, which no consumer ever used
+    # -- so deleting that dead method broke a test about a completely different invariant, with a
+    # `ValueError: substring not found` rather than anything resembling the claim above. A landmark
+    # nobody depends on is a landmark that can move; `current()` is read by `quick-add.js` after
+    # every await, so it cannot quietly disappear.
+    open_fn = src[src.index('self.open = function'):src.index('self.current = function')]
     assert 'if (_anchoredOpen) { _anchoredOpen.close(false); }' in open_fn, \
         'opening one menu no longer closes the other'
 
