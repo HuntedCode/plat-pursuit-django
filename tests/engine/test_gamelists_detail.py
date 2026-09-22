@@ -2997,6 +2997,31 @@ def test_the_spoken_section_name_survives_a_docked_adder(client):
         'the heading lost the id its grid points at'
 
 
+def test_removing_a_grid_mid_arrange_drops_its_drag_wiring(client):
+    """`pruneEmptyLooseBucket` removes a grid WHILE arrange mode is still live.
+
+    `detachDrag` tears every manager down at once, which is right when the mode ENDS and wrong here:
+    it does not run. So the manager, its SortableJS instance and the grid's click listener stayed
+    bound to a detached node, and `reorderManagers` held the grid -- and every card that was in it --
+    alive until the next mode toggle.
+
+    Bounded rather than serious, which is why it is pinned rather than merely fixed: the next person
+    to remove a grid will copy this function, and the teardown is the half that is easy to leave out.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    prune = js[js.index('function pruneEmptyLooseBucket('):js.index('function repaintAfterGroupChange(')]
+    assert 'releaseGrid(grid)' in prune, 'a grid is removed with its drag wiring still attached'
+    assert prune.index('releaseGrid(grid)') < prune.index('removeChild(grid)'), \
+        'the teardown runs after the node is already detached'
+
+    release = js[js.index('function releaseGrid('):js.index('function pruneEmptyLooseBucket(')]
+    assert '.destroy()' in release, 'the SortableJS instance is never destroyed'
+    assert 'reorderManagers.splice' in release, 'the array keeps a manager for a removed grid'
+    assert "removeEventListener('click', onCardClick)" in release, \
+        'the click listener outlives the grid it was bound to'
+
+
 def test_section_writes_queue_behind_the_arrangement_writes(client):
     """A queued `saveOrder` carries a body captured from the DOM as it was. A section delete that
     lands first leaves that reorder posting a deleted section id: the server refuses, the pill flips
