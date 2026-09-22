@@ -1331,7 +1331,7 @@ def test_no_gl_class_is_used_without_a_rule():
     import glob
 
     root = Path(__file__).resolve().parents[2]
-    built = (root / 'staticfiles' / 'css' / 'output.css').read_text(encoding='utf-8')
+    built = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
 
     used = set()
     for path in glob.glob(str(root / 'templates' / 'gamelists' / '**' / '*.html'), recursive=True):
@@ -1451,7 +1451,7 @@ def test_the_results_panel_is_an_overlay_not_in_flow():
     """In flow it pushed the whole grid down by up to 336px on every debounced keystroke that changed
     the result count -- on a 375px phone that left about one tile row visible. Asserted against the
     BUILT stylesheet, because that is what the browser loads."""
-    built = _read('staticfiles/css/output.css')
+    built = _read('static/css/output.css')
 
     rule = re.search(r'\.gl-adder__panel\{([^}]*)\}', built)
     assert rule, 'the results panel has no rule in the built CSS'
@@ -1535,7 +1535,7 @@ def test_the_publish_sweep_is_clipped_to_the_card():
 
     Asserted against the BUILT stylesheet, because that is what the browser loads.
     """
-    built = _read('staticfiles/css/output.css')
+    built = _read('static/css/output.css')
 
     # ALL the blocks, not the first one. lightningcss splits this selector across three rules -- two
     # of them custom-property fallbacks for `color-mix()` -- and `re.search` returns the fallback,
@@ -1596,7 +1596,7 @@ def test_the_adder_panel_is_reachable_with_a_keyboard_up_and_above_the_tabbar():
     """Two mobile defects in one rule. A fixed 21rem cap put most of the panel off-screen with the
     soft keyboard up, and z-index 30 painted it under `.mobile-tabbar` (z-index 40, fixed, below
     `lg`)."""
-    built = _read('staticfiles/css/output.css')
+    built = _read('static/css/output.css')
 
     rule = re.search(r'\.gl-adder__panel\{([^}]*)\}', built)
     assert rule, 'the results panel has no rule in the built CSS'
@@ -1731,7 +1731,7 @@ def test_the_action_caption_can_actually_take_its_own_row(client):
     body = client.get(_url(private)).content.decode()
     assert 'gl-actions__note' in body, 'the caption carries no hook for the mobile rule'
 
-    built = _read('staticfiles/css/output.css')
+    built = _read('static/css/output.css')
     assert '.gl-actions__note{flex-basis:100%}' in built.replace(' ', ''), (
         'the caption rule is missing from the built CSS'
     )
@@ -3536,7 +3536,7 @@ def test_the_adder_actually_wins_the_cascade(client):
     Asserted against the COMPILED bundle, because that is where the question lives. Two conditions
     together are sufficient: the winning rule is at least as specific (two classes), and it comes
     later in the sheet (so an equal-specificity tie breaks our way)."""
-    css = _read('staticfiles/css/output.css')
+    css = _read('static/css/output.css')
 
     shared = css.index('.pp-gbrowse__bar>.pp-bgal__search{flex:200px}')
     ours = css.index('.gl-toolbar .gl-adder{flex:320px}')

@@ -159,7 +159,7 @@ def test_every_hub_has_a_tab_and_the_fifth_returns_from_md(client):
     # `chrome.css` meant forgetting to rebuild left the fifth tab absent at every width with this
     # test green. Both are checked: the source for the rule's shape, the bundle for delivery.
     css = (ROOT / 'static/css/components/chrome.css').read_text(encoding='utf-8')
-    served = (ROOT / 'staticfiles/css/output.css').read_text(encoding='utf-8')
+    served = (ROOT / 'static/css/output.css').read_text(encoding='utf-8')
     assert 'mobile-tabbar-item--wide' in served, 'the rule never reached the served bundle'
 
     bar = body[body.index('mobile-tabbar-inner'):]

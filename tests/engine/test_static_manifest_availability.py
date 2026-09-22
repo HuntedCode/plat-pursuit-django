@@ -26,6 +26,17 @@ ROOT = Path(settings.BASE_DIR)
 #: Images whose containers run Django code that can reach `static()`.
 DOCKERFILES = ['Dockerfile', 'Dockerfile.worker']
 
+#: A test READING something out of `staticfiles/`, which is the thing that breaks CI.
+#:
+#: Two shapes, and the narrowness is the point. `staticfiles/` followed by a real path character
+#: catches the string-literal form; a quoted `'staticfiles'` followed by `/` catches the pathlib
+#: join. Both require something to FOLLOW the directory, because every legitimate mention in the
+#: suite is the bare name: `SKIP_DIRS = {..., 'staticfiles', ...}` excluding it from a walk,
+#: `STORAGES['staticfiles']` naming a Django settings key, `('venv/', 'staticfiles/', 'tests/')`
+#: as a path PREFIX to skip, and the prose in `test_mod_center` that states this very rule. A
+#: first cut flagged all five and would have taught the next reader to delete the guard.
+_READS_COLLECTED = re.compile(r"""staticfiles/[A-Za-z0-9_.]|['"]staticfiles['"]\s*/""")
+
 
 @pytest.mark.parametrize('name', DOCKERFILES)
 def test_every_django_image_collects_static(name):
@@ -97,3 +108,35 @@ def test_the_whole_medallion_path_survives_a_missing_manifest(monkeypatch):
     assert tier, 'the backing metal is CSS-driven and unaffected'
     assert layers == [], 'unresolvable art degrades to the bare metal plate'
     assert is_avatar is False
+
+
+def test_no_test_reads_the_collectstatic_output():
+    """A test asserting on the compiled CSS must read `static/`, never `staticfiles/`.
+
+    `staticfiles/` is gitignored and produced by `collectstatic` at deploy time, so CI has no such
+    directory: a test that reads it is red on every run for reasons having nothing to do with the
+    code. The tracked build output is what gets deployed and then collected, so it is also the
+    honest thing to assert on.
+
+    THIS RULE WAS ALREADY WRITTEN DOWN -- in `test_mod_center._built_css`'s docstring -- and was
+    violated eight times across three files on one branch anyway, because a docstring in one file
+    cannot be found by somebody writing a different one. A rule nothing enforces is a rule that
+    holds until the next person needs it.
+
+    Deliberately a SOURCE scan rather than a filesystem check: asserting `staticfiles/` is absent
+    would pass locally (where every developer has run collectstatic) exactly when it needs to fail,
+    which is the same class of environment-dependent green this is about.
+    """
+    offenders = []
+    for path in sorted((ROOT / 'tests').rglob('*.py')):
+        if path.name == Path(__file__).name:
+            continue          # this file NAMES the pattern in its own prose
+        for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+            code = line.split('#', 1)[0]
+            if _READS_COLLECTED.search(code):
+                offenders.append(f'{path.relative_to(ROOT)}:{n}: {line.strip()}')
+
+    assert not offenders, (
+        'these tests read the collectstatic output, which does not exist in CI -- read '
+        'static/css/output.css instead:\n  ' + '\n  '.join(offenders)
+    )

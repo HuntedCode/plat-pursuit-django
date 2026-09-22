@@ -590,7 +590,7 @@ def test_the_card_foot_can_wrap_rather_than_clipping_its_chips(linked_staff_clie
     """
     from pathlib import Path
 
-    built = (Path(__file__).resolve().parents[2] / 'staticfiles' / 'css' / 'output.css').read_text(
+    built = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'output.css').read_text(
         encoding='utf-8')
 
     # NOT `.replace(' ', '')` on the haystack: `.a .b` and `.a.b` are different selectors, and
