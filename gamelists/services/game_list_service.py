@@ -46,7 +46,8 @@ from gamelists.models import (
     GameListLike,
     GameListSection,
 )
-from trophies.models import Profile
+from gamelists.services.game_search import page_key_expression, page_key_filter
+from trophies.models import Concept, Profile
 from trophies.services.comment_service import CommentService
 from users.services import restriction_service
 
@@ -458,7 +459,41 @@ def add_concept(game_list, profile, concept, *, note='', section=None):
     _refuse_banned_words(note, field='note')
 
     locked = _lock_list(game_list)
-    if GameListItem.objects.filter(game_list=locked, concept=concept).exists():
+    # THE DUPLICATE IS A GAME, NOT A CONCEPT, and those are not the same thing.
+    #
+    # `unique(game_list, concept)` catches the obvious case and misses the one that matters:
+    # `Concept.game_page_url` states that "deliberately-split concepts sharing an igdb_id share one
+    # page", so two concepts can BE the same game. A list could therefore hold it twice, under two
+    # ids, which is exactly the defect keying on Concept was introduced to end -- the old `Game`
+    # keying let one backlog hold Elden Ring once per stack.
+    #
+    # THROUGH THE SHARED RULE, not a fourth hand-written copy of it. This spelled the identity out
+    # again as a `Q` while the adder used `page_key_expression`, so the one surface the bug actually
+    # came from was the one surface that could still drift. The two helpers are the definition; a
+    # trusted match's `igdb_id` IS the page, and everything untrusted stands for itself.
+    #
+    # TRUST IS THE GATE, not the presence of an id. A REJECTED match keeps the `igdb_id` it was
+    # rejected FOR -- the id that means "this concept is NOT that game" -- so keying on the id alone
+    # would refuse a game the list does not hold. Both halves are pinned by tests.
+    #
+    # Two bounded queries: the key (an indexed pk read, two columns, no `raw_response`) and the
+    # `SELECT 1 ... LIMIT 1` below, which `page_key_filter` keeps on the `igdb_id` and `concept_id`
+    # indexes rather than scanning the list.
+    #
+    # `Q(concept=concept)` stays as well, and is not redundant: if the concept is deleted between
+    # these two statements the key comes back None and the filter matches nothing, and an exact
+    # duplicate must still be refused.
+    #
+    # The message is deliberately the same in both cases. To the hunter it IS the same game, and
+    # explaining that the site models it as two concepts would be telling them about our schema.
+    page_key = (
+        Concept.objects.filter(pk=concept.pk)
+        .annotate(_page_key=page_key_expression())
+        .values_list('_page_key', flat=True)
+        .first()
+    )
+    duplicate = models.Q(concept=concept) | page_key_filter([page_key], 'concept__')
+    if GameListItem.objects.filter(game_list=locked).filter(duplicate).exists():
         raise ListError('That game is already on this list.')
 
     # COUNTED UNDER THE LOCK, the same shape `create_list` and `create_section` use and for the same

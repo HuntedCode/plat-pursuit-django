@@ -7,6 +7,7 @@ Two rules carry most of the weight here. A private list must 404 rather than 403
 its owner -- a 403 confirms the list exists and whose it is, from nothing but an id. And the page
 must not scale with the list: a 200-game list should cost what a 5-game one does.
 """
+
 import re
 from pathlib import Path
 
@@ -2510,7 +2511,8 @@ def test_a_sectioned_page_does_not_scale_with_its_sections(client):
     this feature.
 
     Sections cost ONE query total: the headers are fetched once and the grouping happens in Python
-    over rows already in hand. Both sides are bounded -- 200 items, 20 sections -- which is the
+    over rows already in hand. Both sides are bounded by their caps (`MAX_ITEMS_PER_LIST`,
+    `MAX_SECTIONS_PER_LIST`) -- which is the
     bounded-slice form CLAUDE.md permits rather than the per-row iteration it bans.
 
     WARMED UP FIRST, because the opening request of a test pays for session load and permission
@@ -3116,7 +3118,14 @@ def test_the_adder_is_raised_without_forking_the_shared_field(client):
 
     css = _read('static/css/components/gamelists.css')
     block = css[css.index('.gl-adder {'):css.index('.gl-adder__panel {')]
-    assert 'flex: 1 1 320px' in block, 'it does not take the bar\'s slack'
+    # THE RELATIONSHIP, not the number. This pinned `flex: 1 1 320px` and broke when the basis was
+    # raised to 420 -- a change that makes the claim MORE true. What the comment beside the rule
+    # actually argues is that the adder is the widest thing in the row wherever there is room, which
+    # means a basis larger than the shared field's 200px and a `flex-grow` that takes the slack.
+    basis = re.search(r'flex: 1 1 (\d+)px', block)
+    assert basis, "it does not take the bar's slack"
+    assert int(basis.group(1)) > 200, \
+        'the adder is no wider than the shared field, so it cannot lead the row'
 
     # THE REST RULE ONLY. Slicing to the whole block swept in `:hover` and `:focus`, which carry the
     # same accent declaration -- so the assertion passed with the resting accent removed, which is
@@ -3478,10 +3487,30 @@ def test_the_typeahead_reads_only_the_results_it_is_about(client):
     member_reads = [q for q in ctx.captured_queries
                     if 'gamelists_gamelistitem' in q['sql'] and 'concept_id' in q['sql']]
     assert len(member_reads) == 1, f'expected one membership read, got {len(member_reads)}'
-    # Bounded BY THE RESULTS: the id of the one row being rendered appears in the WHERE clause, so
-    # the database returns at most that many rows rather than all thirty-one.
-    assert 'IN (' in member_reads[0]['sql'], \
-        'the membership check reads the whole list rather than the page of results'
+
+    # BOUNDED BY THE RESULTS, asserted on the ROWS THE DATABASE READ rather than on a substring.
+    #
+    # This asserted `'IN (' in sql`, which stopped meaning what it says the moment the membership
+    # check started identifying games by page rather than by pk: the unbounded shape emits
+    # `CASE ... END IN ('concept:...')`, which contains the substring while reading all thirty-one
+    # rows. A duplicate label matching the wrong thing -- and it passed through an audit that way.
+    #
+    # ASSERTED ON THE WHERE CLAUSE, not on the query plan. `EXPLAIN ANALYZE` is the tempting move and
+    # it does not work here: Postgres seq-scans a thirty-one-row table whatever indexes exist,
+    # because on that size it is genuinely cheaper, so the plan is identical for both shapes and a
+    # rows-removed assertion fails on the CORRECT one. The fixture cannot be grown to where the
+    # planner switches without making this test slow and still leaving the threshold a guess.
+    #
+    # What actually differs is the predicate. A page-key `CASE` in the WHERE clause is a computed
+    # value over a two-table join and no index can serve it at ANY size; `igdb_id IN (...)` and
+    # `concept_id IN (...)` are seeks on their own indexes. So this asserts the predicate is made of
+    # columns. The `CASE` still appears in the SELECT list -- that is where it belongs, evaluated per
+    # surviving row -- which is why only the text after WHERE is examined.
+    where = member_reads[0]['sql'].split(' WHERE ', 1)[-1]
+    assert 'CASE' not in where.upper(), \
+        'the membership check filters on a computed page key, so it reads the whole list'
+    assert 'concept_id' in where or 'igdb_id' in where, \
+        'the membership check no longer names the indexed columns'
 
 
 def test_the_typeahead_answer_does_not_change_with_the_bound(client):
@@ -3844,13 +3873,17 @@ def test_the_adder_actually_wins_the_cascade(client):
     later in the sheet (so an equal-specificity tie breaks our way)."""
     css = _read('static/css/output.css')
 
+    # THE BASIS IS READ, not asserted. This named `flex:320px` twice and broke when the basis was
+    # raised -- a test about CASCADE ORDER failing for a change to a VALUE it does not care about.
     shared = css.index('.pp-gbrowse__bar>.pp-bgal__search{flex:200px}')
-    ours = css.index('.gl-toolbar .gl-adder{flex:320px}')
+    ours_rule = re.search(r'\.gl-toolbar \.gl-adder\{flex:(\d+)px\}', css)
+    assert ours_rule, 'the adder rule lost its qualifying class or its basis'
+    ours = ours_rule.start()
 
     assert ours > shared, 'the adder rule is compiled BEFORE the shared one and loses the tie'
     # Two classes, matching the shared selector rather than being outranked by it. A single-class
     # selector here is the bug, whatever its source position.
-    assert '.gl-toolbar .gl-adder{flex:320px}' in css, 'the rule lost its qualifying class'
+    assert int(ours_rule.group(1)) > 200, 'the adder no longer out-bases the shared field'
 
 
 def test_the_two_wrapping_bodies_take_the_space_that_is_left(client):

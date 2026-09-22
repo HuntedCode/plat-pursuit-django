@@ -35,7 +35,8 @@ from gamelists.models import (DESCRIPTION_MAX_LENGTH, LIST_TYPE_COLLECTION, LIST
                               list_type_options)
 from gamelists.services import game_list_service as svc
 from gamelists.services.covers import attach_cover_games, cover_games_for
-from gamelists.services.game_search import SearchRefused, search_concepts
+from gamelists.services.game_search import (SearchRefused, page_key_expression, page_key_filter,
+                                            search_concepts)
 from trophies.mixins import HtmxListMixin
 from trophies.models import Concept
 
@@ -1465,9 +1466,11 @@ class MyListsForConceptView(LoginRequiredMixin, _LinkedProfileRequired, View):
       a second copy of a product rule. A full list renders disabled rather than absent: "no room"
       and "not a list" are different answers and a picker that hides the first is lying.
 
-    BOUNDED BY CONSTRUCTION. A hunter holds at most `MEMBER_MAX_LISTS` (25) lists, so this is a
-    small indexed read plus one `IN` over their items -- the same bounded-membership shape
-    `ListGameSearchView` uses, for the same reason, rather than reading every row of every list.
+    BOUNDED BY CONSTRUCTION, AND ONLY WHILE THE MEMBERSHIP FILTER STAYS INDEXED. A hunter holds at
+    most `MEMBER_MAX_LISTS` (25) lists of `MAX_ITEMS_PER_LIST` (200), so the upper bound on "read
+    every row of every list" is 5,000 rows joined twice, per popover open, at 120/m. What keeps it to
+    a seek is `page_key_filter` -- the same bounded-membership shape `ListGameSearchView` uses, for
+    the same reason. Putting the page-key `CASE` in the WHERE clause instead reads all 5,000.
     """
 
     @method_decorator(ratelimit(key='user', rate='120/m', method='GET', block=True))
@@ -1475,12 +1478,29 @@ class MyListsForConceptView(LoginRequiredMixin, _LinkedProfileRequired, View):
         profile = request.user.profile
         game_lists = list(GameList.objects.owned_by(profile))
 
-        # ONE query for membership across every list, keyed on the concept being asked about --
-        # never a count per list, which is the N+1 a picker invites.
+        # KEYED ON THE GAME PAGE, not the concept pk. A list holding a SIBLING of this concept holds
+        # this game -- `add_concept` refuses it on exactly that ground -- so asking by pk offered Add
+        # on a list that would then refuse, and offered no Remove for the row actually on it. The
+        # same defect as `ListGameSearchView`'s, reached from the other direction.
+        #
+        # One bounded lookup for the asked-about concept's identity, then ONE INDEXED query for
+        # membership across every list -- never a count per list, which is the N+1 a picker invites,
+        # and never a `CASE` in the WHERE clause, which on 25 lists of 200 would read 5,000 rows to
+        # answer a question about one game. A concept that does not exist yields no key, and
+        # `page_key_filter` then matches nothing without issuing a query at all.
+        page_key = (
+            Concept.objects.filter(pk=concept_id)
+            .annotate(_page_key=page_key_expression())
+            .values_list('_page_key', flat=True)
+            .first()
+        )
+        # Any surviving row IS this game, so the key itself is not needed back here.
         held = {
             row['game_list_id']: row['id']
             for row in GameListItem.objects
-            .filter(game_list__in=game_lists, concept_id=concept_id)
+            .filter(game_list__in=game_lists)
+            .filter(page_key_filter([page_key], 'concept__'))
+            .order_by()
             .values('game_list_id', 'id')
         }
 
@@ -1624,20 +1644,43 @@ class ListGameSearchView(LoginRequiredMixin, _LinkedProfileRequired, View):
         # the answer and deliberately not this half, so it ran unprotected at 120 requests a minute
         # per hunter, against a list that was uncapped when this was written. `MAX_ITEMS_PER_LIST`
         # has since bounded the damage at 200 rows -- which is a reason to keep the bound rather than
-        # to drop it: reading two hundred to answer a question about twelve is still the wrong shape,
+        # to drop it: reading two hundred to answer a question about twenty is still the wrong shape,
         # and the cap is a product decision that could move.
         #
-        # The answer only ever needs membership for the twelve ids being rendered, and asking the
-        # database that question returns at most twelve rows. The `WHERE concept_id IN (...)` is
-        # served by the `unique(game_list, concept)` index, so it is a bounded indexed seek rather
-        # than a scan of the hunter's list.
-        already = set(
+        # THE BOUND HAS NOW BEEN LOST AND RESTORED ONCE, which is why it is spelled out twice. The
+        # answer only ever needs membership for the `LIMIT` ids being rendered, and both the seek and
+        # the identity rule below have to hold for that to stay true.
+        #
+        # ASKED BY PAGE IDENTITY, not by concept pk, because that is what the search elected by.
+        #
+        # This keyed on `concept_id` while `search_concepts` collapsed siblings onto one row, so when
+        # the elected representative was the sibling NOT on the list, the row rendered as addable and
+        # `add_concept` then refused it -- a dead end, on roughly half of the split games, created by
+        # collapsing the read side without the membership side.
+        #
+        # FILTERED WITH `page_key_filter`, ANNOTATED WITH `page_key_expression`, and the order is the
+        # whole point -- see `page_key_filter`. Filtering on the expression put a `CASE` over a join
+        # in the WHERE clause, which no index serves, so this read all 200 rows of the list on every
+        # keystroke: the bound above, re-lost. The `Q` below seeks `igdb_id` and `concept_id` on
+        # their own indexes, and the key is computed only for the handful of rows that survive.
+        keys = [row['page_key'] for row in cached]
+        held = set(
             GameListItem.objects
-            .filter(game_list=game_list, concept_id__in=[row['concept_id'] for row in cached])
-            .values_list('concept_id', flat=True)
+            .filter(game_list=game_list)
+            .filter(page_key_filter(keys, 'concept__'))
+            .annotate(_page_key=page_key_expression('concept__'))
+            # `Meta.ordering` would otherwise sort rows on their way into a set.
+            .order_by()
+            .values_list('_page_key', flat=True)
         )
         # Marked rather than filtered out: a hunter searching for something already on the list
         # should be told it is there, not left wondering why it does not appear.
-        return JsonResponse({'results': [
-            dict(row, already_added=row['concept_id'] in already) for row in cached
-        ]})
+        #
+        # `page_key` is stripped: it is how the server recognises a game, not something the client
+        # has any use for.
+        results = []
+        for row in cached:
+            out = {key: value for key, value in row.items() if key != 'page_key'}
+            out['already_added'] = row['page_key'] in held
+            results.append(out)
+        return JsonResponse({'results': results})

@@ -4298,6 +4298,9 @@ function GameAdder(root, opts) {
 
     var status = opts.status || null;
     var prefix = opts.prefix || 'pp-adder';
+    // The server's page size, so the panel can tell a FULL page from a complete answer. Defaults to
+    // `game_search.LIMIT`; a caller with a different endpoint passes its own.
+    var limit = opts.limit || 20;
     var minQuery = opts.minQuery || 3;
     var addLabel = opts.addLabel || 'Add';
     var addedLabel = opts.addedLabel || 'Added';
@@ -4421,8 +4424,30 @@ function GameAdder(root, opts) {
         }
         panel.textContent = '';
         results.forEach(function (result) { panel.appendChild(buildRow(result)); });
+
+        // A FULL PAGE OF RESULTS IS NOT "ALL THE RESULTS", and the difference is the whole of the
+        // complaint that produced this. The endpoint answers with at most `limit` rows ranked by how
+        // well they match; when a series shares a substring with what somebody is looking for, a
+        // full page can be entirely that series and the game they want is simply not in it. Without
+        // this line the panel looks authoritative and the search looks broken.
+        //
+        // A ROW, not just the live region: the reader who needs this is the one scanning the list
+        // and not finding it, and a spoken-only message reaches everybody except them. It is last so
+        // it reads as the end of the results rather than a warning above them, and it is inert --
+        // `.gl-adder__note` is a <p>, so it is skipped by the arrow keys that walk the rows.
+        var capped = results.length >= limit;
+        if (capped) {
+            var more = document.createElement('p');
+            more.className = prefix + '__note';
+            more.textContent = 'Showing the closest ' + results.length
+                + '. Add more of the title to narrow it down.';
+            panel.appendChild(more);
+        }
+
         panel.hidden = false;
-        say(results.length === 1 ? '1 game found.' : results.length + ' games found.');
+        say(results.length === 1
+            ? '1 game found.'
+            : results.length + ' games found.' + (capped ? ' Add more of the title to narrow.' : ''));
     }
 
     var search = PP.debounce(function () {

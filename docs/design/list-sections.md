@@ -103,8 +103,9 @@ Every question this document opened, and how it was answered when the thing was 
 - **Deleting a section.** Confirmed: `GameListItem.section` is `SET_NULL`, so its games fall back into
   the ungrouped bucket. The confirm dialog says so out loud — without that sentence the control reads
   as "delete these twelve games", which is the one thing it does not do.
-- **A cap on sections per list.** `MAX_SECTIONS_PER_LIST = 20`, enforced with the same lock-then-count
-  shape `create_list` uses (`@transaction.atomic` alone does not stop two requests both counting 19).
+- **A cap on sections per list.** `MAX_SECTIONS_PER_LIST = 25` (20 until 2026-09), enforced with the
+  same lock-then-count shape `create_list` uses (`@transaction.atomic` alone does not stop two
+  requests both counting one under the cap).
   Unlike list size, this one is a real ceiling: each section is a rendered header.
 - **Drag between sections** did reuse `DragReorderManager`'s cross-container support — but needed one
   addition to it, a `sort` pass-through, which turned out to be the crux of the whole slice rather

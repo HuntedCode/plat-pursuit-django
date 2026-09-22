@@ -222,7 +222,7 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
-| `adder:search:{lowercased query}` | 60s | The catalogue half of a typeahead answer: `[{concept_id, title, cover}]`, capped at 12 rows |
+| `adder:search:2:{lowercased query}` | 60s | The catalogue half of a typeahead answer: `[{concept_id, title, cover, page_key}]`, capped at `LIMIT` (20) rows |
 
 Keyed on the query and **nothing else** -- not the caller, not the container, not the viewer. That is
 what makes the expensive half shareable across every adder on the site, and it is why the
@@ -232,6 +232,14 @@ into them. A viewer-keyed variant would be a cache that is permanently cold for 
 The prefix is `adder:` rather than the `gamelists:search:` it shipped as, because the cached value is
 a catalogue answer that was never about lists; a second adder elsewhere should share it. The rename
 costs one minute of cold cache and needs no deploy step.
+
+**The `:2:` is a row-shape version, and it moves whenever the row shape does.** `page_key` was added
+in 2026-09 so callers could run their membership check against game-page identity rather than concept
+pk; a reader holding a pre-deploy entry would `KeyError` on it. Bumping the prefix trades one minute
+of cold cache for that, and is preferred to defensive `.get()` reads, which would turn the same
+mistake into a silently wrong "already on this list" flag rather than a loud failure.
+
+`page_key` is internal — `ListGameSearchView` strips it before serializing.
 
 **Files**: `gamelists/services/game_search.py`
 

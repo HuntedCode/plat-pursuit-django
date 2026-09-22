@@ -140,9 +140,17 @@ SECTION_NAME_MAX_LENGTH = 40
 #: How many sections a list may hold. A section is a rendered header with its own row, so a hundred
 #: of them is a page nobody can read. Capped for the same reason list SIZE is (`MAX_ITEMS_PER_LIST`)
 #: and, like it, flat for everyone rather than tiered.
-#: Twenty covers every real shape: Finished/Playing/Someday is three, a tier list is five to seven,
-#: one per platform is about six.
-MAX_SECTIONS_PER_LIST = 20
+#: Twenty-five covers every real shape with room over: Finished/Playing/Someday is three, a tier
+#: list is five to seven, one per platform is about six, and one per release year on a long-running
+#: series is the shape that wanted more than twenty. Raised from 20 on the owner's call, 2026-09.
+#:
+#: Raising it is the safe direction and staying under `MEMBER_MAX_LISTS` is a coincidence, not a
+#: rule -- the two count different things. What makes 25 free to adopt is that nothing was built on
+#: the old number: the cap is enforced in one place (`create_section`, lock-then-count from rows),
+#: read from this constant by the message that reports it, and the render is bounded by the cap
+#: rather than by a literal. Lowering it later would be the hard direction, because existing lists
+#: would be over it.
+MAX_SECTIONS_PER_LIST = 25
 
 
 class GameListQuerySet(models.QuerySet):

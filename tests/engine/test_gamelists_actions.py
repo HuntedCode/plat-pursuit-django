@@ -18,7 +18,10 @@ from gamelists.models import (FREE_MAX_LISTS, NAME_MAX_LENGTH, LIST_TYPE_COLLECT
 from pathlib import Path
 
 from gamelists.services import game_list_service as svc
-from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
+from gamelists.services.game_search import LIMIT
+from tests.factories import (ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+                             UserFactory)
+from trophies.models import Concept
 from users.models import UserRestriction
 
 pytestmark = pytest.mark.django_db
@@ -405,13 +408,18 @@ def test_an_enormous_query_is_refused_rather_than_becoming_a_like_pattern(client
 def test_the_search_is_bounded(client):
     owner = _staff(client)
     game_list = svc.create_list(owner, name='Backlog')
-    for n in range(20):
+    # `LIMIT + 8`, so the fixture is always larger than the bound rather than larger than a number
+    # that happened to be the bound when this was written.
+    for n in range(LIMIT + 8):
         _concept(f'Bounded Game {n:02d}')
 
     results = client.get(reverse('list_game_search', args=[game_list.id]),
                          {'q': 'bounded'}).json()['results']
 
-    assert len(results) == 12
+    # READ FROM THE CONSTANT. This asserted a literal 12, so raising the bound to 20 failed a test
+    # about BOUNDEDNESS for the one reason that is not a defect -- the bound changing. What it is
+    # here to catch is the bound going missing.
+    assert len(results) == LIMIT
 
 
 def test_the_search_does_not_fetch_the_igdb_blob(client):
@@ -420,17 +428,87 @@ def test_the_search_does_not_fetch_the_igdb_blob(client):
 
     owner = _staff(client)
     game_list = svc.create_list(owner, name='Backlog')
-    _concept('Blob Test')
+    # THE TERM HAS TO MATCH THE TITLE. This searched "blobtest" against "Blob Test", which does not
+    # match, so the search returned nothing -- and once the election was split from the display read,
+    # `pk__in=[]` meant the display read was never issued at all. The only remaining query mentioning
+    # igdb was the election, which selects two columns and cannot contain `raw_response`, so the
+    # `assert joined` anti-vacuity guard below was satisfied by the wrong query and BOTH halves of
+    # the pairing could be deleted with the suite green.
+    _concept('Blobtest Adventure')
 
     with CaptureQueriesContext(connection) as ctx:
-        client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'blobtest'})
+        response = client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'blobtest'})
+
+    # The fixture matching is the precondition, so it is asserted rather than assumed.
+    assert response.json()['results'], 'the fixture does not match the term; this proves nothing'
 
     joined = [q['sql'] for q in ctx.captured_queries if 'igdb' in q['sql'].lower()]
     # The guard its sibling in test_gamelists_detail.py has and this dropped: an empty generator
     # passes the loop below, so without this the test is green when the query never runs at all.
     assert joined, 'the cover chain is not being joined at all'
+    # WHAT THIS NOW GUARDS IS `cover_games_for`'s pairing, which is the query that actually walks the
+    # cover chain. The search's own Concept read used to carry a select_related/defer pair as well,
+    # and it turned out to join `igdb_match` for nothing -- the row supplies `pk` and
+    # `unified_title`, and the cover comes off the `Game` objects. Deleting a pairing maintained to
+    # protect a column nothing read is why that read is now two columns wide.
     for sql in joined:
         assert 'raw_response' not in sql.lower()
+
+
+def test_the_two_halves_of_the_page_key_agree(client):
+    """`page_key_expression` BUILDS a key and `page_key_filter` PARSES it back.
+
+    They are separate because one has to be an indexed WHERE clause and the other a SELECT
+    expression, and nothing structural stops them drifting -- a prefix changed in one, a trust rule
+    tightened in the other. Then the adder would mark nothing held, silently, and the only symptom
+    would be `add_concept` refusing games the hunter was just offered.
+
+    Checked across all three states that reach the key: trusted, untrusted, and no match at all.
+    """
+    from gamelists.services.game_search import page_key_expression, page_key_filter
+
+    trusted, sibling = _split_game('Split One', 'Split Two', igdb_id=44444)
+    untrusted = _matched('Rejected Guess', 44444, 'rejected')
+    unmatched, = _titled('No Match Here')
+
+    for concept, expected_siblings in (
+        (trusted, {trusted.pk, sibling.pk}),
+        (untrusted, {untrusted.pk}),
+        (unmatched, {unmatched.pk}),
+    ):
+        key = (Concept.objects.filter(pk=concept.pk)
+               .annotate(_k=page_key_expression()).values_list('_k', flat=True).first())
+        found = set(Concept.objects.filter(page_key_filter([key])).values_list('pk', flat=True))
+        assert found == expected_siblings, \
+            f'{concept.unified_title}: key {key!r} round-tripped to {found}, not {expected_siblings}'
+
+
+def test_no_page_keys_matches_nothing_rather_than_everything(client):
+    """An empty `Q()` matches EVERY row, which on a membership check is the difference between
+    "nothing is on the list" and "all of it is". `page_key_filter` opens on `pk__in=[]` for exactly
+    that reason, and Django then issues no query at all."""
+    from gamelists.services.game_search import page_key_filter
+
+    _titled('Anything At All')
+
+    assert not Concept.objects.filter(page_key_filter([])).exists()
+    assert not Concept.objects.filter(page_key_filter([None])).exists()
+
+    # AND IT HAS TO SURVIVE BEING OR'd. `add_concept` writes
+    # `Q(concept=concept) | page_key_filter([key])` so that a concept deleted between resolving its
+    # key and running the check is still refused as an exact duplicate. That branch only executes on
+    # a race, so without this the first time anyone learns whether Django folds an EmptyResultSet
+    # inside an OR -- rather than propagating it and matching nothing, or raising -- is in
+    # production, on a write.
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    on_it, = _titled('Genuinely On It')
+    svc.add_concept(game_list, owner, on_it)
+
+    from django.db.models import Q
+    assert GameListItem.objects.filter(game_list=game_list).filter(
+        Q(concept=on_it) | page_key_filter([None], 'concept__')).exists(), \
+        'an empty page-key branch swallowed the exact-duplicate branch beside it'
 
 
 # ── the gates ────────────────────────────────────────────────────────────────────────────────────
@@ -572,11 +650,17 @@ def test_the_search_is_cached_so_the_catalogue_scan_is_not_per_keystroke(client)
     with CaptureQueriesContext(connection) as second:
         client.get(url, {'q': 'cached'})
 
-    def catalogue_queries(ctx):
-        return len([q for q in ctx.captured_queries if 'trophies_concept' in q['sql']])
+    # THE SCAN, not merely the table. This counted every query mentioning `trophies_concept`, which
+    # stopped meaning what it says the moment the membership check started joining Concept to read a
+    # game's page identity -- an uncached query, correctly uncached, that the old detector would have
+    # reported as a cache miss. What is cached here is the `unified_title` LIKE pass the module
+    # docstring calls a sequential scan, and nothing else references that column.
+    def catalogue_scans(ctx):
+        return len([q for q in ctx.captured_queries
+                    if 'unified_title' in q['sql'] and 'LIKE' in q['sql'].upper()])
 
-    assert catalogue_queries(first) >= 1
-    assert catalogue_queries(second) == 0, 'the catalogue is scanned again on an identical query'
+    assert catalogue_scans(first) >= 1
+    assert catalogue_scans(second) == 0, 'the catalogue is scanned again on an identical query'
     cache.clear()
 
 
@@ -1996,3 +2080,455 @@ def test_no_stylesheet_shows_a_control_on_is_revealed():
             if '.is-revealed ~' in line and 'opacity: 1' in line:
                 offenders.append(f'{path.name}: {line.strip()}')
     assert not offenders, 'a control is shown by .is-revealed: ' + '; '.join(offenders)
+
+
+# ── the typeahead ranks by match quality, not by the alphabet (2026-09) ──────────────────────────
+
+def _titled(*titles):
+    """Concepts with these titles, each with a trophy list so the cover lookup has something."""
+    made = []
+    for title in titles:
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        made.append(concept)
+    return made
+
+
+def _bust(term):
+    """Drop the shared catalogue answer for `term`, READING THE PREFIX FROM THE MODULE.
+
+    It held a copy of the literal, so bumping the prefix (the row shape changed) would have left
+    every test here reading a key nothing writes -- silently restoring the cross-test bleed this
+    helper exists to prevent, with the suite still green.
+    """
+    from django.core.cache import cache
+
+    from gamelists.services.game_search import _CACHE_PREFIX
+
+    cache.delete(_CACHE_PREFIX + term.lower())
+
+
+def _search(client, game_list, term):
+    """The typeahead's titles for `term`, WITHOUT another test's cached answer.
+
+    `search_concepts` caches on the normalized query and nothing else -- deliberately, so the
+    expensive half is shared across every adder on the site. Under `settings_test` that is a
+    LocMemCache which lives for the whole run, so the first test to search "myst" fixes the answer
+    for every test after it: three of these were written against a result set assembled by their
+    own neighbours, and two of them failed for it.
+
+    The same shape `conftest` documents for `rarity:community_size`, one key along. Deleted here
+    rather than added to that autouse fixture because this key is per-TERM: a pattern delete is not
+    something LocMemCache does well, and the tests that care are all in this file.
+    """
+    _bust(term)
+    response = client.get(reverse('list_game_search', args=[game_list.id]), {'q': term})
+    assert response.status_code == 200, f'the search answered {response.status_code}'
+    return [row['title'] for row in response.json()['results']]
+
+
+def test_the_search_ranks_the_exact_title_first(client):
+    """The whole title BEING the term is the strongest possible signal.
+
+    THE FIRST VERSION OF THIS TEST COULD NOT FAIL, and the reason is worth keeping: it searched
+    "myst" against "Myst" / "Mysterium" / "Mystery Case Files", where the exact title is also
+    alphabetically first -- because an exact match is always a prefix of the titles that extend it.
+    Every ordering under test agreed, so it proved nothing.
+
+    An exact match only has something to prove against a title that sorts BEFORE it and merely
+    contains the term. Hence "Amazed".
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Amazed', 'Zed Adventures', 'Zed')
+
+    titles = _search(client, game_list, 'zed')
+
+    assert titles[0] == 'Zed', f'the exact title is not first: {titles}'
+
+
+def test_a_term_at_a_word_boundary_outranks_one_buried_mid_word(client):
+    """THE REPORTED BUG. Searching "myst" never reached "Riven: The Sequel to Myst", because a dozen
+    titles beginning with those four letters sort ahead of anything starting with R -- the search
+    looked broken on exactly the query a series had flooded.
+
+    A term that begins a WORD is almost always the game somebody means. It was previously
+    indistinguishable from a mid-word coincidence, and both lost to the alphabet.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Amystified Journey', 'Riven: The Sequel to Myst')
+
+    titles = _search(client, game_list, 'myst')
+
+    assert titles.index('Riven: The Sequel to Myst') < titles.index('Amystified Journey'), \
+        f'a mid-word match outranks a word-boundary one: {titles}'
+
+
+def test_a_prefix_flood_still_outranks_a_word_boundary_match(client):
+    """WHAT THE RANKING DOES NOT FIX, pinned so it is a decision rather than a surprise.
+
+    The report was a series flooding the results and pushing the wanted game out. The tiers help
+    when the wanted game matches BETTER than the flood -- exactly, or at a word boundary against a
+    flood that matches mid-word. They do not help when the flood matches better: fifteen titles
+    starting with "Myst" are all tier 1, and "Riven: The Sequel to Myst" is tier 2, so the flood
+    still wins and still fills the page.
+
+    That is the right default -- a title that STARTS with what you typed is usually what you meant --
+    and it is why the panel tells the reader the results were capped and asks for more of the title.
+    Reserving slots for weaker tiers was considered and rejected: it would push out matches that are
+    genuinely more relevant, to rescue a case the hint already covers.
+
+    A version of this test that asserted the opposite passed for a while, because its fixture held
+    sixteen titles against a limit of twenty -- every ordering returned all of them.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled(*['Mystery Case Files %02d' % n for n in range(1, LIMIT + 6)])
+    _titled('Riven: The Sequel to Myst')
+
+    titles = _search(client, game_list, 'myst')
+
+    assert len(titles) == LIMIT
+    assert 'Riven: The Sequel to Myst' not in titles, \
+        'a weaker match is being rescued at the expense of stronger ones; if that is now wanted, ' \
+        'the panel hint and this test both need rewriting together'
+
+
+def test_a_word_boundary_match_survives_a_flood_it_can_outrank(client):
+    """The half the ranking DOES fix. Same shape as above, but the flood matches mid-word -- so the
+    wanted game is tier 2 against a tier 3 flood and surfaces no matter how much noise there is.
+
+    Alphabetically it was hopeless: "Amystified" sorts before "Riven", so twenty of them filled the
+    page and the answer never appeared.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled(*['Amystified Journey %02d' % n for n in range(1, LIMIT + 6)])
+    _titled('Riven: The Sequel to Myst')
+
+    titles = _search(client, game_list, 'myst')
+
+    assert 'Riven: The Sequel to Myst' in titles, \
+        'a word-boundary match is still buried under mid-word noise'
+    assert titles[0] == 'Riven: The Sequel to Myst', 'it surfaced but did not lead'
+
+
+def test_the_search_still_answers_at_most_one_page(client):
+    """The ranking widened the window it ranks into; it did not remove the window. This is also the
+    bound every caller's "already on this list" check respects, so it cannot quietly grow."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled(*['Mystery Case Files %02d' % n for n in range(1, LIMIT + 8)])
+
+    titles = _search(client, game_list, 'myst')
+
+    assert len(titles) == LIMIT, f'the typeahead answered with {len(titles)} rows'
+
+
+def test_the_panel_says_when_it_had_to_stop(client):
+    """A full page of results is not "all the results", and without saying so the panel looks
+    authoritative while the game somebody wants is simply not in it -- which is what the ranking
+    alone cannot fix.
+
+    A ROW rather than only the live region: the reader who needs this is the one scanning the list
+    and not finding it, and a spoken-only message reaches everybody except them."""
+    js = _decommented(_read('static/js/utils.js'))
+
+    assert 'results.length >= limit' in js, 'a capped result set is indistinguishable from a full one'
+    assert 'Add more of the title to narrow' in js, 'the reader is not told what to do about it'
+    # Inert, so the arrow keys that walk the result rows do not land on it.
+    assert "more.className = prefix + '__note'" in js
+
+
+# ── a game is one row and one entry, however many concepts it is split across (2026-09) ──────────
+
+def _split_game(title_a, title_b, igdb_id=90210):
+    """Two concepts that are the SAME GAME: different rows, one trusted IGDB id, one Game page.
+
+    `Concept.game_page_url` is the rule this fixture exists to exercise -- "deliberately-split
+    concepts sharing an igdb_id share one page" -- and it is reachable in real data, which is why
+    `game_page_canonicals` elects between them on Browse Games.
+    """
+    made = []
+    for title in (title_a, title_b):
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        IGDBMatchFactory(concept=concept, igdb_id=igdb_id, status='auto_accepted')
+        made.append(concept)
+    return made
+
+
+def test_the_search_offers_one_row_per_game_page(client):
+    """Browse Games collapses split concepts and the adder did not, so the catalogue showed one card
+    where the adder offered two rows for the same game -- with the same title, and no way to tell
+    which to pick."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+
+    titles = _search(client, game_list, 'colossus')
+
+    assert len(titles) == 1, f'one game offered as {len(titles)} rows: {titles}'
+
+
+def test_concepts_with_no_trusted_match_still_stand_for_themselves(client):
+    """The partition falls back to the concept id, so the unmatched tail -- PP_* stubs and PSN-only
+    concepts -- is NOT collapsed. Two genuinely different games that happen to lack matches must
+    still be two rows, or the dedupe would be hiding games rather than duplicates."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Colossus Down', 'Colossus Rising')       # no IGDB match at all
+
+    titles = _search(client, game_list, 'colossus')
+
+    assert len(titles) == 2, f'two different games were collapsed into one: {titles}'
+
+
+def test_an_untrusted_match_does_not_collapse_two_games(client):
+    """`TRUSTED_STATUSES` gates the identity, not the mere presence of an igdb_id. A rejected or
+    pending match is a GUESS, and collapsing two games on a guess would make the better-known one
+    unreachable from the adder."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    for title in ('Colossus Down', 'Colossus Rising'):
+        concept = ConceptFactory(unified_title=title)
+        GameFactory(concept=concept, title_platform=['PS5'])
+        IGDBMatchFactory(concept=concept, igdb_id=77777, status='rejected')
+
+    titles = _search(client, game_list, 'colossus')
+
+    assert len(titles) == 2, f'an untrusted match collapsed two games: {titles}'
+
+
+def test_a_game_cannot_be_added_twice_under_two_concepts(client):
+    """THE DEFECT KEYING ON CONCEPT WAS MEANT TO END, arriving through a door nobody checked.
+
+    `unique(game_list, concept)` catches the obvious duplicate and misses this one: the two rows
+    really are different concepts, so the constraint is satisfied while the list holds one game
+    twice -- exactly what the old `Game` keying did with one stack per platform.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    first, second = _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+
+    svc.add_concept(game_list, owner, first)
+    with pytest.raises(svc.ListError):
+        svc.add_concept(game_list, owner, second)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 1, \
+        'the same game is on the list twice'
+
+
+def test_two_different_games_are_still_both_addable(client):
+    """The guard must refuse a DUPLICATE, not a coincidence. Two concepts with no trusted match --
+    or with different ids -- are two games, and refusing the second would be worse than the bug."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    a, b = _split_game('Colossus Down', 'Colossus Rising', igdb_id=11111)
+    # ...but give them DIFFERENT identities, which is the ordinary case.
+    b.igdb_match.igdb_id = 22222
+    b.igdb_match.save(update_fields=['igdb_id'])
+
+    svc.add_concept(game_list, owner, a)
+    svc.add_concept(game_list, owner, b)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 2, \
+        'two different games were treated as one'
+
+
+def test_the_refusal_does_not_explain_our_schema(client):
+    """To the hunter it IS the same game. Saying "a sibling concept of this game is already on the
+    list" would be telling them about our data model to explain something they already understand,
+    so both paths refuse in the same words."""
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    first, second = _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+    svc.add_concept(game_list, owner, first)
+
+    with pytest.raises(svc.ListError) as sibling:
+        svc.add_concept(game_list, owner, second)
+    with pytest.raises(svc.ListError) as same:
+        svc.add_concept(game_list, owner, first)
+
+    assert str(sibling.value) == str(same.value), \
+        'the two duplicate paths refuse in different words'
+
+
+# ── the membership half of the same identity rule (2026-09) ──────────────────────────────────────
+
+def test_the_adder_marks_a_game_held_under_a_sibling(client):
+    """THE DEAD END COLLAPSING ONLY THE READ SIDE CREATED.
+
+    The search elects one row per game page; `already_added` keyed on the concept pk. So when the
+    elected representative was the sibling NOT on the list, the row rendered as addable, the hunter
+    clicked, and `add_concept` answered "already on this list" -- on roughly half the split games,
+    decided by which sibling won the election.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    # THE ELECTED ONE MUST BE THE ONE NOT ON THE LIST, or this passes under the old code too: if the
+    # election happened to return the held sibling, matching on the concept pk gets the right answer
+    # for the wrong reason. `_match_rank` decides it, so the fixture decides it -- "Colossus" is an
+    # exact match (rank 0) and always wins, and the list holds the other one.
+    elected, held = _split_game('Colossus', 'Shadow of the Colossus')
+    svc.add_concept(game_list, owner, held)
+
+    _bust('colossus')
+    rows = client.get(reverse('list_game_search', args=[game_list.id]),
+                      {'q': 'colossus'}).json()['results']
+
+    assert rows and rows[0]['concept_id'] == elected.pk, \
+        'the fixture did not elect the sibling that is off the list, so this proves nothing'
+
+    assert len(rows) == 1, f'the election stopped collapsing: {rows}'
+    assert rows[0]['already_added'] is True, \
+        'the adder offers a game the list already holds, and the add would refuse it'
+
+
+def test_the_adder_does_not_leak_how_it_recognises_a_game(client):
+    """`page_key` is how the server matches a row against a list, not something the client can use.
+
+    It rides in the cached row because the membership check needs it; it has no place in the JSON,
+    where it would be a second, undocumented id for a game.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Solotitle')
+
+    _bust('solotitle')
+    rows = client.get(reverse('list_game_search', args=[game_list.id]),
+                      {'q': 'solotitle'}).json()['results']
+
+    assert rows, 'the fixture did not match'
+    assert 'page_key' not in rows[0], 'an internal key reached the client'
+
+
+def test_the_picker_knows_a_list_holds_this_game_under_a_sibling(client):
+    """The same defect from the other direction.
+
+    The quick-add popover asked `concept_id=<this concept>`, so a list holding the SIBLING answered
+    "not on it" -- offering Add, which `add_concept` then refuses, and offering no Remove for the row
+    that is actually there. A hunter could neither add it nor get rid of it from this surface.
+    """
+    owner = _member(client)
+    first, second = _split_game('Shadow of the Colossus', 'Shadow of the Colossus (Remaster)')
+    holds_sibling = svc.create_list(owner, name='Has it')
+    item = svc.add_concept(holds_sibling, owner, second)
+
+    rows = {row['name']: row for row in
+            client.get(reverse('lists_for_concept', args=[first.id])).json()['lists']}
+
+    assert rows['Has it']['has_concept'] is True, \
+        'the picker offers Add for a game this list already holds'
+    assert rows['Has it']['remove_url'] == \
+        reverse('list_remove_game', args=[holds_sibling.id, item.id]), \
+        'the row on the list cannot be removed from the surface that shows it'
+
+
+# ── trust is the gate on the write side too (2026-09) ────────────────────────────────────────────
+#
+# BOTH OF THESE KILL A MUTATION THAT SURVIVED THE WHOLE SUITE. The search side pinned trust; the add
+# side pinned nothing, so deleting `match.is_trusted` or the status clause from the sibling `Q` ran
+# clean. They are two directions of one rule, which is why there are two tests: each mutation is
+# only reachable from one side.
+
+def _matched(title, igdb_id, status):
+    """A concept whose IGDB match is in a named state -- trusted or not."""
+    concept = ConceptFactory(unified_title=title)
+    GameFactory(concept=concept, title_platform=['PS5'])
+    IGDBMatchFactory(concept=concept, igdb_id=igdb_id, status=status)
+    return concept
+
+
+def test_a_rejected_match_on_the_list_does_not_block_a_real_game(client):
+    """A REJECTED match keeps the `igdb_id` it was rejected FOR.
+
+    That id is the record of a WRONG guess -- it means "this concept is not that game" -- so a list
+    holding it must not make the game it names unaddable. Without the status clause on the sibling
+    `Q`, the rejected row matches and the real game is refused, with no way for the hunter to see
+    why.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    wrongly_guessed = _matched('Some Other Game', 77777, 'rejected')
+    the_real_one = _matched('The Actual Game', 77777, 'auto_accepted')
+
+    svc.add_concept(game_list, owner, wrongly_guessed)
+    svc.add_concept(game_list, owner, the_real_one)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 2, \
+        'a rejected guess blocked the game it was wrong about'
+
+
+def test_a_rejected_match_being_added_is_not_a_duplicate(client):
+    """The mirror, and the one that pins `match.is_trusted` on the INCOMING concept.
+
+    Same reasoning, other direction: the concept arriving carries a rejected id, so that id says
+    nothing about what it is. Refusing it because a list holds the game it was wrongly guessed to be
+    would be the dedupe hiding a game rather than a duplicate.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    the_real_one = _matched('The Actual Game', 88888, 'auto_accepted')
+    wrongly_guessed = _matched('Some Other Game', 88888, 'rejected')
+
+    svc.add_concept(game_list, owner, the_real_one)
+    svc.add_concept(game_list, owner, wrongly_guessed)
+
+    assert GameListItem.objects.filter(game_list=game_list).count() == 2, \
+        'a rejected guess was refused as a duplicate of the game it was wrong about'
+
+
+def test_the_best_matching_sibling_represents_the_page(client):
+    """WHICH sibling is elected was unpinned: reversing the window's order survived the suite.
+
+    It does not matter for navigation -- both route to the same page -- but it is the title the
+    hunter reads, so electing the worse match makes a correct result look like the wrong game. The
+    fixture is built so ONLY `_match_rank` ascending can produce the right answer: the decoy sorts
+    first alphabetically AND holds the lower `concept_id`, so every other ordering elects it.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    decoy = ConceptFactory(unified_title='Aaa Zorblex Edition', concept_id='CUSA-00001')
+    GameFactory(concept=decoy, title_platform=['PS5'])
+    IGDBMatchFactory(concept=decoy, igdb_id=55555, status='auto_accepted')
+    best = ConceptFactory(unified_title='Zorblex', concept_id='CUSA-99999')
+    GameFactory(concept=best, title_platform=['PS5'])
+    IGDBMatchFactory(concept=best, igdb_id=55555, status='auto_accepted')
+
+    titles = _search(client, game_list, 'zorblex')
+
+    assert titles == ['Zorblex'], f'the worse match represents the page: {titles}'
+
+
+def test_the_election_sorts_a_narrow_row(client):
+    """THE ELECTION IS SPLIT FROM THE DISPLAY READ FOR A MEASURED REASON, and nothing else pins it.
+
+    The outer `LIMIT` cannot push into the sort, because the `_page_rank = 1` filter sits between
+    them -- so this sorts the whole MATCHED SET, not the top 20. At `SELECT *` width that drags every
+    JSONField on Concept through it: on 8,000 rows that measured as two `external merge` sorts
+    spilling ~25 MB to disk, where the un-elected query used an 81 kB top-N heapsort. On a
+    per-keystroke endpoint, over a catalogue far larger than 8,000, with `MIN_QUERY` at 3 -- "the"
+    and "war" both reach it. It is the whale shape CLAUDE.md names.
+
+    Collapsing the two queries back into one reads better and reintroduces all of it, silently,
+    because every functional test still passes. This is the only thing that would notice.
+    """
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    _titled('Narrowcheck One', 'Narrowcheck Two')
+
+    _bust('narrowcheck')
+    with CaptureQueriesContext(connection) as captured:
+        client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'narrowcheck'})
+
+    elections = [q['sql'] for q in captured.captured_queries if 'ROW_NUMBER' in q['sql'].upper()]
+    assert len(elections) == 1, f'expected one election query, got {len(elections)}'
+
+    # A sample of the wide columns, named rather than counted so a failure says WHICH one came back.
+    # `raw_response` is the ~30 KB blob; the rest are Concept's own JSONFields, which is the payload
+    # the defer never covered.
+    wide = [column for column in ('raw_response', 'descriptions', 'media', 'content_rating')
+            if column in elections[0]]
+    assert not wide, f'the election sorts full rows again, carrying: {", ".join(wide)}'

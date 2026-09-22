@@ -1143,8 +1143,13 @@
 .gl-toolbar .gl-adder {
     /* Takes the bar's slack. At the shared 200px basis this sat roughly level with the sort select;
        the larger basis makes it the widest thing in the row wherever there is room, and the bar's
-       `flex-wrap` still drops it to its own full-width line on a phone. */
-    flex: 1 1 320px;
+       `flex-wrap` still drops it to its own full-width line on a phone.
+
+       420, up from 320 (owner, 2026-09): the RESULTS are what needed the room. The panel is
+       `left: 0; right: 0` against this element, so its rows are exactly as wide as the field, and
+       `.gl-adder__name` ellipsizes -- so a long title was being cut mid-word in the one place where
+       reading the whole title is the entire task. Widening the field is what widens the answer. */
+    flex: 1 1 420px;
 }
 .gl-adder > svg {
     /* The accent, and a touch larger than the shared 16px. The icon is the first thing read in a

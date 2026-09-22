@@ -27,13 +27,28 @@ What this module CAN do, and does, is bound the damage: a rate limit at each vie
 on the normalized query, and an upper bound on the term.
 """
 from django.core.cache import cache
+from django.db import models
+from django.db.models import Case, CharField, F, IntegerField, Value, When, Window
+from django.db.models.functions import Cast, Concat, RowNumber
 
 from gamelists.services.covers import cover_games_for
-from trophies.models import Concept
+from trophies.models import Concept, IGDBMatch
+
+#: The two shapes a page key takes. Named because `page_key_expression` BUILDS them and
+#: `page_key_filter` PARSES them back, and a literal in one place and not the other is how those two
+#: would drift apart silently.
+_IGDB_PREFIX = 'igdb:'
+_CONCEPT_PREFIX = 'concept:'
 
 #: How many rows a typeahead answers with. Also the bound every caller's membership check must respect
 #: -- the answer only ever needs to be known for the rows being rendered.
-LIMIT = 12
+#:
+#: 20, up from 12 (2026-09). The panel scrolls, so the cost of more rows is bytes rather than layout,
+#: and 12 was demonstrably too few the moment a series shared a substring with the thing being looked
+#: for: searching "myst" returned twelve titles beginning with it and never reached
+#: "Riven: The Sequel to Myst". The ranking below is the real fix; this widens the window it ranks
+#: into.
+LIMIT = 20
 
 #: THREE, not two. pg_trgm extracts no trigrams from a two-character pattern, so a 2-char query is a
 #: guaranteed full pass even once the index question above is settled.
@@ -45,12 +60,87 @@ MAX_QUERY = 64
 
 CACHE_TTL = 60
 
+
+def page_key_expression(prefix=''):
+    """The GAME PAGE IDENTITY of a concept, as an ORM expression rooted at `prefix`.
+
+    ONE DEFINITION, AND EVERY SURFACE THAT ASKS "is this game here" GOES THROUGH IT -- the election
+    below, both membership checks in `gamelists.views`, and `add_concept`'s duplicate gate. That last
+    one hand-wrote the rule as its own `Q` for a while, which left the one surface the original bug
+    came from as the one surface that could still drift. `prefix` is the path from the caller's model
+    to Concept: `''` from Concept itself, `'concept__'` from a row that points at one.
+
+    Pair it with `page_key_filter` rather than filtering on it; the docstring there says why.
+
+    The rule is `Concept.game_page_url`'s, not a new one: a trusted match's `igdb_id` IS the page, and
+    everything untrusted stands for itself. TRUST IS THE GATE rather than the mere presence of an id,
+    because a REJECTED match keeps the id it was rejected FOR -- the id that means "this concept is
+    not that game" -- and keying on it would hide games rather than duplicates.
+    """
+    match = f'{prefix}igdb_match__'
+    return Case(
+        When(**{f'{match}status__in': IGDBMatch.TRUSTED_STATUSES,
+                f'{match}igdb_id__isnull': False},
+             then=Concat(Value(_IGDB_PREFIX), Cast(f'{match}igdb_id', CharField()))),
+        # `Concat` compiles to `COALESCE(a,'') || COALESCE(b,'')` on Postgres, so a NULL operand
+        # yields '' rather than a NULL partition key. `Concept.concept_id` is NOT NULL and unique, so
+        # this branch is genuinely per-row, and the two prefixes differ at character one.
+        default=Concat(Value(_CONCEPT_PREFIX), F(f'{prefix}concept_id')),
+        output_field=CharField(),
+    )
+
+
+def page_key_filter(page_keys, prefix=''):
+    """An INDEXED `Q` matching rows whose game page is one of `page_keys`.
+
+    THE COMPANION TO `page_key_expression`, AND THE REASON BOTH EXIST. Filtering on the expression
+    reads naturally and is a trap: it puts a `CASE` over a two-table join into the WHERE clause,
+    which no index can serve, so Postgres materialises every row of the container and discards almost
+    all of them. Measured on a 200-item list: "Rows Removed by Filter: 180". The membership checks
+    shipped that way once -- reverting, in effect, the bound an earlier commit added for exactly this
+    reason -- and the test meant to catch it passed, because `CASE ... IN (...)` still contains the
+    substring `IN (` the assertion looked for.
+
+    This says the same thing in terms Postgres can seek: `igdb_id IN (...)` against its own index and
+    `concept_id IN (...)` against the unique one. Where the KEY itself is needed back, annotate
+    `page_key_expression` AFTER filtering with this -- the `CASE` is then evaluated per surviving row
+    in the SELECT list rather than per candidate row in the WHERE.
+
+    Parsing the keys is safe because this module is the only thing that builds them, and
+    `test_the_two_halves_of_the_page_key_agree` pins the two against each other.
+    """
+    igdb_ids, concept_ids = [], []
+    for key in page_keys:
+        if key and key.startswith(_IGDB_PREFIX):
+            igdb_ids.append(key[len(_IGDB_PREFIX):])
+        elif key and key.startswith(_CONCEPT_PREFIX):
+            concept_ids.append(key[len(_CONCEPT_PREFIX):])
+
+    # `pk__in=[]` rather than an empty `Q()`, because an empty `Q` matches EVERYTHING -- which on a
+    # membership check is the difference between "nothing is on the list" and "all of it is".
+    # Django compiles this to `EmptyResultSet` and issues no query at all.
+    matches = models.Q(pk__in=[])
+    if igdb_ids:
+        matches |= models.Q(**{
+            f'{prefix}igdb_match__igdb_id__in': igdb_ids,
+            f'{prefix}igdb_match__status__in': IGDBMatch.TRUSTED_STATUSES,
+        })
+    if concept_ids:
+        matches |= models.Q(**{f'{prefix}concept_id__in': concept_ids})
+    return matches
+
+
 #: Keyed on the query and NOTHING ELSE -- not the caller, not the container, not the viewer. That is
 #: what makes the expensive half shareable across every adder on the site, and it is why the
 #: membership flag must be applied afterwards. `adder:` rather than the old `gamelists:search:` prefix
 #: because the cached value is a catalogue answer that was never about lists; the rename costs one
 #: minute of cold cache.
-_CACHE_PREFIX = 'adder:search:'
+#:
+#: VERSIONED, and the version moves whenever the ROW SHAPE changes. `page_key` was added to each row
+#: in 2026-09, and a caller reading a pre-deploy entry would `KeyError` on it -- a 60-second window of
+#: 500s at deploy, for one minute of cold cache avoided. Bump it rather than reaching for `.get()`,
+#: which would turn the same mistake into a silently wrong membership flag next time.
+_CACHE_PREFIX = 'adder:search:2:'
 
 
 class SearchRefused(Exception):
@@ -58,7 +148,11 @@ class SearchRefused(Exception):
 
 
 def search_concepts(query):
-    """`[{concept_id, title, cover}]` for a typeahead term, cached across every caller.
+    """`[{concept_id, title, cover, page_key}]` for a typeahead term, cached across every caller.
+
+    `page_key` is the identity each row was ELECTED by, and it is here so a caller's membership check
+    can ask the same question of its own table -- see `page_key_expression`. It is internal: strip it
+    before serializing.
 
     Returns an EMPTY LIST for a term that is merely too short, and raises `SearchRefused` for one that
     is too long. The asymmetry is deliberate and is the existing behaviour: a short term is somebody
@@ -75,18 +169,93 @@ def search_concepts(query):
     if cached is not None:
         return cached
 
-    # `select_related('igdb_match')` paired with `.defer('igdb_match__raw_response')`, because
-    # `display_image_url` reads the IGDB cover FIRST on every render -- without the select_related
-    # that is a query per row, and without the defer each one drags the ~30 KB API blob that caused
-    # the May 2026 web-server OOM. CLAUDE.md requires the pairing; neither half is optional.
-    concepts = list(
+    # RANKED BY HOW WELL THE TITLE MATCHES, then alphabetically inside each tier.
+    #
+    # This was `order_by('unified_title')[:LIMIT]` -- the alphabet, truncated. Which means a title
+    # that CONTAINS the term but does not START with it competes on spelling against every title
+    # that does, and loses. The reported case: "myst" never reached "Riven: The Sequel to Myst",
+    # because a dozen titles beginning with those four letters sort ahead of anything starting with
+    # R. The result was a search that looked broken on exactly the query a series had flooded.
+    #
+    # Four tiers, cheapest first to read:
+    #   0  the whole title IS the term          -- "Myst"
+    #   1  the title begins with it             -- "Myst III", "Mystery Case Files"
+    #   2  it begins a WORD inside the title    -- "Riven: The Sequel to Myst"
+    #   3  it appears mid-word                  -- "Pathologic" for "logi"
+    #
+    # Tier 2 is the one that earns this. A term at a word boundary is almost always the game
+    # somebody means, and it was previously indistinguishable from a mid-word coincidence. It is
+    # approximated with a leading space rather than a regex: `~*` would cost a per-row regex match
+    # on a scan that is already the expensive part, and the space catches every real title because
+    # the alternative -- a word starting mid-token -- is what tier 3 is for.
+    #
+    # No index is lost by this. The `icontains` cannot use one either way (see the module docstring),
+    # so the sort was always over the matched set.
+    # ONE ROW PER GAME PAGE, not per Concept.
+    #
+    # `Concept.game_page_url` states the identity rule: "deliberately-split concepts sharing an
+    # igdb_id share one page". So two concepts can be the SAME GAME -- Browse Games collapses them
+    # with `game_page_canonicals`, and this search did not, which meant the adder offered two rows
+    # for one game while the catalogue showed one card. The same partition key, computed on Concept
+    # rather than on Game.
+    #
+    # WHICH ONE REPRESENTS THE PAGE barely matters for navigation -- both route to the same place --
+    # so the tiebreak is chosen for the READER: the concept whose title matches the query best, then
+    # `concept_id` ascending, which is a lexicographic tiebreak on the PSN id (a CharField, and not
+    # the pk the JSON below calls `concept_id`). Which one it picks is arbitrary; that it picks the
+    # SAME one every time is what makes the answer cacheable.
+    #
+    # ELECTED OVER A NARROW ROW, THEN RE-FETCHED, which is two queries where one would read more
+    # naturally. The reason is measured, not stylistic: the outer `LIMIT 20` CANNOT push into the
+    # sort, because the `_page_rank = 1` filter sits between them. So the sort is over the whole
+    # matched set rather than the top 20 -- and at `SELECT *` width that drags every JSONField on
+    # Concept and IGDBMatch through it. On 8,000 matched rows that measured as two `external merge`
+    # sorts spilling ~25 MB to disk, against a `top-N heapsort` using 81 kB before. On a
+    # per-keystroke endpoint at 120/min, over a catalogue far larger than 8,000, with `MIN_QUERY`
+    # at 3 -- so "the", "war" and "man" all reach it. That is the whale shape CLAUDE.md names, and
+    # it is the same reason `raw_response` is deferred: projecting to two columns here is what keeps
+    # the defer meaningful, since everything else was still riding along.
+    elected = list(
         Concept.objects.filter(unified_title__icontains=query)
         .exclude(unified_title='')
-        .select_related('igdb_match')
-        .defer('igdb_match__raw_response')
-        .order_by('unified_title')[:LIMIT]
+        .annotate(_match_rank=Case(
+            When(unified_title__iexact=query, then=Value(0)),
+            When(unified_title__istartswith=query, then=Value(1)),
+            When(unified_title__icontains=' ' + query, then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        ))
+        .annotate(_page_key=page_key_expression())
+        .annotate(_page_rank=Window(
+            expression=RowNumber(),
+            partition_by=[F('_page_key')],
+            order_by=[F('_match_rank').asc(), F('concept_id').asc()],
+        ))
+        # NOTHING NARROWING MAY BE CHAINED AFTER THIS. Django wraps a window filter in a subquery,
+        # so a `.filter()` here lands INSIDE it and silently narrows the election POPULATION rather
+        # than the elected rows -- the trap `GamesListView` documents at length. Ordering, the
+        # projection and the slice all land on the OUTER query, which is verified from the compiled
+        # SQL rather than assumed.
+        .filter(_page_rank=1)
+        .order_by('_match_rank', 'unified_title')
+        .values_list('pk', '_page_key')[:LIMIT]
     )
-    covers = cover_games_for([concept.pk for concept in concepts])
+
+    # The display read, bounded at LIMIT rows. `select_related('igdb_match')` paired with
+    # `.defer('igdb_match__raw_response')`, because `display_image_url` reads the IGDB cover FIRST on
+    # every render -- without the select_related that is a query per row, and without the defer each
+    # one drags the ~30 KB API blob that caused the May 2026 web-server OOM. CLAUDE.md requires the
+    # pairing; neither half is optional.
+    fetched = {
+        concept.pk: concept
+        for concept in Concept.objects.filter(pk__in=[pk for pk, _ in elected])
+        .only('pk', 'unified_title')
+    }
+    # Re-ordered from `elected`, which carries the ranking. `pk__in` returns rows in whatever order
+    # the plan produces, so the sort above would otherwise be thrown away here.
+    ranked = [(fetched[pk], key) for pk, key in elected if pk in fetched]
+
+    covers = cover_games_for([concept.pk for concept, _ in ranked])
     results = [
         {
             'concept_id': concept.pk,
@@ -94,8 +263,12 @@ def search_concepts(query):
             # A concept with no trophy list is simply absent from the mapping -- that is
             # `cover_games_for`'s stated contract, so this is a miss rather than a None to guard.
             'cover': covers[concept.pk].display_image_url if concept.pk in covers else '',
+            # CARRIED OUT TO THE CALLER so its membership check can ask the identity question this
+            # row was elected by. It is a catalogue fact, so it caches with the rest; it is internal,
+            # so callers strip it before serializing.
+            'page_key': page_key,
         }
-        for concept in concepts
+        for concept, page_key in ranked
     ]
     cache.set(cache_key, results, CACHE_TTL)
     return results
