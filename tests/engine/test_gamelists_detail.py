@@ -7,6 +7,7 @@ Two rules carry most of the weight here. A private list must 404 rather than 403
 its owner -- a 403 confirms the list exists and whose it is, from nothing but an id. And the page
 must not scale with the list: a 200-game list should cost what a 5-game one does.
 """
+
 import re
 from pathlib import Path
 
@@ -3486,10 +3487,30 @@ def test_the_typeahead_reads_only_the_results_it_is_about(client):
     member_reads = [q for q in ctx.captured_queries
                     if 'gamelists_gamelistitem' in q['sql'] and 'concept_id' in q['sql']]
     assert len(member_reads) == 1, f'expected one membership read, got {len(member_reads)}'
-    # Bounded BY THE RESULTS: the id of the one row being rendered appears in the WHERE clause, so
-    # the database returns at most that many rows rather than all thirty-one.
-    assert 'IN (' in member_reads[0]['sql'], \
-        'the membership check reads the whole list rather than the page of results'
+
+    # BOUNDED BY THE RESULTS, asserted on the ROWS THE DATABASE READ rather than on a substring.
+    #
+    # This asserted `'IN (' in sql`, which stopped meaning what it says the moment the membership
+    # check started identifying games by page rather than by pk: the unbounded shape emits
+    # `CASE ... END IN ('concept:...')`, which contains the substring while reading all thirty-one
+    # rows. A duplicate label matching the wrong thing -- and it passed through an audit that way.
+    #
+    # ASSERTED ON THE WHERE CLAUSE, not on the query plan. `EXPLAIN ANALYZE` is the tempting move and
+    # it does not work here: Postgres seq-scans a thirty-one-row table whatever indexes exist,
+    # because on that size it is genuinely cheaper, so the plan is identical for both shapes and a
+    # rows-removed assertion fails on the CORRECT one. The fixture cannot be grown to where the
+    # planner switches without making this test slow and still leaving the threshold a guess.
+    #
+    # What actually differs is the predicate. A page-key `CASE` in the WHERE clause is a computed
+    # value over a two-table join and no index can serve it at ANY size; `igdb_id IN (...)` and
+    # `concept_id IN (...)` are seeks on their own indexes. So this asserts the predicate is made of
+    # columns. The `CASE` still appears in the SELECT list -- that is where it belongs, evaluated per
+    # surviving row -- which is why only the text after WHERE is examined.
+    where = member_reads[0]['sql'].split(' WHERE ', 1)[-1]
+    assert 'CASE' not in where.upper(), \
+        'the membership check filters on a computed page key, so it reads the whole list'
+    assert 'concept_id' in where or 'igdb_id' in where, \
+        'the membership check no longer names the indexed columns'
 
 
 def test_the_typeahead_answer_does_not_change_with_the_bound(client):

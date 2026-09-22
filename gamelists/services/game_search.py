@@ -27,11 +27,18 @@ What this module CAN do, and does, is bound the damage: a rate limit at each vie
 on the normalized query, and an upper bound on the term.
 """
 from django.core.cache import cache
+from django.db import models
 from django.db.models import Case, CharField, F, IntegerField, Value, When, Window
 from django.db.models.functions import Cast, Concat, RowNumber
 
 from gamelists.services.covers import cover_games_for
 from trophies.models import Concept, IGDBMatch
+
+#: The two shapes a page key takes. Named because `page_key_expression` BUILDS them and
+#: `page_key_filter` PARSES them back, and a literal in one place and not the other is how those two
+#: would drift apart silently.
+_IGDB_PREFIX = 'igdb:'
+_CONCEPT_PREFIX = 'concept:'
 
 #: How many rows a typeahead answers with. Also the bound every caller's membership check must respect
 #: -- the answer only ever needs to be known for the rows being rendered.
@@ -57,11 +64,13 @@ CACHE_TTL = 60
 def page_key_expression(prefix=''):
     """The GAME PAGE IDENTITY of a concept, as an ORM expression rooted at `prefix`.
 
-    ONE DEFINITION WITH TWO CALLERS, and the pairing is the whole point. The search elects one row per
-    page with this; every caller's membership check must ask the SAME question of its own table, or
-    the adder marks a row addable that the service then refuses -- which is precisely what shipped
-    when only the read side was collapsed. `prefix` is the path from the caller's model to Concept:
-    `''` from Concept itself, `'concept__'` from a row that points at one.
+    ONE DEFINITION, AND EVERY SURFACE THAT ASKS "is this game here" GOES THROUGH IT -- the election
+    below, both membership checks in `gamelists.views`, and `add_concept`'s duplicate gate. That last
+    one hand-wrote the rule as its own `Q` for a while, which left the one surface the original bug
+    came from as the one surface that could still drift. `prefix` is the path from the caller's model
+    to Concept: `''` from Concept itself, `'concept__'` from a row that points at one.
+
+    Pair it with `page_key_filter` rather than filtering on it; the docstring there says why.
 
     The rule is `Concept.game_page_url`'s, not a new one: a trusted match's `igdb_id` IS the page, and
     everything untrusted stands for itself. TRUST IS THE GATE rather than the mere presence of an id,
@@ -72,13 +81,53 @@ def page_key_expression(prefix=''):
     return Case(
         When(**{f'{match}status__in': IGDBMatch.TRUSTED_STATUSES,
                 f'{match}igdb_id__isnull': False},
-             then=Concat(Value('igdb:'), Cast(f'{match}igdb_id', CharField()))),
+             then=Concat(Value(_IGDB_PREFIX), Cast(f'{match}igdb_id', CharField()))),
         # `Concat` compiles to `COALESCE(a,'') || COALESCE(b,'')` on Postgres, so a NULL operand
         # yields '' rather than a NULL partition key. `Concept.concept_id` is NOT NULL and unique, so
         # this branch is genuinely per-row, and the two prefixes differ at character one.
-        default=Concat(Value('concept:'), F(f'{prefix}concept_id')),
+        default=Concat(Value(_CONCEPT_PREFIX), F(f'{prefix}concept_id')),
         output_field=CharField(),
     )
+
+
+def page_key_filter(page_keys, prefix=''):
+    """An INDEXED `Q` matching rows whose game page is one of `page_keys`.
+
+    THE COMPANION TO `page_key_expression`, AND THE REASON BOTH EXIST. Filtering on the expression
+    reads naturally and is a trap: it puts a `CASE` over a two-table join into the WHERE clause,
+    which no index can serve, so Postgres materialises every row of the container and discards almost
+    all of them. Measured on a 200-item list: "Rows Removed by Filter: 180". The membership checks
+    shipped that way once -- reverting, in effect, the bound an earlier commit added for exactly this
+    reason -- and the test meant to catch it passed, because `CASE ... IN (...)` still contains the
+    substring `IN (` the assertion looked for.
+
+    This says the same thing in terms Postgres can seek: `igdb_id IN (...)` against its own index and
+    `concept_id IN (...)` against the unique one. Where the KEY itself is needed back, annotate
+    `page_key_expression` AFTER filtering with this -- the `CASE` is then evaluated per surviving row
+    in the SELECT list rather than per candidate row in the WHERE.
+
+    Parsing the keys is safe because this module is the only thing that builds them, and
+    `test_the_two_halves_of_the_page_key_agree` pins the two against each other.
+    """
+    igdb_ids, concept_ids = [], []
+    for key in page_keys:
+        if key and key.startswith(_IGDB_PREFIX):
+            igdb_ids.append(key[len(_IGDB_PREFIX):])
+        elif key and key.startswith(_CONCEPT_PREFIX):
+            concept_ids.append(key[len(_CONCEPT_PREFIX):])
+
+    # `pk__in=[]` rather than an empty `Q()`, because an empty `Q` matches EVERYTHING -- which on a
+    # membership check is the difference between "nothing is on the list" and "all of it is".
+    # Django compiles this to `EmptyResultSet` and issues no query at all.
+    matches = models.Q(pk__in=[])
+    if igdb_ids:
+        matches |= models.Q(**{
+            f'{prefix}igdb_match__igdb_id__in': igdb_ids,
+            f'{prefix}igdb_match__status__in': IGDBMatch.TRUSTED_STATUSES,
+        })
+    if concept_ids:
+        matches |= models.Q(**{f'{prefix}concept_id__in': concept_ids})
+    return matches
 
 
 #: Keyed on the query and NOTHING ELSE -- not the caller, not the container, not the viewer. That is
@@ -199,10 +248,8 @@ def search_concepts(query):
     # pairing; neither half is optional.
     fetched = {
         concept.pk: concept
-        for concept in Concept.objects
-        .filter(pk__in=[pk for pk, _ in elected])
-        .select_related('igdb_match')
-        .defer('igdb_match__raw_response')
+        for concept in Concept.objects.filter(pk__in=[pk for pk, _ in elected])
+        .only('pk', 'unified_title')
     }
     # Re-ordered from `elected`, which carries the ranking. `pk__in` returns rows in whatever order
     # the plan produces, so the sort above would otherwise be thrown away here.

@@ -46,7 +46,8 @@ from gamelists.models import (
     GameListLike,
     GameListSection,
 )
-from trophies.models import IGDBMatch, Profile
+from gamelists.services.game_search import page_key_expression, page_key_filter
+from trophies.models import Concept, Profile
 from trophies.services.comment_service import CommentService
 from users.services import restriction_service
 
@@ -466,33 +467,32 @@ def add_concept(game_list, profile, concept, *, note='', section=None):
     # ids, which is exactly the defect keying on Concept was introduced to end -- the old `Game`
     # keying let one backlog hold Elden Ring once per stack.
     #
-    # Reaching the catalogue's own identity rule rather than re-deriving it: a trusted match's
-    # `igdb_id` IS the page, and everything untrusted stands for itself, which is what the `Q` below
-    # says. The duplicate filter itself is ONE `SELECT 1 ... LIMIT 1` in both branches -- the sibling
-    # clause is only added when there is a match to add it for, and it is served by the index on
-    # `igdb_id`.
-    #
-    # TWO COLUMNS, NOT THE ROW. `getattr(concept, 'igdb_match', None)` reads naturally and fetches
-    # `SELECT *`, which on this table means the ~30 KB `raw_response` blob -- unconditionally, on
-    # every add, including for a concept with no match at all, because neither caller resolves the
-    # concept with the match already selected. That is the pairing CLAUDE.md requires, arrived at
-    # from the other side: the two fields the gate actually reads.
+    # THROUGH THE SHARED RULE, not a fourth hand-written copy of it. This spelled the identity out
+    # again as a `Q` while the adder used `page_key_expression`, so the one surface the bug actually
+    # came from was the one surface that could still drift. The two helpers are the definition; a
+    # trusted match's `igdb_id` IS the page, and everything untrusted stands for itself.
     #
     # TRUST IS THE GATE, not the presence of an id. A REJECTED match keeps the `igdb_id` it was
     # rejected FOR -- the id that means "this concept is NOT that game" -- so keying on the id alone
-    # would refuse a game the list does not hold. Both halves are pinned by tests below.
+    # would refuse a game the list does not hold. Both halves are pinned by tests.
+    #
+    # Two bounded queries: the key (an indexed pk read, two columns, no `raw_response`) and the
+    # `SELECT 1 ... LIMIT 1` below, which `page_key_filter` keeps on the `igdb_id` and `concept_id`
+    # indexes rather than scanning the list.
+    #
+    # `Q(concept=concept)` stays as well, and is not redundant: if the concept is deleted between
+    # these two statements the key comes back None and the filter matches nothing, and an exact
+    # duplicate must still be refused.
     #
     # The message is deliberately the same in both cases. To the hunter it IS the same game, and
     # explaining that the site models it as two concepts would be telling them about our schema.
-    duplicate = models.Q(concept=concept)
-    match = (
-        IGDBMatch.objects.filter(concept=concept).only('igdb_id', 'status').first()
+    page_key = (
+        Concept.objects.filter(pk=concept.pk)
+        .annotate(_page_key=page_key_expression())
+        .values_list('_page_key', flat=True)
+        .first()
     )
-    if match is not None and match.is_trusted and match.igdb_id is not None:
-        duplicate |= models.Q(
-            concept__igdb_match__igdb_id=match.igdb_id,
-            concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
-        )
+    duplicate = models.Q(concept=concept) | page_key_filter([page_key], 'concept__')
     if GameListItem.objects.filter(game_list=locked).filter(duplicate).exists():
         raise ListError('That game is already on this list.')
 

@@ -21,6 +21,7 @@ from gamelists.services import game_list_service as svc
 from gamelists.services.game_search import LIMIT
 from tests.factories import (ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
                              UserFactory)
+from trophies.models import Concept
 from users.models import UserRestriction
 
 pytestmark = pytest.mark.django_db
@@ -427,17 +428,87 @@ def test_the_search_does_not_fetch_the_igdb_blob(client):
 
     owner = _staff(client)
     game_list = svc.create_list(owner, name='Backlog')
-    _concept('Blob Test')
+    # THE TERM HAS TO MATCH THE TITLE. This searched "blobtest" against "Blob Test", which does not
+    # match, so the search returned nothing -- and once the election was split from the display read,
+    # `pk__in=[]` meant the display read was never issued at all. The only remaining query mentioning
+    # igdb was the election, which selects two columns and cannot contain `raw_response`, so the
+    # `assert joined` anti-vacuity guard below was satisfied by the wrong query and BOTH halves of
+    # the pairing could be deleted with the suite green.
+    _concept('Blobtest Adventure')
 
     with CaptureQueriesContext(connection) as ctx:
-        client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'blobtest'})
+        response = client.get(reverse('list_game_search', args=[game_list.id]), {'q': 'blobtest'})
+
+    # The fixture matching is the precondition, so it is asserted rather than assumed.
+    assert response.json()['results'], 'the fixture does not match the term; this proves nothing'
 
     joined = [q['sql'] for q in ctx.captured_queries if 'igdb' in q['sql'].lower()]
     # The guard its sibling in test_gamelists_detail.py has and this dropped: an empty generator
     # passes the loop below, so without this the test is green when the query never runs at all.
     assert joined, 'the cover chain is not being joined at all'
+    # WHAT THIS NOW GUARDS IS `cover_games_for`'s pairing, which is the query that actually walks the
+    # cover chain. The search's own Concept read used to carry a select_related/defer pair as well,
+    # and it turned out to join `igdb_match` for nothing -- the row supplies `pk` and
+    # `unified_title`, and the cover comes off the `Game` objects. Deleting a pairing maintained to
+    # protect a column nothing read is why that read is now two columns wide.
     for sql in joined:
         assert 'raw_response' not in sql.lower()
+
+
+def test_the_two_halves_of_the_page_key_agree(client):
+    """`page_key_expression` BUILDS a key and `page_key_filter` PARSES it back.
+
+    They are separate because one has to be an indexed WHERE clause and the other a SELECT
+    expression, and nothing structural stops them drifting -- a prefix changed in one, a trust rule
+    tightened in the other. Then the adder would mark nothing held, silently, and the only symptom
+    would be `add_concept` refusing games the hunter was just offered.
+
+    Checked across all three states that reach the key: trusted, untrusted, and no match at all.
+    """
+    from gamelists.services.game_search import page_key_expression, page_key_filter
+
+    trusted, sibling = _split_game('Split One', 'Split Two', igdb_id=44444)
+    untrusted = _matched('Rejected Guess', 44444, 'rejected')
+    unmatched, = _titled('No Match Here')
+
+    for concept, expected_siblings in (
+        (trusted, {trusted.pk, sibling.pk}),
+        (untrusted, {untrusted.pk}),
+        (unmatched, {unmatched.pk}),
+    ):
+        key = (Concept.objects.filter(pk=concept.pk)
+               .annotate(_k=page_key_expression()).values_list('_k', flat=True).first())
+        found = set(Concept.objects.filter(page_key_filter([key])).values_list('pk', flat=True))
+        assert found == expected_siblings, \
+            f'{concept.unified_title}: key {key!r} round-tripped to {found}, not {expected_siblings}'
+
+
+def test_no_page_keys_matches_nothing_rather_than_everything(client):
+    """An empty `Q()` matches EVERY row, which on a membership check is the difference between
+    "nothing is on the list" and "all of it is". `page_key_filter` opens on `pk__in=[]` for exactly
+    that reason, and Django then issues no query at all."""
+    from gamelists.services.game_search import page_key_filter
+
+    _titled('Anything At All')
+
+    assert not Concept.objects.filter(page_key_filter([])).exists()
+    assert not Concept.objects.filter(page_key_filter([None])).exists()
+
+    # AND IT HAS TO SURVIVE BEING OR'd. `add_concept` writes
+    # `Q(concept=concept) | page_key_filter([key])` so that a concept deleted between resolving its
+    # key and running the check is still refused as an exact duplicate. That branch only executes on
+    # a race, so without this the first time anyone learns whether Django folds an EmptyResultSet
+    # inside an OR -- rather than propagating it and matching nothing, or raising -- is in
+    # production, on a write.
+    owner = _staff(client)
+    game_list = svc.create_list(owner, name='Backlog')
+    on_it, = _titled('Genuinely On It')
+    svc.add_concept(game_list, owner, on_it)
+
+    from django.db.models import Q
+    assert GameListItem.objects.filter(game_list=game_list).filter(
+        Q(concept=on_it) | page_key_filter([None], 'concept__')).exists(), \
+        'an empty page-key branch swallowed the exact-duplicate branch beside it'
 
 
 # ── the gates ────────────────────────────────────────────────────────────────────────────────────

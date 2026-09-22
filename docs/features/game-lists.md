@@ -603,8 +603,13 @@ Keying on `Concept` fixed the old per-platform duplication, but a concept is sti
 one page**, which Browse Games already collapses with `GameQuerySet.game_page_canonicals`. So a list
 could hold one game twice under two concept ids, with `unique(game_list, concept)` satisfied.
 
-`game_search.page_key_expression(prefix)` is that identity as an ORM expression, and it has **four
-callers that must agree**:
+That identity lives in `gamelists/services/game_search.py` as **two functions that must agree**, and
+every surface asking "is this game here" goes through them:
+
+| Function | Shape | Use |
+|---|---|---|
+| `page_key_expression(prefix)` | a `CASE` for the **SELECT** list | get the key back for a row |
+| `page_key_filter(keys, prefix)` | an indexed `Q` for the **WHERE** clause | find rows by key |
 
 | Caller | Asks |
 |---|---|
@@ -617,11 +622,22 @@ The rule: a trusted match's `igdb_id` **is** the page; everything else stands fo
 `concept_id`. **Trust is the gate, not the presence of an id** — a `rejected` match keeps the id it
 was rejected *for*, so keying on the bare id would hide games rather than duplicates.
 
+`page_key_filter` **parses** the keys `page_key_expression` **builds**, so the two can drift; they
+share the prefix constants and `test_the_two_halves_of_the_page_key_agree` round-trips all three
+states (trusted, untrusted, unmatched) against each other. Note its `Q` opens on `pk__in=[]`, not an
+empty `Q()` — an empty `Q` matches *everything*, which on a membership check is the difference
+between "nothing is on the list" and "all of it is".
+
 The failure mode to watch for is asymmetry. Collapsing the read side alone shipped once: the search
 returned one row, membership still compared concept pks, so when the elected representative was the
 sibling *not* on the list the row rendered addable and `add_concept` refused it — a dead end on
-roughly half the split games. `prefix` exists so the expression is written once rather than three
-times.
+roughly half the split games. `prefix` exists so the rule is written once rather than four times.
+
+**Legacy lists can hold both siblings.** Nothing migrates a list authored before this, and the guard
+only refuses new adds. The picker's `held` map is `{list_id: item_id}`, so such a list surfaces one
+`remove_url`; removing it leaves the game on the list under the other concept and the popover offers
+Remove again. Tolerated rather than fixed: it is self-correcting through the UI, and a data migration
+that silently deleted a hunter's entry is the worse failure.
 
 ### Cover art
 
@@ -910,7 +926,15 @@ human, which is the thing `all_ugc` names.
   Python set on every keystroke — the third anti-pattern in CLAUDE.md's whale rule — on a system with
   no cap on list size, and the query cache above deliberately does not cover this half. Note that
   **query counting cannot catch a regression here**: both shapes issue exactly one query, and what
-  differs is how many rows it returns, so the test asserts on the `IN (…)` bound instead.
+  differs is how many rows it returns.
+- **The bound has been lost and restored once, so here is how it is lost.** `page_key_expression`
+  makes it tempting to write `.annotate(_page_key=…).filter(_page_key__in=…)`, which puts a `CASE`
+  over a two-table join in the WHERE clause. No index serves that, so the database reads every row
+  of the list (measured: "Rows Removed by Filter: 180" on a 200-item list) — and on the quick-add
+  picker, every row of all 25 lists. Filter with **`page_key_filter`**, which seeks `igdb_id` and
+  `concept_id` on their own indexes, and annotate the expression *after* if the key is needed back.
+  The test that should have caught this asserted `'IN (' in sql`, which the broken shape also
+  contains (`CASE … END IN ('concept:…')`); it now asserts the WHERE clause is made of columns.
 - **Membership is asked by page identity, not by concept pk.** See
   [One row per game page](#one-row-per-game-page). Collapsing the search without collapsing the
   membership check produced a dead end: the row rendered addable and the service then refused it.

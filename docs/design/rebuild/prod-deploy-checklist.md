@@ -1531,3 +1531,24 @@ both items are about knowing the blast radius before hunters find it.
 - [ ] **Expect one minute of cold typeahead.** `_CACHE_PREFIX` moved to `adder:search:2:` because the
       cached row shape gained `page_key`. Old entries are simply never read and expire on their own
       60-second TTL. No flush needed; no action if the graph shows a brief bump in catalogue scans.
+- [ ] **Count the LISTS holding both siblings, not just the split games.** The census above sizes the
+      catalogue; this one sizes the user-visible fallout, because only these lists behave oddly (one
+      `remove_url` for a game that is on the list twice):
+
+      ```python
+      from django.db.models import Count
+      from gamelists.models import GameListItem
+      from trophies.models import IGDBMatch
+      (GameListItem.objects
+          .filter(concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+                  concept__igdb_match__igdb_id__isnull=False)
+          .values('game_list_id', 'concept__igdb_match__igdb_id')
+          .annotate(n=Count('id'))
+          .filter(n__gt=1)
+          .count())
+      ```
+
+      Expected: zero or near it. If it is non-trivial, decide whether to leave it self-correcting
+      through the UI (the current call) or write a one-off cleanup. Do NOT add an automatic migration
+      that deletes entries: silently removing a hunter's hand-curated row is the worse failure, which
+      is the same reasoning that made `absorb()`'s `GameListItem` branch re-point rather than cascade.
