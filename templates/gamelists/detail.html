@@ -81,8 +81,15 @@ below with no outer wrapper.
                     </div>
 
                     {% if is_owner %}
-                    {# `id` so the Edit button's `aria-controls` points at something real. #}
-                    <form id="gl-edit-panel" data-gl-identity-edit hidden class="gl-edit">
+                    {% comment %}FOUND BY `data-gl-identity-edit`, which is how `list-detail.js`
+                    actually reaches it. The `id="gl-edit-panel"` that used to sit here existed for
+                    one reason, stated in a comment: so the Edit button's `aria-controls` pointed at
+                    something real. That `aria-controls` was then deliberately removed -- Edit opens
+                    a MODE reaching the cards, the section headers and the adders, so naming this one
+                    panel understated it by most of the page, and a test now asserts the attribute is
+                    absent. The id outlived its only consumer and was read by nothing: no JS, no CSS,
+                    no ARIA.{% endcomment %}
+                    <form data-gl-identity-edit hidden class="gl-edit">
                         <div class="stg-field">
                             <label class="stg-field__label" for="gl-edit-name">Name</label>
                             <input type="text" id="gl-edit-name" name="name" class="stg-input" required

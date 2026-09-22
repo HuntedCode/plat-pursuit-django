@@ -122,7 +122,7 @@ const menu = PlatPursuit.AnchoredMenu({
     onItem: (row, trigger) => { /* a row was activated */ },
     canOpen: (trigger) => true,       // optional refusal
 });
-// -> { close, reposition, isOpen, panel, current, stale, destroy }
+// -> { close, reposition, current, stale, destroy }
 ```
 
 > **Extracted from `quick-add.js` in 2026-09**, which held the only correct implementation of this on

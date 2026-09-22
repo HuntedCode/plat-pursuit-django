@@ -1438,6 +1438,14 @@
         var id = pendingPickId;
         pendingPickId = null;
         if (!arranging) { return; }
+        // NO `CSS.escape` HERE, AND THE REASON IS THE DATA, NOT AN OVERSIGHT. Every value
+        // interpolated into a selector on this page is a server-rendered `GameListItem` or
+        // `GameListSection` PRIMARY KEY -- an integer, or `''` for the loose bucket -- read straight
+        // back out of `data-item-id` / `data-section-id`. An integer cannot carry a quote or a
+        // combinator, and these are attribute-value selectors rather than id selectors, so there is
+        // nothing for an escape to do. If either key ever becomes a slug, a uuid or anything
+        // user-supplied, every one of these needs escaping and this comment is the thing that says
+        // so.
         var row = document.querySelector('.gl-item[data-item-id="' + id + '"]');
         if (!row) { return; }
         togglePicked(row);
@@ -2250,17 +2258,58 @@
     }
 
     /**
+     * Drop the drag wiring for ONE grid that is about to leave the document.
+     *
+     * `detachDrag` tears down every manager at once and is right when arrange mode ends. This is the
+     * other case: a single grid removed WHILE the mode is still live. Without it the manager, its
+     * SortableJS instance and the grid's own click listener stay bound to a node nobody can reach,
+     * and `reorderManagers` keeps the grid alive along with every card that was in it.
+     *
+     * Bounded rather than serious -- the next mode toggle destroys it either way -- but the array is
+     * right here and a stale entry is a footgun for whoever next iterates it expecting live grids.
+     * Walked backwards because it splices.
+     */
+    function releaseGrid(grid) {
+        for (var i = reorderManagers.length - 1; i >= 0; i--) {
+            if (reorderManagers[i].container === grid) {
+                reorderManagers[i].destroy();
+                reorderManagers.splice(i, 1);
+            }
+        }
+        var at = dragGrids.indexOf(grid);
+        if (at !== -1) {
+            grid.removeEventListener('click', onCardClick);
+            dragGrids.splice(at, 1);
+        }
+    }
+
+    /**
      * Drop the ungrouped bucket once it is empty, which is what the server does.
      *
      * The bucket renders only when it holds something (2026-09), so a client that files the last
      * loose card and leaves the heading behind is showing a state the next page load will not
      * reproduce. Only the LOOSE bucket: a named section is a real thing that legitimately sits empty.
+     *
+     * NOT WHILE A DRAG IS LIVE, and this is the sharp edge rather than the tidying above.
+     * `Sortable.destroy()` calls `_onDrop()` unconditionally, and that reaches `_offMoveEvents()`,
+     * `_offUpEvents()` and `_nulling()` -- all MODULE-level and shared by every instance. So
+     * destroying any grid's Sortable mid-gesture unbinds the document move/up listeners belonging to
+     * whatever drag is currently running and nulls `Sortable.active`, leaving a `forceFallback`
+     * clone parented to <body> with no mouseup to clear it.
+     *
+     * The window is real even though this runs after the POST resolves: file the last loose card,
+     * then pick up another while the request is in flight -- which touch makes MORE likely, since
+     * the 320ms delay lengthens the gesture. Skipping is free: the bucket is pruned on the next
+     * repaint, and a heading that lingers for one interaction is nothing next to a drag that dies
+     * under the hunter's finger.
      */
     function pruneEmptyLooseBucket() {
+        if (window.Sortable && window.Sortable.active) { return; }
         var head = document.querySelector('#gl-items-root .gl-section__head--loose');
         if (!head) { return; }
         var grid = groupGridFor(head);
         if (!grid || grid.querySelector('.gl-item')) { return; }
+        releaseGrid(grid);
         if (grid.parentNode) { grid.parentNode.removeChild(grid); }
         if (head.parentNode) { head.parentNode.removeChild(head); }
     }
@@ -2422,12 +2471,25 @@
         return null;
     }
 
-    // The heading immediately above a grid, which is how `detail_group.html` lays a group out. Used
-    // only to make a restarted number unambiguous when it is spoken.
+    /**
+     * The name of the section a grid belongs to, for the spoken form of a restarted number.
+     *
+     * READ FROM THE LABEL THE MARKUP ALREADY DECLARES, not from DOM adjacency. This was
+     * `grid.previousElementSibling`, which is the exact mistake `groupGridFor` above carries a
+     * comment about: the adder DOCKS BETWEEN a header and its grid, so the moment somebody is adding
+     * to this section the previous sibling is the adder. There is no `.gl-section__name` inside it,
+     * so this returned null and a keyboard move announced "3 of 7" instead of "3 of 7 in Finished"
+     * -- silently, and only for the one person who cannot see which header they are under.
+     *
+     * `aria-labelledby` points at the `<h2>` by id (`detail_group.html`), which is the same fact the
+     * screen reader itself is using to name this group. Reading it means the announcement cannot
+     * disagree with the accessible name, and nothing between the header and the grid can break it.
+     * A flat list has no label and therefore no section, which is the correct null.
+     */
     function sectionNameFor(grid) {
-        var head = grid.previousElementSibling;
-        var name = head && head.querySelector && head.querySelector('.gl-section__name');
-        return name ? name.textContent.trim() : null;
+        var labelId = grid.getAttribute('aria-labelledby');
+        var head = labelId && document.getElementById(labelId);
+        return head ? head.textContent.trim() : null;
     }
 
     /**

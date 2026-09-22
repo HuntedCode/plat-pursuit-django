@@ -18,6 +18,7 @@ from django.urls import reverse
 
 from gamelists.models import LIST_TYPE_RANKED, GameListSection
 from gamelists.services import game_list_service as svc
+from tests.engine._tree import ROOT
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 
 pytestmark = pytest.mark.django_db
@@ -1411,10 +1412,19 @@ def test_no_gl_class_is_used_without_a_rule():
 
     Checked against the BUILT stylesheet, because that is what the browser loads and this project has
     been bitten before by markup that disagreed with the compiled CSS.
+
+    AND AGAINST THE JAVASCRIPT, which this scanned for a while without: it read `templates/gamelists`
+    only, so six `gl-*` names that exist NOWHERE ELSE -- `gl-menu`, `gl-menu__head`, `gl-menu__sep`,
+    `gl-menu__item--danger`, `gl-published`, `gl-adder--docked` -- were outside the guard entirely.
+    Those are the card/section popovers and two state classes, i.e. exactly the kind of thing a
+    refactor deletes a rule for while leaving the `classList.add` behind. The original `.gl-adder__field`
+    failure, one file over.
     """
     import glob
 
-    root = Path(__file__).resolve().parents[2]
+    # `_tree.ROOT`, not a fourth hand-rolled `parents[2]` -- which is the duplication the
+    # shared walk was extracted to end, re-introduced four minutes later in the same branch.
+    root = ROOT
     built = (root / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
 
     used = set()
@@ -1430,7 +1440,80 @@ def test_no_gl_class_is_used_without_a_rule():
             used.update(c for c in attr.split() if c.startswith('gl-'))
 
     assert used, 'found no gl-* classes at all -- the scan is broken, not the CSS'
-    orphaned = sorted(name for name in used if f'.{name}' not in built)
+
+    # FIVE SIGNALS THAT MEAN "JS APPLIES THIS CLASS", and nothing looser.
+    #
+    # The obvious approach -- harvest every string literal that looks like class names -- was tried
+    # and produces false positives of three kinds: element ids (`gl-items-root`), a SortableJS GROUP
+    # name (`group: 'gl-items'`), and concatenation fragments. Suppressing those needs a
+    # hand-maintained exception list, which drifts and then hides a real orphan. None of the five
+    # below needs one: an id is never passed to `classList.add`, a drag group is never written into a
+    # `class="..."`, and no id in this app carries a BEM `__` or `--`.
+    #
+    # Decommented first: `list-detail.js` discusses `#gl-items` at length in prose.
+    consumers = ('list-detail.js', 'quick-add.js')
+    signals = {name: set() for name in
+               ('classList', 'class attribute', 'className option', 'bare literal', 'composed')}
+
+    def keep(signal, value):
+        for token in value.split():
+            # Trimmed to the class, because a conditional is written butted against the quote:
+            # `'class="gl-menu__item' + (flag ? ' is-current' : '') + '"'` yields the token
+            # `gl-menu__item'`, which matches no rule and reports a false orphan.
+            hit = re.match(r'^(gl-[\w-]+)', token)
+            if hit:
+                signals[signal].add(hit.group(1))
+
+    sources = {name: _decommented((root / 'static' / 'js' / name).read_text(encoding='utf-8'))
+               for name in consumers}
+    for source in sources.values():
+        for args in re.findall(r'classList\.(?:add|remove|toggle)\(([^)]*)\)', source):
+            for a, b in re.findall(r"'([^'\n]*)'|\"([^\"\n]*)\"", args):
+                keep('classList', a or b)
+        for value in re.findall(r'class="([^"\n]*)"', source):
+            keep('class attribute', value)
+        for value in re.findall(r"""className\s*[:=]\s*['"]([^'"\n]*)['"]""", source):
+            keep('className option', value)
+        # A CLASS PASSED AS A FUNCTION ARGUMENT is invisible to the four structural patterns:
+        # `menuRow('delete', 'Delete section', ICON_X, false, 'gl-menu__item--danger')` concatenates
+        # its last argument into a class attribute inside the helper. That name survived the scan
+        # only because the CARD menu happens to hard-code the same one in a literal attribute, i.e.
+        # by coincidence. A BEM marker is the discriminator that makes a bare literal safe to read:
+        # every id in this app is plain-hyphenated (`gl-items-root`, `gl-detail-form`) and so is the
+        # drag group, while `__` and `--` appear only in class names.
+        for a, b in re.findall(r"'([^'\n]*)'|\"([^\"\n]*)\"", source):
+            value = a or b
+            if re.match(r'^gl-[\w-]*(?:__|--)[\w-]+$', value):
+                keep('bare literal', value)
+
+    # COMPOSED IN utils.js ON THIS PAGE'S BEHALF. `list-detail.js` passes `prefix: 'gl-adder'` to the
+    # shared `GameAdder`, which then builds `prefix + '__opt'`, `__note`, `__thumb`, `__name` and
+    # `__state` and applies them. Five real gamelists classes, in no template and in no literal here
+    # -- so the guard that exists for "a refactor deleted the rule and left the class behind" could
+    # not see the whole `.gl-adder` block. That is the `.gl-adder__field` failure again, one file
+    # further out than the first fix reached.
+    utils = _decommented(_read('static/js/utils.js'))
+    parts = set(re.findall(r"prefix \+ '(__[\w-]+)'", utils))
+    assert parts, 'the shared adder no longer composes classes from a prefix; drop this signal'
+    for source in sources.values():
+        for block in re.findall(r"prefix:\s*'(gl-[\w-]+)'", source):
+            for part in parts:
+                keep('composed', block + part)
+
+    # ONE ANTI-VACUITY CHECK PER SIGNAL, rather than one anchor class for the lot.
+    #
+    # This asserted only `'gl-menu' in js_used`, which is produced by the `className` option alone --
+    # so the `classList` scan could be DELETED and the guard stayed green, taking `gl-published` and
+    # `gl-adder--docked` (the two state classes this was written for) with it. Verified: injecting a
+    # real orphan via `classList.add` failed the guard before that deletion and passed after.
+    #
+    # Named signals rather than named classes because a class name can be legitimately refactored
+    # away, which then fails a test about orphans for an unrelated reason.
+    for signal, found in signals.items():
+        assert found, f'the {signal} scan found no gl-* class; it has stopped contributing'
+
+    js_used = set().union(*signals.values())
+    orphaned = sorted(name for name in used | js_used if f'.{name}' not in built)
     assert not orphaned, f'gl-* classes with no rule in the built CSS: {orphaned}'
 
 
@@ -1732,7 +1815,12 @@ def test_the_edit_control_is_a_labelled_action_not_an_inline_pencil(client):
 
     # The panel still exists and is still what the mode opens first; it is simply no longer the
     # whole of what the control means.
-    assert 'id="gl-edit-panel"' in body
+    #
+    # PINNED ON THE HOOK THE JS USES, not on the id. This asserted `id="gl-edit-panel"`, which was
+    # added for the `aria-controls` two lines above -- and once that attribute was removed on purpose
+    # the id had no consumer at all: no JS, no CSS, no ARIA. `list-detail.js` finds this form by
+    # `[data-gl-identity-edit]`, so that is the attribute whose loss would actually break the page.
+    assert 'data-gl-identity-edit' in body
 
 
 def test_the_edit_opener_is_looked_up_where_it_actually_lives(client):
@@ -2918,6 +3006,86 @@ def test_the_spoken_rank_matches_the_printed_one(client):
     # The TOTAL moves with the mode too: "2 of 5" about a list of forty is a different claim, not a
     # smaller one.
     assert 'restart ? rows.length : fullOrder().length' in rank
+
+
+def test_the_spoken_section_name_survives_a_docked_adder(client):
+    """The other half of the spoken rank, and it went quiet for the one person who needs it.
+
+    `sectionNameFor` read `grid.previousElementSibling` -- which is the exact mistake `groupGridFor`
+    twenty lines above carries a comment about, because **the adder docks BETWEEN a header and its
+    grid**. So with the adder open under a header, the previous sibling is the adder, there is no
+    `.gl-section__name` inside it, and the announcement dropped from "3 of 7 in Finished" to "3 of
+    7". Silently, and only for a reader who cannot see which header they are under -- i.e. the only
+    person the announcement exists for.
+
+    BOTH ENDS ARE PINNED, because the fix is that the JS reads a fact the TEMPLATE states: the grid's
+    `aria-labelledby` names the `<h2>` by id. Asserting only the JS would let the markup drop the
+    attribute and leave the function reading nothing; asserting only the markup would let the JS go
+    back to walking siblings. That split is how half a shared pattern ships.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    # Bounded by the NEXT definition, never to end-of-file: `previousElementSibling` is a legitimate
+    # read elsewhere in this file, so an unbounded slice would make the first assertion below fail on
+    # correct code -- and someone would then "fix" it by deleting the assertion.
+    body = js[js.index('function sectionNameFor('):js.index('function saveAssignment(')]
+
+    assert 'previousElementSibling' not in body, \
+        'the spoken section name is back to DOM adjacency, which the docked adder breaks'
+    assert 'aria-labelledby' in body and 'getElementById' in body, \
+        'it no longer reads the label the markup declares'
+
+    # BOTH BRANCHES, because the attribute is emitted by an if/elif and only one half was pinned.
+    # Deleting the `{% elif groups %}` arm left all 358 tests in this file and its sibling green
+    # while the LOOSE bucket lost `role="group"`, lost its accessible name, and started returning
+    # null from the function above -- the same silent, screen-reader-only failure this commit exists
+    # to close, reintroduced through the branch nobody asserted.
+    group = _read('templates/gamelists/partials/detail_group.html')
+    for label, heading in (('gl-section-{{ section.id }}', 'a named section'),
+                           ('gl-section-none', 'the ungrouped bucket')):
+        assert f'aria-labelledby="{label}"' in group, \
+            f'{heading} no longer names its heading, so the JS above reads nothing'
+        assert f'id="{label}"' in group, \
+            f"{heading}'s heading lost the id its grid points at"
+
+
+def test_removing_a_grid_mid_arrange_drops_its_drag_wiring(client):
+    """`pruneEmptyLooseBucket` removes a grid WHILE arrange mode is still live.
+
+    `detachDrag` tears every manager down at once, which is right when the mode ENDS and wrong here:
+    it does not run. So the manager, its SortableJS instance and the grid's click listener stayed
+    bound to a detached node, and `reorderManagers` held the grid -- and every card that was in it --
+    alive until the next mode toggle.
+
+    Bounded rather than serious, which is why it is pinned rather than merely fixed: the next person
+    to remove a grid will copy this function, and the teardown is the half that is easy to leave out.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    prune = js[js.index('function pruneEmptyLooseBucket('):js.index('function repaintAfterGroupChange(')]
+    assert 'releaseGrid(grid)' in prune, 'a grid is removed with its drag wiring still attached'
+    # Ordering, kept as a READABILITY pin and labelled as one. The commit that added it claimed
+    # releasing after the node is detached "looks correct and is not" -- an audit could construct no
+    # behavioural difference, because `Sortable.destroy()` and `removeEventListener` both work on a
+    # detached node. Tearing down before removal is still the order that reads correctly; it is just
+    # not load-bearing, and saying so is better than leaving a test asserting a story.
+    assert prune.index('releaseGrid(grid)') < prune.index('removeChild(grid)'), \
+        'teardown reads better before the removal, though nothing observable depends on it'
+
+    # NOT WHILE A DRAG IS LIVE. `Sortable.destroy()` calls `_onDrop()` unconditionally, which reaches
+    # `_offMoveEvents`, `_offUpEvents` and `_nulling` -- all module-level and shared across every
+    # instance -- so destroying ANY grid's Sortable mid-gesture unbinds the document listeners of the
+    # drag actually running. The window is real: file the last loose card, then pick up another while
+    # the POST is in flight.
+    assert 'window.Sortable.active' in prune, \
+        'the prune can destroy a Sortable while an unrelated drag is still running'
+    assert prune.index('window.Sortable.active') < prune.index('releaseGrid(grid)'), \
+        'the live-drag guard runs after the teardown it is meant to prevent'
+
+    release = js[js.index('function releaseGrid('):js.index('function pruneEmptyLooseBucket(')]
+    assert '.destroy()' in release, 'the SortableJS instance is never destroyed'
+    assert 'reorderManagers.splice' in release, 'the array keeps a manager for a removed grid'
+    assert "removeEventListener('click', onCardClick)" in release, \
+        'the click listener outlives the grid it was bound to'
 
 
 def test_section_writes_queue_behind_the_arrangement_writes(client):

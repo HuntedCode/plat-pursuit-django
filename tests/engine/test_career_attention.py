@@ -10,6 +10,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
+from tests.engine._tree import source_files
 from tests.factories import ProfileFactory
 from trophies.models import Contract, EarnedContract, Job
 from trophies.services import career_attention, contracts_service
@@ -479,12 +480,6 @@ def test_every_team_preview_door_is_the_same_door():
     tree instead, so a fifth door has to be either routed through `core.previews` or argued for by
     name below.
     """
-    from pathlib import Path
-
-    from django.conf import settings
-
-    root = Path(settings.BASE_DIR)
-
     # These read the same querystring and are NOT team doors -- a different gate on purpose, so
     # folding them in would change behaviour. Named here so the exception is a decision, not a hole.
     allowed = {
@@ -494,10 +489,13 @@ def test_every_team_preview_door_is_the_same_door():
         'core/previews.py',           # the door itself
     }
 
+    # THE SHARED WALK, because this one reports PATHS and so is the guard that actually breaks when
+    # an agent worktree puts a second copy of the repo under `.claude/`: the copy's paths are not in
+    # `allowed`, so every exception above is re-reported as an offence. It failed that way twice in
+    # one afternoon, each time looking like a regression in code nobody had touched.
     offenders = []
-    for path in root.glob('**/*.py'):
-        rel = path.relative_to(root).as_posix()
-        if rel.startswith(('venv/', 'staticfiles/', 'tests/')) or rel in allowed:
+    for path, rel in source_files('*.py', skip_paths=('tests/',)):
+        if rel in allowed:
             continue
         src = path.read_text(encoding='utf-8', errors='ignore')
         if "GET.get('preview')" in src or 'GET.get("preview")' in src:

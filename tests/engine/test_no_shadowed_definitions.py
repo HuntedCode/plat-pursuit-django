@@ -20,23 +20,18 @@ ImportError` fallback, or a platform branch is a deliberate alternative binding,
 lives one level down in the tree.
 """
 import ast
-import pathlib
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+from tests.engine._tree import source_files
 
-SKIP_DIRS = {'node_modules', 'venv', '.venv', '.git', 'staticfiles', '__pycache__', '.pytest_cache',
-             'htmlcov', 'dist', 'build', '.ruff_cache', 'migrations'}
-
-#: Migrations are excluded above rather than here: they are generated, never read for their definitions,
-#: and a `Migration` class per file is the whole convention.
+#: Migrations are excluded per-caller rather than in the shared list: they are generated, never read
+#: for their definitions, and a `Migration` class per file is the whole convention. The other
+#: exclusions (including `.claude`, which is where an agent worktree puts a second copy of the repo)
+#: live in `_tree.SKIP_DIRS`, because three tests had three drifting copies of them.
 DEFINITIONS = (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
 
 
 def _python_files():
-    for path in ROOT.rglob('*.py'):
-        if any(part in SKIP_DIRS for part in path.relative_to(ROOT).parts):
-            continue
-        yield path, path.relative_to(ROOT).as_posix()
+    return source_files('*.py', skip_dirs={'migrations'})
 
 
 def _shadowed(tree):
