@@ -76,6 +76,9 @@
     var arranging = false;
     // The identity panel's own show/hide, published by `wireIdentityEditor` so the mode can drive
     // it. It is no longer a mode: it is one of the things entering the mode reveals.
+    // Where the adder was docked when a refresh took it home, so it can go back. `null` means it
+    // was not docked; '' would mean the loose bucket, which is why this is not a plain falsy check.
+    var pendingDockSection = null;
     var identityShow = null;
     var identityHide = null;
     // The single toggle. Looked up rather than closed over, because the header is re-rendered
@@ -1330,6 +1333,9 @@
         // AFTER `syncPositioning`, which re-attaches the drag -- and whose `detachDrag` drops any
         // pick. Restoring before it would be undone one line later.
         restorePick();
+        // AFTER `wireSections` for the same reason `restoreSectionFocus` is: the header it re-docks
+        // under has to be the live node, not the one about to be replaced.
+        redockAdder();
     }
 
     function wireEditToggle() {
@@ -1549,6 +1555,21 @@
 
         if (identityHide) { identityHide(); }
         stopArranging();
+        // EVERYTHING THE MODE PUT ON SCREEN LEAVES WITH IT, and these two do not live inside the
+        // gated subtree so the CSS cannot do it for them.
+        //
+        // The menus are panels on `document.body`: their triggers go `display: none` with the mode,
+        // but an OPEN panel keeps floating -- anchored to a trigger that is still `isConnected`,
+        // holding focus, offering "Remove from list" on a page that has left edit mode.
+        //
+        // The adder is worse, because it is actionable. Docked under a section header it keeps its
+        // accent rail and its `data-section`, while the "+ Add game" toggle that would send it home
+        // is now hidden -- so it claims a destination, accepts input, and files games into that
+        // section from outside the mode, with no way back short of a refresh.
+        if (cardMenu) { cardMenu.close(false); }
+        if (sectionMenu) { sectionMenu.close(false); }
+        parkAdder();
+        pendingDockSection = null;      // leaving is not a refresh; do not come back docked
         paintEditToggle();
         setPositionsStatus('');
         if (!silent) { announce('Editing off.'); }
@@ -1691,9 +1712,20 @@
             // and the threshold inside the manager lets a scroll cancel a pending pick-up.
             delay: 320,
             delayOnTouchOnly: true,
-            // The grip is a button; a drag starting ON it still works, because it is inside the
-            // draggable item. Nothing here needs excluding while the remove control is hidden in
-            // this mode -- listed for the next control that is not.
+            // THE MENU TRIGGER IS EXCLUDED; the grip deliberately is not.
+            //
+            // The grip is a button and a drag starting on it still works, because it is inside the
+            // draggable item -- which is what you want from a control whose whole job is "this
+            // thing moves". The `...` menu is the opposite: it is there to be PRESSED, and with
+            // `forceFallback: true` and no mouse delay a mousedown plus three pixels of travel
+            // starts dragging the card instead of opening it.
+            //
+            // The comment here used to say nothing needed excluding "while the remove control is
+            // hidden in this mode". That stopped being true when the single mode landed: the CSS
+            // flipped from hiding the control while ARRANGING to hiding it while NOT EDITING, so
+            // the trigger is now on screen for the whole of the state in which cards are draggable.
+            // The note said "listed for the next control that is not" -- this is that control.
+            dragExclude: '.gl-item__menu',
             // `fullOrder()` and NOT the `allItemIds` the manager hands over: that argument is this
             // grid's rows, which on a sectioned list is one group out of several. `svc.reorder`
             // refuses a partial ordering by design, so posting it would turn every drag inside a
@@ -2441,26 +2473,54 @@
      * could be renamed and deleted but never reordered.
      */
     function moveSection(trigger, delta) {
-        var all = sectionTriggers();
-        var at = all.indexOf(trigger);
-        var to = at + delta;
-        if (at < 0 || to < 0 || to >= all.length) { return; }
+        var sectionId = trigger.dataset.sectionId;
+        var reorderUrl = trigger.dataset.reorderUrl;
+        if (!sectionId || !reorderUrl) { return; }
 
-        var ids = all.map(function (b) { return b.dataset.sectionId; });
-        var moved = ids.splice(at, 1)[0];
-        ids.splice(to, 0, moved);
-
-        var body = new FormData();
-        ids.forEach(function (id) { body.append('section_ids[]', id); });
-
-        // THROUGH THE SAME QUEUE as every other section write. Reordering while a rename or a delete
-        // is in flight would otherwise race: the refresh from one lands over the other's optimistic
-        // state, and the order posted here was read from a DOM the other write is about to replace.
+        // EVERYTHING IS READ INSIDE THE QUEUE, and that placement is the whole correctness of this
+        // function. The first version read the order and built the FormData out here, at click time,
+        // and queued only the POST -- under a comment claiming the queue solved the race. It did not:
+        // joining the chain delays the SEND, and the body was already frozen.
+        //
+        // The failure: open section B's menu, Delete; open section C's menu, Move up. The order
+        // captured at click time still contains B. B's delete lands, the panel re-renders, then the
+        // queued POST goes out carrying a section that no longer exists -- and `reorder_sections`
+        // refuses a set that does not match the list ("That order does not match the list. Reload
+        // and try again."). The owner is told a move they made failed, after a delete that worked.
+        //
+        // Read at SEND time and the order is whatever the DOM says once the writes ahead of it have
+        // landed, which is the only order worth posting.
         queueSectionWrite(function () {
+            var all = sectionTriggers();
+            var at = -1;
+            for (var i = 0; i < all.length; i++) {
+                if (all[i].dataset.sectionId === sectionId) { at = i; break; }
+            }
+            // MATCHED ON THE ID, not on the node. The trigger this closure captured may have been
+            // replaced by a refresh that ran while this was queued, so the original element is not
+            // in the document any more even though its section still is.
+            var to = at + delta;
+            if (at < 0 || to < 0 || to >= all.length) {
+                // The section was deleted, or it has already moved to the end, while this waited.
+                // Nothing to post, and nothing went wrong: say nothing rather than reporting a
+                // failure for a move the page no longer has a meaning for.
+                return null;
+            }
+
+            var ids = all.map(function (b) { return b.dataset.sectionId; });
+            var moved = ids.splice(at, 1)[0];
+            ids.splice(to, 0, moved);
+
+            var body = new FormData();
+            ids.forEach(function (id) { body.append('section_ids[]', id); });
+
             setPositionsStatus('Saving…');
-            return postJson(trigger.dataset.reorderUrl, body)
+            return postJson(reorderUrl, body)
                 .then(function () {
-                    setPositionsStatus('Saved');
+                    // GUARDED ON `pendingSaves`, like `saveOrder` and `saveAssignment`. Writing
+                    // "Saved" unconditionally flips the pill over an outstanding reorder, which is
+                    // the exact bug that guard was added for on the other two writers.
+                    if (pendingSaves <= 1) { setPositionsStatus('Saved'); }
                     announce('Section moved.');
                     // `true` -- the chrome as well. Moving a section changes the order the
                     // out-of-band slot renders, and a swap of the grid alone leaves the numbering
@@ -2550,9 +2610,38 @@
         var adder = document.querySelector('[data-gl-adder]');
         var home = document.querySelector('[data-gl-adder-home]');
         if (!adder || !home || adder.parentElement === home) { return; }
+        // REMEMBERED, so a refresh can put it back. Parking is unavoidable -- the header it is
+        // docked under is about to be replaced -- but "unavoidable" is not the same as "the hunter
+        // asked to stop adding to this section", and the two were indistinguishable until now.
+        pendingDockSection = adder.dataset.section || '';
         home.appendChild(adder);
         delete adder.dataset.section;
         adder.classList.remove('gl-adder--docked');
+    }
+
+    /**
+     * Put the adder back where a refresh took it from.
+     *
+     * THE MULTI-ADD SESSION IS THE WHOLE POINT of docking, and it worked exactly once. `GameAdder`
+     * deliberately leaves its results open after an add so several games can go in from one search
+     * -- and this page's `onAdded` returns `refreshItems()`, whose first act is `parkAdder()`. So the
+     * first game was filed into the section, the adder was yanked back to the toolbar with its
+     * `data-section` deleted, and the SECOND game from that same list of results went into the loose
+     * bucket. Silently: no error, no toast, nothing said.
+     *
+     * Only while the mode is still on, and only if the header survived -- a section deleted during
+     * the round trip has nowhere to go back to, and re-docking to a header that no longer exists
+     * would put the adder in an arbitrary place pointing at a dead id.
+     */
+    function redockAdder() {
+        var want = pendingDockSection;
+        pendingDockSection = null;
+        if (want === null || !editing) { return; }
+        var trigger = document.querySelector(
+            '#gl-items-root [data-gl-add-to-section][data-section-id="' + want + '"]');
+        var head = trigger && trigger.closest('.gl-section__head');
+        if (!head) { return; }
+        dockAdderTo(head, want, { silent: true });
     }
 
     /**
@@ -2711,6 +2800,26 @@
         detachDrag();
         editing = false;
         arranging = false;
+
+        // AND THE DOM, which the variables above do not reach. `data-gl-editing` and
+        // `data-gl-arranging` are ATTRIBUTES on the panel, so they serialise into htmx's history
+        // snapshot (`cloneNode(true)`) and come back set on a restored page -- where the CSS gates
+        // read them, not the booleans. The old comment claimed resetting the booleans fixed the
+        // restore case; it left grips, grab cursors, drop boxes and card menus over a page with no
+        // editor, no Sortable and no keydown listener.
+        //
+        // Same for the controls strip's `hidden`, which `enterEditing` REMOVED, and for the adder,
+        // which a restore would otherwise bring back docked inside the panel with its home slot
+        // empty -- so `wireAdder` would bind a second `GameAdder`, leaking one per restore.
+        var panel = document.getElementById('gl-items-panel');
+        if (panel) {
+            delete panel.dataset.glEditing;
+            delete panel.dataset.glArranging;
+        }
+        var strip = document.querySelector('[data-gl-positions]');
+        if (strip) { strip.hidden = true; }
+        parkAdder();
+        pendingDockSection = null;
         orderChain = Promise.resolve();
         pendingSaves = 0;
         pendingSectionFocus = false;

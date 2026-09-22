@@ -21,7 +21,12 @@
     'use strict';
 
     var PP = window.PlatPursuit || {};
-    if (!PP.API) { return; }
+    // `AnchoredMenu` as well as `API`. This file gained a cross-file dependency when the panel was
+    // extracted, and a browser holding a cached pre-extraction `utils.js` against a fresh
+    // `quick-add.js` would throw at the constructor call -- killing the whole IIFE and taking the
+    // "Create list" submit handler with it, not just the popover. `list-detail.js` guards both of
+    // its menus this way; this file was the one left asymmetric.
+    if (!PP.API || !PP.AnchoredMenu) { return; }
 
     //: The panel, its anchoring, its focus restore, its flip-and-clamp positioning, and the four
     //: document listeners that used to live in this file are now `PlatPursuit.AnchoredMenu`

@@ -1822,6 +1822,16 @@
 }
 
 
+/* A TRIGGER WITH ITS MENU OPEN STAYS VISIBLE. Both of these are `opacity: 0` at rest and lifted by
+   hover or focus-within on their container -- and the panel is a child of `document.body`, so the
+   moment it takes focus the container's `:focus-within` is false and the trigger disappears while
+   its own menu is on screen. `quick-add.css` solves this on the identical control with the same
+   hook; neither new consumer had ported it.
+
+   `aria-expanded` is written by the primitive on every open, so the hook already existed unused. */
+.gl-item__menu[aria-expanded="true"],
+.gl-section__act[aria-expanded="true"] { opacity: 1; }
+
 /* ── the card's action menu ──────────────────────────────────────────────────────────────────────
  *
  * The panel `AnchoredMenu` builds and positions. It is `position: fixed` on <body> -- set by the
@@ -1831,7 +1841,12 @@
  * primitive writes per open. */
 .gl-menu {
     position: fixed;
-    z-index: 60;
+    /* 100, matching every other anchored panel on the site -- `.qa-pop`, the nav search, the sub-nav
+       more-menu, the badge-detail popover, and `.gl-adder__panel` ON THIS PAGE. 60 cleared the
+       chrome, so nothing broke against it, but the docked adder opens its results downward from a
+       section header into exactly the band this menu opens into, and at 60 the menu paints behind
+       them. Being the one panel at a different depth is the defect; the collision is the symptom. */
+    z-index: 100;
     min-width: 200px;
     max-width: min(280px, calc(100vw - 16px));
     padding: 6px;
@@ -1869,7 +1884,14 @@
     cursor: pointer;
 }
 .gl-menu__item svg { width: 14px; height: 14px; flex: none; }
-.gl-menu__item:hover { background: color-mix(in oklab, var(--pp-primary) 14%, transparent); }
+.gl-menu__item { transition: background 0.14s ease, color 0.14s ease; }
+/* GUARDED, like every other hover-background in this file (see the rule above `.gl-group__grid`).
+   On touch an unguarded `:hover` STICKS after the tap. It matters least here -- the panel closes and
+   clears its own markup -- and most on `.gl-section__add` below, which stays lit until something
+   else is tapped. Guarding all three keeps one rule rather than one rule and an exception. */
+@media (hover: hover) {
+    .gl-menu__item:hover { background: color-mix(in oklab, var(--pp-primary) 14%, transparent); }
+}
 .gl-menu__item:focus-visible {
     outline: 2px solid var(--pp-primary); outline-offset: -2px;
 }
@@ -1885,16 +1907,28 @@
        this -- "which of these am I on" in an anchored menu. The first cut of this reached for a
        `var(--pp-tick)` mask, which is a token that does not exist anywhere in the stylesheet: it
        would have rendered a blank 14px box, and blank is indistinguishable from "not current",
-       which is the one thing this mark exists to say. */
-    content: '¹3';
+       which is the one thing this mark exists to say.
+
+       AND THE SECOND CUT SHIPPED WORSE THAN BLANK: `¹3`, in the accent colour, announced aloud as
+       "superscript one three". The CSS escape was written into this file through a generated Python
+       string where `\2713` with ONE backslash is an OCTAL escape -- chr(0o271) is `¹` -- so the
+       character never survived to the stylesheet. It reached `output.css` and `staticfiles/` before
+       an audit caught it.
+
+       Written as the CSS escape `\2713`, exactly as `elements.css` writes it, and never as a literal
+       ✓: the literal depends on every tool between here and the browser agreeing about encoding, and
+       this one did not. */
+    content: '\2713';
     margin-left: auto;
     padding-left: 8px;
     color: var(--pp-primary);
     font-weight: 700;
 }
 .gl-menu__item--danger { color: var(--pp-error); }
-.gl-menu__item--danger:hover {
-    background: color-mix(in oklab, var(--pp-error) 16%, transparent);
+@media (hover: hover) {
+    .gl-menu__item--danger:hover {
+        background: color-mix(in oklab, var(--pp-error) 16%, transparent);
+    }
 }
 .gl-menu__sep {
     height: 1px;
@@ -1934,12 +1968,30 @@
     transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 .gl-section__add svg { width: 12px; height: 12px; }
-.gl-section__add:hover {
-    color: var(--pp-text);
-    border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
-    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+@media (hover: hover) {
+    .gl-section__add:hover {
+        color: var(--pp-text);
+        border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
+        background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    }
 }
 .gl-section__add:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* THE 44px FLOOR, the same transparent-padding trick `.gl-item__menu`, `.gl-item__grab`,
+   `.gl-section__act` and the adder's input all carry. This was the only control in the feature
+   below it -- and the primary action of the header in edit mode, which is the worst one to leave
+   short. The drawn pill stays its own size; only the hit area grows.
+
+   `::after`, not `::before`: `.gl-section__act` uses `::before` for its own target and these two
+   sit adjacent, so keeping them on different pseudo-elements means a future rule aimed at one
+   cannot silently catch the other. */
+@media (hover: none) {
+    .gl-section__add { position: relative; }
+    .gl-section__add::after {
+        content: ''; position: absolute; left: 0; right: 0;
+        top: 50%; transform: translateY(-50%);
+        height: 44px;
+    }
+}
 /* `margin-left: auto` belongs to whichever of the two comes first, so the menu button takes it when
    the add button is absent -- a lapsed member, or a list where nothing can be filed. */
 .gl-section__add + .gl-section__act { margin-left: 8px; }

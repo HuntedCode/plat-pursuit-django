@@ -3634,21 +3634,55 @@ function _anchoredBindOnce() {
         }
 
         // Anywhere else closes, which is what every menu on this site does.
-        if (_anchoredOpen && _anchoredOpen.el && !e.target.closest('.' + _anchoredOpen.cfg.className)) {
+        // `el.contains`, not a class selector built from `className`. A two-class `className`
+        // would compile to a DESCENDANT selector matching nothing, and the failure mode is
+        // "clicking inside the menu closes it", which reads as a flaky menu rather than a bad
+        // config. Containment is what this check actually means.
+        if (_anchoredOpen && _anchoredOpen.el && !_anchoredOpen.el.contains(e.target)) {
             _anchoredOpen.close(false);
         }
     });
 
+    // CAPTURE PHASE, and that is the whole of why this works.
+    //
+    // The list editor's arrange mode also listens for Escape on `document` to drop a picked-up card,
+    // so one press closed the menu AND dropped the pick. The first fix was `stopPropagation()` from
+    // a BUBBLE listener here, which is inert: propagation is about other NODES on the path, and both
+    // listeners are on `document`. Stopping same-node listeners is `stopImmediatePropagation`, and
+    // that only suppresses handlers registered AFTER this one -- true today by luck of load order
+    // (the editor binds its handler when the mode is entered, long after boot) and not a thing to
+    // rest on.
+    //
+    // A capture listener on `document` runs before every bubble listener anywhere and before any
+    // capture listener below it, so `stopPropagation()` here genuinely ends the dispatch.
+    //
+    // The comment this replaced cited `GameAdder` as precedent for the bubble version. It is not:
+    // that one is bound on the results PANEL, a descendant, where stopping propagation really does
+    // keep the event away from `document`. Same intent, different mechanism, and the primitive had
+    // copied the word rather than the mechanism.
+    //
+    // Guarded on a menu actually being open, so Escape reaches the page untouched the rest of the
+    // time -- including the adder, which must still be able to answer it.
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && _anchoredOpen) {
-            // STOPPED HERE. The list editor's arrange mode also listens for Escape on `document` to
-            // drop a picked-up card; without this, one press closed the menu AND dropped the pick.
-            // The adder already had to learn this (`GameAdder` calls stopPropagation for the same
-            // reason), which is two surfaces and therefore the primitive's problem, not theirs.
+        if (!_anchoredOpen) { return; }
+        if (e.key === 'Escape') {
             e.stopPropagation();
             _anchoredOpen.close(true);
+            return;
         }
-    });
+        // ARROWS ARE SWALLOWED WHILE A PANEL IS OPEN, for the reason `GameAdder` swallows them in
+        // its own results: a page's arrange mode listens for the same keys on `document`, and the
+        // rows here are real <button>s, so an `isTyping` check does not exclude them.
+        //
+        // Reachable in the list editor: pick a card up by clicking it, open ANY card's `...`, press
+        // ArrowDown. The picked card moves and a reorder is written while the reader is navigating
+        // a menu. Only stopped, never acted on -- this primitive has no roving-focus model, and Tab
+        // already walks the rows.
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown'
+            || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            if (_anchoredOpen.el && _anchoredOpen.el.contains(e.target)) { e.stopPropagation(); }
+        }
+    }, true);
 
     // A FIXED panel does not travel with the page, so a scroll would leave it pointing at nothing.
     //
@@ -3708,7 +3742,15 @@ function AnchoredMenu(config) {
     };
 
     function ensure() {
-        if (self.el) { return self.el; }
+        // `isConnected`, not just truthy. The panel is appended to `document.body`, and htmx's
+        // history restore replaces the history element's innerHTML -- which defaults to `body`
+        // when no `hx-history-elt` is declared, and none is. So a Back/Forward on any page that
+        // pushes a URL (Browse Games filters, this page's sort) deletes the panel while this
+        // handle goes on pointing at the detached node: `reposition()` then measures something
+        // that is not in the document and the menu silently stops opening until a hard reload.
+        //
+        // Falling through rebuilds it, which is the same work the first open does.
+        if (self.el && self.el.isConnected) { return self.el; }
         var el = document.createElement('div');
         el.className = config.className;
         el.setAttribute('role', 'dialog');

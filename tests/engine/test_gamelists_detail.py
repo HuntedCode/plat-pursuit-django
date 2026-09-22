@@ -2222,7 +2222,11 @@ def test_remove_and_rearrange_share_a_card_without_contesting_it(client):
     # ...and the touch targets, which is where the real collision would be: 26px circles do not
     # overlap at 32px apart, but the 44px `::before` boxes both anchor to `right: 0` unless told
     # otherwise, and the overlapping strip belongs to whichever paints last.
-    touch = css[css.index('@media (hover: none) {', css.index('.gl-item__grab {')):]
+    # NEWLINE-ANCHORED, for the reason `_rule` above exists: `.gl-item__grab {` also matches the
+    # tail of `...:not([data-gl-arranging]) .gl-item__grab {` seventy-odd lines earlier, and this
+    # slice then starts from the wrong place. It works today only because no `@media (hover: none)`
+    # sits between the two -- which is a fact about the file's current order, not a guarantee.
+    touch = css[css.index('@media (hover: none) {', css.index('\n.gl-item__grab {')):]
     touch = touch[:touch.index('.gl-item__grab::before')]
     assert 'right: 44px' in touch, 'the two 44px hit areas overlap on touch'
 
@@ -2596,7 +2600,12 @@ def test_a_free_owner_keeps_their_sections_and_is_told_what_changed(client):
     assert 'data-gl-section-menu' in body, 'the owner lost the section controls entirely'
     assert 'data-rename-url=""' in body, 'a rename that will be refused is offered'
     # DELETE SURVIVES: removing your own thing is not the act the perk covers.
-    assert '/delete/' in body, 'removing your own section is not the gated act'
+    # THE SECTION'S OWN DELETE URL, not the substring `/delete/`. That is what this said, and
+    # every owner's page also renders the LIST delete button at `/community/lists/<id>/delete/`
+    # -- so the assertion was true for any owner whether or not the section menu carried a
+    # delete at all. An audit proved it by deleting the whole section-delete affordance and
+    # watching all three copies of this line stay green.
+    assert f'/sections/{first.id}/delete/' in body, 'removing your own section is not the gated act'
     # `gl-lockup`, not `gl-sections__locked`: the lapsed-member line moved OUT of the arrange bar and
     # became the second state of the CTA block, because the bar it lived in is hidden until the
     # editor is opened and does not render at all for a section-less Collection.
@@ -3021,7 +3030,13 @@ def test_a_doomed_section_stops_being_a_drop_target_at_once(client):
     # `data-section-id` rides the SECTION MENU trigger now -- delete stopped being a button of its
     # own when the header's controls became one menu -- but the client still has to be able to find
     # the doomed section's grid from whatever it was handed.
-    assert f'data-section-id="{first.id}"' in rendered \
+    # SCOPED TO THE TRIGGER. The bare `data-section-id="<id>" in rendered` this replaced was the
+    # weak half of an old `A or B`, and it is satisfied by the group GRID, which renders the same
+    # attribute -- so it did not check what the comment above it says it checks. (It also left an
+    # orphaned line continuation behind when the other half was deleted.)
+    menu = rendered[rendered.index('data-gl-section-menu'):]
+    menu = menu[:menu.index('>')]
+    assert f'data-section-id="{first.id}"' in menu, 'the client cannot find the doomed grid'
 
 
 def test_the_section_field_does_not_steal_a_caret_that_moved_on(client):
@@ -3125,7 +3140,7 @@ def test_the_preview_renders_the_page_as_a_non_member_sees_it(client):
     flag is the whole surface."""
     owner = _member(client, psn='member')
     game_list = _ranked(owner, 3)
-    svc.create_section(game_list, owner, name='Playing')
+    section = svc.create_section(game_list, owner, name='Playing')
 
     normal = client.get(_url(game_list))
     assert normal.context['can_manage_sections'] is True
@@ -3145,7 +3160,12 @@ def test_the_preview_renders_the_page_as_a_non_member_sees_it(client):
     assert 'data-rename-url=""' in body, 'a rename that will be refused is offered'
     # EVERYTHING UNGATED STAYS. A preview that also withdrew the ungated controls would answer a
     # different question than the one it is asked.
-    assert '/delete/' in body, 'deleting your own section is not the gated act'
+    # THE SECTION'S OWN DELETE URL, not the substring `/delete/`. That is what this said, and
+    # every owner's page also renders the LIST delete button at `/community/lists/<id>/delete/`
+    # -- so the assertion was true for any owner whether or not the section menu carried a
+    # delete at all. An audit proved it by deleting the whole section-delete affordance and
+    # watching all three copies of this line stay green.
+    assert f'/sections/{section.id}/delete/' in body, 'deleting your own section is not the gated act'
     assert preview.context['can_arrange'] is True
     assert 'gl-lockup' in body, 'the lapsed-member line is part of what they see'
 
@@ -3286,7 +3306,12 @@ def test_a_lapsed_member_is_told_what_they_keep_first(client):
     assert 'min-height: 44px' in go
     # Their sections and the ungated controls are all still there, which is what the copy promises.
     assert 'gl-section__head' in body
-    assert '/delete/' in body, 'removing your own section is not the gated act'
+    # THE SECTION'S OWN DELETE URL, not the substring `/delete/`. That is what this said, and
+    # every owner's page also renders the LIST delete button at `/community/lists/<id>/delete/`
+    # -- so the assertion was true for any owner whether or not the section menu carried a
+    # delete at all. An audit proved it by deleting the whole section-delete affordance and
+    # watching all three copies of this line stay green.
+    assert f'/sections/{_first.id}/delete/' in body, 'removing your own section is not the gated act'
 
 
 def test_the_cta_is_never_shown_to_somebody_it_cannot_help(client):
@@ -3932,7 +3957,20 @@ def test_the_current_section_is_marked_and_inert():
     assert '.gl-menu__item.is-current' in css, 'the marked row has no treatment'
     # A tick that renders as nothing is indistinguishable from "not current", which is the one thing
     # the mark exists to say. The first cut reached for a `var(--pp-tick)` that does not exist.
-    assert 'pp-tick' not in css.replace('--pp-tick`', ''), 'the tick is drawn with a token that does not exist'
+    # THE TICK IS A CSS ESCAPE AND IT RENDERS. The old assertion (`'pp-tick' not in css`) was a
+    # tautology: `_decommented_css` had already stripped the only `--pp-tick` in the file, which
+    # lives in a comment. Nothing checked that the mark drew anything -- and while that assertion
+    # was green the rule shipped `content: '¹3'` (superscript one, then a 3) all the way into
+    # `output.css`, because a single-backslash `¹3` in a generated Python string is an OCTAL
+    # escape. `test_source_control_characters.py` now guards the class; this guards the character.
+    rule = css[css.index('.gl-menu__item.is-current::after'):]
+    rule = rule[:rule.index('}')]
+    # A RAW STRING, so the backslash reaches the comparison. Written as `"content: '\2713'"` this
+    # assertion is itself the bug it is testing for: Python reads `\271` as an octal escape and the
+    # test then looks for the very mojibake it exists to forbid. It failed loudly against correct
+    # CSS, which is the good outcome -- but the same slip written into a NEGATIVE assertion would
+    # have passed silently.
+    assert r"content: '\2713'" in rule, 'the current-section tick is not the escaped check mark'
 
 
 def test_the_menu_escapes_a_section_name_as_text_and_its_id_as_an_attribute():
@@ -3960,7 +3998,12 @@ def test_the_menu_is_wired_once_and_not_per_swap():
     js = _decommented(_read('static/js/list-detail.js'))
     fn = _fn(js, 'wireCardMenu')
 
-    assert 'if (cardMenu' in fn, 'a swap builds a second menu over the first'
+    assert 'if (cardMenu || !PP.AnchoredMenu) { return; }' in fn,         'a swap builds a second menu over the first'
+
+    # THE SECTION MENU TOO, which had no coverage at all -- and it is the second consumer the whole
+    # extraction was done for. Same guard, same leak on every `#gl-items-panel` swap.
+    section_fn = _fn(js, 'wireSectionMenu')
+    assert 'if (sectionMenu || !PP.AnchoredMenu) { return; }' in section_fn,         'a swap builds a second section menu over the first'
 
 
 # ── the section header's controls (2026-09) ──────────────────────────────────────────────────────
@@ -3973,8 +4016,16 @@ def test_a_section_header_offers_to_add_a_game_to_itself(client):
     body = client.get(_url(game_list)).content.decode()
 
     assert 'data-gl-add-to-section' in body, 'a section cannot be added to directly'
-    assert f'data-gl-add-to-section\n            data-section-id="{first.id}"' in body \
-        or f'data-section-id="{first.id}"' in body, 'the button does not name its section'
+    # SCOPED TO THE BUTTON. This was an `A or B` whose B (`data-section-id="<id>" in body`) is
+    # satisfied by the group GRID, which renders the same attribute under `can_arrange` -- so
+    # the claim in the message was unguarded, and an audit proved it by stripping the attribute
+    # off the button and watching this stay green. The A half matched on exact whitespace and
+    # broke the first time a comment was inserted nearby.
+    #
+    # Sliced to the element instead, which survives both failure modes.
+    btn = body[body.index('data-gl-add-to-section'):]
+    btn = btn[:btn.index('>')]
+    assert f'data-section-id="{first.id}"' in btn, 'the add button does not name its section'
     # LABELLED, not another icon. It is the one action this header exists to make easy, and the two
     # controls already here are the reason everything else went into a menu.
     assert 'Add game' in body
@@ -4123,3 +4174,149 @@ def test_pressing_add_on_the_same_header_twice_sends_the_adder_home():
 
     assert 'parkAdder(); return;' in fn, 'a second press cannot undock the adder'
     assert 'previousElementSibling === head' in fn, 'the toggle does not check which header it is on'
+
+
+# ── what the audits found, pinned so it cannot come back (2026-09) ───────────────────────────────
+
+def test_a_multi_add_session_keeps_its_section():
+    """THE DOCKED ADDER WORKED EXACTLY ONCE. `GameAdder` leaves its results open after an add so
+    several games can go in from one search -- and `onAdded` returns `refreshItems()`, whose first
+    act is `parkAdder()`. So the first game was filed into the section, the adder was yanked home
+    with its `data-section` deleted, and the SECOND game from that same list of results went into
+    the loose bucket. Silently: no error, no toast, nothing said.
+
+    Parking is unavoidable (the header is about to be replaced); what was missing is the other half.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+
+    park = _fn(js, 'parkAdder')
+    assert 'pendingDockSection = adder.dataset.section' in park, \
+        'parking forgets where the adder was, so a refresh cannot put it back'
+
+    redock = _fn(js, 'redockAdder')
+    assert 'dockAdderTo(' in redock, 'nothing puts the adder back after a refresh'
+    # Only while the mode is on, and only if the header survived the round trip.
+    assert '!editing' in redock, 'the adder re-docks onto a page that has left the mode'
+    assert 'if (!head) { return; }' in redock, 'it re-docks to a section that was deleted'
+
+    # ...and the re-dock must run after the swap has settled, next to the other restores.
+    settle = _fn(js, 'onAfterSettle')
+    assert 'redockAdder()' in settle, 'the adder never comes back'
+
+
+def test_leaving_the_mode_takes_the_menus_and_the_adder_with_it():
+    """Both live OUTSIDE the gated subtree, so the CSS cannot do it for them.
+
+    The menus are panels on `document.body`: their triggers go `display: none` with the mode, but an
+    OPEN panel keeps floating -- anchored to a trigger that is still `isConnected`, holding focus,
+    offering "Remove from list" on a page that has left edit mode.
+
+    The adder is worse because it is actionable: docked under a header it keeps its accent rail and
+    its `data-section` while the "+ Add game" toggle that would send it home is now hidden, so it
+    claims a destination and files games into that section from outside the mode.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'exitEditing')
+
+    assert 'cardMenu.close(false)' in fn, 'the card menu floats on over a page that left the mode'
+    assert 'sectionMenu.close(false)' in fn, 'the section menu floats on'
+    assert 'parkAdder()' in fn, 'the adder stays docked, pointed at a section, outside the mode'
+    # Leaving is not a refresh, so it must not come back docked on the next swap.
+    assert 'pendingDockSection = null' in fn
+
+
+def test_boot_clears_the_dom_flags_and_not_just_the_variables():
+    """`data-gl-editing` and `data-gl-arranging` are ATTRIBUTES, so they serialise into htmx's
+    history snapshot (`cloneNode(true)`) and come back SET on a restored page -- where the CSS gates
+    read them, not the booleans. The previous version reset the two variables and claimed that fixed
+    the restore case; it left grips, grab cursors, drop boxes and card menus over a page with no
+    editor, no Sortable and no keydown listener.
+
+    Same for the strip's `hidden`, which `enterEditing` REMOVED, and for the adder, which a restore
+    would otherwise bring back docked with its home slot empty -- so `wireAdder` would bind a second
+    `GameAdder`, leaking one per restore.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = js[js.index('function boot(first) {'):js.index('if (PP.onPageReady)')]
+
+    assert 'delete panel.dataset.glEditing' in fn, 'a restored page keeps the editing flag'
+    assert 'delete panel.dataset.glArranging' in fn, 'a restored page keeps the arranging flag'
+    assert 'strip.hidden = true' in fn, 'a restored page shows the controls strip over no mode'
+    assert 'parkAdder()' in fn, 'a restored page comes back with the adder docked'
+
+
+def test_the_menu_trigger_is_not_a_drag_handle():
+    """With `forceFallback: true` and no mouse delay, a mousedown plus three pixels on the `...`
+    starts dragging the card instead of opening it.
+
+    The grip is deliberately NOT excluded -- a drag starting on it is exactly what a control saying
+    "this thing moves" should do. The comment that stood here said nothing needed excluding "while
+    the remove control is hidden in this mode", which stopped being true when one mode flipped that
+    CSS from hiding-while-arranging to hiding-while-not-editing.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'attachDragTo')
+
+    assert "dragExclude: '.gl-item__menu'" in fn, 'pressing the card menu starts a drag'
+    assert "dragExclude: '.gl-item__grab'" not in fn, 'the grip stopped being draggable'
+
+
+def test_a_section_move_reads_the_order_inside_the_queue():
+    """THE RACE ITS OWN COMMENT CLAIMED TO HAVE FIXED. The first version read the order and built the
+    FormData at click time and queued only the POST -- but joining the chain delays the SEND, and the
+    body was already frozen.
+
+    Delete section B, then Move up on section C: the captured order still contains B, B's delete
+    lands, and the queued POST carries a section that no longer exists. `reorder_sections` refuses a
+    set that does not match the list, so the owner is told a move they made failed, after a delete
+    that worked.
+
+    Asserted as an ORDERING, because the token was present in the broken version too -- which is
+    exactly why the original test passed.
+    """
+    js = _decommented(_read('static/js/list-detail.js'))
+    fn = _fn(js, 'moveSection')
+
+    assert fn.index('queueSectionWrite(') < fn.index('sectionTriggers()'), \
+        'the order is read before the write joins the queue'
+    assert fn.index('queueSectionWrite(') < fn.index('new FormData()'), \
+        'the payload is built before the write joins the queue'
+    # The trigger may have been replaced by a refresh that ran while this was queued, so the
+    # position is found by section id rather than by node identity.
+    assert 'dataset.sectionId === sectionId' in fn, 'the move matches on a node that may be stale'
+    # ...and the status pill respects the shared in-flight count, like the other two writers.
+    assert 'if (pendingSaves <= 1)' in fn, 'a section move reports Saved over an outstanding write'
+
+
+def test_an_open_menu_keeps_its_trigger_visible():
+    """Both triggers are `opacity: 0` at rest, lifted by hover or `:focus-within` on their container
+    -- and the panel is a child of `document.body`, so the moment it takes focus the container's
+    `:focus-within` is false and the trigger vanishes while its own menu is on screen.
+
+    `quick-add.css` solves this on the identical control with the same hook, which the primitive
+    already writes on every open. Neither new consumer had ported it."""
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    assert '.gl-item__menu[aria-expanded="true"]' in css, 'the card trigger hides under its own menu'
+    assert '.gl-section__act[aria-expanded="true"]' in css, 'the section trigger hides under its own menu'
+
+
+def test_the_menu_panel_sits_at_the_sites_panel_depth():
+    """Every other anchored panel is 100 -- including `.gl-adder__panel` on this very page, which
+    opens downward from a section header into exactly the band this menu opens into. At 60 the menu
+    painted behind a docked adder's results."""
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    menu = css[css.index('.gl-menu {'):]
+    menu = menu[:menu.index('}')]
+    assert 'z-index: 100' in menu, 'the card menu is at a different depth from every sibling panel'
+
+
+def test_the_section_add_button_clears_the_touch_floor():
+    """The only control in this feature below 44px, and the primary action of the header in edit
+    mode. Its three neighbours all carry the transparent-padding trick; this one did not."""
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    block = css[css.index('.gl-section__add::after'):]
+    block = block[:block.index('}')]
+    assert 'height: 44px' in block, 'the add button is still under the touch floor'

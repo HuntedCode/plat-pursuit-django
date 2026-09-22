@@ -50,7 +50,11 @@ section it is rather than "list, 12 items" four times down the page.{% endcommen
     {% if can_arrange %}
     <button type="button" class="gl-section__add" data-gl-add-to-section
             data-section-id="{{ section.id }}"
-            aria-label="Add a game to {{ section.name }}">
+            {% comment %}"Add game to X", not "Add A game to X". WCAG 2.5.3 (Label in Name, level A)
+            requires the accessible name to CONTAIN the visible label, and the visible one is
+            "Add game" -- the inserted "a" broke the match, so a voice-control user saying "click Add
+            game" would not have hit this button.{% endcomment %}
+            aria-label="Add game to {{ section.name }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
             <path d="M12 5v14M5 12h14"/>
         </svg>
@@ -63,7 +67,11 @@ section it is rather than "list, 12 items" four times down the page.{% endcommen
             data-rename-url="{% if can_manage_sections %}{% url 'list_section_rename' game_list.id section.id %}{% endif %}"
             data-delete-url="{% url 'list_section_delete' game_list.id section.id %}"
             data-reorder-url="{% url 'list_sections_reorder' game_list.id %}"
-            aria-haspopup="true" aria-expanded="false"
+            {% comment %}`dialog`, not `true`. `aria-haspopup="true"` is defined as
+            equivalent to "menu", and `AnchoredMenu` builds its panel as `role="dialog"` --
+            so a screen reader announced "has pop-up menu" and then landed the reader in a
+            dialog.{% endcomment %}
+            aria-haspopup="dialog" aria-expanded="false"
             aria-label="Actions for the section {{ section.name }}">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/>

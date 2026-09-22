@@ -160,17 +160,55 @@ def test_the_trigger_does_not_swallow_the_click_other_menus_listen_for():
 
 def test_escape_is_stopped_so_it_does_not_also_reach_the_page():
     """The list editor's arrange mode listens for Escape on `document` to drop a picked-up card.
-    Without this, one press closed the menu AND dropped the pick -- two undos for one keystroke.
+    Without this, one press closes the menu AND drops the pick -- two undos for one keystroke.
 
-    The game adder already had to learn this (`GameAdder` calls `stopPropagation` for the same
-    reason), which is two surfaces and therefore the primitive's problem rather than each page's.
+    THE CAPTURE FLAG IS THE ASSERTION, and the first version of this test is why it has to be.
+    It checked that the string `stopPropagation` appeared in the handler, which was true of a call
+    that did nothing at all: both listeners are on `document`, and `stopPropagation()` stops an
+    event reaching other NODES, never other listeners on the same one (that is
+    `stopImmediatePropagation`). The bug the docstring described stayed live behind a green test --
+    precisely the vacuous-guard shape this suite keeps finding.
+
+    A capture listener on `document` runs before every bubble listener anywhere and before any
+    capture listener below it, so stopping there genuinely ends the dispatch.
+
+    The docstring also used to cite `GameAdder` as precedent. It is not: that one is bound on the
+    results PANEL, a descendant, where stopping propagation really does keep the event away from
+    `document`. Same intent, different mechanism, and the primitive had copied the word.
     """
     src = _module_source()
 
     keydown = src[src.index("document.addEventListener('keydown'"):]
-    keydown = keydown[:keydown.index('});') + 3]
+    # To the listener's own close, which for this one is `}, true);` -- the flag under test.
+    keydown = keydown[:keydown.index('});') + 3] if '});' in keydown[:20] else keydown
+    end = src.index('}, true);', src.index("document.addEventListener('keydown'"))
+    keydown = src[src.index("document.addEventListener('keydown'"):end + len('}, true);')]
+
     assert "e.key === 'Escape'" in keydown
     assert 'stopPropagation' in keydown, 'Escape still reaches the page behind the menu'
+    # THE MECHANISM. Without the third argument the call above is inert.
+    assert keydown.rstrip().endswith('}, true);'), \
+        'the keydown listener is not registered in the capture phase, so stopping it does nothing'
+
+
+def test_arrow_keys_do_not_reach_the_page_from_inside_an_open_panel():
+    """The same hazard as Escape, one key along, and it was missed entirely at first.
+
+    Menu rows are real `<button>`s, so a page's `isTyping()` guard does not exclude them -- and the
+    list editor listens for arrows on `document` to move a picked-up card. Pick a card up, open any
+    other card's menu, press ArrowDown: the picked card moves and a reorder is written while the
+    reader is navigating a menu.
+
+    `GameAdder` fixed exactly this for its own result rows, and its comment says why ("a page's own
+    arrange mode may listen for the same keys on the DOCUMENT"). Swallowed rather than acted on:
+    this primitive has no roving-focus model, and Tab already walks the rows.
+    """
+    src = _module_source()
+
+    assert "e.key === 'ArrowUp'" in src and "e.key === 'ArrowDown'" in src, \
+        'arrow keys still reach the page from inside an open menu'
+    # Scoped to the open panel, so arrows outside it are left entirely alone.
+    assert '_anchoredOpen.el.contains(e.target)' in src
 
 
 # ── one open menu, and one set of listeners ─────────────────────────────────────────────────────
