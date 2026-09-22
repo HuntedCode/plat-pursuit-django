@@ -2510,7 +2510,8 @@ def test_a_sectioned_page_does_not_scale_with_its_sections(client):
     this feature.
 
     Sections cost ONE query total: the headers are fetched once and the grouping happens in Python
-    over rows already in hand. Both sides are bounded -- 200 items, 20 sections -- which is the
+    over rows already in hand. Both sides are bounded by their caps (`MAX_ITEMS_PER_LIST`,
+    `MAX_SECTIONS_PER_LIST`) -- which is the
     bounded-slice form CLAUDE.md permits rather than the per-row iteration it bans.
 
     WARMED UP FIRST, because the opening request of a test pays for session load and permission
