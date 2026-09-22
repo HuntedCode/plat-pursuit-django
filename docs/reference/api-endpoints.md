@@ -126,7 +126,7 @@ that has to agree with the first. They are listed in
 | `/community/lists/<id>/reorder/` | `list_reorder` | POST — Ranked lists only |
 | `/community/lists/<id>/like/` | `list_like` | POST |
 | `/community/lists/<id>/follow/` | `list_follow` | POST |
-| `/community/lists/<id>/add/` | `list_add_game` | POST |
+| `/community/lists/<id>/add/` | `list_add_game` | POST — optional `section` files the game on arrival (empty or absent = the ungrouped bucket); echoes back `section`, the value the service settled on under the list lock |
 | `/community/lists/<id>/items/<item>/remove/` | `list_remove_game` | POST |
 | `/community/lists/<id>/items/<item>/section/` | `list_item_assign` | POST — file one entry under a section |
 | `/community/lists/<id>/sections/` | `list_section_create` | POST — **members only** |

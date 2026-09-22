@@ -3868,13 +3868,25 @@ def test_the_two_wrapping_bodies_take_the_space_that_is_left(client):
 
 
 def test_the_section_controls_hit_areas_do_not_overlap(client):
-    """The visible buttons are 28px with a 10px gap, so their centres sit 38px apart while each 44px
-    `::before` is 44 wide -- 6px of overlap, won by whichever paints last. That is DELETE, so a thumb
-    landing just right of the pencil opened "delete this section"."""
-    css = _read('static/css/components/gamelists.css')
+    """Two adjacent controls in a header, each with a hit area wider than itself.
 
-    assert '.gl-section__act + .gl-section__act { margin-left: 8px; }' in css, \
-        'the two 44px targets overlap again, and the overlap belongs to Delete'
+    THE PAIR CHANGED, which is why this was rewritten rather than deleted. It pinned
+    `.gl-section__act + .gl-section__act`, from when the header carried a rename button and a delete
+    button: 28px buttons 10px apart put their centres 38px apart while each `::before` is 44px wide,
+    a 6px overlap won by whichever painted last -- Delete -- so a thumb landing just right of the
+    pencil opened "delete this section", with a confirm dialog the only thing in the way.
+
+    The header carries ONE `.gl-section__act` now, so that selector can never match and the test was
+    pinning a rule with no job. The live adjacency is `.gl-section__add + .gl-section__act`, and the
+    hazard is identical: a labelled pill beside an icon button, both reaching past their own edges.
+    """
+    css = _decommented_css(_read('static/css/components/gamelists.css'))
+
+    assert '.gl-section__add + .gl-section__act { margin-left: 8px; }' in css, \
+        'the add button and the section menu can overlap on touch'
+    # ...and the rule it replaced is gone rather than left behind, since nothing can match it.
+    assert '.gl-section__act + .gl-section__act' not in css, \
+        'a dead selector is still being kept alive'
 
 
 def test_the_phone_reorder_is_withheld_where_nothing_competes(client):
@@ -4372,26 +4384,31 @@ def test_the_section_add_button_clears_the_touch_floor():
 
 def test_moving_a_section_repaints_in_place_instead_of_re_rendering_the_list():
     """THE OWNER CALLED IT "JUMPY", and the cause was a full re-render for a two-heading change.
+    `moveSection` ended in `refreshItems(true)`, which `innerHTML`-swaps the whole items panel: every
+    card re-rendered, every cover re-fetched, the reveal re-ran, every Sortable rebuilt.
 
-    `moveSection` ended in `refreshItems(true)`, which `innerHTML`-swaps the whole items panel plus
-    the out-of-band chrome: every card in every section re-rendered, every cover re-fetched, the
-    arrival reveal re-ran and every Sortable was torn down and rebuilt -- to learn an arrangement
-    the client had just decided.
+    THE FIRST FIX WAS WRONG ABOUT THE RANKS, and this test's own docstring said so confidently:
+    "neither numbering mode reads group order". `_number` in `gamelists/views.py` records
+    `position + 1` as "the first cut" and abandons it for sectioned lists -- once a list has
+    sections the sections are part of the sequence, so continue-through runs ONE counter across the
+    groups in their order. Moving a section up renumbers everything after it. The test was therefore
+    encoding the defect it was supposed to guard.
 
-    The item drag had already reached the opposite conclusion, in its own words: a plain reorder
-    must not refresh because it would "redraw forty covers that did not change". Sections were the
-    one write still doing it.
-
-    Nothing else needed to change with it: `position` is global and per-ITEM, so a section move does
-    not touch it, and neither numbering mode reads group order.
+    So the slide stays and the ranks are recomputed: `renumber()` where the client can reproduce
+    `_number` (the `rank` sort, where DOM order IS canonical order), and a round trip where it
+    cannot.
     """
     js = _decommented(_read('static/js/list-detail.js'))
     fn = _fn(js, 'moveSection')
 
     assert 'slideSectionBlock(' in fn, 'the move no longer repaints in place'
-    # The SUCCESS path must not re-render. The failure path still must.
-    success = fn[fn.index('.then(function'):fn.index('.catch(function')]
-    assert 'refreshItems' not in success, 'a successful section move still re-renders the list'
+    # The ranks are a function of group order, so something has to answer for them.
+    assert 'renumber()' in fn, 'a section move leaves continue-through ranks stale'
+    assert 'orderingLive(' in fn, 'the renumber is not gated on the sort that makes it correct'
+    # ...and the case it cannot compute takes the round trip instead of guessing.
+    assert 'pendingSectionRenumber' in fn, 'a ranked list read out of order is left with wrong ranks'
+
+    # The failure path still resyncs -- it must, because the DOM was moved optimistically.
     failure = fn[fn.index('.catch(function'):]
     assert 'refreshItems(true)' in failure, \
         'a refused move leaves the page showing an order the server does not have'
@@ -4424,6 +4441,13 @@ def test_a_section_moves_with_everything_it_owns():
         'the block stops at the grid and leaves anything docked behind'
     assert 'nextElementSibling' in fn
 
+    # ...AND EVERYTHING WALKED IS COLLECTED. The terminator alone does not say that: a version that
+    # pushed only `.gl-group__grid` would satisfy it and still strand a docked adder, which is what
+    # this test is entirely about. The push has to be unconditional inside the walk.
+    loop = fn[fn.index('while ('):fn.index('return nodes')]
+    assert 'nodes.push(next);' in loop, 'the walk visits nodes without collecting them'
+    assert 'if (' not in loop, 'the walk collects only some of what it visits'
+
 
 def test_the_section_slide_respects_reduced_motion():
     """The settle exists so the eye can follow the section rather than re-find it. Somebody who has
@@ -4436,6 +4460,14 @@ def test_the_section_slide_respects_reduced_motion():
     # leave the section where it was while the server was told it had moved.
     assert fn.index('insertBefore') < fn.index('if (!firsts'), \
         'reduced motion skips the move itself, not just the animation'
+
+    # ...AND THE MOVE IS UNCONDITIONAL. The ordering assertion above holds even when the
+    # `insertBefore` sits inside a branch that never runs, so an audit was able to make the whole
+    # section-move feature inert with this test still green. Nothing may guard the move.
+    between = fn[fn.index('var parent'):fn.index('if (!firsts')]
+    assert 'if (' not in between, 'the move itself is behind a condition'
+    # And the reduced-motion read is a real query, not a constant somebody wired to false.
+    assert 'window.matchMedia' in fn and 'false &&' not in fn
 
 
 def test_the_repaint_tells_the_card_which_section_it_is_in_now():
@@ -4453,7 +4485,12 @@ def test_the_repaint_tells_the_card_which_section_it_is_in_now():
     js = _decommented(_read('static/js/list-detail.js'))
     fn = _fn(js, 'repaintAfterGroupChange')
 
-    assert 'trigger.dataset.current' in fn, "the card's menu keeps pointing at its old section"
+    # THE WHOLE ASSIGNMENT, not the property name. `'trigger.dataset.current' in fn` was the first
+    # version and it is satisfied by `trigger.dataset.currentXX = ...` (the name is a PREFIX of the
+    # mutant) and by the no-op `trigger.dataset.current = trigger.dataset.current || ''`. An audit
+    # killed both against it. The value being written is the thing under test.
+    assert "trigger.dataset.current = sectionId || ''" in fn, \
+        "the card's menu keeps pointing at its old section"
     # The row is needed for this even when the node was already placed by a drag, so the lookup
     # cannot sit inside the `!placed` branch.
     assert fn.index("querySelector('.gl-item[data-item-id=\"'") < fn.index('if (!placed)'), \

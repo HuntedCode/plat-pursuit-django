@@ -156,7 +156,6 @@ Rendered inside `detail_group.html`, which owns the grid and the section header.
     suggests.){% endcomment %}
     <button type="button" class="gl-item__menu" data-gl-card-menu
             data-remove-url="{% url 'list_remove_game' game_list.id item.pk %}"
-            data-title="{{ item.concept.unified_title }}"
             {% if can_arrange %}data-current="{{ item.section_id|default_if_none:'' }}"{% endif %}
             {% comment %}`dialog`, not `true`. `aria-haspopup="true"` is defined as
             equivalent to "menu", and `AnchoredMenu` builds its panel as `role="dialog"` --

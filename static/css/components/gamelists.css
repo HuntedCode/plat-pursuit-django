@@ -211,7 +211,8 @@
     color: var(--pp-text-dim);
     /* Tailwind v4's preflight sets no `cursor: pointer` on buttons, so every control has to declare
        it -- which this file argues explicitly 195 lines down while naming THIS element, and which
-       the sibling controls honour. The destructive control was the one still rendering an arrow. */
+       the sibling controls honour. This element was the one still rendering an arrow, back when it
+       was the remove button. */
     cursor: pointer;
     opacity: 0;
     transform: scale(0.9);
@@ -224,17 +225,26 @@
     outline: 2px solid var(--pp-primary); outline-offset: 2px;
     color: var(--pp-text);
 }
+/* NEUTRAL, not destructive. This was `--pp-error` -- correct while the control was a remove
+   button, and wrong the moment it became a `...` menu whose first rows are "Move to <section>".
+   The rename was mechanical and the hover came with it, so every card on every owned list flashed
+   red for an action that mostly is not destructive.
+   The one row that IS destructive carries the red, inside the panel: `.gl-menu__item--danger`. */
 @media (hover: hover) {
     .gl-item__menu:hover {
-        color: var(--pp-error);
-        border-color: color-mix(in oklab, var(--pp-error) 55%, var(--pp-border));
+        color: var(--pp-text);
+        border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
         transform: scale(1.06);
     }
 }
 /* Touch has no hover, so the control would never appear. Show it at rest instead -- and at the
    design system's 44px minimum (design-system.md), which the first cut set to 30px. This file
-   already honours that rule 110 lines up for a merely DISMISSIVE control; the one that deletes a
-   curated entry had the smaller target. A mis-tap here destroys curated work with no confirm step.
+   already honours that rule 110 lines up for a merely DISMISSIVE control.
+
+   The argument used to be that a mis-tap DESTROYS curated work with no confirm step, which was true
+   while this was the remove button. It opens a menu now, so the stake is lower -- and the floor
+   stays anyway, because this menu is how a card is both filed and removed and it sits inside a
+   draggable cell.
    (The ~166x125px figure quoted here was the 4:3 grouping tile's; the card's 3:4 cover at 375px is
    ~166x222px. The argument survives the move, the number did not.) The visual circle stays 30px --
    the extra is transparent padding, so the target grows without the button getting heavier. */
@@ -257,7 +267,7 @@
 /* The button is a SIBLING of the card (a <button> inside an <a> is invalid), so
    `.pp-reveal .pp-gcard { opacity: 0 }` (game-card.css) never covered it. On desktop that was masked because it
    rests at opacity 0 anyway -- but on touch it is forced visible, so after every sort, add and
-   remove the grid showed a row of bare floating "x" glyphs hanging over empty space for ~500ms
+   remove the grid showed a row of bare floating glyphs hanging over empty space for ~500ms
    while the tiles faded up beneath them.
 
    RELEASING IT WITH `.is-revealed` WAS THE WRONG HALF OF THE PAIR, twice over. That class lands one
@@ -451,8 +461,10 @@
  * down depends on winning a (1,4,0) vs (1,3,0) fight that a shorter selector loses silently. */
 #gl-items-panel:not([data-gl-editing]) .gl-item__menu { display: none; }
 
-/* The grip. Mirrors the remove control across the card (top-LEFT to its top-right) and shares its
-   geometry, but is visible at rest WITHIN the mode: once you have said you are arranging the list,
+/* The grip. Sits INBOARD of the card's `...` menu rather than opposite it -- the placement comment
+   inside the rule below is the live one, and this line said "top-LEFT to its top-right" from when
+   the two controls were mirrored across the card. It shares that control's geometry, but is visible
+   at rest WITHIN the mode: once you have said you are arranging the list,
    the thing you arrange it with should not also have to be discovered, and a hover-only grip does
    not exist at all on touch. */
 .gl-item__grab {
@@ -774,7 +786,7 @@
 /* ── Section header controls ─────────────────────────────────────────────────────────────────────
  *
  * Quiet until the header is hovered or something inside it takes focus -- the same restraint the
- * card's remove control uses, and for the same reason: these sit beside content people are reading.
+ * card's own `...` menu uses, and for the same reason: these sit beside content people are reading.
  *
  * `:focus-within` and not `:hover` alone, so tabbing through the page surfaces each header's controls
  * in turn rather than leaving a keyboard user pressing buttons they cannot see. */
@@ -793,12 +805,14 @@
     transition: opacity 0.16s ease, color 0.16s ease, background 0.16s ease;
 }
 .gl-section__act svg { width: 14px; height: 14px; }
-/* THE TWO TARGETS MUST NOT OVERLAP. The visible buttons are 28px with a 10px gap, so their centres
-   sit 38px apart while each `::before` is 44px wide -- a 6px overlap, won by whichever paints last.
-   That is Delete, so a thumb landing just right of the PENCIL opened "delete this section". Eight
-   more pixels puts the centres 46px apart and the boxes side by side with room to spare. The confirm
-   dialog was the only thing standing between that mis-tap and a deleted header. */
-.gl-section__act + .gl-section__act { margin-left: 8px; }
+/* THE TWO TARGETS MUST NOT OVERLAP, and the pair that needed keeping apart has changed.
+   It was `.gl-section__act + .gl-section__act`, when this header carried a rename button and a
+   delete button: 28px buttons 10px apart put their centres 38px apart while each `::before` is
+   44px wide, a 6px overlap won by whichever painted last -- Delete -- so a thumb landing just right
+   of the pencil opened "delete this section".
+   The header carries ONE `.gl-section__act` now (the `...` menu), so that selector can never match.
+   The live adjacency is `.gl-section__add + .gl-section__act`, spaced where those two are defined
+   further down. */
 
 .gl-section__head:hover .gl-section__act,
 .gl-section__head:focus-within .gl-section__act { opacity: 1; }
@@ -825,10 +839,8 @@
         color: var(--pp-text);
         background: color-mix(in oklab, var(--pp-text) 9%, transparent);
     }
-    .gl-section__act--danger:hover {
-        color: var(--pp-error);
-        background: color-mix(in oklab, var(--pp-error) 12%, transparent);
-    }
+    /* `.gl-section__act--danger:hover` lived here and went with the delete BUTTON it styled.
+       Deleting a section is a row in the `...` menu now, carrying `.gl-menu__item--danger`. */
     .gl-sections__numbering:hover { color: var(--pp-text); }
 }
 .gl-section__act:focus-visible { opacity: 1; outline: 2px solid var(--pp-primary); outline-offset: 2px; }

@@ -79,6 +79,9 @@
     // Where the adder was docked when a refresh took it home, so it can go back. `null` means it
     // was not docked; '' would mean the loose bucket, which is why this is not a plain falsy check.
     var pendingDockSection = null;
+    // Set when a section move changed ranks the client cannot recompute, so the write's success
+    // path knows to fetch the page that can. See `moveSection`.
+    var pendingSectionRenumber = false;
     var identityShow = null;
     var identityHide = null;
     // The single toggle. Looked up rather than closed over, because the header is re-rendered
@@ -2012,10 +2015,18 @@
             var landedIn = moved.grid.dataset.sectionId || '';
             if (orderingLive(arrangeGrids())) {
                 announceAndSave(row, moved.grid, {
-                    movedItem: row.dataset.itemId, section: landedIn, refresh: true,
+                    // `placed: true` -- `stepIntoNeighbourGrid` has ALREADY put the row where it
+                    // goes, and for a forward step that is the START of the next group
+                    // (`insertBefore`), which is also the order `fullOrder()` just posted. Without
+                    // this the repaint appended it to the END instead: the database held "first",
+                    // the screen showed "last", the spoken rank contradicted the plate, and a
+                    // second press skipped a whole group.
+                    movedItem: row.dataset.itemId, section: landedIn, refresh: true, placed: true,
                 });
             } else {
-                saveAssignment(row.dataset.itemId, landedIn, null);
+                // `placed` for the same reason as the ordering branch above: the node has
+                // already been moved by `stepIntoNeighbourGrid`.
+                saveAssignment(row.dataset.itemId, landedIn, null, true);
             }
             // NOT `grab.focus()`: the refresh below replaces every row, so focusing a node that
             // is about to be discarded lands the caret on <body>. The pick is carried across
@@ -2278,6 +2289,29 @@
      * moved it before the write was ever queued, and false for the card menu, which moves nothing.
      */
     function repaintAfterGroupChange(itemId, sectionId, placed) {
+        // ONLY WHERE THE CLIENT CAN REPRODUCE THE SERVER'S RENDER, which is narrower than the first
+        // cut assumed and was found by audit rather than by use.
+        //
+        // `_number` (gamelists/views.py) does NOT number a sectioned list `position + 1`. Its own
+        // docstring records that as "the first cut" and abandons it: once a list has sections, the
+        // sections are part of the sequence, so continue-through runs a counter ACROSS the groups in
+        // their order, and within each group it sorts by `position` rather than taking the rendered
+        // order. Two things follow, and the first version of this function got both wrong:
+        //
+        //   - the rendered order is only the canonical order at the `rank` sort. Under A-Z the
+        //     server keeps each entry's real rank and prints it out of sequence on the page, which
+        //     is the point; `renumber()` walks the DOM, so it would relabel the list 1..N
+        //     alphabetically and claim the alphabet was the author's ranking.
+        //   - appending the card to the END of its new group is only right when the page is in
+        //     position order. Anywhere else the server slots it by the page's sort and the client
+        //     does not.
+        //
+        // `orderingLive()` is exactly "the page is at the real sequence" (`can_reorder` is
+        // `arrangeable and sort == 'rank'`), so inside it DOM order IS canonical order and
+        // `renumber()` reproduces `_number` line for line. Outside it, the honest answer is the
+        // round trip -- which is what the `saveAssignment` docstring argued before this function
+        // overruled it without updating it.
+        if (!orderingLive(arrangeGrids())) { return false; }
         var dest = gridForSection(sectionId);
         if (!dest) { return false; }
         var row = document.querySelector('.gl-item[data-item-id="' + itemId + '"]');
@@ -2315,6 +2349,11 @@
                 var badge = rows[i].querySelector('.gl-rank');
                 if (badge) { badge.textContent = String(running); }
 
+                // GATED ON THE BADGE, like the line above it. `detail_card.html` renders the
+                // "Number N: " prefix under `{% if is_ranked %}` and the plate under the same flag,
+                // so a list with no plates has no prefix either -- and writing one anyway announced
+                // a ranking a Collection does not have, to screen readers only, on every card.
+                if (!badge) { continue; }
                 var card = rows[i].querySelector('.pp-gcard');
                 if (!card) { continue; }
                 var label = card.getAttribute('aria-label') || '';
@@ -2399,13 +2438,17 @@
      * one page but the failure handling is identical and a half-copied version of it is how the
      * recovery path rots.
      *
-     * On success the panel is REFRESHED rather than left as dropped. SortableJS has already put the
-     * card where the cursor let go, and the server sorts each group independently -- so without this
-     * the card sits out of alphabetical order until something else re-renders, which reads as a bug
-     * on the one sort whose whole promise is that it is alphabetical. The refresh also repaints both
+     * On success the panel is REFRESHED rather than left as dropped, UNLESS the page is at the real
+     * sequence. SortableJS has already put the card where the cursor let go, and the server sorts
+     * each group independently -- so outside the `rank` sort the card would sit out of the page's
+     * order until something else re-renders, which reads as a bug on the one sort whose whole
+     * promise is that it is alphabetical.
+     *
+     * `repaintAfterGroupChange` takes the other case and refuses this one; it was briefly allowed to
+     * take both, which made this paragraph false without anybody editing it. The refresh also repaints both
      * section counts, which the drop just changed.
      */
-    function saveAssignment(itemId, sectionId, evt) {
+    function saveAssignment(itemId, sectionId, evt, placed) {
         setPositionsStatus('Saving…');
         var url = assignUrlFor(itemId, evt);
         if (!url) {
@@ -2436,7 +2479,7 @@
                 // or a ranked list being read A-Z -- and it was re-rendering the whole list for a
                 // card changing heading, which is the asymmetry the owner reported: reordering
                 // within a section repainted in place and moving between sections did not.
-                if (repaintAfterGroupChange(itemId, sectionId, !!evt)) { return; }
+                if (repaintAfterGroupChange(itemId, sectionId, placed || !!evt)) { return; }
                 return refreshItems().catch(function (err) {
                     // The write LANDED; only the view is stale. Say so rather than implying the move
                     // was lost, which would send somebody to redo a move they already made.
@@ -2616,10 +2659,22 @@
      * the item drag had already reached the opposite conclusion for the same reason: a plain reorder
      * repaints in place precisely so it does not "redraw forty covers that did not change".
      *
-     * Nothing else has to change. `position` is global and per-ITEM, so a section move does not
-     * touch it -- continue-through ranks are `position + 1` and restart-per-section ranks are the
-     * index within the group, and neither is affected by which order the groups are drawn in. The
-     * menu's own disabled states are computed from DOM order when it opens, so they follow for free.
+     * THE RANKS DO HAVE TO CHANGE, and the first version of this said the opposite. It argued
+     * that `position` is global and per-ITEM, so a section move cannot touch it, therefore
+     * continue-through ranks are `position + 1` and nothing needs recomputing.
+     *
+     * `_number` in `gamelists/views.py` records `position + 1` as "the first cut" and ABANDONS it
+     * for sectioned lists, in a docstring written after that exact mistake shipped: once a list has
+     * sections, the sections are part of the sequence, so continue-through runs one counter across
+     * the groups in their order. Move a section up and everything after it renumbers. Only
+     * restart-per-section is genuinely unaffected.
+     *
+     * The lesson is narrower than "read the code": `position` really is global and really is
+     * untouched here. What was wrong was inferring the DISPLAYED rank from the stored one, when the
+     * function that computes the displayed rank exists and says not to.
+     *
+     * The menu's own disabled states are computed from DOM order when it opens, so those do follow
+     * for free.
      *
      * FLIP, because an instant jump is the other half of what "jumpy" meant: measure, move, then
      * animate from the old box to the new one so the eye can follow the section rather than having
@@ -2708,6 +2763,16 @@
             if (block.length && target) {
                 slideSectionBlock(block, delta < 0 ? target : nextHeadAfter(all[to]));
             }
+            // THE RANKS MOVE WITH THE SECTIONS, which the first version of this denied in so many
+            // words. `_number` runs its counter ACROSS the groups in their order, so continue-through
+            // numbering is a function of group order -- move a section up and everything after it
+            // renumbers. Only restart-per-section is unaffected, and `renumber()` handles both.
+            //
+            // At the `rank` sort `renumber()` reproduces `_number` exactly. Anywhere else it cannot
+            // (see `repaintAfterGroupChange`), so a ranked list being read in another order takes
+            // the refresh instead -- and a list with no ranks at all needs neither.
+            if (orderingLive(arrangeGrids())) { renumber(); }
+            else { pendingSectionRenumber = !!document.querySelector('#gl-items-root .gl-rank'); }
 
             setPositionsStatus('Saving…');
             return postJson(reorderUrl, body)
@@ -2717,11 +2782,18 @@
                     // the exact bug that guard was added for on the other two writers.
                     if (pendingSaves <= 1) { setPositionsStatus('Saved'); }
                     announce('Section moved.');
-                    // NO REFRESH. The DOM already shows the move, and the server was only ever
-                    // going to send back the same arrangement -- re-rendering every card in the
-                    // list to learn that is what made this feel jumpy. The chrome does not need it
-                    // either: the number of sections has not changed, so the numbering choice and
-                    // the strip are describing exactly what they were.
+                    // NO REFRESH in the ordinary case: the DOM already shows the move and the
+                    // server was only ever going to send back the same arrangement -- re-rendering
+                    // every card to learn that is what made this feel jumpy. The chrome does not
+                    // need it either, because the number of sections has not changed.
+                    //
+                    // The exception is a RANKED list being read in some order other than its own:
+                    // the ranks changed with the group order and the client cannot compute them
+                    // there, so it fetches the page that can.
+                    if (pendingSectionRenumber) {
+                        pendingSectionRenumber = false;
+                        return refreshItems().catch(function () {});
+                    }
                     return null;
                 })
                 .catch(function (err) {

@@ -273,8 +273,8 @@ mode is on, which matters because for a free owner with no sections the honest r
 
 | Their list | What renders |
 |---|---|
-| Ranked, with games | the arrange bar (arranging is ungated), no section controls |
-| Collection, no sections | no arrange bar at all |
+| Ranked, with games | the controls strip (arranging is ungated), no section controls |
+| Collection, no sections | no controls strip at all |
 | Any list that already has sections | headers, **delete** but no rename |
 
 ...plus the **sections lockup** in every row, which is what closes the gap this table used to
@@ -292,8 +292,8 @@ One block, two states, sitting where the section controls would be:
 
 Four things about it are load-bearing:
 
-- **It is a sibling of the arrange bar, not a row inside it.** That bar is `hidden` until the identity
-  editor is opened and does not render at all for a free owner of a section-less Collection, so
+- **It is a sibling of the controls strip, not a row inside it.** That strip is `hidden` until the
+  mode is entered and does not render at all for a free owner of a section-less Collection, so
   anything inside it is invisible to the exact hunter this is for. The line it replaced
   (`.gl-sections__locked`) lived there and reached nobody.
 - **It is gated on `is_linked`.** An unlinked owner also fails `can_manage_sections`, and selling them
@@ -901,7 +901,7 @@ human, which is the thing `all_ugc` names.
   all three shapes of the partial and is what those three now read.
 - **A drop is not always a reorder.** See [Filing a game](#filing-a-game-two-payloads-on-purpose).
   Posting the drop index under a non-`rank` sort rewrites the author's sequence to match a view.
-- **The arrange bar is not gated on the drag.** It also carries "Add a section", so tying the whole
+- **The controls strip is not gated on the drag.** It also carries "Add a section", so tying the whole
   bar to whether a drag is possible hid the only control that could make one possible — a member with
   a section-less Collection had no way in.
 - **The ungrouped bucket is omitted when empty, for everybody** (changed 2026-09). It used to stay

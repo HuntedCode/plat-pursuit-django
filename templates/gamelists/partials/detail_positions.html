@@ -15,17 +15,21 @@ The JS hides it while the mode is off, which is the deliberate-entry half: the h
 live whenever a ranked list was viewed by its owner, which made rearranging something you could do by
 accident. That is now the ONLY gate -- there is no second press inside this strip any more.
 
-ONE BAR, TWO CAPABILITIES, and they are not the same one. `can_arrange` is "cards can be dragged at
-all", which on a sectioned list means FILING one under a header; `can_reorder` is the stricter "a drop
-position means something", true only at the real sequence. A sectioned Collection has the first and
-not the second, which is why the toggle inside is gated separately from the bar around it.
+ONE STRIP, TWO CAPABILITIES, and they are not the same one. `can_arrange` is "cards can be dragged
+at all", which on a sectioned list means FILING one under a header; `can_reorder` is the stricter "a
+drop position means something", true only at the real sequence. A sectioned Collection has the first
+and not the second, which is why the HINT below names a different gesture in each case.
+
+That sentence used to end "...which is why the toggle inside is gated separately from the bar around
+it". There is no toggle inside -- the note fifteen lines down says so -- and this is the header
+comment of the file that deleted it, which is the worst place for a contradiction to sit.
 {% endcomment %}
 <div id="gl-positions-slot"{% if oob %} hx-swap-oob="true"{% endif %}>
 {% if can_arrange or can_manage_sections %}
-    {% comment %}Directly above the grid, not in the edit panel where it started: the one control the
-    Ranked type exists for was the quietest thing on the page, behind a scroll past the name and
-    description. Full width, solid CTA, and the BAR carries the mode state rather than only the
-    button label.
+    {% comment %}Directly above the grid, not in the edit panel where it started: the controls the
+    Ranked type exists for were the quietest things on the page, behind a scroll past the name and
+    description. Full width, and the STRIP carries the mode state -- which used to be the argument
+    for it carrying the mode's button as well, and is now just how the mode is visible at a glance.
 
     Outside the identity <form> on purpose -- it is not part of that form's save cycle, and the hint
     says so, because Cancel undoes a rename and cannot undo a move that was already written.{% endcomment %}
