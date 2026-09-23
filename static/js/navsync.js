@@ -138,8 +138,13 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(function (data) { if (data.error) { console.error(data.error); stopPoll(); } else { startPoll(); } })
             .catch(async function (err) {
                 console.error('sync trigger error:', err); stopPoll();
-                var msg = 'Failed to start sync. Please try again.';
-                try { var e = await err.response?.json().catch(function () { return null; }); if (e && e.error) { msg = e.error; } } catch (_) { /* ignore */ }
+                // The server's own refusal when it wrote one (cooldown, outage, rate limit), via the
+                // shared reader in utils.js rather than a local re-implementation of it. Feature-tested
+                // because a cached pre-change `utils.js` would otherwise throw from inside this
+                // rejection handler, leaving the button stuck reading "Syncing..." and disabled.
+                var api = window.PlatPursuit && PlatPursuit.API;
+                var fallback = 'Failed to start sync. Please try again.';
+                var msg = api && api.failureOr ? await api.failureOr(err, fallback) : fallback;
                 if (window.PlatPursuit && PlatPursuit.ToastManager) { PlatPursuit.ToastManager.error(msg); }
                 setSync('error'); txt(statusEl, 'Sync error');
             });

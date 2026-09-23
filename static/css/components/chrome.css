@@ -257,7 +257,8 @@
 
 /* Results panel (typeahead rows + the add-and-sync fallback). */
 .pp-navsearch__panel {
-    position: absolute; top: calc(100% + 7px); left: 0; right: 0; z-index: 100; padding: 6px; overflow: hidden;
+    position: absolute; top: calc(100% + 7px); left: 0; right: 0; z-index: 100; padding: 6px;
+    overflow-x: hidden; overflow-y: auto; max-height: min(70vh, 520px); overscroll-behavior: contain;
     background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 44px rgba(0,0,0,0.45);
 }
@@ -309,7 +310,7 @@
 }
 /* Gated display (see the spin/clear note above): keeps the add + Visit rows hidden until JS reveals them. */
 .pp-navsearch__add:not([hidden]) { display: flex; }
-.pp-navsearch__visit:not(.hidden) { display: flex; }
+.pp-navsearch__visit:not(.hidden) { display: flex; animation: ppRevealIn 0.34s var(--pp-ease); }
 .pp-navsearch__add { color: var(--pp-primary); }
 .pp-navsearch__add.is-active, .pp-navsearch__add:hover { background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
 .pp-navsearch__add svg { width: 18px; height: 18px; flex-shrink: 0; }
@@ -317,8 +318,36 @@
 .pp-navsearch__visit { color: var(--pp-success); }
 .pp-navsearch__visit.is-active, .pp-navsearch__visit:hover { background: color-mix(in oklab, var(--pp-success) 14%, transparent); }
 .pp-navsearch__visit svg { width: 16px; height: 16px; flex-shrink: 0; }
-.pp-navsearch__msg { padding: 7px 9px; font-size: 0.74rem; font-weight: 600; }
+/* The add-and-sync status line. No `display:` here on purpose (see the gating note above): the base
+   rule must leave the hidden state to Tailwind's `.hidden`. The BASE is the neutral in-progress
+   voice ("Looking up NAME", "In the queue", "Syncing NAME"); the modifiers are the two endings.
+
+   0.8rem / 500, not the 0.74rem / 600 this carried as an error line. 0.74rem is 11.84px, under the
+   design system's 12px floor for readable content -- fine for a rare one-line flash, wrong now that
+   this is the prose channel for an entire multi-minute flow. 0.8rem also puts it level with the
+   `__add` / `__visit` rows it leads, so the cluster reads as one typographic unit instead of a row
+   with an undersized footnote, and 500 stops two lines of prose reading as a label that ran on:
+   every 600-weight sibling in this panel is a single-line label. Colour carries the emphasis. */
+@media (prefers-reduced-motion: reduce) { .pp-navsearch__visit:not(.hidden) { animation: none; } }
+.pp-navsearch__msg { padding: 7px 9px; font-size: 0.8rem; font-weight: 500; line-height: 1.45; color: var(--pp-text-dim); }
 .pp-navsearch__msg--err { color: var(--pp-error); font-style: italic; }
+/* Matches the `.pp-navsearch__visit` row it introduces, so "Found NAME" and the link read as one beat
+   rather than two unrelated rows. No italic, unlike --err: across this codebase italic is the register
+   for muted asides, and italicising the payoff would demote it. */
+.pp-navsearch__msg--ok { color: var(--pp-success); }
+
+/* A hairline between the search results and the add-and-sync cluster, reusing the recipe the group
+   headers use above -- this panel's established idiom for "a different kind of thing starts here".
+   The cluster used to be one add row and could abut the last result harmlessly; it is now a status
+   line plus an action row, which without a rule reads as a fifth category of search result. The
+   status line is not a result.
+
+   Two selectors, not three: the Visit row can only ever show while the status line is showing (both
+   require a `ready` phase whose message is visible), so it is never the cluster's first member. */
+.pp-navsearch__list:not(:empty) + .pp-navsearch__msg:not(.hidden),
+.pp-navsearch__list:not(:empty) + .pp-navsearch__msg.hidden + .pp-navsearch__add:not([hidden]) {
+    margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--pp-divider);
+}
 
 /* md+: persistent inline bar. The container grows to fill the whole centre gap (pushing the end
    cluster to the right edge); the visible bar caps at 440px and centres within it. */

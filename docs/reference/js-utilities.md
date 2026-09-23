@@ -55,16 +55,35 @@ HTTP client with CSRF token injection and automatic response parsing.
 | `delete(url, options)` | | Promise | DELETE request |
 | `postFormData(url, formData, options)` | FormData object | Promise | POST without Content-Type (browser sets boundary) |
 | `fetchHTML(url, options)` | | Promise\<string\> | GET with `X-Requested-With: XMLHttpRequest` |
+| `failureMessage(err)` | the Error thrown above | Promise\<string\|null\> | The server's own `error` string, or null |
+| `failureOr(err, fallback)` | | Promise\<string\> | `failureMessage` with a fallback baked in |
 
-**Error handling**: On non-ok responses, throws `Error` with `.response` property containing the raw Response object. Callers extract server messages via:
+**Error handling**: On non-ok responses, throws `Error` with `.response` property containing the raw
+Response object -- the raw `fetch` Response, **not** a parsed body, so `err.response.error` is always
+`undefined`. Use `failureOr` rather than re-deriving it:
+
 ```js
 try {
     const data = await PlatPursuit.API.post(url, body);
 } catch (error) {
-    const errData = await error.response?.json().catch(() => null);
-    const msg = errData?.error || 'Something went wrong';
+    PlatPursuit.ToastManager.error(
+        await PlatPursuit.API.failureOr(error, 'Something went wrong')
+    );
 }
 ```
+
+`failureMessage` returns null for a missing `.response`, a non-JSON body (an HTML error page), an
+empty body, or an already-consumed stream, so a caller only ever has to handle "a message or not".
+
+**Why it is shared**: hand-rolled copies of the six-line version had accumulated in a dozen
+controllers, and each one was a place the *next* fix wouldn't land. Two shipped bugs came from them
+directly: a hunter hitting the 200-game list cap was told "That could not be saved" instead of the
+sentence naming the cap, and the navbar search's add-and-sync replaced BOTH the 429 ("Too many
+searches. Please wait a minute and try again.") and the 503 PSN-outage line with a generic failure --
+the anon search cap is 3/min, so the message hunters met most often was the one always discarded.
+`quick-add.js`, `navsync.js` and `navbar-search.js` use the shared reader; the remaining call sites
+(`comments.js`, `game-lists.js`, `fundraiser.js`, `list-detail.js`, `rate-my-games.js` and others)
+are a mechanical follow-up, not a second implementation.
 
 **Auto-parsing**: 204 returns null, JSON content-type returns parsed object, everything else returns text.
 
