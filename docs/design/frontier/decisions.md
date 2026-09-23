@@ -19,8 +19,11 @@ needs a second system with its own cadence.
 A new way of displaying job levels is a chart. The second layer has to contain decisions,
 scarcity, and uncertainty that the character sheet does not.
 
-### D3. Trophies buy access, and nothing else  *(REVISED 2026-09-14)*
-> **Trophies buy access. The village runs the economy. Gear provides power.**
+### D3. Trophies buy width, and nothing else  *(REVISED 2026-09-14, again 2026-09-22)*
+> **Trophies buy WIDTH. The base buys DEPTH. Gear buys VIABILITY.**
+
+*(The "access" wording this decision originally carried was revised again on 2026-09-22; see
+[D48](#d48-trophies-gate-width-the-base-gates-depth-revised-2026-09-22).)*
 
 Three inputs, three distinct roles, no overlap.
 
@@ -81,7 +84,10 @@ No raiding, no theft, no whale-stomping. See [R8](#r8).
 Neutral contested ground nobody owns. Losing costs an income stream, never your stores.
 
 ### D12. Two masters, cleanly split
-> Trophies set level. The Village sets gear. Level gates access, gear gates efficiency.
+> Trophies set level. The base sets gear. **The base gates depth, gear gates viability.**
+
+*(Originally "level gates access"; revised by [D48](#d48-trophies-gate-width-the-base-gates-depth-revised-2026-09-22)
+on 2026-09-22. Level now gates WIDTH, not depth.)*
 
 Hunting stays the hard ceiling. The village gets real teeth. Neither substitutes.
 
@@ -210,7 +216,7 @@ band, and never build a separate casual mode. Full reasoning in
 [vision.md](vision.md#who-this-has-to-work-for).
 
 ### D41. Gear is the only power axis, and it is a real ladder
-Because level buys access and the village runs the economy, gear is the sole differentiator of
+Because level buys width and the base buys depth, gear is the sole differentiator of
 how fast two players clear. It gets a genuine ascending power line. The anti-stomp protection
 comes from gear being **earned in-game**, not from gear being weak. Full system in
 [gear.md](gear.md).
@@ -243,6 +249,50 @@ Equipping gear is a universal video-game language and the premise is a celebrati
 games. The refinement: **video-game equipment, not fantasy equipment.** Power-ups, mods,
 gadgets, chips, loadouts, perks. Not swords and plate. Each era and genre has its own equipment
 idiom, which makes the gear collection a tour of gaming's equipment vocabulary.
+
+### D48. Trophies gate WIDTH; the base gates DEPTH  *(REVISED 2026-09-22)*
+> **Trophies buy WIDTH. The base buys DEPTH. Gear buys VIABILITY.**
+
+The main path is gated purely by in-game progress (Hall tier, building levels). **A Pursuer-0
+account can grind the main road to endgame.** Trophy hunting buys *different* content, not
+*more* of it: themed regions built on the franchises, genres, studios and platforms the player
+actually plays.
+
+**Supersedes** the earlier rule that the main path gated on total Pursuer level. That version
+was better than gating everything on trophies, but it still put depth behind hunting, which
+punishes newcomers and hands veterans a lump of content they cannot use.
+
+What this buys:
+
+- Hunting becomes **identity** rather than **permission**, which is the product's through-line
+  going back to Badges
+- The casual case is solved structurally, not by careful tuning
+- Veteran onboarding stops being a tease
+
+**The condition it depends on:** width must be where the *good* stuff lives, not the extra
+stuff. Test every piece of content with *would someone be disappointed to never see this?*
+
+### D49. Compound gates belong on width, never the main path
+A width gate may require both a trophy condition and a base condition (*Exorcist 20 and Hall 5*).
+That stops a veteran teleporting into themed content their base cannot support, without ever
+blocking progression.
+
+### D50. Access is revealed, not granted (fog of war)
+The map reveals through play; the Signal Tower building already exists for the job. Driven by a
+problem found while re-examining the gating model: **a gate you never hit isn't a reward.** A
+veteran is past every trophy gate, so what they experience is the *absence* of a wall, and
+absences are not felt. Progressive reveal turns that into discovery.
+
+### D51. Unlocks are events
+A platinum opening a region must be a notified, celebrated moment rather than a silently larger
+map. A feedback requirement, not a mechanical one, but without it the width model never visibly
+pays out.
+
+### D52. Gear affinity carries the width model
+**Effective power = base power x affinity match.** Main-path gear is solid everywhere and
+dominant nowhere (roughly 60 to 70% in a themed region), so newly-unlocked width is something to
+engage with rather than faceroll. Guards: not a reset, and not so dominant that each region is a
+separate grind. Detail in [gear.md](gear.md#affinity-why-newly-unlocked-width-is-not-a-victory-lap).
 
 ---
 

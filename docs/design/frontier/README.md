@@ -43,9 +43,12 @@ Pursuer's level decides **how much of the map is open to you**. You build a **ba
 generates resources and outfits you, then run expeditions into **the Backlog**, a branching
 universe of gaming history, where you find gear, discs, cards, and artifacts to bring home.
 
-Three inputs, three distinct roles:
+Three inputs, three distinct roles, and **none of them can block a new player**:
 
-> **Trophies buy access. The base runs the economy. Gear provides power.**
+> **Trophies buy WIDTH. The base buys DEPTH. Gear buys VIABILITY.**
+
+A Pursuer-0 account grinds the main road to endgame on base progress alone. Trophy hunting buys
+*different* content (themed regions built on what you actually play), not *more* of it.
 
 ---
 
@@ -73,9 +76,11 @@ Three inputs, three distinct roles:
 - **Only the player first-clears.** Companions farm consumables and collectibles; the player
   finds capacity and access (companions, slots, zones, key unlocks). If anything that expands
   farming capacity can itself be farmed, the system bootstraps and the player becomes optional.
-- **Gear is the only power axis, and nothing else may become one.** Level buys access; the base
-  runs the economy. A change that lets level or the base confer power collapses the separation
-  the whole design rests on.
+- **Gear is the only power axis, and nothing else may become one.** A change that lets level or
+  the base confer power collapses the separation the whole design rests on.
+- **No trophy condition may ever gate the main path.** Trophies gate width. Depth is bought with
+  base progress, so a Pursuer-0 account has a complete game. The flip side is that **width has to
+  hold the good content** or hunting becomes optional and the thesis collapses quietly.
 - **Casual means slow-income hunter, not non-hunter.** The accessibility answer is depth *under*
   the level ceiling, never a separate casual mode. Level is a ceiling, not a pace.
 

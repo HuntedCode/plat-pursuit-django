@@ -14,10 +14,13 @@ Two axes, deliberately separated.
 | Axis | Meaning | Gated by |
 |------|---------|----------|
 | **Lateral: era** | Which region of PlayStation history you are in | Nothing. Free choice, any order |
-| **Vertical: depth** | How legendary and hard-to-find the contents are | Pursuer level, absolutely |
+| **Vertical: depth** | How legendary and hard-to-find the contents are | **Base progress** (Hall tier, building levels) |
+| **Width: themed regions** | Franchise, genre, studio and platform content | **Trophy hunting** (jobs, disciplines, badges) |
 
 From the hub, all eras are open. The player picks whichever appeals to them, in any order, at
-no penalty. What they cannot do is go **deep** in any of them early.
+no penalty. What they cannot do is go **deep** in any of them early, and depth is bought with
+**base progress**, not with trophies. Trophies buy the third axis: width. See
+[The main path rule](#the-main-path-rule-revised-2026-09-22).
 
 ### Why not escalating costs for later branches
 
@@ -78,7 +81,7 @@ depth-runner has not. Reconnection is what turns a tree into a place.
 
 | Gate | Example |
 |------|---------|
-| Total level | Pursuer Lv. 160 |
+| Total level | Pursuer Lv. 160 (**width only**, never the main path) |
 | Single job | Survivalist Lv. 30 |
 | Job combination | Slayer 20 + Exorcist 20 |
 | Discipline | Mind Lv. 90 |
@@ -86,13 +89,80 @@ depth-runner has not. Reconnection is what turns a tree into a place.
 | Badge progress | Any stage in a series, more stages for deeper zones |
 | Village | Watchtower Lv. 5 |
 
-### The main path rule
+### The main path rule  *(REVISED 2026-09-22)*
 
-> **Main path gates on total Pursuer level only. Side content gates on specifics.**
+> **Trophies gate WIDTH. The base gates DEPTH.**
+>
+> The main path is gated **purely by in-game progress** (Hall tier, building levels). A player
+> at **Pursuer level 0** can grind the main road all the way to endgame. What trophy hunting
+> buys is *different* content, not *more* of it.
 
-Nobody is ever hard-blocked from progressing because they dislike a genre. Specialists still
-get things generalists never see. This preserves the long-standing rule that PlatPursuit
-should pull players toward a **direction**, never assign them a specific game.
+This replaces the earlier rule ("main path gates on total Pursuer level, side content on
+specifics"), which was strictly better than nothing but still gatekept depth behind hunting.
+See [decisions.md](decisions.md#d48).
+
+**Why this is better:**
+
+- **It changes what hunting is FOR.** The old model used trophies to remove walls, which is
+  gatekeeping. This one uses trophies to decide *what kind of player you are and therefore what
+  kind of content you get*. That is identity rather than permission, and identity has been the
+  through-line of this product since Badges.
+- **It solves the casual problem outright.** A brand-new account has a complete game.
+- **It fixes veteran onboarding.** A veteran no longer receives a lump of depth they cannot use.
+  They receive *width*: themed regions that reflect how they actually play.
+- **It is honest about what can be gated.** Depth cannot be gated on trophies without punishing
+  newcomers. Flavor can be, because nobody is blocked from progressing.
+
+#### The risk that decides whether this works
+
+> **Width has to be where the good stuff lives, not where the extra stuff lives.**
+
+If a player can reach endgame on the main road and the themed regions are a nice-to-have, then
+hunting is optional and the entire thesis collapses quietly. Width needs the distinctive
+collectibles, the memorable sets, the signature bonuses people actually want, and the zones
+people talk about.
+
+**The test for every piece of content:** *would someone be disappointed to never see this?*
+If no, it belongs on the main path. If yes, it belongs in width.
+
+#### The second risk: the main path must not be filler
+
+The phrase that surfaced this was "generic road content," and that phrase is the warning. If the
+main path is a bland default that exists to be graduated from, then every new player's first
+month is the weakest part of the game, which is backwards.
+
+The main path has to be genuinely good in its own right. It needs to be **broadly** good rather
+than **specifically** good. That is a tone difference, not a quality one.
+
+#### Compound gates belong on width
+
+A width gate may require **both** a trophy condition and a base condition: *Horror Highway needs
+Exorcist 20 **and** Hall 5.* That stops a veteran teleporting into themed content their base
+cannot support, which protects pacing without ever blocking progression.
+
+Compound gates never appear on the main path.
+
+### Fog of war: access is revealed, not granted
+
+Level grants access; the **map reveals through play**. A veteran can reach further than a
+newcomer, but neither sees the whole board at once. The Signal Tower building already exists for
+exactly this job.
+
+This matters because of a problem that surfaced while re-examining the gating model:
+
+> **A gate you never hit isn't a reward.**
+
+A veteran is past every trophy gate, so the gate does nothing for them; what they experience is
+the *absence* of a wall, and absences are not felt. Progressive reveal converts that into
+discovery, kills the tease of staring at content you cannot clear, and preserves the
+"what's down this path for someone like me" pull.
+
+### Unlocks must be events
+
+When a platinum opens a region, that has to be a **notified, celebrated moment**, not a silently
+larger map. Otherwise the reward is genuinely invisible. This is a feedback requirement rather
+than a mechanical one, and it is cheap, but without it the whole width model stops paying out in
+any way the player can perceive.
 
 ### Soft-gating: gate on a thing, not a number
 
@@ -225,8 +295,11 @@ having to rip it out after it is load-bearing.
 
 - **Depth gates must be absolute, not relative to the player's route.** The moment gating
   depends on what a player picked first, side-branch tuning becomes unsolvable.
-- **Do not let franchise worlds onto the main path.** They are the one gate type a player can
-  be permanently unable to satisfy.
+- **No trophy condition may ever gate the main path.** Depth is bought with base progress so a
+  Pursuer-0 account has a complete game. Trophy conditions gate width only.
+- **Width must not become optional.** If the themed regions hold only nice-to-haves, trophy
+  hunting becomes optional and the thesis collapses. Apply the disappointment test to every
+  piece of content.
 - **Anything keyed to platinum rarity silently breaks pre-2008.** Check every collectible,
   every gate, and every stat against the 2008 line.
 - **A branch that never reconnects is a dead end.** Budget reconnections into the map from the
