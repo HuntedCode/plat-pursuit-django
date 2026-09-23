@@ -19,8 +19,11 @@ needs a second system with its own cadence.
 A new way of displaying job levels is a chart. The second layer has to contain decisions,
 scarcity, and uncertainty that the character sheet does not.
 
-### D3. Trophies buy access, and nothing else  *(REVISED 2026-09-14)*
-> **Trophies buy access. The village runs the economy. Gear provides power.**
+### D3. Trophies buy width, and nothing else  *(REVISED 2026-09-14, again 2026-09-22)*
+> **Trophies buy WIDTH. The base buys DEPTH. Gear buys VIABILITY.**
+
+*(The "access" wording this decision originally carried was revised again on 2026-09-22; see
+[D48](#d48-trophies-gate-width-the-base-gates-depth-revised-2026-09-22).)*
 
 Three inputs, three distinct roles, no overlap.
 
@@ -81,7 +84,10 @@ No raiding, no theft, no whale-stomping. See [R8](#r8).
 Neutral contested ground nobody owns. Losing costs an income stream, never your stores.
 
 ### D12. Two masters, cleanly split
-> Trophies set level. The Village sets gear. Level gates access, gear gates efficiency.
+> Trophies set level. The base sets gear. **The base gates depth, gear gates viability.**
+
+*(Originally "level gates access"; revised by [D48](#d48-trophies-gate-width-the-base-gates-depth-revised-2026-09-22)
+on 2026-09-22. Level now gates WIDTH, not depth.)*
 
 Hunting stays the hard ceiling. The village gets real teeth. Neither substitutes.
 
@@ -210,7 +216,7 @@ band, and never build a separate casual mode. Full reasoning in
 [vision.md](vision.md#who-this-has-to-work-for).
 
 ### D41. Gear is the only power axis, and it is a real ladder
-Because level buys access and the village runs the economy, gear is the sole differentiator of
+Because level buys width and the base buys depth, gear is the sole differentiator of
 how fast two players clear. It gets a genuine ascending power line. The anti-stomp protection
 comes from gear being **earned in-game**, not from gear being weak. Full system in
 [gear.md](gear.md).

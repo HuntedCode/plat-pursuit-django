@@ -3,7 +3,7 @@
 > Status: BRAINSTORM CAPTURE (2026-09-14). Not committed. See [README](README.md).
 
 Gear is the **only** thing that differentiates how quickly and easily two players clear
-content. Pursuer level buys access and nothing else; the village runs the economy. That makes
+content. Pursuer level buys **width**; the base buys **depth**. That makes
 this system load-bearing in a way none of the collection tracks are.
 
 ---
