@@ -294,6 +294,75 @@ dominant nowhere (roughly 60 to 70% in a themed region), so newly-unlocked width
 engage with rather than faceroll. Guards: not a reset, and not so dominant that each region is a
 separate grind. Detail in [gear.md](gear.md#affinity-why-newly-unlocked-width-is-not-a-victory-lap).
 
+### D53. The main path is a linear road of stops, and the order is authored
+Each stop wears an era as **flavour**; the road itself is the **difficulty ladder**. The order is
+chosen for authoring quality and pacing, not chronology, which makes it a shipping schedule
+rather than a historical claim. Start at the **PS3-era stop**, because trophies began in late 2008
+and that is the earliest era with complete player data.
+
+**Supersedes [D14](#d14-eras-are-lateral-and-free-depth-is-vertical-and-level-gated).** Free
+choice moves from eras to **width**: picking between five eras at minute one is choice without
+information; picking which unlocked themed region to chase is choice with meaning.
+
+Eras named archetypally, never by console. PSP, Vita and VR are width, not stops.
+
+### D54. Every stop is a gate-breadth ladder
+Generic road (base-gated, everyone) → side passages (discipline, most) → a discipline path (teaches
+affinity, some) → focused branches (specific job/badge/contract, few). **Value gradient matches
+gate gradient**, so the ladder doubles as the rarity ladder. Advancing needs a **portion** of the
+generic road (~60%), never all of it. Four tiers are a skeleton; proportions vary and each stop
+gets **one signature thing** no other stop has.
+
+### D55. Buildings are capacity; Shifts are the gameplay
+The base is a **workspace**, not a checklist of things to own. Replaces an earlier building-list
+model that was never validated. Full system in [base-and-shifts.md](base-and-shifts.md).
+
+### D56. Shifts are one system with two states
+A building always produces at a **passive floor**; a worker on a **shift** makes it produce better,
+and short shifts beat long ones per hour. A shift ending with nobody there **degrades to passive**
+rather than stopping. **The passive-to-short-shift ratio IS "how much does attention matter"** and
+is the single most consequential constant in the base. Cap the dedicated-versus-casual spread at
+roughly **1.5 to 2x**.
+
+**Converters take shifts; capacity buildings do not.**
+
+### D57. Shifts are NOT the Pursuer's Job Board
+Entirely in-game. Never reads Contract or trophy state, or hunting would drive base throughput and
+re-break the casual case. **Never called "jobs"**: Job, Job Board, Contract and Project are all
+load-bearing vocabulary in the existing career system.
+
+### D58. Gear is forged, not found
+The Workshop is gear's only source; the Frontier drops **materials and recipes**. Kills the
+drop-table authoring problem, takes RNG off the power axis, and makes the loop sayable in one
+sentence. **Recipes are the found thing**, which preserves discovery while keeping acquisition
+deterministic.
+
+### D59. Gear affinity is by DISCIPLINE
+Five categories, not twenty-odd eras and themes. **One axis does triple duty**: the five resources,
+the five gear affinities, and the discipline gating on width regions. Neutral gear is the foothold
+and maps onto the main road. Supersedes the era/theme affinity in
+[D52](#d52-gear-affinity-carries-the-width-model).
+
+### D60. Shifts and expeditions share ONE roster
+Not a balance choice: it is the entire reason companions carry **two modifiers**. Separate pools
+would mean assigning everyone to their better role once and never thinking again. Expeditions are
+**demanding** (cooldown after); shifts are **sustainable** (no cooldown).
+
+### D61. Cooldown length is what creates scarcity, not roster size
+Eight village slots plus three or four expedition slots against a twenty-companion roster means
+nothing is scarce. Cooldowns are what keep a chunk of the roster unavailable, so **cooldown length
+is the second most consequential constant** after the passive-to-shift ratio. The Lodge shift then
+has a real strategic job: **spend a slot to get slots back.**
+
+### D62. Companions are archetypes, never characters
+"The grizzled escort protagonist," not a specific one. Same rule as the zones. Not a legal
+compromise: a reference to one character is an in-joke, an archetype that captures a pattern
+across the medium is observation, which ages better and cannot run out. **Personality lives in the
+shift flavour text**, not in the modifiers.
+
+**Numbers:** 4 to 8 concurrent shifts, 12 to 20 companions at launch, so a maxed player fields
+**8 of 20**. A bench, not a lineup. Early the scarce thing is **workers**; later it is **slots**.
+
 ---
 
 ## Rejected

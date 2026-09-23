@@ -7,20 +7,88 @@ hard constraints (the pre-2008 trophy gap and the IP line).
 
 ---
 
-## The shape of the map
+## The shape of the map  *(RESHAPED 2026-09-23)*
+
+The main path is **a linear road of stops**. Each stop wears an era as its flavour, holds depth,
+and has width branching off it.
+
+### The road order is authored, not chronological
+
+> **The road is the difficulty ladder. The era is the flavour at each stop.**
+
+Structure and aesthetic separate completely. Era stops being structural and becomes content,
+which buys three things:
+
+- **The road order becomes a shipping schedule rather than a historical claim.** Eras ship in
+  whatever order they can be authored *well*. Never stuck with "PS1 comes second because
+  chronology" when PS1 is the most authoring-heavy stop on the map.
+- **Zigzagging keeps arrivals fresh.** Five stops of steadily increasing modernity is monotonous;
+  alternating retro and modern means every stop looks different from the one before.
+- **New generations are more flexible, not less.** A new era can be appended at the end or
+  inserted anywhere pacing wants it, because the order never claimed to be a timeline.
+
+**Start at the PS3-era stop.** Not for nostalgia: **trophies began in late 2008**, so that era is
+the earliest one with complete player data (rarity, badges, contracts, completion). The
+onboarding stop is therefore fully data-driven, and the data-poor eras that need the most
+hand-authoring arrive later, when the player is invested and authoring capacity has grown.
+
+Example order, illustrative only: PS3 → PS4 → PS1 → PS5 → PS2.
+
+**Don't foreground the chronology** and nobody asks why the order is what it is. The archetypal
+naming already does most of that work: **the Backlog is a place, not a timeline**, and a route
+through a place does not visit its regions in date order. If an in-fiction reason is ever wanted,
+the Signal Tower reveals the next stop, so the answer is "that is what we picked up next."
+
+**Eras are named archetypally, not by console** (the Disc Era, the Crossbar Era). Same
+archetype-not-trademark discipline used everywhere else. **PSP, Vita and VR are not stops on the
+road**, they are width, which is correct: they are corners of the hobby a specific kind of hunter
+cares about.
+
+### The anatomy of a stop
+
+A **gate-breadth ladder**, not a main-path/width binary. Almost every player finds something past
+the main road even if the deepest niches stay shut:
+
+| Tier | Gate | Audience |
+|------|------|----------|
+| **The generic road** | Base progress (Hall, buildings) | Everyone |
+| **Side passages** | Discipline level | Most |
+| **A discipline path** | A discipline, and it teaches affinity | Some |
+| **Focused branches** | Specific job, badge, contract | Few |
+
+Three rules on top:
+
+- **Require a PORTION of the generic road to advance, not all of it.** Roughly 60% opens the way
+  forward. Respects completion without demanding it, so a player who bounces off a stop's flavour
+  is not stuck there.
+- **The value gradient must match the gate gradient.** Narrower gate means better reward,
+  deliberately. Common collectibles fall off the generic road; the distinctive things sit behind
+  the narrow branches. This is what keeps width desirable rather than optional, which is the
+  condition the entire width model depends on.
+- **The collection tracks map onto the same gradient**, so the gate-breadth ladder doubles as the
+  rarity ladder and there is only one thing to tune.
+
+**The risk:** if every stop has these four tiers in identical proportions, players learn the shape
+in an hour and every later stop is a checklist. Keep the **four tiers as a skeleton**, vary the
+proportions, and give each stop **one signature thing no other stop has**. Predictable structure,
+unpredictable contents. That also sets the authoring rhythm: the skeleton is a template to fill
+quickly, the signature is where the real writing goes.
+
+### Depth and width within a stop
 
 Two axes, deliberately separated.
 
 | Axis | Meaning | Gated by |
 |------|---------|----------|
-| **Lateral: era** | Which region of PlayStation history you are in | Nothing. Free choice, any order |
+| **Road position** | Which stop you have reached | **Base progress** |
 | **Vertical: depth** | How legendary and hard-to-find the contents are | **Base progress** (Hall tier, building levels) |
 | **Width: themed regions** | Franchise, genre, studio and platform content | **Trophy hunting** (jobs, disciplines, badges) |
 
-From the hub, all eras are open. The player picks whichever appeals to them, in any order, at
-no penalty. What they cannot do is go **deep** in any of them early, and depth is bought with
-**base progress**, not with trophies. Trophies buy the third axis: width. See
-[The main path rule](#the-main-path-rule-revised-2026-09-22).
+**Free choice moved from eras to width.** Choosing between five eras at minute one is choice
+without information; choosing which of your unlocked themed regions to chase is choice with
+meaning behind it. This supersedes the earlier "eras are lateral and free, any order" model
+([D14](decisions.md#d14-eras-are-lateral-and-free-depth-is-vertical-and-level-gated), revised by
+[D53](decisions.md#d53-the-main-path-is-a-linear-road-of-stops-and-the-order-is-authored)).
 
 ### Why not escalating costs for later branches
 

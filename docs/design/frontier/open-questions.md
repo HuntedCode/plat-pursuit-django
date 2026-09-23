@@ -70,6 +70,7 @@ The hardest open question so far. All working titles:
 | **The Backlog** | For the Frontier. Strongest candidate. Every hunter has one and making it a place is exactly the right charm. Note the meaning is a *universe of gaming history*, not the player's literal unplayed pile |
 | **Village** | Placeholder, and it does not survive the theming. Implies civilians and settlement. Candidates raised: **the Reach** (warm, suggests the edge of somewhere vast), **Basecamp** (plain, expedition-native), **Checkpoint** or **Save State** (gaming-native, means both "preserved" and "the place you return to"), **the Anchor** (a fixed point in a shifting universe, which is literally the fiction) |
 | **Town Hall** | Placeholder for the tier-gating main building |
+| **Shifts** | SETTLED 2026-09-23. Deliberately not "jobs" (collides with the career Job Board) |
 | **Compendium** | For the master collectible list. Alternatives: Catalog (warmer, but Sony uses "Game Catalog" for a PS Plus tier), Index, Registry, Almanac |
 | **Frontier** | Placeholder for the whole game layer, currently doubling as the branch name |
 | **Coins** | Placeholder for the soft currency |
@@ -99,6 +100,20 @@ a weaker "place worth visiting" than one linked from a profile.
 ---
 
 ## Smaller, but worth recording
+
+- **What do the two dominant constants actually settle at?** The passive-to-short-shift ratio and
+  companion cooldown length. Both need the balance model extended before they can be picked.
+- **What does an ACTIVE player-run Frontier expedition look like?** Agreed in principle that the
+  player's own runs can involve choices while companion runs stay idle. The mechanics are
+  undesigned.
+- **What are the shift OUTPUT types per building?** Producers are obvious; the Workshop, Signal
+  Tower and Lodge each need a small menu of what a shift there can produce.
+- **How does worker affinity grow, and is it capped?** Decided that it grows with use. The curve,
+  the cap, and whether it can be reset are open.
+- **What is the signature feature of each launch stop?** The four-tier skeleton is settled; the one
+  thing per stop that no other stop has is the authoring work.
+- **How many companions realistically drop across 3 launch stops?** Target is that nobody has all
+  20 at launch pace, but the actual distribution across first-clears and width gates is unset.
 
 - **Do companion affinities map to the five disciplines?** Decided NOT to map them to jobs or
   disciplines, because it would constrain where each companion can go and that is less fun.

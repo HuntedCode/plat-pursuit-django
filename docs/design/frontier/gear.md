@@ -34,6 +34,48 @@ The resolution splits the two things that were fused:
 
 ---
 
+## Gear is FORGED, not found  *(REVISED 2026-09-23)*
+
+> **Gear is crafted in the base. Materials are what you find.**
+
+Gear no longer drops. The Workshop is its sole source, which does more than centre the base:
+
+- **It kills the drop-table authoring problem.** Author *materials* per region instead of gear per
+  region. Far fewer things to write and far easier to tune.
+- **It takes RNG off the power axis.** You never fail to get the gear you want, you only need the
+  materials. Deterministic progression on the thing that matters most, consistent with "real work
+  pays deterministically."
+- **The loop becomes legible.** Go to combat places, get combat materials, forge combat gear, get
+  better at combat places. A player can say that sentence after one session.
+
+**What it loses, and how it is recovered: recipes are the found thing.** You discover a recipe in
+the world (excitement, provenance, a Compendium entry), then forge the item (agency,
+deterministic). Best of both, and recipes are cheap to author and make excellent Compendium
+entries.
+
+Forging is also a **Shift** at the Workshop, so gear production competes with everything else for
+worker slots. See [base-and-shifts.md](base-and-shifts.md#shifts).
+
+### Affinity is by DISCIPLINE, not era or theme
+
+An earlier draft had gear affinity keyed to eras and themes. Discipline is better:
+
+- **Five categories instead of twenty-odd.** Manageable to author and to read.
+- **It maps to the existing taxonomy**, the five disciplines already in the product.
+- **One axis does triple duty:** the five resources, the five gear affinities, and the discipline
+  gating on width regions all line up. That is a real simplification.
+
+Affinity gear needs **materials found where that gear is used** plus **resources from that
+discipline's producer**, which is the structural reason a player cannot live in the base or the
+Frontier alone. See
+[the shared worker pool](base-and-shifts.md#what-keeps-the-allocation-choice-live).
+
+**Neutral gear** is broadly useful and never best. It is the foothold for entering a region you
+have no attuned kit for, and it maps exactly onto the main road: broadly good rather than
+specifically good.
+
+---
+
 ## Gear items: a clean treadmill
 
 A gear item is essentially a **power number**. Higher is better. Finding a better base is always
@@ -44,7 +86,7 @@ an upgrade, and that is the Diablo loop working exactly as it should.
 | **Base power** | The ascending line. Unambiguous, legible, answers "am I getting stronger" |
 | **Upgrading** | Invest materials at the Workshop to raise a piece within its tier |
 | **Upgrade ceiling** | Capped by the piece's tier or rarity. A common base caps low; a rare base caps high. **This is what stops one early set carrying a player forever** |
-| **Sources** | Found in the Frontier (exciting), crafted at the Workshop (reliable) |
+| **Sources** | **Forged at the Workshop only.** Materials and recipes are what the Frontier drops |
 | **Slots** | Keep the count low, four to six. Loadout management in a menu game gets tedious fast |
 | **Obsolescence** | Old pieces salvage into upgrade materials. Nothing is ever wasted |
 
@@ -148,7 +190,7 @@ The fix is a mechanic already designed here, now given a real job:
 
 > **Effective power = base power x affinity match.**
 
-Main-path gear is **solid everywhere and dominant nowhere**. In a themed region it sits at
+Neutral gear is **solid everywhere and dominant nowhere**. In a discipline region it sits at
 roughly 60 to 70%, and region-attuned gear closes the gap. So newly-unlocked width is something
 to engage with rather than a lap of honour, and there is an immediate reason to chase gear that
 belongs to the region you just opened.
@@ -211,9 +253,9 @@ a game generic is **naming and flavor, not mechanics.**
 Swords and plate armour are medieval fantasy and are off-theme. Video games have a far richer
 equipment vocabulary: power-ups, mods, gadgets, chips, upgrades, loadouts, perks, attachments.
 
-**The opportunity:** each era and genre has its own equipment idiom. Gear from a racing-genre
-zone should feel nothing like gear from a horror zone. Done well, the gear collection becomes a
-tour of gaming's own equipment language, which is both deeply on-theme and effectively infinite.
+**The opportunity:** each discipline has its own equipment idiom. Combat kit should feel nothing
+like Mind kit. Done well, the gear collection becomes a tour of gaming's own equipment language,
+which is both deeply on-theme and effectively infinite.
 
 ---
 

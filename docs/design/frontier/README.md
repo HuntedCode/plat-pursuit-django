@@ -30,6 +30,7 @@ engine powers.**
 | [vision.md](vision.md) | The premise, the tone, the driving force, the theming approach, and the tests every future decision has to pass |
 | [systems.md](systems.md) | Mechanics: the three layers, the loop, resources, gating, the risk boundary, the social layer |
 | [content-model.md](content-model.md) | The map: eras, depth, branch types, gate types, the authoring model, and the pre-2008 trophy gap |
+| [base-and-shifts.md](base-and-shifts.md) | **The base.** Launch building set, the Shift system, the shared worker pool, companion design and roster numbers. The base is the sole depth gate, so this is the pacing doc |
 | [gear.md](gear.md) | The only power axis: the gear treadmill, the set layer (passives, signatures, milestones), the 100-signatures problem, and theming |
 | [decisions.md](decisions.md) | The decision log, **including rejected alternatives and why they were rejected** |
 | [open-questions.md](open-questions.md) | What is genuinely undecided |
@@ -81,6 +82,12 @@ A Pursuer-0 account grinds the main road to endgame on base progress alone. Trop
 - **No trophy condition may ever gate the main path.** Trophies gate width. Depth is bought with
   base progress, so a Pursuer-0 account has a complete game. The flip side is that **width has to
   hold the good content** or hunting becomes optional and the thesis collapses quietly.
+- **Shifts are NOT the Pursuer's Job Board**, and must never be called "jobs." Job, Job Board,
+  Contract and Project are load-bearing vocabulary in the existing career system. Shifts never
+  read Contract or trophy state.
+- **Two constants dominate the whole economy:** the passive-to-short-shift ratio (how much
+  attention matters) and companion cooldown length (what makes the roster scarce). Tune those
+  before anything else.
 - **Casual means slow-income hunter, not non-hunter.** The accessibility answer is depth *under*
   the level ceiling, never a separate casual mode. Level is a ceiling, not a pace.
 
