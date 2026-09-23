@@ -197,9 +197,14 @@ Which turns a vague worry into a concrete design question:
 
 > **What does a player do when their Pursuer level stops moving?**
 
-The two-layer design already answers it, but only if we are deliberate about four things:
+**Since 2026-09-22 the design answers this structurally rather than by care alone.** Trophies
+gate **width**, not depth, so a Pursuer-0 account can grind the main road to endgame. The
+question below is therefore no longer "can they progress" (they can) but "is there enough to do
+at their level of investment."
 
-1. **Level is a ceiling, not a pace.** Village build-out, farming, companion rotation, and
+The remaining four things still matter:
+
+1. **Level is a ceiling on width, not a pace.** Village build-out, farming, companion rotation, and
    collecting all happen *under* the ceiling and are driven by in-game activity, not by new
    platinums.
 2. **Make the space under the ceiling deep.** A player who never gains another level should

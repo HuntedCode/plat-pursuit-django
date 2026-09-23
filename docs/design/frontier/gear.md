@@ -137,6 +137,34 @@ raw number.
 Within a family they vary by condition and magnitude. Players grasp families instantly and it
 stops the design space feeling arbitrary.
 
+### Affinity: why newly-unlocked width is not a victory lap
+
+Once trophies gate **width** rather than depth
+([content-model.md](content-model.md#the-main-path-rule-revised-2026-09-22)), a new problem
+appears: a player who unlocks Horror Highway at month six arrives geared from the main path and
+would faceroll it. The reward for hunting would be a region you *harvest* rather than *play*.
+
+The fix is a mechanic already designed here, now given a real job:
+
+> **Effective power = base power x affinity match.**
+
+Main-path gear is **solid everywhere and dominant nowhere**. In a themed region it sits at
+roughly 60 to 70%, and region-attuned gear closes the gap. So newly-unlocked width is something
+to engage with rather than a lap of honour, and there is an immediate reason to chase gear that
+belongs to the region you just opened.
+
+Two guards:
+
+- **Do not make it feel like a reset.** Arriving at zero effective power in a new region is
+  punishing and will read as the game confiscating your progress. Strong-but-not-dominant is the
+  target.
+- **Do not make affinity so dominant that every region is a separate grind.** The base ladder
+  must still carry most of the weight.
+
+This quietly rehabilitates the horizontal instinct that was rejected as [R20](decisions.md#r20),
+and the difference is worth naming: it is now **vertical within a region, horizontal across
+regions**, which has a reason to exist rather than being variety for its own sake.
+
 ### The rule that keeps creep out
 
 > **New sets add new conditions, not bigger numbers.**
@@ -196,9 +224,11 @@ tour of gaming's own equipment language, which is both deeply on-theme and effec
   map dead space.
 - **Recommended power per zone, not hard power gates.** Players self-select into difficulty
   instead of hitting walls.
-- **Gear must never become a gate in disguise.** Level gates access; gear gates efficiency. If a
+- **Gear must never become a gate in disguise.** The base gates depth; gear gates viability. If a
   zone is technically enterable but impossible without one specific item, that is a gate wearing
   a costume. Gear makes things faster and better, not possible.
+- **Affinity is a discount, not a wall.** A player with no region-attuned gear must still be able
+  to play a region they unlocked, just less efficiently.
 
 ---
 

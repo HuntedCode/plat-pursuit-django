@@ -16,17 +16,18 @@
             v
    ┌────────────────────┐
    │   THE PURSUER      │              raised by trophies ONLY
-   │  Level, 24 Jobs,   │              buys ACCESS, nothing else
+   │  Level, 24 Jobs,   │              buys WIDTH, nothing else
    │   5 Disciplines    │
    └─────────┬──────────┘
              |
-        zone access
+      themed regions            (width: franchise, genre, studio, platform)
              |
              v
       ┌────────────┐   ┌────────────┐
       │    BASE    │──>│  FRONTIER  │   resources, gear, companions
-      │ (economy)  │<──│  (power)   │   loot, materials, cards, salvage
-      └────────────┘   └────────────┘
+      │ (economy + │<──│  (power)   │   loot, materials, cards, salvage
+      │   DEPTH)   │   └────────────┘
+      └────────────┘         |
              |               |
              └───────┬───────┘
                      v
@@ -34,11 +35,15 @@
      visiting, trading, community goals
 ```
 
-> **Trophies buy access. The base runs the economy. Gear provides power.**
+> **Trophies buy WIDTH. The base buys DEPTH. Gear buys VIABILITY.**
 
-Three inputs, three distinct roles, no overlap. The Base and Frontier feed each other.
-Everything above the Pursuer is one-way: the game can never reach up and change your trophy
-record.
+Three inputs, three distinct roles, no overlap, and **none of them can block a new player.**
+A Pursuer-0 account grinds the main road to endgame on base progress alone; trophy hunting buys
+*different* content rather than *more* of it. Full reasoning in
+[content-model.md](content-model.md#the-main-path-rule-revised-2026-09-22).
+
+The Base and Frontier feed each other. Everything above the Pursuer is one-way: the game can
+never reach up and change your trophy record.
 
 **Nothing else may become a power axis.** If a change lets Pursuer level or the base confer
 power directly, the separation the whole design rests on collapses. See
@@ -59,23 +64,20 @@ Heart, Finesse.
 
 There is also a soft currency (working name: Coins) for cosmetics and non-discipline costs.
 
-### Pursuer level buys access, and nothing else
+### Pursuer level buys width, and nothing else  *(REVISED 2026-09-22)*
 
-> **Trophies buy access. The village runs the economy. Gear provides power.**
+> **Trophies buy WIDTH. The base buys DEPTH. Gear buys VIABILITY.**
 
-Three inputs, three distinct roles, no overlap. An earlier draft had Pursuer level setting the
-resource generation rate, which meant a veteran generated faster than everyone else forever.
-That is now gone: **a ten-year veteran and a brand-new player build their village at the same
-speed.** The veteran's only advantage is that more of the map is open to them earlier.
+Two drafts preceded this. The first had Pursuer level setting the **resource rate**, which gave
+veterans a permanent multiplier. The second had it gating **depth**, which meant a newcomer
+could not reach endgame without hunting. Both are gone.
 
-This still solves the veteran-dump problem, arguably better than the rate model did. They
-arrive with unlocked zones and no village, no gear, and no resources, so there is nothing to
-consume.
+**A ten-year veteran and a brand-new player build their base at the same speed and can both
+reach endgame.** What the veteran's history buys is *different* content: themed regions built
+around the franchises, genres, studios and platforms they actually play.
 
-**One honest caveat.** Access indirectly raises the power ceiling, because deeper zones drop
-better gear. Hunt more, reach further, farm stronger pieces. That is a normal and fine chain,
-and a newcomer has a clear path to the same place, but the playing field is not perfectly flat
-and we should not describe it as if it were.
+That reframes what hunting is for. It stops being **permission** and becomes **identity**, which
+is the through-line of this product going back to Badges.
 
 ### On time
 
@@ -519,11 +521,13 @@ site tomorrow, and it costs the player nothing they earned.
 
 ## Gotchas and Pitfalls
 
-- **Guard the three-way separation.** Trophies buy access, the base runs the economy, gear
-  provides power. Any change that lets level or the base confer power collapses it. (Note: an
-  earlier draft had Pursuer level setting the resource rate and forbade the base from raising
-  it. Both were reversed on 2026-09-14. Treat any doc text implying a level-driven rate as
-  stale.)
+- **Guard the three-way separation.** Trophies buy WIDTH, the base buys DEPTH, gear buys
+  VIABILITY. Any change that lets level or the base confer power collapses it, and any change
+  that lets a trophy condition gate the main path re-breaks the casual case. (Two earlier drafts
+  are stale: level setting the resource rate, reversed 2026-09-14; level gating depth, reversed
+  2026-09-22. Treat doc text implying either as out of date.)
+- **Width must stay desirable.** If themed regions hold only nice-to-haves, trophy hunting
+  becomes optional and the thesis collapses quietly. Apply the disappointment test.
 - **Cap the daily take if any active conversion is added.** If more clicking always means more
   progress, the cheap loop out-competes the expensive one and someone who visits obsessively
   beats someone who actually hunts. Idle-only accrual sidesteps this entirely, which is one
