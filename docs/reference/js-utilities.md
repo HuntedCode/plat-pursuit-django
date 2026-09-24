@@ -55,7 +55,8 @@ HTTP client with CSRF token injection and automatic response parsing.
 | `delete(url, options)` | | Promise | DELETE request |
 | `postFormData(url, formData, options)` | FormData object | Promise | POST without Content-Type (browser sets boundary) |
 | `fetchHTML(url, options)` | | Promise\<string\> | GET with `X-Requested-With: XMLHttpRequest` |
-| `failureMessage(err)` | the Error thrown above | Promise\<string\|null\> | The server's own `error` string, or null |
+| `failureBody(err)` | the Error thrown above | Promise\<Object\|null\> | The parsed refusal body, or null |
+| `failureMessage(err)` | | Promise\<string\|null\> | The server's own `error` string, or null |
 | `failureOr(err, fallback)` | | Promise\<string\> | `failureMessage` with a fallback baked in |
 
 **Error handling**: On non-ok responses, throws `Error` with `.response` property containing the raw
@@ -72,8 +73,14 @@ try {
 }
 ```
 
-`failureMessage` returns null for a missing `.response`, a non-JSON body (an HTML error page), an
-empty body, or an already-consumed stream, so a caller only ever has to handle "a message or not".
+`failureBody` returns null for a missing `.response`, a non-JSON body (an HTML error page), an empty
+body, or an already-consumed stream; `failureMessage` is a thin read of `.error` over it, so a caller
+only ever has to handle "a message or not".
+
+**Take the body, not the message, when you need to branch on WHY.** A refresh refused by a cooldown
+comes back 429 with `reason: 'cooldown'`, and that is not a failure to show in red -- the profile exists
+and is current. Three clients read `reason` for exactly that (`navbar-search.js`, `navsync.js`,
+`landing.js`); see the refresh contract in [api-endpoints](api-endpoints.md).
 
 **Why it is shared**: hand-rolled copies of the six-line version had accumulated in a dozen
 controllers, and each one was a place the *next* fix wouldn't land. Two shipped bugs came from them

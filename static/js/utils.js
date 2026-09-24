@@ -314,7 +314,7 @@ const API = {
     },
 
     /**
-     * The server's own refusal message, or null.
+     * The server's own refusal, parsed.
      *
      * `request` throws an Error whose `.response` is the raw `fetch` Response, NOT a parsed body,
      * so `err.response.error` is always `undefined` -- and reading it threw away every message the
@@ -328,18 +328,29 @@ const API = {
      * are a follow-up, not a second implementation.
      *
      * @param {Error} err - the Error thrown by `request` (or anything else; a non-API error is null)
-     * @returns {Promise<string|null>} the server's `error` string, or null when there isn't one
+     * @returns {Promise<Object|null>} the parsed JSON body, or null when there isn't a readable one
      */
-    async failureMessage(err) {
+    async failureBody(err) {
         if (!err || !err.response || typeof err.response.json !== 'function') {
             return null;
         }
         try {
-            const data = await err.response.json();
-            return (data && data.error) || null;
+            return await err.response.json();
         } catch (_) {
             return null;   // HTML error page, empty body, already-consumed stream
         }
+    },
+
+    /**
+     * The server's own refusal message, or null. A thin read over `failureBody`.
+     *
+     * Most callers only want the sentence. One that needs to branch on WHY -- a refresh refused by a
+     * cooldown means the profile is fine and viewable, which is not a failure to show in red -- takes
+     * the whole body instead.
+     */
+    async failureMessage(err) {
+        const data = await API.failureBody(err);
+        return (data && data.error) || null;
     },
 
     /**

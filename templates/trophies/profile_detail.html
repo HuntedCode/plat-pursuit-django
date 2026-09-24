@@ -77,6 +77,9 @@ privacy leak (SEO Lane 0). The sitemap's quality floor agrees with this stamp.{%
 {% comment %}Collapsing a game inside the day modal. Presentational -- its trophies are already in
 the HTML -- and document-delegated, so it also covers the standalone day page.{% endcomment %}
 <script src="{% static 'js/activity-collapse.js' %}"></script>
+    {% comment %}The hero's refresh control. Loaded for everyone: the file bails immediately when the
+    line carries no endpoints, which is the anonymous case.{% endcomment %}
+    <script src="{% static 'js/refresh-control.js' %}"></script>
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script src="{% static 'js/profile-card-tab.js' %}"></script>
     <script>

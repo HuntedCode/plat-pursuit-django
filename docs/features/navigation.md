@@ -45,7 +45,8 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the detailed design, 
 | `core/context_processors.py` | `hub_subnav_context()` — URL-prefix matcher that drives the sub-nav |
 | `core/constants.py` *(or new `core/hub_subnav.py`)* | `HUB_SUBNAV_CONFIG` — the hub definitions |
 | `templates/trophies/profile_detail.html` | Profile page with 4 tabs (Games, Trophies, Badges, Ratings) |
-| `templates/trophies/partials/profile_detail/profile_detail_header.html` | Profile header with quick links row |
+| `templates/trophies/partials/profile_detail/profile_detail_header.html` | Profile header with quick links row, and the hero's freshness line + refresh control |
+| `static/js/refresh-control.js` | The hero refresh control: pressing it, ticking its cooldown, polling a started sync. Every resting state is server-rendered, so it degrades to correct-but-static with JS off |
 | `trophies/views/profile_views.py` | ProfileDetailView with tab handlers |
 
 ## Global Navbar

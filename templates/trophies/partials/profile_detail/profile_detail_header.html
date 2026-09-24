@@ -109,14 +109,53 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
 
                 {% comment %}Freshness, in the compact form the hunter cards use. It is the one thing on
                 this page that changes hour to hour, and a profile whose data is stale reads very
-                differently from one synced this morning.{% endcomment %}
-                <p class="pp-phero__sync">
+                differently from one synced this morning.
+
+                And it is where the refresh control belongs, because this line is what creates the want:
+                a hunter reading "Synced 5 days ago" had nowhere to go with that. Inline as a text action
+                rather than a bordered button -- chrome is a frame, and the hero stays lean.
+
+                It matters more than impatience. The scheduled sweep only picks up an unlinked,
+                non-Discord-verified profile once it is SEVEN DAYS stale, and that is most of the hunters
+                anyone browses; for those, asking is the only thing that makes them current in a week.
+
+                Anonymous visitors see the line and no action, which is the whole of the difference.
+                `refresh-control.js` owns every state past first paint.{% endcomment %}
+                <p class="pp-phero__sync" data-refresh-line
+                   {% if can_request_refresh %}data-refresh-url="{% url 'request_profile_refresh' psn_username=profile.psn_username %}"
+                   data-refresh-status="{% url 'add_sync_status' %}"
+                   data-refresh-name="{{ profile.psn_username }}"{% endif %}>
                     {% if profile.sync_status == 'syncing' %}
-                        <span class="pp-phero__dot pp-phero__dot--live" aria-hidden="true"></span>Syncing now
+                        <span class="pp-phero__dot pp-phero__dot--live" data-refresh-dot aria-hidden="true"></span><span data-refresh-text>Syncing now</span>
                     {% elif profile.last_synced %}
-                        <span class="pp-phero__dot" aria-hidden="true"></span>Synced {{ profile.last_synced|compact_since }}
+                        <span class="pp-phero__dot" data-refresh-dot aria-hidden="true"></span><span data-refresh-text>Synced {{ profile.last_synced|compact_since }}</span>
                     {% else %}
-                        <span class="pp-phero__dot" aria-hidden="true"></span>Never synced
+                        <span class="pp-phero__dot" data-refresh-dot aria-hidden="true"></span><span data-refresh-text>Never synced</span>
+                    {% endif %}
+
+                    {% if can_request_refresh %}
+                        {% comment %}Server-rendered into its resting state so it is right before any JS
+                        runs, and correct with JS off. The three states are mutually exclusive; JS swaps
+                        between them from here.{% endcomment %}
+                        <span class="pp-phero__sep" aria-hidden="true">&middot;</span>
+                        {% if psn_outage %}
+                            <span class="pp-phero__refresh pp-phero__refresh--off" data-refresh-note>PSN unavailable</span>
+                        {% elif profile.sync_status == 'syncing' %}
+                            {% comment %}Nothing to offer: it is already happening. The pulsing dot is the
+                            status.{% endcomment %}
+                            <span class="pp-phero__refresh pp-phero__refresh--off" data-refresh-note>Updating now</span>
+                        {% elif refresh_seconds %}
+                            {% comment %}The countdown starts server-rendered in minutes and JS takes over
+                            ticking it, so a hunter with JS off still learns WHEN rather than being offered
+                            a control that would refuse.{% endcomment %}
+                            <span class="pp-phero__refresh pp-phero__refresh--off" data-refresh-note
+                                  data-refresh-seconds="{{ refresh_seconds }}">Refreshable soon</span>
+                        {% else %}
+                            <button type="button" class="pp-phero__refresh" data-refresh-btn>Refresh</button>
+                        {% endif %}
+                        {% comment %}The announcer: the line itself is not a live region, because a
+                        countdown ticking every second inside one would be announced every second.{% endcomment %}
+                        <span class="sr-only" data-refresh-live aria-live="polite" aria-atomic="true"></span>
                     {% endif %}
                 </p>
             </div>

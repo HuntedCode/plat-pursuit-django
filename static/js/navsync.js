@@ -111,10 +111,18 @@ document.addEventListener('DOMContentLoaded', function () {
         if (sec <= 0) { syncBtn.textContent = 'Sync Now'; syncBtn.disabled = false; syncBtn.setAttribute('aria-label', 'Sync profile now'); }
         else { var t = PlatPursuit.TimeFormatter.countdown(sec); syncBtn.textContent = t; syncBtn.disabled = true; syncBtn.setAttribute('aria-label', 'Sync available in ' + t); }
     }
+    // One countdown at a time. It self-cleared at zero, so repeated calls were bounded rather than a
+    // leak -- but the cooldown-refusal path added a second caller that can fire again before the first
+    // reaches zero, and two intervals both decrementing their own `sec` race the label between them.
+    var cooldownIv = null;
     function countdown(sec) {
         if (!syncBtn) return;
+        if (cooldownIv) { clearInterval(cooldownIv); cooldownIv = null; }
         setBtn(sec);
-        var iv = setInterval(function () { sec--; setBtn(sec); if (sec <= 0) { clearInterval(iv); } }, 1000);
+        cooldownIv = setInterval(function () {
+            sec--; setBtn(sec);
+            if (sec <= 0) { clearInterval(cooldownIv); cooldownIv = null; }
+        }, 1000);
     }
 
     function poll() { if (!syncUrl) return; PlatPursuit.API.get(syncUrl).then(update).catch(function (e) { console.error('sync poll error:', e); }); }
@@ -143,8 +151,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 // because a cached pre-change `utils.js` would otherwise throw from inside this
                 // rejection handler, leaving the button stuck reading "Syncing..." and disabled.
                 var api = window.PlatPursuit && PlatPursuit.API;
-                var fallback = 'Failed to start sync. Please try again.';
-                var msg = api && api.failureOr ? await api.failureOr(err, fallback) : fallback;
+                var body = api && api.failureBody ? await api.failureBody(err) : null;
+                var msg = (body && body.error) || 'Failed to start sync. Please try again.';
+
+                // A COOLDOWN is not an error state. The profile is perfectly fine; we asked too soon.
+                // Turning the avatar ring red and the panel to "Sync error" under a message reading
+                // "you can refresh again in 40 minutes" said two contradictory things at once. Restore
+                // the synced state and put the countdown back on the button, which is the honest UI and
+                // the one the panel already knows how to draw.
+                if (body && body.reason === 'cooldown') {
+                    if (PlatPursuit.ToastManager) { PlatPursuit.ToastManager.info(msg); }
+                    setSync('synced'); txt(statusEl, 'Synced');
+                    countdown(body.seconds_to_next_sync || 0);
+                    return;
+                }
+
                 if (window.PlatPursuit && PlatPursuit.ToastManager) { PlatPursuit.ToastManager.error(msg); }
                 setSync('error'); txt(statusEl, 'Sync error');
             });

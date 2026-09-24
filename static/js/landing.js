@@ -99,6 +99,27 @@
                 return r.json().then(function (data) { return { status: r.status, data: data }; });
             }).then(function (res) {
                 button.disabled = false;
+                // A COOLDOWN or a SIGN-IN refusal both mean: this hunter is already tracked. They exist
+                // and are viewable RIGHT NOW, and only the refresh was declined. Hand over the link.
+                //
+                // This hero is ANONYMOUS, so `sign_in` is the case it meets most: any name a visitor
+                // types that we already hold. Before the refusal was made honest a tracked name returned
+                // 200 and the poll revealed this same link on its first tick, so painting either of
+                // these red would be a regression dressed as a fix -- and this hero's entire job is
+                // getting a stranger onto a profile page.
+                if (res.data.slug && (res.data.reason === 'cooldown' || res.data.reason === 'sign_in')) {
+                    stopPolling();
+                    // TWO reasons, two sentences. `cooldown` means we synced them recently, so "already
+                    // up to date" is true. `sign_in` means only that we track them and refused the
+                    // refresh -- it says NOTHING about freshness, and using the cooldown's wording for
+                    // it told a visitor a five-day-stale hunter was current.
+                    setState('ready', res.data.reason === 'cooldown'
+                        ? 'Found ' + name + '. Already up to date.'
+                        : 'Found ' + name + '. Sign in to refresh them.');
+                    visit.href = res.data.slug;
+                    visit.hidden = false;
+                    return;
+                }
                 if (res.status === 429) {
                     setState('error', res.data.error || 'Too many searches. Give it a minute and try again.');
                     return;

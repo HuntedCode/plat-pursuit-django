@@ -18,12 +18,25 @@ class PSNManager:
     COUNTED_QUEUES = ("low_priority", "medium_priority", "bulk_priority")
 
     @classmethod
-    def assign_job(cls, job_type: str, args: list, profile_id: int, priority_override: str=None, skip_counter: bool=False):
+    def assign_job(cls, job_type: str, args: list, profile_id: int, priority_override: str=None, skip_counter: bool=False,
+                   jump_queue: bool=False):
         """Assign job to queue, respecting priorities.
 
         Args:
             skip_counter: If True, don't increment the per-profile job counter.
                 Used when re-queuing a failed job that was already counted.
+            jump_queue: Put the job at the end of its queue that the worker reads next.
+
+        On `jump_queue`: the worker does `brpop`, which pops the TAIL, and the normal path `lpush`es to
+        the head -- so the queue is FIFO and `rpush` is the way to be served next. It exists for work a
+        human is sitting and waiting on. Choosing a higher-priority queue cannot express this, because
+        `profile_refresh` already maps to `orchestrator`, the highest of the five, which is also where
+        the every-15-minutes cron sweep puts its hundreds of jobs. Position within that one queue is
+        the only lever there is.
+
+        It buys a sooner START, not a sooner finish: the orchestrator job fans per-game work out to
+        `low_priority`, which queues normally. Any UI built on this shows progress and never promises
+        a duration.
         """
         queue_name = priority_override or cls._get_queue_for_job(job_type)
         if queue_name in cls.COUNTED_QUEUES and not skip_counter:
@@ -35,8 +48,14 @@ class PSNManager:
             'args': args,
             'profile_id': profile_id
         })
-        redis_client.lpush(f"{queue_name}_jobs", json_data)
-        logger.info(f"[profile {profile_id}] queued {job_type} -> {queue_name}")
+        if jump_queue:
+            redis_client.rpush(f"{queue_name}_jobs", json_data)
+        else:
+            redis_client.lpush(f"{queue_name}_jobs", json_data)
+        logger.info(
+            f"[profile {profile_id}] queued {job_type} -> {queue_name}"
+            f"{' (jumped)' if jump_queue else ''}"
+        )
 
     @classmethod
     def _get_queue_for_job(cls, job_type):
@@ -75,7 +94,7 @@ class PSNManager:
         return redis_client.get('site:psn_outage') is not None
 
     @classmethod
-    def initial_sync(cls, profile: Profile):
+    def initial_sync(cls, profile: Profile, jump_queue: bool = False):
         """Queue the unified sync orchestrator for an account that's never synced.
 
         Both initial_sync and profile_refresh now queue the same `profile_refresh`
@@ -93,10 +112,10 @@ class PSNManager:
             # Mark orchestrator as pending so the stuck checker doesn't fire
             # sync_complete before profile_refresh has created the real jobs.
             redis_client.set(f"sync_orchestrator_pending:{profile.id}", "1", ex=1800)
-            cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
+            cls.assign_job('profile_refresh', args=[], profile_id=profile.id, jump_queue=jump_queue)
 
     @classmethod
-    def profile_refresh(cls, profile: Profile, force_walk: bool = False):
+    def profile_refresh(cls, profile: Profile, force_walk: bool = False, jump_queue: bool = False):
         # force_walk=True makes the orchestrator take the slow path even when the fingerprint
         # matches. The fingerprint watches trophy counts and game count, so it is structurally
         # blind to anything that changes neither -- a title rename being the case that motivated
@@ -106,7 +125,7 @@ class PSNManager:
             logger.warning(f"Skipping profile_refresh for profile {profile.id}: PSN outage active")
             return
         if profile.sync_status == 'error':
-            cls.initial_sync(profile)
+            cls.initial_sync(profile, jump_queue=jump_queue)
         elif profile.sync_status == 'synced':
             profile.reset_sync_progress()
             profile.set_sync_status('syncing')
@@ -114,7 +133,8 @@ class PSNManager:
             redis_client.set(f"sync_orchestrator_pending:{profile.id}", "1", ex=1800)
             # Old shape ([]) preserved for the normal case so nothing else changes; the flag rides
             # as args[0] only when set, and the dispatcher tolerates both.
-            cls.assign_job('profile_refresh', args=[force_walk] if force_walk else [], profile_id=profile.id)
+            cls.assign_job('profile_refresh', args=[force_walk] if force_walk else [], profile_id=profile.id,
+                           jump_queue=jump_queue)
 
     @classmethod
     def sync_complete(cls, profile: Profile, priority: str, touched_profilegame_ids: list[int]):
