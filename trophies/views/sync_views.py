@@ -647,5 +647,17 @@ class AddSyncStatusView(View):
             'account_id': profile.account_id,
             'psn_username': profile.psn_username,
             'slug': reverse('profile_detail', kwargs={'psn_username': profile.psn_username}),
+            # The live tally, for a page watching a sync it asked for. Zero extra queries -- the
+            # profile is already loaded, and these four denorms climb DURING the walk via the
+            # EarnedTrophy post_save signal, unlike `total_trophies` which waits for finalize.
+            # `ProfileSyncStatusView` sends the same block for the same reason.
+            #
+            # Nothing here is exposed that the profile page does not already print.
+            'stats': {
+                'plats': profile.total_plats,
+                'golds': profile.total_golds,
+                'silvers': profile.total_silvers,
+                'bronzes': profile.total_bronzes,
+            },
         }
         return JsonResponse(data)

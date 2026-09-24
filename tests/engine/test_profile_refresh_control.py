@@ -17,6 +17,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
+from tests.engine.test_navbar_add_sync import _tag_around
 from tests.factories import ProfileFactory
 
 pytestmark = pytest.mark.django_db
@@ -41,6 +42,19 @@ def _hero(client, profile):
     at = body.find('data-refresh-line')
     assert at != -1, 'the hero freshness line is not on the page'
     return body[body.rindex('<p', 0, at):body.index('</p>', at)]
+
+
+def _page(client, profile):
+    """The whole rendered profile page.
+
+    `_hero()` is deliberately narrower -- it returns only the freshness line -- so anything about the
+    FIGURES has to look wider. The hooks asserted through this helper (`data-live-tier`,
+    `data-live-total`, `data-sync-provisional`) appear nowhere else on the page, and the one that is not
+    distinctive (`data-countup`) is read out of its own tag with `_tag_around`.
+    """
+    resp = client.get(reverse('profile_detail', kwargs={'psn_username': profile.psn_username}), **CF)
+    assert resp.status_code == 200
+    return resp.content.decode()
 
 
 def _stale(psn_username='stalehunter', **kwargs):
@@ -374,3 +388,355 @@ def test_the_still_updating_state_stays_an_inert_note():
     cap = js.split('polls > POLL_CAP', 1)[1].split('return;', 1)[0]
     assert 'Reload in a few minutes' in cap
     assert 'offerButton' not in cap, 'the cap state offers a reload that would show stale figures'
+
+
+# ------------------------------------------- the figures that move while a sync runs ----
+#
+# Only FOUR do: the per-type trophy denorms, which climb through the walk via an EarnedTrophy post_save
+# signal. `total_trophies`, Games, Completed and Avg. completion all wait for finalize -- which is the
+# whole problem, because the tiers climbing past a frozen total beside them is a visible contradiction,
+# not a subtle one.
+
+
+def test_the_tier_figures_are_hooked_for_live_updates(client):
+    """The four that move carry `data-live-tier`; nothing else does, because nothing else can."""
+    profile = _stale('livehunter', sync_status='syncing')
+    _member(client)
+
+    body = _page(client, profile)
+
+    for key in ['plats', 'golds', 'silvers', 'bronzes']:
+        assert 'data-live-tier="%s"' % key in body, key + ' is not hooked'
+
+
+def test_the_hook_names_match_the_payload_keys(client):
+    """A CROSS-FILE CONTRACT that fails silently. The controller reads `stats[el.dataset.liveTier]`, so a
+    hook named `platinums` against a payload key of `plats` updates nothing at all -- no error, no
+    console warning, just four figures that never move. Pin both ends against each other."""
+    subject = ProfileFactory(psn_username='payloadhunter', sync_status='syncing',
+                             total_plats=1, total_golds=2, total_silvers=3, total_bronzes=4)
+    _member(client)
+
+    payload = client.get(reverse('add_sync_status'), {'psn_username': 'payloadhunter'}).json()
+    body = _page(client, subject)
+
+    assert set(payload['stats']) == {'plats', 'golds', 'silvers', 'bronzes'}
+    for key in payload['stats']:
+        assert 'data-live-tier="%s"' % key in body, \
+            'the payload sends %r and the markup never asks for it' % key
+
+
+def test_mid_sync_the_headline_total_is_derived_from_the_tiers(client):
+    """THE inconsistency this exists to prevent. `total_trophies` waits for finalize, so mid-sync the
+    hero's Trophies card showed a pre-sync figure while the four tiers climbed past it -- eventually
+    out-summing the total printed in the same eyeline.
+
+    Derived server-side too, not just by the poll, so the FIRST paint is already consistent rather than
+    correcting itself a few seconds later.
+    """
+    profile = ProfileFactory(psn_username='derivehunter', sync_status='syncing',
+                             total_trophies=100,
+                             total_plats=1, total_golds=2, total_silvers=3, total_bronzes=4)
+    _member(client)
+
+    # SCOPED to the headline figure's own card: `data-countup` is on every figure in the hero, so an
+    # unscoped assertion would happily match a different number that happened to agree.
+    body = _page(client, profile)
+    card = _trophies_card(body)
+
+    assert 'data-countup="10"' in card, 'the total is not the sum of the tiers (1+2+3+4)'
+    assert '100' not in card, 'the pre-sync total is still being printed'
+    assert 'data-live-total' in body, 'the poll is not told to keep the derived figure in step'
+
+
+def test_a_hunter_who_hides_games_keeps_the_static_total(client):
+    """THE trap in deriving this figure, and the reason it is gated rather than always on.
+
+    `total_trophies` is FILTER-RESPECTING (`hide_hiddens` + `hide_zeros`); the four tier counters are
+    NOT -- the model calls them out as unfiltered and their sum is by definition `total_trophies_raw`.
+    So for a hunter who hides games the derived figure is HIGHER than the one finalize will write, and it
+    would climb all through the sync and then DROP on reload. A number going backwards reads as data
+    loss, which is a worse failure than a figure that honestly does not move.
+
+    The absent `data-live-total` hook is also what tells the controller to leave the figure alone, so
+    this pins both halves at once.
+    """
+    profile = ProfileFactory(psn_username='hidinghunter', sync_status='syncing', hide_hiddens=True,
+                             total_trophies=100,
+                             total_plats=1, total_golds=2, total_silvers=3, total_bronzes=4)
+    _member(client)
+
+    body = _page(client, profile)
+
+    assert 'data-live-total' not in body, \
+        'the controller is told to derive a figure that will drop when the sync finishes'
+    # SCOPED, and positive: asserting only an absence passes if the feature is deleted outright, and an
+    # unscoped `data-countup="100"` would match any figure on the page that happened to be 100.
+    assert 'data-countup="100"' in _trophies_card(body), \
+        'the filtered total was replaced by an unfiltered sum'
+    # And prove the profile really is mid-sync, or the absence above proves nothing at all.
+    assert 'still arriving' in body, 'this profile is not syncing, so the gate was never exercised'
+
+
+def test_hiding_zero_trophy_games_also_keeps_it_static(client):
+    """Gated on BOTH filters rather than reasoning about which of them can actually shift an
+    earned-trophy count. `update_profile_trophy_counts` honours both, and one condition is cheaper than
+    an argument that has to stay true."""
+    profile = ProfileFactory(psn_username='zerohunter', sync_status='syncing', hide_zeros=True,
+                             total_trophies=100,
+                             total_plats=1, total_golds=2, total_silvers=3, total_bronzes=4)
+    _member(client)
+
+    body = _page(client, profile)
+
+    assert 'data-live-total' not in body
+    assert 'data-countup="100"' in _trophies_card(body), 'the filtered total was replaced'
+    assert 'still arriving' in body, 'this profile is not syncing, so the gate was never exercised'
+
+
+def _trophies_card(body):
+    """The hero's headline Trophies figure, scoped by its own label.
+
+    Not via `data-live-total`: that hook is deliberately ABSENT on a settled profile and on any hunter
+    with a display filter, so anchoring on it makes the tests that care about its absence unwritable.
+    """
+    at = body.index('>Trophies</div>')
+    return body[at:body.index('</div>', body.index('scard__value', at))]
+
+
+def test_a_failed_sync_shows_the_more_current_figure(client):
+    """A failed sync leaves the tier denorms ALREADY ADVANCED by the partial walk while `total_trophies`
+    was never rewritten -- `update_profile_trophy_counts` only runs on the finalize path. So an errored
+    profile would otherwise print tiers that out-sum its own headline, permanently, until some later
+    sync succeeds. The derived sum is the more current figure there, not the less."""
+    # Tiers summing ABOVE the stale headline, which is the actual shape of the problem: a partial walk
+    # advanced them past a `total_trophies` that was never rewritten. The first version of this fixture
+    # had them 90 BELOW it, so it pinned the right branch while demonstrating the opposite of its own
+    # argument.
+    profile = _stale('erroredhunter', sync_status='error', total_trophies=8,
+                     total_plats=1, total_golds=2, total_silvers=3, total_bronzes=4)
+    _member(client)
+
+    card = _trophies_card(_page(client, profile))
+
+    assert 'data-countup="10"' in card, \
+        'an errored profile still prints the pre-sync total its tiers have already passed'
+    assert '"8"' not in card, 'the stale pre-sync figure is still being printed'
+
+
+def test_a_settled_profile_shows_its_real_total_but_keeps_the_hook(client):
+    """Two questions, and an earlier version answered both with one condition.
+
+    The VALUE is the real `total_trophies` on a settled profile: it is the FILTER-RESPECTING figure, which
+    is the whole reason a derived sum cannot stand in for it.
+
+    The HOOK is present anyway, and that is the half that matters. A hunter loads a settled page and
+    presses Refresh -- if the hook were gated on the rendered value there would be nothing to update,
+    because the controller captures that element ONCE at DOMContentLoaded, so the headline would sit
+    frozen at its pre-sync figure for the life of the page. Which is precisely the contradiction this
+    feature exists to remove, on the only path anybody actually takes.
+    """
+    profile = _stale('settledhunter', total_trophies=100,
+                     total_plats=1, total_golds=2, total_silvers=3, total_bronzes=4)
+    _member(client)
+
+    body = _page(client, profile)
+
+    assert 'data-countup="100"' in _trophies_card(body), 'a settled profile is showing a derived total'
+    assert 'data-live-total' in body, \
+        'no hook on a settled profile, so a sync started from this page can never update the figure'
+
+
+def test_the_status_poll_carries_the_live_tally(client):
+    """The open endpoint the control polls. Zero extra queries -- the profile is already loaded for the
+    lookup -- and nothing here is not already printed on the page."""
+    ProfileFactory(psn_username='tallyhunter', sync_status='syncing',
+                   total_plats=7, total_golds=70, total_silvers=700, total_bronzes=7000)
+
+    stats = client.get(reverse('add_sync_status'), {'psn_username': 'tallyhunter'}).json()['stats']
+
+    assert stats == {'plats': 7, 'golds': 70, 'silvers': 700, 'bronzes': 7000}
+
+
+# ---------------------------------------------- saying so, for the figures that cannot ----
+
+def test_a_syncing_profile_says_its_figures_are_still_arriving(client):
+    """Games, Completed and Avg. completion cannot move during a sync, and a viewer has no way to know
+    that from the numbers. One line for all of them rather than a marker on each."""
+    profile = _stale('arrivinghunter', sync_status='syncing')
+    _member(client)
+
+    body = _page(client, profile)
+
+    assert 'data-sync-provisional' in body
+    assert 'still arriving' in body
+    # Present and VISIBLE: rendered hidden would be the same as not saying it at all.
+    assert 'hidden' not in _tag_around(body, 'These figures are still arriving')
+
+
+def test_a_settled_profile_says_nothing_of_the_kind(client):
+    """It is rendered hidden rather than omitted, because the controller reveals it the moment a hunter
+    presses Refresh -- but it must not be visible on a profile that is not syncing."""
+    profile = _stale('quiethunter')
+    _member(client)
+
+    body = _page(client, profile)
+
+    assert 'data-sync-provisional' in body, 'the line is omitted, so JS cannot reveal it on demand'
+    assert 'hidden' in _tag_around(body, 'These figures are still arriving')
+
+
+def test_the_tab_walls_say_so_too_and_survive_a_tab_change(client):
+    """The walls are the stalest thing on the page -- a mid-first-sync Games tab can be EMPTY and read as
+    "this hunter owns nothing".
+
+    The line has to sit OUTSIDE `#tab-content`, which htmx swaps wholesale on every tab click: inside it
+    the line would vanish the first time somebody changed tab, and htmx settle would strip a class JS had
+    added to it besides.
+    """
+    profile = _stale('wallhunter', sync_status='syncing')
+    _member(client)
+    body = _page(client, profile)
+
+    assert 'still filling' in body, 'the tab walls say nothing while they fill'
+    assert body.index('still filling') < body.index('id="tab-content"'), \
+        'the notice is inside the htmx-swapped container and will vanish on the first tab change'
+    # The index comparison only proves it is outside `#tab-content`. It has to be outside whatever htmx
+    # ACTUALLY targets -- point `hx-target` at a wrapping element and the line gets swapped away with the
+    # assertion above still green.
+    assert 'hx-target="#tab-content"' in body, 'the tab swap targets something else now'
+
+
+# ------------------------------------------------- the controller's half of the contract ----
+
+def test_the_control_derives_the_total_and_never_trusts_the_stale_one():
+    """It must SUM the tiers rather than read a `total` off the payload -- the endpoint does not send one,
+    and `total_trophies` is precisely the figure that is wrong mid-sync."""
+    js = _js('static/js/refresh-control.js')
+
+    body = js.split('function applyTally(stats) {', 1)[1].split('\n    }', 1)[0]
+    assert 'total += raw' in body, 'the headline figure is not derived from the tiers'
+    assert 'stats.total' not in body, 'it is reading a total the endpoint does not send'
+    # Writing is `tick`'s job now, so this function must not set text itself -- two writers would race
+    # a half-finished animation against a hard swap.
+    assert 'textContent' not in body, 'a figure is written directly, bypassing the tick'
+    assert body.count('tick(') == 2, 'the tiers and the total do not both go through the tick'
+
+    # A SHORT sum is the same contradiction inverted -- a headline less than the four figures beside it --
+    # and one renamed payload key is all it takes. The total only lands when every tier resolved.
+    assert 'resolved === tierEls.length' in body, 'a missing payload key writes a short total'
+    assert "typeof raw !== 'number'" in body, \
+        'a null-ish payload value zeroes a tier instead of being skipped'
+
+
+def test_the_figures_tick_to_their_new_values():
+    """They were a hard `textContent` swap, so a count went from 1,400 to 1,437 instantly every four
+    seconds. The first-sync hero already ticks its tally through the shared `countUp` primitive; this is
+    the same event on another surface, so it uses the same primitive at the same 600ms.
+
+    Three substrings rather than the exact call: the earlier version pinned
+    `'PlatPursuit.countUp(el, 600, { from: prev })'` verbatim, which any reformat would have broken while
+    the behaviour stayed correct. The parity with `syncing.js`'s duration is the part Python cannot reach
+    any other way, so it is what gets named.
+    """
+    js = _js('static/js/refresh-control.js')
+
+    body = js.split('function tick(el, value) {', 1)[1].split('\n    }', 1)[0]
+    assert 'PlatPursuit.countUp(' in body, 'the figures jump instead of ticking'
+    assert '600' in body, "the duration drifted from syncing.js's tally"
+    assert 'from: prev' in body, 'it animates from zero instead of from the previous value'
+    # And a fallback, because a cached pre-change utils.js would otherwise throw mid-poll. `'en-US'` to
+    # match the sibling and the server's `intcomma`; a bare `toLocaleString()` renders 1.437 on de-DE.
+    assert "value.toLocaleString('en-US')" in body, 'no fallback, or it formats to the wrong locale'
+
+
+def test_the_tick_sets_its_target_before_animating():
+    """`countUp` reads its TARGET from `data-countup`. Set after the call, it animates to the PREVIOUS
+    number -- which looks entirely convincing and is wrong by exactly one poll.
+
+    Setting it also keeps the attribute honest: the page's count-up pass reads it, so leaving it stale
+    would revert every figure to its page-load value if anything ever re-ran that pass.
+    """
+    js = _js('static/js/refresh-control.js')
+    body = js.split('function tick(el, value) {', 1)[1].split('\n    }', 1)[0]
+
+    assert 'el.dataset.countup = value' in body
+    assert body.index('el.dataset.countup = value') < body.index('PlatPursuit.countUp('), \
+        'the target is set after the animation starts, so it animates to the previous value'
+
+
+def test_an_unchanged_figure_does_not_re_animate():
+    """Most polls move some figures and not others: bronzes climb constantly while platinums barely
+    move. Without the skip, three of the four would re-run a 600ms animation from 4 to 4 every four
+    seconds -- four numbers pulsing while none of them changes reads as a page in distress."""
+    js = _js('static/js/refresh-control.js')
+    body = js.split('function tick(el, value) {', 1)[1].split('\n    }', 1)[0]
+
+    assert 'if (value === prev) return;' in body, 'an unchanged figure still animates'
+    assert body.index('if (value === prev) return;') < body.index('el.dataset.countup = value')
+
+
+def test_a_response_that_outlived_its_request_is_discarded():
+    """`stopPolling` clears the interval; it CANNOT cancel a fetch already in flight.
+
+    So: one slow request, then the next poll returns `synced` and finishes the run -- and the slow one
+    lands afterwards still carrying `sync_status: 'syncing'` and an OLDER tally. Without a liveness check
+    it would tick all four tiers and the headline DOWNWARD, one line under "Updated just now", with
+    nothing left polling to correct it. A number going backwards reads as data loss, which is the exact
+    failure the derived total exists to avoid.
+
+    Both handlers need it: a late REJECTION would otherwise overwrite the finished state with "Status
+    unavailable" for a sync that completed.
+    """
+    js = _js('static/js/refresh-control.js')
+
+    assert 'var seq = ++pollSeq' in js, 'requests are not tagged, so a stale response cannot be spotted'
+    # In BOTH handlers, and before anything else in them -- a guard after the first write is no guard.
+    assert js.count('if (!pollTimer || seq !== pollSeq) { return; }') == 2, \
+        'only one of the two handlers checks whether its response is still wanted'
+
+    then_body = js.split('.then(function (data) {', 1)[1].split('\n            })', 1)[0]
+    assert then_body.index('seq !== pollSeq') < then_body.index('applyTally('), \
+        'a stale response reaches the figures before it is checked'
+
+
+def test_the_last_tally_lands_before_the_reload_prompt():
+    """The tiers gain rows between the second-to-last poll and the one that sees `synced`. Without a final
+    apply they freeze mid-climb at the exact moment the hunter looks at them."""
+    js = _js('static/js/refresh-control.js')
+    done = _done_branch(js)
+
+    assert 'applyTally(data.stats)' in done, 'the tiers stop a poll short of the finish'
+    assert done.index('applyTally(data.stats)') < done.index("say('Updated just now')")
+
+
+def test_giving_up_on_the_poll_does_not_claim_the_sync_ended():
+    """Losing the status teaches us nothing about the sync, which is very probably still running.
+
+    Both give-up paths used to call `setLive(false)`, which hides the "still arriving" lines -- while the
+    line right beside them said "Still updating". Self-contradictory in one eyeline, and the lines were
+    TRUE: every non-tier figure on the page is still stale. Only the `synced` and `error` branches have
+    actually learned the sync ended.
+    """
+    js = _js('static/js/refresh-control.js')
+
+    cap = js.split('polls > POLL_CAP', 1)[1].split('return;', 1)[0]
+    assert 'setLive(' not in cap, 'the poll cap claims the sync finished'
+
+    failure = js.split('pollFailures >= MAX_POLL_FAILURES', 1)[1].split('}', 1)[0]
+    assert 'setLive(' not in failure, 'a dead status endpoint claims the sync finished'
+
+    # No count assertion here. The obvious one -- `js.count('setLive(false)') == 1` -- passed only
+    # because `_js` strips LINE-LEADING comments and this file mentions the call in one; moving that
+    # comment inline would have broken it while the code stayed correct. The two scoped checks above
+    # carry the whole meaning.
+
+
+def test_the_provisional_lines_follow_the_live_dot():
+    """One owner for "is this profile syncing": the dot and the two lines are the same fact, so they are
+    set together rather than from two places that can disagree."""
+    js = _js('static/js/refresh-control.js')
+
+    body = js.split('function setLive(on) {', 1)[1].split('\n    }', 1)[0]
+    assert 'provisional' in body, 'the lines are not tied to the syncing state'
+    assert 'hidden = !on' in body

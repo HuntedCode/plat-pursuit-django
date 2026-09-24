@@ -56,9 +56,9 @@ inferring from the status code. See the shared refusal contract below -- all thr
 return the same shape, pinned by `test_all_three_refresh_surfaces_return_one_body_shape`.
 
 `GET /api/add-sync-status/?psn_username=<name>` (`__iexact`) always returns 200 for a lookup that
-has a name. A known profile returns `{sync_status, account_id, psn_username, slug}`; an unknown one
-returns only `{sync_status: 'error', account_id: ''}`, so a caller must not assume `slug` is present.
-Three states matter:
+has a name. A known profile returns `{sync_status, account_id, psn_username, slug, stats}`; an unknown
+one returns only `{sync_status: 'error', account_id: ''}`, so a caller must not assume the rest are
+present. Three states matter:
 
 | Response | Meaning | What the client does |
 |----------|---------|----------------------|
@@ -66,9 +66,36 @@ Three states matter:
 | `account_id` truthy **and** `slug` set | Basic ingestion landed | Stop polling, reveal the profile link |
 | anything else | Queued or mid-flight | Keep polling, narrate `sync_status` |
 
+**`stats` is the live tally.** `{plats, golds, silvers, bronzes}`, and these four are the **only
+profile figures that move during a sync** — they are per-type denorms incremented by the `EarnedTrophy`
+signals as the walk proceeds. Costs no query (the profile is already loaded for the lookup) and exposes
+nothing the profile page does not already print. `ProfileSyncStatusView` sends the same block.
+
+**Do NOT derive a displayed "total trophies" from them without checking the PROFILE OWNER's filters**
+(not the viewer's — on a public profile page those are different people). Their sum is by definition
+`Profile.total_trophies_raw`, which ignores `hide_hiddens`; the figure the profile hero displays is
+`Profile.total_trophies`, which is **filter-respecting** (`hide_hiddens` *and* `hide_zeros`, via
+`profile_stats_service.update_profile_trophy_counts`). For a hunter who hides games the derived sum is
+therefore **higher** than the figure finalize will write, so a UI built on it climbs all sync and then
+drops on reload — which reads as data loss.
+
+`ProfileDetailView` answers this with **two** context values, and keeping them separate matters:
+
+| | |
+|---|---|
+| `can_derive_trophy_total` | *Would* a derived figure be honest for this hunter — i.e. no display filter on. Drives the `data-live-total` **hook**, and is therefore true on a **settled** profile too |
+| `live_trophy_total` | Is the rendered value stale *right now* — `sync_status != 'synced'`, so syncing **or** error. Drives the **value** |
+
+Gating the hook on the value instead was a real bug: the client captures that element once at load, so a
+settled page carried no hook and pressing Refresh left the figure frozen for the page's life. See
+`test_a_settled_profile_shows_its_real_total_but_keeps_the_hook` and
+`test_a_hunter_who_hides_games_keeps_the_static_total`.
+
 **Gotchas**
 - `Profile.sync_status` defaults to **`'synced'`**, so a brand-new row reports 'synced' before
   anything has synced. `account_id` is what gates the link, never the status.
+- `total_trophies` waits for **finalize**; only the four `stats` counters climb during the walk. Any
+  other figure read mid-sync is a pre-sync snapshot.
 - Callers still need a poll cap; both clients stop after 120 ticks at 2.5s. A status that never moves
   is reachable whenever the worker is down.
 - The Profile row is created **before** PSN confirms the name exists, so a typo leaves a row behind
