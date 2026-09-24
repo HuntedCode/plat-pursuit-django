@@ -1759,6 +1759,9 @@ def test_the_popover_shows_what_the_server_actually_said(client):
     # property off the raw Response.
     utils = _decommented(_read('static/js/utils.js'))
     assert 'async failureMessage(err) {' in utils
+    # The read itself moved down into `failureBody` when a caller needed to branch on `reason` rather
+    # than only show `error`. Same guarantee, one layer lower.
+    assert 'async failureBody(err) {' in utils
     assert 'await err.response.json()' in utils, 'the body is still never awaited'
     assert 'err.response.error' not in utils
 

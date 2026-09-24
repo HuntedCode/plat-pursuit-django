@@ -44,7 +44,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const panel = document.getElementById('navbar-search-results');
     const list = form.querySelector('[data-search-list]');
     const addBtn = form.querySelector('[data-search-add]');
-    const addTerm = form.querySelector('[data-search-term]');
+    const addTerms = form.querySelectorAll('[data-search-term]');
+    const addLabelNew = form.querySelector('[data-search-addlabel="new"]');
+    const addLabelKnown = form.querySelector('[data-search-addlabel="known"]');
     const visitAnchor = form.querySelector('.add-sync-anchor');
     const spinner = form.querySelector('.add-sync-load');
     const clearBtn = form.querySelector('[data-search-clear]');
@@ -59,14 +61,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const POLL_MS = 2500;
     const POLL_CAP = 120;   // 5 minutes, then rest with an honest line (landing.js's cap)
 
-    // The server's own refusal, or `fallback`. Guarded rather than called directly because a browser
+    // The server's refusal body, or null. Guarded rather than called directly because a browser
     // holding a cached pre-change `utils.js` against a fresh copy of this file would throw
-    // "failureOr is not a function" from inside a rejection handler -- an unhandled rejection that
+    // "failureBody is not a function" from inside a rejection handler -- an unhandled rejection that
     // strands the panel on "Looking up X..." with the spinner running and no timer left to move it.
     // Reporting a failure must not be able to fail worse than the failure.
-    function refusal(err, fallback) {
+    //
+    // The BODY rather than just the message, because a 429 has two very different meanings here and
+    // only `reason` separates them: too many searches (an error) versus this hunter was synced
+    // recently (not an error at all -- see the submit handler's catch).
+    function refusalBody(err) {
         const api = window.PlatPursuit && PlatPursuit.API;
-        return api && api.failureOr ? api.failureOr(err, fallback) : Promise.resolve(fallback);
+        return api && api.failureBody ? api.failureBody(err) : Promise.resolve(null);
     }
 
     // ONE object for the whole wait, not a scatter of timer flags: now that the wait survives the
@@ -243,6 +249,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (liveRegion && liveRegion.textContent !== next) { liveRegion.textContent = next; }
     }
 
+    // Land on the resolved state: paint it, and make sure the hunter learns whether or not they are
+    // looking at the panel. Shared by the poll and by a cooldown refusal, which also means "this hunter
+    // is right here" -- porting half of this to the second caller is exactly how the last round of
+    // browser bugs happened.
+    function resolveReady(message, href) {
+        const seen = inView();
+        setAddSync('ready', message, href);
+        if (seen) {
+            focusVisitRow(true);   // never steal a cursor the hunter is driving
+        } else if (window.PlatPursuit && PlatPursuit.ToastManager) {
+            PlatPursuit.ToastManager.success(COPY.readyAway(addSync.query));
+        }
+    }
+
     // Put the keyboard cursor on the Visit row, so Enter goes straight to the profile.
     //
     // `onlyIfIdle` for the async caller: a sync resolving while the hunter is arrowing through
@@ -315,6 +335,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function renderSuggestions(data, q) {
         list.textContent = '';
+        // Recomputed per response, before `paintAddRow` reads it.
+        exactHunter = (data.groups || []).some(function (group) {
+            return group.type === 'profile' && (group.items || []).some(function (item) { return item.exact; });
+        });
         let i = 0;
         (data.groups || []).forEach((group) => {
             if (!group.items || !group.items.length) return;
@@ -377,11 +401,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return isLiveQuery(q) && addSync.phase !== 'error';
     }
 
+    // Does the CURRENT suggestion set contain the exact hunter the query names?
+    //
+    // Server-flagged rather than compared here: the row's `label` is the DISPLAY name, which can differ
+    // from the `psn_username` the query matched, so a client-side string comparison would be wrong for
+    // exactly the hunters whose display name is styled.
+    let exactHunter = false;
+
     // The add row, computed in ONE place so it cannot be set from two with a one-way override.
     function paintAddRow() {
         if (!addBtn) return;
         const q = input.value.trim();
-        if (addTerm) { addTerm.textContent = q; }
+        for (let i = 0; i < addTerms.length; i++) { addTerms[i].textContent = q; }
+
+        // "Sync X, a new hunter" is a LIE for a hunter we already track, and this button has always
+        // done both jobs. Pick the label that matches the job.
+        if (addLabelNew) { addLabelNew.hidden = exactHunter; }
+        if (addLabelKnown) { addLabelKnown.hidden = !exactHunter; }
+
         addBtn.hidden = !PSN_RE.test(q) || addSyncOwnsRow(q);
     }
 
@@ -448,6 +485,10 @@ document.addEventListener('DOMContentLoaded', () => {
         ready: (name) => 'Found ' + name + '. Trophies are still arriving, so the numbers keep climbing.',
         missing: "We couldn't find that name on PSN. It may be misspelled, or fully private.",
         rest: 'Still syncing. Check back in a few minutes.',
+        // A cooldown refusal. The hunter is tracked and current; there was simply nothing to do.
+        alreadyFresh: (name) => 'Found ' + name + '. Already up to date.',
+        // A sign-in refusal. Same shape: we have them, and the profile is the answer either way.
+        signInToRefresh: (name) => 'Found ' + name + '. Sign in to refresh them.',
         // Used BOTH for the toast and for the live region when the sync lands out of view, so the
         // sentence naming the way back cannot drift between the two.
         readyAway: (name) => name + ' is ready. Search the name again to open the profile.',
@@ -480,16 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // and actively hid the link to the profile sitting right there.
                 if (data.account_id && data.slug) {
                     stopPolling();
-                    const seen = inView();
-                    setAddSync('ready', COPY.ready(addSync.query), data.slug);
-                    if (seen) {
-                        focusVisitRow(true);   // never steal a cursor the hunter is driving
-                    } else if (window.PlatPursuit && PlatPursuit.ToastManager) {
-                        // Resolved out of view: the panel was dismissed, or the bar has moved on to
-                        // another query. Both are now allowed, and a Visit link revealed where nobody
-                        // is looking tells nobody anything, so say it out loud and name the way back.
-                        PlatPursuit.ToastManager.success(COPY.readyAway(addSync.query));
-                    }
+                    resolveReady(COPY.ready(addSync.query), data.slug);
                     return;
                 }
                 if (data.sync_status === 'error') {
@@ -584,9 +616,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Read the body FIRST, then re-check identity. Reading it yields, and the guard above
                 // is on the wrong side of that await on its own: a submit for a different name landing
                 // during the read would have this refusal stamped into ITS wait.
-                const refused = await refusal(error, "We couldn't start that sync. Try again in a moment.");
+                const body = await refusalBody(error);
                 if (addSync !== mine) return;
-                setAddSync('error', refused);
+
+                // A COOLDOWN is not a failure to the hunter. It means this name is already tracked and
+                // already current, so the right answer is the profile, not a red line. Making the
+                // refusal honest must not take away the link the old fake-success path used to reach:
+                // before this branch, a tracked hunter returned 200 and the poll revealed the Visit row
+                // on its first tick.
+                // A COOLDOWN or a SIGN-IN refusal both mean the same thing to the hunter: this name is
+                // already tracked. Neither is a reason to withhold the profile, and a red line where a
+                // link belongs is the failure this whole branch was written to stop.
+                if (body && body.slug && (body.reason === 'cooldown' || body.reason === 'sign_in')) {
+                    stopPolling();
+                    resolveReady(
+                        body.reason === 'sign_in' ? COPY.signInToRefresh(addSync.query)
+                                                  : COPY.alreadyFresh(addSync.query),
+                        body.slug
+                    );
+                    return;
+                }
+                setAddSync('error', (body && body.error)
+                    || "We couldn't start that sync. Try again in a moment.");
             });
     });
 

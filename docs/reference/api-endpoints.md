@@ -38,18 +38,22 @@ Driven by `navbar-search.js` and `landing.js`.
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/site-suggest/` | Open | Typeahead over the catalogue, grouped (games / badges / franchises / hunters) |
-| POST | `/api/search-sync-profile/` | Open | Add a PSN Online ID and start its sync (creates the Profile if new, else refreshes) |
+| POST | `/api/search-sync-profile/` | Open | Add a PSN Online ID and start its sync. Creates the Profile if new; otherwise refreshes it, **or refuses with 429 if its cooldown is still running** |
 | GET | `/api/add-sync-status/` | Open | Poll the added hunter's ingestion state. Read-only, consumes no PSN tokens |
 
 **The add-and-sync contract** (pinned by `tests/engine/test_navbar_add_sync.py`). A first sync pulls an
 entire trophy history through rate-limited workers, so it is measured in minutes; the client has to
 narrate a wait, not await a response.
 
-`POST /api/search-sync-profile/` returns `{success, message, psn_username}`. Poll with the
-**`psn_username` from the response, not the raw input**: a newly created Profile is stored
-lowercased. Refusals are `{error}` bodies at 400 (blank name), 429 (over the cap) and 503 (PSN
-outage), and the client must read the body of the non-ok response to surface them (see
-`API.failureOr` in [js-utilities](js-utilities.md)).
+`POST /api/search-sync-profile/` returns `{success, reason, message, psn_username, slug}`. Poll with
+the **`psn_username` from the response, not the raw input**: a newly created Profile is stored
+lowercased. The client must read the body of a non-ok response to surface a refusal (see
+`API.failureBody` in [js-utilities](js-utilities.md)); `API.request` throws on any non-ok, so an
+unread body means the server's sentence is discarded.
+
+**`reason` is on every body, success included**, so a caller has one field to switch on rather than
+inferring from the status code. See the shared refusal contract below -- all three refresh surfaces
+return the same shape, pinned by `test_all_three_refresh_surfaces_return_one_body_shape`.
 
 `GET /api/add-sync-status/?psn_username=<name>` (`__iexact`) always returns 200 for a lookup that
 has a name. A known profile returns `{sync_status, account_id, psn_username, slug}`; an unknown one
@@ -65,11 +69,55 @@ Three states matter:
 **Gotchas**
 - `Profile.sync_status` defaults to **`'synced'`**, so a brand-new row reports 'synced' before
   anything has synced. `account_id` is what gates the link, never the status.
-- A PSN outage makes `PSNManager.initial_sync` a silent no-op while this view still returns
-  `success: true`, so a status that never moves is reachable. Callers need a poll cap; both clients
-  stop after 120 ticks at 2.5s.
+- Callers still need a poll cap; both clients stop after 120 ticks at 2.5s. A status that never moves
+  is reachable whenever the worker is down.
 - The Profile row is created **before** PSN confirms the name exists, so a typo leaves a row behind
   that later reports `sync_status: 'error'`.
+
+### Refreshing a tracked hunter
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/trigger-sync/` | Login | Refresh YOUR OWN profile. Drives the navbar avatar panel's "Sync Now" |
+| POST | `/api/hunters/<psn_username>/refresh/` | Login | Ask for **another** hunter's profile to be refreshed. Drives the control on `/hunters/<name>/`. Jumps the orchestrator queue |
+
+The rule these follow: **open to ADD a hunter nobody tracks yet, signed-in to REFRESH one we already
+have.** Adding is the anonymous landing pitch and stays open; refreshing a tracked profile is not part
+of that pitch, and tying it to an account is what makes a per-caller rate limit mean anything.
+
+**The shared refusal contract.** All three surfaces (`trigger_sync`, `search_sync_profile` for an
+existing hunter, and `hunters/<name>/refresh/`) go through `SyncService.request_refresh` and return one
+body shape. Switch on `reason`, not the status code:
+
+| `reason` | Status | Meaning | What a client should do |
+|----------|--------|---------|-------------------------|
+| `''` | 200 | A refresh was queued | Show progress; poll `add-sync-status` |
+| `already_syncing` | 200 | One was **already** running; nothing new queued | Show progress, but do not narrate a fresh start |
+| `cooldown` | 429 | Synced too recently. `seconds_to_next_sync` says when | **Offer the profile anyway** -- see below |
+| `outage` | 503 | PSN is down site-wide | Say so; retrying will not help |
+| `rate_limited` | 429 | The CALLER asked too often | Say so; this is about them, not the profile |
+
+Every body also carries `psn_username` and `slug`. **A `cooldown` refusal is not a dead end**: it means
+the hunter exists and is current, so a client should reveal the profile link rather than paint an error.
+Before the refusal was made honest, a tracked hunter returned 200 and the poll revealed that link on its
+first tick, so treating 429 as a failure was a regression dressed as a fix -- it broke the anonymous
+hero, whose whole job is getting a stranger onto a profile page.
+
+**Two independent bounds, and the important one is not the rate limit.** The cooldown on
+`Profile.last_synced` is a **per-profile** throttle (5 min premium / 1 hour basic, `sync_tier`'s only
+effect on a sync path), so any number of people asking about the same hunter inside its window produce
+**one** refresh. The per-caller rate limit bounds how many *different* profiles one account can spend
+tokens on.
+
+**Gotchas**
+- `last_synced` is stamped at the **START** of a sync, not its completion, so a sync that runs longer
+  than the cooldown leaves the cooldown open while `sync_status` is still `'syncing'`. That is what
+  `already_syncing` exists for: `PSNManager.profile_refresh` has branches for `'error'` and `'synced'`
+  only and silently does nothing on `'syncing'`, so without the check the endpoint reported success for
+  a job nobody queued.
+- The queue jump front-runs the **orchestrator** job only. That job then fans per-game work out to
+  `low_priority`, which queues normally, so the jump buys a sooner start and not a sooner finish. Never
+  promise a duration in the UI.
 
 ### Comments (Legacy / Read-Only)
 
@@ -301,6 +349,7 @@ Rate limits are applied via `django-ratelimit` on specific endpoints:
 | Recap regenerate | 10/min | Limit costly regeneration |
 | Recap share PNG | 20/min | Limit Playwright rendering |
 | Recap share HTML | 60/min | Limit share card generation |
+| Refresh a tracked hunter | 10/min by user | PSN-token cost, across DIFFERENT profiles. The per-profile cooldown caps the cost of any one of them |
 | Search-sync profile (authed) | 15/min by user | PSN-token cost of a sync |
 | Search-sync profile (anon) | 3/min by IP | Same, for an open endpoint. The user bucket is checked first, so a member behind a NAT'd IP is not held to this |
 

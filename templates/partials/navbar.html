@@ -96,7 +96,13 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                     `{% templatetag openvariable %}#` comments are SINGLE-LINE in Django, so a
                     multi-line one leaks straight onto the page, which is how this comment's first
                     draft failed the very guard it was explaining.{% endcomment %}
-                    <span>Sync &ldquo;<b data-search-term></b>&rdquo;, a new hunter</span>
+                    {% comment %}Two labels, one row. The same button both ADDS a hunter nobody tracks
+                    and REFRESHES one we already have, and for years it described itself as only the
+                    first -- "a new hunter" about accounts we had held since launch. The suggest endpoint
+                    flags an exact match, so the row can now say which thing it is about to do. Copy
+                    lives here rather than in JS; the controller only picks.{% endcomment %}
+                    <span data-search-addlabel="new">Sync &ldquo;<b data-search-term></b>&rdquo;, a new hunter</span>
+                    <span data-search-addlabel="known" hidden>Refresh &ldquo;<b data-search-term></b>&rdquo;</span>
                 </button>
                 <a id="navsearch-visit" class="pp-navsearch__visit add-sync-anchor hidden" aria-label="Visit synced profile">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>

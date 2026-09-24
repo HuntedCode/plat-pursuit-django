@@ -2,11 +2,11 @@
 
 PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each cron job is configured through the Render dashboard (not a config file) and executes a Django management command via `python manage.py <command>`. The TokenKeeper worker process handles real-time PSN sync jobs separately as a long-running daemon; the cron jobs described here cover everything else: profile refresh queuing, cache warming, leaderboard computation, analytics cleanup, and monthly recap delivery.
 
-> **STATUS: not registered yet.** The rebuild has not deployed to production, so the schedule below is
-> the intended state, not the running one. The full list gets reviewed and created in the Render dashboard
-> at cutover -- see the Cron / scheduling section of
-> [prod-deploy-checklist.md](../design/rebuild/prod-deploy-checklist.md). Treat every time in this doc as a
-> proposal until that review happens.
+> **STATUS: partly registered.** `refresh_profiles` IS registered and running in production, every
+> **15 minutes**. The rest of the schedule below is still the intended state rather than the running one;
+> the full list gets reviewed and created in the Render dashboard at cutover -- see the Cron / scheduling
+> section of [prod-deploy-checklist.md](../design/rebuild/prod-deploy-checklist.md). Treat every other
+> time in this doc as a proposal until that review happens.
 
 ---
 
@@ -14,7 +14,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 
 | Time (UTC) | Command | Frequency | Dependencies |
 |------------|---------|-----------|--------------|
-| Every 30 min | `refresh_profiles` | Every 30 minutes | TokenKeeper must be running to process queued syncs |
+| Every 15 min | `refresh_profiles` | Every 15 minutes (**live**) | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
 | ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
 | 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs, in dependency order: `update_shovelware` -> `recompute_clean_standings` -> `recompute_rarity_standings` -> `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `process_contracts --all --incremental` -> `recompute_milestones` -> `audit_badge_coverage`. The middle two are DRIFT NETS: sync only evaluates what a sync touched, so anything authored after a hunter last touched the game needs a sweep to reach them. |
@@ -52,12 +52,18 @@ shovelware override reads the flags it writes. Idempotent; one bad row cannot ab
 
 ### refresh_profiles
 
-- **Schedule**: Every 30 minutes
+- **Schedule**: Every 15 minutes (registered and live in production)
 - **Command**: `python manage.py refresh_profiles`
 - **What it does**: Scans all profiles and queues those whose data is stale for a PSN sync via TokenKeeper. Processes scouts first (per-scout configurable cadence, default 2h, capped at `--max-scouts` per run), then tier-based profiles: premium (6h), basic (12h), Discord-verified (12h), unregistered (7d). The command only *queues* profiles; the actual sync work happens asynchronously in the TokenKeeper worker.
 - **Dependencies**: TokenKeeper must be running to process the queued jobs. If TokenKeeper is down, profiles will queue up but not sync.
 - **Idempotency**: Fully safe to re-run. Profiles already queued or recently synced are skipped by the threshold check. Double-running causes no harm because `PSNManager.profile_refresh()` deduplicates.
 - **Failure impact**: Profiles stop getting updated. Scout discovery and premium users are affected first. The site continues to serve cached data but it becomes increasingly stale.
+- **Why the manual refresh control exists**: the bottom tier here is **7 days** (unlinked, not
+  Discord-verified), and that is most of the hunters anyone browses. For those profiles a human asking
+  is the only thing that makes them current inside a week, which is what
+  `POST /api/hunters/<name>/refresh/` is for. That path passes `jump_queue=True` so it is served ahead
+  of this sweep's backlog; this command must **never** pass it, or the sweep front-runs itself and the
+  flag stops meaning anything (guarded by `test_the_scheduled_sweep_does_not_ask_to_jump`).
 
 ### refresh_homepage_hourly
 

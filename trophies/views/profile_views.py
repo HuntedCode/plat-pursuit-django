@@ -29,6 +29,7 @@ from ..models import (
 from trophies.services.activity_service import DAYS_PER_PAGE
 from trophies.mixins import HtmxListMixin
 from trophies.psn_manager import PSNManager
+from trophies.services.sync_service import SyncService
 
 logger = logging.getLogger("psn_api")
 
@@ -828,6 +829,18 @@ class ProfileDetailView(DetailView):
 
         # Own profile check (for edit controls; computed with the tab normalization above)
         context['is_own_profile'] = is_own_profile
+
+        # The hero's refresh control. Signed-in only, on the rule "open to ADD a hunter nobody tracks
+        # yet, signed-in to REFRESH one we already have" -- adding is the anonymous landing pitch and
+        # stays open, refreshing a tracked profile is not part of it. Shown on your own profile too:
+        # the navbar panel also offers it, but hiding it here is a special case that costs more than it
+        # saves.
+        #
+        # NO NEW QUERIES: `last_synced` and `sync_tier` are already on `profile`, and the outage flag is
+        # a Redis read. This page's query counts are pinned in test_profile_detail_queries.py.
+        context['can_request_refresh'] = self.request.user.is_authenticated
+        context['refresh_seconds'] = SyncService.get_seconds_to_next_sync(profile)
+        context['psn_outage'] = PSNManager.is_psn_outage_active()
 
         if profile.psn_history_public:
             context['seo_description'] = (

@@ -148,6 +148,34 @@
 }
 @keyframes ppPheroPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+/* ---- The refresh control ------------------------------------------------------------------------- */
+/* A TEXT action inside the freshness line, not a bordered button beside it. The line is what creates the
+   want ("Synced 5 days ago" with nowhere to go), so the answer belongs in the same sentence -- and the
+   hero is chrome, which the rebuild keeps lean. It inherits the line's 0.72rem rather than setting its
+   own, so the two can never drift apart.
+
+   `--off` is every state where there is nothing to press: mid-sync, inside the cooldown, PSN down. It is
+   a span, not a disabled button, because a disabled control still advertises an action; these states are
+   information. */
+.pp-phero__sep { color: color-mix(in oklab, var(--pp-text-mute) 55%, transparent); }
+.pp-phero__refresh {
+    font: inherit; padding: 0; border: none; background: none; color: var(--pp-primary);
+    cursor: pointer; text-align: left;
+    transition: color var(--pp-dur-fast) var(--pp-ease);
+}
+@media (hover: hover) {
+    .pp-phero__refresh:hover { color: color-mix(in oklab, var(--pp-primary) 75%, white); }
+}
+.pp-phero__refresh:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; border-radius: 3px; }
+/* Not a colour change on press: the label swaps to "Asking..." and then the line itself takes over
+   ("Updating now"), which is the real feedback. */
+.pp-phero__refresh[disabled] { color: var(--pp-text-mute); cursor: default; }
+.pp-phero__refresh--off { color: var(--pp-text-mute); cursor: default; }
+
+/* The line wraps on a phone rather than pushing the control off the edge: at 375px "Synced 5 days ago"
+   plus a countdown is already most of the width. `row-gap` keeps the two rows from touching. */
+.pp-phero__sync { flex-wrap: wrap; row-gap: 2px; }
+
 
 .pp-phero__unit { font-size: 0.62em; font-weight: 700; color: var(--pp-text-mute); margin-left: 1px; }
 

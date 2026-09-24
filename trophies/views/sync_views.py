@@ -14,10 +14,39 @@ from django_ratelimit.decorators import ratelimit
 from core.services.tracking import track_site_event
 from trophies.psn_manager import PSNManager
 from trophies.services.game_grouping_service import representative_concept_icon_subquery
+from trophies.services.sync_service import RefreshOutcome, SyncService
 from trophies.util_modules.cache import redis_client
 from ..models import Badge, Concept, Franchise, Game, Profile
 
 logger = logging.getLogger("psn_api")
+
+
+def _refresh_response(outcome, profile=None):
+    """One JsonResponse shape for every refresh-request surface.
+
+    503 for an outage (site-wide and temporary) and 429 for the cooldown (the caller asked too soon).
+    `reason` is on EVERY body, success included, so a client has one field to switch on rather than
+    inferring from the status code -- and `seconds_to_next_sync` rides along so it can tick a countdown
+    down instead of re-parsing the sentence.
+
+    `profile` is what stops a refusal being a dead end. A cooldown means the hunter EXISTS and is
+    viewable right now; only the refresh was declined. Handing back the canonical name and URL lets a
+    caller offer the profile anyway, which matters most on the anonymous landing hero, whose entire job
+    is getting a stranger onto a profile page. Without it, making this refusal honest turned a working
+    search into a red error with no recourse.
+    """
+    body = {'reason': outcome.reason, 'seconds_to_next_sync': outcome.seconds}
+    if profile is not None:
+        body['psn_username'] = profile.psn_username
+        body['slug'] = reverse('profile_detail', kwargs={'psn_username': profile.psn_username})
+
+    if outcome.ok:
+        body.update({'success': True, 'message': outcome.message})
+        return JsonResponse(body)
+
+    body['error'] = outcome.message
+    status_code = 503 if outcome.reason == SyncService.REFUSED_OUTAGE else 429
+    return JsonResponse(body, status=status_code)
 
 
 def _get_queue_position(profile_id):
@@ -359,20 +388,43 @@ class SiteSuggestView(View):
         return {'type': 'franchise', 'label': 'Franchises', 'items': items}
 
     def _hunters(self, q):
-        # Same query/shape as ProfileSuggestView (prefix, ranked by trophy weight).
-        rows = (
+        # Prefix match ranked by trophy weight, as ProfileSuggestView does -- but with an EXACT match
+        # sorted to the front and flagged.
+        #
+        # Two things were wrong without that. Searching a hunter's full name could fail to show them:
+        # `istartswith` capped at PER_GROUP and ranked by platinums means five `daniel*` hunters bury
+        # the actual `dan`. And the client had no way to know a typed name was already tracked, so the
+        # add row offered to "Sync X, a new hunter" for hunters we have had for years.
+        #
+        # TWO queries, deliberately, rather than one sorted by a CASE. Making the exact match the
+        # leading sort key put a non-indexable expression first, which stops the planner taking a top-N
+        # over `profile_total_plats_idx` and forces it to materialise and sort every prefix match --
+        # per keystroke, and worst for the one-character queries that match the most rows. The exact
+        # lookup below instead hits the unique index (`.lower()` + exact; `Profile.save()` lowercases
+        # this column), and the prefix query keeps the plan it always had.
+        fields = ('psn_username', 'display_psn_username', 'avatar_url', 'total_plats')
+        needle = q.strip().lower()
+
+        exact = list(Profile.objects.filter(psn_username=needle).values(*fields)[:1])
+        prefix = list(
             Profile.objects
             .filter(psn_username__istartswith=q)
+            .exclude(psn_username=needle)
             .order_by('-total_plats', 'psn_username')
-            .values('psn_username', 'display_psn_username', 'avatar_url', 'total_plats')
-            [:self.PER_GROUP]
+            .values(*fields)
+            [:self.PER_GROUP - len(exact)]
         )
+        rows = [dict(r, is_exact=True) for r in exact] + [dict(r, is_exact=False) for r in prefix]
         items = [
             {
                 'label': r['display_psn_username'] or r['psn_username'],
                 'avatar_url': r['avatar_url'] or '',
                 'plats': r['total_plats'],
                 'url': reverse('profile_detail', kwargs={'psn_username': r['psn_username']}),
+                # The client reads this to label its add row honestly: a tracked hunter gets "Refresh",
+                # not "Sync a new hunter". Server-authoritative rather than a client-side string
+                # comparison, because `label` is the DISPLAY name and can differ from `psn_username`.
+                'exact': r['is_exact'],
             }
             for r in rows
         ]
@@ -390,18 +442,8 @@ class TriggerSyncView(LoginRequiredMixin, View):
         if not hasattr(request.user, 'profile'):
             return JsonResponse({'error': 'No linked profile'}, status=400)
 
-        if redis_client.get('site:psn_outage'):
-            return JsonResponse({
-                'error': 'PlayStation Network is currently unavailable. '
-                         'Syncs will resume automatically when PSN recovers.'
-            }, status=503)
-
         profile = request.user.profile
-        is_syncing = profile.attempt_sync()
-        if not is_syncing:
-            seconds_left = profile.get_seconds_to_next_sync()
-            return JsonResponse({'error': f'Cooldown active: {seconds_left} seconds left'}, status=429)
-        return JsonResponse({'success': True, 'message': 'Sync started'})
+        return _refresh_response(SyncService.request_refresh(profile), profile)
 
 class SearchSyncProfileView(View):
     """
@@ -431,14 +473,19 @@ class SearchSyncProfileView(View):
             )
         if limited:
             return JsonResponse({
-                'error': 'Too many searches. Please wait a minute and try again.'
+                'error': 'Too many searches. Please wait a minute and try again.',
+                'reason': SyncService.REFUSED_RATE_LIMIT,
             }, status=429)
 
-        if redis_client.get('site:psn_outage'):
-            return JsonResponse({
-                'error': 'PlayStation Network is currently unavailable. '
-                         'Please try again later.'
-            }, status=503)
+        # Checked here as well as inside `request_refresh`, because it has to guard the CREATE path
+        # too -- `initial_sync` is a silent no-op during an outage, so without this a hunter would be
+        # told their brand-new profile was queued when nothing had been. Routed through
+        # `_refresh_response` so this 503 carries the same `reason` as every other refusal; it was the
+        # one body in this view shaped differently from its neighbours.
+        if PSNManager.is_psn_outage_active():
+            return _refresh_response(
+                RefreshOutcome(False, SyncService.REFUSED_OUTAGE, SyncService.OUTAGE_MESSAGE, 0)
+            )
 
         psn_username = request.POST.get('psn_username', '').strip()
         if not psn_username:
@@ -459,14 +506,117 @@ class SearchSyncProfileView(View):
         track_site_event('sync_search', object_id, request)
 
         if is_new:
+            # No cooldown on a profile that has never synced, so there is nothing to refuse. `reason`
+            # is still on the body: every response from this endpoint carries it, so a client has one
+            # field to switch on rather than three shapes to tell apart.
             PSNManager.initial_sync(profile)
-        else:
-            profile.attempt_sync()
-        return JsonResponse({
-            'success': True,
-            'message': f"{'Added and syncing' if is_new else 'Syncing'} {psn_username}",
-            'psn_username': profile.psn_username,
-        })
+            return JsonResponse({
+                'success': True,
+                'reason': '',
+                'message': f'Added and syncing {psn_username}',
+                'psn_username': profile.psn_username,
+                'slug': reverse('profile_detail', kwargs={'psn_username': profile.psn_username}),
+            })
+
+        # Refreshing a hunter we ALREADY TRACK needs an account; adding one we do not stays open. The
+        # rule cannot be held half-way: the profile-page control is members-only, so leaving this door
+        # open to refresh the same profile would just move it. Adding is the anonymous landing pitch and
+        # is untouched, which is why this check sits AFTER the `is_new` branch has already returned.
+        #
+        # With the slug, for the same reason the cooldown refusal carries it: the hunter exists and is
+        # viewable, so a visitor who typed a tracked name must still be handed the profile rather than
+        # bounced. That is the anonymous hero's whole promise.
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'error': 'Sign in to refresh a hunter we already track.',
+                'reason': SyncService.REFUSED_SIGN_IN,
+                'seconds_to_next_sync': 0,
+                'psn_username': profile.psn_username,
+                'slug': reverse('profile_detail', kwargs={'psn_username': profile.psn_username}),
+            }, status=403)
+
+        # One shape for BOTH outcomes of a refresh, so `already_syncing` (which is an ok) is not
+        # smuggled out through a success body with no `reason`. The refusal this view used to swallow
+        # lived here: it called `attempt_sync()` and discarded the return, so asking to refresh a
+        # hunter synced ten minutes ago reported success for a sync that never started. Passing the
+        # profile is what keeps a cooldown refusal from being a dead end -- the anonymous hero's "type
+        # a name, get a profile" promise would otherwise break on any account synced in the last hour.
+        return _refresh_response(SyncService.request_refresh(profile), profile)
+
+class RequestProfileRefreshView(View):
+    """Ask for ANOTHER hunter's profile to be refreshed from PSN.
+
+    The gap this fills: a hunter looking at a profile could read "Synced 5 days ago" and had no way to
+    do anything about it. The capability already existed -- `SearchSyncProfileView` re-syncs any named
+    hunter -- but only through the navbar search, whose row reads "Sync X, a new hunter" and so is both
+    undiscoverable and actively misdescribed for a profile we already track.
+
+    Why it matters more than impatience: the every-15-minutes cron only picks up an unlinked,
+    non-Discord-verified profile once it is SEVEN DAYS stale (`refresh_profiles.py`), and that is most
+    of the hunters anyone browses. For those, asking is the only thing that makes them current.
+
+    SIGNED-IN ONLY, and the rule is: open to ADD a hunter nobody tracks yet, signed-in to refresh one
+    we already have. Adding is the anonymous landing pitch and stays open; refreshing a tracked profile
+    is not part of that pitch, and tying it to an account is what makes a per-caller rate limit mean
+    anything at all.
+
+    Abuse is bounded twice, and the important bound is not this view's: the per-profile cooldown on
+    `last_synced` means any number of hunters asking about the same profile inside its window produce
+    ONE refresh, so the PSN cost per profile is capped however many people ask. The rate limit here
+    bounds how many DIFFERENT profiles one account can spend tokens on.
+    """
+    def post(self, request, psn_username):
+        # An explicit JSON 403, NOT `LoginRequiredMixin`. The mixin 302s to the login page, `fetch`
+        # follows redirects by default, and the login HTML comes back 200 -- so `API.request` sees an ok
+        # response, returns the page as a STRING, and the control reads `data.reason` off it as
+        # `undefined`. It then announced "Updating now", polled, read the unchanged status and finished
+        # with "Updated just now. Reload to see it." Nothing had been queued, and the hunter was told
+        # both that their refresh landed and that the page they were looking at was stale.
+        #
+        # Reachable by any session that expires between page load and click, which is exactly when the
+        # control is on screen: it is rendered only for an authenticated request.
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'error': 'Sign in to refresh a hunter.',
+                'reason': SyncService.REFUSED_SIGN_IN,
+                'seconds_to_next_sync': 0,
+            }, status=403)
+
+        if is_ratelimited(
+            request, group='refresh_request:user', key='user',
+            rate='10/m', method='POST', increment=True,
+        ):
+            return JsonResponse({
+                'error': 'Too many refresh requests. Please wait a minute and try again.',
+                'reason': SyncService.REFUSED_RATE_LIMIT,
+            }, status=429)
+
+        try:
+            # `.lower()` + exact, not `iexact`: on Postgres `iexact` compiles to
+            # `UPPER(col) = UPPER(%s)`, which neither the unique constraint nor `psn_username_idx`
+            # can serve, so every call sequentially scanned the whole Profile table.
+            # `profile_views.py` records the same trap for the same column. Correct as well as
+            # cheaper, because `Profile.save()` lowercases this field unconditionally.
+            profile = Profile.objects.get(psn_username=psn_username.strip().lower())
+        except Profile.DoesNotExist:
+            # 404, not 400: the name is well-formed, we simply do not track that hunter. Adding them is
+            # the navbar search's job, and that is open to everyone.
+            return JsonResponse({'error': 'That hunter is not tracked yet.'}, status=404)
+
+        # Recorded like `SearchSyncProfileView`'s own searches, so this surface is not invisible to the
+        # funnel the other one feeds. Tagged `profile_page` to tell the two apart: which surface hunters
+        # actually use to ask is the question this feature exists to answer.
+        track_site_event(
+            'sync_search',
+            f'{profile.psn_username}|refresh_request|pid:{getattr(getattr(request.user, "profile", None), "id", None)}',
+            request,
+        )
+
+        # `jump_queue`: a person is sitting looking at the page. The cron sweep lands hundreds of
+        # `profile_refresh` jobs in the same orchestrator queue every 15 minutes, so without this a
+        # requested refresh waits behind all of them.
+        return _refresh_response(SyncService.request_refresh(profile, jump_queue=True), profile)
+
 
 class AddSyncStatusView(View):
     """
