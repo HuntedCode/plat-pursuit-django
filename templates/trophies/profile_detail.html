@@ -67,6 +67,15 @@ privacy leak (SEO Lane 0). The sitemap's quality floor agrees with this stamp.{%
         your profile -- so a resolved `current_tab` always has a chip. Re-deriving that here would be
         a second source of truth for it, and the two could disagree. The guarantee itself is pinned
         by `test_every_resolved_tab_has_a_chip_to_name`.{% endcomment %}
+        {% comment %}OUTSIDE `#tab-content`, which htmx swaps wholesale on every tab change -- inside it
+        this line would vanish the first time somebody clicked a tab, and htmx settle would strip a class
+        JS had added to it besides.
+
+        The walls are the stalest thing on the page: a mid-first-sync Games tab can be empty and read as
+        "this hunter owns nothing". Same sentence as the hero's, because it is the same fact.{% endcomment %}
+        <p class="pp-phero__provisional pp-phero__provisional--tabs" data-sync-provisional
+           {% if profile.sync_status != 'syncing' %}hidden{% endif %}>These lists are still filling.</p>
+
         <div id="tab-content" role="tabpanel" aria-labelledby="profile-tab-{{ current_tab }}">
             {% include tab_template %}
         </div>
@@ -77,8 +86,11 @@ privacy leak (SEO Lane 0). The sitemap's quality floor agrees with this stamp.{%
 {% comment %}Collapsing a game inside the day modal. Presentational -- its trophies are already in
 the HTML -- and document-delegated, so it also covers the standalone day page.{% endcomment %}
 <script src="{% static 'js/activity-collapse.js' %}"></script>
-    {% comment %}The hero's refresh control. Loaded for everyone: the file bails immediately when the
-    line carries no endpoints, which is the anonymous case.{% endcomment %}
+    {% comment %}The hero's refresh control. Loaded for everyone, and for an anonymous viewer it wires
+    nothing: the endpoints are rendered only for a signed-in request, so there is no button to bind and
+    `startPolling` returns on the empty status url. It does NOT bail early -- the line itself is always
+    present -- so an anonymous viewer on a syncing profile sees the "still arriving" lines (true, and worth
+    saying) while the figures hold until they reload. That is the intended trade, not an accident.{% endcomment %}
     <script src="{% static 'js/refresh-control.js' %}"></script>
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script src="{% static 'js/profile-card-tab.js' %}"></script>

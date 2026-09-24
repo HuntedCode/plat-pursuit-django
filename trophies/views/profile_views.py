@@ -842,6 +842,44 @@ class ProfileDetailView(DetailView):
         context['refresh_seconds'] = SyncService.get_seconds_to_next_sync(profile)
         context['psn_outage'] = PSNManager.is_psn_outage_active()
 
+        # The hero's headline Trophies figure cannot move on its own while a sync runs: `total_trophies`
+        # waits for finalize, while the four tier denorms climb live through the walk. Derived from those
+        # tiers it keeps up. TWO SEPARATE QUESTIONS decide that, and conflating them into one condition
+        # broke the feature's main path -- the hook was absent on a settled profile, so pressing Refresh
+        # left the headline frozen at its pre-sync value for the life of the page, which is exactly the
+        # contradiction this exists to remove.
+        #
+        # (1) WOULD a derived total be honest for this hunter? Only with no display filter on.
+        #     `total_trophies` is FILTER-RESPECTING (`hide_hiddens` + `hide_zeros`, see
+        #     profile_stats_service.update_profile_trophy_counts); the four tier counters are NOT -- the
+        #     model calls them out as unfiltered and their sum is by definition `total_trophies_raw`. So
+        #     for a hunter who hides games the derived figure is HIGHER than the one finalize will write,
+        #     and it would climb all sync and then DROP on reload. A number going backwards reads as data
+        #     loss, which is worse than one that honestly does not move.
+        #
+        #     Gated on both filters rather than on an argument about which of them can actually shift an
+        #     earned-trophy count. One condition is cheaper than an argument that has to stay true.
+        #
+        #     This answer drives the `data-live-total` HOOK, so the controller can keep the figure in
+        #     step through a sync it starts after page load.
+        #
+        # (2) Is the rendered value stale RIGHT NOW? Any state but a settled one. 'error' counts: a failed
+        #     sync leaves the tier denorms already advanced by the partial walk while `total_trophies` was
+        #     never rewritten, and it stays that way until the next SUCCESSFUL finalize. The derived sum is
+        #     the more current figure there, not the less.
+        #
+        # NOT `profile.total_trophies_raw`, though the model documents that column as by definition this
+        # same sum. Summing the four counters the template is about to render cannot disagree with the
+        # figures on screen; a separate column can drift from them. (It is signal-maintained and
+        # nightly-reconciled, so drift is unlikely -- but "unlikely to disagree" is a weaker property than
+        # "cannot", for a figure whose entire job is not contradicting its neighbours.)
+        #
+        # No new queries either way: every column here is already loaded, and none of them is nullable.
+        context['can_derive_trophy_total'] = not profile.hide_hiddens and not profile.hide_zeros
+        context['live_trophy_total'] = (
+            profile.total_plats + profile.total_golds + profile.total_silvers + profile.total_bronzes
+        ) if context['can_derive_trophy_total'] and profile.sync_status != 'synced' else None
+
         if profile.psn_history_public:
             context['seo_description'] = (
                 f"{profile.display_psn_username}'s PlayStation trophy profile. "

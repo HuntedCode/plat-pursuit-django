@@ -172,11 +172,15 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
             On a phone it stays a wrapping row below both columns, because a third column there would
             squeeze the username to nothing.
             {% endcomment %}
+            {% comment %}`data-live-tier` because these four are the ONLY figures on this page that move
+            during a sync: they are per-type denorms climbing through the walk via the EarnedTrophy
+            post_save signal. Everything else here waits for finalize. `refresh-control.js` updates them
+            off the status poll.{% endcomment %}
             <div class="pp-phero__tiers">
-                <span class="pp-phero__tier" data-tier="platinum" role="img" aria-label="Platinum trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</b></span>
-                <span class="pp-phero__tier" data-tier="gold" role="img" aria-label="Gold trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_golds }}">{{ profile.total_golds|intcomma }}</b></span>
-                <span class="pp-phero__tier" data-tier="silver" role="img" aria-label="Silver trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_silvers }}">{{ profile.total_silvers|intcomma }}</b></span>
-                <span class="pp-phero__tier" data-tier="bronze" role="img" aria-label="Bronze trophies"><i></i><b class="pp-tally" data-countup="{{ profile.total_bronzes }}">{{ profile.total_bronzes|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="platinum" role="img" aria-label="Platinum trophies"><i></i><b class="pp-tally" data-live-tier="plats" data-countup="{{ profile.total_plats }}">{{ profile.total_plats|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="gold" role="img" aria-label="Gold trophies"><i></i><b class="pp-tally" data-live-tier="golds" data-countup="{{ profile.total_golds }}">{{ profile.total_golds|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="silver" role="img" aria-label="Silver trophies"><i></i><b class="pp-tally" data-live-tier="silvers" data-countup="{{ profile.total_silvers }}">{{ profile.total_silvers|intcomma }}</b></span>
+                <span class="pp-phero__tier" data-tier="bronze" role="img" aria-label="Bronze trophies"><i></i><b class="pp-tally" data-live-tier="bronzes" data-countup="{{ profile.total_bronzes }}">{{ profile.total_bronzes|intcomma }}</b></span>
             </div>
         </div>
 
@@ -187,10 +191,22 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
         trophy tiers. The two problems solved each other: the duplicate leaves, the stray moves in.
         {% endcomment %}
         <div class="pp-phero__stats grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-3 md:mt-4">
+            {% comment %}MID-SYNC this is the SUM OF THE TIERS, not `total_trophies`, which waits for
+            finalize -- so the four figures above would otherwise climb past the total printed here and
+            contradict it in the same eyeline. Derived in the view (`live_trophy_total`), server-rendered
+            so the first paint is already consistent, and kept in step by the status poll.{% endcomment %}
+            {% with trophies_now=live_trophy_total|default_if_none:header_stats.total_earned_trophies %}
             <div class="scard">
                 <div class="scard__label">Trophies</div>
-                <div class="scard__value pp-tally" data-countup="{{ header_stats.total_earned_trophies }}">{{ header_stats.total_earned_trophies|intcomma }}</div>
+                    {% comment %}`data-live-total` follows CAN-derive, not IS-derived. Gating it on the rendered
+                value meant a settled profile carried no hook, so pressing Refresh left this figure frozen
+                for the life of the page -- the controller captures the element once, at load. Its absence
+                is the signal to leave the figure alone, which is right for any hunter with a display
+                filter on (the tier counters are unfiltered; this figure is not) and wrong for everyone
+                else.{% endcomment %}
+                <div class="scard__value pp-tally"{% if can_derive_trophy_total %} data-live-total{% endif %} data-countup="{{ trophies_now }}">{{ trophies_now|intcomma }}</div>
             </div>
+            {% endwith %}
             <div class="scard">
                 <div class="scard__label">Games</div>
                 <div class="scard__value pp-tally" data-countup="{{ header_stats.total_games }}">{{ header_stats.total_games|intcomma }}</div>
@@ -204,5 +220,16 @@ The POLISH pass (2026-08) changed three things, and the first is structural rath
                 <div class="scard__value pp-tally"><span data-countup="{{ header_stats.average_completion|default:0|floatformat:0 }}">{{ header_stats.average_completion|default:0|floatformat:0 }}</span><span class="pp-phero__unit">%</span></div>
             </div>
         </div>
+
+        {% comment %}One line, for all of them at once, rather than a marker on each figure. Three of the
+        four cards above (Games, Completed, Avg. completion) read denorms that wait for finalize, so
+        during a sync they are a snapshot while the trophy tiers climb -- and a viewer has no way to know
+        that from the numbers.
+
+        Rendered hidden when the profile is not syncing rather than omitted, because `refresh-control.js`
+        reveals it the moment a hunter presses Refresh: the sync starts under a page that was correct a
+        second ago.{% endcomment %}
+        <p class="pp-phero__provisional" data-sync-provisional
+           {% if profile.sync_status != 'syncing' %}hidden{% endif %}>These figures are still arriving.</p>
     </div>
 </section>

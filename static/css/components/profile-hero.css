@@ -148,6 +148,26 @@
 }
 @keyframes ppPheroPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
+/* ---- "Still arriving" ---------------------------------------------------------------------------- */
+/* One quiet line rather than a marker on each figure. It is a statement about the PAGE, so it reads as
+   one -- and at 0.72rem/--pp-text-mute it matches the freshness line above it, which is the other
+   sentence on this surface about how current the numbers are. Not a banner, not a colour: a profile
+   mid-sync is a normal state, not a warning. */
+/* No `display` here, so the UA `[hidden]` rule already applies -- the explicit
+   `[hidden] { display: none }` this file's neighbours carry exists only where a component sets its own
+   display that would out-rank it.
+
+   `padding-right: 1px` because the house convention for italic text is unconditional, not scoped to
+   line-clamped text: `.pp-phero__title` twenty lines up carries it with no clamp at all, as do
+   `.edetail__flavor`, `.pursuer-card__title` and `.fnd__flavour`. Nothing clips this line, so it is
+   consistency rather than a fix. */
+.pp-phero__provisional {
+    margin-top: 8px; font-size: 0.72rem; font-weight: 500; font-style: italic;
+    color: var(--pp-text-mute); padding-right: 1px;
+}
+/* Above the tab walls it needs its own breathing room, since it sits between the tab bar and the grid. */
+.pp-phero__provisional--tabs { margin-top: 0; margin-bottom: 10px; }
+
 /* ---- The refresh control ------------------------------------------------------------------------- */
 /* A TEXT action inside the freshness line, not a bordered button beside it. The line is what creates the
    want ("Synced 5 days ago" with nowhere to go), so the answer belongs in the same sentence -- and the
