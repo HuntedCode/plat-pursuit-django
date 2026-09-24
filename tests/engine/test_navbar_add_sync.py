@@ -777,7 +777,12 @@ def test_the_announcement_gate_accounts_for_a_CLOSED_panel():
     gate = _body(js, 'function announcementFor() {')
     assert 'inView()' in gate, 'the gate is back on statusVisible(), which ignores a closed panel'
     assert 'statusVisible()' not in gate
-    assert "phase === 'ready'" in gate and "phase === 'error'" in gate
+    # No per-phase branches any more. They existed to re-word the three terminal stages for an
+    # out-of-view announcement, because nothing announced a toast; ToastManager does its own now, so
+    # keeping them would read each sentence twice. Out of view this says nothing at all.
+    assert "phase ===" not in gate, \
+        'the out-of-view branches are back, so a terminal stage is announced twice'
+    assert "return inView() ? addSync.message : '';" in gate
 
 
 def test_a_failure_out_of_view_reaches_a_sighted_hunter_too():
@@ -792,13 +797,18 @@ def test_a_failure_out_of_view_reaches_a_sighted_hunter_too():
     assert 'ToastManager.info(addSync.query' in js, 'an out-of-view poll cap is silent for sighted users'
 
 
-def test_the_ready_sentence_has_one_source():
-    """The toast and the announced line both promise "search the name again". Two literals would drift,
-    and the announced half is the only one a screen reader can reach."""
+def test_the_ready_sentence_has_exactly_one_speaker():
+    """It used to be said twice -- once as a toast, once re-worded into the live region, because a toast
+    was announced by nothing. ToastManager announces its own messages now, so the toast is the single
+    speaker and drift is impossible by construction rather than by sharing a constant.
+
+    Pinned at ONE call, not two: a second would be the double-announcement this change removed.
+    """
     js = _js('static/js/navbar-search.js')
 
-    assert js.count('readyAway:') == 1
-    assert js.count('COPY.readyAway(addSync.query)') == 2, 'the toast and the announcer share one string'
+    assert js.count('readyAway:') == 1, 'the sentence has two definitions again'
+    assert js.count('COPY.readyAway(addSync.query)') == 1, \
+        'the ready sentence is spoken twice -- a screen reader hears it from the toast AND the region'
 
 
 def test_the_shared_refusal_reader_is_feature_tested_at_every_call_site():
@@ -996,3 +1006,56 @@ def test_the_hero_does_not_call_a_stale_hunter_up_to_date():
     assert hand_over.count("'Found '") == 2, 'the two refusals still share one sentence'
     assert 'Already up to date' in hand_over
     assert 'Sign in to refresh' in hand_over
+
+
+# ----------------------------------------------------- toasts reach a screen reader at all ----
+
+def test_toasts_are_announced(client):
+    """For the life of the project, nothing ToastManager wrote was announced: it appends a div to a
+    container with no live region. 132 call sites, 119 of them with no other announcement at all -- so a
+    blind hunter pressed a button and was told nothing, whether it worked or not.
+
+    A dedicated page-level text region, not `aria-live` on the visual container: that one holds an icon
+    and markup rather than a sentence, and modal toasts go to their own `.modal-toast-container` popover
+    per dialog, which is HIDDEN between toasts -- and a hidden live region announces nothing.
+    """
+    body = client.get('/support/').content.decode()
+
+    assert 'id="toast-announcer"' in body, 'toasts have nowhere to be announced'
+    announcer = _tag_around(body, 'id="toast-announcer"')
+    assert 'aria-live="polite"' in announcer
+    assert 'sr-only' in announcer, 'the announcer is visible, so every toast is printed twice'
+    # `false`, so a burst reads as several messages instead of re-reading the whole region each time.
+    assert 'aria-atomic="false"' in announcer
+
+    # And the VISUAL container must NOT also be a live region, or every toast is announced twice.
+    assert 'aria-live' not in _tag_around(body, 'id="toast-container"')
+
+
+def test_the_toast_manager_writes_to_the_announcer():
+    """The markup is inert without this, and the write has to be per-toast rather than a replace: two
+    toasts in quick succession are two messages, not one that overwrites the other."""
+    utils = _js('static/js/utils.js')
+    body = _body(utils, 'show(message, type = \'info\', duration = 5000) {')
+
+    assert "getElementById('toast-announcer')" in body, 'the announcer is never written to'
+    assert 'announcer.appendChild' in body, 'it replaces rather than appends, so a burst loses messages'
+    assert 'said.textContent = message' in body, 'it announces something other than the message'
+    # Cleaned up on the toast's own schedule, so the region does not grow for the life of the page.
+    assert 'said.remove()' in body
+
+
+def test_no_page_announces_a_toast_a_second_time():
+    """Three files had built their own live region BECAUSE the toast was silent, and two of them said the
+    same sentence as the toast beside it. Once the toast speaks, those are a second reading of one fact --
+    a worse outcome for a screen-reader user than the gap was, so they had to go in the same change."""
+    ld = _js('static/js/list-detail.js')
+
+    for said in ["announce('Report sent. A moderator will take a look.')",
+                 "announce('Added ' + data.title + ' to the list.')",
+                 "announce(data.is_public ? 'List published.'"]:
+        assert said not in ld, 'a toast is still being announced twice: %s' % said[:40]
+
+    # The refusal path too: the toast and the announce carried the identical string.
+    refusal = ld.split('function toastError(', 1)[1].split('\n    }', 1)[0]
+    assert 'announce(' not in refusal, 'the refusal is announced twice'

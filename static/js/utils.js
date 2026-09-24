@@ -79,6 +79,21 @@ const ToastManager = {
 
         // Auto-remove after duration (longer for errors)
         const autoRemoveDuration = type === 'error' ? Math.max(duration, 7000) : duration;
+
+        // ANNOUNCE it. The visual toast is not announced by anything -- it is a div appended to a
+        // container with no live region -- so until this existed every toast on the site was silent to a
+        // screen reader, and a blind hunter pressing a button was told nothing whether it worked or not.
+        //
+        // A page-level text region (`#toast-announcer` in base.html), not `aria-live` on the container:
+        // see the comment there for why the container cannot do this job. One child per toast so a burst
+        // reads as several messages, removed on the toast's own schedule so the region does not grow.
+        const announcer = document.getElementById('toast-announcer');
+        if (announcer) {
+            const said = document.createElement('span');
+            said.textContent = message;
+            announcer.appendChild(said);
+            setTimeout(() => said.remove(), autoRemoveDuration);
+        }
         setTimeout(() => {
             toast.style.opacity = '0';
             toast.style.transform = 'translateX(100%)';

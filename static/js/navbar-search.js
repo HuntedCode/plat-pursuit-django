@@ -185,14 +185,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // `COPY.missing` and `COPY.rest` name no hunter, and out of context they describe a state the
     // screen flatly contradicts. '' clears a stale line.
     //
-    // This is the only channel that reaches a screen reader at all: `ToastManager` appends a plain div
-    // and `#toast-container` has no `aria-live`.
+    // Carries the ON-SCREEN stages only. It used to carry the out-of-view ones too, because nothing
+    // announced a toast; ToastManager does its own now (`#toast-announcer` in base.html).
+    // OUT OF VIEW IT NOW SAYS NOTHING, and that is a change. The three terminal stages used to be
+    // re-worded and announced from here because a toast was announced by nothing, and this was the only
+    // channel that reached a screen reader at all. ToastManager announces its own messages now, and each
+    // of those three branches already fires a toast carrying the same sentence -- so keeping them would
+    // read every one twice, which is a worse outcome for a screen-reader user than the silence was.
     function announcementFor() {
         if (!addSync || !addSync.message) { return ''; }
-        if (inView()) { return addSync.message; }
-        if (addSync.phase === 'ready') { return COPY.readyAway(addSync.query); }
-        if (addSync.phase === 'error' || addSync.phase === 'rest') { return addSync.query + ': ' + addSync.message; }
-        return '';
+        return inView() ? addSync.message : '';
     }
 
     // Is the field still showing the name we are syncing? RENDERING is gated on this; the WAIT is
