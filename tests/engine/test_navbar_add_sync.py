@@ -823,6 +823,26 @@ def test_the_shared_refusal_reader_is_feature_tested_at_every_call_site():
         'the delegation can throw from inside a catch'
 
 
+def test_the_shared_reader_speaks_both_refusal_dialects():
+    """`error` is ours, `detail` is DRF's -- and `error` must win when both are present, because a view
+    that set the explicit one meant it.
+
+    This is a prerequisite for migrating any DRF-calling site onto the shared reader: without the second
+    key, a site that moved over would silently lose every throttle and permission message it used to
+    show. `game-flag.js` is the first to move, and its local read is gone.
+    """
+    utils = _js('static/js/utils.js')
+    body = _body(utils, 'async failureMessage(err) {')
+
+    assert 'data.error || data.detail' in body, 'the precedence is wrong or a dialect is missing'
+    assert body.index('data.error') < body.index('data.detail'), 'detail would out-rank our own error'
+
+    flag = _js('static/js/game-flag.js')
+    assert 'd?.detail' not in flag, 'the local workaround survived the migration'
+    assert 'api.failureOr' in flag, 'game-flag no longer uses the shared reader'
+    assert 'api && api.failureOr' in flag, 'the shared call is unguarded against a cached utils.js'
+
+
 def test_the_guards_do_not_hide_the_loss_of_the_helper_itself():
     """The necessary complement to feature-testing every call site: with all three guarded, deleting or
     renaming `API.failureOr` raises nothing and fails nothing, and every server refusal in the navbar
@@ -833,10 +853,13 @@ def test_the_guards_do_not_hide_the_loss_of_the_helper_itself():
     assert 'async failureOr(err, fallback)' in utils, 'the shared fallback reader is gone'
     assert 'async failureMessage(err)' in utils
     assert 'async failureBody(err)' in utils, 'the parsed-body reader is gone'
-    # The one thing a caller actually depends on: it reads the server's `error` key. A rewrite returning
-    # `data.message` or `data.detail` would keep every other assertion green while reverting every
-    # refusal in the app to its fallback.
-    assert "data.error) || null" in utils, 'failureMessage no longer reads the server\'s `error` key'
+    # The two keys a caller depends on, and it is TWO because this codebase speaks two dialects: our own
+    # views refuse with `{'error': ...}`, every DRF view under `api/` with `{'detail': ...}` -- which is
+    # what a tripped `@ratelimit(block=True)` produces, since `Ratelimited` subclasses `PermissionDenied`
+    # and DRF renders that as a 403 carrying `detail`. Reading only `error` was silent on that whole
+    # surface, and `game-flag.js` had to work around it locally.
+    assert 'data.error || data.detail || null' in utils, \
+        'failureMessage is blind to one of the two refusal dialects'
     # And the two tolerances that make a `.catch` caller safe, which moved here out of quick-add.js:
     # a non-API error (no `.response`) and a non-JSON body (an HTML error page).
     body = _body(utils, 'async failureBody(err) {')
