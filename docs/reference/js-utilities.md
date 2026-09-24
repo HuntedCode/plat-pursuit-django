@@ -22,6 +22,30 @@ Shows temporary alert messages in the `#toast-container` element (positioned out
 
 Uses DaisyUI alert classes. Auto-removes after duration with slide-out animation. Error toasts get minimum 7000ms duration.
 
+#### Every toast announces itself. Do not announce it again.
+
+`show()` writes the message into a screen-reader-only live region as well as drawing the toast. Before
+that, nothing a toast said was announced at all: it appends a div to a container with no `aria-live`, so
+all 132 call sites were silent, and a hunter using a screen reader pressed a button and was told nothing
+either way.
+
+**The consequence for new code: if a toast reports an outcome, nothing else may report the same outcome.**
+A page that also writes that sentence to its own live region makes a screen reader read one event twice,
+which is a worse experience than the original silence. Nine sites had built exactly that workaround
+*because* toasts were silent, and unpicking them was the larger half of the change. A page-local live
+region is still right for stages that have **no** toast (progress, result counts, an empty state).
+
+Two structural details worth knowing before touching this:
+
+| Detail | Why |
+|--------|-----|
+| The region is page-level (`#toast-announcer`), not `aria-live` on `#toast-container` | The visual toast holds an SVG icon and markup rather than a sentence, and modal toasts go to a per-dialog `.modal-toast-container` popover that is hidden between toasts. A hidden live region announces nothing. |
+| A toast raised while a `<dialog>` is open is announced from a region **inside that dialog**, built on first use | `showModal()` makes everything outside the dialog inert, and an inert live region is silent. The page-level region cannot reach a modal toast, so `_announcerFor(openDialog)` mirrors the host lookup `show()` already does for the visual toast. A region created this instant gets its first message ~100ms later, because a live region has to be in the DOM before the text lands or the mutation is never observed. |
+
+Children are appended (one `<div>` per toast) rather than replacing the region's text, so a burst reads
+as several messages instead of one overwriting the next, and block children keep two messages from
+flattening into `Saved!Saved!`.
+
 ### PlatPursuit.CSRFToken
 
 Retrieves CSRF token for Django requests. Checks hidden input field first, falls back to cookies.

@@ -14,6 +14,29 @@ const ToastManager = {
      * @param {string} type - Type of toast: 'info', 'success', 'error', 'warning'
      * @param {number} duration - How long to show toast in ms (default: 5000)
      */
+    /**
+     * Where a toast's TEXT goes, which is not always where the toast goes.
+     *
+     * No open dialog: the page-level region in base.html. With one: a region inside that dialog, because
+     * the page-level one is inert while a modal is open and would say nothing. Created on first use
+     * rather than added to all 18+ dialog templates, and flagged `fresh` so the caller knows to let it
+     * settle into the DOM before writing to it.
+     */
+    _announcerFor(openDialog) {
+        if (!openDialog) { return document.getElementById('toast-announcer'); }
+        let region = openDialog.querySelector('[data-toast-announcer]');
+        if (!region) {
+            region = document.createElement('div');
+            region.className = 'sr-only';
+            region.setAttribute('aria-live', 'polite');
+            region.setAttribute('aria-atomic', 'false');
+            region.setAttribute('data-toast-announcer', '');
+            region.dataset.toastAnnouncerFresh = '1';
+            openDialog.appendChild(region);
+        }
+        return region;
+    },
+
     show(message, type = 'info', duration = 5000) {
         // If a dialog is open, use its toast container (dialogs use the browser
         // top layer which renders above all z-indices).
@@ -84,15 +107,36 @@ const ToastManager = {
         // container with no live region -- so until this existed every toast on the site was silent to a
         // screen reader, and a blind hunter pressing a button was told nothing whether it worked or not.
         //
-        // A page-level text region (`#toast-announcer` in base.html), not `aria-live` on the container:
-        // see the comment there for why the container cannot do this job. One child per toast so a burst
-        // reads as several messages, removed on the toast's own schedule so the region does not grow.
-        const announcer = document.getElementById('toast-announcer');
+        // A dedicated text region, not `aria-live` on the container: see the comment in base.html for why
+        // the container cannot do this job. One child per toast so a burst reads as several messages,
+        // removed on the toast's own schedule so the region does not grow for the life of the page.
+        //
+        // THE ANNOUNCEMENT FOLLOWS THE SAME HOST THE VISUAL TOAST DOES, for the same reason spelled out
+        // at the top of this method: while a modal <dialog> is open, `showModal()` makes everything
+        // outside it INERT, and an inert live region announces nothing whatsoever. The page-level region
+        // therefore cannot reach a toast raised over a modal, so a per-dialog region is created on first
+        // use. Without this half, every toast fired from a dialog stayed exactly as silent as it was
+        // before this region existed -- and roughly every destructive confirmation on the site is a
+        // dialog.
+        const announcer = ToastManager._announcerFor(openDialog);
         if (announcer) {
-            const said = document.createElement('span');
+            // A <div>, not a <span>: children of a live region are flattened into one string for any AT
+            // that re-reads the whole region, and inline siblings run together as "Saved!Saved!".
+            const said = document.createElement('div');
             said.textContent = message;
-            announcer.appendChild(said);
-            setTimeout(() => said.remove(), autoRemoveDuration);
+            const speak = () => {
+                announcer.appendChild(said);
+                setTimeout(() => said.remove(), autoRemoveDuration);
+            };
+            // A live region has to be in the DOM BEFORE the text lands or the mutation is not observed,
+            // so a region born this instant gets its first message a beat later. Every later toast in the
+            // same dialog finds it already there and speaks immediately.
+            if (announcer.dataset.toastAnnouncerFresh) {
+                delete announcer.dataset.toastAnnouncerFresh;
+                setTimeout(speak, 100);
+            } else {
+                speak();
+            }
         }
         setTimeout(() => {
             toast.style.opacity = '0';
@@ -4648,8 +4692,11 @@ function GameAdder(root, opts) {
                 var message = (err && err.signedOut)
                     ? 'You may have been signed out. Reload the page and try again.'
                     : ((err && err.response && err.message) || 'That could not be added.');
+                // No `say(message)` beside the toast. The status line is `sr-only aria-live`, so it
+                // exists only to announce -- and the toast now announces the same variable itself, which
+                // read the failure twice. `say()` still carries the stages that have no toast (the result
+                // counts, the empty state), which is the whole reason it exists.
                 if (PP.ToastManager) { PP.ToastManager.show(message, 'error'); }
-                say(message);
             });
     });
 
