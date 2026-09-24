@@ -66,26 +66,17 @@
         if (window.console && console.error) { console.error('[quick-add] ' + what, err); }
     }
 
-    /**
-     * The server's own refusal, or null.
-     *
-     * `PP.API` throws an Error whose `.response` is the raw `fetch` Response, NOT a parsed body --
-     * so `err.response.error` is always `undefined`, and reading it threw away every message the
-     * server took trouble to write. A hunter tapping a list holding 200 games was told "That could
-     * not be saved" instead of "A list holds 200 games. Remove one to make room, or start another
-     * list." -- a sentence the service runs an extra query to get right.
-     *
-     * This is the THIRD copy of this shape (`list-detail.js` has it, the legacy controller had it).
-     * Extracting it to `utils.js` is the right follow-up; doing it here first, correctly, beats a
-     * fourth wrong one.
-     */
+    // The server's own refusal, or null. The body of this lived here, as its comment predicted it
+    // shouldn't: it is now PlatPursuit.API.failureMessage in utils.js, shared with every other
+    // controller that was hand-rolling the same six lines.
+    //
+    // Feature-tested, not called straight. Both call sites are inside `.catch` handlers, and the guard
+    // at the top of this file passes on a CACHED pre-extraction `utils.js` (it has `postFormData`, so
+    // the happy path works) -- a bare call would then throw "failureMessage is not a function" from
+    // inside a rejection handler, losing the error toast entirely. The body being self-contained was
+    // the one thing this file had that the extraction took away; this puts it back.
     function failureMessage(err) {
-        if (!err || !err.response || typeof err.response.json !== 'function') {
-            return Promise.resolve(null);
-        }
-        return err.response.json()
-            .then(function (data) { return (data && data.error) || null; })
-            .catch(function () { return null; });
+        return PP.API.failureMessage ? PP.API.failureMessage(err) : Promise.resolve(null);
     }
 
     /* --------------------------------------------------------------- the popover ---- */

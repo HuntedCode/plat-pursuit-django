@@ -45,6 +45,7 @@ Strategic-identity docs and long-form vision documents for systems not yet fully
 | [Premium = Membership](design/rebuild/premium-proposal.md) | Premium direction: support-led membership (not a paywall), four buckets, v1 = positioning/storefront/flair, value flagships on a published roadmap. |
 | [Platinum Journey](design/platinum-journey.md) | Premium "patient companion": **Phase C of the Data Intelligence arc** — the insight engine spoken rather than charted; knows the user, helps plan their next pursuits |
 | [Stats Page](design/stats-page.md) | Premium `/my-stats/` page: video game stats screen with 100+ trophy hunting stats |
+| [The Frontier: Game Layer](design/frontier/README.md) | **BRAINSTORM CAPTURE (2026-09).** A browser menu/idle/builder game layered on the Pursuer. **Trophies buy WIDTH, the base buys DEPTH, gear buys VIABILITY**, so a Pursuer-0 account can reach endgame and hunting decides what KIND of content opens. Seven docs: vision, systems, the base + Shift system, content model, gear, the decision log (62 decisions, 21 rejected paths), and open questions. Nothing built. |
 
 ## Features
 

@@ -62,7 +62,10 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                        aria-label="Search games, badges, and hunters" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="navbar-search-results"
                        autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64"
                        data-form-type="other" data-lpignore="true" />
-                <span class="add-sync-load pp-navsearch__spin hidden" role="status" aria-label="Searching"></span>
+                {% comment %}aria-hidden, not role=status: the status line at the foot of the panel is
+                   the live region now, and a spinner announcing "Searching" alongside it read the
+                   same state twice.{% endcomment %}
+                <span class="add-sync-load pp-navsearch__spin hidden" aria-hidden="true"></span>
                 <button type="button" class="pp-navsearch__clear hidden" data-search-clear aria-label="Clear search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
                 </button>
@@ -71,6 +74,20 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
             {# Typeahead results + the add-and-sync fallback. #}
             <div class="pp-navsearch__panel" id="navbar-search-results" role="listbox" aria-label="Search suggestions" hidden>
                 <div class="pp-navsearch__list" data-search-list></div>
+                {% comment %}The add-and-sync status line, not an error line: it carries "Looking up
+                   NAME", "In the queue", "Syncing NAME", "Found NAME" and the failures, and JS adds the
+                   --err / --ok modifier per phase. It was `add-sync-error-text` with --err baked in,
+                   which is why the successful path had nowhere to speak and said nothing at all.
+
+                   It LEADS the cluster, above both action rows, because the sentence introduces the
+                   action in every phase: "Found NAME." then Visit profile, "We couldn't find that name"
+                   then the retry. It sat last, so each pair read backwards.
+
+                   VISUAL only -- the announcer at the end of the form is a sibling of the panel, because
+                   a <p> is not a permitted child of role="listbox" (AT may prune it) and this panel is
+                   `hidden` whenever it is closed, which is exactly when a hunter most needs telling.
+                   Same split the sync panel uses with its own `data-nav-live`.{% endcomment %}
+                <p id="add-sync-status-text" class="pp-navsearch__msg hidden"></p>
                 <button type="submit" id="navsearch-add" class="pp-navsearch__add add-sync-btn" data-search-add hidden>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M11 8v6M8 11h6"/></svg>
                     {% comment %}A comma, not an em-dash entity: house style forbids em dashes in
@@ -85,8 +102,8 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     <span>Visit profile</span>
                 </a>
-                <p id="add-sync-error-text" class="pp-navsearch__msg pp-navsearch__msg--err hidden"></p>
             </div>
+            <div class="sr-only" data-search-live aria-live="polite" aria-atomic="true"></div>
         </form>
     </div>
 

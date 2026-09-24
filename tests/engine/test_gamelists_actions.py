@@ -1737,16 +1737,30 @@ def test_the_popover_shows_what_the_server_actually_said(client):
     """`PP.API` throws an Error whose `.response` is the raw fetch Response, NOT a parsed body -- so
     `err.response.error` was always undefined and every refusal was replaced by a generic fallback.
     A hunter tapping a list at its 200-game cap was told "That could not be saved" instead of the
-    sentence `add_concept` runs an extra query to get right."""
+    sentence `add_concept` runs an extra query to get right.
+
+    The BODY that reads the response moved to `PlatPursuit.API.failureMessage` in 2026-09, when the
+    navbar search needed the same reader and this file's own comment had already named utils.js as
+    where it belonged. So this is now a delegation test, the same shape as the legacy-CSS test above:
+    absent from the old place, present in the new one. What it still guarantees is unchanged -- both
+    failure paths reach the server's sentence.
+    """
     js = _decommented(_read('static/js/quick-add.js'))
 
     assert 'function failureMessage(' in js
-    assert 'err.response.json()' in js, 'the body is still never awaited'
+    assert 'PP.API.failureMessage(err)' in js, 'the delegation to the shared reader is gone'
     assert 'err.response.error' not in js, 'the property that is always undefined is back'
     # BOTH failure paths use it. Counted from the CALL sites only: the definition line contains the
     # same substring, so a bare count of three would have been satisfied by one caller plus the
     # function itself.
     assert js.count('failureMessage(err).then(') == 2
+
+    # The one place the body lives now, and it must still await the stream rather than read a
+    # property off the raw Response.
+    utils = _decommented(_read('static/js/utils.js'))
+    assert 'async failureMessage(err) {' in utils
+    assert 'await err.response.json()' in utils, 'the body is still never awaited'
+    assert 'err.response.error' not in utils
 
 
 # ── the panel mechanics moved ───────────────────────────────────────────────────────────────────

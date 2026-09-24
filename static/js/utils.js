@@ -311,6 +311,46 @@ const API = {
                 ...options.headers
             }
         });
+    },
+
+    /**
+     * The server's own refusal message, or null.
+     *
+     * `request` throws an Error whose `.response` is the raw `fetch` Response, NOT a parsed body,
+     * so `err.response.error` is always `undefined` -- and reading it threw away every message the
+     * server took trouble to write. A hunter tapping a full list was told "That could not be saved"
+     * instead of the sentence naming the 200-game cap; the navbar search told a rate-limited hunter
+     * "Failed to sync profile" instead of "Too many searches. Please wait a minute."
+     *
+     * Hand-rolled copies of this shape had accumulated in `quick-add.js`, `list-detail.js`,
+     * `navsync.js`, `comments.js`, `game-lists.js` and a dozen more. This is the one home for it;
+     * `quick-add.js` predicted as much in the comment above its own copy. Callers not yet migrated
+     * are a follow-up, not a second implementation.
+     *
+     * @param {Error} err - the Error thrown by `request` (or anything else; a non-API error is null)
+     * @returns {Promise<string|null>} the server's `error` string, or null when there isn't one
+     */
+    async failureMessage(err) {
+        if (!err || !err.response || typeof err.response.json !== 'function') {
+            return null;
+        }
+        try {
+            const data = await err.response.json();
+            return (data && data.error) || null;
+        } catch (_) {
+            return null;   // HTML error page, empty body, already-consumed stream
+        }
+    },
+
+    /**
+     * `failureMessage` with a fallback baked in, for the common
+     * `ToastManager.error(await API.failureOr(err, '...'))` call.
+     */
+    async failureOr(err, fallback) {
+        // `API.failureMessage`, not `this.failureMessage`: these get pulled off the object by name in
+        // a few controllers, and a `this` that silently becomes undefined is a worse failure than the
+        // one being reported.
+        return (await API.failureMessage(err)) || fallback;
     }
 };
 

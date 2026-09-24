@@ -29,6 +29,48 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | POST | `/api/v1/trophy-case/` | Login | Update trophy case selections |
 | POST | `/api/v1/projects/accept/` | Login (linked) | Accept a claimable Project (`{slug}`) or all (`{all:true}`); banks XP. Returns `{granted, accepted[], claimable_count}` |
 
+### Universal Nav Search (Open)
+
+The navbar search bar and the anonymous landing hero. All three are open to anonymous callers on
+purpose: the search IS the pitch, and a hunter has to be able to look someone up before signing up.
+Driven by `navbar-search.js` and `landing.js`.
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/site-suggest/` | Open | Typeahead over the catalogue, grouped (games / badges / franchises / hunters) |
+| POST | `/api/search-sync-profile/` | Open | Add a PSN Online ID and start its sync (creates the Profile if new, else refreshes) |
+| GET | `/api/add-sync-status/` | Open | Poll the added hunter's ingestion state. Read-only, consumes no PSN tokens |
+
+**The add-and-sync contract** (pinned by `tests/engine/test_navbar_add_sync.py`). A first sync pulls an
+entire trophy history through rate-limited workers, so it is measured in minutes; the client has to
+narrate a wait, not await a response.
+
+`POST /api/search-sync-profile/` returns `{success, message, psn_username}`. Poll with the
+**`psn_username` from the response, not the raw input**: a newly created Profile is stored
+lowercased. Refusals are `{error}` bodies at 400 (blank name), 429 (over the cap) and 503 (PSN
+outage), and the client must read the body of the non-ok response to surface them (see
+`API.failureOr` in [js-utilities](js-utilities.md)).
+
+`GET /api/add-sync-status/?psn_username=<name>` (`__iexact`) always returns 200 for a lookup that
+has a name. A known profile returns `{sync_status, account_id, psn_username, slug}`; an unknown one
+returns only `{sync_status: 'error', account_id: ''}`, so a caller must not assume `slug` is present.
+Three states matter:
+
+| Response | Meaning | What the client does |
+|----------|---------|----------------------|
+| `sync_status: 'error'` | Unknown to PSN, or the sync failed | Stop polling, offer the spelling/privacy line |
+| `account_id` truthy **and** `slug` set | Basic ingestion landed | Stop polling, reveal the profile link |
+| anything else | Queued or mid-flight | Keep polling, narrate `sync_status` |
+
+**Gotchas**
+- `Profile.sync_status` defaults to **`'synced'`**, so a brand-new row reports 'synced' before
+  anything has synced. `account_id` is what gates the link, never the status.
+- A PSN outage makes `PSNManager.initial_sync` a silent no-op while this view still returns
+  `success: true`, so a status that never moves is reachable. Callers need a poll cap; both clients
+  stop after 120 ticks at 2.5s.
+- The Profile row is created **before** PSN confirms the name exists, so a typo leaves a row behind
+  that later reports `sync_status: 'error'`.
+
 ### Comments (Legacy / Read-Only)
 
 The comment system no longer accepts new comments. The list/create endpoints have been removed; only vote, report, and detail/edit/delete on existing rows remain. See [Comment System (Legacy)](../features/comment-system.md) for the full story.
@@ -259,6 +301,8 @@ Rate limits are applied via `django-ratelimit` on specific endpoints:
 | Recap regenerate | 10/min | Limit costly regeneration |
 | Recap share PNG | 20/min | Limit Playwright rendering |
 | Recap share HTML | 60/min | Limit share card generation |
+| Search-sync profile (authed) | 15/min by user | PSN-token cost of a sync |
+| Search-sync profile (anon) | 3/min by IP | Same, for an open endpoint. The user bucket is checked first, so a member behind a NAT'd IP is not held to this |
 
 ## Related Docs
 
