@@ -43,13 +43,17 @@ server-rendered; JS only toggles.
             <div class="ttl-plate ttl-plate--hero{% if not equipped_title %} ttl-plate--empty{% endif %} mt-3 md:mt-4" data-ttl-plate>
                 <span class="ttl-plate__label">Currently wearing</span>
                 {% if equipped_title %}
-                <span class="ttl-plate__name" data-ttl-plate-name aria-live="polite">{{ equipped_title.name }}</span>
+                {% comment %}No `aria-live` here. `setPlate()` writes this span in the same `.then()` as
+                a toast reading 'Now wearing "<name>".', so announcing it read one event twice -- the bare
+                name, then the sentence. The toast is the speaker; this is the visual state.{% endcomment %}
+                <span class="ttl-plate__name" data-ttl-plate-name>{{ equipped_title.name }}</span>
                 <button type="button" class="ttl-plate__clear" data-ttl-unequip>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
                     Take it off
                 </button>
                 {% else %}
-                <span class="ttl-plate__name ttl-plate__name--none" data-ttl-plate-name aria-live="polite">No title equipped</span>
+                {% comment %}No `aria-live`: the "Title removed." toast announces this outcome.{% endcomment %}
+                <span class="ttl-plate__name ttl-plate__name--none" data-ttl-plate-name>No title equipped</span>
                 <span class="ttl-plate__hint">Pick one from Yours below</span>
                 {% endif %}
             </div>

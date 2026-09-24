@@ -416,7 +416,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Rate limited, or anything else. The server's sentence when it wrote one.
                 var msg = (body && body.error) || 'Could not ask for an update. Try again in a moment.';
                 noteOnly('Try again shortly');
-                announce(msg);
+                // No `announce(msg)` beside the toast: ToastManager announces its own messages now, so
+                // saying it here too would read the same sentence twice. The line's short label
+                // ("Try again shortly") is what stays on screen.
                 if (window.PlatPursuit && PlatPursuit.ToastManager) { PlatPursuit.ToastManager.error(msg); }
             });
     }

@@ -777,7 +777,12 @@ def test_the_announcement_gate_accounts_for_a_CLOSED_panel():
     gate = _body(js, 'function announcementFor() {')
     assert 'inView()' in gate, 'the gate is back on statusVisible(), which ignores a closed panel'
     assert 'statusVisible()' not in gate
-    assert "phase === 'ready'" in gate and "phase === 'error'" in gate
+    # No per-phase branches any more. They existed to re-word the three terminal stages for an
+    # out-of-view announcement, because nothing announced a toast; ToastManager does its own now, so
+    # keeping them would read each sentence twice. Out of view this says nothing at all.
+    assert "phase ===" not in gate, \
+        'the out-of-view branches are back, so a terminal stage is announced twice'
+    assert "return inView() ? addSync.message : '';" in gate
 
 
 def test_a_failure_out_of_view_reaches_a_sighted_hunter_too():
@@ -792,13 +797,18 @@ def test_a_failure_out_of_view_reaches_a_sighted_hunter_too():
     assert 'ToastManager.info(addSync.query' in js, 'an out-of-view poll cap is silent for sighted users'
 
 
-def test_the_ready_sentence_has_one_source():
-    """The toast and the announced line both promise "search the name again". Two literals would drift,
-    and the announced half is the only one a screen reader can reach."""
+def test_the_ready_sentence_has_exactly_one_speaker():
+    """It used to be said twice -- once as a toast, once re-worded into the live region, because a toast
+    was announced by nothing. ToastManager announces its own messages now, so the toast is the single
+    speaker and drift is impossible by construction rather than by sharing a constant.
+
+    Pinned at ONE call, not two: a second would be the double-announcement this change removed.
+    """
     js = _js('static/js/navbar-search.js')
 
-    assert js.count('readyAway:') == 1
-    assert js.count('COPY.readyAway(addSync.query)') == 2, 'the toast and the announcer share one string'
+    assert js.count('readyAway:') == 1, 'the sentence has two definitions again'
+    assert js.count('COPY.readyAway(addSync.query)') == 1, \
+        'the ready sentence is spoken twice -- a screen reader hears it from the toast AND the region'
 
 
 def test_the_shared_refusal_reader_is_feature_tested_at_every_call_site():
@@ -1057,3 +1067,181 @@ def test_the_stored_name_is_always_lowercased():
     profile.save()
     profile.refresh_from_db()
     assert profile.psn_username == 'shouting'
+
+
+# ----------------------------------------------------- toasts reach a screen reader at all ----
+
+def test_toasts_are_announced(client):
+    """For the life of the project, nothing ToastManager wrote was announced: it appends a div to a
+    container with no live region. 132 call sites, 119 of them with no other announcement at all -- so a
+    blind hunter pressed a button and was told nothing, whether it worked or not.
+
+    A dedicated page-level text region, not `aria-live` on the visual container: that one holds an icon
+    and markup rather than a sentence, and modal toasts go to their own `.modal-toast-container` popover
+    per dialog, which is HIDDEN between toasts -- and a hidden live region announces nothing.
+    """
+    body = client.get('/support/').content.decode()
+
+    assert 'id="toast-announcer"' in body, 'toasts have nowhere to be announced'
+    announcer = _tag_around(body, 'id="toast-announcer"')
+    assert 'aria-live="polite"' in announcer
+    assert 'sr-only' in announcer, 'the announcer is visible, so every toast is printed twice'
+    # `false`, so a burst reads as several messages instead of re-reading the whole region each time.
+    assert 'aria-atomic="false"' in announcer
+
+    # And the VISUAL container must NOT also be a live region, or every toast is announced twice.
+    assert 'aria-live' not in _tag_around(body, 'id="toast-container"')
+
+
+def test_the_toast_manager_writes_to_the_announcer():
+    """The markup is inert without this, and the write has to be per-toast rather than a replace: two
+    toasts in quick succession are two messages, not one that overwrites the other."""
+    utils = _js('static/js/utils.js')
+    body = _body(utils, 'show(message, type = \'info\', duration = 5000) {')
+
+    # Resolved through the helper, not `getElementById` inline: where the TEXT goes depends on whether a
+    # modal is open, exactly as the visual container already does.
+    assert 'ToastManager._announcerFor(openDialog)' in body, 'the announcer is never written to'
+    assert 'announcer.appendChild' in body, 'it replaces rather than appends, so a burst loses messages'
+    assert 'said.textContent = message' in body, 'it announces something other than the message'
+    # Cleaned up on the toast's own schedule, so the region does not grow for the life of the page.
+    assert 'said.remove()' in body
+    # A block child, so that AT which re-reads the whole region does not run two messages together as
+    # "Saved!Saved!".
+    assert "const said = document.createElement('div')" in body
+
+
+def test_a_toast_raised_over_a_modal_is_announced_inside_the_dialog():
+    """The page-level region cannot do this job alone, which made the first version of this change a
+    no-op for roughly every destructive confirmation on the site.
+
+    `showModal()` puts the dialog in the top layer and makes everything outside it INERT, and an inert
+    live region announces nothing whatsoever. `#toast-announcer` lives at body level, outside
+    `#zoom-container`, so a toast fired from an open dialog was as silent as it had always been --
+    even though `show()` already knew to move the VISUAL toast into the dialog's own container.
+    """
+    utils = _js('static/js/utils.js')
+    helper = _body(utils, '_announcerFor(openDialog) {')
+
+    # No dialog: the page-level region, as before. Pinned by EQUALITY on the guard line, not by
+    # containment anywhere in the body -- `if (openDialog || !openDialog) { return <page region>; }`
+    # restores the original bug while leaving every string below it intact but unreachable, and a
+    # containment assertion cannot tell the difference. It passed exactly that mutation once.
+    guard = [ln.strip() for ln in helper.split('\n') if ln.strip()][0]
+    assert guard == "if (!openDialog) { return document.getElementById('toast-announcer'); }", \
+        'the page-level region is returned on the wrong condition, so modal toasts are silent again'
+
+    # With one: a region INSIDE that dialog, and a real live region rather than a bare div.
+    assert 'openDialog.querySelector' in helper, 'it never looks inside the dialog'
+    assert 'openDialog.appendChild(region)' in helper, 'the region is built but never attached'
+    assert "setAttribute('aria-live', 'polite')" in helper, 'the per-dialog region is not a live region'
+    assert "region.className = 'sr-only'" in helper, 'the per-dialog region is visible'
+
+    # A live region must be in the DOM before the text lands or the mutation goes unobserved, so a
+    # region born this instant has to settle first. Pinned because the bug it prevents is invisible:
+    # the region is correct, the text is correct, and nothing is announced.
+    assert 'toastAnnouncerFresh' in helper, 'a newly built region is not flagged'
+    body = _body(utils, 'show(message, type = \'info\', duration = 5000) {')
+    assert 'toastAnnouncerFresh' in body and 'setTimeout(speak, 100)' in body, \
+        'the first message into a fresh region is not deferred, so it is silently dropped'
+
+
+def test_the_game_adder_does_not_announce_its_failure_twice():
+    """The ninth instance of the pattern this change fixed, and it was in the very file the change
+    edited. Missed because the sweep grepped for `function announce(` and this speaks through `say()`.
+
+    `say()` writes `[data-gl-adder-status]`, which is `sr-only aria-live="polite"` -- it exists ONLY to
+    announce. The toast on the line above carried the identical `message` variable, so a screen reader
+    heard the failure, then heard it again.
+    """
+    utils = _js('static/js/utils.js')
+    catch = utils.split("logFailure('add ' + root.dataset.addUrl, err);", 1)[1].split('});', 1)[0]
+
+    assert 'ToastManager.show(message' in catch, 'wrong block captured -- the toast is not in it'
+    assert 'say(' not in catch, 'the add failure is announced twice: the toast says it and say() repeats it'
+
+    # And `say()` is still doing its real job. It carries the stages that have NO toast, so gutting it
+    # would trade a double announcement for a silent one.
+    assert utils.count('say(') > 3, 'say() was gutted rather than un-duplicated'
+
+
+def test_the_title_plate_is_not_a_live_region():
+    """`setPlate()` writes the plate name in the same `.then()` as a toast reading 'Now wearing "X".',
+    so announcing the span read one event twice: the bare name, then the sentence. The toast's wording
+    is the better of the two, so it is the speaker and the plate is visual state."""
+    src = (Path(__file__).resolve().parents[2] / 'templates/trophies/my_titles.html').read_text(encoding='utf-8')
+
+    # Scoped to the tags themselves: this file now carries a comment that explains the absence, and
+    # `aria-live` appears in its prose.
+    at, seen = -1, 0
+    while True:
+        at = src.find('data-ttl-plate-name', at + 1)
+        if at < 0:
+            break
+        tag = src[src.rindex('<', 0, at):src.index('>', at) + 1]
+        assert 'aria-live' not in tag, 'the equipped title is announced twice (plate + toast)'
+        seen += 1
+
+    # Both states: the equipped plate and the "No title equipped" one.
+    assert seen == 2, 'the plate markup changed shape; re-scope this test'
+
+
+def test_the_first_sync_finale_is_not_a_live_region():
+    """Two speakers for one moment. The finale block reveals from `hidden` on the very tick navsync
+    fires "Profile sync complete!", so a screen reader heard "Sync complete" and then the toast.
+
+    It was a poor live region on its own terms too: the four stat slots inside it COUNT UP, so a polite
+    region read every intermediate value on the way to each total.
+    """
+    src = (Path(__file__).resolve().parents[2] / 'templates/home/_hero_syncing.html').read_text(encoding='utf-8')
+    tag = _tag_around(src, 'data-sync-complete')
+
+    assert 'hidden' in tag, 'wrong tag captured -- the finale starts hidden'
+    assert 'aria-live' not in tag, 'the first-sync finale is announced twice, and reads every count-up'
+
+
+
+def test_no_page_announces_a_toast_a_second_time():
+    """Three files had built their own live region BECAUSE the toast was silent, and two of them said the
+    same sentence as the toast beside it. Once the toast speaks, those are a second reading of one fact --
+    a worse outcome for a screen-reader user than the gap was, so they had to go in the same change."""
+    ld = _js('static/js/list-detail.js')
+
+    for said in ["announce('Report sent. A moderator will take a look.')",
+                 "announce('Added ' + data.title + ' to the list.')",
+                 "announce(data.is_public ? 'List published.'"]:
+        assert said not in ld, 'a toast is still being announced twice: %s' % said[:40]
+
+    # The refusal path too: the toast and the announce carried the identical string.
+    refusal = ld.split('function toastError(', 1)[1].split('\n    }', 1)[0]
+    assert 'announce(' not in refusal, 'the refusal is announced twice'
+
+
+def test_the_nav_panel_does_not_say_sync_complete_twice():
+    """`navsync.js` owns BOTH a toast and its own live region, and on the syncing -> synced transition it
+    wrote "Profile sync complete" to the region three lines above a toast reading "Profile sync
+    complete!". One event, one sentence, read twice, the moment the toast gained a voice.
+
+    This was missed by the sweep that resolved the other eight sites, because that sweep grepped for
+    `function announce(` and this file writes through a local `txt(live, ...)` helper instead.
+
+    The assertion is on the BRANCH, not on the string. The sentence is still in the file: it moved into
+    the `else`, where no toast fires (a poll that finds an already-settled profile), so the region does
+    not go stale for someone who never saw the transition. Pinning `not in js` would pass for the wrong
+    reason and would forbid the correct code.
+    """
+    js = _js('static/js/navsync.js')
+
+    assert js.count("lastStatus === 'syncing'") == 1, 'anchor is no longer unique; re-scope this test'
+    transition = js.split("if (lastStatus === 'syncing') {", 1)[1].split('} else {', 1)[0]
+
+    assert 'ToastManager.success' in transition, 'wrong block captured -- the toast is not in it'
+    assert 'txt(live' not in transition, \
+        'the completion is announced twice: the toast says it and the live region says it again'
+
+    # And the no-toast branch keeps its own announcement, so a poll landing on a settled profile still
+    # leaves an accurate region rather than a stale "Syncing 84% complete".
+    settled = js.split("if (lastStatus === 'syncing') {", 1)[1].split('} else {', 1)[1].split('\n            }', 1)[0]
+    assert "txt(live, 'Profile sync complete')" in settled, \
+        'the live region was deleted rather than moved, so it can now go stale'
+    assert 'ToastManager' not in settled, 'a toast moved onto the no-transition branch'

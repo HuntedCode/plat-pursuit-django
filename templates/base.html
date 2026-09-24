@@ -90,6 +90,19 @@
     <!-- Toast Notification Container -->
     <div id="toast-container" class="toast toast-bottom toast-end z-50"></div>
 
+    {% comment %}Where toasts are ANNOUNCED. Separate from the visual container above, deliberately:
+    that one holds an icon and markup rather than a sentence, modal toasts go to their own
+    `.modal-toast-container` popover per dialog (hidden between toasts, and a hidden live region
+    announces nothing), and a future container would have to remember the attribute.
+
+    `aria-atomic="false"` with one child appended per toast, so a burst reads as several messages rather
+    than re-reading the whole region each time. Polite, not assertive: a toast is a report, and an
+    interrupting one costs more than it buys even for an error.
+
+    Nothing writes here but ToastManager. Before this existed, all 132 toast call sites were silent to a
+    screen reader, and three pages had built their own live regions to work around it.{% endcomment %}
+    <div id="toast-announcer" class="sr-only" aria-live="polite" aria-atomic="false"></div>
+
     <!-- Unsaved Changes Modal (shared across pages) -->
     {% include 'partials/unsaved_changes_modal.html' %}
 

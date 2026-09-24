@@ -77,10 +77,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (s === 'synced') {
             setSync('synced'); txt(statusEl, 'Synced'); hide(prog);
-            txt(live, 'Profile sync complete'); stopPoll(); countdown(data.seconds_to_next_sync);
+            stopPoll(); countdown(data.seconds_to_next_sync);
             if (lastStatus === 'syncing') {
                 flashRings();   // the satisfying "done" pulse on the avatar ring
+                // The toast announces itself now, so it is the sole speaker here. It used to say
+                // "Profile sync complete!" while `live` said "Profile sync complete" on the line above --
+                // one sentence, read twice, once the toast gained a voice.
                 if (window.PlatPursuit && PlatPursuit.ToastManager) { PlatPursuit.ToastManager.success('Profile sync complete!'); }
+            } else {
+                // No transition, so no toast fired: this poll found a profile that was already settled.
+                // Nothing to celebrate, but the live region should still not be stale.
+                txt(live, 'Profile sync complete');
             }
         } else if (s === 'syncing') {
             setSync('syncing');

@@ -441,9 +441,12 @@ below with no outer wrapper.
     {% endif %}
 
     {% comment %}Page-level actions announce here. Separate from the adder's own status region,
-    which is scoped to search results: adding and removing are page-level changes, and the toast
-    that reports them is not an announcement -- `#toast-container` in base.html carries no
-    `aria-live`, so nothing ToastManager writes is read out at all.
+    which is scoped to search results: adding and removing are page-level changes.
+
+    It used to carry the toast messages too, because nothing announced a toast -- `#toast-container`
+    had no `aria-live`. `#toast-announcer` in base.html closed that, so this region now carries only
+    the stages that have NO toast; anything a toast reports must not be repeated here, or a screen
+    reader hears one sentence twice.
 
     NOT `{% templatetag openblock %} if is_owner {% templatetag closeblock %}` ANY MORE, and that
     gate was a silent hole rather than a saving. Reporting is the one action on this page available

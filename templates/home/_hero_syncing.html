@@ -124,7 +124,17 @@ the one messages renderer (a second one double-renders every login message).
                     phrase for this exact moment). Hidden until syncing.js sees the synced transition;
                     first syncs only -- a returning user mid-quick-refresh keeps the instant reload.
                     Stats fill from the poll payload; the slots render 0 until then. {% endcomment %}
-                    <div class="text-center py-2 md:py-4 pp-head-cascade" data-sync-complete hidden aria-live="polite">
+                    {% comment %}NOT a live region, deliberately. Two reasons, and either alone is enough.
+                    It reveals from `hidden` on the same tick navsync fires its "Profile sync complete!"
+                    toast, which is announced now, so the moment was read twice. And the four stat slots
+                    below COUNT UP inside this block, so a polite region here read every intermediate
+                    value aloud on the way to the total. The toast is the single speaker; the tally is
+                    here to be read at leisure.
+
+                    The one case with no toast -- a sync that finishes between render and the first poll,
+                    where navsync never saw 'syncing' -- is covered by the `else` in its own synced
+                    branch, which announces completion through `[data-nav-live]`.{% endcomment %}
+                    <div class="text-center py-2 md:py-4 pp-head-cascade" data-sync-complete hidden>
                         <p class="text-[0.65rem] md:text-xs font-semibold uppercase tracking-[0.14em] text-success">Sync complete</p>
                         <h2 class="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight mt-1">Your Pursuer has emerged</h2>
                         <p class="text-xs md:text-sm text-base-content/60 mt-2">Every trophy counted, every badge weighed, every job leveled. Here is your opening tally.</p>

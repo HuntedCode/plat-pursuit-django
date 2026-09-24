@@ -139,7 +139,9 @@
 
     // Owner actions were entirely silent to a screen reader: the add path toasted and the remove
     // path emitted nothing, and the toast is not a fallback -- `#toast-container` has no `aria-live`,
-    // so ToastManager's output is never announced.
+    // ...for the STAGES that have no toast. Toast messages are announced by ToastManager itself now,
+    // so anything a toast reports must NOT also be announced here -- that reads one sentence twice,
+    // which is a worse outcome for a screen-reader user than the silence this worked around.
     function announce(message) {
         var el = document.querySelector('[data-gl-status]');
         if (el) { el.textContent = message; }
@@ -156,12 +158,12 @@
     function toastError(err, fallback) {
         logFailure('write', err);
         var show = function (msg) {
+            // ONE reading. A refusal used to be toasted AND announced with the identical string,
+            // because nothing announced a toast -- successes called `announce()` and failures did not,
+            // so a blind owner whose rename was refused got silence: no announcement, no inline error,
+            // and a form still open. ToastManager announces its own messages now, so the toast alone
+            // covers both audiences and a second call here would read the refusal twice.
             if (PP.ToastManager) { PP.ToastManager.show(msg || fallback, 'error'); }
-            // The toast is NOT a fallback for this: `#toast-container` carries no `aria-live`, as
-            // both this file and the template note, so nothing ToastManager writes is announced.
-            // Successes called `announce()` and failures did not, so a blind owner whose rename was
-            // refused got silence -- no announcement, no inline error, and a form still open.
-            announce(msg || fallback);
         };
         // A followed redirect, not a refusal -- so say the thing the person can act on rather than
         // a generic failure they would read as a bug in the list.
@@ -644,10 +646,12 @@
             failureCopy: failureCopy,
             onAdded: function (data) {
                 setTally('[data-game-count]', data.game_count);
+                // One reading, not two -- and the better sentence. The announce said "Added X to the
+                // list." where the toast said "Added X."; different words for one event, heard twice.
+                // The fuller wording moved INTO the toast, since that is the one everybody gets.
                 if (PP.ToastManager) {
-                    PP.ToastManager.show('Added ' + data.title + '.', 'success');
+                    PP.ToastManager.show('Added ' + data.title + ' to the list.', 'success');
                 }
-                announce('Added ' + data.title + ' to the list.');
                 // Its own catch, for the same reason as remove -- and worse here, because the
                 // success toast has ALREADY fired. Chained into a shared catch, a failed re-render
                 // put "Added Hollow Knight." and "That game could not be added." on screen together,
@@ -858,9 +862,8 @@
                         if (PP.ToastManager) {
                             PP.ToastManager.show('Report sent. A moderator will take a look.', 'success');
                         }
-                        // The toast carries no `aria-live`, as this file notes elsewhere, so the
-                        // status line is what actually announces it.
-                        announce('Report sent. A moderator will take a look.');
+                        // No `announce()`: the toast announces itself now, and the comment that used to
+                        // sit here said the opposite -- it is the reason this line existed.
                     });
                 })
                 .catch(function (err) {
@@ -1172,12 +1175,13 @@
                 .then(function (data) {
                     paint(data.is_public, data.is_public);
                     refocusAfter(data.is_public);
+                    // The announce's wording was the clearer of the two ("List published." against a
+                    // bare "Published."), so it is what the toast says now: one reading, better sentence.
                     if (PP.ToastManager) {
                         PP.ToastManager.show(
-                            data.is_public ? 'Published.' : 'This list is private again.',
+                            data.is_public ? 'List published.' : 'This list is private again.',
                             'success');
                     }
-                    announce(data.is_public ? 'List published.' : 'List is now private.');
                 })
                 .catch(function (err) {
                     toastError(err, isPublic ? 'That list could not be published.'
