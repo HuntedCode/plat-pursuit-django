@@ -1019,3 +1019,41 @@ def test_the_hero_does_not_call_a_stale_hunter_up_to_date():
     assert hand_over.count("'Found '") == 2, 'the two refusals still share one sentence'
     assert 'Already up to date' in hand_over
     assert 'Sign in to refresh' in hand_over
+
+
+# ------------------------------------------------- the lookups that must stay indexed ----
+
+def test_no_sync_endpoint_seq_scans_the_profile_table():
+    """`psn_username__iexact` compiles to `UPPER("psn_username") = UPPER(%s)` on Postgres, which neither
+    the unique constraint nor `psn_username_idx` can serve -- so it sequentially scans every Profile.
+
+    This file holds the most-polled endpoint on the site: `navbar-search.js` and `landing.js` hit
+    `add_sync_status` every 2.5s and `refresh-control.js` every 4s, so the scan ran 15-24 times a minute
+    for every viewer with a page open.
+
+    Pinned at the SOURCE because the failure is invisible from the outside: the wrong lookup returns
+    exactly the right answer, just slowly, and no assertion on a response body or a test-sized fixture
+    can tell the two apart. An `EXPLAIN` against a handful of rows would happily pick a seq scan for the
+    indexed version too.
+
+    `.lower()` + exact is correct as well as cheap, because `Profile.save()` lowercases this column
+    unconditionally -- pinned by `test_the_stored_name_is_always_lowercased` below.
+    """
+    source = _js('trophies/views/sync_views.py')   # comment-stripping works on Python too
+
+    assert 'psn_username__iexact' not in source, \
+        'a sync endpoint is sequentially scanning the Profile table again'
+    assert source.count('psn_username=psn_username.lower()') >= 2, \
+        'the indexed form is gone from one of the lookups'
+
+
+def test_the_stored_name_is_always_lowercased():
+    """The premise the indexed lookup rests on. If `Profile.save()` ever stopped lowercasing, exact-match
+    would start missing rows that `iexact` used to find -- silently, and only for mixed-case names."""
+    profile = ProfileFactory(psn_username='MiXeDcAsE')
+
+    assert profile.psn_username == 'mixedcase'
+    profile.psn_username = 'ShOuTiNg'
+    profile.save()
+    profile.refresh_from_db()
+    assert profile.psn_username == 'shouting'
