@@ -39,7 +39,7 @@ Driven by `navbar-search.js` and `landing.js`.
 |--------|------|------|---------|
 | GET | `/api/site-suggest/` | Open | Typeahead over the catalogue, grouped (games / badges / franchises / hunters) |
 | POST | `/api/search-sync-profile/` | Open | Add a PSN Online ID and start its sync. Creates the Profile if new; otherwise refreshes it, **or refuses with 429 if its cooldown is still running** |
-| GET | `/api/add-sync-status/` | Open | Poll the added hunter's ingestion state. Read-only, consumes no PSN tokens |
+| GET | `/api/add-sync-status/` | Open | Poll the added hunter's ingestion state. Read-only, consumes no PSN tokens. **The most-polled endpoint on the site** and deliberately un-rate-limited: see below |
 
 **The add-and-sync contract** (pinned by `tests/engine/test_navbar_add_sync.py`). A first sync pulls an
 entire trophy history through rate-limited workers, so it is measured in minutes; the client has to
@@ -96,6 +96,11 @@ settled page carried no hook and pressing Refresh left the figure frozen for the
   anything has synced. `account_id` is what gates the link, never the status.
 - `total_trophies` waits for **finalize**; only the four `stats` counters climb during the walk. Any
   other figure read mid-sync is a pre-sync snapshot.
+- **Never look this column up with `iexact`.** On Postgres it compiles to
+  `UPPER("psn_username") = UPPER(%s)`, which neither the unique constraint nor `psn_username_idx` can
+  serve, so it sequentially scans every Profile. `Profile.save()` lowercases the column unconditionally,
+  so `.lower()` + exact is correct as well as cheap. The failure is invisible from outside -- the wrong
+  lookup returns exactly the right answer, just slowly -- which is why it is pinned at the source.
 - Callers still need a poll cap; both clients stop after 120 ticks at 2.5s. A status that never moves
   is reachable whenever the worker is down.
 - The Profile row is created **before** PSN confirms the name exists, so a typo leaves a row behind
@@ -129,6 +134,18 @@ the hunter exists and is current, so a client should reveal the profile link rat
 Before the refusal was made honest, a tracked hunter returned 200 and the poll revealed that link on its
 first tick, so treating 429 as a failure was a regression dressed as a fix -- it broke the anonymous
 hero, whose whole job is getting a stranger onto a profile page.
+
+**`add-sync-status` is deliberately NOT rate-limited**, unlike its login-gated sibling
+`/api/profile-sync-status/` (60/m per user). Three clients poll it on a timer -- `navbar-search.js` and
+`landing.js` every 2.5s (24/min each), `refresh-control.js` every 4s (15/min) -- and one viewer can have
+two running at once. Anonymous polling here is a **first-class use, not abuse**: the landing hero *is*
+the pitch to a stranger. A cap tight enough to bound scraping would have to be keyed on IP, and any
+household, office or mobile carrier behind one address would hit it; the front door is the worst thing on
+the site to break. The lookup is a single indexed read of figures the profile page already prints
+unauthenticated, so scraping it is no cheaper than crawling the public, sitemapped profile pages.
+
+Its lookup uses `.lower()` + exact, never `iexact`, for the reason recorded in the Gotchas below.
+Pinned by `test_no_sync_endpoint_seq_scans_the_profile_table`.
 
 **Two independent bounds, and the important one is not the rate limit.** The cooldown on
 `Profile.last_synced` is a **per-profile** throttle (5 min premium / 1 hour basic, `sync_tier`'s only
