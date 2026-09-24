@@ -175,14 +175,15 @@ const GameFlag = (() => {
                 PlatPursuit.ToastManager.show(msg, 'success');
                 close();
             } catch (error) {
-                let msg = 'Failed to submit report.';
-                // `detail` as well as `error`: our own refusals use `error`, but a tripped rate
-                // limit raises Ratelimited (a PermissionDenied subclass) which DRF renders as a 403
-                // carrying `detail`. Reading only `error` told a rate-limited reporter nothing.
-                try {
-                    const d = await error.response?.json();
-                    msg = d?.error || d?.detail || msg;
-                } catch (_) { /* no body */ }
+                // `API.failureOr` reads `error` THEN `detail`, which is the reason this site no longer
+                // needs its own read: our refusals use `error`, but a tripped rate limit raises
+                // Ratelimited (a PermissionDenied subclass) that DRF renders as a 403 carrying `detail`,
+                // and reading only `error` told a rate-limited reporter nothing. That knowledge now
+                // lives in the shared reader, guarded for the cached-utils.js case.
+                const api = window.PlatPursuit && PlatPursuit.API;
+                const msg = api && api.failureOr
+                    ? await api.failureOr(error, 'Failed to submit report.')
+                    : 'Failed to submit report.';
                 PlatPursuit.ToastManager.show(msg, 'error');
             } finally {
                 submitBtn.disabled = false;

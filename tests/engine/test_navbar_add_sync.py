@@ -833,6 +833,26 @@ def test_the_shared_refusal_reader_is_feature_tested_at_every_call_site():
         'the delegation can throw from inside a catch'
 
 
+def test_the_shared_reader_speaks_both_refusal_dialects():
+    """`error` is ours, `detail` is DRF's -- and `error` must win when both are present, because a view
+    that set the explicit one meant it.
+
+    This is a prerequisite for migrating any DRF-calling site onto the shared reader: without the second
+    key, a site that moved over would silently lose every throttle and permission message it used to
+    show. `game-flag.js` is the first to move, and its local read is gone.
+    """
+    utils = _js('static/js/utils.js')
+    body = _body(utils, 'async failureMessage(err) {')
+
+    assert 'data.error || data.detail' in body, 'the precedence is wrong or a dialect is missing'
+    assert body.index('data.error') < body.index('data.detail'), 'detail would out-rank our own error'
+
+    flag = _js('static/js/game-flag.js')
+    assert 'd?.detail' not in flag, 'the local workaround survived the migration'
+    assert 'api.failureOr' in flag, 'game-flag no longer uses the shared reader'
+    assert 'api && api.failureOr' in flag, 'the shared call is unguarded against a cached utils.js'
+
+
 def test_the_guards_do_not_hide_the_loss_of_the_helper_itself():
     """The necessary complement to feature-testing every call site: with all three guarded, deleting or
     renaming `API.failureOr` raises nothing and fails nothing, and every server refusal in the navbar
@@ -843,10 +863,13 @@ def test_the_guards_do_not_hide_the_loss_of_the_helper_itself():
     assert 'async failureOr(err, fallback)' in utils, 'the shared fallback reader is gone'
     assert 'async failureMessage(err)' in utils
     assert 'async failureBody(err)' in utils, 'the parsed-body reader is gone'
-    # The one thing a caller actually depends on: it reads the server's `error` key. A rewrite returning
-    # `data.message` or `data.detail` would keep every other assertion green while reverting every
-    # refusal in the app to its fallback.
-    assert "data.error) || null" in utils, 'failureMessage no longer reads the server\'s `error` key'
+    # The two keys a caller depends on, and it is TWO because this codebase speaks two dialects: our own
+    # views refuse with `{'error': ...}`, every DRF view under `api/` with `{'detail': ...}` -- which is
+    # what a tripped `@ratelimit(block=True)` produces, since `Ratelimited` subclasses `PermissionDenied`
+    # and DRF renders that as a 403 carrying `detail`. Reading only `error` was silent on that whole
+    # surface, and `game-flag.js` had to work around it locally.
+    assert 'data.error || data.detail || null' in utils, \
+        'failureMessage is blind to one of the two refusal dialects'
     # And the two tolerances that make a `.catch` caller safe, which moved here out of quick-add.js:
     # a non-API error (no `.response`) and a non-JSON body (an HTML error page).
     body = _body(utils, 'async failureBody(err) {')
@@ -1006,6 +1029,44 @@ def test_the_hero_does_not_call_a_stale_hunter_up_to_date():
     assert hand_over.count("'Found '") == 2, 'the two refusals still share one sentence'
     assert 'Already up to date' in hand_over
     assert 'Sign in to refresh' in hand_over
+
+
+# ------------------------------------------------- the lookups that must stay indexed ----
+
+def test_no_sync_endpoint_seq_scans_the_profile_table():
+    """`psn_username__iexact` compiles to `UPPER("psn_username") = UPPER(%s)` on Postgres, which neither
+    the unique constraint nor `psn_username_idx` can serve -- so it sequentially scans every Profile.
+
+    This file holds the most-polled endpoint on the site: `navbar-search.js` and `landing.js` hit
+    `add_sync_status` every 2.5s and `refresh-control.js` every 4s, so the scan ran 15-24 times a minute
+    for every viewer with a page open.
+
+    Pinned at the SOURCE because the failure is invisible from the outside: the wrong lookup returns
+    exactly the right answer, just slowly, and no assertion on a response body or a test-sized fixture
+    can tell the two apart. An `EXPLAIN` against a handful of rows would happily pick a seq scan for the
+    indexed version too.
+
+    `.lower()` + exact is correct as well as cheap, because `Profile.save()` lowercases this column
+    unconditionally -- pinned by `test_the_stored_name_is_always_lowercased` below.
+    """
+    source = _js('trophies/views/sync_views.py')   # comment-stripping works on Python too
+
+    assert 'psn_username__iexact' not in source, \
+        'a sync endpoint is sequentially scanning the Profile table again'
+    assert source.count('psn_username=psn_username.lower()') >= 2, \
+        'the indexed form is gone from one of the lookups'
+
+
+def test_the_stored_name_is_always_lowercased():
+    """The premise the indexed lookup rests on. If `Profile.save()` ever stopped lowercasing, exact-match
+    would start missing rows that `iexact` used to find -- silently, and only for mixed-case names."""
+    profile = ProfileFactory(psn_username='MiXeDcAsE')
+
+    assert profile.psn_username == 'mixedcase'
+    profile.psn_username = 'ShOuTiNg'
+    profile.save()
+    profile.refresh_from_db()
+    assert profile.psn_username == 'shouting'
 
 
 # ----------------------------------------------------- toasts reach a screen reader at all ----

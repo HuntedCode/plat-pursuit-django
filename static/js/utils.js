@@ -406,10 +406,20 @@ const API = {
      * Most callers only want the sentence. One that needs to branch on WHY -- a refresh refused by a
      * cooldown means the profile is fine and viewable, which is not a failure to show in red -- takes
      * the whole body instead.
+     *
+     * TWO KEYS, because this codebase speaks two dialects. Our own views refuse with
+     * `{'error': '...'}`; every DRF view under `api/` refuses with `{'detail': '...'}`, which is what a
+     * tripped `@ratelimit(block=True)` produces -- `Ratelimited` subclasses `PermissionDenied`, and DRF
+     * renders that as a 403 carrying `detail`. Reading only `error` told a rate-limited caller nothing at
+     * all on that entire surface, and `game-flag.js` had to work around it locally.
+     *
+     * `error` wins when both are present: it is our own convention, and a DRF view that sets both meant
+     * the explicit one.
      */
     async failureMessage(err) {
         const data = await API.failureBody(err);
-        return (data && data.error) || null;
+        if (!data) return null;
+        return data.error || data.detail || null;
     },
 
     /**

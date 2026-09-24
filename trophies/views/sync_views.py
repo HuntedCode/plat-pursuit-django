@@ -493,7 +493,10 @@ class SearchSyncProfileView(View):
 
         is_new = False
         try:
-            profile = Profile.objects.get(psn_username__iexact=psn_username)
+            # `.lower()` + exact, not `iexact`: see the note on `AddSyncStatusView` below. Cheaper, and
+            # it also makes the lookup agree with the CREATE two lines down, which has always stored the
+            # lowercased form -- a mismatch there is how a "not found" can race into a duplicate row.
+            profile = Profile.objects.get(psn_username=psn_username.lower())
         except Profile.DoesNotExist:
             profile = Profile.objects.create(
                 psn_username=psn_username.lower(),
@@ -626,6 +629,18 @@ class AddSyncStatusView(View):
     Returns sync status, account ID, and profile URL. Read-only DB lookup,
     no PSN tokens consumed, so it's open to anonymous users to pair with
     the open SearchSyncProfileView.
+
+    THE MOST-POLLED ENDPOINT ON THE SITE, which is why the lookup below is written the way it is.
+    Three clients hit it on a timer: `navbar-search.js` and `landing.js` every 2.5s (24/min each) and
+    `refresh-control.js` every 4s (15/min), and one viewer can have two of them running at once.
+
+    DELIBERATELY NOT RATE-LIMITED, unlike its login-gated sibling `ProfileSyncStatusView` (60/m per
+    user). Anonymous polling here is a first-class use, not abuse: the landing hero IS the pitch to a
+    stranger, and it polls at 24/min. A cap tight enough to bound scraping would therefore have to be
+    keyed on IP, and any household, office or mobile carrier sharing one address would hit it -- the
+    front door is the worst thing on the site to break. After the indexed lookup below, a request here
+    is one primary-key read of figures the profile page already prints unauthenticated to everybody, so
+    scraping it is not materially cheaper than crawling the public, sitemapped profile pages.
     """
     def get(self, request):
         psn_username = request.GET.get('psn_username', '').strip()
@@ -633,7 +648,15 @@ class AddSyncStatusView(View):
             return JsonResponse({'error': 'Username required'}, status=400)
 
         try:
-            profile = Profile.objects.get(psn_username__iexact=psn_username)
+            # `.lower()` + exact, NOT `iexact`. On Postgres `iexact` compiles to
+            # `UPPER("psn_username") = UPPER(%s)`, which neither the unique constraint nor
+            # `psn_username_idx` can serve -- so every poll sequentially scanned the entire Profile
+            # table, 15-24 times a minute for every viewer with a page open.
+            #
+            # Correct as well as cheap: `Profile.save()` lowercases this column unconditionally, so a
+            # stored value is never anything else. `profile_views.py` records the same trap for the same
+            # column, and `RequestProfileRefreshView` above was already written this way.
+            profile = Profile.objects.get(psn_username=psn_username.lower())
         except Profile.DoesNotExist:
             data = {
                 'sync_status': 'error',
