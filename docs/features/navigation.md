@@ -21,7 +21,8 @@ Design philosophy: **menus expose the few, hubs expose the many**. The global na
 
 A second design principle: **no feature silos**. Every page should link outward to related features. Badge detail links to Titles. A profile's Ratings tab links each card to the game it rates, and its Games tab uses the site-wide game card so every tile is a route onward. This "mesh" of cross-links reduces dead ends and increases feature discovery.
 
-The four hubs:
+The hubs (five configs in `core/hub_subnav.py`, four of them carrying a navbar entry -- Community
+returned in 2026-09 and `/community/` 301s to `/leaderboards/`):
 
 | Hub | URL | Mental mode | Sub-nav items |
 |-----|-----|-------------|---------------|

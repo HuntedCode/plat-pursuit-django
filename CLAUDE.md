@@ -210,6 +210,14 @@ Before exiting plan mode, specifically search:
 - Existing templates for component patterns that can be reused or extended
 - Existing Django views/services for logic that can be shared rather than duplicated
 
+**When the work touches a page, also audit its backend before designing the frontend.** Read the view, queryset and services and look for three things:
+
+- **Performance issues**: N+1 queries, expensive subqueries, missing annotations, unnecessary prefetches
+- **Missing data opportunities**: user-specific context (played status, completion %) and personalized data the new design could surface. This is the one prompt that asks what the page could *gain*, not just what can be reused
+- **Cleanup candidates**: duplicate logic, organic growth needing refactoring, context data the new design no longer needs
+
+**Only change the backend where there is a clear win. Don't touch views that are already clean and performant.** This restraint is the counterweight to the from-scratch rule in [rebuild-playbook.md](docs/design/rebuild/rebuild-playbook.md): rebuilding a page's *visuals* from scratch is the default, rewriting its working *view* is not.
+
 ### Phase 2 Additions: Security Focus
 
 In addition to the standard inline audit, check for Django-specific security pitfalls (CSRF, SQL injection, XSS in templates, unsafe querystring handling).

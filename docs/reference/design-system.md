@@ -2,16 +2,16 @@
 
 The canonical styling and design reference for PlatPursuit. The **Career page (`/career/`) is the reference implementation and the design baseline for the entire site**; the site-wide rebuild that brought every page to it completed in 2026-09, and new work is held to the same language.
 
-(The dashboard was the original baseline and is cited as such throughout this doc's history. It was **deleted in 2026-08** -- `/dashboard/` 301s to `/` -- so where an older passage says "would this look at home in a dashboard module?", read it as "would this look at home on Career?". The tokens and patterns it established are the ones documented here.)
+(The dashboard was the original baseline. It was **deleted in 2026-08** -- `/dashboard/` 301s to `/` -- so wherever a doc still poses the old test, "would this look at home inside a dashboard module?" (for example [chrome-audit.md](../design/rebuild/chrome-audit.md), which quotes it as this doc's core test), read it as "would this look at home on Career?". The tokens and patterns the dashboard established are the ones documented here; the page itself is gone and cannot be opened as a reference.)
 
 This doc covers **site-wide building blocks** (cards, grids, spacing, colors, component patterns). Page-level layout decisions (content width, sidebars, tab systems) are page-specific and not covered here.
 
 ## Working on a page
 
-The rebuild's three-part process (backend audit, frontend rebuild, polish) is recorded in
-[rebuild-playbook.md](../design/rebuild/rebuild-playbook.md); the audit phases that outlived it are in
-CLAUDE.md's Plan / Build / Polish workflow. What belongs here is the design half of that work, which
-applies to any page:
+The rebuild's three-part process (backend audit, frontend rebuild, polish) is no longer maintained as a
+process doc: its **backend-audit** half now lives in CLAUDE.md's Phase 1 additions (including the
+restraint rule -- only change the backend where there is a clear win), and its **polish** half is
+CLAUDE.md's Phase 3 audit checklist. What belongs here is the design half, which applies to any page:
 
 - **Build from the tokens and patterns in this doc**, not from whatever the page next to it happens to do.
 - **The bar is Career.** Would this component look at home on `/career/`? If no, it is not done. See
@@ -53,9 +53,12 @@ phone-scoped polish: swipe-to-close modal chrome, the mobile peek scroll cap, co
 badge-detail stage ladder (slimmer gutter/node + stacked meta). Prefer the mobile-first `md:`/`lg:` ladder
 for layout; reach for `max-width: 640px` only for these phone-only overrides.
 
-### Legacy Migration Pattern
+### Legacy Migration Pattern (historical -- no subjects remain)
 
-When converting a page from ZoomScaler to proper responsive:
+ZoomScaler is gone and no page is transform-scaled any more, so this conversion has nothing left to
+convert. Kept because the spacing shift is the clearest illustration of the base-is-mobile rule, and
+because it explains why older `p-5 lg:p-7` pairs appear in git history. When a page is scaled
+tablet-first, the fix is:
 
 ```
 Before: p-5 lg:p-7          (base = tablet, lg = desktop)
@@ -713,10 +716,10 @@ For franchise/company browse cards (aggregated cover art across many games), use
 
 These are **page-specific** decisions, not site-wide tokens:
 
-- **Content width**: Dashboard uses `max-w-4xl mx-auto`; other pages use full `container` width, sidebars, or custom layouts
+- **Content width**: pages use full `container` width, sidebars, or custom layouts. (The deleted dashboard used `max-w-4xl mx-auto`; that narrow well is not the house default.)
 - **Page layout structure**: Single-column vs. multi-column, sidebar presence
-- **Tab/navigation systems**: Dashboard's tab bar is specific to that page
-- **Module lazy loading**: Dashboard-specific architecture (module registry, skeleton states)
+- **Tab/navigation systems**: the site-wide treatment is the `.pp-switch` segmented switcher; a page-specific tab bar is a one-off, not a pattern to copy
+- **Module lazy loading**: was dashboard-specific architecture (module registry, skeleton states) and went with it; there is no module orchestrator in the codebase now
 
 ---
 
@@ -737,5 +740,6 @@ These are **page-specific** decisions, not site-wide tokens:
 ## Related Docs
 
 - [Template Architecture](template-architecture.md): base.html structure, zoom wrapper, blocks
-- [JS Utilities](js-utilities.md): ZoomScaler, ZoomAwareObserver (still used on non-redesigned pages)
-- [Dashboard](../features/dashboard.md): Module registry, customization, the reference implementation
+- [JS Utilities](js-utilities.md): ZoomAwareObserver and the shared helpers (ZoomScaler itself is gone)
+- [Career: Reference Standard](../design/rebuild/career-reference-standard.md): the reference implementation and the bar every page is held to
+- [Dashboard](../features/dashboard.md): historical record of the deleted dashboard (module registry, customization) -- it was the ORIGINAL baseline, not the current one

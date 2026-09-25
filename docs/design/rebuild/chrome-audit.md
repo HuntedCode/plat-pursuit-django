@@ -2,9 +2,11 @@
 
 The permanent chrome (navbar, mobile tab bar, sub-nav strip, hotbar, footer) frames every page, so
 it was audited as one set before further page polish — a trusted baseline beats re-discovering
-nav/footer quirks page by page. **That audit is complete (2026-07): every item below is done.** This is
-the closed punch-list, kept for its calibration (what "in the rebuild fold" means for a frame rather
-than a module), which still governs any change to the chrome.
+nav/footer quirks page by page. **That audit is complete (2026-07): every punch-list item is done, and THREE items were
+explicitly deferred rather than fixed** -- they are marked "Deferred" in place below. One of them is a
+real open defect worth knowing about: the easter-egg footer logo is not keyboard-operable. This is the
+closed punch-list, kept for its calibration (what "in the rebuild fold" means for a frame rather than a
+module), which still governs any change to the chrome.
 
 ## Calibration: chrome is the *frame*, not a module
 
