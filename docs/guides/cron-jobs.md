@@ -207,6 +207,34 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   scans the whole userbase per Contract.
 - **Ad hoc**: `--user <psn_username>` for one account, `--dry-run` to preview. Worth running by hand
   right after publishing a Contract if you do not want to wait for the nightly.
+- **Two watermarks, two questions** (Redis, both written by `_set_watermark`):
+
+  | Key | Answers | Advances |
+  |-----|---------|----------|
+  | `contract_detection:last_run` | *Where does this incremental pass start?* (`updated_at__gt`, less `CURSOR_GRACE`) | every incremental run, including a quiet one |
+  | `contract_detection:last_full_run` | *Has 7 days passed, so a FULL pass is due?* (`FULL_SWEEP_INTERVAL`) | only on a run that actually was full |
+
+  A full pass is also forced when **either** key is missing or unreadable, which is the safe direction:
+  a watermark nobody can read must mean "sweep everything", never "nothing has changed".
+
+  Neither advances on `--dry-run` (which promises to write nothing, and a watermark is a write), on
+  `--contract <slug>` or `--user` (neither has covered the catalogue, so neither may claim to have),
+  or on a run that finds no live Contracts at all and returns early.
+
+  **Gotcha — these are not interchangeable, and conflating them is silent.** The scoping filter used
+  to read `last_full_run`, so every incremental run re-swept the whole window since the last FULL
+  pass rather than since the last run, while `last_run` was written by every run and read by nobody.
+  Publishing in waves of 150 and sweeping after each one reported `incremental (150 changed)`, then
+  300, then 450, then 600 -- each run redoing its predecessor's work and reporting the redo as
+  change. Nothing was lost (the mode only ever ADDS stamps) and it self-corrected every 7 days when
+  the forced full pass moved the stamp, which is exactly why it read as a busy catalogue for a month.
+  A growing "changed" count with no publishing behind it is the symptom to watch for.
+- **The watermark is stamped with the run's START time**, not its end, so a Contract published by a
+  curator while the sweep is mid-flight falls after the cursor and is picked up next run instead of
+  being recorded as already swept. The cursor is then read back with a 1-minute lookback
+  (`CURSOR_GRACE`) to cover the remaining sliver: `updated_at` is stamped in Python, so it always
+  predates the instant the row's transaction commits and becomes visible to the sweep, and a publish
+  that commits just after the cursor would otherwise be skipped until the weekly pass.
 
 ### announce_contracts
 

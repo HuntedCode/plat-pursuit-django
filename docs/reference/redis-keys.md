@@ -185,8 +185,19 @@ Position markers, not caches: they carry no payload and losing one costs coverag
 |-------------|-----|---------|
 | `recalc_earn_rates:cursor` | None | Highest `Game.id` fully processed by the last budget-capped `recalc_earn_rates` run. The next run resumes just past it and wraps, so a job that always hits `--max-minutes` still sweeps the whole catalogue round-robin instead of restarting at id 0 and never reaching the tail. Cleared on a completed pass. Deliberately left alone by `--game-ids` and `--dry-run`. |
 | `dlc_detection:last_run` | None | Timestamp watermark for `detect_dlc_and_refresh`; falls back to a 3-day lookback when missing. |
+| `contract_detection:last_run` | None | Where the next `process_contracts --all --incremental` pass STARTS: it narrows to `Contract.updated_at > this - CURSOR_GRACE` (1 minute). Advanced on every incremental run, including one that finds nothing *changed*. **Not** advanced by `--dry-run`, `--contract`, `--user`, or a run that finds no live Contracts at all. |
+| `contract_detection:last_full_run` | None | When the last FULL `process_contracts` pass ran. It is what the 7-day `FULL_SWEEP_INTERVAL` is measured against, and the only key whose *age* can force a full pass. Advanced only by a run that actually was full. (A full pass is also forced whenever *either* key is missing or unreadable, so this is not the sole input to that decision.) |
 
-**Files**: `core/management/commands/recalc_earn_rates.py`, `trophies/management/commands/detect_dlc_and_refresh.py`
+**Gotcha — the two `contract_detection` keys are not interchangeable.** They answer different questions
+and swapping them is silent. The scoping filter used to read `last_full_run`, so every incremental run
+re-swept the whole window since the last FULL pass instead of since the last run, while `last_run` was
+written by every run and read by nobody. Publishing in waves of 150 and sweeping after each reported
+`incremental (150 changed)`, then 300, then 450, then 600 -- each run redoing its predecessor's work.
+Nothing was lost (detection only ADDS stamps) and it self-corrected weekly when the forced full pass
+moved the stamp, which is why it read as a busy catalogue rather than a bug. Neither key existing is
+safe in the same direction: a missing watermark forces a full sweep, never a skipped one.
+
+**Files**: `core/management/commands/recalc_earn_rates.py`, `trophies/management/commands/detect_dlc_and_refresh.py`, `trophies/management/commands/process_contracts.py`
 
 ### Game Detail Page
 
