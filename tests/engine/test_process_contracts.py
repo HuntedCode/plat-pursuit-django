@@ -377,7 +377,6 @@ def test_a_hunter_with_no_row_yet_is_always_a_candidate():
     assert EarnedContract.objects.filter(profile=profile, contract=contract).exists()
 
 
-
 # -- --incremental watermarks: two keys, two questions ---------------------------------------------
 
 #: Patch target for the command module's own globals (`redis_client`, `CURSOR_GRACE`).

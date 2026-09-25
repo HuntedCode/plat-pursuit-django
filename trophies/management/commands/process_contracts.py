@@ -75,9 +75,19 @@ FULL_WATERMARK_KEY = 'contract_detection:last_full_run'
 #: additive, `_settled_profiles` filters out the candidates, and `mark_contract_reached` only ever fills
 #: fields that are still None. (`>=` instead of `>` does NOT help: in this race `updated_at` is strictly
 #: less than the watermark, not equal to it.)
-#: LIMIT, stated because it is not obvious: one minute covers a stamp-to-commit gap, which without
-#: ATOMIC_REQUESTS is a statement round trip. A future writer that stamps a Contract inside a
-#: `transaction.atomic()` block held open longer than this would still lose the row until the full pass.
+#: HOW BIG THE GAP ACTUALLY IS, since one minute is only defensible against a real number. It depends on
+#: which admin surface published the row, and they differ:
+#:   - `make_live` / `make_not_live` (the bulk actions) are a bare `queryset.update()` outside any
+#:     transaction, so the gap is one statement round trip. ATOMIC_REQUESTS is not set anywhere in
+#:     settings, so nothing wraps the request either.
+#:   - The change form and the `list_editable` changelist toggle both stamp INSIDE
+#:     `transaction.atomic()` -- Django's own `changeform_view` / `changelist_view` open it, not our
+#:     code -- and `ContractAdmin.list_editable = ('is_live',)` means the publish tick is one of them.
+#:     A changelist submit saves every changed row in ONE block, so the first row stamped waits for all
+#:     the others before the commit lands. A page of rows is still milliseconds; a block held open for
+#:     over a minute would lose its earliest rows to the weekly pass, and that is the real limit here.
+#: So this is not a hypothetical about future code: two of the three publish paths already commit inside
+#: a transaction. One minute covers all three comfortably today.
 CURSOR_GRACE = timedelta(minutes=1)
 
 

@@ -212,7 +212,7 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   | Key | Answers | Advances |
   |-----|---------|----------|
   | `contract_detection:last_run` | *Where does this incremental pass start?* (`updated_at__gt`, less `CURSOR_GRACE`) | every incremental run, including a quiet one |
-  | `contract_detection:last_full_run` | *Has 7 days passed, so a FULL pass is due?* (`FULL_SWEEP_INTERVAL`) | only on a run that actually was full |
+  | `contract_detection:last_full_run` | *Has 7 days passed, so a FULL pass is due?* (`FULL_SWEEP_INTERVAL`) | only on a run that actually was full (which advances the cursor too) |
 
   A full pass is also forced when **either** key is missing or unreadable, which is the safe direction:
   a watermark nobody can read must mean "sweep everything", never "nothing has changed".
