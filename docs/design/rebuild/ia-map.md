@@ -1,11 +1,13 @@
-# IA Map (Rebuild) — Living Document
+# IA Map — Living Document
 
-> **How to use this.** The rebuild's information architecture is being built **bottom-up**:
-> we build pages, and the structure is recorded here as it solidifies (not designed in full
-> up front). For every page we build, add a row with its URL, what it links **out** to, and
-> what links **in** to it. Thirty seconds per page; it is the defense against disconnected
-> islands. Build **destinations first, hubs last** — the hub pages (especially Pursuit home)
-> are assembled once their destinations exist, so they surface real things instead of guesses.
+> **How to use this.** The rebuild's information architecture was built **bottom-up**: pages first,
+> with the structure recorded here as it solidified rather than designed in full up front. The rebuild
+> is complete (2026-09), so the map below describes the shipped IA, not a plan.
+>
+> **It stays living.** For every page added from here on, add a row with its URL, what it links **out**
+> to, and what links **in** to it. Thirty seconds per page; it is the defense against disconnected
+> islands. The bottom-up rule still applies to any new cluster — build **destinations first, hubs last**,
+> so a hub surfaces real things instead of guesses.
 >
 > This supersedes the legacy `docs/architecture/ia-and-subnav.md` (the 4-hub model) for
 > rebuild work. The strategic frame is `docs/design/product-identity.md`.
@@ -15,7 +17,7 @@
 The expensive-to-change structure is decided and stable. Do not re-litigate it per page.
 
 - **3 hubs**: **Pursuit** (`/`, the spine + home), **Browse** (`/games/`), **Community** (`/community/`).
-- **Standalone utilities**: Stats (`/stats/` — hidden for 1.0, redirects to Home pending its rebuild),
+- **Standalone utilities**: Stats (`/stats/` — hidden for 1.0, redirects to Home; out of scope for the site-wide rebuild, returns later as its own tool),
   Shareables (`/shareables/`), Recap (`/recap/`).
 - **Navbar (signed-in)**: `[Logo -> Pursuit home] [Browse] [Community] [My Profile]   [bell] [avatar]`. There is no separate "Pursuit" button; the logo is the Pursuit home link.
 - **URL convention**: flat top-level URLs for Pursuit sub-pages (no `/pursuit/` prefix; `/` is its home). Legacy paths 301 via the reverse-name redirect strategy.
@@ -51,7 +53,11 @@ Existing hub, unchanged. Reviews, profiles, challenges, lists, leaderboards.
 - **Research Panel home** (resolved 2026-06-16) — its **own page** (`/my-pursuit/research-panel/`), a Pursuit sub-nav slot; linked in from the Pursuit home.
 - **Badge catalog vs Collection** (resolved 2026-06-23) — badges live in TWO surfaces, mirroring games. The public **catalog** (find/search: `/badges/` + `/badges/<series_slug>/`) is a **Browse** page (re-homed `BadgeListView`/`BadgeDetailView`); the personal **Collection** album stays in **Pursuit**. This supersedes "Badges = collection at `/badges/`" — `/badges/` is now the Browse catalog, the Collection is built (currently `/my-pursuit/collection/`). The list is a far better find/search surface than the album, and being public it fixes anonymous discovery. See `product-identity.md` IA amendment + memory `project_badge_pages_collection_vs_list`.
 
-## Open IA questions (resolve as we build)
+## IA questions — both resolved
 
-- **URL convention sweep** — the stable skeleton calls for flat top-level Pursuit URLs (`/lab/`, `/badges/`), but pages are currently shipping under `/my-pursuit/*` (logbook, research-panel). Do the flat-URL migration as one sweep (with reverse-name 301s) rather than per page; new pages use `/my-pursuit/*` until then for sibling consistency.
-- **Near-term sub-nav shape** — which items show in Phase 1 vs deferred.
+- **URL convention sweep** — RESOLVED. The flat top-level Pursuit URLs shipped as one sweep: the old
+  `/my-pursuit/*` and `/dashboard/*` paths 301-redirect to them, reverse names did not move, and bare
+  `/my-pursuit/` and `/dashboard/` redirect to `/`. New pages use flat URLs. See
+  [ia-and-subnav.md](../../architecture/ia-and-subnav.md).
+- **Near-term sub-nav shape** — RESOLVED by shipping: the sub-nav is config-driven from
+  `core/hub_subnav.py`, and the live items are what that file lists.

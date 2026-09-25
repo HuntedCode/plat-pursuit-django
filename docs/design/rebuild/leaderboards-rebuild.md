@@ -410,10 +410,13 @@ documented Redis keys. **Sequencing:** the standings stores are written on this 
 so swapping page reads to Lane B is coherent here; prod requires the badge cutover to have seeded holds
 first (`badge-backend-rebuild.md` §6 step 4).
 
-### Dashboard modules
+### Dashboard modules — RESOLVED
 
-The badge XP and country XP dashboard providers duplicate boards this section will own, on a dashboard
-that is being sunset. Retire with the dashboard, not before — some providers are still load-bearing.
+The badge XP and country XP dashboard providers duplicated boards this section owns, and the plan was to
+retire them **with** the dashboard rather than before it, because some providers were still load-bearing.
+That happened: the dashboard was **deleted in 2026-08** (views, template, the 41-module registry,
+`dashboard_service`, `dashboard.js` and `DashboardConfig`), taking the duplicate providers with it. This
+section's boards are now the only implementation. Nothing outstanding.
 
 ---
 

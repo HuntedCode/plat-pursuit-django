@@ -2,8 +2,9 @@
 
 `/career/` (`templates/trophies/career.html` + `trophies/services/career_service.py` + the claim
 ceremony) shipped to prod on 2026-07-07 as a complete, polished product. It is the **finished-quality
-bar for the site-wide rebuild**: every page rebuilt from here on is measured against it. If a page
-doesn't meet these dimensions, it isn't done.
+bar for the site**: it set the standard the site-wide rebuild was measured against (complete 2026-09),
+and it remains the standard for every page built or reworked since. If a page doesn't meet these
+dimensions, it isn't done.
 
 This doc is the *bar*, not a how-to. The how-to lives in
 [Design System](../../reference/design-system.md) (tokens, components, responsive) and
@@ -26,7 +27,7 @@ almost always a specific detail that question surfaces:
 - What did we deliberately leave OUT? Restraint is the craft -- animating everything is the amateur
   tell (see [motion-patterns](../../reference/motion-patterns.md) principle 3).
 
-## The bar: dimensions every rebuilt page must meet
+## The bar: dimensions every page must meet
 
 ### 1. Design coherence
 - Composes the Visual Identity primitives (Frame, Pursuer Card, Horizon, Tally) instead of inventing
@@ -107,7 +108,7 @@ almost always a specific detail that question surfaces:
 
 ## Related Docs
 
-- [Rebuild Playbook & Progress](rebuild-playbook.md) -- **start here:** which pages are done + the shared decisions every rebuilt page inherits (this doc is the quality bar those pages are held to).
+- [Rebuild Playbook & Record](rebuild-playbook.md) -- **start here:** the per-page record + the shared decisions every page inherits (this doc is the quality bar they are held to).
 - [Visual Identity](../visual-identity.md) -- the constitution Career satisfies (the motion philosophy).
 - [Design System](../../reference/design-system.md) -- tokens / components / responsive how-to.
 - [Premium Motion Patterns](../../reference/motion-patterns.md) -- the motion recipes + GPU gotchas.

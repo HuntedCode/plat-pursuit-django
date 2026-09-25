@@ -142,7 +142,7 @@ so the rail read "Support → Support".
 
 > **Community was retired (2026-08) and returned (2026-09).** It was retired not because community
 > failed but because everything in it had gone somewhere else: Challenges retired, Reviews archived,
-> Lists hidden pending a revamp, Profiles moved to Browse, Rate My Games to My Pursuit → Tools (it
+> Lists hidden pending a revamp (since rebuilt and made PUBLIC in 2026-09), Profiles moved to Browse, Rate My Games to My Pursuit → Tools (it
 > makes community DATA, but the act is personal and login-only), and Leaderboards promoted to a hub of
 > their own. What remained was a landing page with nothing of its own to land on.
 >
@@ -162,7 +162,7 @@ is the lobby above the hubs, not this hub's root. The strip is grouped
 `Overview · Collection · Career · Milestones · Titles` **|** `Plat Cards · Recap · Profile`
 
 (The Lab + Research Panel merged into **Career**. **My Stats** was pulled for the 1.0 launch — `/stats/`
-redirects to Home pending its rebuild; see [stats-page.md](../design/stats-page.md).)
+redirects to Home; deliberately out of scope for the site-wide rebuild and returning later as its own tool, see [stats-page.md](../design/stats-page.md).)
 
 - **Root URLs.** The personal pages live at root: `/collection/`, `/lab/`, `/research-panel/`,
   `/milestones/`, `/titles/`, `/shareables/`, `/recap/` (+ `/profile-editor/`). The old

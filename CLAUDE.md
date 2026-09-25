@@ -10,21 +10,15 @@ The full visual constitution lives in **[docs/design/visual-identity.md](docs/de
 
 ---
 
-## Site-Wide Redesign
+## Page Design Standards
 
 ### Overview
 
-Every page in PlatPursuit is being rebuilt into one coherent, polished product. This is a full redesign, not a re-style. The dashboard seeded the design language; the **Career page (`/career/`) is now the finished-quality standard** every page is measured against (see Reference Implementation below). The goal: every page should feel like it belongs to the same app, at the same level of polish.
+Every page in PlatPursuit was rebuilt into one coherent, polished product: a full redesign, not a re-style. **That work is complete (2026-09).** The **Career page (`/career/`) is the finished-quality standard** every page is measured against (see Reference Implementation below).
 
-**Redesign in progress**: Pages are being rebuilt incrementally. Each page goes through a three-part process (backend audit, frontend rebuild, polish). All pages now build mobile-first; the legacy ZoomScaler scaling system has been removed (see below).
+The standard did not close with the initiative. New pages, and changes to existing ones, are held to the same bar, because the goal it served is permanent: every page should feel like it belongs to the same app, at the same level of polish. All pages build mobile-first; the legacy ZoomScaler scaling system has been removed (see below).
 
-### Three-Part Process Per Page
-
-**1. Backend Audit**: Read the view, queryset, and services. Identify performance issues (N+1 queries, expensive subqueries), missing data opportunities (user-specific context, annotations), and cleanup candidates. Only rebuild the backend where there's a clear win.
-
-**2. Frontend Rebuild**: Ground-up template rebuild. Not "add breakpoints" or "swap colors." The test: **"Would this component look at home inside a dashboard module?"** If no, rebuild it.
-
-**3. Polish**: Final audit against the Platinum Pursuit Standard, responsive compliance, visual cohesion, interactive polish.
+The rebuild's own history lives in **[docs/design/rebuild/rebuild-playbook.md](docs/design/rebuild/rebuild-playbook.md)**: the per-page record, the shared decisions every page inherited, and the from-scratch rule. Read it before reworking an existing page, so its decisions are not re-litigated one page at a time.
 
 ### Responsive Philosophy: Three Layouts, Mobile-First
 
@@ -56,13 +50,13 @@ All styling tokens, patterns, component blueprints, and rules are documented in 
 - Mobile-specific patterns (icon-only buttons, short dates, hidden timestamps)
 - Typography scale
 
-**Consult the design system doc before rebuilding any page.** It is the single source of truth for how components should look and behave.
+**Consult the design system doc before any non-trivial visual work**, on a new page or an existing one. It is the single source of truth for how components should look and behave.
 
 ### Reference Implementation
 
-**The Career page (`/career/`) is the finished-quality standard for the rebuild.** Hold every page to its bar for polish and design coherence. See **[docs/design/rebuild/career-reference-standard.md](docs/design/rebuild/career-reference-standard.md)** for the dimensions that define "done" (design coherence, mobile-first fit, premium motion, performance, interaction, URL/state) and the **"what would Google/Apple do here?" polishing lens** that got it there. Exemplar files: `templates/trophies/career.html`, `static/js/claim-ceremony.js`, `static/css/components/claim-ceremony.css`.
+**The Career page (`/career/`) is the finished-quality standard for the site.** Hold every page to its bar for polish and design coherence. See **[docs/design/rebuild/career-reference-standard.md](docs/design/rebuild/career-reference-standard.md)** for the dimensions that define "done" (design coherence, mobile-first fit, premium motion, performance, interaction, URL/state) and the **"what would Google/Apple do here?" polishing lens** that got it there. Exemplar files: `templates/trophies/career.html`, `static/js/claim-ceremony.js`, `static/css/components/claim-ceremony.css`.
 
-The dashboard (`templates/trophies/dashboard.html`) seeded the design language and is still a useful token/pattern reference, but it is being sunset; Career is the current bar.
+The dashboard seeded the design language, but it was **deleted in 2026-08** (`/dashboard/` now 301s to `/`), so it is no longer available as a reference: Career is the bar, and the tokens and patterns live in the design system doc.
 
 ### ZoomScaler (removed)
 
@@ -226,7 +220,7 @@ The final audit should review every new/modified template and JS file against:
 
 1. **Platinum Pursuit Standard**: Does it feel professional, sleek, and modern while retaining the indie charm? Or does it feel generic/sterile?
 2. **Google/Apple polish lens**: For each interactive moment, ask "what would a top-tier Google/Apple product do here?" — real physics (spring settle, not a flat ease), anticipation + follow-through, exits choreographed as carefully as entrances, and deliberate restraint (not motion everywhere). This lens is what got the Career page to its bar; see [career-reference-standard.md](docs/design/rebuild/career-reference-standard.md).
-3. **Rebuild cohesion (Career standard)**: Would this page hold up next to the Career page? Uses the correct `--pp-*`/`--disc-*` tokens and the visual-identity primitives, not one-offs?
+3. **Design cohesion (Career standard)**: Would this page hold up next to the Career page? Uses the correct `--pp-*`/`--disc-*` tokens and the visual-identity primitives, not one-offs?
 4. **Responsive design compliance**: Three-layout mobile-first system, base styles correct at 375px, proper `md:`/`lg:` progression. Do the real mobile fit pass (compact airiness, restore at `md:`, omit expendable blocks rather than scroll)
 5. **Component pattern compliance**: Page header cards, filter toolbars, browse cards, pagination, empty states all follow the design system patterns
 6. **Interactive polish**: Hover glow (not scale), transitions, focus indicators, loading states

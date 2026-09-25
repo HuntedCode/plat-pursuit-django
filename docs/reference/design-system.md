@@ -1,36 +1,29 @@
 # Design System Reference
 
-The canonical styling and design reference for PlatPursuit. The dashboard is the reference implementation and the design baseline for the entire site. Every page is being rebuilt from the ground up to match its design language.
+The canonical styling and design reference for PlatPursuit. The **Career page (`/career/`) is the reference implementation and the design baseline for the entire site**; the site-wide rebuild that brought every page to it completed in 2026-09, and new work is held to the same language.
+
+(The dashboard was the original baseline and is cited as such throughout this doc's history. It was **deleted in 2026-08** -- `/dashboard/` 301s to `/` -- so where an older passage says "would this look at home in a dashboard module?", read it as "would this look at home on Career?". The tokens and patterns it established are the ones documented here.)
 
 This doc covers **site-wide building blocks** (cards, grids, spacing, colors, component patterns). Page-level layout decisions (content width, sidebars, tab systems) are page-specific and not covered here.
 
-## Site-Wide Redesign: Process
+## Working on a page
 
-Every page goes through a three-part rebuild process:
+The rebuild's three-part process (backend audit, frontend rebuild, polish) is recorded in
+[rebuild-playbook.md](../design/rebuild/rebuild-playbook.md); the audit phases that outlived it are in
+CLAUDE.md's Plan / Build / Polish workflow. What belongs here is the design half of that work, which
+applies to any page:
 
-### 1. Backend Audit
-
-Read the view, queryset, and any services. Identify:
-
-- **Performance issues**: N+1 queries, expensive subqueries, missing annotations, unnecessary prefetches
-- **Missing data opportunities**: User-specific context (played status, completion %), personalized data that the new design could surface
-- **Cleanup candidates**: Duplicate logic, organic growth that needs refactoring, context data the new design no longer needs
-
-Only rebuild the backend where there's a clear win. Don't touch views that are already clean and performant.
-
-### 2. Frontend Rebuild
-
-Ground-up template rebuild using the dashboard as the literal design target. This is NOT a "re-style" or "add breakpoints" pass. The question to ask is: **"Would this component look at home inside a dashboard module?"** If the answer is no, rebuild it until it does.
-
-Key principles:
-- Use the tokens and patterns defined in this doc
-- Every piece of data should have a clear visual hierarchy (labels, grouping, contrast)
-- Flavor text, personality, and contextual messaging are part of the Platinum Pursuit Standard
-- Mobile-first: design for 375px, then expand at `md:` and `lg:`
-
-### 3. Polish
-
-Final audit reviewing every new/modified file against the Platinum Pursuit Standard, responsive compliance, visual cohesion, and interactive polish (hover states, transitions, focus indicators). See CLAUDE.md for the full audit checklist.
+- **Build from the tokens and patterns in this doc**, not from whatever the page next to it happens to do.
+- **The bar is Career.** Would this component look at home on `/career/`? If no, it is not done. See
+  [career-reference-standard.md](../design/rebuild/career-reference-standard.md) for the dimensions that
+  define "done" and the "what would Google/Apple do here?" lens.
+- **Every piece of data gets a clear visual hierarchy**: labels, grouping, contrast.
+- **Flavor text, personality and contextual messaging are part of the Platinum Pursuit Standard**, not
+  decoration to be trimmed.
+- **Mobile-first**: design for 375px, then expand at `md:` and `lg:`. Three layouts, every page.
+- **Reworking an existing page is not a re-style.** Read its row in the playbook first: its rebuild
+  settled decisions that should not be re-litigated, and the from-scratch rule there explains why "the
+  old page did it this way" is not a reason.
 
 ---
 
