@@ -1,18 +1,23 @@
 # Chrome Audit — bringing the permanent chrome into the rebuild fold
 
 The permanent chrome (navbar, mobile tab bar, sub-nav strip, hotbar, footer) frames every page, so
-it gets audited as one set before further page polish — a trusted baseline beats re-discovering
-nav/footer quirks page by page. This is the living punch-list from that audit (2026-07).
+it was audited as one set before further page polish — a trusted baseline beats re-discovering
+nav/footer quirks page by page. **That audit is complete (2026-07): every punch-list item is done, and THREE items were
+explicitly deferred rather than fixed** -- they are marked "Deferred" in place below. One of them is a
+real open defect worth knowing about: the easter-egg footer logo is not keyboard-operable. This is the
+closed punch-list, kept for its calibration (what "in the rebuild fold" means for a frame rather than a
+module), which still governs any change to the chrome.
 
 ## Calibration: chrome is the *frame*, not a module
 
-The design-system doc's core test ("would this look at home inside a dashboard module?") is written
-for **content**, not chrome. The visual-identity brief is clearer about chrome's job:
+The design-system doc's core test — "would this look at home inside a dashboard module?", which since
+the dashboard's deletion reads "would this look at home on Career?" — is written for **content**, not
+chrome. The visual-identity brief is clearer about chrome's job:
 
 > "The visual identity exists to frame the art without competing with it. If the chrome ever fights
 > the art, the chrome loses."
 
-So "in the rebuild fold" for chrome does **not** mean turning nav/hotbar/footer into dashboard
+So "in the rebuild fold" for chrome does **not** mean turning nav/hotbar/footer into content
 cards. It means holding them to the *universal* parts of the standard while they stay the calm matte
 frame. Definition of done for chrome:
 

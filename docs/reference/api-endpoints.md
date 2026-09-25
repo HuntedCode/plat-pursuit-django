@@ -309,7 +309,7 @@ and its three config/reorder/module endpoints. `/dashboard/` 301s to `/`. See
 
 ### Stats Page — HIDDEN (2026-08)
 
-My Stats is hidden pending a rebuild; `/stats/` 302s to Home and the premium stats endpoint is unrouted.
+My Stats is hidden and was out of scope for the site-wide rebuild; `/stats/` 302s to Home and the premium stats endpoint is unrouted.
 
 ### Game Flags
 

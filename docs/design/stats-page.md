@@ -9,12 +9,18 @@
 
 > Dedicated page at `/stats/` with a video game stats screen aesthetic showing every possible stat about the user's trophy hunting career. Career Overview is free; all other sections are premium-only.
 
-## Status: HIDDEN for the 1.0 launch (2026-08)
+## Status: HIDDEN for the 1.0 launch (2026-08), and OUT OF SCOPE for the site-wide rebuild
 
-The page below is **built and working**, but it is the last surface still wearing the pre-rebuild
-design language, and it was never taken through the three-part rebuild process. Shipping a 120+-stat
-dump at 1.0, right next to Career and Milestones, would set the wrong bar. So it is hidden rather than
-rebuilt-in-a-hurry or deleted:
+The page below is **built and working**, but it wears the pre-rebuild design language and was
+deliberately **excluded** from the site-wide rebuild rather than left unfinished by it. Shipping a
+120+-stat dump at 1.0, right next to Career and Milestones, would have set the wrong bar; rebuilding
+it in a hurry to close out the initiative would have set a worse one. So it was hidden instead, and
+the rebuild closed (2026-09) without it.
+
+**This is not outstanding rebuild work.** The page returns as an upgraded tool on its own schedule, as
+part of the Data Intelligence arc (see the relaunch plan below and
+[data-intelligence.md](data-intelligence.md)) -- a new surface at this URL, not a late page in a
+finished initiative. What is hidden:
 
 - **`/stats/` answers with a redirect to Home** (`RedirectView`, `permanent=False`). Everyone gets the
   same answer -- bookmarks, stale links, staff. It is deliberately a **302, not a 301**: browsers cache

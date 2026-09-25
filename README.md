@@ -130,7 +130,7 @@ Uses psnawp v3.0.0 for endpoints like profiles, trophy summaries, and trophies. 
 ### Planned Features
 
 - **PSN API**: Use `psnawp` for trophy syncing. Background tasks via Celery/Redis for periodic/delta updates (2-6 hours for preferred users, 24 hours for others).
-- **Frontend**: DaisyUI-themed UI with light/dark modes. Registration/linking forms in progress.
+- **Frontend**: dark-only UI on the house `--pp-*` token system (light mode was removed in 2026-08). DaisyUI is still installed and carries some legacy components, but rebuilt pages use the house classes documented in `docs/reference/design-system.md`. Registration/linking forms in progress.
 - **Aggregates**: Calculate trophy earn rates (stored in `Trophy.earn_rate`) via scheduled tasks.
 - **Search/Filtering**: Leverage PostgreSQL full-text search for trophy/game queries.
 

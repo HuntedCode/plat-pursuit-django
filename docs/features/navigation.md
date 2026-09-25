@@ -21,13 +21,14 @@ Design philosophy: **menus expose the few, hubs expose the many**. The global na
 
 A second design principle: **no feature silos**. Every page should link outward to related features. Badge detail links to Titles. A profile's Ratings tab links each card to the game it rates, and its Games tab uses the site-wide game card so every tile is a route onward. This "mesh" of cross-links reduces dead ends and increases feature discovery.
 
-The four hubs:
+The hubs (five configs in `core/hub_subnav.py`, four of them carrying a navbar entry -- Community
+returned in 2026-09 and `/community/` 301s to `/leaderboards/`):
 
 | Hub | URL | Mental mode | Sub-nav items |
 |-----|-----|-------------|---------------|
-| **My Pursuit** (personal) | `/` (logged-in Home = Overview) | "my identity + progression" | Overview, Collection, Career, Milestones, Titles \| My Shareables, Recap, Profile (auth-gated strip). *My Stats was pulled for 1.0 — `/stats/` redirects to Home pending rebuild.* |
+| **My Pursuit** (personal) | `/` (logged-in Home = Overview) | "my identity + progression" | Overview, Collection, Career, Milestones, Titles \| My Shareables, Recap, Profile (auth-gated strip). *My Stats was pulled for 1.0 — `/stats/` redirects to Home. Out of scope for the site-wide rebuild; it returns later as its own tool.* |
 | **Browse** | `/games/` | "find content" | Catalog: Games, Trophy Lists, Badges, Jobs, Recently Added, Hunters. Curation: Franchises, Companies, Genres & Themes |
-| **Leaderboards** | `/leaderboards/` | "where do I stand" | (no strip -- badge leaderboards are the only kind so far) |
+| **Leaderboards** | `/leaderboards/` | "where do I stand" | (no strip -- one destination, not a hub with a rail: the three directories were removed in 2026-08 and per-entity Ranks panels live on game, badge and job detail) |
 | **Support** | `/support/` | "ways to support us" | (landing-focused — no strip; houses the fundraiser + the coming store) |
 
 The personal hub is rooted at the logged-in Home (`/` = its Overview) and its pages live at root URLs; Browse IS the games list; Leaderboards + Support have dedicated landings. See [ia-and-subnav.md](../architecture/ia-and-subnav.md) for the full model.
@@ -167,8 +168,9 @@ The profile page has **4 tabs**, switchable via the `?tab=` URL parameter:
 | Ratings | Yes | Yes | Sort, plus a Games/DLC switcher |
 
 Three tabs were retired rather than rebuilt, and the reasons are in the
-[rebuild playbook](../design/rebuild/rebuild-playbook.md): **Lists** (Game Lists was rebuilt in 2026-09 and is staff-gated pending
-revamp, so the tab linked to cards whose links bounced you home), **Challenges** (the system was
+[rebuild playbook](../design/rebuild/rebuild-playbook.md): **Lists** (at the time the tab was retired, Game Lists was hidden, so the tab linked to cards whose
+links bounced you home; Game Lists was rebuilt and went PUBLIC in 2026-09, but the profile TAB did not
+come back with it -- lists are reached from their own surfaces), **Challenges** (the system was
 retired), and **Reviews** (text reviews were archived in 2026-05 — the ratings that survived them are
 what the Ratings tab shows). All three builders are gone: `_build_lists_tab_context` went in 2026-09,
 because removing only the CHIP left `?tab=lists` still rendering for anyone who typed it (and running a
@@ -248,7 +250,7 @@ server's page size breaks the resume arithmetic. Pinned by
 
 - **Sub-nav must be hidden on non-hub pages.** Settings, auth flows, notification inbox, staff admin pages, and error pages render NO sub-nav. The context processor returns `hub_section=None` and the template `{% if hub_section %}` short-circuits. Test these explicitly when adding new top-level URLs.
 
-- **The personal (My Pursuit) hub is rooted at the logged-in Home (`/`).** Its 10-item auth-gated strip covers the personal surfaces, now at root URLs. The legacy dashboard's in-page module tabs (still load-bearing until the dashboard sunset) are separate from the IA-level sub-nav — don't conflate them.
+- **The personal (My Pursuit) hub is rooted at the logged-in Home (`/`).** Its 10-item auth-gated strip covers the personal surfaces, now at root URLs. The legacy dashboard's in-page module tabs are gone with the dashboard itself (deleted 2026-08); they were always separate from the IA-level sub-nav, and the distinction is recorded here only so old screenshots and commits do not confuse the two.
 
 - **Sticky chrome stacks vertically — keep the budget honest.** On desktop the navbar (64px) + sub-nav (~46px) + hotbar (variable, ~80-110px when expanded) all pin to the top, and on mobile the bottom tab bar (56px) pins to the bottom. With everything visible the user gives up ~190-210px on desktop and ~250px on mobile. The hotbar's collapse toggle is the relief valve — users can shrink it to ~28px (just the toggle button) to reclaim the space. Adding any new sticky chrome (banners, status bars, announcement strips) means subtracting somewhere else. The budget was set deliberately during the Community Hub initiative; revisit `ia-and-subnav.md` before introducing more pinned elements.
 
