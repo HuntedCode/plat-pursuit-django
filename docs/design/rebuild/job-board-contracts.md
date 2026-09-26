@@ -258,6 +258,101 @@ apply. `--user <psn>` exists to check the fix on one hunter before committing to
 that has since changed, so a nulled row would keep a stale flag and mis-size the tiers if the hunter
 later completes the game for real. A deleted row is re-created correctly by `mark_contract_reached`.
 
+## Job drift -- when the IGDB data changes under a Contract
+
+Reconciliation above handles membership moving. This is the sibling problem one level down: the
+**job profile** moving. `Contract.jobs` is written once (staged by `evaluate_contract_candidates`,
+or set by the admin's "Suggest jobs from IGDB genres/themes" action) and never revisited, while
+`enrich_from_igdb --refresh` re-pulls genres and themes weekly. A game whose IGDB page was thin at
+staging time is detected as `{freelancer}` and keeps that profile after the page fills in.
+
+Nothing in the engine notices, and the consequence compounds: `ContractXPGrant.job` records the job
+each payout went into, so every claim on a drifted contract pins more XP to a job the game is not.
+Today the admin action re-points `Contract.jobs` with **no XP consequence at all** -- hunters who
+already banked keep grants on the old jobs, and their History card renders contributions for jobs
+the contract no longer has.
+
+```
+python manage.py report_job_drift                                  # whole catalogue
+python manage.py report_job_drift --live-only                      # only what hunters can see
+python manage.py report_job_drift --bucket freelancer_repair       # list one bucket in full
+```
+
+**Read-only. There is no repair path, deliberately.** Re-pointing banked grants moves hunters'
+per-job levels DOWN, which is the same class of operation as `reconcile_contracts` and earns the
+same discipline. The report exists to size the problem before anything is built.
+
+### The buckets, and why there is more than one
+
+A disagreement is **not** automatically an error. Curation trims IGDB's peripheral tags on purpose
+(a "6-job" auto-detection is usually 2 real jobs and 4 incidental ones), so a contract holding fewer
+jobs than detection suggests is as likely to be good curation as stale data, and **nothing stored
+distinguishes them**. Reporting one undifferentiated "drifted" count would hide exactly the
+distinction the decision turns on.
+
+| Bucket | Meaning | Safe to automate? |
+|---|---|---|
+| `aligned` | jobs match detection | nothing to do |
+| `freelancer_repair` | holds only Freelancer, detection now has real jobs | **yes** -- monotone, nothing curated is lost |
+| `combo_upgrade` | a base job became its combo (game gained the paired theme) | **yes** -- rule-driven, not opinion |
+| `narrower` | holds FEWER jobs than detected | no -- staff trim vs new tags, indistinguishable |
+| `wider` | holds jobs detection no longer suggests | no -- staff pick vs IGDB losing tags |
+| `mixed` | both added and removed, no single explanation | no |
+| `combo_downgrade` | a combo fell back to its base (IGDB lost the theme) | no -- data loss, not a correction |
+| `freelancer_regression` | detection collapsed to Freelancer alone | no -- usually broken enrichment |
+| `unjobbed` | **no jobs at all**: banks ZERO XP on claim | a live defect, not stale data -- just set jobs |
+| `no_signal` | no member concepts, or no genres/themes at all | cannot be judged |
+
+**`unjobbed` is counted as drift by the report** (it is not in `SETTLED`, so it appears in the
+totals and gets its own section) even though the table above calls it a defect rather than stale
+data. That is deliberate: it needs the same attention as the rest, and it is reached the same way.
+
+### Four things that are load-bearing here
+
+- **`no_signal` is not `freelancer_regression`.** `assign_job_slugs` answers a tagless game with
+  `{freelancer}`, so the fallback is indistinguishable *in its output* from a real detection saying
+  "this game is unspecialized". The scanner tracks whether IGDB supplied any tag at all and reports
+  the absence of data separately. Without that, the regression bucket fills with contracts whose
+  enrichment has simply not run.
+- **The batched scanner must equal the per-contract helper.** `JobDriftScanner` pays a fixed seven
+  queries for the whole catalogue instead of ~5 *per contract*, and it must produce exactly what
+  `job_detection.suggest_jobs_for_contract` produces for every contract, ordering included. The moment they diverge the
+  report describes a rule the admin action and the staging pipeline do not follow. Pinned by
+  `tests/engine/test_job_drift.py`, not by reading the two implementations.
+- **Banked and pending are counted apart.** A reached-but-unaccepted contract re-splits for free (no
+  grants exist yet; the hunter claims under the new profile). Only banked XP is a migration of levels.
+- **Read the XP column, not the contract count.** A hundred drifted contracts nobody claimed cost
+  nothing; one drifted contract with four thousand earners is the whole problem.
+
+### If a repair path is built
+
+Open decisions, recorded so they are not re-derived: whether the auto path is limited to the two
+monotone buckets; whether stranded `ProgressionMilestone` rungs on a vacated job are pruned (the
+current rule leaves them, which is right for a rare revoke and degrades when re-allocation is
+routine); and whether hunters are told. Two mechanics are already settled by the engine:
+
+- **Re-point in place, do not revoke and re-earn.** The existing rule ("Revoke and re-earn, not
+  re-point") is about a *re-keyed* game whose completion now belongs to a **different** Contract with
+  its own job profile. Job drift is the same contract, same qualification, same T -- only the split
+  changes -- so the rule does not apply and a revoke would take away a claim the hunter made honestly.
+- **Preserve each tier's total from the ledger, re-split only the distribution.** Sum the tier's
+  existing grants and re-split *that* figure, carrying `base_t` and `multiplier` across verbatim,
+  rather than re-deriving from current config. The total paid is history; the distribution is a fact
+  about the game. Net XP is unchanged and Pursuer Level is near-conserved (the flat curve plus the
+  level-1 floor), so what actually moves is the per-job number.
+
+### A jobless Contract banks nothing (found 2026-09, not yet fixed)
+
+`accept_contracts_bulk` skips any Contract with an empty `jobs` M2M (`if not jobs: continue`), and
+`accept_contract` is a thin wrapper over it, so BOTH claim paths are affected. A hunter completes
+the game, sees the contract as claimable, clicks claim, and receives nothing -- no XP, no error, no
+signal that anything went wrong.
+
+This is unrelated to job drift and needs no repair pipeline; the fix is to set jobs on those
+contracts. `report_job_drift` surfaces them as the `unjobbed` bucket with a warning line so they
+can be found. A guard worth considering separately: the staging pipeline already auto-suggests
+jobs, so a live Contract with none is arguably a state the admin should refuse to save.
+
 ## Board vs History (Career display)
 
 The Career Contracts view splits into a **Board | History** segmented sub-toggle — a `scope` filter on
