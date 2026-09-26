@@ -2580,124 +2580,6 @@ class Badge(models.Model):
             self.most_recent_concept = concepts.filter(release_date=max_date).first() if max_date else None
         self.save(update_fields=['most_recent_concept'])
 
-    def update_required(self):
-        from trophies.models import Stage
-        from trophies.constants import EVALUATABLE_BADGE_TYPES
-        if self.badge_type in EVALUATABLE_BADGE_TYPES:
-            stages = Stage.objects.filter(series_slug=self.series_slug)
-            required_count = 0
-            for stage in stages:
-                if stage.stage_number == 0:
-                    continue
-                if stage.applies_to_tier(self.tier):
-                    required_count += 1
-
-            # For megamix badges with requires_all=False, use min_required
-            # Otherwise use the total count of non-zero stages
-            if self.badge_type == 'megamix' and not self.requires_all:
-                self.required_stages = self.min_required
-            else:
-                self.required_stages = required_count
-
-            self.save(update_fields=['required_stages'])
-
-
-    def get_stage_completion(self, profile: Profile, badge_type: str) -> dict[int, bool]:
-        if not profile:
-            return {}
-
-        from django.db.models import Q
-
-        stages = Stage.objects.filter(
-            Q(series_slug=self.series_slug)
-            & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))
-        ).prefetch_related('concepts__games', 'concept_bundles__concepts')
-
-        is_plat_check = False
-        is_progress_check = False
-
-        from trophies.constants import CONCEPT_BASED_BADGE_TYPES
-        if badge_type in CONCEPT_BASED_BADGE_TYPES:
-            is_plat_check = self.tier in [1, 3]
-            is_progress_check = self.tier in [2, 4]
-        elif badge_type == 'megamix':
-            is_plat_check = True
-        else:
-            return {}
-
-        if is_plat_check:
-            condition = Q(has_plat=True)
-        elif is_progress_check:
-            condition = Q(progress=100)
-        else:
-            return {}
-
-        # Build mappings: stage_number -> standalone game_ids, and stage_number -> list of bundle member-id sets
-        stage_games = {}
-        stage_bundles = {}
-        all_game_ids = set()
-        bundle_concept_ids = set()
-        for stage in stages:
-            game_ids = set()
-            for concept in stage.concepts.all():
-                for game in concept.games.all():
-                    game_ids.add(game.id)
-            stage_games[stage.stage_number] = game_ids
-            all_game_ids.update(game_ids)
-
-            bundles = []
-            for bundle in stage.concept_bundles.all():
-                member_ids = frozenset(c.id for c in bundle.concepts.all())
-                if member_ids:
-                    bundles.append(member_ids)
-                    bundle_concept_ids.update(member_ids)
-            stage_bundles[stage.stage_number] = bundles
-
-        if not all_game_ids and not bundle_concept_ids:
-            return {sn: False for sn in stage_games}
-
-        # Fetch completed game IDs for this profile (standalone concept satisfaction)
-        completed_game_ids = set(
-            ProfileGame.objects.filter(
-                profile=profile, game_id__in=all_game_ids
-            ).filter(condition).values_list('game_id', flat=True)
-        ) if all_game_ids else set()
-
-        # Fetch fully-earned concept ids (synthesized-plat path). A bundle's
-        # synthesized completion counts for both plat-check and progress-check.
-        fully_earned_concept_ids = set(
-            ProfileGame.objects
-            .filter(profile=profile, progress=100, game__concept_id__in=bundle_concept_ids)
-            .values_list('game__concept_id', flat=True)
-            .distinct()
-        ) if bundle_concept_ids else set()
-
-        # Fetch platted concept ids (real-plat path, plat-check tiers only). A
-        # bundle whose member has a real platinum the user has earned satisfies
-        # plat-check tiers without requiring every member at 100%.
-        platted_concept_ids = set(
-            ProfileGame.objects
-            .filter(profile=profile, has_plat=True, game__concept_id__in=bundle_concept_ids)
-            .values_list('game__concept_id', flat=True)
-            .distinct()
-        ) if (bundle_concept_ids and is_plat_check) else set()
-
-        completion = {}
-        for stage_number, game_ids in stage_games.items():
-            bundles = stage_bundles.get(stage_number, [])
-            if not game_ids and not bundles:
-                continue
-            standalone_satisfied = bool(completed_game_ids & game_ids) if game_ids else False
-            bundle_satisfied = False
-            for member_ids in bundles:
-                if is_plat_check and (member_ids & platted_concept_ids):
-                    bundle_satisfied = True
-                    break
-                if member_ids.issubset(fully_earned_concept_ids):
-                    bundle_satisfied = True
-                    break
-            completion[stage_number] = standalone_satisfied or bundle_satisfied
-        return completion
 
     def __str__(self):
         return f"{self.name} (Tier {self.tier})"
@@ -3279,8 +3161,6 @@ class Stage(models.Model):
     title = models.CharField(max_length=255, blank=True, help_text="Optional stage title")
     stage_icon = models.URLField(null=True, blank=True)
     concepts = models.ManyToManyField(Concept, related_name='stages', blank=True, help_text='Concepts required for this stage.')
-    required_tiers = ArrayField(models.IntegerField(choices=[(1, 'Bronze'), (2, 'Silver'), (3, 'Gold'), (4, 'Platinum')]), blank=True, default=list)
-    has_online_trophies = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ['series_slug', 'stage_number']
@@ -3291,9 +3171,6 @@ class Stage(models.Model):
 
     def __str__(self):
         return f"{self.series_slug} - Stage {self.stage_number}"
-        
-    def applies_to_tier(self, tier: int) -> bool:
-        return not self.required_tiers or tier in self.required_tiers
 
 
 class ConceptBundle(models.Model):

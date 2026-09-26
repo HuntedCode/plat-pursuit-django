@@ -156,8 +156,7 @@ def test_first_click_asks_for_a_slug_and_copies_nothing(client):
 
 def test_duplicate_copies_every_field_and_both_qualifier_paths(client):
     _owner(client)
-    source = _stage('soulsborne', 2, title='Bloodborne',
-                    required_tiers=[1, 4], has_online_trophies=True)
+    source = _stage('soulsborne', 2, title='Bloodborne')
     standalone, episodic_a, episodic_b = ConceptFactory(), ConceptFactory(), ConceptFactory()
     source.concepts.add(standalone)
     bundle = ConceptBundle.objects.create(stage=source, label='PS3 Episodic', sort_order=3)
@@ -170,8 +169,6 @@ def test_duplicate_copies_every_field_and_both_qualifier_paths(client):
     assert copy.pk != source.pk
     assert copy.title == 'Bloodborne'
     assert copy.stage_icon == source.stage_icon
-    assert copy.required_tiers == [1, 4]
-    assert copy.has_online_trophies is True
     assert list(copy.concepts.all()) == [standalone]
 
     copied_bundle = copy.concept_bundles.get()

@@ -293,15 +293,13 @@ class ProfileGameFactory(factory.django.DjangoModelFactory):
 
 
 class StageFactory(factory.django.DjangoModelFactory):
-    """A badge stage. Add concepts via stage.concepts.add(...); required_tiers
-    defaults to [] which means "applies to every tier"."""
+    """A badge stage. Add concepts via stage.concepts.add(...)."""
 
     class Meta:
         model = Stage
 
     series_slug = factory.Sequence(lambda n: f"series-{n}")
     stage_number = 1
-    required_tiers = factory.LazyFunction(list)
 
 
 class ConceptBundleFactory(factory.django.DjangoModelFactory):
