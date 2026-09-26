@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 
-from trophies.constants import EVALUATABLE_BADGE_TYPES, PLATFORM_LABELS
+from trophies.constants import PLATFORM_LABELS
 
 # Personal-state chips on the group-badge list (Gallery + Series): binary hold only (per-badge in-progress is
 # engine-derived, not whale-safe across a catalog -- it lives on the badge detail page).

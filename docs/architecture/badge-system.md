@@ -62,11 +62,13 @@ platinum** — the engine never asks.
 
 | Bar | Source | Meaning |
 |---|---|---|
-| `base_complete` | `ProfileTrophyGroup.progress == 100` on the game's **`default`** trophy group | The **platinum** on a plat game; the **base trophy list at 100%** on a game without one. **DLC-independent** |
+| `base_complete` | `ProfileTrophyGroup.progress == 100` on the game's **`default`** trophy group, **or** `full_complete` (see the invariant below) | The **platinum** on a plat game; the **base trophy list at 100%** on a game without one. **DLC-independent** |
 | `full_complete` | `ProfileGame.progress == 100` | The whole game at 100%, **DLC included** |
 
-`base_complete` is what earns the badge. `full_complete` only sets `is_holo`, which is cosmetic, flips
-both ways and pays no XP.
+`base_complete` is what earns the badge. The only thing `full_complete` earns is `is_holo`, which is
+cosmetic, flips both ways and pays no XP. It is not inert otherwise, though: it also back-fills
+`base_complete` (the invariant below) and supplies the game's `completion_date` when the default group
+has no date of its own, which is what dates the earn.
 
 **A game with no platinum still has to be finished** — its base list must reach 100%, not merely be
 played. What it does *not* have to do is clear DLC, because `default` is PSN's base group and the DLC

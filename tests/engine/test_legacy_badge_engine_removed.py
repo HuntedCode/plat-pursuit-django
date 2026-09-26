@@ -92,7 +92,7 @@ def test_stage_carries_no_tier_routing():
     (`PlatformGroup.platforms`), and a tier column reappearing on Stage means someone is rebuilding
     the old routing next to the new one.
     """
-    from trophies.models import Stage
+    from trophies.models import Badge, Stage
 
     fields = {f.name for f in Stage._meta.get_fields()}
     assert 'required_tiers' not in fields, 'tier-based stage routing is back on Stage'
@@ -101,6 +101,13 @@ def test_stage_carries_no_tier_routing():
         'the community flags and the game-flags partial; Stage never had a reader.'
     )
     assert not hasattr(Stage, 'applies_to_tier'), 'Stage.applies_to_tier is back'
+
+    # The two readers, guarded explicitly. `update_required` matters most: it called
+    # `self.save(update_fields=['required_stages'])` on a RETAINED table, so it was a live violation
+    # of this file's own no-writer invariant that `test_the_retained_tables_have_no_writer` cannot
+    # see -- that guard resolves the call chain to the Name `self`, never to `Badge`.
+    assert not hasattr(Badge, 'update_required'), 'Badge.update_required is back (it writes a retained table)'
+    assert not hasattr(Badge, 'get_stage_completion'), 'Badge.get_stage_completion is back'
 
 
 def test_the_sync_path_evaluates_only_the_new_engine():
