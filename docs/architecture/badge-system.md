@@ -67,8 +67,21 @@ platinum** — the engine never asks.
 
 `base_complete` is what earns the badge. The only thing `full_complete` earns is `is_holo`, which is
 cosmetic, flips both ways and pays no XP. It is not inert otherwise, though: it also back-fills
-`base_complete` (the invariant below) and supplies the game's `completion_date` when the default group
-has no date of its own, which is what dates the earn.
+`base_complete` (the invariant below) and dates the earn in the same case.
+
+The date rule reads its branch off **progress, not off date presence**, and the difference is worth
+stating because it is easy to describe backwards:
+
+```python
+completion_date = base_date if base_prog == 100 else (full_date if full_complete else None)
+```
+
+So `full_date` is used exactly when the default group is SHORT of 100% — the same case in which
+`full_complete` is what made `base_complete` true. When the default group IS at 100%, its own date wins
+**even when that date is null**: a stale `ProfileTrophyGroup` with no `last_trophy_at` yields a game that
+is complete and undated, and `full_complete` does not rescue it. An undated game drops out of its stage's
+`base_dates`, and `_earned_date` can then return None for the whole badge — the hunter keeps the badge
+(`apply_changes` stamps `now()`) and loses only the historical date.
 
 **A game with no platinum still has to be finished** — its base list must reach 100%, not merely be
 played. What it does *not* have to do is clear DLC, because `default` is PSN's base group and the DLC

@@ -94,6 +94,39 @@ def test_holo_needs_full_complete():
     assert r2.base_earned is True and r2.holo is True
 
 
+def test_a_dated_full_complete_does_not_rescue_an_undated_default_group():
+    """The completion-date branch keys on PROGRESS, not on whether a date is present:
+
+        completion_date = base_date if base_prog == 100 else (full_date if full_complete else None)
+
+    So when the default group is AT 100% its own date wins even when that date is null, and the
+    game's `most_recent_trophy_date` is NOT consulted as a fallback. Easy to describe backwards
+    (badge-system.md did, briefly), and the consequence is real: the badge is earned and holo, and
+    still carries no earn date, so `apply_changes` stamps now() instead of the true completion.
+    """
+    _, ultra = _groups()
+    series, stage = _series_with_stage(slug='undated-base')
+    concept = ConceptFactory()
+    stage.concepts.add(concept)
+    game = _game(concept, platforms=('PS5',))
+    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+
+    profile = ProfileFactory()
+    _complete(profile, game, full=True, day=6)
+    assert evaluate_profile(profile, [gb])[gb.id].earned_date == _dt(6)
+
+    # The default group keeps progress=100 but loses its date; the GAME keeps a real date.
+    ProfileTrophyGroup.objects.filter(profile=profile, trophy_group__game=game).update(last_trophy_at=None)
+    ProfileGame.objects.filter(profile=profile, game=game).update(most_recent_trophy_date=_dt(6))
+
+    res = evaluate_profile(profile, [gb])[gb.id]
+    assert res.base_earned is True and res.holo is True, 'progress is intact; only the date went'
+    assert res.earned_date is None, (
+        'full_complete was used as a DATE fallback -- it is only a fallback when the default group '
+        'is short of 100%, not when it merely lacks a date'
+    )
+
+
 # ── platform routing between the two groups ──────────────────────────────────
 def test_one_clear_credits_every_edition_the_stage_reaches():
     """THE cross-platform rule (owner's call, 2026-09). One stage is one WORK; clearing it on any platform
