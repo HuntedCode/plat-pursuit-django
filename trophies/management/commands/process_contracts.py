@@ -53,9 +53,42 @@ logger = logging.getLogger(__name__)
 #: when its MEMBERSHIP changes: members are derived from IGDB matches (`member_concept_ids`), which the
 #: sync's igdb_enrich phase writes. So a concept anchored today can join an untouched Contract, and only
 #: a full pass will see it. Weekly keeps the nightly cost near zero without letting that case rot.
+#: The episodic `bundles` are the same story for the same reason: `ContractBundle.concepts` is an M2M,
+#: and editing it leaves `Contract.updated_at` untouched while changing who `_candidate_profiles` finds.
 FULL_SWEEP_INTERVAL = timedelta(days=7)
+#: TWO KEYS, TWO QUESTIONS, AND THEY ARE NOT THE SAME QUESTION. `WATERMARK_KEY` is the SCOPING
+#: cursor: "what has changed since anything last swept", which is what `updated_at__gt` narrows on.
+#: `FULL_WATERMARK_KEY` is the only one whose AGE can force a full pass, so a week of incremental runs
+#: cannot postpone one. Reading the full-pass stamp for BOTH was the bug below (see `_get_watermark`).
+#: (A missing or unreadable value on EITHER key also forces a full pass -- that is the safe direction,
+#: so the full-pass decision reads both while the narrowing reads only the cursor.)
 WATERMARK_KEY = 'contract_detection:last_run'
 FULL_WATERMARK_KEY = 'contract_detection:last_full_run'
+#: Lookback margin on the scoping cursor, closing a commit-visibility race that `started_at` alone
+#: cannot. `Contract.updated_at` is stamped in PYTHON (`auto_now`, and the admin's bulk actions stamp it
+#: explicitly because `queryset.update()` bypasses `auto_now`), so a row's timestamp is always EARLIER
+#: than the instant its transaction commits and becomes visible to this sweep. The lost row is therefore
+#: any whose `updated_at` precedes our `started_at` while its COMMIT lands after our snapshot -- note
+#: that the commit may arrive long after the watermark write and still be missed, because what excludes
+#: the row next run is its own early timestamp, not when we looked. Such a row is silently skipped until
+#: the weekly full pass. Re-examining a minute of already-swept Contracts costs nothing: detection is
+#: additive, `_settled_profiles` filters out the candidates, and `mark_contract_reached` only ever fills
+#: fields that are still None. (`>=` instead of `>` does NOT help: in this race `updated_at` is strictly
+#: less than the watermark, not equal to it.)
+#: HOW BIG THE GAP ACTUALLY IS, since one minute is only defensible against a real number. It depends on
+#: which admin surface published the row, and they differ:
+#:   - `make_live` / `make_not_live` (the bulk actions) are a bare `queryset.update()` outside any
+#:     transaction, so the gap is one statement round trip. ATOMIC_REQUESTS is not set anywhere in
+#:     settings, so nothing wraps the request either.
+#:   - The change form and the `list_editable` changelist toggle both stamp INSIDE
+#:     `transaction.atomic()` -- Django's own `changeform_view` / `changelist_view` open it, not our
+#:     code -- and `ContractAdmin.list_editable = ('is_live',)` means the publish tick is one of them.
+#:     A changelist submit saves every changed row in ONE block, so the first row stamped waits for all
+#:     the others before the commit lands. A page of rows is still milliseconds; a block held open for
+#:     over a minute would lose its earliest rows to the weekly pass, and that is the real limit here.
+#: So this is not a hypothetical about future code: two of the three publish paths already commit inside
+#: a transaction. One minute covers all three comfortably today.
+CURSOR_GRACE = timedelta(minutes=1)
 
 
 class Command(BaseCommand):
@@ -78,6 +111,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         username = options.get('user')
         dry_run = options.get('dry_run', False)
+        # The watermark is WRITTEN at the end of the run but CAPTURED here, because this instant is
+        # the only one the run can honestly claim to have covered: it reads the catalogue now, so a
+        # curator publishing a wave while the sweep is mid-flight must fall AFTER the cursor, not
+        # be stamped as already swept. Stamping `timezone.now()` at the end silently dropped that
+        # wave until the weekly full pass.
+        started_at = timezone.now()
         if dry_run:
             self.stdout.write(self.style.WARNING("DRY RUN -- no changes will be written.\n"))
 
@@ -118,9 +157,20 @@ class Command(BaseCommand):
         # Contract explicitly must therefore OVERRIDE "has it changed", not be subject to it.
         if options.get('incremental') and options.get('all_profiles') and not username and not slug:
             watermark = self._get_watermark()
-            full_sweep = watermark is None or (timezone.now() - watermark) >= FULL_SWEEP_INTERVAL
+            last_full = self._get_full_watermark()
+            # Two watermarks, two decisions. Whether a FULL pass is due is a question about the last
+            # full pass; WHERE an incremental pass starts is a question about the last run of any
+            # kind. Asking both of `last_full` made every incremental run re-sweep the whole window
+            # since that pass (see `_get_watermark`).
+            #
+            # The `watermark is None` arm is load-bearing beyond its own case: it is what proves
+            # `watermark` is non-None at the subtraction below. Drop it (on the reasoning that a
+            # missing cursor is the full-pass stamp's problem) and an unreadable cursor reaches
+            # `None - CURSOR_GRACE` and raises, which nightly would swallow as a failed step.
+            full_sweep = (watermark is None or last_full is None
+                          or (started_at - last_full) >= FULL_SWEEP_INTERVAL)
             if not full_sweep:
-                live = live.filter(updated_at__gt=watermark)
+                live = live.filter(updated_at__gt=watermark - CURSOR_GRACE)
 
         contracts = list(live)
         if not contracts:
@@ -137,7 +187,7 @@ class Command(BaseCommand):
                 # promises "write nothing", and a watermark is a write. Stamping it here let a
                 # preview run advance the nightly's cursor past contracts it never processed.
                 if not dry_run:
-                    self._set_watermark(timezone.now(), full=False)
+                    self._set_watermark(started_at, full=False)
             return
 
         if username:
@@ -168,7 +218,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.MIGRATE_HEADING(f"Contract reach detection: {scope}"))
             self._process_all(contracts, dry_run)
             if options.get('incremental') and not dry_run and not slug:
-                self._set_watermark(timezone.now(), full=full_sweep)
+                self._set_watermark(started_at, full=full_sweep)
             return
 
         self.stderr.write(self.style.ERROR(
@@ -337,13 +387,13 @@ class Command(BaseCommand):
     # -- incremental-mode watermarks -------------------------------------------------------------
 
     @staticmethod
-    def _get_watermark():
-        """When the last FULL pass ran. Incremental scoping keys off this, not the last run of any
-        kind, so a week of incremental runs cannot postpone the full pass indefinitely."""
+    def _read_watermark(key):
+        """One stored, timezone-aware watermark, or None. None always means "sweep everything",
+        which is the safe direction for every caller: it costs a full pass, never a missed one."""
         try:
-            raw = redis_client.get(FULL_WATERMARK_KEY)
+            raw = redis_client.get(key)
         except Exception:
-            logger.warning("process_contracts: redis unavailable for watermark read")
+            logger.warning("process_contracts: redis unavailable for watermark read (%s)", key)
             return None            # unreadable watermark -> full sweep, which is the safe direction
         if not raw:
             return None
@@ -351,7 +401,34 @@ class Command(BaseCommand):
         return parsed if parsed and timezone.is_aware(parsed) else None
 
     @staticmethod
+    def _get_watermark():
+        """When ANY run last swept -- the cursor `updated_at__gt` narrows on.
+
+        THIS READ `FULL_WATERMARK_KEY`, while `WATERMARK_KEY` was written by every run and read by
+        nobody. One value was answering two questions, and it could only ever be right about one of
+        them: scoping from the last FULL pass means every incremental run re-sweeps everything every
+        run since that pass already covered. A curator publishing 150 contracts per wave saw
+        `incremental (150 changed)`, then 300, then 450, then 600 -- each run redoing the last one's
+        work, reporting the redo as change, and giving no sign anything was wrong, because a growing
+        "changed" count is exactly what a busy catalogue looks like. It self-corrected weekly when
+        FULL_SWEEP_INTERVAL forced a pass and moved the stamp, which is why it read as noise.
+
+        The nightly paid the same cost silently: its window grew across the week rather than
+        covering one day.
+        """
+        return Command._read_watermark(WATERMARK_KEY)
+
+    @staticmethod
+    def _get_full_watermark():
+        """When the last FULL pass ran -- and ONLY whether one is due now keys off it. Held separate
+        from the scoping cursor so a week of incremental runs cannot postpone the full pass, which is
+        the one thing the two-key split has to keep true."""
+        return Command._read_watermark(FULL_WATERMARK_KEY)
+
+    @staticmethod
     def _set_watermark(when, *, full):
+        """Advance the scoping cursor on every incremental run, and the full-pass stamp only when the
+        run actually was one. `when` is the run's START (see `handle`), not its end."""
         try:
             redis_client.set(WATERMARK_KEY, when.isoformat())
             if full:

@@ -10,6 +10,7 @@ promptly as it can be taken away. Its sharp edges are the interaction with `--in
 narrows the same queryset) and the nightly watermark, which a targeted run must never write.
 """
 import itertools
+from contextlib import contextmanager
 from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
@@ -19,7 +20,9 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.utils import timezone
 
-from trophies.management.commands.process_contracts import Command
+from trophies.management.commands.process_contracts import (
+    FULL_SWEEP_INTERVAL, FULL_WATERMARK_KEY, WATERMARK_KEY, Command,
+)
 from trophies.models import Contract, EarnedContract
 from tests.factories import (
     ConceptFactory, EarnedTrophyFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
@@ -201,7 +204,11 @@ def test_targeted_sweep_ignores_the_incremental_changed_since_filter():
     Contract.objects.filter(pk=contract.pk).update(
         updated_at=timezone.now() - timedelta(days=1))
 
-    with patch.object(Command, '_get_watermark', return_value=timezone.now()):
+    # Through the STORE, not a patched accessor: patching `_get_watermark` here stopped meaning
+    # anything once the command grew a second accessor, and a patch that no longer influences the
+    # code under test reads to the next person like coverage that is not there.
+    now_iso = timezone.now().isoformat()
+    with _fake_redis(**{WATERMARK_KEY: now_iso, FULL_WATERMARK_KEY: now_iso}):
         out = _run('--contract', 'c-unchanged', '--all', '--incremental')
 
     assert 'No Contracts changed' not in out
@@ -210,15 +217,43 @@ def test_targeted_sweep_ignores_the_incremental_changed_since_filter():
     )
 
 
-def test_dry_run_does_not_advance_the_nightly_watermark():
-    """`--dry-run` promises "write nothing", and a watermark IS a write -- a preview that advances
-    the nightly's cursor past contracts it never processed is the worst kind, because the real run
-    then skips them. (Pre-existing; the empty-queryset branch was missing the guard its sibling
-    already had.)"""
-    with patch.object(Command, '_get_watermark', return_value=timezone.now()):
-        with patch.object(Command, '_set_watermark') as spy:
-            _run('--all', '--incremental', '--dry-run')
-    assert not spy.called, 'a dry run advanced the nightly watermark'
+@pytest.mark.parametrize('scenario', ['swept', 'quiet', 'full'])
+def test_dry_run_does_not_advance_either_watermark(scenario):
+    """`--dry-run` promises "write nothing", and a watermark IS a write -- a preview that advances the
+    nightly's cursor past contracts it never processed is the worst kind, because the real run then
+    skips them.
+
+    THREE scenarios because a dry-run guard can be missing on either key independently. The swept and
+    quiet branches both take the incremental path, which writes with `full=False` and so never touches
+    `FULL_WATERMARK_KEY` at all -- assert on that key from either one and the assertion cannot fail.
+    The 'full' case is the only shape where a non-dry run stamps BOTH, so it is the only one that pins
+    the full stamp.
+
+    THIS TEST WAS VACUOUS FOR A WHILE, and the way it went vacuous is the lesson. It patched
+    `_get_watermark` only. When the command grew a second accessor, the unpatched one fell through to
+    real Redis, returned None, forced a full sweep, and -- because the test created no Contract -- the
+    run left through the "No live Contracts" early return, which writes no watermark under any
+    circumstances. `assert not spy.called` then held for a reason that had nothing to do with
+    `--dry-run`: both guards could be deleted with the test still green.
+    """
+    a_day_ago = (timezone.now() - timedelta(days=1)).isoformat()
+    stale_full = (timezone.now() - FULL_SWEEP_INTERVAL - timedelta(hours=1)).isoformat()
+    full_seed = stale_full if scenario == 'full' else a_day_ago
+
+    contract, _game, _plat = _completable_contract('c-dryrun-wm')
+    if scenario == 'quiet':
+        Contract.objects.filter(pk=contract.pk).update(
+            updated_at=timezone.now() - timedelta(days=3))     # older than the cursor: quiet branch
+
+    with _fake_redis(**{WATERMARK_KEY: a_day_ago, FULL_WATERMARK_KEY: full_seed}) as fake:
+        out = _run('--all', '--incremental', '--dry-run')
+
+    expected = {'swept': 'incremental (1 changed)',
+                'quiet': 'No Contracts changed',
+                'full': 'FULL sweep'}[scenario]
+    assert expected in out, f'the run did not reach the branch under test: {out!r}'
+    assert _stamp(fake, WATERMARK_KEY) == a_day_ago, 'a dry run advanced the scoping cursor'
+    assert _stamp(fake, FULL_WATERMARK_KEY) == full_seed, 'a dry run stamped a full pass'
 
 
 def test_no_scope_flag_is_an_error_that_names_all_three_modes():
@@ -340,3 +375,296 @@ def test_a_hunter_with_no_row_yet_is_always_a_candidate():
 
     assert '1 candidate(s)' in out
     assert EarnedContract.objects.filter(profile=profile, contract=contract).exists()
+
+
+# -- --incremental watermarks: two keys, two questions ---------------------------------------------
+
+#: Patch target for the command module's own globals (`redis_client`, `CURSOR_GRACE`).
+_CMD = 'trophies.management.commands.process_contracts'
+
+
+@contextmanager
+def _fake_redis(**initial):
+    """Route the command's raw redis client through an in-memory fake, seeded with watermarks.
+
+    A STORE RATHER THAN A PATCHED ACCESSOR, deliberately. Every incremental test here used to patch
+    `_get_watermark`, and that is precisely why the wrong-key bug survived them: a patched accessor
+    answers whatever the test asked for no matter which key the code reads, so the one thing that was
+    broken was the one thing unobservable. Worse, when the command grew a SECOND accessor those
+    patches silently stopped covering their own subject (see the dry-run test above). Going through a
+    store makes the KEY part of what is under test, and cannot rot that way.
+
+    `fakeredis` rather than a hand-rolled dict, for one specific reason: the real client is built
+    WITHOUT `decode_responses` (`cache.get_redis_client`), so `get` returns BYTES. A dict fake hands
+    back the `str` it was given, which would leave `_read_watermark`'s decode branch exercised only in
+    production -- delete the `.decode()` and a dict-backed suite stays green while every real run reads
+    an unusable watermark and sweeps the whole catalogue nightly. It is also the project's convention:
+    `fakeredis` is in requirements-dev for exactly "tests that touch the raw redis client".
+    """
+    import fakeredis
+
+    client = fakeredis.FakeStrictRedis(server=fakeredis.FakeServer())
+    for key, value in initial.items():
+        client.set(key, value)
+    with patch(_CMD + '.redis_client', client):
+        yield client
+
+
+@contextmanager
+def _no_grace():
+    """Zero `CURSOR_GRACE` for tests that reason about the window at sub-minute resolution.
+
+    NOT a workaround -- it is what keeps those tests honest. The margin is one minute, and a test
+    publishes its waves milliseconds apart, so every wave falls inside the previous run's margin and
+    the margin alone would satisfy them: they would pass on the buggy key too, and go quietly vacuous.
+    Zeroing it isolates the question each test is actually asking (which key is read, and which
+    timestamp is stamped) from the margin, which has its own test below at real-world spacing.
+    """
+    with patch(_CMD + '.CURSOR_GRACE', timedelta(0)):
+        yield
+
+
+def _stamp(client, key):
+    """A stored watermark, decoded the way the command decodes it. None when unset."""
+    raw = client.get(key)
+    return raw.decode() if raw is not None else None
+
+
+def _publish(slug):
+    """A live Contract whose `updated_at` is NOW -- one wave of the curator's publishing."""
+    contract, _game, _plat = _completable_contract(slug)
+    Contract.objects.filter(pk=contract.pk).update(updated_at=timezone.now())
+    return contract
+
+
+def _backdate(contract, **delta):
+    Contract.objects.filter(pk=contract.pk).update(updated_at=timezone.now() - timedelta(**delta))
+
+
+def test_consecutive_incremental_runs_do_not_re_sweep_the_previous_wave():
+    """THE BUG THIS PINS. The `updated_at__gt` narrowing read `contract_detection:last_full_run`, so
+    an incremental run scoped to "changed since the last FULL pass" -- re-sweeping everything every
+    incremental run since that pass had already covered. Publishing in waves reported
+    `incremental (150 changed)`, then 300, then 450, then 600: each run redoing the previous run's
+    work, reporting the redo as change, and looking exactly like a busy catalogue while doing it.
+
+    `contract_detection:last_run` was written by every run and read by nobody, which is the shape of
+    the defect: one stored value answering two different questions, right about only one of them.
+    """
+    # A baseline Contract so the first run reaches the sweep at all: a full pass that finds NOTHING
+    # live returns early and stamps no watermark, which would leave run two a full sweep as well.
+    _publish('c-baseline')
+    with _fake_redis(), _no_grace():
+        _run('--all', '--incremental')                     # first run: full sweep, stamps both keys
+
+        _publish('c-wave-a')
+        first = _run('--all', '--incremental')
+        assert 'incremental (1 changed)' in first
+
+        _publish('c-wave-b')
+        second = _run('--all', '--incremental')
+
+    assert 'incremental (1 changed)' in second, (
+        f'the second wave re-swept the first: {second!r}'
+    )
+    # `c-wave-a` is the contract's NAME as well as its slug (see `_completable_contract`), and
+    # `_process_all` prints one line per swept contract by name -- so its absence is the assertion
+    # that it was not swept again. It is also not a substring of `c-wave-b`.
+    assert 'c-wave-a' not in second, 'an unchanged Contract from the previous wave was swept again'
+
+
+def test_an_incremental_run_advances_the_scoping_cursor_but_not_the_full_stamp():
+    """The two keys move on different schedules, and the window is one RUN wide, not one full-pass
+    wide. Seeded to DIFFERENT values on purpose: with both keys holding the same timestamp this test
+    passes whichever key the code reads, which is exactly the blind spot that let the bug through.
+
+    The Contract updated 4 days ago sits BETWEEN them -- already covered by the last run, not yet
+    covered by the last full pass. Scoping from the full stamp sweeps it; scoping from the cursor does
+    not. That single row is the discriminator.
+    """
+    cursor = (timezone.now() - timedelta(days=2)).isoformat()
+    full = (timezone.now() - timedelta(days=6)).isoformat()
+    _backdate(_publish('c-already-swept'), days=4)
+    _publish('c-genuinely-new')
+
+    with _fake_redis(**{WATERMARK_KEY: cursor, FULL_WATERMARK_KEY: full}) as fake:
+        out = _run('--all', '--incremental')
+
+    assert 'FULL sweep' not in out, 'a 6-day-old full pass should not have forced another'
+    assert 'incremental (1 changed)' in out, f'the window was not one run wide: {out!r}'
+    assert 'c-already-swept' not in out, 'a Contract the previous run already covered was swept again'
+    assert _stamp(fake, FULL_WATERMARK_KEY) == full, 'an incremental run moved the full stamp'
+    assert _stamp(fake, WATERMARK_KEY) != cursor, 'the scoping cursor did not advance'
+
+
+def test_the_weekly_full_pass_still_keys_off_the_full_stamp():
+    """The invariant the split has to preserve, and the reason the full stamp cannot simply be dropped.
+    Membership is IGDB-derived, so a Contract's `updated_at` does NOT move when it gains a member --
+    the forced full pass is the only thing that ever sees that, and a cursor advancing every night must
+    not be able to postpone it. (This guards the split rather than pinning the original bug: it fails
+    if the full-pass decision is ever pointed at the cursor.)"""
+    with _fake_redis(**{
+        WATERMARK_KEY: timezone.now().isoformat(),                                # swept minutes ago
+        FULL_WATERMARK_KEY: (timezone.now() - FULL_SWEEP_INTERVAL - timedelta(hours=1)).isoformat(),
+    }):
+        _publish('c-weekly')
+        out = _run('--all', '--incremental')
+
+    assert 'FULL sweep' in out, 'a stale full pass was postponed by a fresh incremental cursor'
+
+
+def test_a_quiet_run_still_advances_the_cursor():
+    """Nothing changed is the normal nightly outcome, and it must still close the window -- leaving the
+    cursor put would make the next run re-sweep whatever the last one already covered.
+
+    Seeded to different values for the same reason as the sibling above: the 1-day-old Contract is
+    inside the full-pass window but outside the cursor's, so reading the wrong key turns this from a
+    quiet run into a sweep and the first assertion fails."""
+    cursor = (timezone.now() - timedelta(hours=6)).isoformat()
+    full = (timezone.now() - timedelta(days=3)).isoformat()
+    _backdate(_publish('c-quiet'), days=1)
+
+    with _fake_redis(**{WATERMARK_KEY: cursor, FULL_WATERMARK_KEY: full}) as fake:
+        out = _run('--all', '--incremental')
+
+    assert 'No Contracts changed' in out, f'a quiet run swept something: {out!r}'
+    assert _stamp(fake, WATERMARK_KEY) != cursor, 'a quiet run left the window open'
+    assert _stamp(fake, FULL_WATERMARK_KEY) == full, 'a quiet run stamped a full pass it never did'
+
+
+def test_a_contract_published_mid_run_is_not_stamped_as_already_swept():
+    """The watermark is stamped at the run's START, not its end. The run read the catalogue at that
+    instant, so that is the only instant it can claim to have covered -- a curator publishing a wave
+    while the sweep is mid-flight must fall AFTER the cursor. Stamping the END silently swallowed that
+    wave until the weekly full pass forced a look.
+
+    `_no_grace` for the reason its own docstring gives: the margin happens to rescue this case too, but
+    only because the test completes in milliseconds. In production a full sweep runs for minutes while
+    the margin is one minute, so `started_at` is what actually protects a real mid-run publish."""
+    real_process_all = Command._process_all
+
+    def _publish_mid_run(self, contracts, dry_run):
+        result = real_process_all(self, contracts, dry_run)
+        _publish('c-mid-run')          # the curator hits "Mark LIVE" while the sweep is running
+        return result
+
+    _publish('c-mid-baseline')        # else the first run finds nothing live and never sweeps at all
+    with _fake_redis(), _no_grace():
+        with patch.object(Command, '_process_all', _publish_mid_run):
+            _run('--all', '--incremental')
+        out = _run('--all', '--incremental')
+
+    assert 'incremental (1 changed)' in out, (
+        f'a Contract published during the previous run was stamped as swept: {out!r}'
+    )
+    assert 'c-mid-run' in out
+
+
+def test_the_grace_margin_catches_a_publish_that_committed_after_the_cursor():
+    """The commit-visibility race `started_at` alone cannot close. `Contract.updated_at` is stamped in
+    Python (`auto_now`, and the admin's bulk actions stamp it explicitly), so a row's timestamp always
+    predates the instant its transaction commits and becomes visible to the sweep. A `Mark LIVE` whose
+    stamp lands just before the cursor but whose COMMIT lands just after would otherwise be recorded as
+    swept, and after that only the weekly full pass would ever look again.
+
+    Note `>=` would not help: in this race `updated_at` is strictly LESS than the watermark, which is
+    why the fix is a lookback margin rather than a change of operator."""
+    cursor = timezone.now()
+    contract = _publish('c-raced')
+    # Stamped 2 seconds BEFORE the cursor: inside the margin, where a row whose commit the previous run
+    # could not yet see still lives. ANCHORED TO `cursor`, not to a fresh `now()` -- `_backdate` would
+    # compute the offset after the factories have built a Contract, Concept, IGDBMatch, Game and
+    # Trophy, so on any run slower than 2s the row would land AFTER the cursor, be swept with no margin
+    # involved, and pass this test without exercising the thing it exists for.
+    Contract.objects.filter(pk=contract.pk).update(updated_at=cursor - timedelta(seconds=2))
+
+    with _fake_redis(**{
+        WATERMARK_KEY: cursor.isoformat(),
+        FULL_WATERMARK_KEY: (timezone.now() - timedelta(days=1)).isoformat(),
+    }):
+        out = _run('--all', '--incremental')
+
+    # A FULL sweep would print `c-raced` too, so the positive assertion alone is satisfiable without
+    # the margin ever applying -- any regression that makes the cursor unreadable would pass it.
+    assert 'FULL sweep' not in out, 'a full sweep printed c-raced without exercising the margin'
+    assert 'incremental (1 changed)' in out, f'the margin did not reach back over the row: {out!r}'
+    assert 'c-raced' in out, f'a Contract that committed after the cursor was never swept: {out!r}'
+
+
+@pytest.mark.parametrize('blind_key', [WATERMARK_KEY, FULL_WATERMARK_KEY])
+def test_an_unreadable_watermark_falls_back_to_a_full_sweep(blind_key):
+    """Redis half-available: one key readable, the other raising. `_read_watermark` returns None on any
+    failure, and None must always degrade toward MORE work, never toward skipping some -- a watermark
+    that cannot be read must not be treated as "nothing has changed". Parametrized over which key fails
+    because the two reach the decision by different routes."""
+    import fakeredis
+    import redis
+
+    class _BlindTo:
+        """A client that raises on reads of ONE key, leaving the other readable.
+
+        `redis.exceptions.ConnectionError`, NOT the builtin of the same name: the two are in disjoint
+        hierarchies (the builtin is an `OSError`, redis's is a `RedisError`). `_read_watermark` catches
+        bare `Exception` so either works today, but raising the builtin would make this test lie under
+        the natural tightening -- narrow that except to `redis.RedisError` and a test raising `OSError`
+        fails while production is fine, which sends someone hunting a bug that is not there.
+        """
+
+        def __init__(self, client, key):
+            self._client, self._key = client, key
+
+        def get(self, key):
+            if key == self._key:
+                raise redis.exceptions.ConnectionError('redis is half-down')
+            return self._client.get(key)
+
+        def set(self, key, value):
+            return self._client.set(key, value)
+
+    inner = fakeredis.FakeStrictRedis(server=fakeredis.FakeServer())
+    fresh = timezone.now().isoformat()
+    inner.set(WATERMARK_KEY, fresh)
+    inner.set(FULL_WATERMARK_KEY, fresh)          # both fresh: a readable pair would sweep nothing
+    _backdate(_publish('c-blind'), days=2)        # older than either watermark
+
+    with patch(_CMD + '.redis_client', _BlindTo(inner, blind_key)):
+        out = _run('--all', '--incremental')
+
+    assert 'FULL sweep' in out, f'an unreadable watermark skipped work instead of sweeping: {out!r}'
+    assert 'c-blind' in out
+
+
+def test_a_full_sweep_advances_both_keys():
+    """The positive counterpart to the tests above, which all assert what does NOT move. A full pass
+    has covered the whole catalogue, so it is the one run entitled to stamp both -- and both must carry
+    the SAME instant, because they are two records of one run and a drift between them would quietly
+    shift the next window. Previously only implied by the first run of the consecutive-runs test."""
+    _publish('c-full-both')
+
+    with _fake_redis() as fake:                                   # empty store: full sweep
+        out = _run('--all', '--incremental')
+
+    assert 'FULL sweep' in out
+    cursor, full = _stamp(fake, WATERMARK_KEY), _stamp(fake, FULL_WATERMARK_KEY)
+    assert cursor is not None, 'a full sweep left the scoping cursor unset'
+    assert full is not None, 'a full sweep did not record itself as a full pass'
+    assert cursor == full, 'the two keys recorded different instants for one run'
+
+
+def test_a_single_user_run_never_stamps_a_watermark():
+    """`--user` has covered ONE account, not the catalogue, so it may not tell the nightly it swept.
+    The same reasoning as the targeted `--contract` sweep above, and a documented invariant that had no
+    test: the write site is skipped because the `--user` branch returns before reaching it, which is
+    true by control flow today and exactly the kind of thing a later refactor moves."""
+    contract, game, plat = _completable_contract('c-user-wm')
+    profile = ProfileFactory(psn_username='wm-user')
+    _complete(profile, game, plat)
+    fresh = timezone.now().isoformat()
+
+    with _fake_redis(**{WATERMARK_KEY: fresh, FULL_WATERMARK_KEY: fresh}) as fake:
+        _run('--user', 'wm-user', '--all', '--incremental')
+
+    # The run DID do its work -- otherwise this asserts nothing about watermarks.
+    assert EarnedContract.objects.filter(profile=profile, contract=contract).exists()
+    assert _stamp(fake, WATERMARK_KEY) == fresh, 'a --user run advanced the scoping cursor'
+    assert _stamp(fake, FULL_WATERMARK_KEY) == fresh, 'a --user run stamped a full pass'

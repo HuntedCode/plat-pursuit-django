@@ -1,21 +1,31 @@
-# IA Map (Rebuild) — Living Document
+# IA Map — SUPERSEDED historical record
 
-> **How to use this.** The rebuild's information architecture is being built **bottom-up**:
-> we build pages, and the structure is recorded here as it solidifies (not designed in full
-> up front). For every page we build, add a row with its URL, what it links **out** to, and
-> what links **in** to it. Thirty seconds per page; it is the defense against disconnected
-> islands. Build **destinations first, hubs last** — the hub pages (especially Pursuit home)
-> are assembled once their destinations exist, so they surface real things instead of guesses.
+> **DO NOT READ THIS AS THE CURRENT IA.** It is the bottom-up map kept while the rebuild was in
+> flight: pages first, structure recorded as it solidified. The rebuild completed in 2026-09 and the
+> structure it describes was overtaken while it was being written, so most of what follows is a plan
+> that did not survive contact. Known-wrong below, as examples rather than an exhaustive list: it says
+> **3 hubs** (five configs ship), its signed-in navbar carries **Community** and **My Profile** (neither
+> is there -- the Profile item was removed in 2026-08), **The Lab** and **Research Panel** are listed as
+> built at `/my-pursuit/*` URLs that now 301 into Career, **Milestones** and **Titles** are marked
+> "legacy, to rebuild" when both are finished, and the **URL convention sweep** it treats as TBD has
+> shipped.
 >
-> This supersedes the legacy `docs/architecture/ia-and-subnav.md` (the 4-hub model) for
-> rebuild work. The strategic frame is `docs/design/product-identity.md`.
+> **For the IA as it actually ships**, read [ia-and-subnav.md](../../architecture/ia-and-subnav.md)
+> (hubs, sub-nav, the flat-URL 301s) and [navigation.md](../../features/navigation.md) (the navbar, the
+> hub table). For which pages exist and their state, read
+> [rebuild-playbook.md](rebuild-playbook.md). This file is kept for the reasoning it records -- the
+> destinations-first-hubs-last rule, and why the Logbook became The Lab -- not for its rows.
+>
+> An earlier version of this header claimed the map "describes the shipped IA, not a plan". That was
+> wrong, and wrong in the most damaging direction: it turned visibly-provisional rows into confident
+> assertions about a live site. The strategic frame is `docs/design/product-identity.md`.
 
 ## Stable skeleton (settled, not in question)
 
 The expensive-to-change structure is decided and stable. Do not re-litigate it per page.
 
 - **3 hubs**: **Pursuit** (`/`, the spine + home), **Browse** (`/games/`), **Community** (`/community/`).
-- **Standalone utilities**: Stats (`/stats/` — hidden for 1.0, redirects to Home pending its rebuild),
+- **Standalone utilities**: Stats (`/stats/` — hidden for 1.0, redirects to Home; out of scope for the site-wide rebuild, returns later as its own tool),
   Shareables (`/shareables/`), Recap (`/recap/`).
 - **Navbar (signed-in)**: `[Logo -> Pursuit home] [Browse] [Community] [My Profile]   [bell] [avatar]`. There is no separate "Pursuit" button; the logo is the Pursuit home link.
 - **URL convention**: flat top-level URLs for Pursuit sub-pages (no `/pursuit/` prefix; `/` is its home). Legacy paths 301 via the reverse-name redirect strategy.
@@ -51,7 +61,11 @@ Existing hub, unchanged. Reviews, profiles, challenges, lists, leaderboards.
 - **Research Panel home** (resolved 2026-06-16) — its **own page** (`/my-pursuit/research-panel/`), a Pursuit sub-nav slot; linked in from the Pursuit home.
 - **Badge catalog vs Collection** (resolved 2026-06-23) — badges live in TWO surfaces, mirroring games. The public **catalog** (find/search: `/badges/` + `/badges/<series_slug>/`) is a **Browse** page (re-homed `BadgeListView`/`BadgeDetailView`); the personal **Collection** album stays in **Pursuit**. This supersedes "Badges = collection at `/badges/`" — `/badges/` is now the Browse catalog, the Collection is built (currently `/my-pursuit/collection/`). The list is a far better find/search surface than the album, and being public it fixes anonymous discovery. See `product-identity.md` IA amendment + memory `project_badge_pages_collection_vs_list`.
 
-## Open IA questions (resolve as we build)
+## IA questions — both resolved (recorded here; the live answers live in ia-and-subnav.md)
 
-- **URL convention sweep** — the stable skeleton calls for flat top-level Pursuit URLs (`/lab/`, `/badges/`), but pages are currently shipping under `/my-pursuit/*` (logbook, research-panel). Do the flat-URL migration as one sweep (with reverse-name 301s) rather than per page; new pages use `/my-pursuit/*` until then for sibling consistency.
-- **Near-term sub-nav shape** — which items show in Phase 1 vs deferred.
+- **URL convention sweep** — RESOLVED. The flat top-level Pursuit URLs shipped as one sweep: the old
+  `/my-pursuit/*` and `/dashboard/*` paths 301-redirect to them, reverse names did not move, and bare
+  `/my-pursuit/` and `/dashboard/` redirect to `/`. New pages use flat URLs. See
+  [ia-and-subnav.md](../../architecture/ia-and-subnav.md).
+- **Near-term sub-nav shape** — RESOLVED by shipping: the sub-nav is config-driven from
+  `core/hub_subnav.py`, and the live items are what that file lists.
