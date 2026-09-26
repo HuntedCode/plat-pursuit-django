@@ -2580,124 +2580,6 @@ class Badge(models.Model):
             self.most_recent_concept = concepts.filter(release_date=max_date).first() if max_date else None
         self.save(update_fields=['most_recent_concept'])
 
-    def update_required(self):
-        from trophies.models import Stage
-        from trophies.constants import EVALUATABLE_BADGE_TYPES
-        if self.badge_type in EVALUATABLE_BADGE_TYPES:
-            stages = Stage.objects.filter(series_slug=self.series_slug)
-            required_count = 0
-            for stage in stages:
-                if stage.stage_number == 0:
-                    continue
-                if stage.applies_to_tier(self.tier):
-                    required_count += 1
-
-            # For megamix badges with requires_all=False, use min_required
-            # Otherwise use the total count of non-zero stages
-            if self.badge_type == 'megamix' and not self.requires_all:
-                self.required_stages = self.min_required
-            else:
-                self.required_stages = required_count
-
-            self.save(update_fields=['required_stages'])
-
-
-    def get_stage_completion(self, profile: Profile, badge_type: str) -> dict[int, bool]:
-        if not profile:
-            return {}
-
-        from django.db.models import Q
-
-        stages = Stage.objects.filter(
-            Q(series_slug=self.series_slug)
-            & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))
-        ).prefetch_related('concepts__games', 'concept_bundles__concepts')
-
-        is_plat_check = False
-        is_progress_check = False
-
-        from trophies.constants import CONCEPT_BASED_BADGE_TYPES
-        if badge_type in CONCEPT_BASED_BADGE_TYPES:
-            is_plat_check = self.tier in [1, 3]
-            is_progress_check = self.tier in [2, 4]
-        elif badge_type == 'megamix':
-            is_plat_check = True
-        else:
-            return {}
-
-        if is_plat_check:
-            condition = Q(has_plat=True)
-        elif is_progress_check:
-            condition = Q(progress=100)
-        else:
-            return {}
-
-        # Build mappings: stage_number -> standalone game_ids, and stage_number -> list of bundle member-id sets
-        stage_games = {}
-        stage_bundles = {}
-        all_game_ids = set()
-        bundle_concept_ids = set()
-        for stage in stages:
-            game_ids = set()
-            for concept in stage.concepts.all():
-                for game in concept.games.all():
-                    game_ids.add(game.id)
-            stage_games[stage.stage_number] = game_ids
-            all_game_ids.update(game_ids)
-
-            bundles = []
-            for bundle in stage.concept_bundles.all():
-                member_ids = frozenset(c.id for c in bundle.concepts.all())
-                if member_ids:
-                    bundles.append(member_ids)
-                    bundle_concept_ids.update(member_ids)
-            stage_bundles[stage.stage_number] = bundles
-
-        if not all_game_ids and not bundle_concept_ids:
-            return {sn: False for sn in stage_games}
-
-        # Fetch completed game IDs for this profile (standalone concept satisfaction)
-        completed_game_ids = set(
-            ProfileGame.objects.filter(
-                profile=profile, game_id__in=all_game_ids
-            ).filter(condition).values_list('game_id', flat=True)
-        ) if all_game_ids else set()
-
-        # Fetch fully-earned concept ids (synthesized-plat path). A bundle's
-        # synthesized completion counts for both plat-check and progress-check.
-        fully_earned_concept_ids = set(
-            ProfileGame.objects
-            .filter(profile=profile, progress=100, game__concept_id__in=bundle_concept_ids)
-            .values_list('game__concept_id', flat=True)
-            .distinct()
-        ) if bundle_concept_ids else set()
-
-        # Fetch platted concept ids (real-plat path, plat-check tiers only). A
-        # bundle whose member has a real platinum the user has earned satisfies
-        # plat-check tiers without requiring every member at 100%.
-        platted_concept_ids = set(
-            ProfileGame.objects
-            .filter(profile=profile, has_plat=True, game__concept_id__in=bundle_concept_ids)
-            .values_list('game__concept_id', flat=True)
-            .distinct()
-        ) if (bundle_concept_ids and is_plat_check) else set()
-
-        completion = {}
-        for stage_number, game_ids in stage_games.items():
-            bundles = stage_bundles.get(stage_number, [])
-            if not game_ids and not bundles:
-                continue
-            standalone_satisfied = bool(completed_game_ids & game_ids) if game_ids else False
-            bundle_satisfied = False
-            for member_ids in bundles:
-                if is_plat_check and (member_ids & platted_concept_ids):
-                    bundle_satisfied = True
-                    break
-                if member_ids.issubset(fully_earned_concept_ids):
-                    bundle_satisfied = True
-                    break
-            completion[stage_number] = standalone_satisfied or bundle_satisfied
-        return completion
 
     def __str__(self):
         return f"{self.name} (Tier {self.tier})"
@@ -3279,8 +3161,6 @@ class Stage(models.Model):
     title = models.CharField(max_length=255, blank=True, help_text="Optional stage title")
     stage_icon = models.URLField(null=True, blank=True)
     concepts = models.ManyToManyField(Concept, related_name='stages', blank=True, help_text='Concepts required for this stage.')
-    required_tiers = ArrayField(models.IntegerField(choices=[(1, 'Bronze'), (2, 'Silver'), (3, 'Gold'), (4, 'Platinum')]), blank=True, default=list)
-    has_online_trophies = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ['series_slug', 'stage_number']
@@ -3291,23 +3171,51 @@ class Stage(models.Model):
 
     def __str__(self):
         return f"{self.series_slug} - Stage {self.stage_number}"
-        
-    def applies_to_tier(self, tier: int) -> bool:
-        return not self.required_tiers or tier in self.required_tiers
 
 
 class ConceptBundle(models.Model):
     """A grouped set of Concepts that act as a single qualifier on a Stage.
 
     Models episodic releases where a game's trophies are split across multiple
-    Concepts with no real platinum (e.g. Telltale PS3 episodic releases). The
-    bundle is satisfied when every member Concept has at least one ProfileGame
-    at progress=100 for the profile. That synthesized completion counts as both
-    the platinum check (tiers 1/3) and the progress check (tiers 2/4), so a
-    fully cleared bundle behaves like a platinum for stage tier evaluation.
+    Concepts with no real platinum (e.g. Telltale PS3 episodic releases).
+
+    The engine collapses the bundle into ONE synthetic GameState
+    (`badge_orchestrator._bundle_state`), so it is evaluated exactly like a
+    single qualifying game. Every member must pull its weight, on each fact:
+
+      base_complete   every member has >= 1 game at the BASE bar (its default
+                      trophy group at 100%: the platinum on a plat game, the
+                      main list on one without, DLC-independent -- or the
+                      whole game at 100%, which the orchestrator infers as
+                      base so a stale default-group row cannot deny credit)
+      full_complete   every member has >= 1 game at the HOLO bar (the whole
+                      game at 100%, DLC included)
+      platforms       the INTERSECTION of the members' platforms, never the
+                      union: a bundle is only completable where every member
+                      runs, so a union would gate an edition on work nobody
+                      can do there
+      is_obtainable   every member has >= 1 obtainable game
+      is_delisted     ANY member has >= 1 delisted game. Existential like the
+                      line above it, so a member holding one delisted and one
+                      live game trips BOTH
+      completion_date the LAST member to reach base -- but None if ANY
+                      base-complete member has no dated game at all, because
+                      a bundle cannot claim an earn date it only half knows.
+                      That None propagates: the stage is still satisfied but
+                      contributes no date, so under the `all` policy
+                      `_earned_date` returns None for the whole badge. Under
+                      `min_count` it need not: the threshold is `need`, not
+                      the satisfied count, so enough OTHER dated stages still
+                      yield a date. See the earn-date note in badge-system.md
+
+    Note the base/holo split: a bundle cleared to its base bar earns the badge
+    but does NOT make it holo. (This docstring previously described the holo
+    rule, in the vocabulary of the pre-2026-08 tier engine, as if it were the
+    earn rule.)
 
     Membership rule: a Concept must not appear both in Stage.concepts and in a
-    ConceptBundle on the same Stage (enforced by StageAdmin/ConceptBundleForm).
+    ConceptBundle on the same Stage (enforced by StageAdmin and
+    ConceptBundleInlineFormSet.clean).
     The same Concept may be a bundle member on Stage A and a standalone on
     Stage B; bundles only constrain membership within a single Stage.
     """

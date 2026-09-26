@@ -54,6 +54,61 @@ demand work that cannot be done on its own platforms.
 A stage with nothing on the edition's platforms is **out of scope**: not gating, not satisfiable, and
 paying no XP there. That is the one limit on cross-platform credit.
 
+### What "completed" means: the two bars
+
+The table above says a stage is satisfied when the hunter "completed" a game. There are exactly two
+completion bars, supplied per game by the orchestrator, and **neither branches on whether the game has a
+platinum** — the engine never asks.
+
+| Bar | Source | Meaning |
+|---|---|---|
+| `base_complete` | `ProfileTrophyGroup.progress == 100` on the game's **`default`** trophy group, **or** `full_complete` (see the invariant below) | The **platinum** on a plat game; the **base trophy list at 100%** on a game without one. **DLC-independent** |
+| `full_complete` | `ProfileGame.progress == 100` | The whole game at 100%, **DLC included** |
+
+`base_complete` is what earns the badge. The only thing `full_complete` earns is `is_holo`, which is
+cosmetic, flips both ways and pays no XP. It is not inert otherwise, though: it also back-fills
+`base_complete` (the invariant below) and dates the earn in the same case.
+
+The date rule reads its branch off **progress, not off date presence**, and the difference is worth
+stating because it is easy to describe backwards:
+
+```python
+completion_date = base_date if base_prog == 100 else (full_date if full_complete else None)
+```
+
+(The line lives in the `game_state` closure in `evaluate_with_catalog`.)
+
+So `full_date` is used only when the default group is SHORT of 100% **and** the game is fully complete —
+the same case in which `full_complete` is what made `base_complete` true. When the default group IS at
+100%, its own date wins **even when that date is null**: a stale `ProfileTrophyGroup` with no
+`last_trophy_at` yields a game that is complete and undated, and `full_complete` does not rescue it.
+
+An undated game drops out of its stage's `base_dates`, and `_earned_date` can then return None for the
+whole badge. Under `completion_policy='all'` it always does, because the threshold is the satisfied
+count; under `min_count` it need not, because the threshold is `min_required` and other dated stages can
+still meet it.
+
+**A None earn date is not a one-off cosmetic loss, and this is the part worth knowing.** `diff()`
+compares `cur.earned_at` against `res.earned_date`, so a stored date against a live None mismatches,
+emits an `update`, and `apply_changes` writes `earned_at = ch.earned_date or timezone.now()`. The next
+evaluation compares the same pair and mismatches again. The badge is re-stamped to sync time **on every
+run, forever**, which churns its position on the earners board. `tests/engine/test_badge_engine.py`
+records this as the failure mode behind the cross-platform `base_date` widening.
+
+**A game with no platinum still has to be finished** — its base list must reach 100%, not merely be
+played. What it does *not* have to do is clear DLC, because `default` is PSN's base group and the DLC
+groups (`001`, `002`, …) sit outside it. So the no-plat requirement is exactly as demanding as the
+platinum requirement, measured on the list that actually exists. This is also what the hunter is told, in
+`templates/trophies/badge_how_it_works.html`: *"A game with no platinum counts the moment its base trophy
+list hits 100%, so nothing in a set is unwinnable."*
+
+One invariant is enforced in the orchestrator rather than the engine: `base_complete = base_prog == 100 or
+full_complete`. A missing or stale default `ProfileTrophyGroup` row must never be able to produce "holo
+without base".
+
+A `ConceptBundle` collapses to a single synthetic game and is held to the same two bars, but **every**
+member must meet them — see the `ConceptBundle` docstring in `trophies/models.py`.
+
 > **Changed 2026-09** (owner's call). Satisfaction used to be scoped to qualifying games the way gating
 > still is, so each edition had to be cleared on its own platform. The per-edition *independence* that
 > created is gone: two editions are separate chases now only when their stages don't overlap platforms.
@@ -224,7 +279,7 @@ fails open, with no error, is the reason this lives on the field now. Other `Fra
 **Stages duplicate onto a new slug.** `Stage` joins to a series by a bare `series_slug` string, so a
 franchise badge that mirrors a series badge means re-entering the same concept picks stage by stage.
 `StageAdmin`'s "Duplicate selected stages under a new series slug" action copies a selection wholesale:
-number, title, icon, required tiers, the online flag, the standalone concepts, and each `ConceptBundle`
+number, title, icon, the standalone concepts, and each `ConceptBundle`
 with its own members. The originals are untouched, the whole run is one transaction (a committed stage
 with no concepts reads to the engine as instantly satisfied, not as broken), and a stage number already
 present on the target slug is SKIPPED and named in the message rather than renumbered -- renumbering would

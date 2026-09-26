@@ -136,13 +136,6 @@ def badge_attribution_rank(collection_id=None, franchise_id=None, developer_id=N
     return BADGE_ATTRIBUTION_FALLBACK_RANK
 
 
-# Badge types that use concept-based stage completion (all stages must be complete).
-# Franchise + Event behave like Series (series_slug-grouped, concept/stage-based).
-CONCEPT_BASED_BADGE_TYPES = [BADGE_TYPE_SERIES, BADGE_TYPE_FRANCHISE, BADGE_TYPE_COLLECTION, BADGE_TYPE_DEVELOPER, BADGE_TYPE_USER, BADGE_TYPE_EVENT]
-
-# All badge types that have stage-based evaluation (concept-based + megamix)
-EVALUATABLE_BADGE_TYPES = CONCEPT_BASED_BADGE_TYPES + [BADGE_TYPE_MEGAMIX]
-
 # Rating Scale
 RATING_MIN = 1
 RATING_MAX = 10

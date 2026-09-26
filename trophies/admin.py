@@ -1310,7 +1310,7 @@ class UserConceptRatingAdmin(admin.ModelAdmin):
 class StageInline(admin.TabularInline):
     model = Stage
     extra = 1
-    fields = ('stage_number', 'title', 'stage_icon', 'concepts', 'required_tiers')
+    fields = ('stage_number', 'title', 'stage_icon', 'concepts')
     autocomplete_fields = ['concepts']
 
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
@@ -1402,9 +1402,8 @@ class StageAdmin(admin.ModelAdmin):
     list_display = (
         '__str__', 'series_slug', 'stage_number', 'title',
         'concepts_display', 'bundle_concepts_display',
-        'required_tiers', 'has_online_trophies',
     )
-    list_filter = ('series_slug', 'stage_number', 'has_online_trophies')
+    list_filter = ('series_slug', 'stage_number')
     search_fields = (
         'title', 'series_slug',
         'concepts__concept_id', 'concepts__unified_title',
@@ -1428,9 +1427,9 @@ class StageAdmin(admin.ModelAdmin):
         megamix that reuses another series' stage list) means re-entering the same concept picks one
         stage at a time. The stages themselves are identical; only the slug they join on differs.
 
-        Everything that makes a stage a stage travels: number, title, icon, required tiers, the
-        online flag, the standalone concepts, and each ConceptBundle with its own members. Nothing is
-        MOVED -- the originals are untouched.
+        Everything that makes a stage a stage travels: number, title, icon, the standalone
+        concepts, and each ConceptBundle with its own members. Nothing is MOVED -- the originals
+        are untouched.
 
         `stage_icon` is copied AND then recomputed: it is derived from the first concept
         (`auto_populate_stage_icon`), and `concepts.set()` on the copy fires that signal. Copying it
@@ -1515,8 +1514,6 @@ class StageAdmin(admin.ModelAdmin):
                     stage_number=stage.stage_number,
                     title=stage.title,
                     stage_icon=stage.stage_icon,
-                    required_tiers=list(stage.required_tiers or []),
-                    has_online_trophies=stage.has_online_trophies,
                 )
                 copy.concepts.set(stage.concepts.all())
                 for bundle in stage.concept_bundles.all():
