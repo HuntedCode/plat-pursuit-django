@@ -700,7 +700,7 @@ Notification
 - **Denormalized counters**: Most entities store pre-computed counts (`earned_count`, `upvote_count`, `like_count`) updated via signals or service methods, avoiding expensive COUNT queries at read time.
 - **Soft delete**: Comments, Reviews, Checklists, GameLists (both the legacy `trophies` one and the rebuilt `gamelists` one) and Challenges use `is_deleted` + `deleted_at` fields rather than hard deletion, preserving thread structure and audit trails.
 - **Concept as unifier**: Regional/platform stacks are separate Game rows, but all user-facing content (comments, ratings, reviews, checklists) is attached to the shared Concept.
-- **Stage-Badge linkage**: Stages connect to Badges via `series_slug` (a string match) rather than a direct FK, allowing flexible tier-based stage filtering via `required_tiers`.
+- **Stage-Badge linkage**: Stages connect to a series by a bare `series_slug` string rather than a direct FK, which is what lets one stage list back several `GroupBadge` editions and lets `StageAdmin` duplicate a stage set onto a new slug. (The tier-era `Stage.required_tiers` filter that this bullet used to describe was dropped in migration `0340`; the current engine routes stages by PLATFORM, not by tier.)
 - **JSON flexibility**: Fields like `defined_trophies`, `earned_trophies`, `title_platform`, `region`, `title_ids`, `metadata`, and recap data use JSONField for schema-flexible storage.
 - **Concept.absorb()**: The critical migration method that must be updated whenever a new model references Concept. See CLAUDE.md for the full list of currently handled relationships.
 

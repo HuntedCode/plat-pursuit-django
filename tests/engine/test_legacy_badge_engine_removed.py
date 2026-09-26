@@ -81,6 +81,28 @@ def test_the_legacy_commands_are_deleted(rel):
     assert not (ROOT / rel).exists(), f'{rel} is back'
 
 
+def test_stage_carries_no_tier_routing():
+    """`Stage.required_tiers` / `.has_online_trophies` are GONE (migration 0340), along with
+    `Stage.applies_to_tier` and the two `Badge` methods that were their only readers.
+
+    Guarded here for the same reason this file exists. These were not retained-for-rollback columns
+    like the `Badge` tables below: they were live columns on a LIVE table with no reader, which
+    `StageAdmin` went on asking curators to fill in for a year after the tier engine was replaced.
+    Re-adding one is easy and looks harmless in a diff; the current engine routes stages by PLATFORM
+    (`PlatformGroup.platforms`), and a tier column reappearing on Stage means someone is rebuilding
+    the old routing next to the new one.
+    """
+    from trophies.models import Stage
+
+    fields = {f.name for f in Stage._meta.get_fields()}
+    assert 'required_tiers' not in fields, 'tier-based stage routing is back on Stage'
+    assert 'has_online_trophies' not in fields, (
+        'Stage.has_online_trophies is back -- note Game.has_online_trophies is the LIVE one, read by '
+        'the community flags and the game-flags partial; Stage never had a reader.'
+    )
+    assert not hasattr(Stage, 'applies_to_tier'), 'Stage.applies_to_tier is back'
+
+
 def test_the_sync_path_evaluates_only_the_new_engine():
     """`_job_sync_complete` ran BOTH engines during cutover 5a. If the legacy call came back, a hunter would
     be pinged twice for one earn -- once tier-shaped, once edition-shaped -- which is the specific reason

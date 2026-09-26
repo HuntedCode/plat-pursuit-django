@@ -252,7 +252,7 @@ fails open, with no error, is the reason this lives on the field now. Other `Fra
 **Stages duplicate onto a new slug.** `Stage` joins to a series by a bare `series_slug` string, so a
 franchise badge that mirrors a series badge means re-entering the same concept picks stage by stage.
 `StageAdmin`'s "Duplicate selected stages under a new series slug" action copies a selection wholesale:
-number, title, icon, required tiers, the online flag, the standalone concepts, and each `ConceptBundle`
+number, title, icon, the standalone concepts, and each `ConceptBundle`
 with its own members. The originals are untouched, the whole run is one transaction (a committed stage
 with no concepts reads to the engine as instantly satisfied, not as broken), and a stage number already
 present on the target slug is SKIPPED and named in the message rather than renumbered -- renumbering would
