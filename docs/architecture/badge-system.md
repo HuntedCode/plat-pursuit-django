@@ -76,12 +76,24 @@ stating because it is easy to describe backwards:
 completion_date = base_date if base_prog == 100 else (full_date if full_complete else None)
 ```
 
-So `full_date` is used exactly when the default group is SHORT of 100% — the same case in which
-`full_complete` is what made `base_complete` true. When the default group IS at 100%, its own date wins
-**even when that date is null**: a stale `ProfileTrophyGroup` with no `last_trophy_at` yields a game that
-is complete and undated, and `full_complete` does not rescue it. An undated game drops out of its stage's
-`base_dates`, and `_earned_date` can then return None for the whole badge — the hunter keeps the badge
-(`apply_changes` stamps `now()`) and loses only the historical date.
+(The line lives in the `game_state` closure in `evaluate_with_catalog`.)
+
+So `full_date` is used only when the default group is SHORT of 100% **and** the game is fully complete —
+the same case in which `full_complete` is what made `base_complete` true. When the default group IS at
+100%, its own date wins **even when that date is null**: a stale `ProfileTrophyGroup` with no
+`last_trophy_at` yields a game that is complete and undated, and `full_complete` does not rescue it.
+
+An undated game drops out of its stage's `base_dates`, and `_earned_date` can then return None for the
+whole badge. Under `completion_policy='all'` it always does, because the threshold is the satisfied
+count; under `min_count` it need not, because the threshold is `min_required` and other dated stages can
+still meet it.
+
+**A None earn date is not a one-off cosmetic loss, and this is the part worth knowing.** `diff()`
+compares `cur.earned_at` against `res.earned_date`, so a stored date against a live None mismatches,
+emits an `update`, and `apply_changes` writes `earned_at = ch.earned_date or timezone.now()`. The next
+evaluation compares the same pair and mismatches again. The badge is re-stamped to sync time **on every
+run, forever**, which churns its position on the earners board. `tests/engine/test_badge_engine.py`
+records this as the failure mode behind the cross-platform `base_date` widening.
 
 **A game with no platinum still has to be finished** — its base list must reach 100%, not merely be
 played. What it does *not* have to do is clear DLC, because `default` is PSN's base group and the DLC

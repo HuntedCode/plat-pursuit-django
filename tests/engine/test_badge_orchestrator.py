@@ -115,7 +115,7 @@ def test_a_dated_full_complete_does_not_rescue_an_undated_default_group():
     _complete(profile, game, full=True, day=6)
     assert evaluate_profile(profile, [gb])[gb.id].earned_date == _dt(6)
 
-    # The default group keeps progress=100 but loses its date; the GAME keeps a real date.
+    # The default group keeps progress=100 but loses its date, while the GAME is given a real one.
     ProfileTrophyGroup.objects.filter(profile=profile, trophy_group__game=game).update(last_trophy_at=None)
     ProfileGame.objects.filter(profile=profile, game=game).update(most_recent_trophy_date=_dt(6))
 
@@ -395,9 +395,15 @@ def test_full_complete_without_ptg_row_infers_base():
     profile = ProfileFactory()
     # Whole game at 100% but NO default ProfileTrophyGroup row (a stale/missing denorm). The orchestrator's
     # guard must infer base from full, so we get base AND holo -- never holo-without-base.
-    ProfileGame.objects.create(profile=profile, game=game, progress=100)
+    ProfileGame.objects.create(profile=profile, game=game, progress=100, most_recent_trophy_date=_dt(3))
     r = evaluate_profile(profile, [gb])[gb.id]
     assert r.base_earned is True and r.holo is True
+    # ...and the earn is DATED off the game, because there is no default group to date it. This is the
+    # ONLY path on which `full_date` is ever read -- the other arm of
+    #   completion_date = base_date if base_prog == 100 else (full_date if full_complete else None)
+    # and, until this assertion existed, entirely uncovered: deleting the `full_date` arm outright
+    # passed the whole badge suite.
+    assert r.earned_date == _dt(3), 'the full-complete fallback did not date the earn'
 
 
 # ── megamix (min_count) through the ORM ──────────────────────────────────────

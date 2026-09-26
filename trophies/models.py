@@ -3201,9 +3201,12 @@ class ConceptBundle(models.Model):
       completion_date the LAST member to reach base -- but None if ANY
                       base-complete member has no dated game at all, because
                       a bundle cannot claim an earn date it only half knows.
-                      That None propagates: the stage is still satisfied, but
-                      it contributes no date, and `_earned_date` returns None
-                      for the whole badge (apply_changes then stamps now())
+                      That None propagates: the stage is still satisfied but
+                      contributes no date, so under the `all` policy
+                      `_earned_date` returns None for the whole badge. Under
+                      `min_count` it need not: the threshold is `need`, not
+                      the satisfied count, so enough OTHER dated stages still
+                      yield a date. See the earn-date note in badge-system.md
 
     Note the base/holo split: a bundle cleared to its base bar earns the badge
     but does NOT make it holo. (This docstring previously described the holo
