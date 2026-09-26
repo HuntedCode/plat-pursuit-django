@@ -394,10 +394,16 @@ def test_bucket_aligned_does_not_claim_rows_have_no_earners():
     Reachable only through `--bucket aligned`, which is exactly the drill-down where a wrong
     "no earners" would be most misleading: on prod that bucket is most of the catalogue.
     """
+    from trophies.models import ContractXPGrant
+
     contract = _contract('cmd-aligned-earners', ['driver'])
     _tagged_member(contract, genres=['Racing'])
     banker, _game, _plat = _earner_who_banked(contract)
     contract_service.accept_contract(banker, contract)
+    # Without this the test passes identically with no earner at all, since aligned rows are
+    # never costed either way -- so the claim "a contract that HAS earners" would be intent,
+    # not verification.
+    assert ContractXPGrant.objects.filter(earned_contract__contract=contract).exists()
 
     out = StringIO()
     call_command('report_job_drift', bucket=job_drift.ALIGNED, stdout=out)
@@ -416,3 +422,32 @@ def test_suggested_keeps_strength_order_in_the_row():
     row = next(r for r in job_drift.scan() if r['contract_id'] == contract.pk)
     # mage is the combo (strongest); infiltrator is a theme job. Alphabetically it is the reverse.
     assert row['suggested'] == ['mage', 'infiltrator']
+
+
+def test_sample_truncates_and_reports_the_remainder():
+    """The one piece of output arithmetic in the command: `[:sample_n]` plus the "N more" line."""
+    for i in range(4):
+        c = _contract(f'sample-repair-{i}', ['freelancer'])
+        _tagged_member(c, genres=['Racing'])
+
+    out = StringIO()
+    call_command('report_job_drift', sample=1, stdout=out)
+    text = out.getvalue()
+
+    listed = sum(1 for i in range(4) if f'sample-repair-{i}' in text)
+    assert listed == 1
+    assert '... and 3 more (--bucket freelancer_repair to list them all).' in text
+
+
+def test_bucket_filter_overrides_the_sample_cap():
+    """A drill-down lists the whole bucket -- that is what it is for."""
+    for i in range(4):
+        c = _contract(f'full-repair-{i}', ['freelancer'])
+        _tagged_member(c, genres=['Racing'])
+
+    out = StringIO()
+    call_command('report_job_drift', bucket=job_drift.FREELANCER_REPAIR, sample=1, stdout=out)
+    text = out.getvalue()
+
+    assert all(f'full-repair-{i}' in text for i in range(4))
+    assert 'more (--bucket' not in text

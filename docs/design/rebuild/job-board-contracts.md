@@ -300,8 +300,12 @@ distinction the decision turns on.
 | `mixed` | both added and removed, no single explanation | no |
 | `combo_downgrade` | a combo fell back to its base (IGDB lost the theme) | no -- data loss, not a correction |
 | `freelancer_regression` | detection collapsed to Freelancer alone | no -- usually broken enrichment |
-| `unjobbed` | **no jobs at all**: banks ZERO XP on claim | not drift; a live defect |
+| `unjobbed` | **no jobs at all**: banks ZERO XP on claim | a live defect, not stale data -- just set jobs |
 | `no_signal` | no member concepts, or no genres/themes at all | cannot be judged |
+
+**`unjobbed` is counted as drift by the report** (it is not in `SETTLED`, so it appears in the
+totals and gets its own section) even though the table above calls it a defect rather than stale
+data. That is deliberate: it needs the same attention as the rest, and it is reached the same way.
 
 ### Four things that are load-bearing here
 
@@ -336,6 +340,18 @@ routine); and whether hunters are told. Two mechanics are already settled by the
   rather than re-deriving from current config. The total paid is history; the distribution is a fact
   about the game. Net XP is unchanged and Pursuer Level is near-conserved (the flat curve plus the
   level-1 floor), so what actually moves is the per-job number.
+
+### A jobless Contract banks nothing (found 2026-09, not yet fixed)
+
+`accept_contracts_bulk` skips any Contract with an empty `jobs` M2M (`if not jobs: continue`), and
+`accept_contract` is a thin wrapper over it, so BOTH claim paths are affected. A hunter completes
+the game, sees the contract as claimable, clicks claim, and receives nothing -- no XP, no error, no
+signal that anything went wrong.
+
+This is unrelated to job drift and needs no repair pipeline; the fix is to set jobs on those
+contracts. `report_job_drift` surfaces them as the `unjobbed` bucket with a warning line so they
+can be found. A guard worth considering separately: the staging pipeline already auto-suggests
+jobs, so a live Contract with none is arguably a state the admin should refuse to save.
 
 ## Board vs History (Career display)
 

@@ -19,8 +19,10 @@ THE CENTRAL CAVEAT, and the reason this is a report before it is a pipeline: a d
 NOT automatically an error. Curation deliberately trims IGDB's peripheral tags (a "6-job"
 auto-detection is usually 2 real jobs and 4 incidental ones), so a contract holding FEWER jobs
 than detection suggests is equally likely to be good curation or stale data, and nothing stored
-distinguishes them. Only `freelancer_repair` is unambiguous. The buckets below exist to keep
-those cases apart rather than reporting one undifferentiated "drifted" count.
+distinguishes them. Only `freelancer_repair` and `combo_upgrade` are unambiguous -- the first
+adds specialization where there was none, the second is a rule-driven override rather than an
+opinion, and neither discards a curated job. The buckets below exist to keep those cases apart
+rather than reporting one undifferentiated "drifted" count.
 
 Shared by the report (`report_job_drift`) and any future evaluator, following the
 `CatalogScanner` precedent in contract_candidates.py: the rule lives in one place so a pipeline
@@ -293,18 +295,23 @@ def attach_stakes(rows):
         # `filter(earned_contract__contract_id__in=...)` is an INNER JOIN, so null-FK grants are
         # excluded outright, and the FK is CASCADE, so a grant cannot outlive its EarnedContract.
         # The banked count is therefore always a subset of the earners. `max` is belt-and-braces.
+        #
+        # The comparison is only MEANINGFUL because `EarnedContract` is unique on
+        # (profile, contract), which is what makes the `Count('id')` above a hunter count rather
+        # than a row count. Lose that constraint and `pending_hunters` silently inflates.
         row['pending_hunters'] = max(earners.get(row['contract_id'], 0) - row['banked_hunters'], 0)
     return rows
 
 
-def scan(*, live_only=False, with_stakes=True):
-    """The whole report input: classified rows, XP attached to the drifted ones.
+def scan(*, live_only=False):
+    """The whole report input: classified rows, with XP attached to every costed one.
 
     The single entry point both the command and any future evaluator should call, so neither
-    can reach a different verdict from the other.
+    can reach a different verdict from the other. Callers that want the classification without
+    the two stakes queries should build a `JobDriftScanner` and call `rows()` directly -- there
+    is no flag for it here, because nothing has needed one.
     """
     scanner = JobDriftScanner(live_only=live_only)
     rows = scanner.rows()
-    if with_stakes:
-        attach_stakes([r for r in rows if r['bucket'] not in UNCOSTED])
+    attach_stakes([r for r in rows if r['bucket'] not in UNCOSTED])
     return rows

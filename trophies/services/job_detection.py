@@ -108,10 +108,17 @@ def assign_job_slugs(genres, themes):
 def pool_tags(concept_ids):
     """(genres_by_concept, themes_by_concept) for the given concepts, as {id: set(names)}.
 
-    TWO queries however many concepts are asked for, which is what lets every caller that needs
-    per-concept tags stay flat in catalogue size. Returns plain dicts, not defaultdicts, so a
-    caller reading a concept that has no tags gets a KeyError rather than silently minting an
-    empty entry -- use `.get(cid, set())`.
+    Two queries however many concepts are asked for (zero for an empty list), which is what lets
+    every caller that needs per-concept tags stay flat in catalogue size.
+
+    KEYS ARE THE DB's OWN `concept_id` VALUES, i.e. ints. Django coerces a string id for the
+    `__in` filter but returns the int, so `pool_tags(['5'])` yields `{5: ...}` and a subsequent
+    `flatten_tags(['5'], ...)` silently finds nothing. Pass ids straight from `values_list`/`pk`.
+    The flat-set version this replaced had no such coupling, so it is new surface area.
+
+    Returns plain dicts rather than defaultdicts so that a `d[cid]` miss raises instead of
+    minting an empty entry; `.get(cid, set())` is the intended access and behaves identically
+    either way.
 
     Extracted 2026-09 from three near-identical copies (`suggest_job_slugs`,
     `simulate_stage_jobs`, and the job-drift scanner, which was about to be the third). They had
@@ -173,7 +180,7 @@ def simulate_stage_jobs():
     """
     from collections import defaultdict
     from django.db.models import Q
-    from trophies.models import Badge, Concept, ConceptGenre, ConceptTheme, Stage
+    from trophies.models import Badge, Concept, Stage
 
     xp_badge_types = ('series', 'developer')  # the only XP-granting badge types
     non_shovelware = ('clean', 'manually_cleared')

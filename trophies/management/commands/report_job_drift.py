@@ -10,7 +10,8 @@ cannot classify differently from the report that sized it). This command only pr
 
 WHY A REPORT FIRST. Re-pointing banked grants moves hunters' per-job levels DOWN, so the
 question is not "can we" but "on which of these is a disagreement actually an error". Only
-`freelancer_repair` answers that on its own. `narrower` in particular conflates deliberate
+`freelancer_repair` and `combo_upgrade` answer that on their own. `narrower` in particular
+conflates deliberate
 curation (trimming IGDB's peripheral tags is the documented job of a curator) with genuinely
 stale data, and nothing stored tells them apart -- so its size decides whether an automatic
 path is worth building at all or whether this stays a staff queue.
@@ -48,7 +49,7 @@ class Command(BaseCommand):
     def handle(self, *args, **opts):
         live_only = opts['live_only']
         sample_n = opts['sample']
-        only = opts.get('bucket')
+        only = opts['bucket']        # argparse always sets it (None when not passed)
         w = self.stdout.write
         head = self.style.MIGRATE_HEADING
 
@@ -123,8 +124,11 @@ class Command(BaseCommand):
         # not (it is not drift). Without this line a reader sees a larger number in the table
         # than in the total underneath it and has nothing to explain the gap.
         ns_xp = sum(r['banked_xp'] for r in no_signal)
+        # Counts the no-signal rows that actually CARRY the XP, matching the `with_xp` idiom
+        # above. `len(no_signal)` would read as "all 50 of these have XP" when one of them does.
+        ns_with_xp = sum(1 for r in no_signal if r['banked_xp'])
         if ns_xp:
-            w(f'  Excluded from the figures above: {ns_xp:,} XP on {_plural(len(no_signal))} with '
+            w(f'  Excluded from the figures above: {ns_xp:,} XP on {_plural(ns_with_xp)} with '
               f'no IGDB signal -- costed in the summary because they are worth a look, but not '
               f'drift, since there is nothing to compare against.')
         w('')
@@ -195,7 +199,7 @@ class Command(BaseCommand):
         repair_n, repair_xp = stat(job_drift.FREELANCER_REPAIR)
         combo_n, combo_xp = stat(job_drift.COMBO_UPGRADE)
         narrower_n, narrower_xp = stat(job_drift.NARROWER)
-        unjobbed_n, _unjobbed_xp = stat(job_drift.UNJOBBED)
+        unjobbed_n, _ = stat(job_drift.UNJOBBED)
 
         w(self.style.MIGRATE_HEADING('Read-out'))
         w('  Unambiguous (a job profile that is strictly wrong, nothing curated is lost):')
