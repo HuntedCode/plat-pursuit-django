@@ -54,6 +54,34 @@ demand work that cannot be done on its own platforms.
 A stage with nothing on the edition's platforms is **out of scope**: not gating, not satisfiable, and
 paying no XP there. That is the one limit on cross-platform credit.
 
+### What "completed" means: the two bars
+
+The table above says a stage is satisfied when the hunter "completed" a game. There are exactly two
+completion bars, supplied per game by the orchestrator, and **neither branches on whether the game has a
+platinum** — the engine never asks.
+
+| Bar | Source | Meaning |
+|---|---|---|
+| `base_complete` | `ProfileTrophyGroup.progress == 100` on the game's **`default`** trophy group | The **platinum** on a plat game; the **base trophy list at 100%** on a game without one. **DLC-independent** |
+| `full_complete` | `ProfileGame.progress == 100` | The whole game at 100%, **DLC included** |
+
+`base_complete` is what earns the badge. `full_complete` only sets `is_holo`, which is cosmetic, flips
+both ways and pays no XP.
+
+**A game with no platinum still has to be finished** — its base list must reach 100%, not merely be
+played. What it does *not* have to do is clear DLC, because `default` is PSN's base group and the DLC
+groups (`001`, `002`, …) sit outside it. So the no-plat requirement is exactly as demanding as the
+platinum requirement, measured on the list that actually exists. This is also what the hunter is told, in
+`templates/trophies/badge_how_it_works.html`: *"A game with no platinum counts the moment its base trophy
+list hits 100%, so nothing in a set is unwinnable."*
+
+One invariant is enforced in the orchestrator rather than the engine: `base_complete = base_prog == 100 or
+full_complete`. A missing or stale default `ProfileTrophyGroup` row must never be able to produce "holo
+without base".
+
+A `ConceptBundle` collapses to a single synthetic game and is held to the same two bars, but **every**
+member must meet them — see the `ConceptBundle` docstring in `trophies/models.py`.
+
 > **Changed 2026-09** (owner's call). Satisfaction used to be scoped to qualifying games the way gating
 > still is, so each edition had to be cleared on its own platform. The per-edition *independence* that
 > created is gone: two editions are separate chases now only when their stages don't overlap platforms.
