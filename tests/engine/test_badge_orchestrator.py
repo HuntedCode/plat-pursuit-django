@@ -247,6 +247,36 @@ def test_concept_bundle_synthesized_completion():
     assert evaluate_profile(profile, [gb])[gb.id].base_earned is True
 
 
+def test_concept_bundle_holo_needs_every_member_at_the_full_bar():
+    """The base bar earns the badge; the HOLO bar is a separate, stricter ask on the same bundle.
+
+    Pinned because nothing asserted it: the model docstring drifted into describing the holo rule
+    (`ProfileGame.progress == 100` on every member) as if it were the earn rule, and no test
+    disagreed. Base-only must leave holo off, and ONE member short of full must keep it off.
+    """
+    _, ultra = _groups()
+    series, stage = _series_with_stage(slug='telltale-holo')
+    bundle = ConceptBundleFactory(stage=stage)
+    c1, c2 = ConceptFactory(), ConceptFactory()
+    bundle.concepts.add(c1, c2)
+    g1 = _game(c1, platforms=('PS5',))
+    g2 = _game(c2, platforms=('PS5',))
+    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+
+    profile = ProfileFactory()
+    _complete(profile, g1, base=True)
+    _complete(profile, g2, base=True)
+    res = evaluate_profile(profile, [gb])[gb.id]
+    assert res.base_earned is True and res.holo is False, 'the base bar must not confer holo'
+
+    _complete(profile, g1, full=True)        # one member at 100% incl DLC, the other not
+    assert evaluate_profile(profile, [gb])[gb.id].holo is False, 'a partial bundle is not holo'
+
+    _complete(profile, g2, full=True)        # every member at the full bar
+    res = evaluate_profile(profile, [gb])[gb.id]
+    assert res.base_earned is True and res.holo is True
+
+
 # ── default (all live) + whale-bounded reads ─────────────────────────────────
 def test_evaluate_defaults_to_all_live():
     _, ultra = _groups()

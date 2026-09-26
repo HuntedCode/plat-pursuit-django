@@ -3300,11 +3300,30 @@ class ConceptBundle(models.Model):
     """A grouped set of Concepts that act as a single qualifier on a Stage.
 
     Models episodic releases where a game's trophies are split across multiple
-    Concepts with no real platinum (e.g. Telltale PS3 episodic releases). The
-    bundle is satisfied when every member Concept has at least one ProfileGame
-    at progress=100 for the profile. That synthesized completion counts as both
-    the platinum check (tiers 1/3) and the progress check (tiers 2/4), so a
-    fully cleared bundle behaves like a platinum for stage tier evaluation.
+    Concepts with no real platinum (e.g. Telltale PS3 episodic releases).
+
+    The engine collapses the bundle into ONE synthetic GameState
+    (`badge_orchestrator._bundle_state`), so it is evaluated exactly like a
+    single qualifying game. Every member must pull its weight, on each fact:
+
+      base_complete   every member has >= 1 game at the BASE bar (its default
+                      trophy group at 100%: the platinum on a plat game, the
+                      main list on one without, DLC-independent)
+      full_complete   every member has >= 1 game at the HOLO bar (the whole
+                      game at 100%, DLC included)
+      platforms       the INTERSECTION of the members' platforms, never the
+                      union: a bundle is only completable where every member
+                      runs, so a union would gate an edition on work nobody
+                      can do there
+      is_obtainable   every member has >= 1 obtainable game
+      is_delisted     ANY member is delisted
+      completion_date the LAST member to reach base (the bundle is not done
+                      until its final episode is)
+
+    Note the base/holo split: a bundle cleared to its base bar earns the badge
+    but does NOT make it holo. (This docstring previously described the holo
+    rule, in the vocabulary of the pre-2026-08 tier engine, as if it were the
+    earn rule.)
 
     Membership rule: a Concept must not appear both in Stage.concepts and in a
     ConceptBundle on the same Stage (enforced by StageAdmin/ConceptBundleForm).
