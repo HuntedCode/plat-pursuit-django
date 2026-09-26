@@ -3185,7 +3185,9 @@ class ConceptBundle(models.Model):
 
       base_complete   every member has >= 1 game at the BASE bar (its default
                       trophy group at 100%: the platinum on a plat game, the
-                      main list on one without, DLC-independent)
+                      main list on one without, DLC-independent -- or the
+                      whole game at 100%, which the orchestrator infers as
+                      base so a stale default-group row cannot deny credit)
       full_complete   every member has >= 1 game at the HOLO bar (the whole
                       game at 100%, DLC included)
       platforms       the INTERSECTION of the members' platforms, never the
@@ -3193,9 +3195,15 @@ class ConceptBundle(models.Model):
                       runs, so a union would gate an edition on work nobody
                       can do there
       is_obtainable   every member has >= 1 obtainable game
-      is_delisted     ANY member is delisted
-      completion_date the LAST member to reach base (the bundle is not done
-                      until its final episode is)
+      is_delisted     ANY member has >= 1 delisted game. Existential like the
+                      line above it, so a member holding one delisted and one
+                      live game trips BOTH
+      completion_date the LAST member to reach base -- but None if ANY
+                      base-complete member has no dated game at all, because
+                      a bundle cannot claim an earn date it only half knows.
+                      That None propagates: the stage is still satisfied, but
+                      it contributes no date, and `_earned_date` returns None
+                      for the whole badge (apply_changes then stamps now())
 
     Note the base/holo split: a bundle cleared to its base bar earns the badge
     but does NOT make it holo. (This docstring previously described the holo
@@ -3203,7 +3211,8 @@ class ConceptBundle(models.Model):
     earn rule.)
 
     Membership rule: a Concept must not appear both in Stage.concepts and in a
-    ConceptBundle on the same Stage (enforced by StageAdmin/ConceptBundleForm).
+    ConceptBundle on the same Stage (enforced by StageAdmin and
+    ConceptBundleInlineFormSet.clean).
     The same Concept may be a bundle member on Stage A and a standalone on
     Stage B; bundles only constrain membership within a single Stage.
     """

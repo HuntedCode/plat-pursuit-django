@@ -277,6 +277,43 @@ def test_concept_bundle_holo_needs_every_member_at_the_full_bar():
     assert res.base_earned is True and res.holo is True
 
 
+def test_concept_bundle_with_one_undated_member_earns_but_carries_no_date():
+    """A bundle's date is the LAST member to reach base -- unless a base-complete member has no
+    dated game, in which case the bundle reports NO date at all rather than a date it only half
+    knows (`_bundle_state` requires `all(d is not None ...)` before taking the max).
+
+    Pinned because the consequence is non-obvious and reaches the badge: the stage stays satisfied,
+    so the badge is still EARNED, but the bundle contributes nothing to `base_dates`, and
+    `_earned_date` then returns None for the whole group badge. `apply_changes` stamps `now()` in
+    that case, so the hunter keeps the badge and loses only the historical earn date.
+    """
+    _, ultra = _groups()
+    series, stage = _series_with_stage(slug='telltale-dateless')
+    bundle = ConceptBundleFactory(stage=stage)
+    c1, c2 = ConceptFactory(), ConceptFactory()
+    bundle.concepts.add(c1, c2)
+    g1 = _game(c1, platforms=('PS5',))
+    g2 = _game(c2, platforms=('PS5',))
+    gb = GroupBadgeFactory(series=series, platform_group=ultra)
+
+    profile = ProfileFactory()
+    _complete(profile, g1, base=True, day=4)
+    _complete(profile, g2, base=True, day=9)
+    res = evaluate_profile(profile, [gb])[gb.id]
+    assert res.base_earned is True
+    assert res.earned_date == _dt(9), 'the LAST member to reach base dates the bundle'
+
+    # Strip the date off the member that currently dates the bundle. PSN can leave a default group
+    # at 100% with no last_trophy_at, so this is a real state, not a contrived one.
+    ProfileTrophyGroup.objects.filter(
+        profile=profile, trophy_group__game=g2,
+    ).update(last_trophy_at=None)
+
+    res = evaluate_profile(profile, [gb])[gb.id]
+    assert res.base_earned is True, 'a missing date must not cost the hunter the badge'
+    assert res.earned_date is None, 'a half-known bundle date is reported as no date'
+
+
 # ── default (all live) + whale-bounded reads ─────────────────────────────────
 def test_evaluate_defaults_to_all_live():
     _, ultra = _groups()
