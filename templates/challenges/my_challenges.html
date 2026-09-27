@@ -61,11 +61,21 @@
                 <div class="flex items-start justify-between gap-2">
                     <h2 class="text-base md:text-lg font-bold min-w-0">{{ card.label }}</h2>
                     {% comment %}The state, said once. `resumable` is the one a hunter would otherwise have
-                    no way to tell from having no run at all.{% endcomment %}
+                    no way to tell from having no run at all.
+
+                    `badge-ghost` for Hidden, NOT `badge-warning`, and the difference is register rather
+                    than colour. A hidden run is not a problem -- it is dormant, and Start brings it back
+                    with every square intact. `warning` is the theme's bright yellow
+                    (`oklch(0.946 0.186 94.8)`), which reads as "something needs attention" about a state
+                    where nothing does. Ghost is what the design system's own page-header example uses for
+                    a context label, which is all this is.
+
+                    It also still contrasts with `In progress` above it, which is the only thing the two
+                    badges have to do: tell a hunter which of their runs is live.{% endcomment %}
                     {% if card.state == 'active' %}
                     <span class="badge badge-sm badge-primary font-bold shrink-0">In progress</span>
                     {% elif card.state == 'resumable' %}
-                    <span class="badge badge-sm badge-warning font-bold shrink-0">Hidden</span>
+                    <span class="badge badge-sm badge-ghost font-bold shrink-0">Hidden</span>
                     {% endif %}
                 </div>
 
