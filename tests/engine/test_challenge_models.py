@@ -512,3 +512,70 @@ def test_the_challenge_table_does_not_index_a_two_value_column():
         f'a bare index on challenge_type is back: {sorted(names)}'
     )
     assert 'chal_type_completed_idx' in names
+
+
+# ── readable_by: the visibility vocabulary, tested directly ───────────────────────────────────────
+
+def test_readable_by_gives_an_anonymous_reader_only_visible_runs():
+    """`profile is None` is its own branch, so it gets its own test -- the gamelists twin is pinned the
+    same way."""
+    mine = ProfileFactory()
+    visible = Challenge.objects.create(profile=mine, challenge_type=CHALLENGE_TYPE_AZ,
+                                       name='Visible', total_slots=26)
+    hidden = Challenge.objects.create(profile=mine, challenge_type=CHALLENGE_TYPE_JOBS,
+                                      name='Hidden', total_slots=25, is_deleted=True,
+                                      deleted_at=timezone.now())
+
+    readable = set(Challenge.objects.readable_by(None).values_list('pk', flat=True))
+
+    assert visible.pk in readable
+    assert hidden.pk not in readable
+
+
+def test_readable_by_adds_your_own_hidden_runs_and_nobody_elses():
+    mine, theirs = ProfileFactory(), ProfileFactory()
+    my_hidden = Challenge.objects.create(profile=mine, challenge_type=CHALLENGE_TYPE_AZ, name='Mine',
+                                         total_slots=26, is_deleted=True, deleted_at=timezone.now())
+    their_hidden = Challenge.objects.create(profile=theirs, challenge_type=CHALLENGE_TYPE_AZ,
+                                            name='Theirs', total_slots=26, is_deleted=True,
+                                            deleted_at=timezone.now())
+    their_visible = Challenge.objects.create(profile=theirs, challenge_type=CHALLENGE_TYPE_JOBS,
+                                             name='Open', total_slots=25)
+
+    readable = set(Challenge.objects.readable_by(mine).values_list('pk', flat=True))
+
+    assert my_hidden.pk in readable
+    assert their_visible.pk in readable
+    assert their_hidden.pk not in readable
+
+
+def test_readable_by_cannot_duplicate_a_row():
+    """An OR across two conditions that both match is the classic way to get a row twice. Both sit on
+    `challenges_challenge` columns with no join, so it cannot fan out -- pinned because the day one of
+    them grows a join is the day it can."""
+    mine = ProfileFactory()
+    # Visible AND owned: both sides of the OR match this row.
+    Challenge.objects.create(profile=mine, challenge_type=CHALLENGE_TYPE_AZ, name='Both',
+                             total_slots=26)
+
+    assert Challenge.objects.readable_by(mine).count() == 1
+
+
+def test_visible_and_readable_by_share_one_definition_of_the_flag():
+    """The duplicate this replaced was two spellings of `is_deleted=False`, one per method, under a
+    docstring arguing the flag had one home. Adding a condition to `VISIBLE` must reach BOTH -- which is
+    the property that was broken and is otherwise invisible until somebody adds one.
+    """
+    mine = ProfileFactory()
+    Challenge.objects.create(profile=mine, challenge_type=CHALLENGE_TYPE_AZ, name='A', total_slots=26)
+
+    visible_sql = str(Challenge.objects.visible().query)
+    readable_sql = str(Challenge.objects.readable_by(mine).query)
+
+    # Both must express the flag, and `readable_by` must additionally express ownership.
+    assert 'is_deleted' in visible_sql
+    assert 'is_deleted' in readable_sql
+    assert 'profile_id' in readable_sql
+    # And the Q object really is shared, not copied.
+    from challenges.models import ChallengeQuerySet
+    assert ChallengeQuerySet.VISIBLE.children == [('is_deleted', False)]

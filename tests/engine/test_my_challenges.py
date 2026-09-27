@@ -760,3 +760,21 @@ def test_the_beta_card_asks_for_support_last(client):
     assert 'please consider helping us build it' in body
     assert body.index('Nothing here stays members-only') < body.index('Supporters keep us running')
     assert body.index('Everyone can start one when the beta ends') < body.index('Supporters keep us running')
+
+
+def test_the_cards_state_pill_is_the_house_chip(client):
+    """`.bd-chip`, not DaisyUI's `.badge`. The commit that chose ghost over warning for Hidden pinned
+    nothing, so the class string it argued about was free to change without any test noticing."""
+    profile = _hunter(client)
+    svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    # The source-level policy test owns "no DaisyUI badge anywhere"; this owns "the right tone for the
+    # right state", which a source test cannot check.
+    body = client.get(reverse('my_challenges')).content.decode()
+    assert 'bd-chip bd-chip--primary' in body, 'an active run should read In progress'
+
+    run = svc.active_run(profile, CHALLENGE_TYPE_AZ)
+    svc.hide(run, profile)
+
+    body = client.get(reverse('my_challenges')).content.decode()
+    assert 'bd-chip bd-chip--ghost' in body, 'a hidden run should read Hidden'
