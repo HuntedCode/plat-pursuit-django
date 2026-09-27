@@ -1,7 +1,7 @@
 """The only thing that writes a challenge.
 
-Four rules hold everywhere below, the same four `gamelists.services.game_list_service` states, for the
-same reasons:
+Four rules hold everywhere below. THREE are `gamelists.services.game_list_service`'s, for the same
+reasons it states them; the fourth this feature adds, and it is arguably the most important one here:
 
 1. **A write refuses before it starts.** Every gate runs before the first INSERT, so a refusal leaves
    nothing behind.
@@ -12,7 +12,9 @@ same reasons:
    derived from the ROWS rather than incremented -- `filled_count` and `completed_count` are what a
    card renders and what `challenge_completed_within_filled` polices, so drift is visible and fatal.
 4. **State that a reward was paid against is never unwound.** A completed slot locks, so the XP guard
-   keyed on that slot cannot be re-armed by clearing it.
+   keyed on that slot cannot be re-armed by clearing it. Note the payout itself is NOT in this module --
+   `ChallengeSlot.xp_redeemed_at` has no writer yet and gains one with the rewards chunk. The rule is
+   here now because the lock has to exist before the thing it protects does.
 
 TWO GATES THIS MODULE DELIBERATELY DOES NOT HAVE, because their absence is a design decision rather
 than an omission:
@@ -25,6 +27,21 @@ than an omission:
   module the gate.
 - **No banned-word check, no report path, no `text_hidden`.** Same reason, and this is most of why the
   feature is cheap: auto-naming removed an entire moderation surface rather than deferring it.
+
+THE LOCK ORDER, written down because the next two chunks each add a link to it and a chain nobody
+agreed on is a deadlock waiting for load:
+
+    Profile -> EarnedContract -> Challenge -> ChallengeSlot -> ProfileJobXP
+
+`start` takes the Profile lock; every slot writer here takes Challenge then Slot; detection will call
+`contract_service.mark_contract_reached` (EarnedContract) before `mark_slot_completed`; and XP
+redemption will end at `ProfileJobXP`, which `contract_service.revoke_contract` already locks from the
+`EarnedContract` side. Reversing any pair trades a race for a deadlock -- the same note
+`revoke_contract` leaves about staying in step with `accept_contracts_bulk`.
+
+**NO SLOT IS WRITTEN OUTSIDE ITS CHALLENGE'S ROW LOCK.** That invariant is what makes `_recount` safe
+against concurrent slot writes, and it is the one a sweep would be tempted to break with a
+`bulk_update`. A future writer touching many slots takes the Challenge lock per run.
 """
 from django.conf import settings
 from django.db import models, transaction
@@ -108,14 +125,20 @@ def _require_owner(challenge, profile):
 def _lock_challenge(challenge):
     """Re-read FOR UPDATE and re-assert the precondition on the row that came back.
 
-    Both halves, the way `game_list_service._lock_list` does it. `is_complete` is the precondition that
-    matters here rather than `is_deleted`: a hidden run is still writable (hiding is a visibility act,
-    see `hide`), but a FINISHED one must refuse every further write, or a slot could be reassigned
-    under a badge and a title that have already been granted.
+    Both halves, the way `game_list_service._lock_list` does it, and BOTH preconditions. An earlier
+    version re-asserted only `is_complete` while claiming a hidden run was writable anyway -- which was
+    false, since `_require_owner` refuses one -- and that left `is_deleted` checked on a stale row, so
+    `hide` committing in the window let a write land on a hidden run.
+
+    Why each refuses: a FINISHED run must refuse every further write, or a square could be reassigned
+    under a badge and a title already granted. A HIDDEN run refuses because the hunter took it out of
+    view, and `start` is the way back -- it un-hides.
     """
     locked = Challenge.objects.select_for_update().get(pk=challenge.pk)
     if locked.is_complete:
         raise ChallengeError('That challenge is finished.')
+    if locked.is_deleted:
+        raise ChallengeError('That challenge is hidden. Start it again to pick it back up.')
     return locked
 
 
@@ -232,7 +255,11 @@ def start(profile, challenge_type):
     # `-updated_at` because more than one hidden unfinished run is reachable only by writing around
     # this service (the partial unique does not cover hidden rows). The newest is the one a hunter
     # means; the others stay hidden and harmless.
-    hidden = Challenge.objects.filter(
+    # `select_for_update`, because this branch MUTATES the row it finds and rule 2 applies to it as much
+    # as to a slot write: without the lock, detection completing the last square of a hidden run in the
+    # window hands back a run that is already finished, after which every write answers "That challenge
+    # is finished." It self-heals on the next Start, which is why it was easy to miss.
+    hidden = Challenge.objects.select_for_update().filter(
         profile=profile, challenge_type=challenge_type, is_complete=False, is_deleted=True,
     ).order_by('-updated_at').first()
     if hidden is not None:
@@ -268,7 +295,13 @@ def hide(challenge, profile):
     Idempotent, so a double-submit is not an error.
     """
     _require_owner_allowing_hidden(challenge, profile)
-    locked = Challenge.objects.select_for_update().get(pk=challenge.pk)
+    # `.first()` not `.get()`, and NOT `_lock_challenge`: that helper refuses a finished run, and a
+    # finished run must still be hideable. `.get()` is the bug `game_list_service.delete_list` documents
+    # fixing -- a row removed by a shell or a `Profile` cascade turns an idempotent soft-delete into an
+    # unhandled `DoesNotExist`, i.e. a 500 where this promises a no-op.
+    locked = Challenge.objects.select_for_update().filter(pk=challenge.pk).first()
+    if locked is None:
+        return challenge
     if locked.is_deleted:
         return locked
     locked.is_deleted = True
@@ -280,8 +313,9 @@ def hide(challenge, profile):
 def _require_owner_allowing_hidden(challenge, profile):
     """Ownership without the `is_deleted` refusal `_require_owner` makes.
 
-    `hide` and `unhide` are the two writes whose whole subject is that flag, so refusing on it would
-    make them refuse exactly the state they exist to change.
+    `hide`'s whole subject is that flag, so refusing on it would make it refuse the state it exists to
+    change. It is the only caller: the un-hide is three inline lines in `start`, reached through a
+    `profile=profile` filter that makes ownership implicit rather than checked.
     """
     if challenge.profile_id != profile.id:
         raise ChallengeError('That is not your challenge.')
@@ -350,12 +384,21 @@ def assign(challenge, profile, key, contract):
 
 
 def _refuse_if_wrong_shape(challenge, key, contract):
-    """Does this contract belong in this slot at all? The one rule that differs by type."""
+    """Does this contract belong in this slot at all?
+
+    DELEGATED to `eligibility.fits_slot`, which is the same predicate the picker's pool and the hatch's
+    count use. An earlier version re-expressed the A-Z half in Python as
+    `contract.name.upper().startswith(key.upper())`, and that DISAGREES with the queryset's
+    `name__istartswith` in both directions: Python's `upper()` does full Unicode case mapping while
+    Postgres folds with `lower()`. A name the pool offered and this refused was a dead-end click; a
+    name this accepted and the pool never held was invisible to the hatch's count. One rule, one
+    spelling.
+    """
+    if eligibility.fits_slot(challenge, key, contract):
+        return
     if challenge.challenge_type == CHALLENGE_TYPE_AZ:
-        if not contract.name.upper().startswith(key.upper()):
-            raise ChallengeError(f'That game does not start with {key}.')
-    elif not contract.jobs.filter(slug=key).exists():
-        raise ChallengeError('That game does not cover that job.')
+        raise ChallengeError(f'That game does not start with {key}.')
+    raise ChallengeError('That game does not cover that job.')
 
 
 def _hunter_has_completed(profile, contract):
@@ -418,18 +461,23 @@ def mark_slot_completed(slot, *, when=None, via=COMPLETED_VIA_LIVE):
     completed slot -- the sync hook, the nightly sweep, the importer, the hatch -- goes through one
     function and cannot disagree about what completing a slot entails.
 
-    `completed_at` is OURS and is never read back from `EarnedContract`. That row gets DELETED when
-    derived contract membership stops qualifying (`reconcile_contracts`), and a run must survive
-    catalogue bookkeeping the hunter never saw.
+    `completed_at` is OURS and is never read back from `EarnedContract`. That row gets DELETED when staff
+    run `reconcile_contracts` over a contract whose derived membership stopped qualifying -- staff-run
+    and never scheduled, because it deletes banked XP (`tests/engine/test_nightly.py` pins that it is
+    not a cron step) -- and a run must survive catalogue bookkeeping the hunter never saw.
     """
-    if slot.is_completed:
-        return False
-    if not slot.is_filled:
+    if slot.is_completed or not slot.is_filled:
         return False
 
     locked_challenge = Challenge.objects.select_for_update().get(pk=slot.challenge_id)
     fresh = ChallengeSlot.objects.select_for_update().get(pk=slot.pk)
-    if fresh.is_completed:
+    # BOTH preconditions re-asserted on the row that came back, not just `is_completed`. `clear` takes
+    # these same locks in this same order, so it reliably commits FIRST -- which means a detector that
+    # re-checked only completion would stamp a square the hunter had just emptied, violating
+    # `challengeslot_completed_is_filled_dated_and_explained` and turning a background sweep into a 500.
+    # Exactly the stale-pivot failure rule 2 names, and that `game_list_service._lock_item` was written
+    # to close.
+    if fresh.is_completed or not fresh.is_filled:
         return False
 
     fresh.is_completed = True
@@ -450,6 +498,12 @@ def _recount(challenge):
     rather than a wrong-looking number.
 
     One aggregate, not two queries, and the completion stamp rides the same UPDATE.
+
+    The constraints are not only a drift DETECTOR, and it is worth being plain about where the error
+    lands: if a slot row were ever added out of band (a shell -- the admin cannot, being fully
+    read-only), `filled_count` would exceed `total_slots` and this UPDATE would raise on
+    `challenge_filled_within_total` for every subsequent assign, clear and completion on that run,
+    permanently, with nothing in the UI that repairs it. A repair command would have to.
     """
     counts = challenge.slots.aggregate(
         filled=models.Count('pk', filter=~models.Q(contract_slug='')),

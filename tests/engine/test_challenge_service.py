@@ -351,17 +351,22 @@ def test_a_draft_contract_cannot_be_assigned():
         svc.assign(challenge, profile, 'B', _contract('Bloodborne', live=False))
 
 
-def test_reassigning_an_unfinished_square_is_allowed():
-    """A hunter changing their mind about a game they have not finished. This freedom is why deleting a
-    run buys nothing -- there is no reroll to be had, because nothing was ever dealt."""
+def test_reassigning_an_unfinished_square_overwrites_it_in_place():
+    """DIRECTLY over a filled square, with no clear in between -- an earlier version of this test
+    cleared first and so never exercised the path it was named for.
+
+    Two things have to hold at once: the old slug is freed by the same row's UPDATE, so
+    `challengeslot_unique_contract` is satisfied without a separate delete, and `filled_count` must not
+    move -- one square held a game before and holds one after."""
     profile = _member()
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.assign(challenge, profile, 'B', _contract('Bloodborne'))
 
-    svc.clear(challenge, profile, 'B')
     slot = svc.assign(challenge, profile, 'B', _contract('Balatro'))
+    challenge.refresh_from_db()
 
     assert slot.contract_name == 'Balatro'
+    assert challenge.filled_count == 1
 
 
 def test_only_the_owner_may_assign():
@@ -378,7 +383,7 @@ def test_a_finished_run_refuses_further_writes():
     Challenge.objects.filter(pk=challenge.pk).update(is_complete=True, completed_at=timezone.now())
     challenge.refresh_from_db()
 
-    with _refuses('is finished'):
+    with _refuses('challenge is finished'):
         svc.assign(challenge, profile, 'B', _contract('Bloodborne'))
 
 
@@ -573,9 +578,14 @@ def test_the_last_square_finishes_the_run():
     challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
     for job in Job.objects.all():
         svc.assign(challenge, profile, job.slug, _contract(f'Game for {job.slug}', jobs=[job]))
-    for slot in list(challenge.slots.all()):
+    slots = list(challenge.slots.all())
+    for slot in slots[:-1]:
         svc.mark_slot_completed(slot)
 
+    challenge.refresh_from_db()
+    assert challenge.is_complete is False, 'a run finished one square early'
+
+    svc.mark_slot_completed(slots[-1])
     challenge.refresh_from_db()
 
     assert challenge.is_complete is True
@@ -600,17 +610,40 @@ def test_finishing_a_run_frees_the_type_for_the_next_one():
 
 # ── eligibility ──────────────────────────────────────────────────────────────────────────────────
 
-def test_the_pool_excludes_games_already_used_in_this_run():
+def test_the_pool_excludes_a_game_used_in_another_square():
+    """A JOBS run, because that is the only place this rule can bite: an A-Z contract fits exactly one
+    letter, so it can never turn up in another square. A contract carrying two jobs can, and without
+    this one completion would fill both and pay twice."""
     profile = _member()
-    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
-    used = _contract('Astro Bot')
-    spare = _contract('Alan Wake')
-    svc.assign(challenge, profile, 'A', used)
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    first, second = list(Job.objects.all()[:2])
+    used = _contract('Two Jobs', jobs=[first, second])
+    spare = _contract('Also Two', jobs=[first, second])
+    svc.assign(challenge, profile, first.slug, used)
 
-    pool = set(eligibility.eligible_contracts(profile, challenge, 'A').values_list('id', flat=True))
+    pool = set(eligibility.eligible_contracts(profile, challenge, second.slug)
+               .values_list('id', flat=True))
 
     assert spare.id in pool
     assert used.id not in pool
+
+
+def test_a_squares_own_occupant_stays_in_its_own_pool():
+    """THE OFF-BY-ONE THAT HANDED OUT FREE SQUARES. A slot's pool has to be the same size whether the
+    slot is empty or being reassigned, because `hatch_is_open` counts it. An earlier version excluded
+    every assigned contract including the slot's own, so a reassignment saw one contract fewer -- and at
+    the boundary that opened the hatch a contract early, handing the hunter a permanently locked,
+    XP-bearing square the rule did not allow."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    held = _contract('Astro Bot')
+    before = eligibility.eligible_contracts(profile, challenge, 'A').count()
+
+    svc.assign(challenge, profile, 'A', held)
+
+    after = eligibility.eligible_contracts(profile, challenge, 'A')
+    assert after.count() == before
+    assert held.id in set(after.values_list('id', flat=True))
 
 
 def test_the_pool_excludes_games_this_hunter_has_finished():
@@ -712,3 +745,148 @@ def test_importability_turns_on_the_join_date():
     importable = eligibility.importable_ids(profile, [after, before], joined)
 
     assert importable == {after.id}
+
+
+# ── the gate and the pool must agree (added after the chunk-1 audit) ─────────────────────────────
+
+def test_the_assignment_gate_accepts_a_lowercase_name():
+    """The Python-side gate used to spell the A-Z rule itself, and case-folded differently from the
+    queryset. Now it delegates, so this exercises the same predicate the pool uses."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    slot = svc.assign(challenge, profile, 'I', _contract('inside'))
+
+    assert slot.contract_name == 'inside'
+
+
+def test_the_gate_and_the_pool_agree_about_every_awkward_name():
+    """THE DIVERGENCE, pinned against the REAL gate -- i.e. `svc.assign`, not a second queryset.
+
+    The first version of this test compared `eligible_contracts` with `eligibility.fits_slot`. Both are
+    querysets running the same `name__istartswith`, so they agreed trivially and the test caught
+    nothing: reverting the gate to its Python spelling left it green. Which makes it a fair example of
+    the thing the audit it was written for was about.
+
+    Python's `upper()` does full Unicode case mapping (one character to many) while Postgres folds with
+    `lower()` (one to one), so these three names disagree in both directions. A name the pool offers and
+    the gate refuses is a dead-end click in the picker; a name the gate accepts and the pool never holds
+    is invisible to `hatch_is_open`'s count, which is the quieter and worse half.
+
+    One profile per name, because a hunter has one active run per type and `assign` is the only honest
+    way to ask the gate.
+    """
+    for name, key in (('\u0130stanbul Tale', 'I'), ('\ufb01nal Cut', 'F'), ('\u00dfeta Test', 'S')):
+        profile = _member()
+        challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+        contract = _contract(name)
+
+        in_pool = contract.id in set(
+            eligibility.eligible_contracts(profile, challenge, key).values_list('id', flat=True))
+        try:
+            svc.assign(challenge, profile, key, contract)
+            gate_accepted = True
+        except svc.ChallengeError:
+            gate_accepted = False
+
+        assert in_pool == gate_accepted, (
+            f'{name!r} under {key}: the pool says {in_pool} and the gate says {gate_accepted}'
+        )
+
+
+# ── hidden runs, and the boundary cases the audit found unpinned ─────────────────────────────────
+
+def test_a_hidden_run_refuses_writes_until_it_is_started_again():
+    """The precondition is re-asserted INSIDE the lock now, not read off a stale object. Hiding takes a
+    run out of view, and Start is the way back."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    svc.hide(challenge, profile)
+    challenge.refresh_from_db()
+
+    with _refuses('is hidden'):
+        svc.assign(challenge, profile, 'A', _contract('Astro Bot'))
+
+    resumed = svc.start(profile, CHALLENGE_TYPE_AZ)
+    assert svc.assign(resumed, profile, 'A', _contract('Alan Wake')).is_filled
+
+
+def test_a_finished_run_refuses_clearing_too():
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    svc.assign(challenge, profile, 'A', _contract('Astro Bot'))
+    Challenge.objects.filter(pk=challenge.pk).update(is_complete=True, completed_at=timezone.now())
+    challenge.refresh_from_db()
+
+    with _refuses('challenge is finished'):
+        svc.clear(challenge, profile, 'A')
+
+
+def test_hiding_a_finished_run_is_allowed():
+    """`hide` deliberately does not go through `_lock_challenge`, which refuses a finished run -- a
+    hunter must be able to take a completed run off their profile."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    Challenge.objects.filter(pk=challenge.pk).update(is_complete=True, completed_at=timezone.now())
+    challenge.refresh_from_db()
+
+    assert svc.hide(challenge, profile).is_deleted is True
+
+
+def test_a_completion_exactly_at_the_join_moment_is_not_importable():
+    """The equality boundary. `importable_ids` compares STRICTLY, and without this test flipping `>` to
+    `>=` breaks nothing -- the other importer tests are a day either side."""
+    profile = _member()
+    joined = timezone.now() - timezone.timedelta(days=100)
+    _joined(profile, joined)
+    contract = _contract('Exactly Then')
+    _platted_at(profile, contract, joined)
+
+    assert eligibility.importable_ids(profile, [contract], joined) == set()
+
+
+def test_completion_dates_ignores_another_hunters_trophies():
+    """The aggregate is filtered by profile as well as by concept. Dropping the profile filter would make
+    every contract somebody else finished look importable."""
+    profile, other = _member(), _member()
+    contract = _contract('Astro Bot')
+    _platted_at(other, contract, timezone.now() - timezone.timedelta(days=10))
+
+    assert eligibility.completion_dates(profile, [contract]) == {}
+
+
+def test_a_jobs_run_is_refused_when_the_catalogue_is_empty(monkeypatch):
+    """The only guard against a zero-slot run, which the DB would otherwise refuse as a bare
+    `challenge_total_slots_positive` IntegrityError rather than a message."""
+    monkeypatch.setattr(svc, 'slot_keys_for', lambda challenge_type: [])
+    profile = _member()
+
+    with _refuses('not available right now'):
+        svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+
+def test_completing_a_square_the_hunter_just_emptied_is_refused():
+    """THE STALE-PIVOT RACE, made deterministic.
+
+    A detector reads a filled, uncompleted square; the hunter clears it; the detector then stamps it.
+    Because `clear` and `mark_slot_completed` take the same locks in the same order, `clear` reliably
+    commits FIRST, so this is the ordinary outcome rather than a narrow window. Passing the stale object
+    reproduces it without threads.
+
+    Re-asserting only `is_completed` on the locked row -- which an earlier version did -- lets the write
+    through and violates `challengeslot_completed_is_filled_dated_and_explained`: a completed square with
+    no game in it, surfacing as an IntegrityError out of a background sweep rather than as a refusal.
+    """
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    svc.assign(challenge, profile, 'A', _contract('Astro Bot'))
+
+    stale = challenge.slots.get(key='A')          # what a detector would be holding
+    assert stale.is_filled                        # ... and it looked fillable when read
+    svc.clear(challenge, profile, 'A')            # the hunter empties it underneath
+
+    assert svc.mark_slot_completed(stale) is False
+
+    challenge.refresh_from_db()
+    assert challenge.completed_count == 0
+    assert challenge.slots.get(key='A').is_completed is False
