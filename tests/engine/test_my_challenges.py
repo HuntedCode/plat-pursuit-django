@@ -579,9 +579,25 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     # break while the sharing was still perfectly correct.
     calls = [' '.join(c.split()) for c in re.findall(r'ratelimit\((.*?)\)\)', src, re.S)]
 
-    assert len(calls) >= 2, 'both write doors must be rate limited'
-    assert len(set(calls)) == 1, f'the write doors do not share one bucket: {set(calls)}'
-    assert 'group=CHALLENGE_WRITE_RATELIMIT_GROUP' in calls[0]
+    # PARTITIONED BY GROUP, because not every door in this file is a write any more. The picker added two
+    # READ doors on a deliberately looser bucket -- the search runs while somebody is typing, and the
+    # writes' 30/m would cut them off mid-word. An earlier version of this test asserted that EVERY
+    # `ratelimit` call in the file was identical, which was true when there were only two and went red the
+    # moment a read door arrived. The property worth keeping is narrower: each KIND shares one bucket.
+    writes = [c for c in calls if 'group=CHALLENGE_WRITE_RATELIMIT_GROUP' in c]
+    reads = [c for c in calls if 'group=CHALLENGE_READ_RATELIMIT_GROUP' in c]
+
+    assert len(writes) + len(reads) == len(calls), f'a door is on an unknown bucket: {calls}'
+
+    assert len(writes) >= 4, 'start, hide, assign and clear must all be rate limited'
+    assert len(set(writes)) == 1, f'the write doors do not share one bucket: {set(writes)}'
+
+    assert len(reads) >= 2, 'both picker reads must be rate limited'
+    assert len(set(reads)) == 1, f'the read doors do not share one bucket: {set(reads)}'
+
+    # AND THE TWO KINDS MUST NOT SHARE. Reads being looser is the whole reason they have their own group,
+    # so a future tidy-up that collapses them would hand the search box the writes' budget.
+    assert set(writes) != set(reads)
 
 
 def test_the_write_endpoints_light_the_rail():
@@ -590,8 +606,12 @@ def test_the_write_endpoints_light_the_rail():
     deleting them broke nothing."""
     from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES
 
-    for name in ('challenge_start', 'challenge_hide'):
-        assert _URL_NAME_TO_SLUG_OVERRIDES.get(name) == ('my_pursuit', 'my_challenges')
+    # ALL SIX, not the original two. The picker's four doors are fetch-only so no strip ever renders for
+    # them today -- but the map's own comment is that a missing line is SILENT, and a future non-JSON
+    # fallback would inherit the gap rather than announce it.
+    for name in ('challenge_start', 'challenge_hide', 'challenge_slot', 'challenge_search',
+                 'challenge_assign', 'challenge_clear'):
+        assert _URL_NAME_TO_SLUG_OVERRIDES.get(name) == ('my_pursuit', 'my_challenges'), name
 
 
 def test_a_finished_run_can_still_be_hidden(client):
@@ -778,3 +798,52 @@ def test_the_cards_state_pill_is_the_house_chip(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
     assert 'bd-chip bd-chip--ghost' in body, 'a hidden run should read Hidden'
+
+
+# ── the JSON doors must never redirect ────────────────────────────────────────────────────────────
+
+def test_a_json_write_answers_401_rather_than_redirecting(client):
+    """SHIPPED BROKEN IN CHUNK 3, and the failure is worse than a wrong status code.
+
+    On a `LoginRequiredMixin` base this POST got a 302 to `/accounts/login/`. `fetch` follows redirects by
+    default, so the browser received the LOGIN PAGE at status **200**; `PlatPursuit.API.request` checks
+    `response.ok` (true) and, seeing `Content-Type: text/html`, returns `response.text()`. The caller's
+    SUCCESS path then ran with login-page HTML as its result -- the toast said it worked and the card
+    updated, while nothing had been written.
+
+    The realistic trigger is not an anonymous visitor but a session expiring on an open tab.
+    """
+    profile = ProfileFactory(user_is_premium=True)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    resp = client.post(reverse('challenge_hide', args=[challenge.pk]))
+
+    assert resp.status_code == 401
+    assert resp['Content-Type'].startswith('application/json')
+    assert resp.get('Location') is None, 'a fetch would follow this and read the login page as success'
+
+
+def test_a_json_write_answers_403_for_an_unlinked_account(client):
+    """`_LinkedProfileRequired` redirects to `link_psn`, which is right for a page and the same trap for a
+    fetch. The JSON sibling answers instead."""
+    user = UserFactory()
+    ProfileFactory(user=user, user_is_premium=True, is_linked=False)
+    owner = ProfileFactory(user_is_premium=True)
+    challenge = svc.start(owner, CHALLENGE_TYPE_AZ)
+    client.force_login(user)
+
+    resp = client.post(reverse('challenge_hide', args=[challenge.pk]))
+
+    assert resp.status_code == 403
+    assert resp['Content-Type'].startswith('application/json')
+    assert resp.get('Location') is None
+
+
+def test_the_form_door_still_sends_a_page_visitor_to_log_in(client):
+    """The other half of the split, and the reason the base could not simply swap mixins. `challenge_start`
+    is a plain form POST answering with a redirect, so for it the login redirect IS the right answer -- a
+    401 JSON body would be shown to a human as a blank page."""
+    resp = client.post(reverse('challenge_start', args=[CHALLENGE_TYPE_AZ]))
+
+    assert resp.status_code == 302
+    assert 'login' in resp['Location']

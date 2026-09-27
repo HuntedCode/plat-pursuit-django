@@ -24,7 +24,11 @@ from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
 from challenges.views import (
+    AssignSlotView,
     ChallengeDetailView,
+    ClearSlotView,
+    SearchPickerView,
+    SlotPickerView,
     HideChallengeView,
     MyChallengesView,
     StartChallengeView,
@@ -474,6 +478,16 @@ urlpatterns = [
     path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
     path('my-challenges/start/<str:challenge_type>/', StartChallengeView.as_view(),
          name='challenge_start'),
+    # THE PICKER'S FOUR DOORS, under the personal path because every one of them is about the hunter's own
+    # run -- two reads that need the hunter's completions to answer, and two writes.
+    path('my-challenges/<int:challenge_id>/search/', SearchPickerView.as_view(),
+         name='challenge_search'),
+    path('my-challenges/<int:challenge_id>/slot/<str:key>/', SlotPickerView.as_view(),
+         name='challenge_slot'),
+    path('my-challenges/<int:challenge_id>/slot/<str:key>/assign/', AssignSlotView.as_view(),
+         name='challenge_assign'),
+    path('my-challenges/<int:challenge_id>/slot/<str:key>/clear/', ClearSlotView.as_view(),
+         name='challenge_clear'),
     # THE RUN'S OWN PAGE, under `/community/challenges/` rather than `/my-challenges/`, because it is
     # PUBLIC: a finished run is something you show somebody, and the Hall of Fame links here. The
     # personal page above is the hunter's own working surface; this is the artefact.

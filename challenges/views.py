@@ -27,6 +27,9 @@ POST.
 """
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+
+from trophies.mixins import LoginRequiredAPIMixin
+from trophies.models import Contract
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
@@ -37,6 +40,7 @@ from django_ratelimit.decorators import ratelimit
 
 from challenges.models import CHALLENGE_TYPE_CHOICES, Challenge
 from challenges.services import challenge_service as svc
+from challenges.services import picker
 from challenges.services import slot_render
 from core.previews import previewing
 
@@ -44,6 +48,12 @@ from core.previews import previewing
 #: on runs is structural (one active per type) rather than numeric, but the RATE is not bounded by it:
 #: hiding frees nothing and starting resumes, yet each still writes and each still takes a row lock.
 CHALLENGE_WRITE_RATELIMIT_GROUP = 'challenges:write'
+
+#: A SEPARATE BUCKET from the writes, and named rather than left implicit. `django_ratelimit` keys a
+#: bucket on the group AND the rate, so reusing the write group at a different rate would give the
+#: reads their own bucket anyway -- by accident. The reads need a looser limit because the picker's
+#: search runs while somebody is typing, and a shared 30/m would cut them off mid-word.
+CHALLENGE_READ_RATELIMIT_GROUP = 'challenges:read'
 
 #: The team preview door for what a FREE hunter sees during the beta: `?preview=challenges-free`.
 #:
@@ -256,14 +266,31 @@ class ChallengeDetailView(DetailView):
         return context
 
 
-class _ChallengeActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
-    """POST-only. What the two subclasses share is the gate, not the contract.
+class _LinkedProfileJson(_LinkedProfileRequired):
+    """`_LinkedProfileRequired`'s check, answered in JSON.
 
-    `HideChallengeView` resolves a run by id and answers JSON, using all four helpers below.
-    `StartChallengeView` resolves a TYPE, answers a redirect, and uses none of them -- for it this base
-    is just `LoginRequiredMixin + _LinkedProfileRequired + View`. Worth saying because an earlier
-    docstring promised a JSON contract both shared, and because "scoped to the hunter's own runs"
-    describes `get_challenge` rather than the class.
+    The parent redirects to `link_psn`, which is right for a PAGE and wrong for a fetch -- see
+    `_ChallengeJsonView` below for what a redirect does to an API caller.
+    """
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            profile = getattr(request.user, 'profile', None)
+            if not profile or not profile.is_linked:
+                return JsonResponse(
+                    {'error': 'Link your PSN account to start a challenge.'}, status=403)
+        # Skip the parent's redirecting branch; the gate above has already answered for this case.
+        return super(_LinkedProfileRequired, self).dispatch(request, *args, **kwargs)
+
+
+class _ChallengeActionView(View):
+    """The shared plumbing for every challenge write: whose run it is, and how to refuse.
+
+    NO AUTH MIXIN HERE, and that is the fix for a real bug rather than a tidy-up. This class used to carry
+    `LoginRequiredMixin`, which REDIRECTS an anonymous request to the login page -- correct for
+    `StartChallengeView`, which is a form POST answering with a redirect anyway, and actively dangerous
+    for the JSON endpoints. So the mixins moved to the two subclasses that need different answers, and
+    `_ChallengeJsonView` records what the redirect actually did.
 
     `get_challenge` returns None rather than raising `Http404`, deliberately: this project installs a
     GET-only `handler404`, so an `Http404` raised from a POST comes back as a 405 listing GET/HEAD/OPTIONS
@@ -289,7 +316,195 @@ class _ChallengeActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
         return JsonResponse({'error': str(exc)}, status=status)
 
 
-class StartChallengeView(_ChallengeActionView):
+class _ChallengeJsonView(LoginRequiredAPIMixin, _LinkedProfileJson, _ChallengeActionView):
+    """Every endpoint a fetch calls. Answers 401/403 JSON, NEVER a redirect.
+
+    WHAT THE REDIRECT DID, because "JSON endpoints must not redirect" sounds like a style rule and is not.
+    `HideChallengeView` shipped in chunk 3 on a `LoginRequiredMixin` base, so an anonymous or
+    session-expired POST got a 302 to `/accounts/login/`. `fetch` follows redirects by default, so the
+    browser then received the LOGIN PAGE with status **200**. `PlatPursuit.API.request` checks
+    `response.ok` -- true -- and, seeing `Content-Type: text/html`, returns `response.text()`. The caller's
+    SUCCESS path therefore ran, with login-page HTML as its result: the toast said it worked and the card
+    updated, while nothing had been written.
+
+    The most likely way to hit it is not an anonymous visitor but a session expiring on an open tab, which
+    is ordinary rather than exotic.
+
+    `LoginRequiredAPIMixin` (`trophies/mixins.py`) exists for exactly this and predates the feature; not
+    using it was the mistake, not a missing abstraction.
+    """
+
+
+class _SlotView(_ChallengeJsonView):
+    """Resolves a run AND one of its slots, which all four picker doors need.
+
+    THE KEY COMES FROM THE URL, so it is untrusted: `slot_panel` returns None and the writes raise for a
+    key this run has no slot for. Both answer 404 rather than validating the string, because "not a slot of
+    this run" and "not this hunter's run" should be indistinguishable from outside.
+    """
+
+    def resolve(self, request, challenge_id, key):
+        challenge = self.get_challenge(request, challenge_id)
+        if challenge is None or not challenge.slots.filter(key=key).exists():
+            return None
+        return challenge
+
+
+class SlotPickerView(_SlotView):
+    """What can fill this square. GET, because it reads.
+
+    RATE LIMITED despite being a read: it runs an `icontains` over an unindexed column when a term is
+    given, and one open panel per keystroke is the shape that turns a search box into a scan loop. The
+    limit is generous enough for typing and answers 429 rather than degrading.
+    """
+
+    @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
+                                method='GET', block=True))
+    def get(self, request, challenge_id, key):
+        challenge = self.resolve(request, challenge_id, key)
+        if challenge is None:
+            return self.not_found()
+        panel = picker.slot_panel(request.user.profile, challenge, key,
+                                  query=request.GET.get('q', ''))
+        if panel is None:
+            return self.not_found()
+        return JsonResponse(_panel_json(panel))
+
+
+class SearchPickerView(_ChallengeJsonView):
+    """Which squares this game could fill. GET, and the contract-first half of the picker."""
+
+    @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
+                                method='GET', block=True))
+    def get(self, request, challenge_id):
+        challenge = self.get_challenge(request, challenge_id)
+        if challenge is None:
+            return self.not_found()
+        panel = picker.search_panel(request.user.profile, challenge, request.GET.get('q', ''))
+        return JsonResponse({
+            'query': panel['query'],
+            'total': panel['total'],
+            'showing': panel['showing'],
+            'too_short': panel['too_short'],
+            'rows': [{
+                'slug': r['slug'],
+                'name': r['name'],
+                'cover': _cover_url(r['cover']),
+                'keys': r['keys'],
+                'key_labels': r['key_labels'],
+                'already_in_run': r['already_in_run'],
+                'is_completed_by_you': r['is_completed_by_you'],
+            } for r in panel['rows']],
+        })
+
+
+class AssignSlotView(_SlotView):
+    """Put a game in a square.
+
+    TWO-STEP FOR A COMPLETING PLACEMENT, and the second step is the server's rule rather than the dialog's.
+    `svc.assign` raises `ConfirmationRequired` unless `confirm` was sent, and this answers **409** with the
+    details the confirmation needs. 409 rather than 400 because nothing is wrong with the request -- the
+    same request, repeated with `confirm`, succeeds.
+    """
+
+    @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
+                                method='POST', block=True))
+    def post(self, request, challenge_id, key):
+        challenge = self.resolve(request, challenge_id, key)
+        if challenge is None:
+            return self.not_found()
+
+        slug = (request.POST.get('contract') or '').strip()
+        contract = Contract.objects.filter(slug=slug).first() if slug else None
+        if contract is None:
+            # NOT a 404: the run and the square exist, and the hunter is being told about the GAME. A 404
+            # here would read to the client as "your run is gone".
+            return self.fail(svc.ChallengeError('That game is not on the Job Board.'))
+
+        confirm = request.POST.get('confirm') in ('1', 'true', 'True', 'on', 'yes')
+        try:
+            slot = svc.assign(challenge, request.user.profile, key, contract,
+                              acknowledge_lock=confirm)
+        except svc.ConfirmationRequired as exc:
+            return JsonResponse({
+                'needs_confirmation': True,
+                'error': str(exc),
+                'via': exc.via,
+                'contract_name': exc.contract_name,
+            }, status=409)
+        except svc.ChallengeError as exc:
+            return self.fail(exc)
+
+        return JsonResponse(_slot_json(challenge, slot))
+
+
+class ClearSlotView(_SlotView):
+    """Empty an unfinished square. A finished one is refused by the service, not by this."""
+
+    @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
+                                method='POST', block=True))
+    def post(self, request, challenge_id, key):
+        challenge = self.resolve(request, challenge_id, key)
+        if challenge is None:
+            return self.not_found()
+        try:
+            slot = svc.clear(challenge, request.user.profile, key)
+        except svc.ChallengeError as exc:
+            return self.fail(exc)
+        return JsonResponse(_slot_json(challenge, slot))
+
+
+def _cover_url(game):
+    """A cover's URL or None. The client needs a string, not a `Game`."""
+    return game.display_image_url if game is not None else None
+
+
+def _slot_json(challenge, slot):
+    """One square's state after a write, plus the run's counters.
+
+    The counters travel with it because every write moves them and the page shows them in two places (the
+    tally and the Horizon). Returning them here means the client never has to guess or re-fetch.
+    """
+    challenge.refresh_from_db()
+    return {
+        'key': slot.key,
+        'is_filled': slot.is_filled,
+        'is_completed': slot.is_completed,
+        'completed_via': slot.completed_via,
+        'game_name': slot.contract_name,
+        'filled_count': challenge.filled_count,
+        'completed_count': challenge.completed_count,
+        'total_slots': challenge.total_slots,
+        'is_complete': challenge.is_complete,
+    }
+
+
+def _panel_json(panel):
+    """`slot_panel`'s payload, with `Game` objects reduced to URLs."""
+    return {
+        'key': panel['key'],
+        'label': panel['label'],
+        'job': panel['job'],
+        'query': panel['query'],
+        'slot_is_filled': panel['slot_is_filled'],
+        'slot_is_completed': panel['slot_is_completed'],
+        'current_name': panel['current_name'],
+        'total': panel['total'],
+        'showing': panel['showing'],
+        'rows': [{'slug': r['slug'], 'name': r['name'], 'cover': _cover_url(r['cover'])}
+                 for r in panel['rows']],
+        'catchup': [{
+            'slug': r['slug'],
+            'name': r['name'],
+            'cover': _cover_url(r['cover']),
+            'via': r['via'],
+            # ISO 8601 so the client can format it with `TimeFormatter` rather than being handed a
+            # server-rendered string in the server's idea of a locale.
+            'completed_at': r['completed_at'].isoformat() if r['completed_at'] else None,
+        } for r in panel['catchup']],
+    }
+
+class StartChallengeView(LoginRequiredMixin, _LinkedProfileRequired, _ChallengeActionView):
     """Start a run, or bring back the one you hid. A form POST, not JSON.
 
     A navigation rather than an in-place update, and a plain form is the sturdier version of that: it
@@ -352,7 +567,7 @@ class StartChallengeView(_ChallengeActionView):
         return redirect(url)
 
 
-class HideChallengeView(_ChallengeActionView):
+class HideChallengeView(_ChallengeJsonView):
     """Take a run off the profile and out of the hub. JSON, because the page updates in place.
 
     Not called Delete anywhere a hunter can see, and the client confirms first -- the run keeps every

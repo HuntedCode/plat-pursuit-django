@@ -363,6 +363,13 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # needs a line anyway, because that hub's `challenges` item is the placeholder browse and the
     # prefix alone would leave the strip unlit.
     'challenge_detail': ('community', 'challenges'),
+    # The picker's doors are fetch-only, so no strip ever renders for them -- but an item
+    # without a line here is silently unhighlighted, and a future non-JSON fallback would
+    # inherit the gap rather than announce it.
+    'challenge_slot': ('my_pursuit', 'my_challenges'),
+    'challenge_search': ('my_pursuit', 'my_challenges'),
+    'challenge_assign': ('my_pursuit', 'my_challenges'),
+    'challenge_clear': ('my_pursuit', 'my_challenges'),
     'challenge_start': ('my_pursuit', 'my_challenges'),
     'challenge_hide': ('my_pursuit', 'my_challenges'),
     'profile_detail': ('community', 'profiles'),
