@@ -42,10 +42,17 @@
     hunter most needs to understand about this page: why the buttons are dim, that it is temporary, and
     that there is a way in now if they want one. Owner's call, 2026-09-27.
 
-    The DESIGN SYSTEM'S Premium CTA Card, not a new block -- `border-primary/20` for the accent rather
-    than `border-base-300`, content centred on mobile and left-aligned from `md:`, button shrinking to
-    `btn-sm` below `md:`. It is the site's existing answer to "this feature is limited for free hunters",
+    The DESIGN SYSTEM'S Premium CTA Card, not a new block: content centred on mobile and left-aligned
+    from `md:`, button shrinking to `btn-sm` below `md:`, and an ACCENT border rather than the usual
+    `border-base-300`. It is the site's existing answer to "this feature is limited for free hunters",
     and inventing a second one here would leave two.
+
+    THE ACCENT IS `warning`, NOT `primary`, which is the one place this departs from the pattern.
+    Owner's call, 2026-09-27, and it reads correctly because the page has stopped spending yellow
+    anywhere else -- the Hidden badge moved to `ghost` the same day. So on this page yellow means
+    "beta, heads up" and nothing competes with it. The BUTTON stays `btn-primary`: yellow is the
+    notice, and primary is the site's action colour, so the two are doing different jobs rather than
+    disagreeing.
 
     THE VOICE IS ADDITIVE, NEVER OPPOSITIONAL, which is the house rule and also the honest reading:
     premium is a dial rather than a door, so nothing here stays members-only and the copy says so
@@ -55,10 +62,10 @@
 
     Rendered only when creation is closed to this viewer, which includes the team preview door.{% endcomment %}
     {% if not creation_is_open %}
-    <section class="card bg-base-200/90 border-2 border-primary/20 shadow-lg shadow-neutral mb-3">
+    <section class="card bg-base-200/90 border-2 border-warning/40 shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-5">
             <div class="flex flex-col md:flex-row items-center gap-3 md:gap-4">
-                <div class="text-primary shrink-0">
+                <div class="text-warning shrink-0">
                     <svg class="w-8 h-8 md:w-10 md:h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2-6.3-4.6-6.3 4.6L7.9 13.8 2 9.4h7.6z"/>
                     </svg>
@@ -88,6 +95,27 @@
                     Become a supporter
                 </a>
             </div>
+
+            {% comment %}THE ASK, at the foot and across the full width rather than squeezed beside the
+            button. Owner's call, 2026-09-27.
+
+            It is LAST on purpose. Everything above it is what a hunter gets either way -- the beta, the
+            promise that nothing stays members-only, the date-free "when the beta ends". Only once that
+            is said does this ask for anything, which is the difference between an earnest appeal and a
+            toll booth. Premium is a dial here, so the page must read as an invitation even to somebody
+            who will never pay.
+
+            The voice is the support hub's own, first-person plural and inviting: "Help us build the best
+            home for trophy hunting", "How much would you like to give?". Not the site's name, because
+            copy elsewhere is split evenly between two spellings of it and this line does not need to
+            pick a side.
+
+            `text-warning` to sit with the border, and a hairline above it so it reads as a footer to
+            the card rather than a fourth thing in the stack.{% endcomment %}
+            <p class="text-xs text-warning mt-3 pt-2 border-t border-warning/30">
+                Supporters keep us running. If you are enjoying it here, please consider helping us
+                build it.
+            </p>
         </div>
     </section>
     {% endif %}

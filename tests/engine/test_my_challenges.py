@@ -720,9 +720,12 @@ def test_the_beta_card_makes_the_ask_and_the_reassurance(client):
 
 
 def test_the_beta_card_uses_the_house_premium_pattern(client):
-    """`border-primary/20` is the pattern's accent, and the thing that makes this card read as the same
-    kind of card a hunter has met elsewhere. `border-base-300` would make it look like an ordinary
-    content block and lose the whole point of the treatment."""
+    """An ACCENT border is what makes this read as the same kind of card a hunter has met elsewhere;
+    `border-base-300` would make it an ordinary content block and lose the point of the treatment.
+
+    `warning` rather than the pattern's `primary` is the one deliberate departure (owner's call), and it
+    only works because nothing else on the page spends yellow any more -- the Hidden badge moved to
+    `ghost` the same day. If something reintroduces yellow here, this card stops being the loud thing."""
     _hunter(client, premium=False)
 
     # SCOPED TO THE CARD'S OWN <section>, not a fixed character window -- a lookbehind of N characters
@@ -731,7 +734,7 @@ def test_the_beta_card_uses_the_house_premium_pattern(client):
     headline = body.index('Challenges are in beta')
     card = body[body.rindex('<section', 0, headline):headline]
 
-    assert 'border-primary/20' in card
+    assert 'border-warning/40' in card
     assert 'border-base-300' not in card, 'the beta card lost its accent and reads as an ordinary block'
 
 
@@ -739,3 +742,21 @@ def test_a_member_never_sees_the_beta_card(client):
     _hunter(client, premium=True)
 
     assert 'Challenges are in beta' not in client.get(reverse('my_challenges')).content.decode()
+
+
+def test_the_beta_card_asks_for_support_last(client):
+    """The ask sits at the FOOT of the card, after everything a hunter gets either way.
+
+    Order is the whole difference between an earnest appeal and a toll booth: the beta, the promise that
+    nothing stays members-only, and the date-free "when the beta ends" all come first. Pinned as an
+    ORDER rather than a presence, because moving this line above the reassurance would pass any test
+    that only checked the words were somewhere on the page.
+    """
+    _hunter(client, premium=False)
+
+    body = ' '.join(client.get(reverse('my_challenges')).content.decode().split())
+
+    assert 'Supporters keep us running' in body
+    assert 'please consider helping us build it' in body
+    assert body.index('Nothing here stays members-only') < body.index('Supporters keep us running')
+    assert body.index('Everyone can start one when the beta ends') < body.index('Supporters keep us running')
