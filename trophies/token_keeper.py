@@ -1535,6 +1535,26 @@ class TokenKeeper:
             except Exception:
                 logger.exception(f"[profile {profile_id}] sync_complete contract detection failed")
 
+            # Complete any Challenge squares whose contract the hunter has now finished.
+            #
+            # MUST FOLLOW the block above, and that ordering is the whole reason it lives here rather than
+            # anywhere else in the phase: a square completes when an `EarnedContract` row exists, and the
+            # line above is what creates one. Run first, this would miss every square finished on this
+            # very sync and leave it for the nightly sweep -- a hunter watching their own sync land would
+            # see the trophy arrive and the square stay empty.
+            #
+            # Deliberately UNSCOPED by contract, unlike its neighbour. A hunter has at most one active run
+            # per type at 26 squares each, so the candidate set is ~51 rows and one query settles it;
+            # narrowing to the concepts this sync touched would cost more than it saves.
+            #
+            # IMPORT OUTSIDE THE GUARD for the reason spelled out above: a missing module is a deploy
+            # error and must be loud, not one log line that silently skips the rest of the job forever.
+            from challenges.services.challenge_service import detect_for_profile
+            try:
+                detect_for_profile(profile)
+            except Exception:
+                logger.exception(f"[profile {profile_id}] sync_complete challenge detection failed")
+
             # Badge notifications are NOT flushed here any more. The only producer that ever filled the
             # `pending_badges:{profile_id}` queue was `notify_badge_awarded`, a post_save on the legacy
             # `UserBadge` that the 5b cutover deleted -- so this was a Redis read per sync for a queue

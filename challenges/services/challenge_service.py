@@ -61,6 +61,7 @@ detector.
 """
 from django.conf import settings
 from django.db import models, transaction
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from challenges.models import (
@@ -574,3 +575,69 @@ def _recount(challenge):
 
     challenge.save(update_fields=fields)
     return challenge
+
+
+# ── detection ────────────────────────────────────────────────────────────────────────────────────
+
+def pending_slots(profile=None):
+    """Filled, uncompleted slots on runs that are still going. The ONE definition, for both detectors.
+
+    Matched on the LIVE FK when a caller narrows by contract, never on `contract_slug` -- see the module
+    header. The snapshot is what a finished square SAYS; the FK is what it IS while the run is live.
+
+    HIDDEN RUNS ARE INCLUDED, and that asymmetry is deliberate. A hunter cannot assign or clear on a
+    hidden run (`_lock_challenge` refuses it), but the world keeps turning for it: hiding is a visibility
+    act, not a pause, so progress earned while a run is out of sight is still theirs when they bring it
+    back. A hidden run that completes this way does NOT reach the Hall of Fame, because
+    `ChallengeQuerySet.completed()` is built on `visible()`.
+
+    Bounded by construction: at most 26 slots per run and at most one active run per type, so a profile's
+    pending set is at most ~51 rows. That is why neither detector bothers scoping by contract.
+    """
+    qs = ChallengeSlot.objects.filter(challenge__is_complete=False, is_completed=False)
+    qs = qs.exclude(contract_slug='')
+    if profile is not None:
+        qs = qs.filter(challenge__profile=profile)
+    return qs
+
+
+def detect_for_profile(profile):
+    """Complete every pending slot whose contract this hunter has now finished. Returns how many.
+
+    The sync hook's half. One query finds the slots that qualify -- no per-slot completion check, and no
+    Python filtering of a profile-scoped queryset -- then each is written through `mark_slot_completed`
+    so the locking and recount rules hold and the last square still finishes the run.
+
+    DELIBERATELY UNSCOPED by contract, unlike `contract_service.check_profile_contracts` which narrows to
+    the concepts a sync touched. Narrowing buys nothing here: the candidate set is already ~51 rows, so
+    building a concept-to-contract map would cost more than it saves -- and being unscoped makes this a
+    drift net too, catching a contract published after the hunter last touched the game.
+    """
+    from trophies.models import EarnedContract
+
+    qualifying = pending_slots(profile).filter(
+        Exists(EarnedContract.objects.filter(profile=profile, contract_id=OuterRef('contract_id')))
+    )
+    return sum(1 for slot in list(qualifying) if mark_slot_completed(slot))
+
+
+def completable_slots():
+    """Every pending slot, site-wide, whose owner has finished its contract. The nightly sweep's half.
+
+    One query for the whole site rather than a loop over profiles, and specifically NOT a loop over
+    `Profile`: the sweep's cost should scale with how many runs are in flight, not with how many accounts
+    exist. `process_contracts` has to walk candidate profiles because a contract's membership is derived
+    and it cannot know who qualifies; this can, because a slot names its own contract.
+
+    No index backs this predicate, which is a decision rather than an omission. `ChallengeSlot` holds 26
+    rows per run, so even a few thousand runs is a trivial scan once a night. A partial index on
+    `(is_completed=False, contract_slug <> '')` is the fix if the table ever reaches six figures.
+    """
+    from trophies.models import EarnedContract
+
+    return pending_slots().filter(
+        Exists(EarnedContract.objects.filter(
+            profile_id=OuterRef('challenge__profile_id'),
+            contract_id=OuterRef('contract_id'),
+        ))
+    )
