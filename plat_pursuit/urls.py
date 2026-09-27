@@ -23,6 +23,7 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
+from challenges.views import HideChallengeView, MyChallengesView, StartChallengeView
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
                             CreateListWithConceptView, CreateSectionView, DeleteListView,
                             DeleteSectionView, GameListDetailView, ListGameSearchView,
@@ -452,6 +453,24 @@ urlpatterns = [
          name='list_create_with_concept'),
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),
     path('my-lists/', MyListsView.as_view(), name='my_lists'),
+
+    # ── My Challenges (2026-09) ───────────────────────────────────────────────────────────────────
+    # A ROOT path, like `/my-lists/`, and for the same reason: the hub is resolved by PATH PREFIX, so
+    # a personal page living under `/community/` would light the Community rail instead of My Pursuit ->
+    # Tools, where a login-gated page about your own runs belongs. The public browse and Hall of Fame
+    # keep `/community/challenges/` above, which is still the placeholder.
+    #
+    # The two write endpoints sit under this page's path rather than /api/v1/, because they are this
+    # page's behaviour and share its gate -- routing them through the API app would mean a second
+    # permission stack that has to agree with the first. Same argument the list writes above make.
+    #
+    # `start` takes a TYPE, not an id: there is nothing to address yet, and which run you get (fresh,
+    # resumed, or the one already going) is the service's decision rather than the caller's.
+    path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
+    path('my-challenges/start/<str:challenge_type>/', StartChallengeView.as_view(),
+         name='challenge_start'),
+    path('my-challenges/<int:challenge_id>/hide/', HideChallengeView.as_view(),
+         name='challenge_hide'),
 
     # Rate My Games wizard (ratings-only). Rehoused 2026-08 from /community/ to a root path under the
     # My Pursuit hub: it is login-required, noindex, and works only on YOUR library -- a personal tool

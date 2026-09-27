@@ -62,7 +62,11 @@ RETIRED_PATHS = (
     '/community/challenges/genre/1/',
     '/community/challenges/genre/1/setup/',
     '/community/challenges/genre/1/edit/',
-    '/my-challenges/',
+    # `/my-challenges/` IS NOT HERE ANY MORE either, as of 2026-09-27. The rebuilt My Challenges page
+    # answers it, deliberately reusing the retired system's address and url_name for the same reason
+    # `/community/challenges/` does: anything that linked to a hunter's own challenges page still
+    # lands somewhere true. `test_my_challenges.py` pins what it does. What is NOT reused is the
+    # per-type create/setup/edit family below -- the rebuild has no such addresses.
     # the legacy 301 shims, which went with them
     '/challenges/',
     '/challenges/az/1/',
@@ -87,8 +91,11 @@ RETIRED_API_PATHS = (
 
 #: Every URL NAME the system owned, page and API, from the same commit. The three `*_detail` names
 #: take a `challenge_id`, which is exactly why the test below cannot use `reverse()`.
+#: `my_challenges` was removed from this tuple in 2026-09 when the rebuilt page took the name back.
+#: `challenges_browse` stays: the placeholder and the future browse both answer to `challenges`, so
+#: the old browse name is genuinely dead rather than reassigned.
 RETIRED_URL_NAMES = (
-    'challenges_browse', 'my_challenges',
+    'challenges_browse',
     'az_challenge_create', 'az_challenge_detail', 'az_challenge_setup', 'az_challenge_edit',
     'calendar_challenge_create', 'calendar_challenge_detail',
     'genre_challenge_create', 'genre_challenge_detail', 'genre_challenge_setup',

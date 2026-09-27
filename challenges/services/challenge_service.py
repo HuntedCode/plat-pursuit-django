@@ -290,9 +290,7 @@ def start(profile, challenge_type):
     # None, and a fresh run is created -- which is legal, because `challenge_one_active_per_type` is
     # partial on the unfinished-and-visible predicate. So this can return None while another hidden row
     # exists, which is benign only because of the newest-wins rule stated just above.
-    hidden = Challenge.objects.select_for_update().filter(
-        profile=profile, challenge_type=challenge_type, is_complete=False, is_deleted=True,
-    ).order_by('-updated_at').first()
+    hidden = _hidden_unfinished(profile, challenge_type).select_for_update().first()
     if hidden is not None:
         hidden.is_deleted = False
         hidden.deleted_at = None
@@ -674,3 +672,38 @@ def completable_slots():
             contract_id=OuterRef('contract_id'),
         ))
     )
+
+
+# ── reads the page needs ─────────────────────────────────────────────────────────────────────────
+
+def _hidden_unfinished(profile, challenge_type):
+    """The hidden, unfinished runs of this type, newest first. ONE predicate, two callers.
+
+    `start` locks it and un-hides; `resumable_run` reads it so the page can say "Resume" instead of
+    "Start". Shared rather than spelled twice, because the two disagreeing about what counts as
+    resumable is a page that offers Start and then hands back somebody's half-finished run.
+
+    `-updated_at` because more than one hidden unfinished run is reachable (the partial unique does not
+    cover hidden rows, and `start`'s own race can leave a second behind). The newest is the one a hunter
+    means; the others stay hidden and harmless.
+    """
+    return Challenge.objects.filter(
+        profile=profile, challenge_type=challenge_type, is_complete=False, is_deleted=True,
+    ).order_by('-updated_at')
+
+
+def active_run(profile, challenge_type):
+    """The run of this type currently in progress and visible, or None."""
+    return Challenge.objects.filter(
+        profile=profile, challenge_type=challenge_type, is_complete=False, is_deleted=False,
+    ).first()
+
+
+def resumable_run(profile, challenge_type):
+    """The hidden run `start` would bring back, or None. Read-only: no lock, no write.
+
+    This is what lets My Challenges label its button honestly. Without it the page shows "Start an A-Z
+    Challenge" to a hunter who hid one with twelve squares filled, and pressing it hands that run back --
+    correct, and a surprise. The hub still never shows hidden runs; this is the owner's own page.
+    """
+    return _hidden_unfinished(profile, challenge_type).first()

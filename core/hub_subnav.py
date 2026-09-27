@@ -175,6 +175,8 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         # was frozen when the rebuilt pages shipped, and a hub is a nav grouping rather than a URL
         # namespace -- `/recap/` and `/collection/` are here on the same footing.
         '/my-lists/',
+        # `/my-challenges/` (2026-09), on exactly the same footing and for exactly the same reason.
+        '/my-challenges/',
     ),
     # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
     # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
@@ -192,6 +194,10 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         # feature's address. (The un-hide checklist originally put it in Community; the IA
         # decision that followed put it here, and that decision wins.)
         HubSubnavItem('my_lists', 'My Lists', 'my_lists', 'list', auth_required=True, group='Tools'),
+        # MY CHALLENGES, beside My Lists and for the identical argument: the private side of a public
+        # system is still personal. The public browse and Hall of Fame keep their Community slot.
+        HubSubnavItem('my_challenges', 'My Challenges', 'my_challenges', 'flag',
+                      auth_required=True, group='Tools'),
     ),
 )
 
@@ -347,6 +353,11 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # just with nothing lit. That is the `job_detail` failure documented above, and it is why these
     # three exist rather than being left to the prefix match.
     'list_detail': ('community', 'lists'),
+    # My Challenges' write endpoints. They redirect to the page, so a reader rarely sees a rail
+    # rendered under these names -- but an item shipping without a line here is SILENT, and a future
+    # error path that re-renders rather than redirecting would inherit an unlit strip.
+    'challenge_start': ('my_pursuit', 'my_challenges'),
+    'challenge_hide': ('my_pursuit', 'my_challenges'),
     'profile_detail': ('community', 'profiles'),
     'trophy_case': ('community', 'profiles'),
     # Reviews archived 2026-05. The notice page matches the COMMUNITY hub by prefix (2026-09) --

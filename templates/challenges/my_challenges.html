@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}My Challenges{% endblock %}
+{% comment %}NOINDEX, NOFOLLOW. A login-gated page about one hunter's own runs, exactly as
+`my_lists.html` is. Nothing here should rank and nothing here should be crawled.{% endcomment %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% comment %}THE PAGE HEADER CARD, the accented shell every rebuilt page opens with. Identity plus
+    one headline number on the right; controls live on the cards below, never up here.{% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">My Challenges</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        One at a time, start to finish. Twenty-six letters or twenty-five jobs.
+                    </p>
+                    {% comment %}THE BETA REASON, as VISIBLE TEXT rather than an attribute on the button.
+                    The same argument `my_lists.html` makes about its at-cap message: an explanation
+                    hidden in a `title` is unreachable by keyboard, by screen reader and by touch. It
+                    says what a free hunter CAN do, because browsing is genuinely open to them -- the
+                    gate is a dial, and a message that only says "no" would describe a door.{% endcomment %}
+                    {% if not creation_is_open %}
+                    <p class="text-xs text-warning mt-1">
+                        Starting a challenge is in beta for members first. Everyone can start one when
+                        the beta ends &mdash; <a class="link" href="{% url 'challenges' %}">browsing is open now</a>.
+                    </p>
+                    {% endif %}
+                </div>
+
+                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ finished|length }}</span>
+                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">finished</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %}TWO CARDS, ALWAYS BOTH, whatever state the hunter is in. A list of what they happen to
+    own would show a newcomer nothing and would hide Job Coverage from anybody mid-A-Z.
+
+    `md:grid-cols-2` and NOT single-column on mobile: two cards side by side at 375px would each be
+    ~170px, so this is one of the grids the design system says collapses. Base is one column.{% endcomment %}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+        {% for card in cards %}
+        <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-3 md:p-5 lg:p-7">
+                <div class="flex items-start justify-between gap-2">
+                    <h2 class="text-base md:text-lg font-bold min-w-0">{{ card.label }}</h2>
+                    {% comment %}The state, said once. `resumable` is the one a hunter would otherwise have
+                    no way to tell from having no run at all.{% endcomment %}
+                    {% if card.state == 'active' %}
+                    <span class="badge badge-sm badge-primary font-bold shrink-0">In progress</span>
+                    {% elif card.state == 'resumable' %}
+                    <span class="badge badge-sm badge-warning font-bold shrink-0">Hidden</span>
+                    {% endif %}
+                </div>
+
+                {% if card.run %}
+                {% comment %}THE HORIZON, the kit's progress primitive, rather than a bespoke bar. Its
+                fill is inline because the value is per-run data and cannot be a class.{% endcomment %}
+                <p class="text-xs text-base-content/60 mt-1">
+                    {{ card.run.completed_count }} of {{ card.run.total_slots }} squares done{% if card.planned %}, {{ card.planned }} planned{% endif %}
+                </p>
+                <div class="mt-2">
+                    {% include 'components/horizon.html' with progress=card.progress %}
+                </div>
+                {% else %}
+                <p class="text-xs md:text-sm text-base-content/60 mt-1">
+                    {% if card.type == 'az' %}
+                    A game for every letter of the alphabet. Finish each one to fill its square.
+                    {% else %}
+                    A game for every job in the catalogue. One completion per specialisation.
+                    {% endif %}
+                </p>
+                {% endif %}
+
+                {% if card.completed_run_count %}
+                <p class="text-[0.7rem] text-base-content/40 mt-1">
+                    {{ card.completed_run_count }} finished before
+                </p>
+                {% endif %}
+
+                <div class="flex items-center gap-2 mt-3 flex-wrap">
+                    {% comment %}A FORM, not a link. Starting or resuming a run writes, so it is a POST with
+                    a CSRF token -- and a plain form works with no JavaScript, which is the sturdier version
+                    of a navigation.
+
+                    `aria-disabled`, NEVER `disabled`, when the beta gate is closed: a truly disabled button
+                    takes no pointer events and leaves the tab order, so it can be neither focused nor
+                    announced. The reason is rendered as text in the header above, so nothing depends on
+                    reaching an attribute. The form is not submitted either way -- the service refuses it,
+                    and that refusal is the real gate; this is only what a hunter sees.{% endcomment %}
+                    <form method="post" action="{% url 'challenge_start' card.type %}" class="contents">
+                        {% csrf_token %}
+                        <button type="submit" class="pp-cta"
+                                {% if card.state == 'empty' and not creation_is_open %}aria-disabled="true"{% endif %}>
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 9-14 9V3z"/></svg>
+                            {{ card.verb }}
+                        </button>
+                    </form>
+
+                    {% if card.state == 'active' %}
+                    {% comment %}HIDE, and it confirms first. The word is "Hide" everywhere a hunter can see
+                    it, because that is what it does -- the run keeps every square and Start brings it back.
+                    Somebody expecting a delete needs telling that BEFORE they act, which is what the
+                    dialog is for. Only on an active run: a hidden one is already hidden.{% endcomment %}
+                    <button type="button" class="pp-cta pp-cta--ghost" data-chal-hide
+                            data-url="{% url 'challenge_hide' card.run.id %}"
+                            data-name="{{ card.run.name }}">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                        Hide
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+
+    {% comment %}FINISHED RUNS. A card rather than bare page filler: it is a prose-and-stats block, and
+    the rule is that free content means page-FILLING grids, not that everything loses its surface.
+
+    Omitted entirely when empty rather than rendered as an empty state -- a hunter who has finished
+    nothing does not need a box telling them so directly under the two cards that invite them to
+    start.{% endcomment %}
+    {% if finished %}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3">
+        <div class="card-body p-3 md:p-5 lg:p-7">
+            <h2 class="text-sm md:text-base font-bold uppercase tracking-wider text-base-content/60">
+                Finished
+            </h2>
+            <ul class="mt-2 divide-y divide-base-300/60">
+                {% for run in finished %}
+                <li class="flex items-center justify-between gap-3 py-2">
+                    <span class="min-w-0 truncate text-sm">{{ run.name }}</span>
+                    <span class="text-xs text-base-content/50 shrink-0">
+                        <span class="hidden md:inline">{{ run.completed_at|date:"j M Y" }}</span>
+                        <span class="md:hidden">{{ run.completed_at|date:"j M y" }}</span>
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/my-challenges.js' %}"></script>
+{% endblock %}
