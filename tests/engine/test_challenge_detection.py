@@ -269,7 +269,14 @@ def test_the_sweep_completes_and_reports(capsys):
     assert challenge.completed_count == 1
     assert '1 square(s) completed.' in out
     assert '1 run(s) FINISHED' in out
-    assert f'{profile.psn_username} / {challenge.name}' in out
+
+    # SCOPED TO THE SECTION, because the square label CONTAINS the run label
+    # (`user / run / A -> Game` vs `user / run`), so a bare `in out` passes either way -- which it did
+    # when first written. The finished list must name the run and nothing more, so the tell is the
+    # absence of the square's arrow after the heading.
+    finished_section = out.split('run(s) FINISHED')[1]
+    assert f'{profile.psn_username} / {challenge.name}' in finished_section
+    assert '->' not in finished_section, 'the finished list is naming squares, not runs'
 
 
 def test_a_dry_run_writes_nothing(capsys):
