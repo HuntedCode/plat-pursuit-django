@@ -250,6 +250,7 @@ INSTALLED_APPS = [
     'allauth.account',
     'djstripe',
     'gamelists.apps.GameListsConfig',
+    'challenges.apps.ChallengesConfig',
     'notifications.apps.NotificationsConfig',
     'fundraiser.apps.FundraiserConfig',
     'art_reveal.apps.ArtRevealConfig',

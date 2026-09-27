@@ -3029,7 +3029,14 @@ class ContractXPGrant(models.Model):
     base_t; other sources leave those null. (Model rename to JobXPGrant is optional polish.)
     """
     TIER_CHOICES = [('platinum', 'Platinum'), ('full', '100%')]
-    SOURCE_CHOICES = [('contract', 'Contract'), ('quest', 'Quest'), ('event', 'Event'), ('manual', 'Manual')]
+    # 'challenge' is the FIRST non-contract source to actually exist (quest/event/manual were
+    # forward-looking placeholders). It carries `source_id` = the ChallengeSlot id, which is also
+    # half of its idempotency guard -- see the partial unique index in Meta.constraints and
+    # `challenges.services.rewards`. The doc's warning is the reason both exist:
+    # `grant_job_xp` has no built-in idempotency for null-`earned_contract` grants, and this ledger
+    # is append-only, so a double-pay can only ever be offset, never removed.
+    SOURCE_CHOICES = [('contract', 'Contract'), ('quest', 'Quest'), ('event', 'Event'),
+                      ('manual', 'Manual'), ('challenge', 'Challenge')]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='contract_xp_grants')
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='xp_grants')
@@ -3050,6 +3057,40 @@ class ContractXPGrant(models.Model):
         unique_together = ['earned_contract', 'job', 'tier']
         indexes = [
             models.Index(fields=['profile', 'job'], name='xpgrant_profile_job_idx'),
+        ]
+        constraints = [
+            # THE 'challenge' SOURCE OWNING ITS IDEMPOTENCY, as the comment above requires of every
+            # null-`earned_contract` source. A challenge slot pays its job exactly once: `source_id`
+            # is the slot's id, so this is one row per (profile, job, slot).
+            #
+            # A guard here rather than only in the service because this ledger is APPEND-ONLY: there
+            # is no delete path to undo a double-pay, only a negating row, so the database is the
+            # right place to refuse the second write. `challenges.models.ChallengeSlot.xp_redeemed_at`
+            # is the other half, and catches the same mistake one layer earlier with a better message.
+            #
+            # The condition is SCOPING, not protection, and it is worth being exact about that: a
+            # blanket unique over these four columns would behave identically for the sibling sources,
+            # because `contract` and `manual` rows carry `source_id=None` and Postgres treats NULLs as
+            # DISTINCT in a unique index -- they would never collide either way. What naming the
+            # source buys is that a future `quest` or `event` integration is left to own its own
+            # idempotency, per the rule stated above, instead of silently inheriting this one.
+            models.UniqueConstraint(
+                fields=['profile', 'job', 'source', 'source_id'],
+                condition=Q(source='challenge'),
+                name='xpgrant_challenge_once_per_slot'),
+            # AND THE HALF THAT MAKES THE UNIQUE ABOVE MEAN ANYTHING. Same NULL-distinctness fact,
+            # pointing the other way this time: without this, a challenge grant written with
+            # `source_id=None` collides with nothing and can be inserted without limit, which is
+            # exactly the unbounded double-pay the unique index was added to prevent. Found by audit
+            # after the unique had already been written and tested -- the tests used a real
+            # `source_id`, so they never went near the hole.
+            #
+            # Expressed as "a challenge grant must identify its slot" rather than fixed with
+            # `nulls_distinct=False`, because that is the true statement about the data. A challenge
+            # grant with no slot is not a deduplication problem; it is a row nobody can trace.
+            models.CheckConstraint(
+                condition=~Q(source='challenge') | Q(source_id__isnull=False),
+                name='xpgrant_challenge_needs_source_id'),
         ]
 
     def __str__(self):
@@ -4268,6 +4309,14 @@ class UserTitle(models.Model):
         ('badge', 'Badge'),
         ('milestone', 'Milestone'),
         ('badge_series', 'Badge Series'),   # grouping-badge rebuild: series-level title, kept distinct from legacy 'badge'
+        # Challenge completion titles, granted by `challenges.services.rewards` with `source_id` =
+        # the Challenge id. DELIBERATELY NOT routed through `BadgeSeries.title`, which is one nullable
+        # FK meaning "the title for this series": challenges award TWO titles (first completion and
+        # second), and expressing that as a second FK would ripple through `badge_adapters`,
+        # `sync_series_titles` (which groups by title ACROSS series and would prune the second one as
+        # orphaned) and `title_views`. The challenge system owns these rows outright instead, which
+        # also keeps them standing while the badge half of the reward is still deferred.
+        ('challenge', 'Challenge'),
     ]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_titles')

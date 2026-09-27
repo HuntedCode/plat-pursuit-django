@@ -14,6 +14,19 @@ that table takes the data with it, silently, and the rebuild's import path with 
 This file is written BEFORE the challenge rebuild starts, on purpose: it is the thing that has to be
 true while the new system is being built beside it, and it is what the rebuild will edit deliberately
 rather than break by accident.
+
+THE REBUILD HAS STARTED (2026-09), so read the next paragraph before being confused by this one.
+
+There is a live `Challenge` model again -- `challenges.Challenge`, in the new `challenges` app. Every
+assertion here still holds and still matters, because what was retired was `trophies.Challenge` and
+its four slot tables, and `RETIRED_MODELS` below is scoped to
+`apps.get_app_config('trophies')` deliberately for exactly this reason. The two facts are both true at
+once: the old models must stay gone (their tables were dropped, and re-adding a model with those names
+to `trophies` would resurrect a schema nothing can populate), while the rebuilt system lives in its
+own app with its own tables and its own migration history.
+
+`ArchivedAZChallenge` stays the thing this file is really for. The rebuilt system reads it; it does not
+replace it, and it must not be the only thing standing between that table and a squash.
 """
 import pathlib
 

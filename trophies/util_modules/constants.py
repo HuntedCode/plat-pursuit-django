@@ -128,6 +128,26 @@ CONTRACT_PLATINUM_FRAC = 0.70  # share of T paid at the Platinum tier
 CONTRACT_FULL_FRAC = 0.30      # share of T paid at the 100% (full-completion) tier
 JOB_XP_PER_LEVEL = 3000        # FLAT, CAP-LESS curve: every job level costs this much XP (level = total_xp // K + 1). See docs/design/rebuild/xp-economy.md
 
+#: What ONE completed Job Coverage challenge slot pays, to that slot's single job.
+#:
+#: It lives HERE rather than in the `challenges` app on purpose: this file is where the economy is
+#: legible in one place, so that `report_xp_economy` CAN read it. An XP value hidden inside a feature
+#: app is an XP value the economy audit cannot see. Note the tense -- that command imports
+#: `CONTRACT_XP_TOTAL` and `JOB_XP_PER_LEVEL` and does not yet import this one. Wiring it in belongs
+#: with the chunk that starts paying the XP, not with the chunk that names the number.
+#:
+#: NOTE WHAT THIS NUMBER IS, because it equals `CONTRACT_XP_TOTAL` and that invites the wrong reading.
+#: T is a whole contract's payout SPLIT EVENLY across its 1-6 jobs; this is the same figure aimed at
+#: ONE job. So relative to what that job would normally earn from the same game it is 1x on a
+#: single-job contract and up to 6x on a six-job one, and it stacks ON TOP of the contract's own
+#: payout, which the hunter claims separately. Under the flat curve it is exactly two job levels every
+#: time, which is the property that makes it legible to a hunter ("two levels a slot").
+#:
+#: A full 25-slot run therefore pays 150,000 bonus XP, i.e. 50 job levels, and Pursuer Level is the
+#: sum of per-job levels. That is a deliberate, owner-approved amount, not an oversight -- but it is
+#: the reason to model a change here with `report_xp_economy` before shipping one.
+CHALLENGE_SLOT_JOB_XP = 6000
+
 # Community Guidelines
 COMMUNITY_GUIDELINES = [
     {
