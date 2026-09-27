@@ -4,20 +4,27 @@ Everything here is per-hunter and therefore answered in the DATABASE. Per-user a
 the OOM pattern this project has paid for repeatedly (the rule in CLAUDE.md), and a hunter opening a
 slot picker is a whale as often as not.
 
-ONE DEFINITION OF "FITS THIS SLOT", and that matters more than it looks. `_shape` is the only place that
-knows a letter slot wants a name prefix and a job slot wants a job, and every caller goes through it --
-the picker's pool, the hatch's count, and the service's assignment gate. An earlier version spelled the
-A-Z rule twice, once as a queryset filter (`name__istartswith`) and once in Python
-(`name.upper().startswith(...)`), and the two DISAGREE: Python's `upper()` does full Unicode case
-mapping (one character to many) while Postgres folds with `lower()` (one to one). Measured, all three
-directions real:
+ONE DEFINITION OF "FITS THIS SLOT", and that matters more than it looks. `_shape` is the only place
+that knows a letter slot wants a name prefix and a job slot wants a job, and every caller goes through
+it. An earlier version spelled the A-Z rule twice -- once as a queryset filter (`name__istartswith`) and
+once in Python (`name.upper().startswith(...)`) -- and the two DISAGREE.
 
-    'Istanbul...' with a dotted capital I   -> pool YES, Python gate NO   (offered, then refused)
-    'final...' with an fi ligature          -> pool NO,  Python gate YES  (invisible to the hatch)
-    'sseta...' spelled with a sharp s       -> pool NO,  Python gate YES
+Both sides fold with UPPER: Django compiles `istartswith` on Postgres to
+`UPPER(name::text) LIKE UPPER('X%')`. The divergence is that Python's `str.upper()` does FULL Unicode
+case mapping, one character to many, while libc's `upper()` is per-character. Measured against this
+project's own cluster (PG 15, libc `en_US.utf8`):
 
-The first is a dead-end click in the picker; the other two are worse, because a contract the gate accepts
-but the pool never counts is a contract `hatch_is_open` cannot see.
+    'final...' spelled with an fi ligature  ->  Python 'FINAL' (4 chars become 5), pool NO, gate YES
+    'sseta...' spelled with a sharp s       ->  Python 'SSETA' (4 chars become 5), pool NO, gate YES
+
+ONE DIRECTION, not two: the Python gate accepts names the pool never holds. An earlier draft of this
+comment claimed the fold was `lower()`, claimed both directions, and offered a dotted capital I as an
+example -- which does NOT diverge, because U+0130 uppercases to itself in Python and in libc alike. The
+measurement had been taken against `lower()` as a proxy for what the ORM emits, and the proxy was wrong.
+
+The surviving direction is the quieter and worse one. A contract the gate accepts but the pool never
+held is a contract `hatch_is_open` cannot count, so the hatch can open while supply that the gate would
+have taken sits unseen.
 
 THE SLOT'S OWN OCCUPANT IS NOT "USED". `_slot_pool` excludes contracts already placed in OTHER squares of
 the run, never the one being filled -- a slot's pool has to be the same size whether that slot is empty or
@@ -125,9 +132,9 @@ def _completed_by(profile):
 def hatch_is_open(profile, challenge, key):
     """Is this slot's pool down to `HATCH_THRESHOLD` or fewer, lifting the completed-contract rule?
 
-    A COUNT in the database, asked about ONE slot: when its picker opens, and again when an assignment to
-    it needs to know. Never mapped over a whole run for a page render -- that would be 26 counts per
-    view, and the page does not need to know.
+    A COUNT in the database, asked about ONE slot: today only by `challenge_service.assign`, and by a
+    picker when one exists (no view layer is built yet). Never mapped over a whole run for a page
+    render -- that would be 26 counts per view, and the page does not need to know.
     """
     return eligible_contracts(profile, challenge, key).count() <= HATCH_THRESHOLD
 
@@ -194,6 +201,9 @@ def completion_dates(profile, contracts):
             .values_list('trophy__game__concept_id', 'first')
         )
 
+    # NOT the same small-side treatment, deliberately: `ProfileGame` is one row per GAME rather than per
+    # trophy, so the profile-filtered side is already bounded by a hunter's library rather than by their
+    # trophy count. `_detect_tiers` reads it exactly this way for the same reason.
     full_dates = dict(
         ProfileGame.objects
         .filter(profile=profile, progress=100, game__concept_id__in=all_concept_ids,

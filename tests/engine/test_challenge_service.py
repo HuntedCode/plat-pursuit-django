@@ -750,8 +750,11 @@ def test_importability_turns_on_the_join_date():
 # ── the gate and the pool must agree (added after the chunk-1 audit) ─────────────────────────────
 
 def test_the_assignment_gate_accepts_a_lowercase_name():
-    """The Python-side gate used to spell the A-Z rule itself, and case-folded differently from the
-    queryset. Now it delegates, so this exercises the same predicate the pool uses."""
+    """Plain ASCII case-insensitivity, which is all this covers.
+
+    It does NOT cover the Unicode divergence, and an earlier docstring implied it did: `'inside'.upper()`
+    starts with 'I' in Python too, so reverting the gate to its Python spelling leaves this green. The
+    mutation it does catch is `istartswith` becoming `startswith` in `_shape`."""
     profile = _member()
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
 
@@ -776,7 +779,7 @@ def test_the_gate_and_the_pool_agree_about_every_awkward_name():
     One profile per name, because a hunter has one active run per type and `assign` is the only honest
     way to ask the gate.
     """
-    for name, key in (('\u0130stanbul Tale', 'I'), ('\ufb01nal Cut', 'F'), ('\u00dfeta Test', 'S')):
+    for name, key in (('\ufb01nal Cut', 'F'), ('\u00dfeta Test', 'S')):
         profile = _member()
         challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
         contract = _contract(name)
@@ -789,25 +792,33 @@ def test_the_gate_and_the_pool_agree_about_every_awkward_name():
         except svc.ChallengeError:
             gate_accepted = False
 
-        assert in_pool == gate_accepted, (
-            f'{name!r} under {key}: the pool says {in_pool} and the gate says {gate_accepted}'
-        )
+        # ABSOLUTE as well as equal. Agreement alone is satisfied by both sides being wrong together,
+        # and these two names must be REFUSED: libc's per-character `upper()` does not expand them, so
+        # the pool cannot hold them and the gate must not take them.
+        assert in_pool is False, f'{name!r} unexpectedly in the pool under {key}'
+        assert gate_accepted is False, f'{name!r} accepted under {key} but the pool never held it'
 
 
 # ── hidden runs, and the boundary cases the audit found unpinned ─────────────────────────────────
 
 def test_a_hidden_run_refuses_writes_until_it_is_started_again():
-    """The precondition is re-asserted INSIDE the lock now, not read off a stale object. Hiding takes a
-    run out of view, and Start is the way back."""
+    """The hidden rule lives in `_lock_challenge` and nowhere else, so this reaches it.
+
+    An earlier version matched the fragment 'is hidden', which BOTH `_require_owner` and
+    `_lock_challenge` produced -- so deleting either check left the test green and it pinned only
+    "something, somewhere refuses a hidden run". `_require_owner` no longer mentions hiding at all, and
+    the fragment here is unique to the surviving message.
+    """
     profile = _member()
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.hide(challenge, profile)
     challenge.refresh_from_db()
 
-    with _refuses('is hidden'):
+    with _refuses('Start it again'):
         svc.assign(challenge, profile, 'A', _contract('Astro Bot'))
 
     resumed = svc.start(profile, CHALLENGE_TYPE_AZ)
+    assert resumed.pk == challenge.pk, 'Start created a new run instead of resuming the hidden one'
     assert svc.assign(resumed, profile, 'A', _contract('Alan Wake')).is_filled
 
 
@@ -850,14 +861,23 @@ def test_completion_dates_ignores_another_hunters_trophies():
     every contract somebody else finished look importable."""
     profile, other = _member(), _member()
     contract = _contract('Astro Bot')
-    _platted_at(other, contract, timezone.now() - timezone.timedelta(days=10))
+    game = _platted_at(other, contract, timezone.now() - timezone.timedelta(days=10))
+    # BOTH aggregates, not just the platinum one: an earlier version created no `ProfileGame`, so the
+    # 100% half was empty either way and dropping its profile filter would have gone unnoticed.
+    ProfileGameFactory(profile=other, game=game, progress=100,
+                       most_recent_trophy_date=timezone.now())
 
     assert eligibility.completion_dates(profile, [contract]) == {}
 
 
 def test_a_jobs_run_is_refused_when_the_catalogue_is_empty(monkeypatch):
     """The only guard against a zero-slot run, which the DB would otherwise refuse as a bare
-    `challenge_total_slots_positive` IntegrityError rather than a message."""
+    `challenge_total_slots_positive` IntegrityError rather than a message.
+
+    PATCHES `slot_keys_for` rather than emptying the Job table, which is the pragmatic call -- the
+    catalogue is seeded per session by `conftest.py` and truncating it would break every other jobs
+    test in the file. So this pins the GUARD, not the claim that an empty catalogue produces an empty
+    key list."""
     monkeypatch.setattr(svc, 'slot_keys_for', lambda challenge_type: [])
     profile = _member()
 
