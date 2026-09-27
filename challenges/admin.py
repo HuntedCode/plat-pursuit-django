@@ -22,8 +22,11 @@ class ChallengeSlotInline(admin.TabularInline):
     model = ChallengeSlot
     extra = 0
     can_delete = False
-    # 26 is the whole A-Z run, so the inline shows a complete one without paging. NOT `max_num = 0`:
-    # that renders every row rather than none, the trap `GameListItemInline` documents.
+    # 26 is the whole A-Z run. This is DOCUMENTATION rather than a behaviour change: with `extra = 0`
+    # a formset renders `initial_forms` whenever that exceeds `max_num`, so 26 and 0 do the same
+    # thing here. It states the expected row count for a reader, and that is all it does -- an
+    # earlier comment claimed it prevented the `max_num = 0` trap `GameListItemInline` documents,
+    # which is not true when `extra` is already 0.
     max_num = 26
     fields = ('position', 'key', 'contract_name', 'contract_slug', 'assigned_at',
               'is_completed', 'completed_at', 'completed_via', 'xp_redeemed_at')

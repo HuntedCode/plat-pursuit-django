@@ -3029,12 +3029,15 @@ class ContractXPGrant(models.Model):
     base_t; other sources leave those null. (Model rename to JobXPGrant is optional polish.)
     """
     TIER_CHOICES = [('platinum', 'Platinum'), ('full', '100%')]
-    # 'challenge' is the FIRST non-contract source to actually exist (quest/event/manual were
-    # forward-looking placeholders). It carries `source_id` = the ChallengeSlot id, which is also
-    # half of its idempotency guard -- see the partial unique index in Meta.constraints and
-    # `challenges.services.rewards`. The doc's warning is the reason both exist:
-    # `grant_job_xp` has no built-in idempotency for null-`earned_contract` grants, and this ledger
-    # is append-only, so a double-pay can only ever be offset, never removed.
+    # 'challenge' carries `source_id` = the ChallengeSlot id, which is also half of its idempotency
+    # guard -- see the two constraints in Meta. `grant_job_xp` has no built-in idempotency for
+    # null-`earned_contract` grants, and this ledger is append-only, so a double-pay can only ever be
+    # offset, never removed.
+    #
+    # NOT the first non-contract source, despite being the first with constraints: `seed_career_demo`
+    # writes `source='seed'`, and that value is absent from this list -- which is why no blanket
+    # source check sits beside the two new constraints below. Adding one would break that command.
+    # Either add 'seed' here or leave the gap knowingly; it is recorded rather than silently inherited.
     SOURCE_CHOICES = [('contract', 'Contract'), ('quest', 'Quest'), ('event', 'Event'),
                       ('manual', 'Manual'), ('challenge', 'Challenge')]
 
@@ -3067,6 +3070,8 @@ class ContractXPGrant(models.Model):
             # is no delete path to undo a double-pay, only a negating row, so the database is the
             # right place to refuse the second write. `challenges.models.ChallengeSlot.xp_redeemed_at`
             # is the other half, and catches the same mistake one layer earlier with a better message.
+            # NOTE there is no writer yet: `challenges/services/` is empty until the rewards chunk, so
+            # both of these rules are currently exercised only by tests.
             #
             # The condition is SCOPING, not protection, and it is worth being exact about that: a
             # blanket unique over these four columns would behave identically for the sibling sources,
@@ -4309,8 +4314,8 @@ class UserTitle(models.Model):
         ('badge', 'Badge'),
         ('milestone', 'Milestone'),
         ('badge_series', 'Badge Series'),   # grouping-badge rebuild: series-level title, kept distinct from legacy 'badge'
-        # Challenge completion titles, granted by `challenges.services.rewards` with `source_id` =
-        # the Challenge id. DELIBERATELY NOT routed through `BadgeSeries.title`, which is one nullable
+        # Challenge completion titles, to be granted by `challenges.services.rewards` (not yet built)
+        # with `source_id` = the Challenge id. DELIBERATELY NOT routed through `BadgeSeries.title`, which is one nullable
         # FK meaning "the title for this series": challenges award TWO titles (first completion and
         # second), and expressing that as a second FK would ripple through `badge_adapters`,
         # `sync_series_titles` (which groups by title ACROSS series and would prune the second one as

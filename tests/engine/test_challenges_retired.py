@@ -25,8 +25,9 @@ once: the old models must stay gone (their tables were dropped, and re-adding a 
 to `trophies` would resurrect a schema nothing can populate), while the rebuilt system lives in its
 own app with its own tables and its own migration history.
 
-`ArchivedAZChallenge` stays the thing this file is really for. The rebuilt system reads it; it does not
-replace it, and it must not be the only thing standing between that table and a squash.
+`ArchivedAZChallenge` stays the thing this file is really for. The rebuilt system is PLANNED to read it
+(nothing in `challenges/` references it yet) and will not replace it, so this file must not be the only
+thing standing between that table and a squash.
 """
 import pathlib
 

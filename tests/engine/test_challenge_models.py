@@ -4,8 +4,9 @@ Every rule pinned here is enforced in Postgres rather than in the service, and e
 because the service is not the only writer: the admin, a shell, a data migration and a future repair
 command all write around it. What the service adds is a good error message.
 
-Three of these would fail SILENTLY if the constraint were written the obvious way instead of the right
-way, and those are the tests worth having:
+Two of these would fail SILENTLY if the constraint were written the obvious way instead of the right
+way (items 1 and 3). Item 2 is here for the opposite reason -- to record that it pins LESS than it
+looks like it does:
 
 1. **The empty-slot trap.** `challengeslot_unique_contract` stops one contract filling six Job
    Coverage slots (six payouts for one completion). Written as a plain unique over a NULLABLE column
@@ -34,7 +35,8 @@ way, and those are the tests worth having:
 import contextlib
 
 import pytest
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from challenges.models import (
@@ -58,6 +60,11 @@ def _challenge(profile, *, challenge_type=CHALLENGE_TYPE_AZ, complete=False, del
     `completed_at` tracks `is_complete` because `challenge_completed_at_matches_flag` requires it --
     so a helper that let them disagree would fail every test for the wrong reason.
     """
+    if challenge_type == CHALLENGE_TYPE_JOBS:
+        # `total_slots` comes from the migration-seeded catalogue, and `challenge_total_slots_positive`
+        # refuses 0 -- so an empty Job table would fail every jobs test with a constraint error about
+        # slot counts rather than naming the real cause.
+        assert Job.objects.exists(), 'the seeded Job catalogue is empty; see conftest.py'
     now = timezone.now()
     return Challenge.objects.create(
         profile=profile, challenge_type=challenge_type, name=name,
@@ -70,12 +77,15 @@ def _challenge(profile, *, challenge_type=CHALLENGE_TYPE_AZ, complete=False, del
 def _slot(challenge, key, *, position=None, contract_slug='', completed=False, contract=None):
     """A slot on `challenge`.
 
-    `position` defaults to the next free one rather than to 0, because `challengeslot_unique_position`
-    means a fixed default would collide the moment a test wants two slots -- and it would fail as an
-    IntegrityError about positions in a test that is about something else entirely.
+    `position` defaults to one past the highest in use, rather than to 0, because
+    `challengeslot_unique_position` means a fixed default would collide the moment a test wants two
+    slots -- and it would fail as an IntegrityError about positions in a test that is about something
+    else entirely. `count()` was the first version and was not the same thing: after an explicit
+    `position=18`, a count of 1 hands back 1 and then collides on the next call.
     """
     if position is None:
-        position = challenge.slots.count()
+        highest = challenge.slots.aggregate(top=Max('position'))['top']
+        position = 0 if highest is None else highest + 1
     return ChallengeSlot.objects.create(
         challenge=challenge, key=key, position=position, contract=contract,
         contract_slug=contract_slug,
@@ -88,8 +98,13 @@ def _slot(challenge, key, *, position=None, contract_slug='', completed=False, c
 
 
 @contextlib.contextmanager
-def _refuses():
-    """Assert the block raises `IntegrityError`, AND give it its own atomic block.
+def _refuses(constraint):
+    """Assert the block raises `IntegrityError` FROM `constraint`, in its own atomic block.
+
+    Naming the constraint is the point. Twenty refusal tests asserting only the exception TYPE all
+    passed while telling us nothing about which rule fired -- and several of these states violate more
+    than one rule, so a test can go on passing after the constraint it was written for is dropped. The
+    `match` turns each one into a pin on a specific rule.
 
     The atomic is folded in rather than left to each caller on purpose. Without it the broken
     transaction poisons the rest of the test, so any later assertion fails with
@@ -97,7 +112,7 @@ def _refuses():
     An earlier draft described that reasoning while leaving callers to supply their own `atomic()`,
     which invited exactly the omission it was warning about.
     """
-    with pytest.raises(IntegrityError):
+    with pytest.raises(IntegrityError, match=constraint):
         with transaction.atomic():
             yield
 
@@ -108,7 +123,7 @@ def test_a_second_active_run_of_the_same_type_is_refused():
     profile = ProfileFactory()
     _challenge(profile)
 
-    with _refuses():
+    with _refuses('challenge_one_active_per_type'):
         _challenge(profile, name='A second run')
 
 
@@ -146,7 +161,7 @@ def test_two_hunters_each_get_their_own_active_run():
 def test_a_completed_run_must_carry_a_completion_date():
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_completed_at_matches_flag'):
         Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ,
                                  name='Finished, supposedly', total_slots=26,
                                  is_complete=True, completed_at=None)
@@ -157,7 +172,7 @@ def test_an_unfinished_run_must_not_carry_one():
     run sorts it into the Hall of Fame's ordering at a position it has not earned."""
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_completed_at_matches_flag'):
         Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ,
                                  name='Not done', total_slots=26,
                                  is_complete=False, completed_at=timezone.now())
@@ -166,7 +181,7 @@ def test_an_unfinished_run_must_not_carry_one():
 def test_a_run_needs_a_name():
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_name_not_blank'):
         Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='',
                                  total_slots=26)
 
@@ -176,7 +191,7 @@ def test_an_unknown_type_is_refused_by_the_database_not_only_by_choices():
     unknown type has no slot keys that make sense, so there is no UI path back from one."""
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_type_valid'):
         Challenge.objects.create(profile=profile, challenge_type='calendar',
                                  name='The one that does not return', total_slots=365)
 
@@ -204,7 +219,7 @@ def test_one_contract_cannot_fill_two_slots_in_the_same_run():
     challenge = _challenge(ProfileFactory(), challenge_type=CHALLENGE_TYPE_JOBS)
     _slot(challenge, 'mage', position=0, contract_slug='some-rpg')
 
-    with _refuses():
+    with _refuses('challengeslot_unique_contract'):
         _slot(challenge, 'champion', position=1, contract_slug='some-rpg')
 
 
@@ -224,7 +239,7 @@ def test_a_slot_key_appears_once_per_run():
     challenge = _challenge(ProfileFactory())
     _slot(challenge, 'A', position=0)
 
-    with _refuses():
+    with _refuses('challengeslot_unique_key'):
         _slot(challenge, 'A', position=1)
 
 
@@ -233,7 +248,7 @@ def test_an_empty_slot_cannot_be_completed():
     filled tile with no game on it."""
     challenge = _challenge(ProfileFactory())
 
-    with _refuses():
+    with _refuses('challengeslot_completed_is_filled_dated_and_explained'):
         ChallengeSlot.objects.create(challenge=challenge, key='A', position=0,
                                      is_completed=True, completed_at=timezone.now(),
                                      completed_via=COMPLETED_VIA_LIVE)
@@ -242,7 +257,7 @@ def test_an_empty_slot_cannot_be_completed():
 def test_a_completed_slot_must_be_dated():
     challenge = _challenge(ProfileFactory())
 
-    with _refuses():
+    with _refuses('challengeslot_completed_is_filled_dated_and_explained'):
         ChallengeSlot.objects.create(challenge=challenge, key='A', position=0,
                                      contract_slug='a-game', contract_name='A Game',
                                      is_completed=True, completed_at=None,
@@ -254,15 +269,18 @@ def test_xp_cannot_be_redeemed_for_an_incomplete_slot():
     cousin, and the ledger it writes to is append-only."""
     challenge = _challenge(ProfileFactory(), challenge_type=CHALLENGE_TYPE_JOBS)
 
-    with _refuses():
+    with _refuses('challengeslot_xp_needs_completion'):
         ChallengeSlot.objects.create(challenge=challenge, key='mage', position=0,
                                      contract_slug='a-game', contract_name='A Game',
                                      is_completed=False, xp_redeemed_at=timezone.now())
 
 
 def test_is_filled_reads_the_snapshot_and_not_the_live_fk():
-    """A slot whose contract row went away is still filled. That is the snapshot's entire purpose --
-    `reconcile_contracts` and staff re-anchoring both move the catalogue under a finished run."""
+    """`is_filled` reads `contract_slug`, not `contract_id`. Flip the property to the FK and this fails.
+
+    Scoped deliberately narrowly: this test never creates a Contract, so it says nothing about what
+    happens when one is deleted. That claim belongs to
+    `test_a_finished_slot_survives_its_contract_being_deleted`, which does the real thing."""
     challenge = _challenge(ProfileFactory())
     slot = _slot(challenge, 'A', position=0, contract_slug='a-game')
 
@@ -285,7 +303,7 @@ def test_a_challenge_slot_pays_its_job_once():
     job = Job.objects.first()
     _grant(profile, job, source='challenge', source_id=1)
 
-    with _refuses():
+    with _refuses('xpgrant_challenge_once_per_slot'):
         _grant(profile, job, source='challenge', source_id=1)
 
 
@@ -338,7 +356,7 @@ def test_a_challenge_grant_must_identify_its_slot():
     profile = ProfileFactory()
     job = Job.objects.first()
 
-    with _refuses():
+    with _refuses('xpgrant_challenge_needs_source_id'):
         _grant(profile, job, source='challenge', source_id=None)
 
 
@@ -357,7 +375,7 @@ def test_two_slots_cannot_share_a_position():
     challenge = _challenge(ProfileFactory())
     _slot(challenge, 'A', position=0)
 
-    with _refuses():
+    with _refuses('challengeslot_unique_position'):
         _slot(challenge, 'B', position=0)
 
 
@@ -367,7 +385,7 @@ def test_a_completed_slot_must_say_how_it_was_completed():
     applied to which slot. The constraint's comment claimed this clause before the clause existed."""
     challenge = _challenge(ProfileFactory())
 
-    with _refuses():
+    with _refuses('challengeslot_completed_is_filled_dated_and_explained'):
         ChallengeSlot.objects.create(challenge=challenge, key='A', position=0,
                                      contract_slug='a-game', contract_name='A Game',
                                      is_completed=True, completed_at=timezone.now(),
@@ -377,7 +395,7 @@ def test_a_completed_slot_must_say_how_it_was_completed():
 def test_an_unknown_completed_via_is_refused_by_the_database():
     challenge = _challenge(ProfileFactory())
 
-    with _refuses():
+    with _refuses('challengeslot_completed_via_valid'):
         ChallengeSlot.objects.create(challenge=challenge, key='A', position=0,
                                      contract_slug='a-game', contract_name='A Game',
                                      is_completed=True, completed_at=timezone.now(),
@@ -387,7 +405,7 @@ def test_an_unknown_completed_via_is_refused_by_the_database():
 def test_a_run_cannot_have_completed_more_slots_than_it_has_filled():
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_completed_within_filled'):
         Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Fibbing',
                                  total_slots=26, filled_count=2, completed_count=3)
 
@@ -395,7 +413,7 @@ def test_a_run_cannot_have_completed_more_slots_than_it_has_filled():
 def test_a_run_cannot_have_filled_more_slots_than_it_has():
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_filled_within_total'):
         Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Fibbing',
                                  total_slots=26, filled_count=27)
 
@@ -404,7 +422,7 @@ def test_a_run_with_no_slots_is_refused():
     """A zero-slot run is complete before it starts, and would render as "0 / 0"."""
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_total_slots_positive'):
         Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Empty',
                                  total_slots=0)
 
@@ -412,7 +430,7 @@ def test_a_run_with_no_slots_is_refused():
 def test_a_soft_deleted_run_must_carry_a_deletion_date():
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_deleted_at_matches_flag'):
         Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Gone',
                                  total_slots=26, is_deleted=True, deleted_at=None)
 
@@ -420,7 +438,7 @@ def test_a_soft_deleted_run_must_carry_a_deletion_date():
 def test_a_live_run_must_not_carry_one():
     profile = ProfileFactory()
 
-    with _refuses():
+    with _refuses('challenge_deleted_at_matches_flag'):
         Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Here',
                                  total_slots=26, is_deleted=False, deleted_at=timezone.now())
 
@@ -445,3 +463,52 @@ def test_a_finished_slot_survives_its_contract_being_deleted():
     assert slot.is_filled                    # the snapshot is not
     assert slot.contract_name == 'A Game'
     assert slot.is_completed
+
+
+# ── The index inventory, pinned ───────────────────────────────────────────────────────────────
+
+def test_the_slot_table_carries_no_redundant_indexes():
+    """A slot table holding 26 rows per run does not need nine indexes, and it had them.
+
+    Two arrived by accident and both were removed: an explicit `(challenge, position)` index that
+    duplicated `challengeslot_unique_position`'s own btree exactly, and the pair `SlugField` builds by
+    default on `contract_slug` (a plain btree plus a `varchar_pattern_ops` one for LIKE) -- neither of
+    which serves any read, because the only access pattern on that column is the per-challenge partial
+    unique.
+
+    Pinned by introspection rather than by reading the migration, because the migration is what we were
+    already reading when the duplicates went in. Asserting on real `pg_indexes` output is the only
+    version of this test that could have caught them.
+    """
+    with connection.cursor() as cur:
+        cur.execute("SELECT indexname FROM pg_indexes WHERE tablename = %s",
+                    [ChallengeSlot._meta.db_table])
+        names = {row[0] for row in cur.fetchall()}
+
+    assert not {n for n in names if 'contract_slug' in n}, (
+        f'SlugField rebuilt its default indexes on contract_slug: {sorted(names)}'
+    )
+    assert 'chalslot_position_idx' not in names, (
+        'the redundant (challenge, position) index is back; challengeslot_unique_position already '
+        'builds that btree'
+    )
+    # The ones that must exist: pkey, the three constraint-backed uniques, and the two FK indexes
+    # Postgres does NOT create automatically -- Django adds them for `challenge_id`.
+    assert 'challengeslot_unique_position' in names
+    assert 'challengeslot_unique_key' in names
+    assert 'challengeslot_unique_contract' in names
+
+
+def test_the_challenge_table_does_not_index_a_two_value_column():
+    """`db_index=True` was dropped from `challenge_type` because `chal_type_completed_idx` already
+    leads with it, and the same commit was removing another index for being redundant."""
+    with connection.cursor() as cur:
+        cur.execute("SELECT indexname FROM pg_indexes WHERE tablename = %s",
+                    [Challenge._meta.db_table])
+        names = {row[0] for row in cur.fetchall()}
+
+    assert not {n for n in names if n.endswith('challenge_type_a3d1c0f9') or
+                ('challenge_type' in n and n != 'chal_type_completed_idx')}, (
+        f'a bare index on challenge_type is back: {sorted(names)}'
+    )
+    assert 'chal_type_completed_idx' in names
