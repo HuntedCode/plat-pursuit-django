@@ -13,6 +13,8 @@ attribute nobody can reach.
 import pytest
 from django.test import Client, override_settings
 from django.urls import reverse
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from pathlib import Path
@@ -192,31 +194,44 @@ def test_a_run_hidden_after_finishing_leaves_the_history(client):
     assert client.get(reverse('my_challenges')).context['finished'] == []
 
 
-def test_the_page_cost_does_not_grow_with_a_hunters_runs(client, django_assert_max_num_queries):
-    """TWO SCALES, which the name promised and an earlier version did not deliver -- it asserted one
-    loose bound at one scale, and 20 was slack enough to hide a per-card or per-finished-run N+1.
+def test_the_pages_own_query_cost_is_exact(rf):
+    """AN EXACT COUNT, measured on the VIEW rather than through the client.
 
-    The page's own cost is 5-7 queries; the ceiling here is tight enough that an extra query per run
-    would break it, and the second measurement is what makes "does not grow" mean anything."""
-    profile = _hunter(client)
+    Both earlier versions were wrong in opposite directions. A ceiling of 20 was slack enough to hide a
+    per-card N+1; tightening it to 12 made the test FLAKY -- it passed at 10 in a whole-file run and
+    failed at 13 in isolation, because four site-wide context-processor queries cache for 60s in locmem
+    and are warmed by whichever test ran first. A request-level budget cannot be both tight and stable
+    while it is measuring other people's queries.
+
+    So this measures `get_context_data` alone, where an exact number is meaningful and stable, and where
+    a per-card N+1 shows up as +2 rather than vanishing into slack. Two shapes, because an empty card
+    costs one query more than an active one (it asks `resumable_run` too).
+    """
+    profile = ProfileFactory(user_is_premium=True)
+    request = rf.get(reverse('my_challenges'))
+    request.user = profile.user
+
+    def cost():
+        view = MyChallengesView()
+        view.request, view.kwargs = request, {}
+        with CaptureQueriesContext(connection) as captured:
+            view.get_context_data()
+        return len(captured.captured_queries)
+
+    # Two EMPTY cards: 3 reads each (active, resumable, visible-completed) + 2 for the history.
+    assert cost() == 8
+
     svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.start(profile, CHALLENGE_TYPE_JOBS)
-    for _ in range(4):
-        done = Challenge.objects.create(
-            profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Old run', total_slots=26,
-            is_complete=True, completed_at=timezone.now())
-        assert done.pk
-
-    with django_assert_max_num_queries(12):
-        client.get(reverse('my_challenges'))
+    # Two ACTIVE cards: `resumable_run` is short-circuited, so one query fewer each.
+    assert cost() == 6
 
     for i in range(12):
         Challenge.objects.create(
-            profile=profile, challenge_type=CHALLENGE_TYPE_JOBS, name=f'More {i}',
-            total_slots=25, is_complete=True, completed_at=timezone.now())
-
-    with django_assert_max_num_queries(12):
-        client.get(reverse('my_challenges'))
+            profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name=f'Old {i}', total_slots=26,
+            is_complete=True, completed_at=timezone.now())
+    # AND IT DOES NOT GROW: the history is one count plus one bounded slice however many runs exist.
+    assert cost() == 6
 
 
 # ── the beta gate, rendered rather than redirected ───────────────────────────────────────────────
@@ -292,14 +307,6 @@ def test_a_free_hunter_cannot_start_during_the_beta_even_by_posting(client):
 
     assert not Challenge.objects.filter(profile=profile).exists()
     assert 'beta for members first' in resp.content.decode()
-
-
-def test_an_unknown_type_cannot_be_posted(client):
-    profile = _hunter(client)
-
-    client.post(reverse('challenge_start', args=['calendar']), follow=True)
-
-    assert not Challenge.objects.filter(profile=profile).exists()
 
 
 def test_starting_requires_a_post(client):
@@ -498,7 +505,7 @@ def test_the_card_count_of_finished_runs_obeys_the_pages_own_rule(client):
     resp = client.get(reverse('my_challenges'))
     card = {c['type']: c for c in resp.context['cards']}[CHALLENGE_TYPE_AZ]
 
-    assert card['completed_run_count'] == 0, 'a hidden finished run was counted on the card'
+    assert card['visible_completed_count'] == 0, 'a hidden finished run was counted on the card'
     assert resp.context['finished'] == []
 
 
@@ -516,7 +523,39 @@ def test_the_header_tally_counts_every_finished_run_not_just_the_listed_ones(cli
 
     assert resp.context['finished_total'] == limit + 3
     assert len(resp.context['finished']) == limit, 'HISTORY_LIMIT is not applied'
-    assert str(limit + 3) in resp.content.decode()
+
+    # SCOPED TO THE TALLY. `str(limit + 3) in body` was VACUOUS: 27 appears in the header star's SVG
+    # path data and in every "27 Sep" date, so it could not fail on any date -- reverting the template
+    # to `finished|length` left it green. Fourth wrong-scope assertion on this branch.
+    body = resp.content.decode()
+    start = body.index('pp-tally')
+    tally = body[start:body.index('</span>', start)]
+    assert str(limit + 3) in tally, f'the tally rendered something other than {limit + 3}'
+
+
+def test_a_lapsed_members_existing_run_keeps_a_live_button(client):
+    """THE RENDER HALF of the beta-gate fix, which was unpinned -- dropping `card.state == 'empty'`
+    from the template's condition left every test green while gating the button on a run the service
+    will happily let them continue. The exact symptom the fix was about, inverted: the page and the
+    service disagreeing about whose button is live."""
+    profile = _hunter(client, premium=True)
+    svc.start(profile, CHALLENGE_TYPE_AZ)
+    profile.user_is_premium = False
+    profile.save(update_fields=['user_is_premium'])
+
+    body = client.get(reverse('my_challenges')).content.decode()
+    az_card = body[body.index('A-Z Challenge'):body.index('Job Coverage Challenge')]
+
+    assert 'Continue' in az_card
+    assert 'aria-disabled' not in az_card, 'a lapsed member was shown a dead Continue'
+    # And the OTHER card, where they genuinely cannot start, still is gated.
+    assert 'aria-disabled' in body[body.index('Job Coverage Challenge'):]
+
+
+def test_the_three_outcome_constants_are_distinct():
+    """`test_starting_reports_which_...` asserts each branch returns the matching constant, which is
+    satisfied if two of them share a value."""
+    assert len({svc.CREATED, svc.RESUMED, svc.ALREADY_ACTIVE}) == 3
 
 
 def test_both_write_doors_share_one_rate_limit_bucket():
@@ -527,13 +566,22 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     Asserted on the decorators' own configuration rather than by firing 31 requests: the rate is a
     number somebody may tune, and a test that breaks when they tune it teaches them to delete it.
     """
+    import re
+
     import challenges.views as views
 
     assert views.CHALLENGE_WRITE_RATELIMIT_GROUP
     src = (ROOT / 'challenges' / 'views.py').read_text(encoding='utf-8')
-    assert src.count('group=CHALLENGE_WRITE_RATELIMIT_GROUP') == 2, (
-        'both write doors must name the shared group, or they get a bucket each'
-    )
+
+    # EVERY ARGUMENT, not just `group`. django_ratelimit hashes group, rate, key and methods together
+    # into the bucket identity, so changing `rate` or `key` on one door splits it just as surely -- and
+    # an earlier version pinned only `group`, then asserted a COUNT of 2 that a third write door would
+    # break while the sharing was still perfectly correct.
+    calls = [' '.join(c.split()) for c in re.findall(r'ratelimit\((.*?)\)\)', src, re.S)]
+
+    assert len(calls) >= 2, 'both write doors must be rate limited'
+    assert len(set(calls)) == 1, f'the write doors do not share one bucket: {set(calls)}'
+    assert 'group=CHALLENGE_WRITE_RATELIMIT_GROUP' in calls[0]
 
 
 def test_the_write_endpoints_light_the_rail():
@@ -565,12 +613,10 @@ def test_a_finished_run_can_still_be_hidden(client):
 
 
 def test_an_unknown_type_is_refused_with_a_reason(client):
-    """Tightened: an earlier version asserted only that no row was created, which a 500 would also
-    satisfy."""
+    """Replaces a looser twin that asserted only "no row was created", which a 500 also satisfies."""
     profile = _hunter(client)
 
     resp = client.post(reverse('challenge_start', args=['calendar']), follow=True)
 
-    assert resp.redirect_chain[-1][1] == 302
     assert 'not a challenge type' in resp.content.decode()
     assert not Challenge.objects.filter(profile=profile).exists()

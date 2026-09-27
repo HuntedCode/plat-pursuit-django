@@ -84,8 +84,13 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # "off my profile", and this page is the profile's.
         finished = Challenge.objects.completed().filter(profile=profile)
         # The TALLY counts them all; the LIST is sliced. Rendering `finished|length` for both made a
-        # hunter with 30 finished runs read "24 finished" -- the reason `my_lists.html` carries a
-        # separate `list_count` beside its sliced grid.
+        # hunter with 30 finished runs read "24 finished".
+        #
+        # `my_lists` is NOT the precedent an earlier comment claimed: it PAGINATES, and its `list_count`
+        # exists to render the cap ("3/25") rather than to reconcile a slice. The difference is real and
+        # unresolved here -- that page gives a reader pages to reach the rest, and this one advertises a
+        # total above a hard slice with no way further. `HISTORY_LIMIT` notes that the history wants its
+        # own page if anybody reaches it; until then the template says when it is truncated.
         context['finished_total'] = finished.count()
         context['finished'] = list(finished[:self.HISTORY_LIMIT])
         context['creation_is_open'] = svc.creation_is_open_to(profile)
@@ -132,15 +137,20 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
             # The verb IS the state, resolved here rather than in the template so the three cases are
             # visible in one place and a fourth cannot be added by accident in markup.
             'verb': {'active': 'Continue', 'resumable': 'Resume', 'empty': 'Start'}[state],
-            'completed_run_count': svc.visible_completed_count(profile, challenge_type),
+            # Keyed `visible_...` to match what it holds. Named `completed_run_count` it invited back
+            # the very confusion it was added to fix -- the two functions differ on hidden runs.
+            'visible_completed_count': svc.visible_completed_count(profile, challenge_type),
         }
 
 
 class _ChallengeActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
-    """POST-only, scoped to the hunter's own runs. `HideChallengeView` answers JSON; `StartChallengeView`
-    answers a redirect and uses none of the three helpers below -- for it this base is just
-    `LoginRequiredMixin + _LinkedProfileRequired + View`, which is worth saying because an earlier
-    docstring promised a JSON contract both subclasses shared and only one does.
+    """POST-only. What the two subclasses share is the gate, not the contract.
+
+    `HideChallengeView` resolves a run by id and answers JSON, using all four helpers below.
+    `StartChallengeView` resolves a TYPE, answers a redirect, and uses none of them -- for it this base
+    is just `LoginRequiredMixin + _LinkedProfileRequired + View`. Worth saying because an earlier
+    docstring promised a JSON contract both shared, and because "scoped to the hunter's own runs"
+    describes `get_challenge` rather than the class.
 
     `get_challenge` returns None rather than raising `Http404`, deliberately: this project installs a
     GET-only `handler404`, so an `Http404` raised from a POST comes back as a 405 listing GET/HEAD/OPTIONS
@@ -174,8 +184,15 @@ class StartChallengeView(_ChallengeActionView):
     `gamelists.CreateListView` writes down -- though unlike that one this returns to the SAME page,
     because the run's own page does not exist yet.
 
-    Both outcomes look identical from here, which is the point: `svc.start` decides whether this is a
-    fresh run, a resume, or a no-op on one already going, and the caller does not need to know.
+    Three outcomes, and they deliberately do NOT look identical -- `start_reporting` reports which
+    branch fired and the messages below differ. An earlier docstring said the opposite, describing the
+    `svc.start` call this no longer makes.
+
+    NOTE WHAT `ALREADY_ACTIVE` ACTUALLY IS, because it is not only the double-submit case: it is the
+    outcome of the card's PRIMARY button on an active run (the one labelled Continue). So Continue
+    currently posts, redirects here, and shows nothing -- the page's deadest button. That is because the
+    run's own page does not exist yet; when it does, Continue becomes a link to it and this outcome goes
+    back to being the edge case the comment below calls it.
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
@@ -194,7 +211,8 @@ class StartChallengeView(_ChallengeActionView):
             messages.success(request, f'{challenge.name} is back where you left it.')
         elif outcome == svc.CREATED:
             messages.success(request, f'{challenge.name} is ready. Pick your first game.')
-        # ALREADY_ACTIVE says nothing: a double submit or a stale tab should be a quiet no-op.
+        # ALREADY_ACTIVE says nothing. For a double submit or a stale tab that is right; for a Continue
+        # press it is merely all there is to say until the run has a page to go to.
         return redirect('my_challenges')
 
 

@@ -88,9 +88,9 @@
                 </p>
                 {% endif %}
 
-                {% if card.completed_run_count %}
+                {% if card.visible_completed_count %}
                 <p class="text-[0.7rem] text-base-content/40 mt-1">
-                    {{ card.completed_run_count }} finished before
+                    {{ card.visible_completed_count }} finished before
                 </p>
                 {% endif %}
 
@@ -158,6 +158,15 @@
                 </li>
                 {% endfor %}
             </ul>
+            {% comment %}SAID, rather than left as a discrepancy. The tally above counts every finished
+            run and this list is sliced, so without this a hunter reads "27 finished" over twenty-four
+            rows with no way to the rest. `HISTORY_LIMIT`'s own note says the history wants its own page
+            if anybody reaches this; until then, saying so is the honest half.{% endcomment %}
+            {% if finished_total > finished|length %}
+            <p class="text-xs text-base-content/50 mt-2">
+                Showing the {{ finished|length }} most recent of {{ finished_total }}.
+            </p>
+            {% endif %}
         </div>
     </section>
     {% endif %}

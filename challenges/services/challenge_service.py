@@ -252,7 +252,11 @@ ALREADY_ACTIVE = 'already_active'
 
 
 def start(profile, challenge_type):
-    """`start_reporting`, for the ~80 callers that only want the run. One implementation."""
+    """`start_reporting`, for callers that only want the run. One implementation.
+
+    Every caller is now a TEST -- the one production call site (`challenges.views.StartChallengeView`)
+    was migrated to `start_reporting`, because the page needs the outcome. Kept because ~85 test call
+    sites read better without an index, not because anything ships against it."""
     return start_reporting(profile, challenge_type)[0]
 
 
@@ -260,8 +264,8 @@ def start(profile, challenge_type):
 def start_reporting(profile, challenge_type):
     """Start a run of `challenge_type` -- or hand back the one already in progress.
 
-    Returns `(challenge, outcome)`, the shape Django's own `get_or_create` uses, where outcome is
-    `CREATED`, `RESUMED` or `ALREADY_ACTIVE`.
+    Returns `(challenge, outcome)` -- the same ARITY as Django's `get_or_create`, though that returns a
+    bool and this returns one of three values, which is the entire reason the function exists.
 
     RESUME BEFORE CREATE, and that is the whole shape of "there is no delete, only hide". Three cases,
     in order:
@@ -284,7 +288,10 @@ def start_reporting(profile, challenge_type):
     _refuse_if_unlinked(profile)
     challenge_type = _check_type(challenge_type)
 
-    Profile.objects.select_for_update().filter(pk=profile.pk).first()
+    # The locked row is BOUND, not discarded, because the beta gate below now reads it -- and rule 2
+    # says a precondition inside a lock is re-asserted on the row that came back. While the gate sat
+    # above the lock, reading the caller's instance was plainly best-effort; inside it, it is not.
+    locked_profile = Profile.objects.select_for_update().filter(pk=profile.pk).first() or profile
 
     active = active_run(profile, challenge_type)
     if active is not None:
@@ -317,7 +324,12 @@ def start_reporting(profile, challenge_type):
     # making more. Checked at the top, a hunter whose membership ended (or anyone at all, if the flag
     # is switched on after runs exist) was refused a Continue on a run they had already started,
     # while the page showed them a live button for it.
-    _refuse_if_beta_gated(profile)
+    #
+    # ONE CONSEQUENCE OF MOVING IT, stated because rule 1 says a write refuses before it starts: a
+    # gated request now takes the Profile row lock and runs two SELECTs before being refused, where it
+    # used to be refused lock-free. Immaterial in practice -- the lock is per-profile and the door is
+    # rate limited per user -- but it is no longer literally true that this refusal costs nothing.
+    _refuse_if_beta_gated(locked_profile)
 
     keys = slot_keys_for(challenge_type)
     if not keys:

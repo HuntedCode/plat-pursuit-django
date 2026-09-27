@@ -71,9 +71,11 @@ class RenderedSubnavItem:
     url_name alone. The resolver lives in the context processor so NoReverseMatch
     failures degrade to "skip this item" rather than 500.
 
-    ``icon`` is an optional Lucide-style icon name. The template renders
-    a matching SVG inline when set; items without an icon render as
-    label-only pills.
+    ``icon`` is an optional Lucide-style icon name, and NOTHING RENDERS IT (verified 2026-09).
+    The sub-nav template draws only the HUB's icon, through ``_hub_subnav_icon.html``, which
+    handles four hub keys and has no else branch; ``item.icon`` appears in no template on the
+    site. Every item renders as a label-only pill whatever this says. Kept because the values
+    read as intent, but do not expect a glyph, and do not treat two items sharing one as a bug.
 
     ``group`` is the rail group label (e.g. 'Catalog'); the template groups
     consecutive same-group items under a quiet separator.

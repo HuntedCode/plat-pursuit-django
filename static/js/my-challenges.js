@@ -33,6 +33,11 @@
      * how they come to disagree with the server. A reload is honest and this is a once-in-a-while action.
      */
     function onHide(btn) {
+        // GUARDED FIRST, before the confirmation. An earlier version asked the hunter to read a
+        // paragraph and press OK and only then discovered it could do nothing -- absolute silence, no
+        // request, no toast. If the helpers are missing there is nothing to confirm.
+        if (!API) { return; }
+
         var name = btn.dataset.name || 'this challenge';
         var ok = window.confirm(
             'Hide ' + name + '?\n\n'
@@ -41,12 +46,12 @@
         );
         if (!ok) { return; }
 
-        // GUARDED BEFORE the attribute is set. If `utils.js` failed to load or was renamed, `API.post`
-        // throws SYNCHRONOUSLY -- outside any promise -- so the `.catch` never runs, the attribute is
-        // never removed, and the boot guard below makes that button permanently inert for the rest of
-        // the session with no toast to say why.
-        if (!API || !Toast) { return; }
-
+        // WHY THE GUARD ABOVE MATTERS: `API.post` on a missing `API` throws SYNCHRONOUSLY, outside any
+        // promise, so the `.catch` below never runs -- the attribute would never be removed and the
+        // boot guard would leave this button inert for the rest of the session with no toast.
+        //
+        // `Toast` is NOT part of that guard: it is used only in the error branch, so gating the happy
+        // path on it would refuse a hide that would have worked.
         btn.setAttribute('aria-disabled', 'true');
         API.post(btn.dataset.url)
             .then(function () { window.location.reload(); })
