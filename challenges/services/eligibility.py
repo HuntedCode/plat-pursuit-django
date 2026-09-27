@@ -39,8 +39,9 @@ sweep in `process_contracts` does the same. So the date comes from trophy data, 
 work actually happened.
 """
 from django.db.models import Exists, Min, OuterRef
+from django.db.models.functions import Substr, Upper
 
-from challenges.models import CHALLENGE_TYPE_AZ, HATCH_THRESHOLD
+from challenges.models import AZ_LETTERS, CHALLENGE_TYPE_AZ, HATCH_THRESHOLD
 from trophies.models import (
     Concept,
     Contract,
@@ -52,9 +53,21 @@ from trophies.models import (
 )
 
 
+def live_contracts():
+    """Every contract a hunter could be offered, before any slot or hunter narrows it.
+
+    One line, and it exists so `is_live=True` is written once. The contract-first search needs the same
+    floor `_shape` starts from but none of its slot shape -- a search spans the whole catalogue and then
+    asks `fitting_keys` which slots each result suits. Without this the search would have respelled the
+    published check, which is the flag most likely to grow a second condition (a region gate, a staged
+    rollout) and least likely to have it applied in two places at once.
+    """
+    return Contract.objects.filter(is_live=True)
+
+
 def _shape(challenge, key):
     """Live contracts of the right SHAPE for the `key` slot. The one definition, used by everything."""
-    pool = Contract.objects.filter(is_live=True)
+    pool = live_contracts()
     if challenge.challenge_type == CHALLENGE_TYPE_AZ:
         # `istartswith` on an unindexed 255-char column. Deliberate at this catalogue size: a scan of a
         # few thousand rows is sub-millisecond, and the index that would serve it is a FUNCTIONAL one on
@@ -77,6 +90,87 @@ def fits_slot(challenge, key, contract):
     guarantee that the gate and the pool can never disagree about a contract.
     """
     return _shape(challenge, key).filter(pk=contract.pk).exists()
+
+
+def fitting_keys(challenge, contract):
+    """Which of this run's slot keys could `contract` go in? The contract-first picker's question.
+
+    `fits_slot` answers the SLOT-FIRST question ("does this contract fit key K?") in one query, so the
+    obvious way to answer this one is to call it for every key -- 26 queries to fill in one square. This
+    answers it in one, and the two shapes are different QUESTIONS rather than a second copy of the rule:
+
+    - **A-Z**: a contract can only ever fit ONE letter, the first character of its name. So the answer is
+      that character, uppercased -- and it is uppercased BY POSTGRES, using the same `UPPER` the pool's
+      `istartswith` compiles to.
+
+      THE REASON IS DRIFT, NOT A KNOWN DISAGREEMENT, and the distinction matters because the first draft
+      of this docstring claimed the latter. It said a Python `name[0].upper()` "would re-introduce the
+      divergence" this module records, on the theory that Python does full Unicode case mapping where
+      libc's fold is per-character. That theory is real but it does not reach this comparison, and the
+      measurement says so: probed against this Postgres, `\N{LATIN SMALL LETTER LONG S}` and dotless
+      `\N{LATIN SMALL LETTER DOTLESS I}` fold to S and I in BOTH, and every character where Python
+      yields two letters (fi and fl ligatures, sharp s, the st ligature) is left alone by Postgres -- so
+      both answers are "not a single A-Z letter" and `istartswith` agrees. There is no case in the live
+      catalogue, or in any case I could construct, where the two differ.
+
+      What is still true is narrower and sufficient: that agreement is a property of today's Python and
+      today's Postgres collation, not a guarantee either owes us. Asking Postgres means this function and
+      the pool CANNOT drift apart, whatever an ICU upgrade does to folding, for the cost of one query.
+      The property test below asserts the equivalence over exactly those awkward characters, so a future
+      divergence fails a test instead of silently offering a square that `assign` refuses.
+
+      A name starting with a digit or a non-ASCII letter (`Okami` with a macron is the live example)
+      yields a key no A-Z run has, so it fits nothing -- which falls out of this rather than needing a
+      branch, exactly as it does in `_shape`.
+
+    - **jobs**: a contract fits every job it carries, up to six. One query through the M2M.
+
+    Returns a set of keys, unfiltered by whether those slots are EMPTY or already used -- the caller
+    knows its own slots and does not need a query to ask about them. `challenge_service.assign` remains
+    the only authority on whether a placement is allowed; this decides what to OFFER.
+
+    Pinned against `fits_slot` by a property test over the whole catalogue, which is what makes "two
+    questions, one rule" a fact rather than an intention.
+    """
+    return fitting_keys_for(challenge, [contract]).get(contract.id, set())
+
+
+def fitting_keys_for(challenge, contracts):
+    """{contract_id: set of keys} for a whole page, in ONE query. The form the picker actually needs.
+
+    THE SINGLE FORM WAS THE MISTAKE, and it is worth recording which way round. `fitting_keys` exists
+    because mapping `fits_slot` over 26 keys is 26 queries -- and then the contract-first panel called
+    `fitting_keys` once per search result, which is 24 queries for a page: the same N+1, one level up,
+    introduced by the fix for it. Bulk is the real shape; one contract is the special case.
+
+    A-Z is one annotated read over the whole page. `jobs` is one read of the M2M, which yields a row per
+    (contract, job) pair and a single row with a NULL slug for a contract carrying no jobs -- dropped
+    below, because "no jobs" means "fits no job slot".
+
+    `live_contracts()` is the floor in both branches, so an unpublished contract maps to an empty set
+    rather than being absent -- callers can then treat "not in the mapping" and "fits nothing" alike.
+    """
+    ids = [c.id for c in contracts]
+    if not ids:
+        return {}
+
+    if challenge.challenge_type == CHALLENGE_TYPE_AZ:
+        letters = set(AZ_LETTERS)
+        initials = dict(
+            live_contracts()
+            .filter(pk__in=ids)
+            .annotate(initial=Upper(Substr('name', 1, 1)))
+            .values_list('pk', 'initial')
+        )
+        return {cid: ({initials[cid]} if initials.get(cid) in letters else set()) for cid in ids}
+
+    out = {cid: set() for cid in ids}
+    for contract_id, slug in (live_contracts()
+                              .filter(pk__in=ids)
+                              .values_list('pk', 'jobs__slug')):
+        if slug is not None:
+            out[contract_id].add(slug)
+    return out
 
 
 def _slot_pool(challenge, key):
@@ -116,6 +210,28 @@ def completed_contracts(profile, challenge, key):
     have had to be made twice.
     """
     return _slot_pool(challenge, key).filter(Exists(_completed_by(profile)))
+
+
+def completed_contract_ids(profile, contracts):
+    """Which of `contracts` this hunter has already completed, as a set of ids, in one query.
+
+    THE SAME FACT AS `_completed_by`, IN THE OTHER FORM. That one is a correlated subquery, which is what
+    a pool query needs so the filter happens in the database over an unbounded set. This one answers the
+    same question about a BOUNDED list already in memory -- the picker's page of results -- where an
+    `__in` lookup is one indexed query and an annotation would mean re-running the pool.
+
+    Two forms of one fact rather than two rules, and the fact is `EarnedContract` existing IS completion:
+    the row appears only once a tier is reached and either tier counts, because platinum is not required.
+    Neither form contains completion logic that could drift from the contract engine's.
+    """
+    ids = [c.id for c in contracts]
+    if not ids:
+        return set()
+    return set(
+        EarnedContract.objects
+        .filter(profile=profile, contract_id__in=ids)
+        .values_list('contract_id', flat=True)
+    )
 
 
 def _completed_by(profile):

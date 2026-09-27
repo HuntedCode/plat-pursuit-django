@@ -22,7 +22,9 @@ depend on it being non-empty -- `slot_keys_for` reads it and the count becomes `
 import contextlib
 
 import pytest
+from django.db import connection
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from challenges.models import (
@@ -414,7 +416,7 @@ def test_the_importer_completes_a_square_from_a_finish_earned_after_you_joined()
     contract = _contract('Astro Bot')
     _platted_at(profile, contract, timezone.now() - timezone.timedelta(days=30))
 
-    slot = svc.assign(challenge, profile, 'A', contract)
+    slot = svc.assign(challenge, profile, 'A', contract, acknowledge_lock=True)
 
     assert slot.is_completed
     assert slot.completed_via == COMPLETED_VIA_IMPORT
@@ -470,7 +472,7 @@ def test_the_hatch_opens_a_finished_game_when_supply_is_too_thin():
     contract = _contract('Quest for Glory')
     _mark_completed(profile, contract)
 
-    slot = svc.assign(challenge, profile, 'Q', contract)
+    slot = svc.assign(challenge, profile, 'Q', contract, acknowledge_lock=True)
 
     assert slot.is_completed
     assert slot.completed_via == COMPLETED_VIA_HATCH
@@ -485,7 +487,7 @@ def test_the_importer_wins_when_both_rules_apply():
     contract = _contract('Quest for Glory')
     _platted_at(profile, contract, timezone.now() - timezone.timedelta(days=30))
 
-    slot = svc.assign(challenge, profile, 'Q', contract)
+    slot = svc.assign(challenge, profile, 'Q', contract, acknowledge_lock=True)
 
     assert slot.completed_via == COMPLETED_VIA_IMPORT
 
@@ -910,3 +912,320 @@ def test_completing_a_square_the_hunter_just_emptied_is_refused():
     challenge.refresh_from_db()
     assert challenge.completed_count == 0
     assert challenge.slots.get(key='A').is_completed is False
+
+
+# ── fitting_keys: the contract-first question, and its agreement with the slot-first one ──────────
+
+@pytest.mark.parametrize('name, expected', [
+    ('Bloodborne', {'B'}),
+    ('astro bot', {'A'}),                  # uppercased by Postgres, not by the caller
+    ('   Spaced', set()),                  # a leading space is not a letter, so it fits nothing
+    ('2064: Read Only Memories', set()),   # digit-initial: 12 such contracts are live and unusable
+])
+def test_an_az_contract_fits_exactly_the_letter_it_starts_with(name, expected):
+    challenge = svc.start(_member(), CHALLENGE_TYPE_AZ)
+
+    assert eligibility.fitting_keys(challenge, _contract(name)) == expected
+
+
+def test_a_non_ascii_initial_fits_nothing_without_needing_a_branch():
+    """The live example is a macron O (Okami). It uppercases to a character no A-Z run has a slot for, so
+    it drops out of the set -- the same way it drops out of `_shape`'s prefix match, with no special case
+    in either place."""
+    challenge = svc.start(_member(), CHALLENGE_TYPE_AZ)
+
+    assert eligibility.fitting_keys(challenge, _contract('\u014ckami')) == set()
+
+
+def test_a_jobs_contract_fits_every_job_it_carries():
+    challenge = svc.start(_member(), CHALLENGE_TYPE_JOBS)
+    jobs = list(Job.objects.order_by('slug')[:3])
+
+    keys = eligibility.fitting_keys(challenge, _contract('Astro Bot', jobs=jobs))
+
+    assert keys == {j.slug for j in jobs}
+
+
+def test_a_dead_contract_fits_nothing_on_either_type():
+    """`_shape` filters `is_live=True`, so an unpublished contract is in no pool. The picker must agree, or
+    it offers a game that `assign` then refuses with "not on the Job Board"."""
+    profile = _member()
+    az = svc.start(profile, CHALLENGE_TYPE_AZ)
+    jobs_run = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    dead = _contract('Bloodborne', jobs=[Job.objects.first()], live=False)
+
+    assert eligibility.fitting_keys(az, dead) == set()
+    assert eligibility.fitting_keys(jobs_run, dead) == set()
+
+
+#: Names whose first character stresses case folding, because that is where the two query shapes could
+#: come apart. Measured against this Postgres: the long s and dotless i fold to S and I in both Python
+#: and Postgres; the fi/fl/st ligatures and sharp s expand to two letters in Python and are left alone by
+#: Postgres, so both say "not a single A-Z letter". None of them diverges TODAY -- they are here so that
+#: the day one does, this test says so.
+FOLD_CASES = [
+    'final',                      # the control
+    '\ufb01nal',                  # fi ligature: Python -> 'FI', Postgres -> unchanged
+    '\ufb02ame',                  # fl ligature
+    '\ufb06tone',                 # st ligature
+    '\u00dfeta',                  # sharp s: Python -> 'SS'
+    '\u017fword',                 # long s: folds to S in BOTH
+    '\u0131sland',                # dotless i: folds to I in BOTH
+    '\u014ckami',                 # macron O: a real live catalogue row
+    '\u212atest',                 # Kelvin sign: uppercase already, and not ASCII
+    '2064: Read Only Memories',   # digit initial
+    '  leading space',
+    'astro bot',                  # plain lowercase
+]
+
+
+@pytest.mark.parametrize('challenge_type', [CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS])
+def test_fitting_keys_agrees_with_fits_slot_on_every_key(challenge_type):
+    """THE PROPERTY THAT KEEPS THE TWO QUERY SHAPES FROM DRIFTING.
+
+    `fits_slot` answers "does this contract fit key K?"; `fitting_keys` answers "which keys does it fit?".
+    Two questions, one rule -- which holds only while they agree.
+
+    WHAT THIS TEST DOES AND DOES NOT CATCH, stated because a mutation run made the difference concrete.
+    Replacing the DB-side fold with `contract.name[:1].upper()` does NOT fail this test: probed against
+    this Postgres, the two agree on every character above, so the Python version is correct today. Only
+    `test_fitting_keys_costs_one_query_whatever_the_run_length` notices that mutation, by the query count.
+
+    So this test is forward-looking rather than a trap for that specific mistake. Its job is to fail if an
+    ICU or collation change ever makes Postgres fold differently from the last time somebody checked --
+    which would otherwise show up as the picker offering a square `assign` refuses, for one letter, for
+    some hunters. `FOLD_CASES` is why it would fail loudly rather than never.
+    """
+    profile = _member()
+    challenge = svc.start(profile, challenge_type)
+    some_jobs = list(Job.objects.order_by('slug')[:4])
+    contracts = [_contract(name, jobs=some_jobs[:2] if i % 2 else some_jobs[2:])
+                 for i, name in enumerate(FOLD_CASES)]
+    keys = list(challenge.slots.values_list('key', flat=True))
+
+    for contract in contracts:
+        claimed = eligibility.fitting_keys(challenge, contract)
+        actual = {k for k in keys if eligibility.fits_slot(challenge, k, contract)}
+        assert claimed == actual, '%s: fitting_keys says %s, fits_slot says %s' % (
+            ascii(contract.name), sorted(claimed), sorted(actual))
+
+
+def test_fitting_keys_ignores_whether_the_slot_is_already_taken():
+    """It decides what could be OFFERED, not what is allowed -- `assign` owns that, and two places
+    deciding it is how they come to disagree. The picker filters by its own slots, which it already
+    holds, rather than spending a query to re-ask."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    svc.assign(challenge, profile, 'B', _contract('Bloodborne'))
+
+    # A second B-game still reports B, even though B is now full.
+    assert eligibility.fitting_keys(challenge, _contract('Brothers')) == {'B'}
+
+
+def test_fitting_keys_costs_one_query_whatever_the_run_length():
+    """The reason this function exists. Mapping `fits_slot` over 26 keys is 26 queries to fill in one
+    square; a jobs run would be 25. Both shapes below are ONE."""
+    profile = _member()
+    az = svc.start(profile, CHALLENGE_TYPE_AZ)
+    jobs_run = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    az_contract = _contract('Bloodborne')
+    jobs_contract = _contract('Astro Bot', jobs=list(Job.objects.order_by('slug')[:3]))
+
+    with CaptureQueriesContext(connection) as captured:
+        eligibility.fitting_keys(az, az_contract)
+    assert len(captured.captured_queries) == 1
+
+    with CaptureQueriesContext(connection) as captured:
+        eligibility.fitting_keys(jobs_run, jobs_contract)
+    assert len(captured.captured_queries) == 1
+
+
+# ── catchup_reasons: one precedence rule, two callers ─────────────────────────────────────────────
+
+def test_catchup_reasons_is_empty_when_neither_rule_lifts_the_exclusion():
+    """A deep pool and a hunter who has already finished one run: nothing lifts anything, so an
+    already-completed contract stays unselectable."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    # Close the importer by recording a finished run.
+    Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Old',
+                             total_slots=26, is_complete=True, completed_at=timezone.now())
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    # A pool well past HATCH_THRESHOLD so the hatch stays shut.
+    for i in range(HATCH_THRESHOLD + 2):
+        _contract('Bloodborne %d' % i)
+    done = _contract('Brothers')
+    _mark_completed(profile, done)
+
+    assert svc.catchup_reasons(profile, challenge, 'B', [done]) == {}
+
+
+def test_the_hatch_lifts_it_when_the_pool_is_thin():
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Old',
+                             total_slots=26, is_complete=True, completed_at=timezone.now())
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Brothers')
+    _mark_completed(profile, done)
+
+    assert svc.catchup_reasons(profile, challenge, 'B', [done]) == {done.id: COMPLETED_VIA_HATCH}
+
+
+def test_import_wins_over_hatch_when_both_apply():
+    """THE PRECEDENCE, and it is not cosmetic. Both rules can apply at once -- a thin pool AND a
+    completion that post-dates the account, on a first run. `import` is the more specific rule and the one
+    with a fairness date behind it, so it is the more honest label for what happened. A square records
+    which applied, permanently."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Brothers')
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    reasons = svc.catchup_reasons(profile, challenge, 'B', [done])
+
+    assert reasons == {done.id: COMPLETED_VIA_IMPORT}, 'the hatch must not claim an importable square'
+
+
+def test_catchup_reasons_labels_a_mixed_page_row_by_row():
+    """The picker's actual shape: one page holding both kinds and some that neither rule lifts. The old
+    single-contract function could only answer one at a time, which is why the picker would have been
+    tempted to decide precedence itself."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    importable = _contract('Brothers')
+    _platted_at(profile, importable, timezone.now() - timezone.timedelta(days=30))
+    # Completed, but BEFORE the account existed, so the importer's date rule refuses it.
+    too_old = _contract('Bloodborne')
+    _platted_at(profile, too_old, timezone.now() - timezone.timedelta(days=800))
+
+    reasons = svc.catchup_reasons(profile, challenge, 'B', [importable, too_old])
+
+    assert reasons[importable.id] == COMPLETED_VIA_IMPORT
+    # The hatch still covers it -- the B pool is thin -- but under the hatch's label, not the importer's.
+    assert reasons[too_old.id] == COMPLETED_VIA_HATCH
+
+
+@pytest.mark.parametrize('days_ago, expect_import', [(30, True), (800, False)])
+def test_the_bulk_and_single_forms_cannot_disagree(days_ago, expect_import):
+    """THE SHARING, PINNED. `assign` asks about one contract and the picker asks about a page, and they
+    must return the same verdict for the same contract -- otherwise the picker offers `hatch` where the
+    square gets stamped `import`, mislabelling a permanently locked, XP-bearing square.
+
+    Asserted as an equivalence rather than by re-listing the expected labels, so it keeps holding if the
+    precedence itself is ever revisited.
+    """
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Brothers')
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=days_ago))
+
+    bulk = svc.catchup_reasons(profile, challenge, 'B', [done]).get(done.id)
+    single = svc._why_a_completed_contract_is_allowed(profile, challenge, 'B', done)
+
+    assert bulk == single
+    assert (bulk == COMPLETED_VIA_IMPORT) is expect_import
+
+
+def test_catchup_reasons_asks_nothing_for_an_empty_page():
+    """The picker calls this with whatever its slice held, which on a slot with no completed contracts is
+    nothing. It must not spend the importer and hatch queries to answer about zero rows."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    with CaptureQueriesContext(connection) as captured:
+        assert svc.catchup_reasons(profile, challenge, 'B', []) == {}
+
+    assert captured.captured_queries == []
+
+
+# ── the lock acknowledgement ──────────────────────────────────────────────────────────────────────
+
+def test_a_completing_placement_stops_and_asks_before_it_writes():
+    """THE ONE IRREVERSIBLE ACTION on a run, so it is the one the service refuses to do silently.
+
+    An already-completed contract lands the square complete, and a completed square never clears -- it
+    cannot be reassigned, and its job XP is keyed to it. So `assign` raises rather than writing, and
+    nothing has changed when it does.
+    """
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    contract = _contract('Quest for Glory')
+    _platted_at(profile, contract, timezone.now() - timezone.timedelta(days=30))
+
+    with pytest.raises(svc.ConfirmationRequired) as caught:
+        svc.assign(challenge, profile, 'Q', contract)
+
+    assert caught.value.via == COMPLETED_VIA_IMPORT
+    assert caught.value.contract_name == 'Quest for Glory'
+    # NOTHING WAS WRITTEN. A stop that had already filled the square would be worse than no stop.
+    slot = challenge.slots.get(key='Q')
+    assert not slot.is_filled
+    assert not slot.is_completed
+    challenge.refresh_from_db()
+    assert challenge.filled_count == 0
+
+
+def test_the_hatch_asks_too_not_just_the_importer():
+    """The owner asked for a confirmation on importing history. The hatch lands a square
+    complete-and-locked by the same mechanism, so it gets the same stop -- narrower would mean explaining
+    why one irreversible click asked and the other did not."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    Challenge.objects.create(profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Old',
+                             total_slots=26, is_complete=True, completed_at=timezone.now())
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    contract = _contract('Quest for Glory')
+    _mark_completed(profile, contract)
+
+    with pytest.raises(svc.ConfirmationRequired) as caught:
+        svc.assign(challenge, profile, 'Q', contract)
+
+    assert caught.value.via == COMPLETED_VIA_HATCH
+
+
+def test_an_ordinary_placement_needs_no_confirmation():
+    """The stop is for completing placements only. Filling an empty square with a game you have NOT
+    finished is reversible -- you can clear it -- so asking would be noise."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    slot = svc.assign(challenge, profile, 'B', _contract('Bloodborne'))
+
+    assert slot.is_filled and not slot.is_completed
+
+
+def test_the_confirmation_is_a_challenge_error_so_an_old_caller_stays_safe():
+    """`ConfirmationRequired` subclasses `ChallengeError` deliberately. A caller that only knows the base
+    class still does something correct -- it declines to write and shows the message -- rather than
+    crashing or, worse, writing anyway."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    contract = _contract('Quest for Glory')
+    _platted_at(profile, contract, timezone.now() - timezone.timedelta(days=30))
+
+    with pytest.raises(svc.ChallengeError) as caught:
+        svc.assign(challenge, profile, 'Q', contract)
+
+    assert 'complete and locked' in str(caught.value)
+
+
+def test_the_confirmation_comes_after_every_other_refusal():
+    """A hunter must never be asked to confirm something that would then fail anyway -- that trains them to
+    click through a dialog which sometimes does nothing. So an ineligible contract is refused on its shape
+    even when it is one they have already finished."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    wrong_letter = _contract('Astro Bot')
+    _platted_at(profile, wrong_letter, timezone.now() - timezone.timedelta(days=30))
+
+    with pytest.raises(svc.ChallengeError) as caught:
+        svc.assign(challenge, profile, 'Q', wrong_letter)
+
+    assert not isinstance(caught.value, svc.ConfirmationRequired)

@@ -61,7 +61,7 @@ def slot_cards(challenge):
     version of this docstring gave only "four and five" -- the common case presented as the only one.
     """
     slots = list(challenge.slots.select_related('contract'))
-    covers = _covers_by_contract([s.contract for s in slots if s.contract_id])
+    covers = covers_by_contract([s.contract for s in slots if s.contract_id])
     atoms = _key_atoms(challenge)
 
     return [_card(slot, covers, atoms) for slot in slots]
@@ -119,8 +119,12 @@ def _label_for_key(key):
     return key if len(key) == 1 else key.replace('-', ' ').title()
 
 
-def _covers_by_contract(contracts):
-    """{contract_id: Game} for every contract that has one, in a fixed number of queries for the grid.
+def covers_by_contract(contracts):
+    """{contract_id: Game} for every contract that has one, in a fixed number of queries.
+
+    PUBLIC because the picker needs the same thing for its own bounded page of results. It was
+    private when the grid was the only caller; a second consumer is the same condition that promoted
+    `covers.sort_key` and `eligibility.member_concepts_by_contract` earlier in this branch.
 
     A contract usually has exactly one member concept; the exceptions are same-entry multi-platform or
     regional siblings. Where there are several, the cover is picked by `covers.sort_key` -- the same

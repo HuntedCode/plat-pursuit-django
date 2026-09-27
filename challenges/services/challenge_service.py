@@ -84,6 +84,23 @@ class ChallengeError(Exception):
     """A refusal a caller is expected to show the hunter. The message is user-facing."""
 
 
+class ConfirmationRequired(ChallengeError):
+    """Not a refusal: a stop. The caller must confirm and retry, and `via` says what they are confirming.
+
+    A SUBCLASS of `ChallengeError` on purpose, so an existing caller that catches the base class and shows
+    the message still does something correct and safe -- it declines to write and tells the hunter why. A
+    caller that wants the two-step flow catches this first and offers the confirmation.
+
+    `via` is `COMPLETED_VIA_IMPORT` or `COMPLETED_VIA_HATCH`; `contract_name` is the snapshot-to-be, so the
+    confirmation can name the game without a second query.
+    """
+
+    def __init__(self, message, *, via, contract_name):
+        super().__init__(message)
+        self.via = via
+        self.contract_name = contract_name
+
+
 # ── gates ────────────────────────────────────────────────────────────────────────────────────────
 
 def _refuse_if_unlinked(profile):
@@ -396,7 +413,7 @@ def _require_owner_allowing_hidden(challenge, profile):
 # ── assigning and clearing ───────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
-def assign(challenge, profile, key, contract):
+def assign(challenge, profile, key, contract, *, acknowledge_lock=False):
     """Put `contract` in the `key` slot, and complete the slot if the hunter has already finished it.
 
     Returns the saved slot. Every refusal happens before the first write.
@@ -411,9 +428,19 @@ def assign(challenge, profile, key, contract):
     `import` wins when both apply: it is the more specific rule and the one with a fairness date behind
     it, so it is the more honest label for what happened.
 
-    A slot completed this way LOCKS immediately, like any other completed slot. That is why the caller
-    must confirm before invoking the importer -- it is the one irreversible action a hunter can take on
-    their own run.
+    A slot completed this way LOCKS immediately, like any other completed slot -- and that is why this
+    function refuses to do it silently. `acknowledge_lock=False` raises `ConfirmationRequired` for any
+    placement that would land the square complete, so the confirmation is a property of the WRITE rather
+    than of whichever UI happened to call it.
+
+    IN THE SERVICE, NOT THE CLIENT, for two reasons. A dialog is the right place to ASK, but a confirmation
+    the server does not know about is one that a stale tab, a double-submit or a second client can skip --
+    and this is the one action on a run that cannot be undone afterwards. And the picker already has to
+    know which label applies (`catchup_reasons`), so the alternative was two places deciding when to warn.
+
+    BOTH RULES, not just the importer. The owner asked for a confirmation on importing history; the hatch
+    lands a square complete-and-locked by the same mechanism, so it gets the same stop. Narrower would mean
+    explaining to a hunter why one irreversible click asked and the other did not.
     """
     _refuse_if_unlinked(profile)
     _require_owner(challenge, profile)
@@ -443,6 +470,15 @@ def assign(challenge, profile, key, contract):
     slot.contract_name = contract.name
     slot.assigned_at = timezone.now()
     fields = ['contract', 'contract_slug', 'contract_name', 'assigned_at']
+
+    if completed_via is not None and not acknowledge_lock:
+        # AFTER every other check, so a confirmation is only ever asked for a placement that would
+        # actually succeed. Asking first and refusing second would train a hunter to confirm a dialog that
+        # sometimes does nothing.
+        raise ConfirmationRequired(
+            'You have already finished that one, so this square will be complete and locked straight '
+            'away. Confirm to use it.',
+            via=completed_via, contract_name=contract.name)
 
     if completed_via is not None:
         slot.is_completed = True
@@ -482,15 +518,49 @@ def _hunter_has_completed(profile, contract):
     return EarnedContract.objects.filter(profile=profile, contract=contract).exists()
 
 
-def _why_a_completed_contract_is_allowed(profile, challenge, key, contract):
-    """`COMPLETED_VIA_IMPORT`, `COMPLETED_VIA_HATCH`, or None if neither rule lifts the exclusion."""
+def catchup_reasons(profile, challenge, key, contracts):
+    """{contract_id: COMPLETED_VIA_IMPORT | COMPLETED_VIA_HATCH} for the ones a rule lifts.
+
+    Already-completed contracts are normally unselectable -- a slot filled with one would land complete
+    instantly. Two rules lift that, and a contract absent from this mapping is one neither lifts.
+
+    PRECEDENCE IS `import` OVER `hatch`, and the two labels are not interchangeable: `import` carries a
+    fairness date (the completion post-dates the account), `hatch` carries an admission that our supply
+    for this slot failed the hunter. A square records which one applied, and a hunter reading their own
+    finished run is entitled to see it. So the ordering below is load-bearing: `importable_ids` writes
+    first and the hatch pass uses `setdefault`.
+
+    THE BULK FORM IS THE REAL ONE. The picker needs this for a page of results at once, and the
+    single-contract caller (`assign`) is the special case -- expressed that way round because the
+    alternative is two spellings of a precedence rule, and the picker offering `hatch` where `assign`
+    records `import` would mislabel a permanently locked, XP-bearing square. Costs are unchanged either
+    way: `importer_is_available` is one query, `importable_ids` batches over the whole list, and
+    `hatch_is_open` is one COUNT about one slot.
+
+    NEVER MAP THIS OVER A WHOLE RUN. `hatch_is_open` is a COUNT per slot, so 26 slots is 26 counts; the
+    docstring there says the same thing. One slot, when its picker opens.
+    """
+    contracts = list(contracts)
+    if not contracts:
+        return {}
+
+    reasons = {}
     if importer_is_available(profile, challenge.challenge_type):
         joined_at = getattr(getattr(profile, 'user', None), 'date_joined', None)
-        if contract.id in eligibility.importable_ids(profile, [contract], joined_at):
-            return COMPLETED_VIA_IMPORT
+        for contract_id in eligibility.importable_ids(profile, contracts, joined_at):
+            reasons[contract_id] = COMPLETED_VIA_IMPORT
     if eligibility.hatch_is_open(profile, challenge, key):
-        return COMPLETED_VIA_HATCH
-    return None
+        for contract in contracts:
+            reasons.setdefault(contract.id, COMPLETED_VIA_HATCH)
+    return reasons
+
+
+def _why_a_completed_contract_is_allowed(profile, challenge, key, contract):
+    """`COMPLETED_VIA_IMPORT`, `COMPLETED_VIA_HATCH`, or None if neither rule lifts the exclusion.
+
+    One contract's worth of `catchup_reasons`, which is where the rule lives.
+    """
+    return catchup_reasons(profile, challenge, key, [contract]).get(contract.id)
 
 
 @transaction.atomic
