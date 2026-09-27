@@ -10,6 +10,17 @@
 > the `ArchivedAZChallenge` table before the drop, keyed on `psn_username` +
 > `np_communication_id` so a rebuilt system can re-import it. Calendar and Genre progress was
 > deliberately **not** preserved.
+>
+> **The rebuild is IN FLIGHT** on `feature/challenges/rebuild`, and everything below describes the OLD
+> system, not it. What exists so far lives in a new `challenges` app: `Challenge` + `ChallengeSlot`
+> (the slot atom is a **Contract**, not a Game, and platinum is **not** required), the
+> `challenge_service` / `eligibility` / `slot_render` services, `process_challenges`, `/my-challenges/`
+> and `community/challenges/<id>/`. Two types only -- A-Z and Job Coverage; Calendar and Genre are not
+> coming back.
+>
+> This banner is a pointer, not a rewrite. The body below is deliberately left in its old tense: the
+> rebuild is half-built, and re-tensing a doc to describe a moving target is how a doc starts asserting
+> things that are not true. It gets rewritten as one piece in this branch's doc pass.
 
 Comprehensive documentation for Platinum Pursuit's three challenge types: A-Z Platinum Challenge, Platinum Calendar Challenge, and Genre Challenge. All three share a common `Challenge` base model and follow the same lifecycle (create, fill slots, sync-driven progress, completion, Hall of Fame).
 
