@@ -1,9 +1,13 @@
 /**
  * My Challenges -- one behaviour: hiding a run, with a confirmation that explains itself.
  *
- * Everything else on this page is server-rendered and posts a plain form. Starting or resuming a run is
- * a navigation, so it needs no JavaScript at all and deliberately has none: the page works with this
- * file blocked.
+ * Everything else on this page is server-rendered and posts a plain form. Starting, continuing and
+ * resuming a run are navigations, so they need no JavaScript at all and deliberately have none.
+ *
+ * HIDE DOES NOT DEGRADE, and the docstring used to imply otherwise by claiming the whole page works
+ * with this file blocked. With JS off the Hide button is present and dead. That matches `gamelists`,
+ * whose list delete is a JS-only `type="button"` for the same reason, so it is consistent rather than
+ * novel -- but Start is the part that genuinely works without this file, not all of it.
  *
  * A NATIVE `confirm()`, not the site's dialog primitive, following the reasoning `list-detail.js` writes
  * down for its own delete: the dialog primitive is for things you are COMPOSING, and this is a yes/no
@@ -36,6 +40,12 @@
             + 'finished stays finished, and pressing Start brings this same run back.'
         );
         if (!ok) { return; }
+
+        // GUARDED BEFORE the attribute is set. If `utils.js` failed to load or was renamed, `API.post`
+        // throws SYNCHRONOUSLY -- outside any promise -- so the `.catch` never runs, the attribute is
+        // never removed, and the boot guard below makes that button permanently inert for the rest of
+        // the session with no toast to say why.
+        if (!API || !Toast) { return; }
 
         btn.setAttribute('aria-disabled', 'true');
         API.post(btn.dataset.url)

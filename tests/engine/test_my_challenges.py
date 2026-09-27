@@ -15,7 +15,10 @@ from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from pathlib import Path
+
 from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS, Challenge
+from challenges.views import MyChallengesView
 from challenges.services import challenge_service as svc
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory, UserFactory
 from trophies.models import Contract
@@ -23,6 +26,8 @@ from trophies.models import Contract
 pytestmark = pytest.mark.django_db
 
 open_beta = override_settings(CHALLENGES_BETA_MEMBERS_ONLY=False)
+
+ROOT = Path(__file__).resolve().parents[2]
 
 _SEQ = {'n': 0}
 
@@ -145,14 +150,19 @@ def test_the_card_shows_progress_and_what_is_merely_planned(client):
 
 
 def test_the_hide_button_appears_only_on_an_active_run(client):
-    """A hidden run is already hidden, and an empty card has nothing to hide."""
+    """ALL THREE STATES, because two of them are not enough: checking empty and active only, the
+    condition could be relaxed to `{% if card.run %}` and Hide would render on a HIDDEN run -- which is
+    exactly what this test's name says must not happen -- while the test stayed green."""
     profile = _hunter(client)
-    empty = client.get(reverse('my_challenges')).content.decode()
-    assert 'data-chal-hide' not in empty
+    assert 'data-chal-hide' not in client.get(reverse('my_challenges')).content.decode()
 
-    svc.start(profile, CHALLENGE_TYPE_AZ)
-
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
     assert 'data-chal-hide' in client.get(reverse('my_challenges')).content.decode()
+
+    svc.hide(challenge, profile)
+    assert 'data-chal-hide' not in client.get(reverse('my_challenges')).content.decode(), (
+        'Hide rendered on a run that is already hidden'
+    )
 
 
 def test_finished_runs_are_listed_and_the_block_is_omitted_when_there_are_none(client):
@@ -183,8 +193,11 @@ def test_a_run_hidden_after_finishing_leaves_the_history(client):
 
 
 def test_the_page_cost_does_not_grow_with_a_hunters_runs(client, django_assert_max_num_queries):
-    """Flat by construction: two reads per type plus one bounded history query. Nothing here touches
-    trophy data, which the rest of this feature does."""
+    """TWO SCALES, which the name promised and an earlier version did not deliver -- it asserted one
+    loose bound at one scale, and 20 was slack enough to hide a per-card or per-finished-run N+1.
+
+    The page's own cost is 5-7 queries; the ceiling here is tight enough that an extra query per run
+    would break it, and the second measurement is what makes "does not grow" mean anything."""
     profile = _hunter(client)
     svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.start(profile, CHALLENGE_TYPE_JOBS)
@@ -194,7 +207,15 @@ def test_the_page_cost_does_not_grow_with_a_hunters_runs(client, django_assert_m
             is_complete=True, completed_at=timezone.now())
         assert done.pk
 
-    with django_assert_max_num_queries(20):
+    with django_assert_max_num_queries(12):
+        client.get(reverse('my_challenges'))
+
+    for i in range(12):
+        Challenge.objects.create(
+            profile=profile, challenge_type=CHALLENGE_TYPE_JOBS, name=f'More {i}',
+            total_slots=25, is_complete=True, completed_at=timezone.now())
+
+    with django_assert_max_num_queries(12):
         client.get(reverse('my_challenges'))
 
 
@@ -209,9 +230,11 @@ def test_a_free_hunter_sees_the_reason_as_text_and_a_disabled_start(client):
     body = client.get(reverse('my_challenges')).content.decode()
 
     assert 'beta for members first' in body
-    assert 'browsing is open now' in body
     assert 'aria-disabled="true"' in body
-    assert 'disabled>' not in body, 'a truly disabled button cannot be focused or announced'
+    assert 'disabled>' not in body, 'a disabled button leaves the tab order and cannot be reached'
+    # And it must NOT promise a browse that does not exist yet: `challenges` still answers the
+    # "coming back soon" placeholder, so sending a gated hunter there was a dead end.
+    assert 'browsing is open' not in body
 
 
 def test_a_member_sees_no_beta_notice(client):
@@ -376,3 +399,178 @@ def test_my_challenges_sits_in_my_pursuit_tools():
     # rail item whose URL sits outside its own hub's prefixes drops you out of the hub the moment you
     # click it -- the rail vanishes or another hub's lights up.
     assert '/my-challenges/' in MY_PURSUIT_HUB.prefixes
+
+
+# ── the audit's findings, pinned ─────────────────────────────────────────────────────────────────
+
+def test_the_breadcrumb_renders_its_labels():
+    """B1: the partial reads `item.text`, and this page passed `label` -- so both crumbs rendered as
+    EMPTY elements and the JSON-LD carried two blank names. Nothing tested the breadcrumb, which is
+    exactly why it shipped."""
+    client = Client()
+    _hunter(client)
+
+    body = client.get(reverse('my_challenges')).content.decode()
+
+    # SCOPED TO THE <nav>, because both labels also appear in the navbar and the page heading -- so a bare
+    # `in body` passed with the bug still present. The third wrong-scope assertion on this branch.
+    start = body.index('aria-label="Breadcrumb"')
+    crumbs = body[start:body.index('</nav>', start)]
+
+    assert 'My Pursuit' in crumbs
+    assert 'My Challenges' in crumbs
+    assert 'Home' in crumbs
+    assert "></a>" not in crumbs, "a breadcrumb rendered as an empty anchor"
+
+
+def test_a_lapsed_member_can_still_continue_a_run_they_already_started():
+    """B4: the beta gate fired BEFORE the resume branches, so it refused a hunter their own existing run.
+
+    It gates CREATING, never keeping -- the line `gamelists._refuse_if_not_member` draws, where a lapsed
+    member keeps everything and only loses making more. Reachable two ways: a membership ending, or the
+    flag being switched on after runs already exist.
+    """
+    client = Client()
+    profile = _hunter(client, premium=True)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    profile.user_is_premium = False          # membership lapses
+    profile.save(update_fields=['user_is_premium'])
+
+    resumed = svc.start(profile, CHALLENGE_TYPE_AZ)
+    assert resumed.pk == challenge.pk, 'a lapsed member was refused their own active run'
+
+    # And the same for a hidden one, which is the other half of the branch the gate used to precede.
+    svc.hide(challenge, profile)
+    assert svc.start(profile, CHALLENGE_TYPE_AZ).pk == challenge.pk
+
+    # But still no NEW run of the other type.
+    with pytest.raises(svc.ChallengeError, match='beta for members first'):
+        svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+
+def test_starting_reports_which_of_its_three_branches_fired():
+    """B5: the view used `filled_count` to pick its message, which cannot tell a fresh run from an empty
+    resumed one and said "back where you left it" about a run that had never gone away."""
+    client = Client()
+    profile = _hunter(client)
+
+    challenge, outcome = svc.start_reporting(profile, CHALLENGE_TYPE_AZ)
+    assert outcome == svc.CREATED
+
+    assert svc.start_reporting(profile, CHALLENGE_TYPE_AZ)[1] == svc.ALREADY_ACTIVE
+
+    svc.hide(challenge, profile)
+    assert svc.start_reporting(profile, CHALLENGE_TYPE_AZ)[1] == svc.RESUMED
+
+
+def test_a_double_submit_says_nothing_rather_than_claiming_a_resume(client):
+    """The one case the old message was actively WRONG rather than merely silent: a stale tab or a
+    back-button repost on a run that never left."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    svc.assign(challenge, profile, 'A', _contract('Astro Bot'))
+
+    body = client.post(reverse('challenge_start', args=[CHALLENGE_TYPE_AZ]), follow=True).content.decode()
+
+    assert 'back where you left it' not in body
+
+
+def test_a_fresh_run_says_it_is_ready(client):
+    """The other half: creating a run used to be a silent 302, because `filled_count` was 0."""
+    _hunter(client)
+
+    body = client.post(reverse('challenge_start', args=[CHALLENGE_TYPE_AZ]), follow=True).content.decode()
+
+    assert 'is ready' in body
+
+
+def test_the_card_count_of_finished_runs_obeys_the_pages_own_rule(client):
+    """B3: the card used `completed_run_count`, which counts HIDDEN finished runs -- right for naming a
+    run and for the importer, wrong on a card. It made the page say "1 finished before" above a Finished
+    list showing none."""
+    profile = _hunter(client)
+    old = Challenge.objects.create(
+        profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name='Old run', total_slots=26,
+        is_complete=True, completed_at=timezone.now())
+    svc.hide(old, profile)
+
+    resp = client.get(reverse('my_challenges'))
+    card = {c['type']: c for c in resp.context['cards']}[CHALLENGE_TYPE_AZ]
+
+    assert card['completed_run_count'] == 0, 'a hidden finished run was counted on the card'
+    assert resp.context['finished'] == []
+
+
+def test_the_header_tally_counts_every_finished_run_not_just_the_listed_ones(client):
+    """B2: the tally rendered the SLICED list's length, so a hunter past the limit read the limit back.
+    Also pins `HISTORY_LIMIT`, which nothing tested -- deleting the slice left every test green."""
+    profile = _hunter(client)
+    limit = MyChallengesView.HISTORY_LIMIT
+    for i in range(limit + 3):
+        Challenge.objects.create(
+            profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name=f'Run {i}', total_slots=26,
+            is_complete=True, completed_at=timezone.now())
+
+    resp = client.get(reverse('my_challenges'))
+
+    assert resp.context['finished_total'] == limit + 3
+    assert len(resp.context['finished']) == limit, 'HISTORY_LIMIT is not applied'
+    assert str(limit + 3) in resp.content.decode()
+
+
+def test_both_write_doors_share_one_rate_limit_bucket():
+    """T4: the whole point of `CHALLENGE_WRITE_RATELIMIT_GROUP` is that create-hide-create cannot outrun
+    one door by using the other. Removing `group=` from either decorator silently splits the bucket and
+    doubles the effective rate, and nothing noticed.
+
+    Asserted on the decorators' own configuration rather than by firing 31 requests: the rate is a
+    number somebody may tune, and a test that breaks when they tune it teaches them to delete it.
+    """
+    import challenges.views as views
+
+    assert views.CHALLENGE_WRITE_RATELIMIT_GROUP
+    src = (ROOT / 'challenges' / 'views.py').read_text(encoding='utf-8')
+    assert src.count('group=CHALLENGE_WRITE_RATELIMIT_GROUP') == 2, (
+        'both write doors must name the shared group, or they get a bucket each'
+    )
+
+
+def test_the_write_endpoints_light_the_rail():
+    """T5: an item shipping without a `_URL_NAME_TO_SLUG_OVERRIDES` line is SILENT -- the strip renders
+    with nothing lit. The map's own comment says so, and the two lines this page added were untested;
+    deleting them broke nothing."""
+    from core.hub_subnav import _URL_NAME_TO_SLUG_OVERRIDES
+
+    for name in ('challenge_start', 'challenge_hide'):
+        assert _URL_NAME_TO_SLUG_OVERRIDES.get(name) == ('my_pursuit', 'my_challenges')
+
+
+def test_a_finished_run_can_still_be_hidden(client):
+    """T6: reachable only by a hand-rolled POST (the template gates Hide on `state == 'active'`), and it
+    has to work -- a hunter must be able to take a completed run off their profile. It rests on `hide`
+    deliberately NOT going through `_lock_challenge`, which refuses a finished run, so a future tidy-up
+    swapping those in would break it silently."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    Challenge.objects.filter(pk=challenge.pk).update(
+        is_complete=True, completed_at=timezone.now())
+
+    resp = client.post(reverse('challenge_hide', args=[challenge.pk]))
+
+    assert resp.status_code == 200
+    challenge.refresh_from_db()
+    assert challenge.is_deleted is True
+    assert not Challenge.objects.completed().filter(pk=challenge.pk).exists()
+
+
+def test_an_unknown_type_is_refused_with_a_reason(client):
+    """Tightened: an earlier version asserted only that no row was created, which a 500 would also
+    satisfy."""
+    profile = _hunter(client)
+
+    resp = client.post(reverse('challenge_start', args=['calendar']), follow=True)
+
+    assert resp.redirect_chain[-1][1] == 302
+    assert 'not a challenge type' in resp.content.decode()
+    assert not Challenge.objects.filter(profile=profile).exists()

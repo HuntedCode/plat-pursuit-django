@@ -120,8 +120,8 @@ def _refuse_if_beta_gated(profile):
     """
     if not creation_is_open_to(profile):
         raise ChallengeError(
-            'Challenges are in beta for members first. '
-            'Everyone can start one when the beta ends -- browsing is open to all now.'
+            'Starting a challenge is in beta for members first. '
+            'Everyone can start one when the beta ends.'
         )
 
 
@@ -242,9 +242,26 @@ def slot_keys_for(challenge_type):
 
 # ── starting, resuming and hiding ────────────────────────────────────────────────────────────────
 
-@transaction.atomic
+#: What `start_reporting` did. A run that was already going is NOT the same event as one resumed from
+#: hiding, and the page has to say different things about them -- so the branch is reported rather
+#: than inferred from `filled_count`, which cannot distinguish an empty resumed run from a fresh one
+#: and cannot distinguish a resumed run from one that never went away.
+CREATED = 'created'
+RESUMED = 'resumed'
+ALREADY_ACTIVE = 'already_active'
+
+
 def start(profile, challenge_type):
+    """`start_reporting`, for the ~80 callers that only want the run. One implementation."""
+    return start_reporting(profile, challenge_type)[0]
+
+
+@transaction.atomic
+def start_reporting(profile, challenge_type):
     """Start a run of `challenge_type` -- or hand back the one already in progress.
+
+    Returns `(challenge, outcome)`, the shape Django's own `get_or_create` uses, where outcome is
+    `CREATED`, `RESUMED` or `ALREADY_ACTIVE`.
 
     RESUME BEFORE CREATE, and that is the whole shape of "there is no delete, only hide". Three cases,
     in order:
@@ -266,15 +283,12 @@ def start(profile, challenge_type):
     """
     _refuse_if_unlinked(profile)
     challenge_type = _check_type(challenge_type)
-    _refuse_if_beta_gated(profile)
 
     Profile.objects.select_for_update().filter(pk=profile.pk).first()
 
-    active = Challenge.objects.filter(
-        profile=profile, challenge_type=challenge_type, is_complete=False, is_deleted=False,
-    ).first()
+    active = active_run(profile, challenge_type)
     if active is not None:
-        return active
+        return active, ALREADY_ACTIVE
 
     # `-updated_at` because more than one hidden unfinished run is reachable only by writing around
     # this service (the partial unique does not cover hidden rows). The newest is the one a hunter
@@ -295,7 +309,15 @@ def start(profile, challenge_type):
         hidden.is_deleted = False
         hidden.deleted_at = None
         hidden.save(update_fields=['is_deleted', 'deleted_at', 'updated_at'])
-        return hidden
+        return hidden, RESUMED
+
+    # THE BETA GATE FIRES HERE, not at the top, and the difference is a lapsed member's own run.
+    # It gates CREATING a run, never keeping or resuming one -- the same line
+    # `gamelists._refuse_if_not_member` draws, where a lapsed member keeps everything and only loses
+    # making more. Checked at the top, a hunter whose membership ended (or anyone at all, if the flag
+    # is switched on after runs exist) was refused a Continue on a run they had already started,
+    # while the page showed them a live button for it.
+    _refuse_if_beta_gated(profile)
 
     keys = slot_keys_for(challenge_type)
     if not keys:
@@ -310,7 +332,7 @@ def start(profile, challenge_type):
     ChallengeSlot.objects.bulk_create([
         ChallengeSlot(challenge=challenge, key=key, position=i) for i, key in enumerate(keys)
     ])
-    return challenge
+    return challenge, CREATED
 
 
 @transaction.atomic
@@ -693,10 +715,28 @@ def _hidden_unfinished(profile, challenge_type):
 
 
 def active_run(profile, challenge_type):
-    """The run of this type currently in progress and visible, or None."""
-    return Challenge.objects.filter(
-        profile=profile, challenge_type=challenge_type, is_complete=False, is_deleted=False,
+    """The run of this type currently in progress and visible, or None.
+
+    Built on `ChallengeQuerySet.active()` rather than repeating its predicate, and `start` calls this
+    rather than spelling it a third time. The argument `_hidden_unfinished` makes about sharing one
+    predicate applies identically here, and an earlier version made it while having three copies.
+    """
+    return Challenge.objects.active().filter(
+        profile=profile, challenge_type=challenge_type,
     ).first()
+
+
+def visible_completed_count(profile, challenge_type):
+    """Finished runs a reader can SEE. For display only.
+
+    NOT `completed_run_count`, which deliberately counts hidden finished runs too -- correct for
+    `_auto_name` (a run's ordinal should not shift because you hid one) and for
+    `importer_is_available` (hiding must not reopen the catch-up). Wrong on a card, where it made the
+    same page say "3 finished before" above a Finished list showing two.
+    """
+    return Challenge.objects.completed().filter(
+        profile=profile, challenge_type=challenge_type,
+    ).count()
 
 
 def resumable_run(profile, challenge_type):

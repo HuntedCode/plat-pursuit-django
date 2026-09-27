@@ -29,6 +29,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.shortcuts import redirect
+from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
@@ -63,10 +64,11 @@ class _LinkedProfileRequired:
 class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView):
     """The two cards, plus this hunter's finished runs.
 
-    Query cost is flat and small by construction: two reads per type for the card state, one bounded
-    queryset for the history. Nothing here scales with a hunter's library, so a whale's page costs what
-    anybody's does -- worth stating because the rest of this feature reads trophy data and this page
-    deliberately does not.
+    Query cost is flat and small by construction: two or three reads per type for the card state (the
+    third only when there is no active run to short-circuit it), plus a count and a bounded slice for
+    the history. Nothing here reads `ProfileGame`, `EarnedTrophy`, `EarnedContract` or a single slot
+    row, which the rest of this feature does -- so a whale's page costs what anybody's does. (It does
+    touch `Profile`, for `user_is_premium`, at no extra query.)
     """
 
     template_name = 'challenges/my_challenges.html'
@@ -80,13 +82,20 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # `completed()` carries its own ordering (newest finish first) and is built on `visible()`, so a
         # run hidden after finishing correctly drops out of the hunter's own history too -- hiding means
         # "off my profile", and this page is the profile's.
-        context['finished'] = list(
-            Challenge.objects.completed().filter(profile=profile)[:self.HISTORY_LIMIT]
-        )
+        finished = Challenge.objects.completed().filter(profile=profile)
+        # The TALLY counts them all; the LIST is sliced. Rendering `finished|length` for both made a
+        # hunter with 30 finished runs read "24 finished" -- the reason `my_lists.html` carries a
+        # separate `list_count` beside its sliced grid.
+        context['finished_total'] = finished.count()
+        context['finished'] = list(finished[:self.HISTORY_LIMIT])
         context['creation_is_open'] = svc.creation_is_open_to(profile)
+        # `text`, NOT `label`: `partials/breadcrumb.html` and `seo_tags` both read `text`, so a `label`
+        # key rendered two EMPTY crumbs and two blank names in the JSON-LD. Every other caller on the
+        # site passes `text` and starts at Home; this did neither.
         context['breadcrumb'] = [
-            {'label': 'My Pursuit', 'url': '/career/'},
-            {'label': 'My Challenges'},
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'My Pursuit', 'url': reverse_lazy('career')},
+            {'text': 'My Challenges'},
         ]
         return context
 
@@ -98,9 +107,10 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
     def _card(self, profile, challenge_type, label):
         """One type's state, resolved through the service.
 
-        `active` is asked first and `resumable` only when there is no active run, because the two are
-        mutually exclusive by the one-active-per-type constraint and asking anyway would be a query
-        spent to learn something the first answer already implied.
+        `active` is asked first and `resumable` only when there is none, which is a DISPLAY choice
+        rather than something the schema guarantees: `challenge_one_active_per_type` is partial on the
+        unfinished-and-visible predicate, so a visible active run and a hidden unfinished one of the
+        same type can coexist. When they do, the active one is what a hunter means.
         """
         run = svc.active_run(profile, challenge_type)
         state = 'active'
@@ -122,12 +132,15 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
             # The verb IS the state, resolved here rather than in the template so the three cases are
             # visible in one place and a fourth cannot be added by accident in markup.
             'verb': {'active': 'Continue', 'resumable': 'Resume', 'empty': 'Start'}[state],
-            'completed_run_count': svc.completed_run_count(profile, challenge_type),
+            'completed_run_count': svc.visible_completed_count(profile, challenge_type),
         }
 
 
 class _ChallengeActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
-    """POST-only, answers JSON, and translates a `ChallengeError` into a status code.
+    """POST-only, scoped to the hunter's own runs. `HideChallengeView` answers JSON; `StartChallengeView`
+    answers a redirect and uses none of the three helpers below -- for it this base is just
+    `LoginRequiredMixin + _LinkedProfileRequired + View`, which is worth saying because an earlier
+    docstring promised a JSON contract both subclasses shared and only one does.
 
     `get_challenge` returns None rather than raising `Http404`, deliberately: this project installs a
     GET-only `handler404`, so an `Http404` raised from a POST comes back as a 405 listing GET/HEAD/OPTIONS
@@ -156,9 +169,10 @@ class _ChallengeActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
 class StartChallengeView(_ChallengeActionView):
     """Start a run, or bring back the one you hid. A form POST, not JSON.
 
-    A navigation rather than an in-place update -- you land on the run -- and a plain form is the
-    sturdier version of that: it works with no JavaScript, and the page needs no client state to offer
-    it. The same reasoning `gamelists.CreateListView` writes down.
+    A navigation rather than an in-place update, and a plain form is the sturdier version of that: it
+    works with no JavaScript, and the page needs no client state to offer it. The same reasoning
+    `gamelists.CreateListView` writes down -- though unlike that one this returns to the SAME page,
+    because the run's own page does not exist yet.
 
     Both outcomes look identical from here, which is the point: `svc.start` decides whether this is a
     fresh run, a resume, or a no-op on one already going, and the caller does not need to know.
@@ -168,13 +182,19 @@ class StartChallengeView(_ChallengeActionView):
                                 method='POST', block=True))
     def post(self, request, challenge_type):
         try:
-            challenge = svc.start(request.user.profile, challenge_type)
+            challenge, outcome = svc.start_reporting(request.user.profile, challenge_type)
         except svc.ChallengeError as exc:
             messages.error(request, str(exc))
             return redirect('my_challenges')
 
-        if challenge.filled_count:
+        # THE OUTCOME, not `filled_count`. That could not tell a fresh run from an empty resumed one,
+        # and said "back where you left it" about a run that had never gone away -- the one case where
+        # it was actively wrong rather than merely silent.
+        if outcome == svc.RESUMED:
             messages.success(request, f'{challenge.name} is back where you left it.')
+        elif outcome == svc.CREATED:
+            messages.success(request, f'{challenge.name} is ready. Pick your first game.')
+        # ALREADY_ACTIVE says nothing: a double submit or a stale tab should be a quiet no-op.
         return redirect('my_challenges')
 
 

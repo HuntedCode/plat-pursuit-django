@@ -33,13 +33,16 @@
                     {% if not creation_is_open %}
                     <p class="text-xs text-warning mt-1">
                         Starting a challenge is in beta for members first. Everyone can start one when
-                        the beta ends &mdash; <a class="link" href="{% url 'challenges' %}">browsing is open now</a>.
+                        the beta ends.
+                        {% comment %}NO LINK to `challenges` yet. That URL still answers the "coming back
+                        soon" placeholder, so an earlier version of this line said "browsing is open now"
+                        and sent a gated hunter to a page telling them it is not.{% endcomment %}
                     </p>
                     {% endif %}
                 </div>
 
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
-                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ finished|length }}</span>
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ finished_total }}</span>
                     <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">finished</span>
                 </div>
             </div>
@@ -49,8 +52,8 @@
     {% comment %}TWO CARDS, ALWAYS BOTH, whatever state the hunter is in. A list of what they happen to
     own would show a newcomer nothing and would hide Job Coverage from anybody mid-A-Z.
 
-    `md:grid-cols-2` and NOT single-column on mobile: two cards side by side at 375px would each be
-    ~170px, so this is one of the grids the design system says collapses. Base is one column.{% endcomment %}
+    `grid-cols-1 md:grid-cols-2`: two cards side by side at 375px would each be ~170px, so this is one
+    of the grids the design system says collapses to a single column on mobile.{% endcomment %}
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
         {% for card in cards %}
         <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
@@ -96,11 +99,15 @@
                     a CSRF token -- and a plain form works with no JavaScript, which is the sturdier version
                     of a navigation.
 
-                    `aria-disabled`, NEVER `disabled`, when the beta gate is closed: a truly disabled button
-                    takes no pointer events and leaves the tab order, so it can be neither focused nor
-                    announced. The reason is rendered as text in the header above, so nothing depends on
-                    reaching an attribute. The form is not submitted either way -- the service refuses it,
-                    and that refusal is the real gate; this is only what a hunter sees.{% endcomment %}
+                    `aria-disabled`, NEVER `disabled`, when the beta gate is closed: a disabled button takes
+                    no pointer events, so its `title` never appears, and it leaves the tab order, so it
+                    cannot be reached by keyboard. (It IS still announced, as unavailable -- an earlier
+                    comment claimed otherwise.) The reason is rendered as text in the header above, so
+                    nothing depends on reaching an attribute at all.
+
+                    NOTE `aria-disabled` does NOT stop submission -- the form still posts and the service
+                    refuses it. That refusal is the real gate; this attribute is only what a hunter sees,
+                    and an earlier comment said the form was not submitted, which is false.{% endcomment %}
                     <form method="post" action="{% url 'challenge_start' card.type %}" class="contents">
                         {% csrf_token %}
                         <button type="submit" class="pp-cta"
