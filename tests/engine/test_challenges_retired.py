@@ -177,12 +177,27 @@ def test_the_sync_pipeline_does_not_call_a_challenge_checker():
 
     So it is scoped to the OLD module's path instead. That is what it always meant: the retired service
     lived at `trophies/services/challenge_service.py`, `test_the_service_and_its_views_stay_gone` asserts
-    that file is deleted, and this asserts nothing imports it. The three old per-type checkers stay named
-    because they are the functions that file exported, and no rebuilt hook will reuse those names.
+    that file is deleted, and this asserts nothing imports it.
+
+    FOUR SPELLINGS, not one, because the first narrowing lost two. `trophies.services.challenge_service`
+    catches only the fully-dotted form -- `from trophies.services import challenge_service` and the
+    relative `from .services.challenge_service import ...` (this file lives in `trophies/`, and relative
+    imports are used here) both slipped through. My own check missed it because I tested the dotted form,
+    which matches two patterns at once, so it proved less than it looked like it did.
+
+    Note what CANNOT be a pattern: the bare `services.challenge_service`, because
+    `challenges.services.challenge_service` -- the new app's module, legitimately imported here --
+    contains it. Every pattern below is chosen to exclude that string.
+
+    The three `check_*_challenge` entries are PREFIXES of the retired service's exported functions
+    (`check_az_challenge_progress` and its two siblings), not their full names. They work as substrings
+    and no rebuilt hook will reuse them.
     """
     source = (ROOT / 'trophies' / 'token_keeper.py').read_text(encoding='utf-8')
 
     for wired in ('trophies.services.challenge_service', 'trophies/services/challenge_service',
+                  'trophies.services import challenge_service',
+                  'from .services.challenge_service', 'from .services import challenge_service',
                   'check_az_challenge', 'check_calendar_challenge', 'check_genre_challenge',
                   'challenge_views'):
         assert wired not in source, f'token_keeper is wired to the RETIRED challenge system: {wired}'

@@ -9,11 +9,18 @@ goes unfinished forever in three cases the hook cannot reach:
 2. **Any other `EarnedContract` row written off the sync path** -- the nightly sweep, a staff
    `process_contracts --contract`, a re-earn after a reconcile. The hook never sees those.
 
-TWO holes, not three. An earlier version of this docstring listed a revoke-and-re-earn case separately
-and claimed a square could be "assigned before curation caught up" -- neither survives contact: a
-square can never hold a non-live contract (`assign` refuses it and `eligibility._shape` filters on
-`is_live`), and completion is STICKY, so a revoke cannot un-complete a square and leaves a sweep nothing
-to redo. The re-earn case is hole 2 restated.
+TWO holes, not three. An earlier version listed a revoke-and-re-earn case separately -- that is hole 2
+restated, since completion is STICKY and a revoke cannot un-complete a square, leaving a sweep nothing
+to redo.
+
+It also claimed a square "can never hold a non-live contract", which is FALSE and is contradicted by
+`test_a_draft_contract_still_completes_a_square_it_already_occupies` in this feature's own detection
+suite. `assign` refuses a draft and `eligibility._shape` filters `is_live`, but both bind at ASSIGN
+time: nothing un-assigns a square when staff later un-publish its contract, and the FK is `SET_NULL`
+rather than `PROTECT`. What is actually true is narrower -- a square holding an un-published contract is
+unreachable by EITHER detector, because `mark_contract_reached` is only ever called for live contracts,
+so no `EarnedContract` row is stamped and there is nothing to find. Not a hole this sweep closes; a case
+neither path covers.
 
 MUST RUN AFTER `process_contracts`, which is why it sits immediately after it in `nightly.STEPS`. A
 square completes when an `EarnedContract` row exists, and that command is what creates one -- running
@@ -68,9 +75,21 @@ class Command(BaseCommand):
         # snapshot columns already carry the game's name, which is the point of freezing them -- nothing
         # here joins `Contract`.
         #
-        # `.iterator()` rather than `list()`, the rule `process_contracts` writes down for itself: this
-        # result is site-wide, so materializing it pulls every pending square plus a Challenge and a
-        # Profile object per row into memory before a single write happens.
+        # `.iterator()` rather than `list()`, so a site-wide result is not pulled into the Python heap
+        # whole -- every pending square plus a Challenge and a Profile object per row -- before a single
+        # write happens.
+        #
+        # HONEST ABOUT WHAT IT BUYS, because `process_contracts` carries the same call with a
+        # qualification that does NOT transfer. A management command runs in autocommit, so Django's
+        # server-side cursor is `DECLARE ... WITH HOLD` and Postgres materialises the whole result into a
+        # tuplestore anyway. That command calls this harmless because its held set is ID-ONLY; this one
+        # selects every column of three joined tables, so the change moves the result from Python's heap
+        # to Postgres's rather than streaming it. Still the better default, and at 26 rows per run it is
+        # academic either way -- `.only()` is where to go first if this table ever gets big, before
+        # anything cleverer.
+        #
+        # It also makes the sweep depend on server-side cursors for its whole duration, which a
+        # transaction-mode connection pooler would break. `process_contracts` already takes that bet.
         #
         # `order_by('challenge_id', 'position')` overrides `Meta.ordering`, and that is not cosmetic.
         # Inherited, the sweep walks position 0 of every run, then position 1 of every run -- so a

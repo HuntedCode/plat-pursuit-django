@@ -42,13 +42,14 @@ from django.core.management.base import BaseCommand
 #:      reads from the `EarnedContract` rows step 6 writes -- so it MUST follow it. Run first it would
 #:      sweep yesterday's rows and report nothing to do on exactly the night a contract went live.
 #:      No watermark of its own: it asks a bounded question (which filled, unfinished squares name a
-#:      contract their owner finished?) over a table holding 26 rows per run, so there is nothing to
-#:      ration and a cursor would only create a way to miss something.
+#:      contract their owner finished?) over a very small table, so there is nothing to
+#:      ration and a cursor would only create a way to miss something (26 rows for a letter run, 25 for
+#:      a jobs run).
 #:      DELIBERATELY NOT a `DEPENDS_ON` entry, despite reading like one. That map makes a step SKIP, and
 #:      a half-written `EarnedContract` set is not a poisoned input here: completion is additive and
 #:      sticky, so this sweeps what it can see and picks up the rest tomorrow. Most of what it completes
-#:      was stamped on earlier nights anyway, so skipping it would forfeit work unrelated to tonight's
-#:      failure. Contrast `clean standings`, whose whole argument is that a rebuild MATERIALIZES a
+#:      may well have been stamped on earlier nights, in which case skipping it forfeits work unrelated
+#:      to tonight's failure. (Expected rather than measured -- the feature has not shipped.) Contrast `clean standings`, whose whole argument is that a rebuild MATERIALIZES a
 #:      snapshot that never consistently existed.
 #:   8. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
 #:      among the writers

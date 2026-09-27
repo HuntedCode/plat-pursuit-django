@@ -616,8 +616,10 @@ def pending_slots(profile=None):
     scoping by contract. But bounded by SERVICE DISCIPLINE, not by construction, and the difference
     matters here: `challenge_one_active_per_type` is PARTIAL on the unfinished-and-visible predicate, so
     it does not cover the hidden rows this query deliberately includes. What actually holds the bound is
-    `start` resuming the newest hidden run before creating a new one. Write around the service and a
-    profile can accumulate hidden unfinished runs without limit, and this set grows with them.
+    `start` resuming the newest hidden run before creating a new one -- and even that is not absolute:
+    the race documented on `start`'s own unhide branch lets its locked lookup return nothing while a
+    hidden unfinished row exists, so the service can itself leave a second one behind. Write around the
+    service and the count is unbounded, and this set grows with it.
     """
     qs = ChallengeSlot.objects.filter(challenge__is_complete=False, is_completed=False)
     qs = qs.exclude(contract_slug='')
@@ -633,9 +635,13 @@ def detect_for_profile(profile):
     Python filtering of a profile-scoped queryset -- then each is written through `mark_slot_completed`
     so the locking and recount rules hold and the last square still finishes the run.
 
-    The return value counts squares WRITTEN, not squares offered. The two differ only under a concurrent
-    writer, so no test in the suite can tell them apart -- `test_the_count_matches_how_many_squares_...`
-    says so rather than implying otherwise.
+    The return value counts squares WRITTEN, not squares offered, and no test can tell that apart from
+    `len(rows)` -- `test_the_count_matches_how_many_squares_...` says so rather than implying otherwise.
+    The reason is NOT that the writer's guards are all in the query's filter (they are re-read per square,
+    while the filter ran once): it is the counter invariant. `_recount` derives both counters from rows
+    and sets `is_complete` only at `completed_count >= total_slots`, while the check constraints force
+    `completed <= filled <= total` -- so every row still in hand is a filled, uncompleted square, and the
+    run can only reach completion on the LAST one. Faking it out of band raises instead.
 
     DELIBERATELY UNSCOPED by contract, unlike `contract_service.check_profile_contracts` which narrows to
     the concepts a sync touched. Narrowing buys nothing here: the candidate set is already ~51 rows, so
