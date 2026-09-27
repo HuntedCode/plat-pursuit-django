@@ -3,24 +3,32 @@
 WHY IT EXISTS, given the sync hook already does this. Sync only sees what a sync TOUCHED, so a square
 goes unfinished forever in three cases the hook cannot reach:
 
-1. **The contract was published after the hunter finished the game.** `mark_contract_reached` only fires
-   for LIVE contracts, so a square assigned before curation caught up waits for a sweep. This is the
-   same hole `process_contracts` step 6 of `nightly` was added to close, one layer up.
-2. **The hunter has stopped syncing.** Their `EarnedContract` rows still arrive via
-   `process_contracts --all`, and without this nothing turns them into squares.
-3. **Credit was revoked and re-earned.** `reconcile_contracts` deletes an `EarnedContract` row; a later
-   honest re-earn recreates it, and only a sweep notices.
+1. **The contract was published after the hunter finished the game, and they have not synced since.**
+   `process_contracts --all` stamps the reach; nothing on the sync path runs to turn it into a square.
+   The same hole step 6 of `nightly` closes for contracts, one layer up.
+2. **Any other `EarnedContract` row written off the sync path** -- the nightly sweep, a staff
+   `process_contracts --contract`, a re-earn after a reconcile. The hook never sees those.
+
+TWO holes, not three. An earlier version of this docstring listed a revoke-and-re-earn case separately
+and claimed a square could be "assigned before curation caught up" -- neither survives contact: a
+square can never hold a non-live contract (`assign` refuses it and `eligibility._shape` filters on
+`is_live`), and completion is STICKY, so a revoke cannot un-complete a square and leaves a sweep nothing
+to redo. The re-earn case is hole 2 restated.
 
 MUST RUN AFTER `process_contracts`, which is why it sits immediately after it in `nightly.STEPS`. A
 square completes when an `EarnedContract` row exists, and that command is what creates one -- running
 first, this would sweep yesterday's rows and report nothing to do on precisely the night a contract
 went live.
 
-NO WATERMARK, unlike `process_contracts`. That command needs one because it cannot tell which profiles
-might qualify without walking candidates, so a full pass is expensive and has to be rationed. This one
-asks a narrower question -- "which filled, unfinished squares name a contract their owner has
-finished?" -- which is one indexed-ish query over a table holding 26 rows per run. There is nothing to
-ration, and a cursor would only create a way to miss something.
+NO WATERMARK, unlike `process_contracts` -- and its watermark is not doing what an earlier version of
+this docstring said. It narrows the CONTRACT queryset (`live.filter(updated_at__gt=...)`), because a
+full pass is O(contracts x candidates) and because a contract's membership is IGDB-derived and can
+change without the row being touched. The profile axis is a separate, always-on mechanism there
+(`_candidate_profiles`), so that command can already tell cheaply which hunters might qualify.
+
+This one needs neither, because a square NAMES its own contract: "which filled, unfinished squares name
+a contract their owner has finished?" is one query over a table holding 26 rows for a letter run and 25
+for a jobs run. Nothing to ration, and a cursor would only create a way to miss something.
 """
 from django.core.management.base import BaseCommand, CommandError
 
@@ -59,14 +67,32 @@ class Command(BaseCommand):
         # `select_related` so the report can name the run and its owner without a query per square. The
         # snapshot columns already carry the game's name, which is the point of freezing them -- nothing
         # here joins `Contract`.
-        rows = list(candidates.select_related('challenge', 'challenge__profile'))
-        if not rows:
-            self.stdout.write('Nothing to complete.')
-            return
+        #
+        # `.iterator()` rather than `list()`, the rule `process_contracts` writes down for itself: this
+        # result is site-wide, so materializing it pulls every pending square plus a Challenge and a
+        # Profile object per row into memory before a single write happens.
+        #
+        # `order_by('challenge_id', 'position')` overrides `Meta.ordering`, and that is not cosmetic.
+        # Inherited, the sweep walks position 0 of every run, then position 1 of every run -- so a
+        # 26-square run finishing tonight takes and releases its Challenge row lock 26 times
+        # NON-CONSECUTIVELY and recounts 26 times, maximising contention with concurrent user writes. It
+        # also interleaved hunters in the report.
+        candidates = (candidates
+                      .select_related('challenge', 'challenge__profile')
+                      .order_by('challenge_id', 'position'))
+        rows = candidates.iterator(chunk_size=200)
+        # The empty case cannot be `if not rows:` any more -- an iterator is always truthy -- so it is
+        # settled after the loop, which costs nothing and keeps the query single-pass.
 
         completed = 0
+        seen = 0
         finished_runs = []
+        # NOT one enclosing transaction: that would hold every Challenge row lock for the whole sweep.
+        # Per-square transactions mean the sweep is not atomic, which is fine because completion is
+        # idempotent -- and mean `rows` is a stale snapshot for the sweep's duration, which is why
+        # `mark_slot_completed` re-asserts both the square's and the run's preconditions under its lock.
         for slot in rows:
+            seen += 1
             label = (f'{slot.challenge.profile.psn_username} / {slot.challenge.name} / '
                      f'{slot.key} -> {slot.contract_name}')
             if dry_run:
@@ -78,12 +104,23 @@ class Command(BaseCommand):
             if svc.mark_slot_completed(slot):
                 completed += 1
                 self.stdout.write(f'  completed       {label}')
+                # A DIFFERENT instance of the same row from the one `mark_slot_completed` locked (Django
+                # has no identity map), and that inner transaction has committed by now because this loop
+                # is not itself atomic -- so this reads the new state.
                 slot.challenge.refresh_from_db()
                 if slot.challenge.is_complete:
-                    finished_runs.append(label)
+                    finished_runs.append(f'{slot.challenge.profile.psn_username} / '
+                                         f'{slot.challenge.name}')
+
+        # THE EMPTY CASE, settled after the loop rather than before it: an iterator is always truthy,
+        # so `if not rows:` would have been dead and the sweep would have printed a bare success line
+        # on a quiet night. Costs nothing and keeps the query single-pass.
+        if seen == 0:
+            self.stdout.write('Nothing to complete.')
+            return
 
         if dry_run:
-            self.stdout.write(self.style.SUCCESS(f'\n{len(rows)} square(s) would be completed.'))
+            self.stdout.write(self.style.SUCCESS(f'\n{seen} square(s) would be completed.'))
             return
 
         self.stdout.write(self.style.SUCCESS(f'\n{completed} square(s) completed.'))

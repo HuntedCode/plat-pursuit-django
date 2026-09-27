@@ -1543,9 +1543,10 @@ class TokenKeeper:
             # very sync and leave it for the nightly sweep -- a hunter watching their own sync land would
             # see the trophy arrive and the square stay empty.
             #
-            # Deliberately UNSCOPED by contract, unlike its neighbour. A hunter has at most one active run
-            # per type at 26 squares each, so the candidate set is ~51 rows and one query settles it;
-            # narrowing to the concepts this sync touched would cost more than it saves.
+            # Deliberately UNSCOPED by contract, unlike its neighbour. A hunter's pending squares number
+            # ~51 at most (26 letters plus 25 jobs), so one query settles it and narrowing to the concepts
+            # this sync touched would cost more than it saves. One SELECT for a hunter with no runs at
+            # all; five statements per square actually completed, each in its own short transaction.
             #
             # IMPORT OUTSIDE THE GUARD for the reason spelled out above: a missing module is a deploy
             # error and must be loud, not one log line that silently skips the rest of the job forever.

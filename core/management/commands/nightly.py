@@ -44,6 +44,12 @@ from django.core.management.base import BaseCommand
 #:      No watermark of its own: it asks a bounded question (which filled, unfinished squares name a
 #:      contract their owner finished?) over a table holding 26 rows per run, so there is nothing to
 #:      ration and a cursor would only create a way to miss something.
+#:      DELIBERATELY NOT a `DEPENDS_ON` entry, despite reading like one. That map makes a step SKIP, and
+#:      a half-written `EarnedContract` set is not a poisoned input here: completion is additive and
+#:      sticky, so this sweeps what it can see and picks up the rest tomorrow. Most of what it completes
+#:      was stamped on earlier nights anyway, so skipping it would forfeit work unrelated to tonight's
+#:      failure. Contrast `clean standings`, whose whole argument is that a rebuild MATERIALIZES a
+#:      snapshot that never consistently existed.
 #:   8. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
 #:      among the writers
 #:   9. audit_badge_coverage   read-only report; last because it is the least urgent
@@ -65,11 +71,11 @@ from django.core.management.base import BaseCommand
 #: it in too is the right end state and is left as the next bite of the standing FOLLOW-UP in
 #: docs/guides/cron-jobs.md, rather than widening a leaderboard branch into the contracts pipeline.
 #:
-#: Steps 6 and 7 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
+#: Steps 6, 7 and 8 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
 #: Sync only evaluates what a sync TOUCHED, so anything authored after a hunter last touched the relevant
 #: game is invisible to them forever without a sweep. `evaluate_badges --all` has always been badges'
-#: net; contracts and milestones had none. A Contract published for a game 10,000 hunters already
-#: platinumed reached exactly zero of them until this ran.
+#: net; contracts, challenges and milestones had none. A Contract published for a game 10,000 hunters
+#: already platinumed reached exactly zero of them until this ran.
 #:
 #: Step 6 runs INCREMENTAL. A full contract sweep is O(contracts x candidates) and, stacked on step 4's
 #: pass over every profile, put this chain past any plausible window. Incremental sweeps only Contracts

@@ -81,23 +81,40 @@ def test_a_square_completes_once_its_contract_is_finished():
 
 
 def test_detection_is_idempotent():
-    """Both schedules run over the same squares, and the sync hook fires on every sync."""
+    """Both schedules run over the same squares, and the sync hook fires on every sync.
+
+    Asserts the QUERY as well as the count, because the count alone pins nothing: deleting
+    `is_completed=False` from `pending_slots` leaves this green, masked by `mark_slot_completed`'s own
+    guard returning False. The regression that hides behind it is real -- the nightly sweep would
+    re-read every completed square on the site, forever, which is precisely the cost
+    `completable_slots` claims not to pay.
+    """
     profile = _member()
     challenge, contract = _run_with_one_square(profile)
     _finished(profile, contract)
     svc.detect_for_profile(profile)
 
     assert svc.detect_for_profile(profile) == 0
+    assert svc.pending_slots(profile).count() == 0, (
+        'a completed square is still pending; the sweep would re-read it every night'
+    )
+    assert svc.completable_slots().count() == 0
 
 
 def test_an_empty_square_is_never_completed():
-    """`pending_slots` excludes them, so an unassigned letter cannot be finished by somebody else's
-    contract landing."""
+    """An unassigned letter cannot be finished by a contract the hunter happens to own.
+
+    THREE nets stop this and the count test pinned none of them: `pending_slots`' `exclude`, SQL NULL
+    semantics in the `EXISTS` (an empty square has `contract_id IS NULL`, so the correlation is never
+    true), and `mark_slot_completed`'s `is_filled` guard. An earlier version credited the first and
+    was actually passing on the second. Asserting the query pins the one it names.
+    """
     profile = _member()
     svc.start(profile, CHALLENGE_TYPE_AZ)
     contract = _contract('Astro Bot')
     _finished(profile, contract)
 
+    assert svc.pending_slots(profile).count() == 0, 'an empty square is pending'
     assert svc.detect_for_profile(profile) == 0
 
 
@@ -216,17 +233,24 @@ def test_a_draft_contract_still_completes_a_square_it_already_occupies():
 
 # ── the sweep's shape ────────────────────────────────────────────────────────────────────────────
 
-def test_the_sweep_finds_every_hunter_in_one_query():
-    """Site-wide, and NOT a loop over profiles: the cost should scale with runs in flight, not with how
-    many accounts exist. `process_contracts` has to walk candidates because contract membership is
-    derived; this does not, because a square names its own contract."""
+def test_the_sweep_finds_every_hunter_in_one_query(django_assert_num_queries):
+    """Site-wide in ONE query, and NOT a loop over profiles: the cost should scale with runs in
+    flight, not with how many accounts exist. `process_contracts` has to walk candidate profiles
+    because contract membership is derived; this does not, because a square names its own contract.
+
+    The query count is asserted rather than described. An earlier version named it in the test's own
+    title and checked only the row total, which a per-profile loop would satisfy just as well.
+    """
     for _ in range(3):
         profile = _member()
         _, contract = _run_with_one_square(profile)
         _finished(profile, contract)
-    _member()   # an account with no run at all, which must cost nothing
+    _member()   # an account with no run at all, which must not be visited
 
-    assert svc.completable_slots().count() == 3
+    with django_assert_num_queries(1):
+        found = list(svc.completable_slots())
+
+    assert len(found) == 3
 
 
 def test_the_sweep_completes_and_reports():
@@ -274,10 +298,14 @@ def test_an_unknown_username_is_an_error_rather_than_a_silent_no_op():
         call_command('process_challenges', '--user', 'nobody-here')
 
 
-def test_the_sweep_is_quiet_when_there_is_nothing_to_do():
+def test_the_sweep_is_quiet_when_there_is_nothing_to_do(capsys):
+    """Says so, rather than only not crashing. The empty branch has to be settled AFTER the loop now,
+    because `.iterator()` is always truthy and the `if not rows:` it replaced was dead code."""
     _member()
 
-    call_command('process_challenges')   # must not raise
+    call_command('process_challenges')
+
+    assert 'Nothing to complete.' in capsys.readouterr().out
 
 
 # ── scheduling ───────────────────────────────────────────────────────────────────────────────────
@@ -325,3 +353,50 @@ def test_the_sync_hook_imports_outside_its_guard():
     assert src[i:src.index('detect_for_profile(profile)', i)].count('try:') == 1, (
         'the import must sit above the try, not inside it'
     )
+
+
+def test_the_count_matches_how_many_squares_actually_became_completed():
+    """The count's real invariant: it equals the number of squares that went from pending to completed.
+
+    HONEST ABOUT ITS LIMIT, because the obvious stronger claim is not reachable here. `detect_for_profile`
+    returns a sum of successful writes rather than the row count of its own query, and those two differ
+    ONLY when the query offers a square that `mark_slot_completed` then refuses -- which single-threaded
+    cannot happen: every guard the writer applies (`is_completed`, `is_filled`, the run's `is_complete`)
+    is already in the query's own filter. It takes a concurrent writer, so replacing the sum with
+    `len(rows)` passes every test in this file and I could not construct one that kills it.
+
+    What this does pin is that the number means something: two pending squares, one of them not yet
+    finished by its owner, so the answer is 1 and not 2, not 0 and not the slot count.
+    """
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    first, second = list(Job.objects.all()[:2])
+    done_contract = _contract(f'Game for {first.slug}', jobs=[first])
+    svc.assign(challenge, profile, first.slug, done_contract)
+    svc.assign(challenge, profile, second.slug,
+               _contract(f'Game for {second.slug}', jobs=[second]))
+    _finished(profile, done_contract)     # only ONE of the two is finished
+
+    before = challenge.slots.filter(is_completed=True).count()
+    reported = svc.detect_for_profile(profile)
+    after = challenge.slots.filter(is_completed=True).count()
+
+    assert reported == after - before
+    assert reported == 1, 'the unfinished square must not be counted'
+
+
+def test_challenge_detection_is_isolated_rather_than_dependent():
+    """It reads what `process_contracts` writes, and still must NOT be a `DEPENDS_ON` entry.
+
+    That map makes a step SKIP, and a half-written `EarnedContract` set is not a poisoned input here:
+    completion is additive and sticky, so the sweep takes what it can see and picks the rest up tomorrow.
+    Most of what it completes was stamped on earlier nights anyway, so skipping would forfeit work
+    unrelated to tonight's failure.
+
+    Pinned in the shape `test_nightly.test_the_rarity_recompute_does_not_declare_a_dependency` uses, and
+    for the same reason: this step resembles a dependent one closely enough that somebody will add the
+    entry for symmetry.
+    """
+    from core.management.commands.nightly import DEPENDS_ON
+
+    assert 'challenge detection' not in DEPENDS_ON

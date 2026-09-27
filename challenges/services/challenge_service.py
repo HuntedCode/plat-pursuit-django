@@ -77,7 +77,7 @@ from challenges.models import (
     ChallengeSlot,
 )
 from challenges.services import eligibility
-from trophies.models import Job, Profile
+from trophies.models import EarnedContract, Job, Profile
 
 
 class ChallengeError(Exception):
@@ -447,7 +447,6 @@ def _hunter_has_completed(profile, contract):
     `EarnedContract` existing IS completion -- the row is created the moment a tier is reached, and
     either tier counts because platinum is not required.
     """
-    from trophies.models import EarnedContract
     return EarnedContract.objects.filter(profile=profile, contract=contract).exists()
 
 
@@ -494,12 +493,18 @@ def clear(challenge, profile, key):
 # ── completion ───────────────────────────────────────────────────────────────────────────────────
 
 @transaction.atomic
-def mark_slot_completed(slot, *, when=None, via=COMPLETED_VIA_LIVE):
+def mark_slot_completed(slot, *, via=COMPLETED_VIA_LIVE):
     """Record that a filled slot's contract is finished. Idempotent. Returns True if anything changed.
 
     The write half of detection, which lives here rather than in the detector so that every path to a
     completed slot -- the sync hook, the nightly sweep, the importer, the hatch -- goes through one
     function and cannot disagree about what completing a slot entails.
+
+    `completed_at` is NOW, deliberately, and there is no parameter to override it. The tempting
+    alternative is the contract's reach timestamp, which sits right there in the subquery -- but that is
+    itself a DETECTION stamp (see the module header on `*_reached_at`), so backdating to it would trade a
+    date that is honestly "when we noticed" for one that merely looks like an achievement date. A square
+    the nightly sweep backfills says tonight, and that is true.
 
     `completed_at` is OURS and is never read back from `EarnedContract`. That row gets DELETED when staff
     run `reconcile_contracts` over a contract whose derived membership stopped qualifying -- staff-run
@@ -515,6 +520,14 @@ def mark_slot_completed(slot, *, when=None, via=COMPLETED_VIA_LIVE):
     locked_challenge = Challenge.objects.select_for_update().filter(pk=slot.challenge_id).first()
     fresh = ChallengeSlot.objects.select_for_update().filter(pk=slot.pk).first()
     if locked_challenge is None or fresh is None:
+        return False
+    # THE RUN'S precondition, re-asserted under the lock as well as the square's. Both detectors read
+    # `challenge__is_complete=False` unlocked, so without this the rule "a finished run is never written
+    # to again" rested entirely on a stale read -- and a finished run has a badge and a title granted
+    # against it. Unreachable while the counters hold (`completed <= filled <= total` leaves no pending
+    # square on a finished run), and reachable the moment anything writes `total_slots` or `is_complete`
+    # out of band. A test in this suite does exactly that, which is the point.
+    if locked_challenge.is_complete:
         return False
     # BOTH preconditions re-asserted on the row that came back, not just `is_completed`.
     #
@@ -532,7 +545,7 @@ def mark_slot_completed(slot, *, when=None, via=COMPLETED_VIA_LIVE):
         return False
 
     fresh.is_completed = True
-    fresh.completed_at = when or timezone.now()
+    fresh.completed_at = timezone.now()
     fresh.completed_via = via
     fresh.save(update_fields=['is_completed', 'completed_at', 'completed_via'])
     _recount(locked_challenge)
@@ -582,8 +595,16 @@ def _recount(challenge):
 def pending_slots(profile=None):
     """Filled, uncompleted slots on runs that are still going. The ONE definition, for both detectors.
 
-    Matched on the LIVE FK when a caller narrows by contract, never on `contract_slug` -- see the module
-    header. The snapshot is what a finished square SAYS; the FK is what it IS while the run is live.
+    Completion is matched on the LIVE FK, in the `Exists` subqueries below, never on `contract_slug` --
+    see the module header. The snapshot is what a finished square SAYS; the FK is what it IS while the
+    run is live. (This function takes no contract argument; an earlier docstring described one.)
+
+    ONE WAY A SQUARE STAYS HERE FOREVER, documented because the header only covers the opposite risk: if
+    the `Contract` row is deleted the FK goes NULL (`SET_NULL`) while the slug snapshot survives, so the
+    square remains pending and the `Exists` can never match -- SQL NULL semantics, and the
+    `EarnedContract` rows cascaded away with the contract regardless. Correct, but it blocks the run from
+    ever finishing until the hunter clears that square. Contract deletion is rare; a repair command is
+    the answer if it stops being.
 
     HIDDEN RUNS ARE INCLUDED, and that asymmetry is deliberate. A hunter cannot assign or clear on a
     hidden run (`_lock_challenge` refuses it), but the world keeps turning for it: hiding is a visibility
@@ -591,8 +612,12 @@ def pending_slots(profile=None):
     back. A hidden run that completes this way does NOT reach the Hall of Fame, because
     `ChallengeQuerySet.completed()` is built on `visible()`.
 
-    Bounded by construction: at most 26 slots per run and at most one active run per type, so a profile's
-    pending set is at most ~51 rows. That is why neither detector bothers scoping by contract.
+    Bounded to ~51 rows in practice -- 26 letters plus 25 jobs -- which is why neither detector bothers
+    scoping by contract. But bounded by SERVICE DISCIPLINE, not by construction, and the difference
+    matters here: `challenge_one_active_per_type` is PARTIAL on the unfinished-and-visible predicate, so
+    it does not cover the hidden rows this query deliberately includes. What actually holds the bound is
+    `start` resuming the newest hidden run before creating a new one. Write around the service and a
+    profile can accumulate hidden unfinished runs without limit, and this set grows with them.
     """
     qs = ChallengeSlot.objects.filter(challenge__is_complete=False, is_completed=False)
     qs = qs.exclude(contract_slug='')
@@ -608,13 +633,15 @@ def detect_for_profile(profile):
     Python filtering of a profile-scoped queryset -- then each is written through `mark_slot_completed`
     so the locking and recount rules hold and the last square still finishes the run.
 
+    The return value counts squares WRITTEN, not squares offered. The two differ only under a concurrent
+    writer, so no test in the suite can tell them apart -- `test_the_count_matches_how_many_squares_...`
+    says so rather than implying otherwise.
+
     DELIBERATELY UNSCOPED by contract, unlike `contract_service.check_profile_contracts` which narrows to
     the concepts a sync touched. Narrowing buys nothing here: the candidate set is already ~51 rows, so
     building a concept-to-contract map would cost more than it saves -- and being unscoped makes this a
     drift net too, catching a contract published after the hunter last touched the game.
     """
-    from trophies.models import EarnedContract
-
     qualifying = pending_slots(profile).filter(
         Exists(EarnedContract.objects.filter(profile=profile, contract_id=OuterRef('contract_id')))
     )
@@ -630,11 +657,11 @@ def completable_slots():
     and it cannot know who qualifies; this can, because a slot names its own contract.
 
     No index backs this predicate, which is a decision rather than an omission. `ChallengeSlot` holds 26
-    rows per run, so even a few thousand runs is a trivial scan once a night. A partial index on
-    `(is_completed=False, contract_slug <> '')` is the fix if the table ever reaches six figures.
+    rows for a letter run and 25 for a jobs run, so even a few thousand runs is a trivial scan once a
+    night. If the table ever reaches six figures the fix is an index ON `(challenge_id, contract_id)`
+    with a partial condition of `is_completed = false AND contract_slug <> ''` -- columns and predicate
+    are different halves of an index and an earlier note gave only the predicate.
     """
-    from trophies.models import EarnedContract
-
     return pending_slots().filter(
         Exists(EarnedContract.objects.filter(
             profile_id=OuterRef('challenge__profile_id'),

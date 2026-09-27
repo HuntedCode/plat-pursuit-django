@@ -170,12 +170,26 @@ def test_the_sync_pipeline_does_not_call_a_challenge_checker():
     Its honest limit: a rebuilt hook named something else (`progress_hooks.run(...)`) passes this.
     That is acceptable -- what it defends against is the OLD system being wired back in, and the new
     one arriving here is a deliberate act that will edit this file anyway.
+
+    THE REBUILT HOOK ARRIVED (2026-09), and this is that deliberate edit. `token_keeper` now imports
+    `challenges.services.challenge_service.detect_for_profile` -- the NEW app -- and the guard was
+    failing on the bare substring `challenge_service`, which both modules share.
+
+    So it is scoped to the OLD module's path instead. That is what it always meant: the retired service
+    lived at `trophies/services/challenge_service.py`, `test_the_service_and_its_views_stay_gone` asserts
+    that file is deleted, and this asserts nothing imports it. The three old per-type checkers stay named
+    because they are the functions that file exported, and no rebuilt hook will reuse those names.
     """
     source = (ROOT / 'trophies' / 'token_keeper.py').read_text(encoding='utf-8')
 
-    for wired in ('challenge_service', 'check_az_challenge', 'check_calendar_challenge',
-                  'check_genre_challenge', 'import challenge', 'challenge_views'):
-        assert wired not in source, f'token_keeper is wired to challenges again: {wired}'
+    for wired in ('trophies.services.challenge_service', 'trophies/services/challenge_service',
+                  'check_az_challenge', 'check_calendar_challenge', 'check_genre_challenge',
+                  'challenge_views'):
+        assert wired not in source, f'token_keeper is wired to the RETIRED challenge system: {wired}'
+
+    # And the positive half, so this file records what the seam holds now rather than only what it must
+    # not: the rebuilt hook is present, and it is the new app's.
+    assert 'challenges.services.challenge_service import detect_for_profile' in source
 
 
 def test_the_az_archive_table_still_exists_and_keeps_its_columns():
