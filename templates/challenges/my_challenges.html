@@ -134,19 +134,22 @@
                     {% comment %}The state, said once. `resumable` is the one a hunter would otherwise have
                     no way to tell from having no run at all.
 
-                    `badge-ghost` for Hidden, NOT `badge-warning`, and the difference is register rather
-                    than colour. A hidden run is not a problem -- it is dormant, and Start brings it back
-                    with every square intact. `warning` is the theme's bright yellow
-                    (`oklch(0.946 0.186 94.8)`), which reads as "something needs attention" about a state
-                    where nothing does. Ghost is what the design system's own page-header example uses for
-                    a context label, which is all this is.
+                    `.bd-chip`, NOT DaisyUI's `.badge`. `chips.css` says why in its own header: the chip
+                    is the strangler replacement for `.badge` as shared atoms convert, and it tints from
+                    `--pp-*` where DaisyUI tints from its own theme. These two read as different greens and
+                    different blues sitting side by side, which is the whole cost of mixing them.
 
-                    It also still contrasts with `In progress` above it, which is the only thing the two
-                    badges have to do: tell a hunter which of their runs is live.{% endcomment %}
+                    `--ghost` for Hidden, NOT `--warning`, and the difference is register rather than
+                    colour. A hidden run is not a problem -- it is dormant, and Resume brings it back with
+                    every square intact. Warning is the bright yellow this page spends on the beta notice,
+                    which would read as "something needs attention" about a state where nothing does.
+
+                    Ghost still contrasts with `In progress` above it, which is the only thing the two
+                    chips have to do: tell a hunter which of their runs is live.{% endcomment %}
                     {% if card.state == 'active' %}
-                    <span class="badge badge-sm badge-primary font-bold shrink-0">In progress</span>
+                    <span class="bd-chip bd-chip--primary shrink-0">In progress</span>
                     {% elif card.state == 'resumable' %}
-                    <span class="badge badge-sm badge-ghost font-bold shrink-0">Hidden</span>
+                    <span class="bd-chip bd-chip--ghost shrink-0">Hidden</span>
                     {% endif %}
                 </div>
 
@@ -189,6 +192,20 @@
                     NOTE `aria-disabled` does NOT stop submission -- the form still posts and the service
                     refuses it. That refusal is the real gate; this attribute is only what a hunter sees,
                     and an earlier comment said the form was not submitted, which is false.{% endcomment %}
+                    {% comment %}CONTINUE IS A LINK NOW, because the run finally has a page. It was a
+                    form posting to `challenge_start`, which for an active run is a no-op that
+                    redirects straight back -- the deadest button on the page, and documented as such
+                    while it waited for this.
+
+                    Start and Resume stay forms, because both WRITE: one creates a run and the other
+                    un-hides it. A link cannot do either, and a GET that mutated would be worse than
+                    the dead button was.{% endcomment %}
+                    {% if card.state == 'active' %}
+                    <a href="{% url 'challenge_detail' card.run.id %}" class="pp-cta">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 9-14 9V3z"/></svg>
+                        {{ card.verb }}
+                    </a>
+                    {% else %}
                     <form method="post" action="{% url 'challenge_start' card.type %}" class="contents">
                         {% csrf_token %}
                         <button type="submit" class="pp-cta"
@@ -197,6 +214,7 @@
                             {{ card.verb }}
                         </button>
                     </form>
+                    {% endif %}
 
                     {% if card.state == 'active' %}
                     {% comment %}HIDE, and it confirms first. The word is "Hide" everywhere a hunter can see
@@ -231,7 +249,8 @@
             <ul class="mt-2 divide-y divide-base-300/60">
                 {% for run in finished %}
                 <li class="flex items-center justify-between gap-3 py-2">
-                    <span class="min-w-0 truncate text-sm">{{ run.name }}</span>
+                    <a class="min-w-0 truncate text-sm link link-hover"
+                       href="{% url 'challenge_detail' run.id %}">{{ run.name }}</a>
                     <span class="text-xs text-base-content/50 shrink-0">
                         <span class="hidden md:inline">{{ run.completed_at|date:"j M Y" }}</span>
                         <span class="md:hidden">{{ run.completed_at|date:"j M y" }}</span>
