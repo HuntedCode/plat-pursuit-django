@@ -244,7 +244,7 @@ def test_a_free_hunter_sees_the_reason_as_text_and_a_disabled_start(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
 
-    assert 'beta for members first' in body
+    assert 'Challenges are in beta' in body
     assert 'aria-disabled="true"' in body
     assert 'disabled>' not in body, 'a disabled button leaves the tab order and cannot be reached'
     # And it must NOT promise a browse that does not exist yet: `challenges` still answers the
@@ -257,7 +257,7 @@ def test_a_member_sees_no_beta_notice(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
 
-    assert 'beta for members first' not in body
+    assert 'Challenges are in beta' not in body
     assert 'aria-disabled="true"' not in body
 
 
@@ -267,7 +267,7 @@ def test_when_the_beta_ends_a_free_hunter_gets_a_live_button(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
 
-    assert 'beta for members first' not in body
+    assert 'Challenges are in beta' not in body
     assert 'aria-disabled="true"' not in body
 
 
@@ -633,10 +633,10 @@ def test_staff_can_preview_the_free_tier_view(client):
     profile.user.save(update_fields=['is_staff'])
 
     plain = client.get(reverse('my_challenges')).content.decode()
-    assert 'beta for members first' not in plain
+    assert 'Challenges are in beta' not in plain
 
     previewed = client.get(reverse('my_challenges') + '?preview=challenges-free').content.decode()
-    assert 'beta for members first' in previewed
+    assert 'Challenges are in beta' in previewed
     assert 'aria-disabled="true"' in previewed
 
 
@@ -647,7 +647,7 @@ def test_the_preview_door_is_staff_only(client):
 
     body = client.get(reverse('my_challenges') + '?preview=challenges-free').content.decode()
 
-    assert 'beta for members first' not in body
+    assert 'Challenges are in beta' not in body
     assert 'aria-disabled="true"' not in body
 
 
@@ -692,3 +692,50 @@ def test_previewing_does_not_take_away_a_run_you_already_have(client):
     challenge.refresh_from_db()
     assert challenge.is_deleted is False
     assert Challenge.objects.filter(profile=profile).count() == 1
+
+
+def test_the_beta_card_makes_the_ask_and_the_reassurance(client):
+    """OWNER'S CALL, 2026-09-27: the beta needs to draw real attention, not sit in small print.
+
+    Four things have to be on the page for a free hunter, and this pins all four because dropping any
+    one of them turns it from an honest explanation into either a gate or a nag:
+      - that it IS a beta,
+      - that members are in first,
+      - that everyone gets it when the beta ends,
+      - and a route in now, for somebody who wants one.
+    """
+    _hunter(client, premium=False)
+
+    # WHITESPACE-NORMALISED, because the template wraps this copy across lines and a raw `in body`
+    # then fails on a sentence that is present and correct. Reflowing prose is a formatting change,
+    # not a content one, and the test should not break on it.
+    body = ' '.join(client.get(reverse('my_challenges')).content.decode().split())
+
+    assert 'Challenges are in beta' in body
+    assert 'Members are running them first' in body
+    assert 'Everyone can start one when the beta ends' in body
+    assert 'Nothing here stays members-only' in body
+    assert reverse('support_hub') in body
+    assert 'Become a supporter' in body
+
+
+def test_the_beta_card_uses_the_house_premium_pattern(client):
+    """`border-primary/20` is the pattern's accent, and the thing that makes this card read as the same
+    kind of card a hunter has met elsewhere. `border-base-300` would make it look like an ordinary
+    content block and lose the whole point of the treatment."""
+    _hunter(client, premium=False)
+
+    # SCOPED TO THE CARD'S OWN <section>, not a fixed character window -- a lookbehind of N characters
+    # would silently start matching the header card above the moment the markup changed length.
+    body = client.get(reverse('my_challenges')).content.decode()
+    headline = body.index('Challenges are in beta')
+    card = body[body.rindex('<section', 0, headline):headline]
+
+    assert 'border-primary/20' in card
+    assert 'border-base-300' not in card, 'the beta card lost its accent and reads as an ordinary block'
+
+
+def test_a_member_never_sees_the_beta_card(client):
+    _hunter(client, premium=True)
+
+    assert 'Challenges are in beta' not in client.get(reverse('my_challenges')).content.decode()
