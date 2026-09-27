@@ -42,6 +42,13 @@ redemption will end at `ProfileJobXP`, which `contract_service.revoke_contract` 
 **NO SLOT IS WRITTEN OUTSIDE ITS CHALLENGE'S ROW LOCK.** That invariant is what makes `_recount` safe
 against concurrent slot writes, and it is the one a sweep would be tempted to break with a
 `bulk_update`. A future writer touching many slots takes the Challenge lock per run.
+
+AND FOR WHOEVER WRITES DETECTION: match a slot to a contract on `contract_slug`, NEVER on
+`contract_id`. The slot holds a SNAPSHOT, so the two differ precisely when the catalogue has moved
+under a run -- a re-anchor, a staff `igdb_id` edit, an absorbed concept -- which is the case detection
+exists to survive. A `filter(contract=contract)` looks correct, passes every happy-path test, and
+silently misses exactly the runs that needed it. The lookup belongs in this module when it is written,
+so there is one rule rather than one per detector.
 """
 from django.conf import settings
 from django.db import models, transaction
