@@ -37,11 +37,40 @@ from django_ratelimit.decorators import ratelimit
 
 from challenges.models import CHALLENGE_TYPE_CHOICES, Challenge
 from challenges.services import challenge_service as svc
+from core.previews import previewing
 
 #: Shared by both write doors, so create-hide-create cannot outrun one door by using the other. The cap
 #: on runs is structural (one active per type) rather than numeric, but the RATE is not bounded by it:
 #: hiding frees nothing and starting resumes, yet each still writes and each still takes a row lock.
 CHALLENGE_WRITE_RATELIMIT_GROUP = 'challenges:write'
+
+#: The team preview door for what a FREE hunter sees during the beta: `?preview=challenges-free`.
+#:
+#: Staff or moderator only, and it writes nothing -- `core.previews` enforces both, and that is the
+#: whole reason to use it rather than the obvious alternative of flipping your own `user_is_premium`
+#: in a shell. That mutates a real row, changes every other page you visit, and is easy to forget to
+#: put back. Same slug shape as `gamelists`' `lists-free`, which previews the same thing one feature
+#: over.
+#:
+#: IT OPENS THE WHOLE THING, which `core.previews`' own docstring insists on: the door is read by the
+#: page AND by the write endpoint, so pressing the button you are previewing gives you the refusal you
+#: are previewing. A preview that dimmed the button and then let the POST through would be showing you
+#: something no free hunter can reach.
+#:
+#: Cheap by construction, per the premium-preview rule: it flips one boolean that HIDES an affordance.
+#: No provider runs, no extra query, nothing reads the viewer's data differently.
+PREVIEW_FREE = 'challenges-free'
+
+
+def creation_is_open(request, profile):
+    """Can this hunter start a run, as THIS REQUEST should be shown it?
+
+    `challenge_service.creation_is_open_to` is the real gate and stays the single enforcement point;
+    this is that answer plus the team preview door, which can only ever make it stricter.
+    """
+    if previewing(request, PREVIEW_FREE):
+        return False
+    return svc.creation_is_open_to(profile)
 
 
 class _LinkedProfileRequired:
@@ -93,7 +122,7 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # own page if anybody reaches it; until then the template says when it is truncated.
         context['finished_total'] = finished.count()
         context['finished'] = list(finished[:self.HISTORY_LIMIT])
-        context['creation_is_open'] = svc.creation_is_open_to(profile)
+        context['creation_is_open'] = creation_is_open(self.request, profile)
         # `text`, NOT `label`: `partials/breadcrumb.html` and `seo_tags` both read `text`, so a `label`
         # key rendered two EMPTY crumbs and two blank names in the JSON-LD. Every other caller on the
         # site passes `text` and starts at Home; this did neither.
@@ -198,11 +227,20 @@ class StartChallengeView(_ChallengeActionView):
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
                                 method='POST', block=True))
     def post(self, request, challenge_type):
+        # THE PREVIEW REFUSES TOO, so the door opens the whole behaviour rather than half of it. Only
+        # for a genuinely new run: previewing must not take away a run you already have, which is the
+        # same line the beta gate itself draws.
+        if previewing(request, PREVIEW_FREE) and svc.active_run(
+                request.user.profile, challenge_type) is None:
+            messages.error(request, 'Starting a challenge is in beta for members first. '
+                                    'Everyone can start one when the beta ends.')
+            return self._back(request)
+
         try:
             challenge, outcome = svc.start_reporting(request.user.profile, challenge_type)
         except svc.ChallengeError as exc:
             messages.error(request, str(exc))
-            return redirect('my_challenges')
+            return self._back(request)
 
         # THE OUTCOME, not `filled_count`. That could not tell a fresh run from an empty resumed one,
         # and said "back where you left it" about a run that had never gone away -- the one case where
@@ -213,7 +251,20 @@ class StartChallengeView(_ChallengeActionView):
             messages.success(request, f'{challenge.name} is ready. Pick your first game.')
         # ALREADY_ACTIVE says nothing. For a double submit or a stale tab that is right; for a Continue
         # press it is merely all there is to say until the run has a page to go to.
-        return redirect('my_challenges')
+        return self._back(request)
+
+    @staticmethod
+    def _back(request):
+        """Back to the page, KEEPING the preview querystring if there is one.
+
+        A bare `redirect('my_challenges')` drops it, so previewing the refusal would land you on the
+        un-previewed page: the error message from the gated state, above live buttons. Confusing in
+        exactly the way a half-open door is.
+        """
+        url = reverse_lazy('my_challenges')
+        if previewing(request, PREVIEW_FREE):
+            return redirect(f'{url}?preview={PREVIEW_FREE}')
+        return redirect(url)
 
 
 class HideChallengeView(_ChallengeActionView):

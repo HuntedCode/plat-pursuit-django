@@ -620,3 +620,75 @@ def test_an_unknown_type_is_refused_with_a_reason(client):
 
     assert 'not a challenge type' in resp.content.decode()
     assert not Challenge.objects.filter(profile=profile).exists()
+
+
+# ── the team preview door ────────────────────────────────────────────────────────────────────────
+
+def test_staff_can_preview_the_free_tier_view(client):
+    """`?preview=challenges-free`, the sanctioned door -- staff only, writes nothing, and strictly
+    narrows what the viewer is shown. The alternative a reader might reach for is flipping your own
+    `user_is_premium` in a shell, which mutates a real row and follows you onto every other page."""
+    profile = _hunter(client, premium=True)
+    profile.user.is_staff = True
+    profile.user.save(update_fields=['is_staff'])
+
+    plain = client.get(reverse('my_challenges')).content.decode()
+    assert 'beta for members first' not in plain
+
+    previewed = client.get(reverse('my_challenges') + '?preview=challenges-free').content.decode()
+    assert 'beta for members first' in previewed
+    assert 'aria-disabled="true"' in previewed
+
+
+def test_the_preview_door_is_staff_only(client):
+    """A querystring anybody could type must not change what anybody sees. `core.previews.is_team`
+    enforces it; this pins that this page goes through it rather than reading `request.GET` itself."""
+    _hunter(client, premium=True)   # a member, not staff
+
+    body = client.get(reverse('my_challenges') + '?preview=challenges-free').content.decode()
+
+    assert 'beta for members first' not in body
+    assert 'aria-disabled="true"' not in body
+
+
+def test_the_previewed_refusal_actually_refuses(client):
+    """THE DOOR OPENS THE WHOLE THING, which `core.previews` insists on. A preview that dimmed the
+    button and then let the POST through would be showing a state no free hunter can reach."""
+    profile = _hunter(client, premium=True)
+    profile.user.is_staff = True
+    profile.user.save(update_fields=['is_staff'])
+
+    resp = client.post(
+        reverse('challenge_start', args=[CHALLENGE_TYPE_AZ]) + '?preview=challenges-free',
+        follow=True)
+
+    assert not Challenge.objects.filter(profile=profile).exists()
+    assert 'beta for members first' in resp.content.decode()
+
+
+def test_the_preview_survives_its_own_redirect(client):
+    """Otherwise previewing the refusal lands you on the un-previewed page: the gated error message
+    above live buttons."""
+    profile = _hunter(client, premium=True)
+    profile.user.is_staff = True
+    profile.user.save(update_fields=['is_staff'])
+
+    resp = client.post(
+        reverse('challenge_start', args=[CHALLENGE_TYPE_AZ]) + '?preview=challenges-free')
+
+    assert 'preview=challenges-free' in resp.url
+
+
+def test_previewing_does_not_take_away_a_run_you_already_have(client):
+    """The same line the real gate draws: it gates creating, never keeping. A previewing staff member
+    with an active run still gets to continue it."""
+    profile = _hunter(client, premium=True)
+    profile.user.is_staff = True
+    profile.user.save(update_fields=['is_staff'])
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    client.post(reverse('challenge_start', args=[CHALLENGE_TYPE_AZ]) + '?preview=challenges-free')
+
+    challenge.refresh_from_db()
+    assert challenge.is_deleted is False
+    assert Challenge.objects.filter(profile=profile).count() == 1
