@@ -784,7 +784,7 @@ def test_a_hidden_list_is_still_findable_by_its_owner(client):
 def test_the_spotlight_pick_is_deterministic():
     """Two lists featured inside the same timestamp resolved by whatever order Postgres felt like,
     so the band could flip between page loads -- the flicker that reads as a bug and cannot be
-    reproduced on request. `covers._sort_key` documents adding a pk tiebreak for exactly this."""
+    reproduced on request. `covers.sort_key` documents adding a pk tiebreak for exactly this."""
     from django.utils import timezone
 
     from gamelists.models import GameList

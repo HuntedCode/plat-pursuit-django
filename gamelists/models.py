@@ -200,7 +200,7 @@ class GameListQuerySet(models.QuerySet):
         """
         # `-pk` AS A TIEBREAK. Two lists featured inside the same timestamp otherwise resolve by
         # whatever order Postgres felt like, so the Spotlight could flip between page loads -- the
-        # same non-determinism `covers._sort_key` documents adding a pk tiebreak to prevent. The
+        # same non-determinism `covers.sort_key` documents adding a pk tiebreak to prevent. The
         # admin refuses bulk featuring so it is unlikely, and it is free: the partial index on
         # `-featured_at` still serves the ordering as a prefix.
         return self.public().filter(featured_at__isnull=False).order_by('-featured_at', '-pk')

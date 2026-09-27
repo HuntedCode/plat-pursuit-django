@@ -61,7 +61,7 @@ def test_the_pick_is_stable_when_two_lists_share_a_platform():
     PK ORDER IS MADE TO DISAGREE WITH INSERTION ORDER, and that is the whole test. The first version
     created two PS4 rows in ascending pk order, so the row the tiebreak should pick was also the row
     that came back first from the unordered queryset and won on the `current is None` branch before
-    `_sort_key` was ever consulted a second time. Deleting `game.pk` from the sort key -- the exact
+    `sort_key` was ever consulted a second time. Deleting `game.pk` from the sort key -- the exact
     mutation this docstring describes -- passed all five iterations.
 
     Creating the HIGHER pk first separates the two: without the tiebreak the physically-first row
@@ -245,7 +245,7 @@ def test_a_game_missing_its_cover_source_is_skipped_not_rendered_as_a_hole():
 def test_title_platform_is_a_list_and_the_rank_must_treat_it_as_one():
     """The root cause, pinned at the source.
 
-    `_sort_key` read this as a scalar (`RANK.get(game.title_platform, ...)`) -- a dict lookup on a
+    `sort_key` read this as a scalar (`RANK.get(game.title_platform, ...)`) -- a dict lookup on a
     list, i.e. `TypeError: unhashable type: 'list'` for every row the database can actually produce.
     It 500'd all four cover surfaces: browse tiles, My Lists tiles, the detail items and the adder
     search.

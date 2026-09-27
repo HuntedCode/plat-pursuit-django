@@ -174,7 +174,7 @@ def completion_dates(profile, contracts):
     if not contracts:
         return {}
 
-    concepts_by_contract = _member_concepts_by_contract(contracts)
+    concepts_by_contract = member_concepts_by_contract(contracts)
     all_concept_ids = {cid for ids in concepts_by_contract.values() for cid in ids}
     if not all_concept_ids:
         return {}
@@ -237,7 +237,7 @@ def importable_ids(profile, contracts, joined_at):
     return {cid for cid, when in completion_dates(profile, contracts).items() if when > joined_at}
 
 
-def _member_concepts_by_contract(contracts):
+def member_concepts_by_contract(contracts):
     """{contract_id: {concept_id, ...}} in two queries, however many contracts.
 
     Membership is DERIVED, so this applies the same rule as `contract_service.contract_by_concept_map`
