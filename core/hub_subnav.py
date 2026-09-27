@@ -358,6 +358,11 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # My Challenges' write endpoints. They redirect to the page, so a reader rarely sees a rail
     # rendered under these names -- but an item shipping without a line here is SILENT, and a future
     # error path that re-renders rather than redirecting would inherit an unlit strip.
+    # The run's own page sits under `/community/challenges/`, so the PREFIX match lands it in the
+    # Community hub -- which is right: it is the public artefact, not the hunter's working page. It
+    # needs a line anyway, because that hub's `challenges` item is the placeholder browse and the
+    # prefix alone would leave the strip unlit.
+    'challenge_detail': ('community', 'challenges'),
     'challenge_start': ('my_pursuit', 'my_challenges'),
     'challenge_hide': ('my_pursuit', 'my_challenges'),
     'profile_detail': ('community', 'profiles'),

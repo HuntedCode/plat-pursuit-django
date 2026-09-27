@@ -117,8 +117,44 @@ class ChallengeQuerySet(models.QuerySet):
     way to take one out of view. That matches the retired system, which also had no `is_public`.
     """
 
+    #: THE VISIBILITY PREDICATE, hoisted so it has exactly one spelling.
+    #:
+    #: It was written out twice -- once in `visible()` and once in `readable_by()` -- inside a class whose
+    #: docstring is about reads that "cannot forget a flag", and under a `readable_by` docstring that
+    #: claimed the flag had one home. The failure that docstring described was therefore live: add a
+    #: second condition to `visible()` (a suspended profile's runs dropping out of public view is the
+    #: obvious one) and anonymous readers would respect it while every signed-in reader would not.
+    #:
+    #: `readable_by` CANNOT just call `visible()`, which is the structural detail that made the duplicate
+    #: look necessary. `GameListQuerySet.readable_by` does exactly that -- `self.visible().filter(...)` --
+    #: because a GameList has two axes and can AND a privacy OR onto a visibility floor. A Challenge has
+    #: one flag and has to OR *around* it, so there is no floor to AND onto. Sharing the Q object is what
+    #: the precedent actually amounts to here; citing it as "the same call" was wrong.
+    VISIBLE = models.Q(is_deleted=False)
+
     def visible(self):
-        return self.filter(is_deleted=False)
+        return self.filter(self.VISIBLE)
+
+    def readable_by(self, profile):
+        """Everything `profile` may OPEN, which is every visible run plus their own hidden ones.
+
+        THE POINT IS THAT THE FLAG LIVES HERE. `ChallengeDetailView` spelled this inline as
+        `filter(Q(is_deleted=False) | Q(profile=viewer))` while its own docstring claimed this queryset
+        was "the only place that knows it" -- so "visible" had two definitions, one of them in a view.
+        The cost lands the day visibility gains a second condition (a suspended profile's runs dropping
+        out of public view is the obvious one): `visible()` would get it, the anonymous path would
+        inherit it, and the signed-in path would not. A run that should have gone dark would then be
+        served to every signed-in visitor and nobody else, which is the hardest kind of leak to notice.
+
+        `profile is None` is an explicit branch rather than something clever, following
+        `GameListQuerySet.readable_by`: an anonymous reader gets `visible()` and nothing else. (Not
+        strictly required -- `Q(profile=None)` compiles to `profile_id IS NULL`, which a non-null FK never
+        matches, so the OR would already reduce correctly. It is here because a reader should not have to
+        work that out.)
+        """
+        if profile is None:
+            return self.visible()
+        return self.filter(self.VISIBLE | models.Q(profile=profile))
 
     def owned_by(self, profile):
         return self.visible().filter(profile=profile)

@@ -32,11 +32,12 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
-from django.views.generic import TemplateView
+from django.views.generic import DetailView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
 from challenges.models import CHALLENGE_TYPE_CHOICES, Challenge
 from challenges.services import challenge_service as svc
+from challenges.services import slot_render
 from core.previews import previewing
 
 #: Shared by both write doors, so create-hide-create cannot outrun one door by using the other. The cap
@@ -172,6 +173,89 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         }
 
 
+class ChallengeDetailView(DetailView):
+    """One run's squares. PUBLIC to read, and the owner gets the affordances.
+
+    Public because the Hall of Fame is the point of the feature: a finished run has to be something you
+    can show somebody, and a link that only works for its owner is not that. Hidden runs are the
+    exception and `readable_by` handles it -- a hunter who took a run out of view gets a 404 for everybody
+    else, including a crawler, and still reaches it themselves.
+
+    NO `is_public` FIELD, deliberately, so there is nothing here to get wrong: visibility is one flag
+    with one meaning, and `ChallengeQuerySet` is the only place that knows it.
+
+    FLAT IN QUERIES, and that is the property to protect rather than a claim to make. A run is 26 squares
+    and every filled one wants cover art, which is the exact shape CLAUDE.md's `raw_response` rule exists
+    for -- so the covers come from `slot_render.slot_cards`, batched, and nothing here resolves one per
+    square.
+    """
+
+    template_name = 'challenges/challenge_detail.html'
+    pk_url_kwarg = 'challenge_id'
+
+    def _viewer(self):
+        """The reading profile, or None.
+
+        Safe for both an `AnonymousUser` and an authenticated account with no `Profile` row, because
+        `RelatedObjectDoesNotExist` subclasses `AttributeError`. Spelled once: `get_queryset` and
+        `get_context_data` both want it, and the second access is free (the reverse one-to-one caches).
+        """
+        return getattr(self.request.user, 'profile', None)
+
+    def get_queryset(self):
+        """Delegated to `readable_by`, which is where the flag lives.
+
+        A hidden run is readable by its owner and nobody else. `select_related('profile')` because the
+        byline wants it, and without it the page pays a query to learn whose run it is looking at.
+        """
+        return Challenge.objects.readable_by(self._viewer()).select_related('profile')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        challenge = self.object
+        viewer = self._viewer()
+
+        context['cards'] = slot_render.slot_cards(challenge)
+        context['is_owner'] = viewer is not None and viewer.id == challenge.profile_id
+        # WHETHER THE OWNER MAY CHANGE THIS RUN. Two conditions beyond ownership, and a run fails either:
+        # a FINISHED run has nothing left to change (completed squares lock, and every square is
+        # complete), and a HIDDEN run is read-only because `start` is what brings one back
+        # (`challenge_service.start`'s resume branch) -- editing one in place would mean filling squares
+        # on a run that is on nobody's page and in no hub.
+        #
+        # NOTHING RENDERS THIS YET, and that is worth admitting rather than dressing up. An earlier
+        # comment here claimed it was "asked once rather than three times in the template"; the template
+        # asks zero times, because its two read-only notes name the specific reason (finished / hidden)
+        # instead of the general one, which is better copy. So this is an invariant with a test and no
+        # consumer until 4b's picker gates on it.
+        #
+        # It is kept rather than deleted for one reason: `not is_deleted` was MISSING from the first
+        # version, and the bug was only visible because it made a template branch unreachable. The picker
+        # would have had to re-derive the same predicate, with nothing to notice if it missed the same
+        # condition again. The tests are the point; the context key is how they reach it.
+        context['can_edit'] = (context['is_owner']
+                               and not challenge.is_complete
+                               and not challenge.is_deleted)
+        context['progress'] = (
+            round(challenge.completed_count / challenge.total_slots * 100)
+            if challenge.total_slots else 0
+        )
+        # THE PUBLIC TRAIL, not the owner's. This route lives under `/community/challenges/` precisely
+        # because the page is somebody's artefact rather than their working surface, and the trail has to
+        # agree with that: `My Pursuit` and `My Challenges` are both login-gated, so an anonymous reader
+        # following them got bounced to a login screen from a page that never asked them to sign in, and
+        # a signed-in visitor was sent to THEIR OWN runs from a page about somebody else's.
+        #
+        # `gamelists` settled this one app over: the public list detail trails Home / Game Lists / name,
+        # never My Lists.
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Challenges', 'url': reverse_lazy('challenges')},
+            {'text': challenge.name},
+        ]
+        return context
+
+
 class _ChallengeActionView(LoginRequiredMixin, _LinkedProfileRequired, View):
     """POST-only. What the two subclasses share is the gate, not the contract.
 
@@ -210,18 +294,19 @@ class StartChallengeView(_ChallengeActionView):
 
     A navigation rather than an in-place update, and a plain form is the sturdier version of that: it
     works with no JavaScript, and the page needs no client state to offer it. The same reasoning
-    `gamelists.CreateListView` writes down -- though unlike that one this returns to the SAME page,
-    because the run's own page does not exist yet.
+    `gamelists.CreateListView` writes down -- though unlike that one this returns to My Challenges
+    rather than to the thing it just made, because the card it returns to is what changed: its verb
+    moves from Start to Continue, and the message says which branch fired.
 
     Three outcomes, and they deliberately do NOT look identical -- `start_reporting` reports which
     branch fired and the messages below differ. An earlier docstring said the opposite, describing the
     `svc.start` call this no longer makes.
 
-    NOTE WHAT `ALREADY_ACTIVE` ACTUALLY IS, because it is not only the double-submit case: it is the
-    outcome of the card's PRIMARY button on an active run (the one labelled Continue). So Continue
-    currently posts, redirects here, and shows nothing -- the page's deadest button. That is because the
-    run's own page does not exist yet; when it does, Continue becomes a link to it and this outcome goes
-    back to being the edge case the comment below calls it.
+    `ALREADY_ACTIVE` IS THE EDGE CASE AGAIN, and it is worth recording that it briefly was not. While
+    the run had no page of its own, the card's primary button on an active run (labelled Continue) posted
+    here, redirected back and showed nothing -- the page's deadest button, and this outcome was how it
+    got there. Continue is now a link to `challenge_detail`, so the only ways to reach this branch are a
+    double-submit and a stale tab, which is what the comment below treats it as.
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',

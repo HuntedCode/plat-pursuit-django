@@ -1,0 +1,371 @@
+/* ============================================================
+ * CHALLENGE SQUARE (.pp-csq) -- one slot of a run, and the grid they sit in.
+ * ============================================================
+ * A run is 26 squares (A-Z) or 25 (one per job), and the GRID is the thing being looked at: a hunter
+ * opens this page to see which keys are still empty, which is a property of the whole set and not of
+ * any square in it. So the squares stay multi-column at 375px -- 26 cells in one column is a
+ * 26-screen scroll that answers no question.
+ *
+ * A BESPOKE PROGRESSION, and said plainly rather than borrowed authority: an earlier comment here
+ * claimed this was "one of the grids the design system lists as" staying multi-column on mobile. That
+ * table has no row for it. Its nearest listed analogue is browse cards at 2 columns on mobile, and
+ * `.pp-gtile-grid` -- this file's own stated donor -- is also 2. Going 3 -> 4 -> 6 -> 7 is a denser call
+ * made for this grid, because 26 keys are a set to be scanned rather than items to be read.
+ *
+ * WHY THIS IS ITS OWN BLOCK rather than `.pp-gtile`. The grouping tile was the obvious candidate and
+ * it is the wrong shape in three ways at once: it is 4:3 where a cover is 3:4, its name is set LARGE
+ * over the art because a genre has no name of its own to compete with, and it has no notion of state.
+ * A square's whole job is to say which of three states it is in. What IS borrowed is that file's
+ * recipe for a cell: radius, `--pp-bg-2`, a drop shadow, hover as a border-and-glow warm (never a
+ * scale on the cell), the art scaling instead, and a `prefers-reduced-motion` branch.
+ *
+ * WHAT IS DELIBERATELY NOT BORROWED: the gtile's `inset 0 1px 0` top highlight. Under a full-bleed
+ * absolutely-positioned image an inset shadow is painted BEHIND the art and never seen -- a
+ * motion-patterns gotcha in so many words. It survives here only on the empty square, which has no
+ * art to hide it. An earlier version of this file carried it on all four states and claimed the gtile
+ * recipe had been taken "line for line", which was true and was the problem.
+ *
+ * THREE STATES, and colour is never the only carrier: a completed square also gets a check glyph, a
+ * filled one has art where an empty one has a ghost key, and every square carries a screen-reader
+ * line naming its state in words.
+ */
+
+.pp-csq-grid {
+    display: grid;
+    /* THREE at 375px, which is what the 3:4 aspect allows: 109px per cell inside the page gutter,
+       where a cover still reads as a cover. Four would be 79.75px, which is a thumbnail. */
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;   /* (375 - 32 gutter - 2x8 gap) / 3 = 109.0px per cell */
+}
+@media (min-width: 640px)  { .pp-csq-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; } }
+@media (min-width: 768px)  { .pp-csq-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; } }
+/* SEVEN at desktop, chosen for CELL SIZE: (1024 - 32 - 6x12) / 7 is ~131px, which is the widest a
+   square gets before the 3:4 aspect makes the grid taller than it needs to be.
+   NOT chosen to avoid a ragged last row, which an earlier comment here claimed. That claim was
+   checkable and false: 26 leaves 2 orphans at 3, 4 AND 6 columns, and 25 leaves a single orphan at all
+   three, so every count below is "broken" by the standard the desktop count was supposedly picked for.
+   26 and 25 are prime-ish in the ways that matter and some row is always short; pick for cell size. */
+@media (min-width: 1024px) { .pp-csq-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+
+/* THE CELL'S SHADOW IS COMPOSED FROM PARTS, and this is not decoration -- it is the fix for a real
+   bug. The first version wrote a whole `box-shadow` per state, so `a.pp-csq:hover`'s primary glow
+   REPLACED `.pp-csq--done`'s success ring: hovering a finished square erased the one mark the page
+   exists to show. Custom properties let hover set the glow and leave the ring alone, because each
+   state now owns a slot rather than the whole declaration. */
+.pp-csq {
+    --csq-highlight: 0 0 #0000;
+    --csq-ring: 0 0 #0000;
+    --csq-drop: 0 6px 20px rgba(0, 0, 0, 0.30);
+
+    position: relative;
+    display: block;
+    aspect-ratio: 3 / 4;
+    border-radius: 11px;
+    overflow: hidden;
+    background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+    box-shadow: var(--csq-highlight), var(--csq-ring), var(--csq-drop);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+/* THE ENTRANCE, pure CSS. `ppRevealIn` is the shared settle-in keyframe from `components/motion.css`,
+   reused rather than re-minted -- that keyframe already has two consumers, and the one time a copy of
+   it lived in a component file, deleting that file left both surfaces animating a name that no longer
+   existed (silently inert, no console error).
+
+   `backwards` AND NOT `both`, which is the load-bearing half. `backwards` applies the hidden `from`
+   state before the animation starts, so there is no flash and no JS is needed. `both` would also
+   PERSIST the final `transform: none` after it ends -- and an animation's filled value outranks a
+   regular declaration, so `a.pp-csq:active`'s press scale would silently do nothing the moment the
+   next chunk makes these squares clickable.
+
+   CAPPED at 12 steps, so the last square starts at 420ms rather than 875ms (25 x 35ms) and the grid
+   has fully arrived by ~840ms instead of ~1.3s. `--rev` is stamped per square from the loop counter.
+   An earlier version of this comment said "nearly two seconds", which was the right instinct about an
+   uncapped cascade and roughly double the real figure. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-csq {
+        animation: ppRevealIn 0.42s var(--pp-ease) backwards;
+        animation-delay: calc(min(var(--rev, 0), 12) * 0.035s);
+    }
+}
+
+/* EMPTY is a WELL, not a failure: dashed, recessed and quieter than a filled cell, so it reads as
+   "something goes here".
+
+   AN EXPLICIT MODIFIER, not `:not(.pp-csq--filled):not(.pp-csq--done)`, which is how this started and
+   was a specificity trap. `:not()` takes its argument's specificity, so that chain scored (0,3,0) and
+   outranked `a.pp-csq:hover` at (0,2,1) -- meaning the empty square, the one a hunter actually clicks
+   to fill, would have been the only square with no hover feedback. Invisible today because the grid is
+   read-only, and it would have shipped as reviewed CSS the moment 4b rendered a button. */
+.pp-csq--empty {
+    --csq-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    --csq-drop: 0 0 #0000;
+    background: color-mix(in oklab, var(--pp-bg-1) 82%, var(--pp-bg-0));
+    border-style: dashed;
+    border-color: var(--pp-divider);
+}
+
+/* FILLED but not finished: assigned, in progress. A primary-tinted border is the whole treatment --
+   the cover art is already doing the talking, and a second accent would put three colours in a
+   26-cell grid. */
+.pp-csq--filled {
+    border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+}
+
+/* DONE. A ring rather than only a border swap, so the completed squares read as a set at a glance from
+   across the grid -- which is the one thing this page exists to show. */
+.pp-csq--done {
+    --csq-ring: 0 0 0 1px color-mix(in oklab, var(--pp-success) 38%, transparent);
+    --csq-drop: 0 8px 22px -12px color-mix(in oklab, var(--pp-success) 46%, #000);
+    border-color: color-mix(in oklab, var(--pp-success) 62%, var(--pp-border));
+}
+
+/* Hover/press only where the square is a LINK or a BUTTON. A read-only grid is not interactive, and a
+   cell that lifts under the cursor while doing nothing is a lie -- the chunk that makes squares
+   clickable inherits this by rendering an `<a>`/`<button>`.
+
+   A DONE SQUARE STAYS GREEN UNDER THE CURSOR, and getting that right took two goes. The first version
+   wrote a whole `box-shadow` per state, so hover's glow replaced the success ring outright. Moving the
+   shadow into slots fixed the ring and MISSED THE BORDER, which was still a plain declaration -- and
+   `a.pp-csq:hover` (0,2,1) outranks `.pp-csq--done` (0,1,0), so the dominant green carrier flipped to
+   cyan anyway while a 1px 38%-alpha ring sat outside it. The ring was the weaker of the two marks, so
+   the original bug was substantially still live under a comment claiming it was fixed.
+
+   So hover is split: every square gets the lift, a done square gets it in SUCCESS, and only a
+   not-done square has its border and ring recoloured. `--csq-ring` now means "the state ring" -- done
+   owns it at rest, hover borrows it otherwise, which also restores the 1px ring the gtile recipe has
+   and this file had dropped. Both values are non-inset, so the transition still interpolates. */
+@media (hover: hover) {
+    a.pp-csq:hover, button.pp-csq:hover {
+        --csq-drop: 0 14px 34px -16px color-mix(in oklab, var(--pp-primary) 42%, #000);
+    }
+    a.pp-csq:not(.pp-csq--done):hover, button.pp-csq:not(.pp-csq--done):hover {
+        --csq-ring: 0 0 0 1px color-mix(in oklab, var(--pp-primary) 24%, transparent);
+        border-color: color-mix(in oklab, var(--pp-primary) 48%, var(--pp-border));
+    }
+    a.pp-csq--done:hover, button.pp-csq--done:hover {
+        --csq-drop: 0 14px 34px -16px color-mix(in oklab, var(--pp-success) 46%, #000);
+        border-color: color-mix(in oklab, var(--pp-success) 78%, var(--pp-border));
+    }
+    a.pp-csq:hover .pp-csq__art, button.pp-csq:hover .pp-csq__art { transform: scale(1.06); }
+}
+a.pp-csq:active, button.pp-csq:active { transform: scale(0.985); }
+a.pp-csq:focus-visible, button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+    .pp-csq { transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+    a.pp-csq:active, button.pp-csq:active { transform: none; }
+    .pp-csq__art { transition: none; }
+    /* AND THE MOVEMENT ITSELF, not just its transition. Dropping `transition` alone leaves the hover
+       scale SNAPPING to 1.06 in one frame, which is the jump this preference is most trying to avoid.
+       Inherited from the gtile recipe, which has the same gap -- "the idiom already does it" is not a
+       reason to copy a bug into a new file. */
+    a.pp-csq:hover .pp-csq__art, button.pp-csq:hover .pp-csq__art { transform: none; }
+}
+
+/* The cover, filling the cell. `object-position: top` for the reason the image conventions give: a
+   wider PSN fallback cropping into a portrait container loses the game's logo otherwise. */
+.pp-csq__art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+    transition: transform 0.35s ease;
+}
+/* The generic PS placeholder is not art and must not be cropped (image conventions again). */
+.pp-csq__art--icon { object-fit: contain; padding: 14%; opacity: 0.85; }
+
+/* The scrim exists to make the name legible over ART. It is rendered only alongside a cover, because
+   over `.pp-csq__art--empty` -- a designed dark field with nothing beneath it -- it was pure loss:
+   it took that field's "?" from 4.0:1 down to 2.5:1 to solve a legibility problem that did not exist. */
+.pp-csq__scrim {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(4, 6, 10, 0.94) 0%, rgba(4, 6, 10, 0.62) 34%, rgba(4, 6, 10, 0.10) 70%, rgba(4, 6, 10, 0) 100%);
+}
+
+/* THE KEY CHIP, top-left: the letter for A-Z, the job's icon for Job Coverage. It rides over the ART,
+   which is why it exists at all -- and why an EMPTY square does not render it. There the ghost glyph
+   below is the key, and drawing both put one datum in two of the cell's three visual slots while the
+   ghost copy sat at 2.2:1. One datum, one slot, at a contrast that passes.
+
+   Opaque backing rather than `backdrop-filter`, for the reason `.pp-gtile__logo` gives: a live blur
+   recomputing under an ancestor transform janks low-end mobile GPUs, and these cells scale their art. */
+.pp-csq__key {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 3;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-family: var(--pp-font-display);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-bg-0) 88%, #000);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+}
+.pp-csq__key svg { width: 13px; height: 13px; }
+/* THE CHIP ASSUMES ONE CHARACTER, and one path reaches it with more. If a `Job` row is deleted under a
+   live run, `slot_render._fallback_label` degrades the slug to "Card Shark" and returns no atom -- so the
+   square takes the A-Z path and this chip is handed a two-word string. The cell's `overflow: hidden`
+   keeps the grid intact and clips it to nonsense; this clips it to something readable instead. */
+.pp-csq__key { max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Job Coverage tints the chip by discipline, off the `--disc` the square sets inline -- the same
+   variable `.pp-jobchip` reads, so a job's colour means one thing site-wide. */
+.pp-csq__key--job {
+    color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, #fff);
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 42%, transparent);
+}
+/* On a done square the chip adopts the success tone, so the finished set reads at chip size too --
+   which is what a hunter scanning a 26-cell grid on a phone actually sees first. */
+.pp-csq--done .pp-csq__key {
+    color: color-mix(in oklab, var(--pp-success) 48%, #fff);
+    border-color: color-mix(in oklab, var(--pp-success) 46%, transparent);
+}
+
+/* The done marker, top-right. Present so state never rides on colour alone. */
+.pp-csq__check {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 3;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: var(--pp-bg-0);
+    background: var(--pp-success);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+}
+.pp-csq__check svg { width: 11px; height: 11px; }
+
+/* THE KEY, centred, on an empty square: the letter, or the job's icon, set large. It is better than a
+   `+` for the reason the whole grid is a grid -- an empty square that says `A` is answering the
+   question the hunter is scanning for, and a `+` answers a different one.
+
+   NOT A GHOST any more. It was `--pp-primary 22%` at `opacity: 0.42`, which computes to 2.2:1 on the
+   empty square's field -- under even the 3:1 large-text floor. That was defensible while the corner
+   chip carried a full-contrast copy; now that this is the ONLY copy it has to be legible, so the mix
+   and the opacity both came up. */
+.pp-csq__well {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--pp-font-display);
+    font-size: clamp(30px, 7.5vw, 46px);
+    font-weight: 800;
+    line-height: 1;
+    color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-text-mute));
+    opacity: 0.78;
+}
+/* KEYED TO THE SAME `font-size` AS THE LETTER, not to the cell. `width: 40%` measured the cell's
+   WIDTH while `height: 40%` measured its taller HEIGHT, so a job's glyph rendered about 1.6x the cap
+   height of an A-Z letter at the same breakpoint and the two run types did not scale together. `em`
+   inherits the `clamp()` above, so one number now sets both. */
+.pp-csq__well svg { width: 1.15em; height: 1.15em; }
+/* Jobs squares tint the key too, so an empty Finesse square still says which discipline it is. */
+.pp-csq__well--job { color: color-mix(in oklab, var(--disc, var(--pp-primary)) 62%, var(--pp-text-mute)); }
+/* Same deleted-`Job` path as the chip above: a multi-character key must not render at 46px. */
+.pp-csq__well { padding: 0 8px; }
+.pp-csq__well:not(.pp-csq__well--job) { font-size: clamp(30px, 7.5vw, 46px); }
+
+/* Name + job line, set over the art at the bottom. */
+.pp-csq__body {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    padding: 7px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+/* THE JOB LINE SHOWS AT EVERY BREAKPOINT, and the version that hid it below `lg:` was wrong twice.
+   It is recorded because the reasoning was plausible and still false.
+
+   The argument was "omit rather than shrink": at 375px the text column inside a square is 91px, and
+   "CARTOGRAPHER" (the longest of the 25 job names) at the 12px floor needs ~100-105px, so it does not
+   fit. Both halves of that are true. What it missed is that OMIT and SHRINK are not the only options --
+   ELLIPSIS is the third, and this file already used it at `lg:` thirty lines below. "CARTOGRAPH..." is
+   partial identity at full size, which beats no identity at all. Two of the 25 names truncate slightly
+   at 375px; the rest fit outright.
+
+   It also missed a worse consequence. The job line lives in `.pp-csq__body`, which only renders on a
+   FILLED square -- so hiding it below `lg:` left an EMPTY Job Coverage square with no name at any
+   breakpoint, including desktop, where no fit argument applies. That is half the run type unable to
+   answer the one question this grid exists to answer ("which squares are still open"), while the
+   screen-reader line answered it fine -- sighted users served worse than AT users, which is backwards.
+   The template now renders the job line in both branches. */
+.pp-csq__job {
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.2;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: color-mix(in oklab, var(--disc, var(--pp-primary)) 42%, #fff);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* A jobs square always spends a line on the job, so the game gets one. */
+.pp-csq--jobs .pp-csq__name { -webkit-line-clamp: 1; line-clamp: 1; }
+
+.pp-csq__name {
+    /* 12px, the design system's floor for readable content. 11.5 bought about one extra character per
+       line and put the page's only body copy under the minimum, on the screen where it is hardest to
+       read -- which inverts the fit rule it was meant to serve. */
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    /* `pr-1`'s 4px, in CSS. It was 2px under a comment that cited the 4px rule, which is the version of
+       a mistake that survives the next edit: nothing here is italic, so no clipping is reachable, and
+       the comment would have gone on certifying compliance the day something italic arrived. */
+    padding-right: 4px;
+}
+
+@media (min-width: 1024px) {
+    /* A 131px cell leaves a 113px text column, so every job name fits outright here -- the ellipsis
+       above stops being reachable rather than being removed. */
+    .pp-csq__name { font-size: 13px; }
+}
+
+/* No cover, but assigned: a contract whose member concept has no usable art. Quiet primary field with
+   a question mark, so the square still reads as deliberately filled rather than as a broken image. */
+.pp-csq__art--empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--pp-font-display);
+    font-size: clamp(24px, 6vw, 36px);
+    font-weight: 800;
+    color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-text-mute));
+    background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--pp-primary) 18%, var(--pp-bg-2)), var(--pp-bg-0));
+}

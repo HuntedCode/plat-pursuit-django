@@ -23,7 +23,12 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
-from challenges.views import HideChallengeView, MyChallengesView, StartChallengeView
+from challenges.views import (
+    ChallengeDetailView,
+    HideChallengeView,
+    MyChallengesView,
+    StartChallengeView,
+)
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
                             CreateListWithConceptView, CreateSectionView, DeleteListView,
                             DeleteSectionView, GameListDetailView, ListGameSearchView,
@@ -469,6 +474,11 @@ urlpatterns = [
     path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
     path('my-challenges/start/<str:challenge_type>/', StartChallengeView.as_view(),
          name='challenge_start'),
+    # THE RUN'S OWN PAGE, under `/community/challenges/` rather than `/my-challenges/`, because it is
+    # PUBLIC: a finished run is something you show somebody, and the Hall of Fame links here. The
+    # personal page above is the hunter's own working surface; this is the artefact.
+    path('community/challenges/<int:challenge_id>/', ChallengeDetailView.as_view(),
+         name='challenge_detail'),
     path('my-challenges/<int:challenge_id>/hide/', HideChallengeView.as_view(),
          name='challenge_hide'),
 
