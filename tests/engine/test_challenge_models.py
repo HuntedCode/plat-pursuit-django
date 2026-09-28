@@ -4,15 +4,22 @@ Every rule pinned here is enforced in Postgres rather than in the service, and e
 because the service is not the only writer: the admin, a shell, a data migration and a future repair
 command all write around it. What the service adds is a good error message.
 
-Two of these would fail SILENTLY if the constraint were written the obvious way instead of the right
-way (items 1 and 3). Item 2 is here for the opposite reason -- to record that it pins LESS than it
-looks like it does:
+ONE of these would fail SILENTLY if the constraint were written the obvious way instead of the right way
+(item 3). Items 1 and 2 are here for the opposite reason -- to record that they pin LESS than they look
+like they do. Item 1 used to belong in the first group and moved when its key moved; the header said so
+for a while after its own paragraph had stopped agreeing:
 
-1. **The empty-slot trap.** `challengeslot_unique_contract` stops one contract filling six Job
-   Coverage slots (six payouts for one completion). Written as a plain unique over a NULLABLE column
-   it would also collide every EMPTY slot with every other, because a brand-new run is 26 empty
-   slots -- so `contract_slug` is blank-not-null and the constraint is PARTIAL. The test that catches
-   a regression here is the boring one: creating a full set of empty slots must work.
+1. **One contract per run, keyed on the FK.** `challengeslot_unique_contract` stops one contract
+   filling six Job Coverage slots (six payouts for one completion). It is keyed on `contract`, the same
+   identity the service's duplicate check uses -- it used to be keyed on the frozen `contract_slug`, and
+   that disagreement was a reachable 500: a staff rename frees a slug, a different contract takes it, and
+   a placement the service allows (different FK) collided on two identical frozen slugs.
+
+   THE PARTIAL CONDITION NO LONGER PROTECTS ANYTHING, and the old version of this paragraph said it did.
+   When the key was the blank-not-null slug it was correctness: without it every empty slot collided on
+   `''`, and a run is 26 empty slots. `contract` is NULLABLE and Postgres treats NULLs as distinct, so a
+   plain unique would already permit them. `test_a_run_holds_a_full_set_of_empty_slots` therefore passes
+   either way now; it is kept because "a new run can be created" is worth holding on its own.
 
 2. **The ledger's new source pays once.** `xpgrant_challenge_once_per_slot` refuses a second grant
    for the same (profile, job, slot), which is the guard `xp-economy.md` demanded of the first
@@ -196,12 +203,16 @@ def test_an_unknown_type_is_refused_by_the_database_not_only_by_choices():
                                  name='The one that does not return', total_slots=365)
 
 
-# ── Slots: one contract per run, and the empty-slot trap ──────────────────────────────────────
+# ── Slots: one contract per run ──────────────────────────────────────
 
 def test_a_run_holds_a_full_set_of_empty_slots():
-    """THE PARTIAL-UNIQUE PIN. A new run is 26 empty slots, and if `challengeslot_unique_contract`
-    were not partial they would all collide with each other on the blank value -- so this boring
-    test is the one that catches the constraint being written the obvious way."""
+    """A new run is 26 empty slots and creating one must work.
+
+    THIS WAS THE PARTIAL-UNIQUE PIN and it no longer is, which is worth saying rather than leaving the old
+    docstring to imply coverage that moved. While `challengeslot_unique_contract` keyed on the blank-not-null
+    `contract_slug`, dropping its condition collided every empty slot on `''` and this test caught it. The key
+    is the nullable `contract` FK now, and Postgres treats NULLs as distinct, so the condition is scoping
+    rather than protection and nothing here can fail on it."""
     challenge = _challenge(ProfileFactory())
 
     ChallengeSlot.objects.bulk_create([
@@ -215,12 +226,17 @@ def test_a_run_holds_a_full_set_of_empty_slots():
 
 def test_one_contract_cannot_fill_two_slots_in_the_same_run():
     """A contract carries up to six jobs. Without this, one completion fills six Job Coverage slots
-    and pays six times."""
+    and pays six times.
+
+    ON THE FK, because that is what the constraint keys on. This passed the same `contract_slug` twice and no
+    FK at all, which pinned the OLD identity -- and once the key moved it pinned nothing, because two slots
+    with a null `contract` do not collide (Postgres treats NULLs as distinct)."""
     challenge = _challenge(ProfileFactory(), challenge_type=CHALLENGE_TYPE_JOBS)
-    _slot(challenge, 'mage', position=0, contract_slug='some-rpg')
+    contract = _contract('Some RPG')
+    _slot(challenge, 'mage', position=0, contract_slug=contract.slug, contract=contract)
 
     with _refuses('challengeslot_unique_contract'):
-        _slot(challenge, 'champion', position=1, contract_slug='some-rpg')
+        _slot(challenge, 'champion', position=1, contract_slug=contract.slug, contract=contract)
 
 
 def test_the_same_contract_may_appear_in_two_different_runs():
@@ -230,9 +246,12 @@ def test_the_same_contract_may_appear_in_two_different_runs():
     az = _challenge(profile, challenge_type=CHALLENGE_TYPE_AZ)
     jobs = _challenge(profile, challenge_type=CHALLENGE_TYPE_JOBS, name='Jobs run')
 
-    _slot(az, 'S', position=18, contract_slug='some-rpg')
+    contract = _contract('Some RPG')
+    _slot(az, 'S', position=18, contract_slug=contract.slug, contract=contract)
 
-    assert _slot(jobs, 'mage', position=0, contract_slug='some-rpg').pk is not None
+    # ON THE FK, or this asserts nothing: two null-contract slots never collide, so the old slug-only form
+    # would have passed even if the constraint were global rather than per-run.
+    assert _slot(jobs, 'mage', position=0, contract_slug=contract.slug, contract=contract).pk is not None
 
 
 def test_a_slot_key_appears_once_per_run():
@@ -473,8 +492,10 @@ def test_the_slot_table_carries_no_redundant_indexes():
     Two arrived by accident and both were removed: an explicit `(challenge, position)` index that
     duplicated `challengeslot_unique_position`'s own btree exactly, and the pair `SlugField` builds by
     default on `contract_slug` (a plain btree plus a `varchar_pattern_ops` one for LIKE) -- neither of
-    which serves any read, because the only access pattern on that column is the per-challenge partial
-    unique.
+    which serves any read worth indexing at 25-26 rows per run. That used to say "because the only access
+    pattern on that column is the per-challenge partial unique", which stopped being true when the unique moved
+    onto the FK: `contract_slug` now has NO index, and `pending_slots()` plus `assign`'s dead-snapshot clause
+    read it unindexed. Still the right call, on the table's size rather than on a covering index.
 
     Pinned by introspection rather than by reading the migration, because the migration is what we were
     already reading when the duplicates went in. Asserting on real `pg_indexes` output is the only
@@ -579,3 +600,76 @@ def test_visible_and_readable_by_share_one_definition_of_the_flag():
     # And the Q object really is shared, not copied.
     from challenges.models import ChallengeQuerySet
     assert ChallengeQuerySet.VISIBLE.children == [('is_deleted', False)]
+
+
+_CSEQ = {'n': 0}
+
+
+def _contract(name):
+    """A live contract. No member concepts: nothing here reads membership, only identity."""
+    _CSEQ['n'] += 1
+    return Contract.objects.create(name=name, slug='slot-uniq-%d' % _CSEQ['n'],
+                                   is_live=True, igdb_id=930_000 + _CSEQ['n'])
+
+
+def test_two_different_contracts_may_share_a_frozen_slug():
+    """THE 500 THAT MOVING THE KEY CLOSED, and it needs no bad data to reach.
+
+    `contract_slug` is a SNAPSHOT taken at assignment. `Contract.slug` is globally unique, so two contracts
+    cannot hold one slug at the same time -- but a rename frees the string, and the next contract to take it
+    then matches a slug some slot froze months ago. While the constraint keyed on that snapshot, the second
+    placement raised `IntegrityError` even though the service had just allowed it (different `contract_id`),
+    and nothing caught it: an uncaught 500 on an ordinary placement.
+
+    Keyed on the FK, the two rows are what they always were -- two different games -- and both are legal.
+    """
+    challenge = _challenge(ProfileFactory(), challenge_type=CHALLENGE_TYPE_JOBS)
+    first, second = _contract('Sonic Frontiers'), _contract('Sonic Superstars')
+
+    # THE SNAPSHOTS ARE WRITTEN DIRECTLY, which is what the constraint sees. An earlier version also called
+    # `Contract.objects.update(slug=...)` on both rows to dramatise the rename; those two lines were inert
+    # (the helper's slugs were never `sonic-frontiers`, and nothing here reads `Contract.slug`), so they
+    # implied coverage of the rename path that this test does not have. The service-level version below does.
+    _slot(challenge, 'mage', position=0, contract_slug='sonic-frontiers', contract=first)
+    _slot(challenge, 'champion', position=1, contract_slug='sonic-frontiers', contract=second)
+
+    held = list(challenge.slots.exclude(contract=None).order_by('position'))
+    assert [s.contract_id for s in held] == [first.pk, second.pk]
+    assert {s.contract_slug for s in held} == {'sonic-frontiers'}
+
+
+def test_a_deleted_contract_releases_its_slots_from_the_constraint():
+    """`on_delete=SET_NULL` nulls the FK on every slot that held the contract, and a partial unique over a
+    nullable column does not constrain NULLs -- so two squares that both held it end up unconstrained. That is
+    acceptable and deliberate: no new assignment can duplicate a contract that is gone from the pool, and the
+    squares keep their snapshots. Pinned so the consequence is a decision on record rather than a surprise."""
+    challenge = _challenge(ProfileFactory(), challenge_type=CHALLENGE_TYPE_JOBS)
+    contract = _contract('Astro Bot')
+    frozen = contract.slug
+    slot = _slot(challenge, 'mage', position=0, contract_slug=frozen, contract=contract)
+
+    Contract.objects.filter(pk=contract.pk).delete()
+
+    kept = ChallengeSlot.objects.get(pk=slot.pk)
+    assert kept.contract_id is None
+    # The SNAPSHOT survives the row it pointed at, which is the whole reason it is stored.
+    assert kept.contract_slug == frozen
+    # NOT `contract_name`: asserting it equals `frozen.replace('-', ' ').title()` re-derived `_slot`'s own
+    # expression, so it tested the helper rather than the model.
+    # And a second slot may now carry the same dead snapshot, which is what "does not constrain NULLs" means.
+    assert _slot(challenge, 'champion', position=1, contract_slug=frozen).pk is not None
+
+
+def test_one_contract_cannot_hold_two_squares_under_two_different_snapshots():
+    """THE SECOND HOLE THE KEY MOVE CLOSED, which had no pin at all.
+
+    While the constraint read the frozen snapshot, a contract renamed between two placements sat in two job
+    squares legally -- two different strings, one game. The service guard was fixed for this first (it matches
+    on the FK); the database permitted it until the key moved. Both layers refuse it now.
+    """
+    challenge = _challenge(ProfileFactory(), challenge_type=CHALLENGE_TYPE_JOBS)
+    contract = _contract('Some RPG')
+    _slot(challenge, 'mage', position=0, contract_slug='some-rpg', contract=contract)
+
+    with _refuses('challengeslot_unique_contract'):
+        _slot(challenge, 'champion', position=1, contract_slug='some-rpg-remastered', contract=contract)

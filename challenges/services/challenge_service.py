@@ -61,7 +61,7 @@ detector.
 """
 from django.conf import settings
 from django.db import models, transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from challenges.models import (
@@ -477,16 +477,41 @@ def assign(challenge, profile, key, contract, *, acknowledge_lock=False):
 
     _refuse_if_wrong_shape(locked, key, contract)
 
-    # MATCHED ON THE LIVE FK, not on the frozen snapshot. A staff edit to `Contract.slug` breaks a slug
-    # match and leaves the FK correct -- this module's own header says so, and the point had been applied
-    # to detection but not here. The cost was a double payout: a jobs game already in one square could be
-    # accepted into a second, because neither this guard nor the pool's exclusion recognised it any more.
+    # ONE GAME, ONE SQUARE PER RUN, and it takes TWO clauses because a square can hold a game whose
+    # `Contract` row no longer exists.
     #
-    # The DB constraint `challengeslot_unique_contract` still keys on `contract_slug`, so it does not back
-    # this rule up for a renamed contract. It is a backstop rather than the rule, and the row lock above
-    # closes the race this guard would otherwise leave -- but the mismatch is worth a migration in its own
-    # right, and is NOT fixed here.
-    if locked.slots.exclude(pk=slot.pk).filter(contract_id=contract.id).exists():
+    # THE LIVE FK is the main rule. A staff edit to `Contract.slug` breaks a snapshot match and leaves the
+    # FK correct -- this module's header says so, and the point had been applied to detection but not here.
+    # The cost was a jobs game already in one square being accepted into a second, because neither this
+    # guard nor the pool's exclusion recognised it any more: a latent double payout (latent because
+    # `xp_redeemed_at` still has no writer, and an earlier version of this comment said "was" rather than
+    # "would be").
+    #
+    # `challengeslot_unique_contract` now keys on the same FK, so the database backs this up rather than
+    # disagreeing with it. That mismatch used to be described here as unfixed; the migration that fixed it
+    # is `0002_slot_uniqueness_keys_on_the_contract_fk`.
+    #
+    # THE DEAD-SNAPSHOT CLAUSE closes what moving the key opened, and it has to live here because no index
+    # can express it. `contract` is `SET_NULL`, so deleting a `Contract` nulls the FK on every square that
+    # held it while the snapshot survives -- and a partial unique does not constrain NULLs. The game then
+    # comes BACK as a new row (staff re-create it, or `evaluate_contract_candidates._stage_contract` restages
+    # it: its only guard is `Contract.objects.filter(igdb_id=...).exists()`, which the delete just freed, and
+    # its slug is `slugify(name)`, so the new row usually lands on the same slug). With its `EarnedContract`
+    # cascaded away the hunter no longer reads as having completed it, so nothing else refuses -- and the run
+    # would quietly hold one game in two squares with two completions. The old slug-keyed constraint caught
+    # this by accident, as an `IntegrityError`; a clean refusal is better than either.
+    #
+    # COMPARED ON THE SLUG because that is all a dead square has. Two limits, both stated rather than
+    # discovered later: a genuinely DIFFERENT game that later takes the dead slug is refused too (wrong, but
+    # it errs toward refusing, and only a staff rename plus a reuse produces it), and a dead square whose
+    # game returns under a NEW slug is not caught at all. A frozen `igdb_id` would be the precise key for the
+    # matched case, but `Contract.igdb_id` is null for admin/episodic contracts, so it would need this same
+    # fallback underneath it and is not the complete answer it looks like.
+    twin = locked.slots.exclude(pk=slot.pk).filter(
+        Q(contract_id=contract.id)
+        | Q(contract_id__isnull=True, contract_slug=contract.slug)
+    )
+    if twin.exists():
         raise ChallengeError('That game is already in another square of this run.')
 
     completed_via = None
@@ -817,11 +842,13 @@ def completable_slots():
     exist. `process_contracts` has to walk candidate profiles because a contract's membership is derived
     and it cannot know who qualifies; this can, because a slot names its own contract.
 
-    No index backs this predicate, which is a decision rather than an omission. `ChallengeSlot` holds 26
-    rows for a letter run and 25 for a jobs run, so even a few thousand runs is a trivial scan once a
-    night. If the table ever reaches six figures the fix is an index ON `(challenge_id, contract_id)`
-    with a partial condition of `is_completed = false AND contract_slug <> ''` -- columns and predicate
-    are different halves of an index and an earlier note gave only the predicate.
+    HALF AN INDEX NOW BACKS THIS PREDICATE, as a side effect rather than by design.
+    `challengeslot_unique_contract` became a partial unique on `(challenge_id, contract_id) WHERE
+    contract_id IS NOT NULL` in `0002_slot_uniqueness_keys_on_the_contract_fk`, which is the leading pair
+    this scan wants; what it does not carry is `is_completed`. Still a decision rather than an omission:
+    `ChallengeSlot` holds 26 rows for a letter run and 25 for a jobs run, so even a few thousand runs is a
+    trivial scan once a night. If the table ever reaches six figures, the remaining half is a partial
+    condition of `is_completed = false` on the columns that index already has.
     """
     return pending_slots().filter(
         Exists(EarnedContract.objects.filter(

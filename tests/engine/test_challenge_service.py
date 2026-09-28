@@ -9,7 +9,7 @@ code. Those are the ones a future reader will be tempted to "simplify":
   checked "a run exists afterwards", and would silently throw away completed squares.
 - **A finished square never clears.** This is load-bearing for the XP economy, not tidiness: the job-XP
   guard is keyed on the slot, so clearing a paid square and refilling it is exactly how one job gets
-  paid twice in one run.
+  paid twice in one run (latent: `xp_redeemed_at` gains its writer with the rewards chunk).
 - **An already-completed contract is refused, unless the hatch (either type) or the A-Z-only importer lifts it** -- and the two
   are labelled differently on purpose, because `import` carries a fairness date and `hatch` carries an
   admission that our supply failed the hunter.
@@ -375,9 +375,10 @@ def test_reassigning_an_unfinished_square_overwrites_it_in_place():
     """DIRECTLY over a filled square, with no clear in between -- an earlier version of this test
     cleared first and so never exercised the path it was named for.
 
-    Two things have to hold at once: the old slug is freed by the same row's UPDATE, so
+    Two things have to hold at once: the old FK is freed by the same row's UPDATE, so
     `challengeslot_unique_contract` is satisfied without a separate delete, and `filled_count` must not
-    move -- one square held a game before and holds one after."""
+    move -- one square held a game before and holds one after. (It said "the old slug" while the constraint
+    keyed on the snapshot; the key is the `contract` FK now.)"""
     profile = _member()
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.assign(challenge, profile, 'B', _contract('Bloodborne'))
@@ -1404,3 +1405,68 @@ def test_the_jobs_hatch_does_not_care_when_the_game_was_finished():
 
     assert slot.is_completed is True
     assert slot.completed_via == COMPLETED_VIA_HATCH
+
+
+def test_a_deleted_and_restaged_contract_cannot_take_a_second_square():
+    """THE HOLE MOVING THE UNIQUENESS KEY OPENED, refused cleanly instead of silently allowed.
+
+    `contract` is `SET_NULL`, so deleting a `Contract` nulls the FK on every square that held it while the
+    snapshot survives -- and a partial unique does not constrain NULLs. The game then comes back as a NEW row
+    (staff re-create it, or `evaluate_contract_candidates._stage_contract` restages it once the delete frees
+    its igdb id), its `EarnedContract` having cascaded away so the hunter no longer reads as having finished
+    it. Nothing else refuses, and the run would quietly hold one game in two squares with two completions.
+
+    The old slug-keyed constraint caught this by accident, as an `IntegrityError` -- a 500. This is the same
+    protection as a refusal a hunter can read.
+    """
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job, other = list(Job.objects.order_by('slug')[:2])
+    original = _contract('Astro Bot', jobs=[job, other])
+    slug, igdb_id = original.slug, original.igdb_id
+    svc.assign(challenge, profile, job.slug, original)
+
+    # Staff delete it: the square keeps its snapshot and loses its FK.
+    Contract.objects.filter(pk=original.pk).delete()
+    held = challenge.slots.get(key=job.slug)
+    assert held.contract_id is None
+    assert held.contract_slug == slug
+
+    # The same game returns as a new row, on the slug the delete freed.
+    restaged = Contract.objects.create(name='Astro Bot', slug=slug, is_live=True, igdb_id=igdb_id)
+    restaged.jobs.set([job, other])
+
+    with _refuses('already in another square'):
+        svc.assign(challenge, profile, other.slug, restaged)
+
+
+def test_a_renamed_contract_frees_its_slug_for_a_different_game():
+    """THE 500 THE KEY MOVE FIXED, exercised through the service rather than by building rows by hand.
+
+    `Contract.slug` is globally unique, so two contracts cannot share one -- but a staff rename frees the
+    string, and the next contract to take it then matches a snapshot some square froze earlier. While the
+    constraint keyed on that snapshot, this second placement raised `IntegrityError` AFTER the service had
+    already allowed it (different FK), and nothing caught it: a 500, and a square that stayed empty on every
+    retry.
+
+    The model-level test of this builds the two rows directly; this one is the path a hunter actually takes.
+    """
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job, other = list(Job.objects.order_by('slug')[:2])
+    first = _contract('Sonic Frontiers', jobs=[job])
+    svc.assign(challenge, profile, job.slug, first)
+    frozen = challenge.slots.get(key=job.slug).contract_slug
+
+    # The rename frees the slug; a DIFFERENT game takes it.
+    Contract.objects.filter(pk=first.pk).update(slug=frozen + '-ps5')
+    second = _contract('Sonic Superstars', jobs=[other])
+    Contract.objects.filter(pk=second.pk).update(slug=frozen)
+    second.refresh_from_db()
+
+    slot = svc.assign(challenge, profile, other.slug, second)
+
+    assert slot.contract_id == second.pk
+    assert slot.contract_slug == frozen
+    # Two squares, one frozen slug, two different games -- which is what it always was.
+    assert challenge.slots.filter(contract_slug=frozen).count() == 2

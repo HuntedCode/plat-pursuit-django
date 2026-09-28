@@ -76,16 +76,39 @@
    No `display` rule is needed -- the element is a `<div>` and the `lg:` grid rule below excludes this
    class, so an explicit `block` was inert. */
 
+/* THE HEAD IS A BAND, on the recipe Career already uses twice: `.jdoss__band` and `.jsheet__disc` are the
+   same idea (a discipline, its icon, its `--disc` name and a stat) and both put it on a SURFACE -- 1px tinted
+   border, a 3px `--disc` left edge, a top-down tint over `--pp-bg-1`, and material depth. The shelf label used
+   to sit on the bare page background, which made this a third treatment of one concept and broke the rule that
+   content belongs on a surface.
+
+   ON THE HEAD, NOT ON THE SHELF, and that is the constraint doing the deciding rather than taste. The shelf is
+   the flex item whose width feeds the 7-column grid, so a border or padding there would shave pixels off every
+   track and shrink all 25 cards -- the one thing this layout may not do. The head is its own grid item inside
+   that grid, sized by `minmax(0, 1fr)` tracks that do not grow to fit content, so dressing it costs the cards
+   nothing. The leftover space is what it is for. */
 .pp-csq-shelf__head {
     display: flex;
     align-items: baseline;
     gap: 8px;
     flex-wrap: wrap;
     margin-bottom: 8px;
+    padding: 9px 12px;
+    border-radius: var(--pp-radius-lg);
+    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 30%, transparent);
+    border-left: 3px solid var(--disc, var(--pp-primary));
+    background: linear-gradient(180deg,
+                                color-mix(in oklab, var(--disc, var(--pp-primary)) 9%, var(--pp-bg-1)),
+                                var(--pp-bg-1));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.18);
 }
+/* FLAT `--disc`, both of these, which is what `.jdoss__name` and `.jsheet__head-name` do. They were a
+   paler `color-mix(... , #fff)` because the label sat on the bare page background and needed lifting; with the
+   band behind it that is the same combination Career already ships, so the five disciplines finally read as one
+   palette across the two pages instead of two. */
 .pp-csq-shelf__icon {
     display: inline-flex;
-    color: color-mix(in oklab, var(--disc, var(--pp-primary)) 60%, #fff);
+    color: var(--disc, var(--pp-primary));
 }
 .pp-csq-shelf__icon svg { width: 18px; height: 18px; }
 .pp-csq-shelf__title {
@@ -94,7 +117,7 @@
     font-weight: 800;
     letter-spacing: 0.02em;
     text-transform: uppercase;
-    color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, #fff);
+    color: var(--disc, var(--pp-primary));
 }
 /* `tabular-nums` because this number CHANGES IN PLACE when a square completes, and proportional
    digits would shift the words beside it. `.jdoss__stats` and `.jsheet__head-avg` on Career set it
@@ -119,13 +142,17 @@
     }
     .pp-csq-shelf__head {
         grid-column: span 2;
-        /* Stacked in the leftover space rather than strung along it, and nudged down so the title sits on
-           the squares' top edge instead of floating above them. */
+        /* Stacked in the leftover space rather than strung along it. */
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         gap: 2px;
-        margin: 4px 0 0;
+        /* No top nudge now: the band's own padding supplies the offset the 4px margin used to, and
+           `align-items: start` on the shelf keeps the band from stretching down the row. The margin it
+           replaced was described as putting "the title on the squares' top edge", which was never quite
+           right and is not right here either -- this head is a COLUMN with the icon first, so the icon is
+           what sits near that edge, and the net move was 6px down rather than up. */
+        margin: 0;
     }
     .pp-csq-shelf__head .pp-csq-shelf__icon svg { width: 22px; height: 22px; }
     .pp-csq-shelf__title { font-size: 1.05rem; }
@@ -958,3 +985,39 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     border-top: 1px solid var(--pp-divider);
 }
 .pp-cpick__current { font-size: 0.76rem; color: var(--pp-text-dim); min-width: 0; }
+
+/* THE FOOT AS A CONFIRMATION BAR. Takes the whole foot (`flex-basis: 100%`) and its siblings are hidden
+   while it is up, so the question is never competing with "Clear this square" -- which at that moment is
+   about the same square and would be the wrong thing to press.
+
+   The foot is already `flex: none` outside the scrolling body, which is the entire reason this lives here:
+   the offers grid cannot reflow and the card being decided about cannot move or clip. */
+.pp-cpick__footask {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.pp-cpick__footask .pp-cpick__ask-text { flex: 1 1 14rem; }
+/* No top margin here: in the foot the buttons sit BESIDE the question when there is room, and only wrap
+   under it on a narrow screen. In the inline prompt they are always on their own line. */
+.pp-cpick__ask-row--foot { margin-top: 0; }
+/* Warning-toned for the duration, so the sheet itself shows that something irreversible is being asked. */
+.pp-cpick__foot--asking {
+    background: color-mix(in oklab, var(--pp-warning) 8%, transparent);
+    border-top-color: color-mix(in oklab, var(--pp-warning) 45%, transparent);
+}
+
+/* THE CARD THE QUESTION IS ABOUT. With the prompt in the foot, nothing else says which offer was pressed --
+   so the card keeps its place and takes a ring. `box-shadow` rather than a border, which would change the
+   card's box and shift the grid by a pixel, undoing the point of moving the prompt out. */
+/* BOTH SPELLINGS, because `.pp-cpick__row:hover` is 0-2-0 and sets `border-color`: hovering the ringed card
+   reverted its border to the primary hover tint while the ring's own box-shadow stayed, so one affordance came
+   apart into two under the cursor. `--asking:hover` levels it and wins on order. */
+.pp-cpick__row--asking,
+.pp-cpick__row--asking:hover {
+    border-color: color-mix(in oklab, var(--pp-warning) 60%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-warning) 45%, transparent);
+}

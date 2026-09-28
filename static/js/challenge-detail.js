@@ -32,7 +32,86 @@
 
     var PP = window.PlatPursuit || {};
 
-    function boot() {
+    //: Set just before the run-finished reload and consumed by `intro`, so the entrance does not replay
+    //: the celebration from zero. Per-tab by design: a different tab's visit should still animate.
+    var INTRO_DONE = 'pp-challenge-intro-done';
+
+    /** This run's Horizon bar, and the scope is the whole point.
+     *
+     *  `.pp-horizon` is a shared primitive (`components/horizon.html`) and this page renders two: the nav's
+     *  hidden sync bar sits earlier in the document, so a bare `document.querySelector('.pp-horizon')` found
+     *  that one. Every write then set `--horizon-progress` on a hidden element in the chrome while the run's
+     *  bar sat still until a reload. The same shape of bug as binding the board's clicks to `.pp-csq-grid`
+     *  and reaching only the first of five shelves.
+     */
+    function runHorizon() {
+        return document.querySelector('[data-cpick-horizon] .pp-horizon');
+    }
+
+    /** The page's entrance: the tally counts up and the bar fills from nothing.
+     *
+     *  FOR EVERY VIEWER, which is why this runs before `boot`'s dialog guard and why the script is no longer
+     *  gated on `can_edit`. Somebody reading another hunter's finished run should see it arrive.
+     *
+     *  BOTH REUSE WHAT THE SITE ALREADY HAS: `PlatPursuit.countUp` (the shared utility, which honours
+     *  reduced-motion itself and reads its target from `data-countup`) and the fill-from-0 move that
+     *  `franchise-detail.js` and `company-detail.js` make at load -- set the property to 0, wait for a paint,
+     *  then set the served value and let the primitive's own `transition: width 0.35s` carry it.
+     *
+     *  DOUBLE rAF, NOT A FORCED REFLOW, and the difference is the whole reason the bar did not move. The
+     *  first version used `void hz.offsetWidth`, which is the form `utils.js` uses -- but that one fires on a
+     *  REVEAL, on an element that has already painted at its served value, so there is a committed "from"
+     *  state to transition out of. At load there is none: setting 0 and the target inside one frame, before
+     *  the element has ever painted, gives the browser a single computed value and nothing to animate.
+     *  `franchise-detail.js` says so in its own comment ("double-rAF so the 0% width lands before the
+     *  transition to the real value") and it is the load-time precedent this should have copied. Same idea,
+     *  wrong context -- the tally ticked and the bar sat still, which is exactly what the owner saw.
+     *
+     *  UNDER REDUCED MOTION THE BAR IS LEFT ALONE ENTIRELY, and that is the half it would be easy to drop.
+     *  `horizon.css` disables the fill's transition under `reduce`, so setting 0 and then the target would
+     *  not animate -- but nor is it harmless to write 0 at all, because the served state IS the final state
+     *  and there is nothing to restore. `utils.js`'s own reveal says the same thing in the same words.
+     */
+    function intro() {
+        // SKIPPED ONCE, straight after a run finishes: `applySlot` reloads the page at that moment and the
+        // entrance would otherwise reset the finished tally to 0 and count it up a second time. Consumed on
+        // read, so the next ordinary visit animates normally. Every access is guarded -- storage throws in a
+        // private window and can come back empty in previews.
+        try {
+            if (window.sessionStorage.getItem(INTRO_DONE)) {
+                window.sessionStorage.removeItem(INTRO_DONE);
+                return;
+            }
+        } catch (e) { /* no storage: fall through and animate, which is the harmless direction */ }
+
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var tally = document.querySelector('[data-cpick-tally]');
+        if (tally && PP.countUp) { PP.countUp(tally, 900); }
+        if (reduce) { return; }
+        var hz = runHorizon();
+        if (!hz) { return; }
+        var target = hz.style.getPropertyValue('--horizon-progress');
+        if (!target) { return; }
+        hz.style.setProperty('--horizon-progress', '0%');
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () { hz.style.setProperty('--horizon-progress', target); });
+        });
+    }
+
+    function boot(first) {
+        // EVERY VIEWER, before the guard below sends a visitor home -- but ONCE.
+        //
+        // `onPageReady` calls its function as `fn(true)` on load and `fn(false)` on every
+        // `htmx:historyRestore`, and both precedents for this entrance gate it on that flag
+        // (`franchise-detail.js`, `company-detail.js` are `function boot(first) { if (first) {...} }`).
+        // Not reachable today -- `base.html` sets `htmx.config.historyCacheSize = 0` with
+        // `refreshOnHistoryMiss`, so a back-nav is a full load and no restore fires with a live DOM -- but
+        // the failure if that config ever changes is not a replayed animation, it is a PERMANENT one: a
+        // restore replays `innerHTML` captured at push time, and a snapshot taken inside the two-frame
+        // window below would bake `--horizon-progress: 0%` into the markup, making the served target `0%`
+        // for good.
+        if (first) { intro(); }
+
         var dialog = document.getElementById('cpick');
         // THE BOARD, not a grid. A jobs run draws one grid per discipline, so `querySelector` on
         // `.pp-csq-grid` would have bound the click delegation to the FIRST shelf and left the other
@@ -54,12 +133,26 @@
             catchupRows: dialog.querySelector('[data-cpick-catchup-rows]'),
             current: dialog.querySelector('[data-cpick-current]'),
             clear: dialog.querySelector('[data-cpick-clear]'),
+            foot: dialog.querySelector('[data-cpick-foot]'),
+            ask: dialog.querySelector('[data-cpick-ask]'),
+            askText: dialog.querySelector('[data-cpick-ask-text]'),
+            askKeep: dialog.querySelector('[data-cpick-ask-keep]'),
+            askGo: dialog.querySelector('[data-cpick-ask-go]'),
             // Outside the dialog: the page's own counters, which every write moves.
             tally: document.querySelector('[data-cpick-tally]'),
-            horizon: document.querySelector('.pp-horizon'),
+            horizon: runHorizon(),
         };
 
         var challengeId = grid.getAttribute('data-challenge-id');
+
+        //: The card the foot is currently asking about, and what to run if the answer is yes.
+        //: Held here rather than on the element because the callback is a closure over the row.
+        var footAnchor = null;
+        var footGo = null;
+
+        //: How to dismiss the open INLINE prompt, published by `askInRow` so the `cancel` handler can answer
+        //: Escape without knowing anything about that prompt's internals. Null when none is open.
+        var openPromptClose = null;
         // THE OPEN SLOT, and the guard for every async reply. A reply is applied only if the panel is still
         // showing the slot it was asked about -- keyed on IDENTITY, not on nullness, because a hunter who
         // closes one square and opens another mid-request would otherwise see the first square's pool under
@@ -374,7 +467,7 @@
                         pick.setAttribute('aria-label', pick.textContent + ' \u2014 ' + row.name);
                         pick.addEventListener('click', function () {
                             if (!occupant) { assign(row.slug, key, false, pick); return; }
-                            askInline(pick,
+                            ask(pick,
                                       keyLabel + ' already has ' + occupant + '. Replace it with '
                                       + row.name + '?',
                                       'Replace it',
@@ -390,11 +483,24 @@
             });
         }
 
-        /** Remove any inline prompt. A re-render replaces the rows a prompt was anchored to. */
+        /** Drop any open prompt, in BOTH surfaces. A re-render replaces the rows one was anchored to, and
+         *  the foot's bar would otherwise survive into a panel about a different square -- still holding the
+         *  callback for the old one, which is the worst version of this bug.
+         *
+         *  `li.` IS JUST PRECISION, not protection, and the comment here used to claim otherwise: that a bare
+         *  `.pp-cpick__ask` sweep "would have torn the foot's markup out of the template". It would not. A
+         *  class selector matches whole tokens, and the foot's elements are `pp-cpick__footask`,
+         *  `pp-cpick__ask-text` and `pp-cpick__ask-row` -- none of which IS the token `pp-cpick__ask`. The
+         *  qualifier says "the inline prompt is an `<li>`", which is true and worth saying; it was not
+         *  rescuing anything. */
         function dropPrompts() {
             Array.prototype.forEach.call(
-                dialog.querySelectorAll('.pp-cpick__ask'),
+                dialog.querySelectorAll('li.pp-cpick__ask'),
                 function (el) { if (el.parentNode) { el.parentNode.removeChild(el); } });
+            // Or Escape would call a closer whose prompt is already detached, and `say('Nothing changed.')`
+            // would answer a question nobody is being asked.
+            openPromptClose = null;
+            closeFootAsk(false);
         }
 
         function note(text) {
@@ -521,7 +627,11 @@
             // the same change that started setting `disabled` had deleted `.pp-cpick__row[disabled]` as
             // dead CSS. So a pressed offer looked identical to an unpressed one and the only feedback was
             // a 12px "Saving..." line. Both are back and both are pinned.
-            if (writing) { return; }
+            // AND IT SAYS SO. Returning in silence is defensible for a stray double-press; it is not
+            // defensible after the hunter has read a warning and pressed "Use it and lock the square", which
+            // is reachable when another offer's write is still in flight. The prompt closes, and without this
+            // nothing happens and nothing is said.
+            if (writing) { say('Still saving the last one. Try again in a moment.'); return; }
             // AND NOT DURING THE EXIT. The dialog stays displayed and interactive for the 180ms of
             // `cpickOut`, so an offer pressed inside that window committed a write and delivered a toast
             // plus a reload after a dismissal the hunter believed had cancelled it. `list-detail.js` guards
@@ -586,10 +696,109 @@
          *
          * Spans the row grid, so on a multi-column catch-up list it is one wide prompt rather than a cell.
          */
-        function askInline(anchor, message, goLabel, keepLabel, onGo) {
+        /** Ask before an irreversible placement, in whichever of the two surfaces suits the offers.
+         *
+         *  ONE QUESTION, TWO PRESENTATIONS, chosen by the shape of what is on screen:
+         *
+         *  - the SEARCH panel lists full-width rows, so a prompt inserted after the pressed row is just
+         *    another row. It reads well and the owner said so; it stays.
+         *  - the SQUARE panel and the catch-up block are multi-column GRIDS of cover cards. A full-width
+         *    prompt there reflows the grid and pushes the card being decided about up far enough to clip its
+         *    own art. Those go to the foot, which cannot reflow anything.
+         *
+         *  THE FOOT IS ALSO THE FALLBACK, and that closes a hole rather than just adding a case. This used to
+         *  call `onGo()` outright when it could not find an `<li>` to anchor to -- so a DOM it did not expect
+         *  meant an irreversible, permanently locking write happened with no confirmation at all. The foot
+         *  needs no anchor, so there is nothing left to fall through to.
+         */
+        function ask(anchor, message, goLabel, keepLabel, onGo) {
             var host = anchor && anchor.closest ? anchor.closest('li') : null;
             var list = host && host.parentNode;
-            if (!host || !list) { onGo(); return; }
+            if (host && list && list.classList.contains('pp-cpick__rows--search')) {
+                askInRow(anchor, host, list, message, goLabel, keepLabel, onGo);
+                return;
+            }
+            // THE WHOLE TRIO, because `askInFoot` dereferences all three and the button listeners are
+            // wired behind `els.askKeep && els.askGo`. Gating on the container alone could raise a bar
+            // with no working answers -- a question only Escape could dismiss.
+            if (els.ask && els.askText && els.askKeep && els.askGo) {
+                askInFoot(anchor, message, goLabel, keepLabel, onGo);
+                return;
+            }
+            // Neither surface exists, which means the sheet's markup is not what this script was written
+            // against. Say nothing happened rather than doing the thing that cannot be undone.
+            fail('Something went wrong. Reload the page and try again.');
+        }
+
+        /** Is the foot currently asking something? */
+        function footAsking() {
+            return !!(els.ask && !els.ask.hidden);
+        }
+
+        /** Put the foot back to its resting state: the square's name and its Clear button. */
+        function closeFootAsk(restoreFocus) {
+            if (!els.ask || els.ask.hidden) { return; }
+            els.ask.hidden = true;
+            els.foot.classList.remove('pp-cpick__foot--asking');
+            if (els.current) { els.current.hidden = false; }
+            // RESTORED FROM WHAT IT WAS, not to a guess. The button is hidden on an empty square and shown on
+            // a filled one, so unhiding it unconditionally would offer "Clear this square" for a square with
+            // nothing in it.
+            if (els.clear) { els.clear.hidden = els.ask.getAttribute('data-clear-was') !== 'shown'; }
+            var anchor = footAnchor;
+            footAnchor = null;
+            // CLEARED WITH THE PROMPT. Nothing can press the hidden button, so this is not a live path -- but
+            // a callback closed over last panel's row, sitting in a variable after its prompt is gone, is the
+            // shape of bug that only needs one future caller to become real.
+            footGo = null;
+            if (anchor) {
+                anchor.classList.remove('pp-cpick__row--asking');
+                anchor.removeAttribute('aria-describedby');
+                if (restoreFocus && anchor.focus && document.contains(anchor)) { anchor.focus(); }
+            }
+        }
+
+        /** The foot presentation: the grid holds still and the pressed card takes a ring. */
+        function askInFoot(anchor, message, goLabel, keepLabel, onGo) {
+            closeFootAsk(false);
+            footAnchor = anchor || null;
+            els.askText.textContent = message;
+            els.askKeep.textContent = keepLabel;
+            els.askGo.textContent = goLabel;
+            els.ask.setAttribute('data-clear-was', els.clear && !els.clear.hidden ? 'shown' : 'hidden');
+            if (els.current) { els.current.hidden = true; }
+            if (els.clear) { els.clear.hidden = true; }
+            els.ask.hidden = false;
+            els.foot.classList.add('pp-cpick__foot--asking');
+            // ONLY A CARD THAT IS STILL ON THE PAGE. A 409 can land after a re-render (press an offer, then
+            // type in the search box), and the button it came from is detached by then -- ringing it dresses a
+            // node nobody can see and points `aria-describedby` into nowhere. The foot still asks; there is
+            // simply no card to mark.
+            if (footAnchor && document.contains(footAnchor)) {
+                footAnchor.classList.add('pp-cpick__row--asking');
+                footAnchor.setAttribute('aria-describedby', 'cpick-ask-text');
+            }
+            footGo = onGo;
+            // ANNOUNCED, because focus moves to a button whose label is "Keep Sly Cooper" and a screen reader
+            // would otherwise be told nothing about what is being confirmed -- including that the square locks
+            // for good. `aria-describedby` on the CARD was the first attempt and describes a path nobody
+            // takes: the reader is on the button, and `closeFootAsk` strips the attribute before focus ever
+            // returns to the card. The status region is already `role="status" aria-live="polite"` and already
+            // announces the cancellation, so announcing the question is the smaller half of the same idea.
+            say(message);
+            // THE SAFE BUTTON, per the house convention: focusing the destructive one turns a stray Enter
+            // into the thing the prompt exists to prevent.
+            els.askKeep.focus();
+        }
+
+        function askInRow(anchor, host, list, message, goLabel, keepLabel, onGo) {
+            // ONE QUESTION AT A TIME, which `askInFoot` gets for free by owning a single bar and this had to
+            // be told. A search result carries up to six key pills and none is disabled while a prompt is
+            // open, so pressing a second occupied square inserted a SECOND prompt -- both with live Go
+            // buttons, and `openPromptClose` overwritten so Escape answered the last one CREATED rather than
+            // the one holding focus. Each prompt used to own its own key handler, so this was a regression
+            // from centralising Escape, not a pre-existing gap.
+            dropPrompts();
 
             var prompt = document.createElement('li');
             prompt.className = 'pp-cpick__ask';
@@ -613,6 +822,7 @@
             prompt.appendChild(row);
 
             var close = function (restoreFocus) {
+                openPromptClose = null;
                 if (prompt.parentNode) { prompt.parentNode.removeChild(prompt); }
                 // FOCUS GOES BACK to what was pressed, which a native confirm did for free and a built one
                 // has to do on purpose -- otherwise a keyboard user lands at the top of the document.
@@ -620,11 +830,16 @@
             };
             keep.addEventListener('click', function () { close(true); say('Nothing changed.'); });
             go.addEventListener('click', function () { close(false); onGo(); });
-            // Escape answers the prompt, not the sheet: the narrower thing wins, which is what a reader
-            // pressing it expects.
-            prompt.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape') { e.stopPropagation(); close(true); }
-            });
+            // ESCAPE IS ROUTED THROUGH THE `cancel` HANDLER, not handled here, and the reason is worth
+            // recording because this used to be a `keydown` listener with `stopPropagation`.
+            //
+            // The sheet's Escape does not arrive as a keydown at all: a modal `<dialog>` turns Escape into a
+            // `cancel` event dispatched ON THE DIALOG, which is what the close routine listens for. So
+            // stopping a keydown from bubbling could never have stopped the sheet closing -- whether it
+            // worked at all rested on the browser honouring `preventDefault()` on the keydown to suppress the
+            // close request, which this listener never called. Publishing the closer and letting the `cancel`
+            // handler decide needs no assumption about any of that.
+            openPromptClose = function () { close(true); };
 
             list.insertBefore(prompt, host.nextSibling);
             // THE SAFE BUTTON, per the house convention. Focusing the destructive one turns a stray Enter
@@ -634,7 +849,7 @@
 
         function offerConfirmation(data, slug, key, button) {
             // The server's own words, so the warning and the rule cannot drift apart.
-            askInline(button,
+            ask(button,
                       data.error + ' (' + data.contract_name + ' \u2192 ' + labelFor(key) + ')',
                       'Use it and lock the square',
                       'Leave it empty',
@@ -706,7 +921,45 @@
                 sub.textContent = shelf.querySelectorAll('.pp-csq--done').length
                     + ' of ' + shelf.querySelectorAll('.pp-csq').length + ' done';
             }
-            if (els.tally) { els.tally.textContent = slot.completed_count; }
+            if (els.tally) {
+                // TICKS FROM THE OLD VALUE, not from zero: this is a change to a number already on screen, so
+                // counting up from 0 would read as the page reloading. `countUp` needs the target on
+                // `data-countup` and the start in `from` -- the shape `company-list.js` uses when its filtered
+                // total changes. It honours reduced-motion itself, so there is no branch here.
+                //
+                // READ FROM `data-countup`, NOT FROM THE RENDERED TEXT, for two reasons that both bite the
+                // same line. The text can be MID-ANIMATION (the entrance's own count-up is still running for
+                // 900ms after load), so parsing it starts the new tick from a number that was never real. And
+                // `countUp` formats with `toLocaleString()`, so a four-figure count renders `1.000` on a
+                // de-DE browser and `1 000` on fr-FR, where stripping commas and parsing yields 1. Neither is
+                // reachable at 25 or 26 squares; the attribute is the value either way.
+                var before = parseInt(els.tally.dataset.countup || '', 10);
+                els.tally.dataset.countup = String(slot.completed_count);
+                if (PP.countUp) {
+                    PP.countUp(els.tally, 600, { from: isNaN(before) ? 0 : before });
+                    // AND REASSERT IT once every animation that could be in flight has ended. `countUp` has
+                    // no cancellation: each call owns its own frame loop and writes ITS captured target when
+                    // it finishes, so the entrance's 900ms loop starting at load can outlive a 600ms write
+                    // loop and leave the OLD number on screen for good. Cheaper and more honest than
+                    // reimplementing cancellation in a shared utility.
+                    window.setTimeout(function () {
+                        if (els.tally.dataset.countup === String(slot.completed_count)) {
+                            els.tally.textContent = String(slot.completed_count);
+                        }
+                    }, 1000);
+                } else {
+                    els.tally.textContent = slot.completed_count;
+                }
+            }
+            // NO EXPLICIT ANIMATION NEEDED. `.pp-horizon__fill` carries `transition: width 0.35s` in the
+            // primitive itself, so setting the property animates.
+            //
+            // WHAT THE OLD BUG ACTUALLY WAS, corrected: writing to the wrong `.pp-horizon` was a COMPLETE
+            // NO-OP, not a smooth animation of something hidden. The nav's sync bar sets
+            // `--horizon-progress` inline on its `.pp-horizon__fill` (`navbar.html`, `data-nav-fill`), and
+            // that declaration SHADOWS anything inherited from the root -- so setting the property on the
+            // root changed nothing anywhere. The run's own bar sets it on the root, which is why inheriting
+            // down to the fill works here. Diagnosis and fix were right; this comment's mechanism was not.
             if (els.horizon && slot.total_slots) {
                 var pct = Math.round(slot.completed_count / slot.total_slots * 100);
                 els.horizon.style.setProperty('--horizon-progress', pct + '%');
@@ -721,6 +974,11 @@
             // design exists to avoid -- so this is the one case that still reloads, once per run instead of
             // once per square, at the moment a hunter has most reason to expect the page to change.
             if (slot.is_complete) {
+                // AND THE RELOAD MUST NOT REPLAY THE ENTRANCE. Without this the hunter watches the tally
+                // reach 25, then the page reloads and the tally SNAPS BACK TO 0 and counts up again while the
+                // bar refills -- the celebration played twice, the second time starting with a visible reset.
+                // A marker rather than a querystring, so the finished run's URL stays clean and shareable.
+                try { window.sessionStorage.setItem(INTRO_DONE, '1'); } catch (e) { /* private mode */ }
                 window.setTimeout(function () { window.location.reload(); }, 1200);
             }
         }
@@ -739,6 +997,11 @@
             els.catchupTitle.textContent = '';
             els.catchupNote.textContent = '';
             els.catchup.hidden = true;
+            // `dropPrompts`, not `closeFootAsk`: this also has to null `openPromptClose`, or a prompt
+            // whose `<li>` was just deleted by the line above leaves its closer behind for Escape to
+            // call. `dropPrompts`' own comment names that hazard; only one of the two teardowns obeyed it.
+            dropPrompts();
+            els.current.hidden = false;
             els.current.textContent = '';
             els.clear.hidden = true;
             els.clear.disabled = false;
@@ -791,6 +1054,28 @@
             els.q.addEventListener('input', PP.debounce ? PP.debounce(run, 250) : run);
         }
 
+        if (els.askKeep && els.askGo) {
+            els.askKeep.addEventListener('click', function () {
+                closeFootAsk(true);
+                say('Nothing changed.');
+            });
+            els.askGo.addEventListener('click', function () {
+                var go = footGo;
+                footGo = null;
+                // CLOSED BEFORE THE WRITE, and focus moved somewhere real rather than left to fall.
+                //
+                // The old reasoning here was that returning focus to the anchor would lose it anyway because
+                // `assign` disables that button -- which justified a choice that did not achieve anything:
+                // hiding the bar removes the focused Go button from the rendering tree, so focus fell to the
+                // document either way. A SUCCESSFUL write closes the sheet and the browser restores focus to
+                // whatever opened it, so that path was fine by luck; a FAILED one leaves the sheet open with
+                // focus nowhere, which is the case this fixes.
+                closeFootAsk(false);
+                if (els.q && document.contains(els.q)) { els.q.focus(); }
+                if (go) { go(); }
+            });
+        }
+
         if (els.clear) {
             els.clear.addEventListener('click', function () {
                 if (!openKey) { return; }
@@ -825,10 +1110,66 @@
             function (button) { button.addEventListener('click', function () { close(); }); });
 
         // Escape, routed through the choreographed close rather than the browser's instant one.
-        dialog.addEventListener('cancel', function (e) { e.preventDefault(); close(); });
+        // ESCAPE TRIES TO ANSWER THE NARROWEST THING THAT IS OPEN, and "tries" is the honest verb.
+        //
+        // A prompt open means a hunter is mid-question about an irreversible placement, so Escape should say
+        // "no" to THAT rather than dismissing the question and the offers together.
+        //
+        // WHAT THIS CANNOT PROMISE, corrected: an earlier version of this comment said routing through
+        // `cancel` needed "no assumption about whether cancelling a keydown suppresses a close request". It
+        // traded that assumption for a weaker one. Under the close-watcher rules `<dialog>` follows, `cancel`
+        // is only cancelable while the page holds TRANSIENT USER ACTIVATION, and it will not fire again for a
+        // second close request until fresh activation arrives. Escape does not grant activation, and the
+        // window expires in seconds -- so a hunter who READS this prompt (which is the entire point of it)
+        // and then presses Escape may find the sheet closing instead.
+        //
+        // That is a UX imperfection, not a correctness one, and the difference is where the work went: the
+        // `close` listener below tears both prompts down whatever route shut the sheet, so nothing is written,
+        // no callback survives, and no ring or bar is left behind. The `keydown` handler below is a
+        // best-effort attempt to keep the sheet open in that case; whether `preventDefault()` on the key
+        // suppresses the close request is NOT something this file should assert, so it does not.
+        // BEST EFFORT, FIRST. If cancelling the key does suppress the close request, a prompt answered here
+        // never reaches `cancel` at all; if it does not, `cancel` (or the `close` listener) still cleans up.
+        // No comment here claims which, because this file cannot verify it.
+        dialog.addEventListener('keydown', function (e) {
+            if (e.key !== 'Escape') { return; }
+            if (!footAsking() && !openPromptClose) { return; }
+            e.preventDefault();
+            e.stopPropagation();
+            if (footAsking()) { closeFootAsk(true); say('Nothing changed.'); return; }
+            var closePrompt = openPromptClose;
+            openPromptClose = null;
+            closePrompt();
+            say('Nothing changed.');
+        }, true);
+
+        dialog.addEventListener('cancel', function (e) {
+            e.preventDefault();
+            if (footAsking()) { closeFootAsk(true); say('Nothing changed.'); return; }
+            if (openPromptClose) {
+                var closePrompt = openPromptClose;
+                openPromptClose = null;
+                closePrompt();
+                say('Nothing changed.');
+                return;
+            }
+            close();
+        });
 
         // Backdrop click. On a native `<dialog>` a click on the backdrop reports the dialog as the target.
         dialog.addEventListener('click', function (e) { if (e.target === dialog) { close(); } });
+
+        // EVERY DISMISSAL TEARS THE QUESTION DOWN, and the native `close` event is the only place that can
+        // promise it. Four routes shut this sheet -- the x button, the backdrop, a swipe (`dismissableSheet`
+        // calls `dialog.close()` itself, bypassing our own `close()`), and Escape -- and only Escape used to
+        // answer an open prompt. The others left the bar up through the 180ms exit, the ring on a card nobody
+        // could see, and `openPromptClose` pointing at a detached node, which then swallowed the NEXT Escape
+        // and announced "Nothing changed." about a question that was never on screen.
+        //
+        // ON `close` RATHER THAN IN `close()`: the event fires however the dialog shut, including the paths
+        // that never call our function and including an Escape whose `cancel` we could not cancel (see the
+        // handler above). One hook, no route to forget.
+        dialog.addEventListener('close', function () { dropPrompts(); });
 
         // `handle:` IS THE DATA-LOSS GUARD, and this sheet needs it. `dismissableSheet`'s contract: "Omit on
         // a sheet you READ; pass one on a sheet you OPERATE." This one holds a search term and two

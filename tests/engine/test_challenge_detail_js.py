@@ -197,8 +197,19 @@ def test_the_sheet_is_shown_before_it_is_loaded():
 
 def test_escape_and_the_backdrop_both_route_through_the_close():
     """Escape would otherwise take the browser's instant close and skip the exit; the backdrop is the one
-    two sibling dialogs honour and a third forgot."""
-    assert "addEventListener('cancel', function (e) { e.preventDefault(); close(); })" in JS
+    two sibling dialogs honour and a third forgot.
+
+    THE HANDLER NOW CHOOSES between three outcomes, narrowest first, because Escape has to answer an open
+    prompt rather than dismissing the question and the offers together. What this still pins is that the
+    SHEET's close goes through the choreographed routine and not the browser's instant one."""
+    assert "addEventListener('cancel', function (e) {" in JS
+    body = JS[JS.index("addEventListener('cancel', function (e) {"):]
+    body = body[:body.index('\n        });') + 1]
+    assert 'e.preventDefault();' in body
+    assert 'close();' in body
+    # Narrowest first: both prompts are answered before the sheet is considered.
+    assert body.index('footAsking()') < body.index('close();')
+    assert body.index('openPromptClose') < body.index('close();')
     assert 'if (e.target === dialog) { close(); }' in JS
 
 
@@ -215,7 +226,8 @@ def test_the_confirmation_text_comes_from_the_server():
     """So the warning and the rule cannot drift apart. A second copy of "this locks the square" in the client
     is a second thing to forget to update."""
     assert 'data.error' in JS
-    assert 'askInline(button,' in JS
+    # `ask(` is the dispatcher that picks the surface; it was `askInline(` when there was only one.
+    assert 'ask(button,' in JS
 
 
 def test_no_confirmation_is_a_native_pop_up():
@@ -419,7 +431,13 @@ def test_only_one_write_can_be_in_flight():
     # presses meant two POSTs, two toasts and two reload timers -- the very thing the flag was added for, in
     # the one write it did not cover. `JS.count('release();') >= 2` could not tell "both paths" from "twice
     # on one path", which is how that passed.
-    assert JS.count('if (writing) { return; }') == 2, 'assign and clear must both take the lock'
+    # COUNTED ON THE FLAG, not on the whole statement. `assign`'s early return now SAYS something before
+    # returning (a confirmation that vanished in silence is worse than a stray double-press ignored in
+    # silence), so the two sites no longer share one spelling.
+    assert JS.count('if (writing)') == 2, 'assign and clear must both take the lock'
+    assert JS.count("say('Still saving the last one. Try again in a moment.'); return; }") == 1, (
+        'the write that a confirmation can reach must report when it refuses'
+    )
     assert JS.count('writing = true;') == 2
     # EXCLUDING THE DECLARATION. `var writing = false;` is the initialiser, not a release, so counting the
     # bare string found three -- the same trap as counting `pendingAfter = []` and matching its `var` line.
@@ -618,7 +636,12 @@ def test_a_write_no_longer_reloads_the_page():
     # embedding a newline in the assertion, which is how the last two attempts at this broke.
     gate = 'if (slot.is_complete) {'
     assert gate in JS_CODE
-    assert 0 < JS_CODE.index('location.reload') - JS_CODE.index(gate) < 120
+    # Widened from 120 characters: the branch now also writes the session marker that stops the entrance
+    # replaying the celebration from zero after the reload. Still tight enough that no unrelated statement
+    # fits, which is the property being held.
+    assert 0 < JS_CODE.index('location.reload') - JS_CODE.index(gate) < 500
+    # And the marker is set BEFORE the reload, or it could not be read on the way back in.
+    assert JS_CODE.index('sessionStorage.setItem(INTRO_DONE') < JS_CODE.index('location.reload')
 
 
 def test_the_swapped_square_markup_comes_from_the_server():
@@ -718,33 +741,67 @@ def test_a_finished_game_cannot_be_placed_from_the_search_panel():
     assert 'if (occupant && !finished) {' in JS
 
 
-def test_the_inline_prompt_follows_the_house_confirm_recipe():
+def test_both_confirmation_surfaces_follow_the_house_confirm_recipe():
     """`.stg-confirm__row` (account deletion in Settings) is the pattern: two buttons, the SAFE one first and
     FOCUSED, and named after what it preserves rather than "Cancel" -- so somebody who reads only the buttons
     still knows what each does. Focusing the destructive one turns a stray Enter into the thing the prompt
-    exists to prevent."""
-    body = JS[JS.index('function askInline('):JS.index('function offerConfirmation(')]
-    assert 'row.appendChild(keep);' in body
-    assert body.index('row.appendChild(keep);') < body.index('row.appendChild(go);'), 'safe answer first'
-    assert 'keep.focus();' in body
+    exists to prevent.
+
+    ASSERTED FOR BOTH SURFACES. The question is asked in a row in the search panel and in the sheet's foot for
+    the grids, and the recipe is the reason either is safe -- so a second surface that skipped it would be a
+    second, unsafe way to ask the same irreversible question."""
+    row = JS[JS.index('function askInRow('):JS.index('function offerConfirmation(')]
+    assert 'row.appendChild(keep);' in row
+    assert row.index('row.appendChild(keep);') < row.index('row.appendChild(go);'), 'safe answer first'
+    assert 'keep.focus();' in row
+
+    # The foot's two buttons come from the template, so the ORDER is asserted there.
+    tpl = _template_code(
+        (ROOT / 'templates' / 'challenges' / 'challenge_detail.html').read_text(encoding='utf-8'))
+    assert tpl.index('data-cpick-ask-keep') < tpl.index('data-cpick-ask-go'), 'safe answer first'
+    foot = JS[JS.index('function askInFoot('):]
+    foot = foot[:foot.index('\n        }') + 1]
+    assert 'els.askKeep.focus();' in foot
+
     assert '.pp-cpick__ask-keep' in CSS and '.pp-cpick__ask-go' in CSS
 
 
-def test_the_prompt_returns_focus_to_what_was_pressed():
+def test_both_confirmation_surfaces_return_focus_to_what_was_pressed():
     """A native confirm did this for free; a built one has to do it on purpose, or a keyboard user who answers
-    "keep" lands at the top of the document."""
-    body = JS[JS.index('function askInline('):JS.index('function offerConfirmation(')]
-    assert 'if (restoreFocus && anchor && anchor.focus && document.contains(anchor)) { anchor.focus(); }' in body
-    assert "keep.addEventListener('click', function () { close(true); say('Nothing changed.'); });" in body
-    # And the destructive answer does NOT restore focus -- the square it wrote to is about to be re-rendered.
-    assert "go.addEventListener('click', function () { close(false); onGo(); });" in body
+    "keep" lands at the top of the document.
+
+    AND NEITHER RESTORES IT ON THE DESTRUCTIVE ANSWER, for the same reason in both: `assign` disables the
+    button it was handed and re-enables it afterwards, so focus returned to a control that is about to be
+    disabled is focus lost to the document."""
+    row = JS[JS.index('function askInRow('):JS.index('function offerConfirmation(')]
+    assert 'if (restoreFocus && anchor && anchor.focus && document.contains(anchor)) { anchor.focus(); }' in row
+    assert "keep.addEventListener('click', function () { close(true); say('Nothing changed.'); });" in row
+    assert "go.addEventListener('click', function () { close(false); onGo(); });" in row
+
+    # The foot's version, whose restore lives in `closeFootAsk` and is called with `true` from Keep only.
+    close_foot = JS[JS.index('function closeFootAsk('):JS.index('function askInFoot(')]
+    assert 'if (restoreFocus && anchor.focus && document.contains(anchor)) { anchor.focus(); }' in close_foot
+    assert 'closeFootAsk(true);' in JS_CODE          # Keep, and Escape
+    assert 'closeFootAsk(false);' in JS_CODE         # the write, and every teardown
 
 
-def test_escape_answers_the_prompt_rather_than_the_sheet():
+def test_escape_answers_whichever_prompt_is_open_rather_than_the_sheet():
     """The narrower thing wins, which is what somebody pressing it expects -- otherwise a prompt they were
-    reading takes the whole picker with it."""
-    body = JS[JS.index('function askInline('):JS.index('function offerConfirmation(')]
-    assert "if (e.key === 'Escape') { e.stopPropagation(); close(true); }" in body
+    reading takes the whole picker with it.
+
+    DECIDED IN ONE PLACE, AND NOT VIA `keydown`. The inline prompt used to listen for a keydown and call
+    `stopPropagation`, which could never have stopped the sheet: a modal `<dialog>` turns Escape into a
+    `cancel` event dispatched on the dialog, not a keydown that bubbles to it. Whether it worked at all rested
+    on the browser suppressing the close request because a keydown was cancelled -- and that listener never
+    called `preventDefault()`. Both prompts now publish how to dismiss them and the `cancel` handler chooses,
+    which needs no assumption about key handling at all.
+    """
+    # No prompt handles Escape itself any more.
+    assert "e.key === 'Escape'" not in JS_CODE, 'Escape is the cancel handler\'s decision, in one place'
+    assert 'openPromptClose = function () { close(true); };' in JS_CODE
+    body = JS[JS.index("addEventListener('cancel', function (e) {"):]
+    body = body[:body.index('\n        });') + 1]
+    assert 'footAsking()' in body and 'openPromptClose' in body
 
 
 def test_a_re_render_drops_any_open_prompt():
@@ -943,3 +1000,316 @@ def test_the_shelf_counter_writes_the_same_sentence_the_server_does():
     assert '{{ group.done }} of {{ group.total }} done' in tpl
     assert "+ ' of ' +" in JS_CODE
     assert "+ ' done'" in JS_CODE
+
+
+# ── the confirmation's second surface ─────────────────────────────────────────────────────────────
+
+def test_the_grid_panels_ask_in_the_foot_and_the_search_panel_asks_in_a_row():
+    """THE OWNER'S NOTE. A full-width prompt row reads well among the search panel's full-width rows, and
+    reflows the square picker's multi-column grid of cover cards -- pushing the card being decided about far
+    enough to clip its own art. The foot cannot reflow anything: it is `flex: none` outside the scrolling
+    body, so it is always visible and the grid holds still."""
+    dispatch = JS_CODE[JS_CODE.index('function ask(anchor,'):]
+    dispatch = dispatch[:dispatch.index('\n        }') + 1]
+    # THE CONDITION, not the order of the two calls. Asserting only that `askInRow` appears before `askInFoot`
+    # was satisfied by a guard inverted to `!contains(...)` -- which sends the search panel to the foot and the
+    # grids to the rows, the exact opposite of the design, with the suite green.
+    guard = "if (host && list && list.classList.contains('pp-cpick__rows--search')) {"
+    assert guard in dispatch, 'the POSITIVE `--search` test is what selects the row form'
+    after = dispatch[dispatch.index(guard):]
+    # The row form is reached only inside that guard; the foot is what everything else gets.
+    assert after.index('askInRow(') < after.index('askInFoot(')
+    assert '.pp-cpick__footask' in CSS_CODE
+    assert '.pp-cpick__foot--asking' in CSS_CODE
+
+
+def test_the_foot_prompt_never_falls_through_to_writing_without_asking():
+    """THE HOLE THIS CLOSED. The old prompt called `onGo()` outright when it could not find an `<li>` to anchor
+    to -- so a DOM it did not expect meant an irreversible, permanently locking write with no confirmation at
+    all. The foot needs no anchor, so it is the fallback and there is nothing left to fall through to."""
+    dispatch = JS_CODE[JS_CODE.index('function ask(anchor,'):]
+    dispatch = dispatch[:dispatch.index('\n        }') + 1]
+    assert 'onGo();' not in dispatch, 'the dispatcher must never perform the action instead of asking'
+    assert 'fail(' in dispatch, 'with no surface at all it must report, not write'
+
+
+def test_the_ringed_card_does_not_move_the_grid():
+    """The ring is what says WHICH offer the foot is asking about, now that the question is not beside it. A
+    border alone would change the card's box and shift the grid by a pixel, undoing the point of moving the
+    prompt out of the rows."""
+    # TWO SELECTORS NOW: `.pp-cpick__row:hover` is 0-2-0 and sets `border-color`, so hovering the ringed
+    # card reverted its border to the primary tint while the ring's box-shadow stayed -- one affordance coming
+    # apart under the cursor. The `:hover` spelling levels it.
+    assert '.pp-cpick__row--asking,\n.pp-cpick__row--asking:hover {' in CSS_CODE
+    rule = CSS_CODE[CSS_CODE.index('.pp-cpick__row--asking,'):]
+    rule = rule[:rule.index('}')]
+    assert 'box-shadow:' in rule
+    assert 'border-width' not in rule and 'padding' not in rule
+
+
+def test_the_foot_restores_the_clear_button_to_what_it_was():
+    """`Clear this square` is hidden on an empty square and shown on a filled one, so unhiding it when the
+    prompt closes would offer to clear a square with nothing in it. The prior state is recorded, not guessed."""
+    assert "els.ask.setAttribute('data-clear-was'" in JS_CODE
+    assert "els.ask.getAttribute('data-clear-was') !== 'shown'" in JS_CODE
+
+
+def test_a_re_render_closes_the_foot_prompt_too():
+    """A bar left up after a re-render is a question about the last square, still holding the callback that
+    would write to it. `dropPrompts` owns both surfaces for that reason."""
+    body = JS_CODE[JS_CODE.index('function dropPrompts()'):]
+    body = body[:body.index('\n        }') + 1]
+    assert 'closeFootAsk(false);' in body
+    assert 'openPromptClose = null;' in body
+    # And it must not sweep the template's own markup away: the foot's bar shares the element classes.
+    assert "querySelectorAll('li.pp-cpick__ask')" in body
+
+
+# ── the entrance, and the bar it actually moves ───────────────────────────────────────────────────
+
+def test_the_bar_lookup_is_scoped_to_this_runs_own_horizon():
+    """THE BUG THE OWNER REPORTED. `.pp-horizon` is a shared primitive and the page renders two; the nav's
+    hidden sync bar is first in the document, so a bare `document.querySelector('.pp-horizon')` moved THAT and
+    the run's bar sat still until a reload. One definition, scoped to the hook."""
+    assert "document.querySelector('[data-cpick-horizon] .pp-horizon')" in JS_CODE
+    assert "querySelector('.pp-horizon')" not in JS_CODE, (
+        'a bare `.pp-horizon` lookup finds the nav bar first'
+    )
+    # And every reader of it goes through the one function.
+    assert 'horizon: runHorizon(),' in JS_CODE
+
+
+def test_the_entrance_runs_for_every_viewer_not_only_the_owner():
+    """`boot` returns early when there is no dialog, which is every visitor -- so an entrance written after
+    that guard would only ever play for the one hunter who can edit the run. The Hall of Fame is people
+    reading somebody else's finished run."""
+    body = JS_CODE[JS_CODE.index('function boot(first) {'):]
+    body = body[:body.index('var dialog = document.getElementById')]
+    assert 'if (first) { intro(); }' in body, 'the entrance must run before the dialog guard, and once'
+    # ONCE PER LOAD. `onPageReady` calls `fn(false)` on every history restore, and both precedents for this
+    # entrance gate it on that flag. Replaying it is the visible cost; the invisible one is that a restore
+    # replays markup captured at push time, so a snapshot taken mid-animation would bake `0%` in for good.
+    assert 'function boot(first)' in JS_CODE
+    assert 'PP.onPageReady(boot)' in JS_CODE
+
+
+def test_the_entrance_fills_the_bar_across_a_paint_not_inside_one_frame():
+    """THE BUG THE OWNER SAW: the tally ticked and the bar did not move.
+
+    A transition needs a committed "from" value. `void el.offsetWidth` gives it one on a REVEAL, where the
+    element has already painted at its served value -- which is why `utils.js` uses that form. At LOAD there is
+    no painted state, so setting 0 and the target inside a single frame leaves the browser one computed value
+    and nothing to animate. The load-time precedents (`franchise-detail.js`, `company-detail.js`) wait a frame,
+    and say so: "double-rAF so the 0% width lands before the transition to the real value".
+
+    Pinned as the ORDER 0 -> rAF -> rAF -> target, because that sequence is the fix; a single rAF is the
+    plausible wrong version."""
+    body = JS_CODE[JS_CODE.index('function intro() {'):]
+    body = body[:body.index('\n    }') + 1]
+    assert 'PP.countUp(tally, 900);' in body
+    assert "setProperty('--horizon-progress', '0%');" in body
+    assert 'void hz.offsetWidth' not in body, 'the reveal form does not animate at load'
+    zero = body.index("setProperty('--horizon-progress', '0%')")
+    target = body.index("setProperty('--horizon-progress', target)")
+    assert zero < target
+    # Two nested frames between them, not one.
+    between = body[zero:target]
+    assert between.count('requestAnimationFrame') == 2, 'a single frame is not enough at load'
+
+
+def test_the_shelf_head_is_a_surface_on_careers_own_recipe():
+    """`.jdoss__band` and `.jsheet__disc` are the same concept -- a discipline, its icon, its `--disc` name and
+    a stat -- and both put it on a surface. The shelf label sat on the bare page background, making this a third
+    treatment of one idea.
+
+    THE BAND IS ON THE HEAD, NOT THE SHELF, and that is load-bearing: the shelf's width feeds the 7-column
+    grid, so a border or padding there would shave a fraction off every track and shrink all 25 cards."""
+    head = CSS_CODE[CSS_CODE.index('.pp-csq-shelf__head {'):]
+    head = head[:head.index('}')]
+    assert 'border-left: 3px solid var(--disc' in head
+    assert 'linear-gradient(180deg' in head
+    assert 'padding:' in head
+
+    # AND THE SHELF ITSELF TAKES NO BORDER OR PADDING, which is the constraint. Asserted on the selector
+    # that EXISTS: an earlier version looped over two spellings and `continue`d past any that were absent,
+    # and `.pp-csq-shelf {` is not one of them -- so half the loop was dead while the test read as guarding
+    # two rules.
+    shelf = CSS_CODE[CSS_CODE.index('.pp-csq-shelf:not(.pp-csq-shelf--plain) {'):]
+    shelf = shelf[:shelf.index('}')]
+    assert 'padding' not in shelf, 'the shelf must not pad: it would resize every card'
+    assert 'border' not in shelf, 'the shelf must not border: it would resize every card'
+    # And no OTHER rule dresses the shelf either, whatever it is spelled as. `--plain` is the A-Z wrapper and
+    # is allowed nothing of its own; the head is where the band lives.
+    assert '.pp-csq-shelf--plain { display' not in CSS_CODE
+    for line in CSS_CODE.splitlines():
+        if '.pp-csq-shelf' in line and '__' not in line and ('padding:' in line or 'border:' in line):
+            raise AssertionError('a shelf rule adds box to the grid container: %s' % line.strip())
+
+
+def test_the_shelf_label_uses_the_same_flat_disc_colour_career_does():
+    """`.jdoss__name` and `.jsheet__head-name` are flat `var(--disc)`. The shelf used a paler
+    `color-mix(..., #fff)` because it sat on the bare page background -- with the band behind it that is the
+    same combination Career ships, so the five disciplines read as one palette across both pages."""
+    for block in ('.pp-csq-shelf__icon {', '.pp-csq-shelf__title {'):
+        rule = CSS_CODE[CSS_CODE.index(block):]
+        rule = rule[:rule.index('}')]
+        assert 'color: var(--disc' in rule, '%s should be flat --disc' % block
+        assert '#fff' not in rule, '%s still lightens the discipline' % block
+
+
+def test_the_entrance_leaves_the_bar_alone_under_reduced_motion():
+    """THE HALF THAT IS EASY TO DROP. `horizon.css` disables the fill's transition under `reduce`, so writing 0
+    and then the target would not animate -- and writing 0 is not harmless, because the served state IS the
+    final state and there is nothing to restore it from. `utils.js`'s own reveal says the same in the same
+    words. The count-up needs no branch: `countUp` checks for itself."""
+    body = JS_CODE[JS_CODE.index('function intro() {'):]
+    body = body[:body.index('\n    }') + 1]
+    assert "matchMedia('(prefers-reduced-motion: reduce)')" in body
+    # The guard is AFTER the count-up (which self-checks) and BEFORE anything touches the bar.
+    assert body.index('PP.countUp(tally, 900);') < body.index('if (reduce) { return; }')
+    assert body.index('if (reduce) { return; }') < body.index('runHorizon()')
+
+
+def test_a_write_ticks_the_tally_from_its_old_value():
+    """FROM THE NUMBER ALREADY ON SCREEN, not from zero: a tally that restarts at 0 on every placement reads as
+    the page reloading, which is the thing removing the reload was for. `company-list.js` does the same when
+    its filtered total changes."""
+    body = JS_CODE[JS_CODE.index('function applySlot('):]
+    body = body[:body.index('\n        }') + 1]
+    assert 'els.tally.dataset.countup = String(slot.completed_count);' in body
+    assert 'PP.countUp(els.tally, 600, { from: isNaN(before) ? 0 : before });' in body
+    # And a fallback that still shows the right number if the utility is missing.
+    assert 'els.tally.textContent = slot.completed_count;' in body
+
+
+def test_the_entrance_does_not_replay_after_the_run_finished_reload():
+    """THE CELEBRATION PLAYED TWICE. When the last square completes, the tally ticks to its final number, the
+    bar fills, and then the page reloads -- and the entrance reset the tally to 0 and counted it up again while
+    the bar refilled. The second showing starts with a visible snap back to zero, which is the opposite of what
+    that moment should feel like.
+
+    A session marker rather than a querystring, so a finished run's URL stays clean and shareable. Consumed on
+    read, so an ordinary later visit still animates. Every access is wrapped: storage throws in a private
+    window and can come back empty in previews, and the fall-through direction (animate) is the harmless one.
+    """
+    assert "var INTRO_DONE = 'pp-challenge-intro-done';" in JS_CODE
+    body = JS_CODE[JS_CODE.index('function intro() {'):]
+    body = body[:body.index('\n    }') + 1]
+    assert 'sessionStorage.getItem(INTRO_DONE)' in body
+    assert 'sessionStorage.removeItem(INTRO_DONE)' in body
+    assert 'return;' in body
+    # Guarded, both ways.
+    assert body.count('try {') >= 1 and body.count('catch (e)') >= 1
+    # Read before anything animates, or it would skip nothing.
+    assert body.index('sessionStorage.getItem') < body.index('PP.countUp')
+
+
+def test_the_tallys_previous_value_comes_from_the_attribute_not_the_rendered_text():
+    """TWO FAILURES ON ONE LINE, and the attribute avoids both.
+
+    The rendered text can be MID-ANIMATION -- the entrance's own count-up runs for 900ms after load -- so
+    parsing it starts the new tick from a number that was never real. And `countUp` formats with
+    `toLocaleString()`, so a four-figure count renders `1.000` on de-DE and `1 000` on fr-FR (a narrow no-break
+    space), where stripping commas and parsing yields 1. Neither is reachable at 25 or 26 squares; the
+    attribute is the value either way and costs nothing.
+    """
+    body = JS_CODE[JS_CODE.index('function applySlot('):]
+    body = body[:body.index('\n        }') + 1]
+    assert "parseInt(els.tally.dataset.countup || '', 10)" in body
+    assert 'els.tally.textContent' not in body.split('var before')[0], 'the old value must not be parsed text'
+    assert ".replace(/,/g, '')" not in body, 'a comma strip cannot cover every locale separator'
+
+
+def test_a_stale_count_up_cannot_leave_the_old_number_on_screen():
+    """`countUp` HAS NO CANCELLATION: each call owns its own frame loop and writes ITS captured target when it
+    finishes. So the entrance's 900ms loop, started at load, can outlive a 600ms write loop started 100ms later
+    and leave the OLD number on screen permanently -- with `data-countup` and the progress bar both saying
+    something else.
+
+    Reasserting the truth after the longest window is cheaper and more honest than reimplementing cancellation
+    inside a shared utility that four other pages depend on. Guarded on `data-countup` still matching, so a
+    LATER write's value is never stomped by an earlier write's timer.
+    """
+    body = JS_CODE[JS_CODE.index('function applySlot('):]
+    body = body[:body.index('\n        }') + 1]
+    assert 'window.setTimeout(' in body
+    assert "els.tally.dataset.countup === String(slot.completed_count)" in body
+    assert 'els.tally.textContent = String(slot.completed_count);' in body
+
+
+# ── the confirmation audit's findings ─────────────────────────────────────────────────────────────
+
+def test_every_dismissal_tears_the_question_down():
+    """FOUR ROUTES SHUT THIS SHEET -- the close button, the backdrop, a swipe (`dismissableSheet` calls
+    `dialog.close()` itself, bypassing our own `close()`), and Escape -- and only Escape answered an open
+    prompt. The others left the warning bar up through the 180ms exit, the ring on a card nobody could see, and
+    `openPromptClose` pointing at a detached node, which then swallowed the NEXT Escape and announced "Nothing
+    changed." about a question that was never on screen.
+
+    ON THE NATIVE `close` EVENT rather than inside our `close()`, because that is the only place that can
+    promise it: the event fires however the dialog shut, including the routes that never call our function and
+    including an Escape whose `cancel` could not be cancelled."""
+    assert "dialog.addEventListener('close', function () { dropPrompts(); });" in JS_CODE
+
+
+def test_reset_uses_the_all_surfaces_teardown():
+    """`reset()` deletes the rows, which destroys the inline prompt's element -- but it called `closeFootAsk`
+    only, leaving `openPromptClose` holding a closer for a node that no longer exists. `dropPrompts`' own
+    comment names exactly that hazard; only one of the two teardown paths obeyed it."""
+    body = JS_CODE[JS_CODE.index('function reset() {'):]
+    body = body[:body.index('\n        }') + 1]
+    assert 'dropPrompts();' in body
+
+
+def test_only_one_inline_prompt_can_be_open_at_a_time():
+    """A search result carries up to six key pills and none is disabled while a prompt is open, so pressing a
+    second occupied square inserted a SECOND prompt -- both with live Go buttons, and `openPromptClose`
+    overwritten so Escape answered the last one CREATED rather than the one holding focus. That was a
+    regression from centralising Escape: each prompt used to own its own key handler. `askInFoot` gets this
+    free by owning a single bar; the row surface had to be told."""
+    body = JS_CODE[JS_CODE.index('function askInRow('):]
+    body = body[:body.index('var prompt = document.createElement')]
+    assert 'dropPrompts();' in body
+
+
+def test_escape_is_attempted_on_the_key_as_well_as_on_cancel():
+    """`cancel` IS NOT RELIABLY CANCELABLE, which is the assumption the previous design swapped in without
+    saying so. Under the close-watcher rules `<dialog>` follows, `cancel` is only cancelable while the page
+    holds transient user activation, and it does not fire again for a second close request until fresh
+    activation arrives. Escape grants none and the window expires in seconds -- so a hunter who READS this
+    prompt, which is its whole purpose, may find Escape closing the sheet.
+
+    So: a best-effort `keydown` first, and the `close` listener to guarantee the STATE is clean either way.
+    Nothing in the file asserts that cancelling the key suppresses the close request, because nothing in the
+    repo can verify it."""
+    assert "dialog.addEventListener('keydown', function (e) {" in JS_CODE
+    body = JS_CODE[JS_CODE.index("dialog.addEventListener('keydown', function (e) {"):]
+    body = body[:body.index('}, true);')]
+    assert "e.key !== 'Escape'" in body
+    assert 'e.preventDefault();' in body
+    # It must not fire when there is no prompt, or it would break the sheet's own Escape.
+    assert '!footAsking() && !openPromptClose' in body
+
+
+def test_the_question_reaches_the_live_region():
+    """Focus moves to a button labelled "Keep Sly Cooper", so a screen reader was told nothing about what was
+    being confirmed -- including that the square locks permanently. `aria-describedby` on the CARD was the
+    first attempt and describes a path nobody takes: the reader is on the button, and `closeFootAsk` strips the
+    attribute before focus ever returns to the card."""
+    body = JS_CODE[JS_CODE.index('function askInFoot('):]
+    body = body[:body.index('els.askKeep.focus();')]
+    assert 'say(message);' in body
+
+
+def test_a_detached_card_is_never_ringed():
+    """A 409 can land after a re-render -- press an offer, then type in the search box -- and the button it came
+    from is detached by then. Ringing it dresses a node nobody can see and points `aria-describedby` into
+    nowhere. The foot still asks; there is simply no card to mark."""
+    assert 'if (footAnchor && document.contains(footAnchor)) {' in JS_CODE
+
+
+def test_the_dispatcher_checks_every_element_the_foot_bar_needs():
+    """`askInFoot` dereferences the text and both buttons, and the listeners are wired behind
+    `els.askKeep && els.askGo`. Gating the dispatcher on the container alone could raise a bar with no working
+    answers -- a question only Escape could dismiss."""
+    assert 'if (els.ask && els.askText && els.askKeep && els.askGo) {' in JS_CODE

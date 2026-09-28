@@ -326,16 +326,25 @@ class ChallengeSlot(models.Model):
     #: letter stable -- `Contract.name` is itself a snapshot of the member concept's title at
     #: creation, but a staff rename would otherwise move a filled slot to a different letter.
     #:
-    #: There is deliberately NO frozen `igdb_id` here. It was in the first draft and had no reader:
-    #: `contract_slug` is the identity the uniqueness key uses and the re-find path would use, the
+    #: There is deliberately NO frozen `igdb_id` here, and the argument is weaker than it was. It was in
+    #: the first draft and had no reader; `contract_slug` was then the identity the uniqueness key used.
+    #: The key is the FK now, so that half is void -- and a frozen `igdb_id` is what would let a square
+    #: recognise its own game after the `Contract` row is deleted and restaged (see `assign`'s dead-snapshot
+    #: clause, which has to compare slugs instead). It is still not added, for one concrete reason:
+    #: `Contract.igdb_id` is NULL for admin/episodic contracts, so it would need the slug fallback beneath
+    #: it anyway and would be a second identity rather than a replacement. Worth revisiting if the
+    #: delete-and-restage case ever shows up in practice. The rest of the original argument stands:
     #: A-Z letter comes from `contract_name`, and completion is detected through `EarnedContract`. A
     #: third column nothing reads would go stale on the first re-anchor -- which is the very event
     #: the snapshot exists for -- and a stale value is worse than an absent one.
     contract = models.ForeignKey(Contract, on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name='challenge_slots')
     # `db_index=False` because `SlugField` defaults to True, and a global btree plus a
-    # `varchar_pattern_ops` index on this column would serve no read that exists: the only access
-    # pattern is the per-challenge partial unique below.
+    # `varchar_pattern_ops` index on this column would serve no read worth indexing. The reason used to be
+    # "the only access pattern is the per-challenge partial unique below", and that stopped being true when
+    # the unique moved onto the FK: this column now has NO index, and `pending_slots()`'s
+    # `exclude(contract_slug='')` plus `assign`'s dead-snapshot clause are live unindexed predicates. Still
+    # the right call at 25-26 rows per run; the justification is the table's size, not a covering index.
     contract_slug = models.SlugField(max_length=255, blank=True, default='', db_index=False)
     contract_name = models.CharField(max_length=255, blank=True, default='')
 
@@ -397,20 +406,48 @@ class ChallengeSlot(models.Model):
             # a hunter could point the same game at six Job Coverage slots and bank 36,000 XP for one
             # completion.
             #
-            # PARTIAL, and that is the part that is easy to get wrong rather than a detail: Postgres
-            # treats NULLs as distinct, so a plain unique over a nullable column permits unlimited
-            # duplicates among the EMPTY slots -- which is every slot on a brand-new run.
-            # `contract_slug` is blank-not-null for exactly this reason, so the condition is a string
-            # test and the index holds only assigned slots.
+            # KEYED ON THE FK, NOT ON THE FROZEN SLUG, and the two are not interchangeable. The service's
+            # duplicate check reads `contract_id` (it was moved there when one game filling two job squares
+            # paid twice, because a staff rename made the frozen slugs differ while the game was the same).
+            # This constraint still read `contract_slug`, so the database and the only writer disagreed about
+            # what "the same game" means -- and the disagreement is reachable in the direction that 500s:
             #
-            # NO precedent is cited here on purpose. An earlier draft pointed at "`GameListItem`'s
-            # nullable game column", which does not exist -- that column was planned in
-            # docs/design/game-list-types.md and never built; the shipped model's `concept` is
-            # non-null and its unique is plain. Mutation-verified instead: drop the condition and
-            # `test_a_run_holds_a_full_set_of_empty_slots` fails on the 26-row bulk_create.
+            #   1. a hunter fills a square with contract X, freezing slug `sonic-frontiers`;
+            #   2. staff rename X, freeing that string;
+            #   3. a different contract Y takes the slug `sonic-frontiers` (it is globally unique, so this is
+            #      legal the moment it is free);
+            #   4. the hunter assigns Y to another square. The service allows it -- different `contract_id` --
+            #      and Postgres raises `IntegrityError` on two identical frozen slugs in one run. Uncaught.
+            #
+            # One key, in both places. `contract_slug` keeps its real job as the snapshot that survives the
+            # row being deleted; it is no longer an identity.
+            #
+            # STILL PARTIAL, BUT FOR A DIFFERENT REASON THAN BEFORE, and the old reasoning must not be carried
+            # across. When the key was the blank-not-null slug, the condition was CORRECTNESS: without it every
+            # empty slot collided on `''`, and a brand-new run is 26 empty slots. `contract` is NULLABLE, and
+            # Postgres treats NULLs as distinct, so a plain unique would already permit unlimited empty slots.
+            # The condition now only keeps the index to the rows it is about and keeps the intent readable.
+            # `test_a_run_holds_a_full_set_of_empty_slots` therefore no longer pins it -- nothing does, and
+            # that is correct rather than a gap.
+            #
+            # A DELETED CONTRACT STOPS BEING CONSTRAINED, and this is the cost of the change rather than a
+            # free consequence -- an earlier version of this comment called it acceptable on two grounds that
+            # are both false. `on_delete=SET_NULL` nulls the FK on every square that held the contract, and a
+            # partial unique does not constrain NULLs. It is NOT true that "no new assignment can duplicate a
+            # contract that is gone from the pool": the game returns as a NEW row (staff re-create it, or
+            # `evaluate_contract_candidates._stage_contract` restages it once the delete frees its igdb id),
+            # and the dead square cannot recognise it. Nor is it true that those squares "cannot be
+            # reassigned" -- `assign` refuses only a COMPLETED square, so an unfinished one with a dead
+            # snapshot is freely reassignable and `clear` empties it.
+            #
+            # WHAT ACTUALLY CLOSES IT is a second clause in `assign`'s duplicate guard, matching a dead
+            # square's frozen slug. It cannot live here: the comparison is between one row's snapshot and
+            # another row's contract's CURRENT slug, which is cross-row and cross-table, so no unique index
+            # can express it. `assign` is the only writer, so a guard there is the whole rule in practice --
+            # and it refuses cleanly where the old slug-keyed constraint raised `IntegrityError`.
             models.UniqueConstraint(
-                fields=['challenge', 'contract_slug'],
-                condition=~Q(contract_slug=''),
+                fields=['challenge', 'contract'],
+                condition=Q(contract__isnull=False),
                 name='challengeslot_unique_contract'),
             # An empty slot cannot be completed, and a filled one cannot be completed without a date
             # and without saying HOW. Guards the state machine at the only level every writer passes.

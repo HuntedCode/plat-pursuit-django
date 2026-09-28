@@ -744,8 +744,14 @@ def test_a_completed_square_is_not_a_button_even_for_its_owner(client):
     assert 'data-cpick-open data-key="A"' in body, 'the other squares must still open'
 
 
-def test_the_picker_and_its_script_ship_only_to_someone_who_can_use_them(client):
-    """Markup nobody can reach is markup that rots, and the bytes are not free either."""
+def test_the_picker_ships_only_to_someone_who_can_use_it_but_the_script_ships_to_everyone(client):
+    """Markup nobody can reach is markup that rots, so the DIALOG is still gated on `can_edit`.
+
+    THE SCRIPT IS NOT, and it used to be. The file now also owns the page's entrance -- the tally counting up
+    and the Horizon filling from zero -- which belongs to every viewer rather than to the one hunter who can
+    change the run. The Hall of Fame is people reading somebody else's finished run, which is the case the
+    animation is most for. Its picker half bails on its own guard when there is no dialog.
+    """
     owner = _hunter(client)
     mine = _az_run(owner)
 
@@ -755,8 +761,8 @@ def test_the_picker_and_its_script_ship_only_to_someone_who_can_use_them(client)
 
     theirs = _az_run(_hunter())
     other = client.get(_url(theirs)).content.decode()
-    assert 'id="cpick"' not in other
-    assert 'challenge-detail.js' not in other
+    assert 'id="cpick"' not in other, 'a visitor must not get write markup'
+    assert 'challenge-detail.js' in other, 'but they do get the entrance'
 
 
 def test_a_finished_run_gets_no_picker(client):
@@ -968,8 +974,9 @@ def test_the_sprite_is_on_a_jobs_page_for_a_viewer_who_cannot_edit_it(client):
 
     assert 'id="jobicon-' in body
     assert 'href="#jobicon-' in body
-    # And the picker's script is NOT shipped to them, which is the thing that IS gated on editability.
-    assert 'challenge-detail.js' not in body
+    # The picker's MARKUP is what editability gates; the script ships to everyone, because it also owns the
+    # page's entrance. (This asserted the script's absence until the entrance moved into it.)
+    assert 'id="cpick"' not in body
 
 
 def test_an_az_shelf_reports_real_progress_rather_than_a_hardcoded_zero():
@@ -1044,3 +1051,44 @@ def test_an_unmapped_discipline_is_named_after_itself_not_lumped_into_other():
     assert mine['dom_id'] == 'csq-shelf-deep_sea_archaeology'
     # The blank-slug group keeps "Other", because there is no job left to name it after.
     assert slot_render._discipline_label('') == 'Other'
+
+
+# ── the run's own counters ────────────────────────────────────────────────────────────────────────
+
+def test_the_runs_progress_bar_carries_a_hook_of_its_own(client):
+    """`.pp-horizon` IS A SHARED PRIMITIVE AND THIS PAGE HAS TWO OF THEM. The nav's hidden sync bar
+    (`.pp-avsync__prog`) comes FIRST in the document, so `document.querySelector('.pp-horizon')` found that
+    one -- every write set `--horizon-progress` on a hidden element in the chrome and the run's bar did not
+    move until a reload. The owner reported it as "the counter goes up but the bar does not".
+
+    This pins both halves: that the hook exists, and that the hazard is real -- if the nav bar ever stops
+    coming first, the test still passes and the hook is still correct, but the comment explaining it would be
+    stale, so the ORDER is asserted too.
+    """
+    import re as _re
+
+    challenge = svc.start(_hunter(client), CHALLENGE_TYPE_JOBS)
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'data-cpick-horizon' in body
+    bars = [m.start() for m in _re.finditer(r'class="pp-horizon[" ]', body)]
+    assert len(bars) >= 2, 'the collision this hook exists for is gone; re-read the JS comment'
+    hook = body.index('data-cpick-horizon')
+    # The run's bar is INSIDE the hook and is not the first on the page.
+    assert bars[0] < hook, 'another .pp-horizon no longer precedes the run\'s own'
+    assert any(b > hook for b in bars)
+
+
+def test_the_tally_declares_its_own_countup_target(client):
+    """`countUp` animates the TEXT to the value in `data-countup`, so the attribute is the target and the text
+    is what a reader sees if the script never runs. Both have to be the real number, or a no-JS reader gets a
+    zero and a JS reader gets a number that never moves."""
+    profile = _hunter(client)
+    challenge = _az_run(profile)
+    contract = _contract('Astro Bot')
+    svc.mark_slot_completed(svc.assign(challenge, profile, 'A', contract))
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'data-cpick-tally data-countup="1">1<' in body

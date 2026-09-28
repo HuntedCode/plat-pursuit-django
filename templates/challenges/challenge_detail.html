@@ -44,12 +44,19 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                 </div>
 
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
-                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl"><span data-cpick-tally>{{ challenge.completed_count }}</span><span class="text-base-content/40">/{{ challenge.total_slots }}</span></span>
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{% comment %}`data-countup` is the TARGET; the text is what a reader sees if the script never runs, so
+                    it is the real number either way. `countUp` reads the attribute and animates the text
+                    to it.{% endcomment %}<span data-cpick-tally data-countup="{{ challenge.completed_count }}">{{ challenge.completed_count }}</span><span class="text-base-content/40">/{{ challenge.total_slots }}</span></span>
                     <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">done</span>
                 </div>
             </div>
 
-            <div class="mt-3">
+            {% comment %}THE HOOK IS NOT OPTIONAL. `.pp-horizon` is a shared primitive and this page
+            renders TWO of them: the nav's hidden sync bar (`.pp-avsync__prog`) comes first in the document, so
+            `document.querySelector('.pp-horizon')` found THAT. Every write set the progress on a hidden
+            element in the chrome and the run's own bar never moved until a reload -- the owner's report. The
+            include cannot take an attribute, so the hook goes on the wrapper.{% endcomment %}
+            <div class="mt-3" data-cpick-horizon>
                 {% include 'components/horizon.html' with progress=progress %}
             </div>
         </div>
@@ -210,9 +217,29 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             </section>
         </div>
 
-        <div class="pp-cpick__foot">
+        {% comment %}THE FOOT, which is also where a confirmation is asked when the offers are a GRID.
+
+        The inline prompt reads well in the search panel, where each result is a full-width row and a prompt
+        inserted after one is just another row. In the square picker the offers are a multi-column grid of
+        cover cards, so a full-width prompt row reflowed the grid and pushed the card being decided about far
+        enough to clip its own art -- the owner's note. This bar is the same question in a place that cannot
+        reflow anything: the foot is `flex: none` outside the scrolling body, so it is always visible and the
+        grid never moves. The card keeps its place and takes a ring instead.{% endcomment %}
+        <div class="pp-cpick__foot" data-cpick-foot>
             <p class="pp-cpick__current" data-cpick-current></p>
             <button type="button" class="pp-cta pp-cta--ghost" data-cpick-clear hidden>Clear this square</button>
+            <div class="pp-cpick__footask" data-cpick-ask hidden>
+                {% comment %}`id` because the pressed card points `aria-describedby` at this, so a screen
+                reader reaching the ring hears the question rather than only seeing it.{% endcomment %}
+                <p class="pp-cpick__ask-text" id="cpick-ask-text" data-cpick-ask-text></p>
+                <div class="pp-cpick__ask-row pp-cpick__ask-row--foot">
+                    {% comment %}THE SAFE BUTTON FIRST, and named after what it keeps -- the house recipe
+                    (`.stg-confirm__row`, used by account deletion in Settings). Labels are set by the script,
+                    because both depend on what is being replaced.{% endcomment %}
+                    <button type="button" class="pp-cpick__ask-keep" data-cpick-ask-keep></button>
+                    <button type="button" class="pp-cpick__ask-go" data-cpick-ask-go></button>
+                </div>
+            </div>
         </div>
     </dialog>
     {% endif %}
@@ -230,10 +257,13 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
 {% endblock %}
 
 {% block js_scripts %}
-{% comment %}Gated on `can_edit`, the same condition the dialog is. A visitor's page has no picker, and
-the file's own first guard would bail -- but not shipping the bytes at all is better than shipping them
-to be bailed on.{% endcomment %}
-{% if can_edit %}
+{% comment %}UNCONDITIONAL, and it used to be gated on `can_edit` with the reasoning that a visitor's
+page has no picker so the bytes were wasted. That premise is gone: the file now also owns the page's ENTRANCE
+-- the tally counting up and the Horizon filling from zero -- and those belong to every viewer, not only to
+the hunter who can change the run. The Hall of Fame is precisely people reading somebody else's finished run,
+which is the case the animation is most for.
+
+The picker half still bails on its own guard (`boot` exits when there is no dialog), so a visitor gets the
+entrance and nothing else.{% endcomment %}
 <script src="{% static 'js/challenge-detail.js' %}"></script>
-{% endif %}
 {% endblock %}
