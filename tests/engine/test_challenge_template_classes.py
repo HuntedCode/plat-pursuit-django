@@ -23,7 +23,11 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = (ROOT / 'static' / 'css' / 'output.css').read_text(encoding='utf-8')
-TEMPLATES = sorted((ROOT / 'templates' / 'challenges').glob('*.html'))
+#: RECURSIVE, because a flat glob stops at the directory. Adding
+#: `partials/_square_body.html` silently took 20-odd classes out of this guard's sight -- including
+#: every class on a challenge square, which is most of what the detail page draws. A guard whose
+#: coverage shrinks when the code is reorganised is worse than no guard, because the green stays.
+TEMPLATES = sorted((ROOT / 'templates' / 'challenges').rglob('*.html'))
 
 #: Characters Tailwind backslash-escapes when it writes a class as a selector, so `md:gap-4` becomes
 #: `.md\:gap-4` and `text-[0.7rem]` becomes `.text-\[0\.7rem\]`. Checking the unescaped form finds

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load mark_tags job_icons %}
+{% load static mark_tags job_icons %}
 
 {% block title %}{{ challenge.name }} — {{ challenge.profile.display_psn_username }}{% endblock %}
 {% comment %}A finished run is meant to be shown to somebody, so this page is indexable -- unlike
@@ -44,7 +44,7 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                 </div>
 
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
-                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ challenge.completed_count }}<span class="text-base-content/40">/{{ challenge.total_slots }}</span></span>
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl"><span data-cpick-tally>{{ challenge.completed_count }}</span><span class="text-base-content/40">/{{ challenge.total_slots }}</span></span>
                     <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">done</span>
                 </div>
             </div>
@@ -69,86 +69,37 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     dominant screen-reader pairing for a page whose base layout is 375px, the bare `<ul>` announced
     nothing at all and the sentence above would have been false. The explicit role is what makes it
     true.{% endcomment %}
-    <ul class="pp-csq-grid" role="list">
+    <ul class="pp-csq-grid" role="list" data-challenge-id="{{ challenge.id }}">
         {% for card in cards %}
-        {% comment %}`--rev` drives the pure-CSS entrance stagger (capped in the stylesheet), and `--disc`
-        tints a jobs square by its discipline.{% endcomment %}
-        <li class="pp-csq{% if card.job %} pp-csq--jobs{% endif %}{% if card.is_completed %} pp-csq--done{% elif card.is_filled %} pp-csq--filled{% else %} pp-csq--empty{% endif %}"
-            style="--rev: {{ forloop.counter0 }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}">
+        {% comment %}THE `<li>` IS THE GRID ITEM; the square inside it is the thing you look at and, for
+        its owner, press. Splitting them is what lets an editable square be a real `<button>` while a
+        read-only one stays a `<div>`: a cell that takes focus and does nothing is worse than one that
+        does not, and `role="button"` would need Enter and Space wired by hand.
 
-            {% if card.is_filled %}
-                {% if card.cover %}
-                {% comment %}`object-cover object-top` via `.pp-csq__art`, per the image conventions:
-                `object-top` keeps a game's logo when wider PSN fallback art crops into a 3:4 container.
-                The `--icon` modifier switches to `contain` for the generic PS placeholder, which is not
-                art and must not be cropped.
+        `--rev` drives the pure-CSS entrance stagger (capped in the stylesheet), and `--disc` tints a jobs
+        square by its discipline. Both ride the SQUARE rather than the `<li>`, because the square is what
+        animates and what the tint applies to.
 
-                The first squares are NOT lazy, because lazy-loading an image that is already on screen
-                defers the page's own LCP candidate to wait for a scroll that has already happened.
-
-                TWENTY-ONE, which is three rows of seven, not two. At 1024x768 the chrome above the grid
-                (nav, sub-nav, breadcrumb, header card) runs to roughly 310px, leaving ~458px of grid --
-                and a `lg:` row is 175px tall plus a 12px gap, so about 2.4 rows are inside the fold and a
-                threshold of 14 left the third row's squares lazy while visible. At 375px the figure is
-                ~2.5 rows of three, so 21 is generous there rather than wrong.{% endcomment %}
-                <img src="{{ card.cover.display_image_url }}" alt="" decoding="async"
-                     {% if forloop.counter0 >= 21 %}loading="lazy"{% endif %}
-                     class="pp-csq__art{% if not card.cover.has_cover_art %} pp-csq__art--icon{% endif %}">
-                {% comment %}The scrim rides with the ART only. Over `.pp-csq__art--empty` -- a designed
-                dark field with nothing beneath it -- it solved no legibility problem and took that
-                field's own glyph down by more than half.{% endcomment %}
-                <span class="pp-csq__scrim" aria-hidden="true"></span>
-                {% else %}
-                <span class="pp-csq__art--empty" aria-hidden="true">?</span>
-                {% endif %}
-                {% comment %}THE KEY CHIP rides over the art, which is the only reason it exists -- so it
-                belongs to the filled branch. An empty square shows its key once, large and centred,
-                rather than twice.{% endcomment %}
-                <span class="pp-csq__key{% if card.job %} pp-csq__key--job{% endif %}" aria-hidden="true">
-                    {% if card.job %}{% job_icon_use card.job.icon '' %}{% else %}{{ card.label }}{% endif %}
-                </span>
-            {% else %}
-                {% comment %}An empty square shows its own key: a hunter scanning for gaps is asking
-                "which letters are left", and a generic `+` answers a different question.{% endcomment %}
-                <span class="pp-csq__well{% if card.job %} pp-csq__well--job{% endif %}" aria-hidden="true">
-                    {% if card.job %}{% job_icon_use card.job.icon '' %}{% else %}{{ card.label }}{% endif %}
-                </span>
-            {% endif %}
-
-            {% comment %}THE BODY SITS OUTSIDE THE FILLED BRANCH, and that placement is the fix for a real
-            gap rather than tidying. It used to live inside the branch, so an EMPTY Job Coverage square
-            rendered only a discipline-tinted glyph and never its job's NAME -- at any breakpoint, desktop
-            included. Half the run type could not answer the one question this grid exists to answer, while
-            the screen-reader line answered it fine: sighted readers served worse than AT users.
-
-            An A-Z square still gets no body when empty, correctly -- there the centred letter IS the name,
-            and repeating it would put one datum in two slots for no gain.
-
-            `aria-hidden` because the line below says all of this in one sentence. Without it a finished
-            jobs square announces "Slayer God of War Slayer: God of War, finished" -- every word twice.{% endcomment %}
-            {% if card.job or card.is_filled %}
-            <span class="pp-csq__body" aria-hidden="true">
-                {% if card.job %}<span class="pp-csq__job" title="{{ card.label }}">{{ card.label }}</span>{% endif %}
-                {% if card.is_filled %}<span class="pp-csq__name" title="{{ card.game_name }}">{{ card.game_name }}</span>{% endif %}
-            </span>
-            {% endif %}
-
-            {% if card.is_completed %}
-            {% comment %}NOT `partials/icons/checkmark.html`, which the design system otherwise asks for:
-            that partial fixes `stroke-width="2"` and adds `inline-block flex-shrink-0`, and this glyph is
-            11px inside an 18px filled disc, where a 2-weight stroke disappears. A deliberate exception,
-            said out loud so the next reader does not have to guess.{% endcomment %}
-            <span class="pp-csq__check" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-            </span>
-            {% endif %}
-
-            {% comment %}The state in words, and the only thing a screen reader gets from this cell --
-            everything above is decoration by the time it reaches here. `|default:` on the name because the
-            completed-slot constraint requires a `contract_slug`, not a `contract_name`, so a row written
-            around the service could otherwise announce "A: , finished".{% endcomment %}
-            <span class="sr-only">{{ card.label }}: {% if card.is_completed %}{{ card.game_name|default:'a game' }}, finished{% elif card.is_filled %}{{ card.game_name|default:'a game' }}, in progress{% else %}empty{% endif %}</span>
+        A COMPLETED SQUARE IS NOT A BUTTON even for its owner -- it can never be reassigned or cleared, so
+        there is nothing for a press to do. That is the same rule `can_edit` encodes at the run level,
+        applied per square.{% endcomment %}
+        {% with square_class=card.job|yesno:"pp-csq pp-csq--jobs,pp-csq" %}
+        <li>
+        {% if can_edit and not card.is_completed %}
+            <button type="button"
+                    class="{{ square_class }}{% if card.is_filled %} pp-csq--filled{% else %} pp-csq--empty{% endif %}"
+                    style="--rev: {{ forloop.counter0 }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}"
+                    data-cpick-open data-key="{{ card.key }}">
+                {% include 'challenges/partials/_square_body.html' %}
+            </button>
+        {% else %}
+            <div class="{{ square_class }}{% if card.is_completed %} pp-csq--done{% elif card.is_filled %} pp-csq--filled{% else %} pp-csq--empty{% endif %}"
+                 style="--rev: {{ forloop.counter0 }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}">
+                {% include 'challenges/partials/_square_body.html' %}
+            </div>
+        {% endif %}
         </li>
+        {% endwith %}
         {% endfor %}
     </ul>
 
@@ -157,6 +108,61 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     the test reduced to `is_complete`, so the hidden-run sentence could never render -- and the owner of a
     hidden run, the one reader for whom this page is a dead end, was told nothing at all. A run can also be
     both finished and hidden, which an if/else cannot say.{% endcomment %}
+    {% if can_edit %}
+    {% comment %}THE PICKER, rendered once and driven by `challenge-detail.js`. Only for a hunter who can
+    actually change this run -- there is nothing for a visitor to open, and markup nobody can reach is
+    markup that rots.
+
+    A NATIVE `<dialog>` on `.gl-dialog`'s recipe, which is the site's real modal primitive and the record
+    of three earlier attempts that got it wrong (raw DaisyUI, then a version that landed in the top-left
+    corner because Tailwind's preflight zeroes the UA's `dialog { margin: auto }`, then one that centred
+    with grid and made overflow past the top edge unreachable with a soft keyboard up).
+
+    EMPTY ON PURPOSE. Both panels are fetched, because the pool for one letter already runs to the hundreds
+    in prod and the eligibility that shapes it is per-hunter -- so there is nothing to server-render that
+    would still be true by the time somebody opened it.{% endcomment %}
+    <dialog id="cpick" class="pp-cpick" aria-labelledby="cpick-title">
+        <div class="pp-cpick__head">
+            <div class="min-w-0">
+                <h2 class="pp-cpick__title" id="cpick-title" data-cpick-title>Choose a game</h2>
+                <p class="pp-cpick__sub" data-cpick-sub></p>
+            </div>
+            {% comment %}`type="button"`: inside a `<dialog>` a bare button still defaults to `submit`, and
+            a submit with no form closes the dialog with no `returnValue` -- which looks identical until
+            something starts reading one.{% endcomment %}
+            <button type="button" class="pp-cpick__close" data-cpick-close aria-label="Close">&times;</button>
+        </div>
+
+        <div class="pp-cpick__body">
+            <label class="sr-only" for="cpick-q">Search for a game</label>
+            <input id="cpick-q" class="stg-input pp-cpick__search" type="search" autocomplete="off"
+                   placeholder="Search for a game" data-cpick-q>
+
+            {% comment %}A live region INSIDE the dialog. A modal `<dialog>` makes everything outside it
+            inert and removes it from the accessibility tree, so the page-level status region announces
+            nothing while this is open -- the same reason `ToastManager` builds a per-dialog region.{% endcomment %}
+            <p class="pp-cpick__status" data-cpick-status role="status" aria-live="polite"></p>
+
+            <ul class="pp-cpick__rows" data-cpick-rows></ul>
+
+            {% comment %}THE CATCH-UP BLOCK, and it is separate from the rows above for one reason: these
+            are the only offers that land a square COMPLETE and therefore LOCKED. Keeping them together
+            means the warning is written once, above all of them, instead of repeated per row or -- worse --
+            omitted.{% endcomment %}
+            <section class="pp-cpick__catchup" data-cpick-catchup hidden>
+                <h3 class="pp-cpick__catchup-title" data-cpick-catchup-title></h3>
+                <p class="pp-cpick__catchup-note" data-cpick-catchup-note></p>
+                <ul class="pp-cpick__rows" data-cpick-catchup-rows></ul>
+            </section>
+        </div>
+
+        <div class="pp-cpick__foot">
+            <p class="pp-cpick__current" data-cpick-current></p>
+            <button type="button" class="pp-cta pp-cta--ghost" data-cpick-clear hidden>Clear this square</button>
+        </div>
+    </dialog>
+    {% endif %}
+
     {% if is_owner and challenge.is_complete %}
     <p class="text-xs text-base-content/60 mt-3">This run is finished, so its squares are fixed.</p>
     {% endif %}
@@ -167,4 +173,13 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     </p>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block js_scripts %}
+{% comment %}Gated on `can_edit`, the same condition the dialog is. A visitor's page has no picker, and
+the file's own first guard would bail -- but not shipping the bytes at all is better than shipping them
+to be bailed on.{% endcomment %}
+{% if can_edit %}
+<script src="{% static 'js/challenge-detail.js' %}"></script>
+{% endif %}
 {% endblock %}

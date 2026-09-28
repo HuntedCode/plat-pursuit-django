@@ -59,7 +59,18 @@
 
     position: relative;
     display: block;
+    /* `width: 100%` IS REQUIRED, not belt-and-braces. The square used to BE the grid item and took the
+       track's width for free; it now sits inside an `<li>` so the editable version can be a real
+       `<button>`, and a button's `width: auto` is shrink-to-fit even at `display: block`. Without this the
+       editable squares would each collapse to the width of their own contents. */
+    width: 100%;
     aspect-ratio: 3 / 4;
+    /* A button brings its own font, padding, colour and text-align; none of them are wanted here. */
+    padding: 0;
+    font: inherit;
+    text-align: initial;
+    -webkit-appearance: none;
+    appearance: none;
     border-radius: 11px;
     overflow: hidden;
     background: var(--pp-bg-2);
@@ -180,7 +191,7 @@ a.pp-csq:focus-visible, button.pp-csq:focus-visible { outline: 2px solid var(--p
 .pp-csq__art--icon { object-fit: contain; padding: 14%; opacity: 0.85; }
 
 /* The scrim exists to make the name legible over ART. It is rendered only alongside a cover, because
-   over `.pp-csq__art--empty` -- a designed dark field with nothing beneath it -- it was pure loss:
+   over `.pp-csq__noart` -- a designed dark field with nothing beneath it -- it was pure loss:
    it took that field's "?" from 4.0:1 down to 2.5:1 to solve a legibility problem that did not exist. */
 .pp-csq__scrim {
     position: absolute;
@@ -355,9 +366,14 @@ a.pp-csq:focus-visible, button.pp-csq:focus-visible { outline: 2px solid var(--p
     .pp-csq__name { font-size: 13px; }
 }
 
-/* No cover, but assigned: a contract whose member concept has no usable art. Quiet primary field with
-   a question mark, so the square still reads as deliberately filled rather than as a broken image. */
-.pp-csq__art--empty {
+/* No cover, but assigned: a contract whose member concept has no usable art. Quiet primary field with a
+   question mark, so the square still reads as deliberately filled rather than as a broken image.
+
+   RENAMED from `.pp-csq__art--empty`, which was wrong twice. It was a MODIFIER used without its base, so
+   `a.pp-csq:hover .pp-csq__art` never matched it -- the one no-cover square would have been the only
+   filled square whose art did not respond to hover. And it sat one character away from `.pp-csq--empty`,
+   which means the OPPOSITE thing (unassigned, rather than assigned-with-no-art). */
+.pp-csq__noart {
     position: absolute;
     inset: 0;
     display: flex;
@@ -369,3 +385,220 @@ a.pp-csq:focus-visible, button.pp-csq:focus-visible { outline: 2px solid var(--p
     color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-text-mute));
     background: radial-gradient(circle at 30% 25%, color-mix(in oklab, var(--pp-primary) 18%, var(--pp-bg-2)), var(--pp-bg-0));
 }
+
+
+/* ============================================================
+ * THE PICKER (.pp-cpick) -- the dialog that fills a square.
+ * ============================================================
+ * ON `.gl-dialog`'s RECIPE, deliberately and in full. That block is the site's real native-`<dialog>`
+ * primitive and, more usefully, the written record of three earlier attempts that each failed
+ * instructively: raw DaisyUI that read as a different product, a house-skinned version that rendered in
+ * the TOP-LEFT CORNER (Tailwind's preflight zeroes the UA's `dialog { margin: auto }`, and DaisyUI's
+ * `.modal` had been masking that), and a grid-centred one where `place-items: center` made overflow past
+ * the top edge unreachable with a soft keyboard up.
+ *
+ * So: `margin: auto` for the centring (an author declaration outranks preflight on both specificity and
+ * source order), `dvh` for the height cap, and the DIALOG never scrolls -- only its body does, which is
+ * what keeps the footer's actions reachable.
+ *
+ * WIDER THAN ITS DONOR (44rem against 30rem) for one reason: this sheet shows a grid of cover art, where
+ * the report dialog shows a select and a textarea. Everything else is the same recipe.
+ */
+.pp-cpick {
+    position: fixed;
+    inset: 0;
+    margin: auto;                       /* the centring. Outranks preflight's `* { margin: 0 }`. */
+    width: min(94vw, 44rem);
+    max-width: 44rem;
+    /* `dvh`, not `vh`: on iOS Safari and Chrome Android `vh` is the LARGE viewport and does not shrink for
+       the soft keyboard, so the search field could push this sheet's own header off an already-short
+       screen -- and this sheet HAS a search field, so it is the case that rule was written for. */
+    max-height: min(88dvh, 46rem);
+    padding: 0;
+    color: var(--pp-text);
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* REQUIRED, not redundant: the author `display: flex` above beats the UA's
+   `dialog:not([open]) { display: none }`, so without this the closed dialog paints over the page. */
+.pp-cpick:not([open]) { display: none; }
+
+/* Solid dim, never a `backdrop-filter`: the blur re-samples the page behind it every frame, which is the
+   documented mobile-GPU trap this project has hit before. */
+.pp-cpick::backdrop { background: rgba(2, 4, 8, 0.8); }
+
+@media (prefers-reduced-motion: no-preference) {
+    @keyframes cpickIn  { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+    @keyframes cpickOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+    @keyframes cpickScrimOut { from { opacity: 1; } to { opacity: 0; } }
+
+    .pp-cpick[open] { animation: cpickIn 0.22s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+    /* `.is-closing` is added by the JS, which waits for `animationend` before calling `close()`. An exit
+       written and never played is worse than no exit: the next reader believes it. */
+    .pp-cpick.is-closing { animation: cpickOut 0.18s cubic-bezier(0.4, 0, 1, 1) both; }
+    .pp-cpick.is-closing::backdrop { animation: cpickScrimOut 0.18s ease both; }
+}
+
+.pp-cpick__head {
+    flex: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 20px 20px 14px;
+    border-bottom: 1px solid var(--pp-divider);
+}
+/* The swipe grabber floats in the top padding on touch, so the head needs room for it. `dismissableSheet`
+   adds `.pp-dismissable` ITSELF -- the template must not, or two pills render. */
+@media (hover: none) and (pointer: coarse) {
+    .pp-cpick.pp-dismissable .pp-cpick__head { padding-top: 26px; }
+}
+
+.pp-cpick__title { font-size: 1.05rem; font-weight: 700; line-height: 1.2; }
+.pp-cpick__sub { margin-top: 4px; font-size: 0.76rem; color: var(--pp-text-dim); }
+
+.pp-cpick__close {
+    flex: none; background: none; border: none; cursor: pointer;
+    color: var(--pp-text-mute); font-size: 26px; line-height: 1;
+    /* 44px minimum touch target (design-system.md), reached with padding rather than a font bump so the
+       glyph stays the size every other modal draws it. */
+    min-width: 44px; min-height: 44px; margin: -10px -8px -10px 0;
+}
+.pp-cpick__close:hover { color: var(--pp-text); }
+.pp-cpick__close:focus-visible {
+    color: var(--pp-text); outline: 2px solid var(--pp-primary);
+    outline-offset: 2px; border-radius: var(--pp-radius-sm);
+}
+
+/* The ONLY scroll region. Head and foot are `flex: none` siblings, so a long pool scrolls between them and
+   the actions stay reachable. */
+.pp-cpick__body { flex: 1 1 auto; overflow-y: auto; padding: 16px 20px; }
+
+.pp-cpick__search { width: 100%; }
+
+.pp-cpick__status {
+    margin-top: 10px;
+    font-size: 0.76rem;
+    color: var(--pp-text-dim);
+    /* NOT `hidden` when empty: a live region that is removed and re-added is not reliably announced, so it
+       stays in the tree and simply holds no text. */
+    min-height: 1.1em;
+}
+
+/* The offers. Two across on a phone, three from `md:` -- a cover plus two lines of text needs about 150px
+   to read, and the sheet is 94vw. */
+.pp-cpick__rows {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+@media (min-width: 768px) { .pp-cpick__rows { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } }
+
+.pp-cpick__row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    width: 100%;
+    text-align: initial;
+    font: inherit;
+    color: inherit;
+    background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md);
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    transition: border-color 0.18s ease, background 0.18s ease;
+}
+@media (hover: hover) {
+    .pp-cpick__row:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 48%, var(--pp-border));
+        background: color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2));
+    }
+}
+.pp-cpick__row:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-cpick__row[disabled] { opacity: 0.55; cursor: default; }
+/* A row that is a CARD rather than a button: the search panel's results, whose actionable parts are the
+   per-square buttons inside them. Same surface, none of the affordance. */
+.pp-cpick__row--static { cursor: default; }
+@media (hover: hover) {
+    .pp-cpick__row--static:hover { border-color: var(--pp-border); background: var(--pp-bg-2); }
+}
+
+.pp-cpick__row-art {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    object-position: top;
+    border-radius: var(--pp-radius-sm);
+    background: var(--pp-bg-3);
+}
+.pp-cpick__row-art--icon { object-fit: contain; padding: 12%; opacity: 0.85; }
+
+.pp-cpick__row-name {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    padding-right: 4px;   /* the `pr-1` rule: a clamp shaves the last glyph otherwise */
+}
+.pp-cpick__row-note { font-size: 10.5px; font-weight: 700; color: var(--pp-text-mute); }
+
+/* Which squares a searched game could fill. A jobs game routinely offers several, so these are their own
+   buttons rather than one action -- picking the game is not the same decision as picking the slot. */
+.pp-cpick__keys { display: flex; flex-wrap: wrap; gap: 4px; }
+.pp-cpick__key {
+    font-size: 10px; font-weight: 800; line-height: 1;
+    padding: 4px 7px; border-radius: 999px;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 16%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, transparent);
+    cursor: pointer;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+@media (hover: hover) {
+    .pp-cpick__key:hover { background: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-bg-2)); }
+}
+.pp-cpick__key:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* THE CATCH-UP BLOCK. Warning-toned because every offer inside it lands the square COMPLETE and LOCKED --
+   the one irreversible action on a run. The tone is the warning; the confirmation is the service's. */
+.pp-cpick__catchup {
+    margin-top: 18px;
+    padding: 12px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 40%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 7%, var(--pp-bg-2));
+}
+.pp-cpick__catchup-title {
+    font-size: 0.82rem; font-weight: 800; color: var(--pp-warning);
+}
+.pp-cpick__catchup-note {
+    margin-top: 3px; font-size: 0.72rem; color: var(--pp-text-dim);
+}
+
+.pp-cpick__foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 14px 20px;
+    border-top: 1px solid var(--pp-divider);
+}
+.pp-cpick__current { font-size: 0.76rem; color: var(--pp-text-dim); min-width: 0; }

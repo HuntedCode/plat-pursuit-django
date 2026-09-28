@@ -548,8 +548,14 @@ def test_every_square_is_a_list_item(client):
 
     body = client.get(_url(challenge)).content.decode()
 
-    assert '<ul class="pp-csq-grid" role="list">' in body
-    assert body.count('<li class="pp-csq') == 26
+    assert 'class="pp-csq-grid" role="list"' in body
+    # SCOPED TO THE GRID. A bare `body.count('<li>')` returned 51: the navbar and the breadcrumb are lists
+    # too, so the count was measuring the whole page's chrome. The `<li>` is now the grid item and the square
+    # sits inside it -- that split is what lets an editable square be a real `<button>` -- so counting list
+    # items inside the grid still counts squares, which is what this test is about.
+    grid = body.split('pp-csq-grid', 1)[1].split('</ul>', 1)[0]
+    assert grid.count('<li>') == 26
+    assert grid.count('class="pp-csq ') == 26
 
 
 def test_the_visible_text_of_a_filled_square_is_hidden_from_a_screen_reader(client):
@@ -575,7 +581,7 @@ def test_a_square_with_no_art_is_not_dimmed_by_the_text_scrim(client):
 
     body = client.get(_url(challenge)).content.decode()
 
-    assert 'pp-csq__art--empty' in body, 'the fixture did not produce an art-less square'
+    assert 'pp-csq__noart' in body, 'the fixture did not produce an art-less square'
     assert 'pp-csq__scrim' not in body
 
 
@@ -687,3 +693,88 @@ def test_a_filled_job_square_names_the_job_AND_the_game(client):
 
     assert 'class="pp-csq__job" title="%s">%s<' % (job.name, job.name) in body
     assert 'pp-csq__name" title="Astro Bot">Astro Bot<' in body
+
+
+# ── the editable square, and the picker it opens ──────────────────────────────────────────────────
+
+def test_an_owners_unfinished_square_is_a_real_button(client):
+    """A REAL `<button>`, not `role="button"`: keyboard activation, focus and semantics come free, where the
+    role attribute needs Enter and Space wired by hand and gets one of them wrong more often than not."""
+    profile = _hunter(client)
+    challenge = _az_run(profile)
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert body.count('<button type="button"') >= 26
+    assert 'data-cpick-open data-key="A"' in body
+
+
+def test_a_visitors_squares_are_not_buttons(client):
+    """A cell that takes focus and does nothing is worse than one that does not."""
+    challenge = _az_run(_hunter())
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'data-cpick-open' not in body
+
+
+def test_a_completed_square_is_not_a_button_even_for_its_owner(client):
+    """It can never be reassigned or cleared, so there is nothing for a press to do -- the run-level
+    `can_edit` rule, applied per square."""
+    profile = _hunter(client)
+    challenge = _az_run(profile)
+    slot = svc.assign(challenge, profile, 'B', _contract('Bloodborne'))
+    svc.mark_slot_completed(slot)
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'data-cpick-open data-key="B"' not in body
+    assert 'data-cpick-open data-key="A"' in body, 'the other squares must still open'
+
+
+def test_the_picker_and_its_script_ship_only_to_someone_who_can_use_them(client):
+    """Markup nobody can reach is markup that rots, and the bytes are not free either."""
+    owner = _hunter(client)
+    mine = _az_run(owner)
+
+    body = client.get(_url(mine)).content.decode()
+    assert 'id="cpick"' in body
+    assert 'challenge-detail.js' in body
+
+    theirs = _az_run(_hunter())
+    other = client.get(_url(theirs)).content.decode()
+    assert 'id="cpick"' not in other
+    assert 'challenge-detail.js' not in other
+
+
+def test_a_finished_run_gets_no_picker(client):
+    """Every square is locked, so there is nothing to pick. `can_edit` already says so; this pins that the
+    template asks it rather than asking `is_owner`."""
+    profile = _hunter(client)
+    challenge = _az_run(profile)
+    Challenge.objects.filter(pk=challenge.pk).update(is_complete=True, completed_at=timezone.now())
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'id="cpick"' not in body
+    assert 'data-cpick-open' not in body
+
+
+def test_the_grid_carries_the_run_id_the_script_needs(client):
+    """The JS builds its endpoint URLs from this. Without it every request would go to `/slot/.../` on
+    `undefined` and 404 -- silently, since the panel would just say it could not load."""
+    profile = _hunter(client)
+    challenge = _az_run(profile)
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'data-challenge-id="%d"' % challenge.id in body
+
+
+def test_the_tally_is_addressable_so_a_write_can_move_it(client):
+    profile = _hunter(client)
+    challenge = _az_run(profile)
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'data-cpick-tally' in body
