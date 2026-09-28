@@ -246,7 +246,11 @@
             <h2 class="text-sm md:text-base font-bold uppercase tracking-wider text-base-content/60">
                 Finished
             </h2>
-            <ul class="mt-2 divide-y divide-base-300/60">
+            {% comment %}`role="list"` for the reason the detail page's lists spell out: preflight ships
+            `ol,ul,menu{list-style:none}` and WebKit drops the implicit role from a list styled that way, so on
+            iOS Safari this announced as an undelimited run of prose with no count. Found by the guard that was
+            added for a list on the other page -- this one predates it and had the same gap.{% endcomment %}
+            <ul class="mt-2 divide-y divide-base-300/60" role="list">
                 {% for run in finished %}
                 <li class="flex items-center justify-between gap-3 py-2">
                     <a class="min-w-0 truncate text-sm link link-hover"

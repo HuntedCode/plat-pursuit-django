@@ -63,6 +63,26 @@ def _contract(name):
     return contract
 
 
+def _joined_at(profile, when):
+    """Move the account's creation date, which is what the importer measures against."""
+    profile.user.date_joined = when
+    profile.user.save(update_fields=['date_joined'])
+    return profile
+
+
+def _platted_at(profile, contract, when):
+    """Completion as the TROPHY DATA records it, which is the date the importer reads."""
+    from tests.factories import EarnedTrophyFactory, TrophyFactory
+    from trophies.models import EarnedContract
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    IGDBMatchFactory(concept=concept, igdb_id=contract.igdb_id, status='accepted')
+    game = GameFactory(concept=concept)
+    plat = TrophyFactory(game=game, trophy_type='platinum')
+    EarnedTrophyFactory(profile=profile, trophy=plat, earned_date_time=when)
+    EarnedContract.objects.create(profile=profile, contract=contract, has_platinum=True,
+                                  platinum_reached_at=timezone.now())
+
+
 def _az_run(profile):
     return svc.start(profile, CHALLENGE_TYPE_AZ)
 
@@ -387,15 +407,21 @@ def test_the_pages_query_cost_does_not_scale_with_its_squares(rf):
             view.get_context_data()
         return len(captured.captured_queries)
 
-    # An EMPTY A-Z run: the slots, and nothing else. No contracts means no cover resolution at all, and
-    # no job catalogue because A-Z keys are their own labels.
+    # An EMPTY A-Z run: the slots, and one COUNT for `history_is_open`. No contracts means no cover
+    # resolution at all, and no job catalogue because A-Z keys are their own labels.
     #
-    # ONE, WITH A CAVEAT WORTH STATING: it is 1 here partly because `ProfileFactory(user=<instance>)`
-    # seeds the reverse one-to-one cache on the user, so `self._viewer()` costs nothing. On a real request
-    # `request.user.profile` is a query, making the live figures 2 / 5 / 6 rather than 1 / 4 / 5. The
-    # FLATNESS below is unaffected and is the property this test exists for -- but calling this an exact
+    # THE SECOND QUERY IS THE HISTORY IMPORTER'S GATE, and what it is NOT is the expensive question. It asks
+    # "has this hunter finished an A-Z run", which is one indexed COUNT; asking "is anything importable"
+    # would mean the date read over trophy data on every view of the page. It is paid only by an OWNER
+    # looking at their own A-Z run -- `can_edit` and the type check both short-circuit before it -- so a
+    # visitor's page, which is most reads once the Hall of Fame exists, still costs 1.
+    #
+    # ONE MORE CAVEAT WORTH STATING: these are 2 rather than 3 partly because
+    # `ProfileFactory(user=<instance>)` seeds the reverse one-to-one cache on the user, so `self._viewer()`
+    # costs nothing. On a real request `request.user.profile` is a query, making the live figures 3 / 6 / 7.
+    # The FLATNESS below is unaffected and is the property this test exists for -- but calling this an exact
     # count without the caveat would be exact by accident.
-    assert cost() == 1
+    assert cost() == 2
 
     empty = cost()
     for key, name in (('A', 'Ape Escape'), ('B', 'Bloodborne'), ('C', 'Control'),
@@ -1092,3 +1118,98 @@ def test_the_tally_declares_its_own_countup_target(client):
     body = client.get(_url(challenge)).content.decode()
 
     assert 'data-cpick-tally data-countup="1">1<' in body
+
+
+# ── the history importer's two doors ──────────────────────────────────────────────────────────────
+
+def test_the_owner_of_a_first_az_run_gets_the_history_door(client):
+    """THE FLOW IT EXISTS FOR. A hunter who has just started an A-Z run and knows their library already covers
+    half the alphabet is not thinking about a particular square yet, so making them open one to find the
+    importer is the wrong first step (owner's note)."""
+    profile = _hunter(client)
+    challenge = _az_run(profile)
+
+    resp = client.get(_url(challenge))
+    body = resp.content.decode()
+
+    assert resp.context['history_is_open'] is True
+    # THE EXACT ATTRIBUTE. `data-cpick-history` is a PREFIX of `data-cpick-history-switch`, so the loose form
+    # was satisfied by the in-sheet toggle alone and could not detect the page button going missing.
+    assert 'data-cpick-history>' in body or 'data-cpick-history ' in body
+    assert 'Import from your history' in body
+    # And the in-sheet toggle, which is the same door for somebody who already opened a square.
+    assert 'data-cpick-history-switch' in body
+
+
+def test_a_job_coverage_run_gets_no_history_door(client):
+    """A-Z ONLY. Rendering a door onto a panel that can only explain itself would be worse than not having it."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    resp = client.get(_url(challenge))
+
+    assert resp.context['history_is_open'] is False
+    assert 'data-cpick-history' not in resp.content.decode()
+
+
+def test_a_hunter_who_finished_a_run_gets_no_history_door(client):
+    """The importer is a one-time head start, and `importer_is_available` owns that rule -- so the door cannot
+    outlive what `assign` will accept."""
+    profile = _hunter(client)
+    done = _az_run(profile)
+    Challenge.objects.filter(pk=done.pk).update(is_complete=True, completed_at=timezone.now())
+    second = _az_run(profile)
+
+    resp = client.get(_url(second))
+
+    assert resp.context['history_is_open'] is False
+    assert 'data-cpick-history' not in resp.content.decode()
+
+
+def test_a_visitor_gets_no_history_door_and_pays_nothing_for_the_answer(client):
+    """`can_edit` SHORT-CIRCUITS FIRST, which is the whole reason the flag is ordered the way it is. Once the
+    Hall of Fame exists most reads of this page are visitors, and none of them can use the importer -- so none
+    of them should pay its COUNT."""
+    owner = _hunter()
+    challenge = _az_run(owner)
+    _hunter(client)
+
+    with CaptureQueriesContext(connection) as captured:
+        resp = client.get(_url(challenge))
+
+    assert resp.context['history_is_open'] is False
+    assert 'data-cpick-history' not in resp.content.decode()
+    # The gate's own query names the challenge table with a COUNT; a visitor must not have run one.
+    # `SELECT COUNT(` RATHER THAN `'COUNT' in sql`: the run's own SELECT lists the column
+    # `completed_count`, which contains the substring COUNT, so the loose form matched the page's ordinary
+    # read and failed against behaviour that was entirely correct. The third substring trap on this branch.
+    gate = [q['sql'] for q in captured.captured_queries
+            if 'FROM "challenges_challenge"' in q['sql'] and 'SELECT COUNT(' in q['sql'].upper()]
+    assert gate == [], 'a visitor paid for the importer gate: %r' % gate
+
+
+def test_the_history_door_asks_the_cheap_question_not_the_expensive_one(client):
+    """DELIBERATELY NOT "is anything importable?". That needs the completion-date read over trophy data -- the
+    tables the whale rule protects -- and would run on every view of the page.
+
+    PINNED BY WHAT THE PAGE DOES NOT READ. The first version of this test was a copy of the one above with
+    weaker assertions: it claimed to show that "a hunter with NOTHING importable still gets the door" while
+    creating no completions at all, and counted nothing, so it would have passed even if the flag had started
+    asking the expensive question. This sets up a hunter whose only completion is PRE-JOIN -- nothing
+    importable -- and asserts both that the door still renders and that no trophy table was touched.
+    """
+    profile = _hunter(client)
+    _joined_at(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = _az_run(profile)
+    old = _contract('Ape Escape')
+    _platted_at(profile, old, timezone.now() - timezone.timedelta(days=800))
+
+    with CaptureQueriesContext(connection) as captured:
+        resp = client.get(_url(challenge))
+
+    assert resp.context['history_is_open'] is True
+    assert 'Import from your history' in resp.content.decode()
+    trophy_reads = [q['sql'] for q in captured.captured_queries
+                    if 'trophies_earnedtrophy' in q['sql'] or 'trophies_profilegame' in q['sql']]
+    assert trophy_reads == [], 'the page render asked the expensive question: %d reads' % len(trophy_reads)
+

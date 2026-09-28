@@ -31,7 +31,7 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                         <span class="bd-chip bd-chip--success shrink-0">Finished</span>
                         {% elif challenge.is_deleted %}
                         <span class="bd-chip bd-chip--ghost shrink-0">Hidden</span>
-                        {% endif %}
+                    {% endif %}
                     </div>
                     {% comment %}THE BYLINE, and it is the reason this page is public at all: a run belongs
                     to a hunter, and a page about somebody's run that does not say whose is an orphan.
@@ -59,6 +59,33 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             <div class="mt-3" data-cpick-horizon>
                 {% include 'components/horizon.html' with progress=progress %}
             </div>
+
+            {% comment %}THE HISTORY IMPORTER, ON THE PAGE. The owner asked for it here as well as inside the
+            sheet, and the reason is the flow: a hunter who has just started an A-Z run and knows their library
+            already covers half the alphabet is not thinking about a particular square yet, so making them open
+            one to find this is the wrong first step.
+
+            Rendered only when the importer is actually open, which is THREE conditions and not the two an
+            earlier version of this comment listed: the viewer can edit this run (the cheapest term, and the one
+            that keeps a visitor's page free of the query), their profile is linked, and the importer itself is
+            available -- A-Z only, and only before they have finished one. See `history_is_open`.
+
+            It deliberately does NOT ask the expensive question of whether anything qualifies, so it can open an
+            empty panel -- and the panel says which KIND of empty it is.{% endcomment %}
+            {% if history_is_open %}
+            <div class="mt-3">
+                <button type="button" class="pp-cta pp-cta--ghost pp-cpick__histcta" data-cpick-history>
+                    {% comment %}Literal about what it does. "Import" is the verb the square records
+                    (`completed_via='import'`), so the copy and the data say the same word.{% endcomment %}
+                    Import from your history
+                </button>
+                {% comment %}THE ONE-TIME RULE BELONGS IN EVERY PLACE THIS IS DESCRIBED (owner, 2026-09-28).
+                A head start somebody expects to get again on their second run is a disappointment we wrote
+                ourselves, so the copy says "first" before it says what it does.{% endcomment %}
+                <p class="pp-cpick__histhint"><b>A one-time head start.</b> Games you finished after joining
+                    Platinum Pursuit can fill a letter straight away, on your first A-Z Challenge only.</p>
+            </div>
+            {% endif %}
         </div>
     </section>
 
@@ -192,6 +219,15 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
         </div>
 
         <div class="pp-cpick__body">
+            {% comment %}THE SAME DOOR AT THE TOP OF THE SHEET, because a hunter who opened a square and
+            then realised they had already finished something should not have to close it again. It TOGGLES:
+            pressing it in history mode goes back to whatever the sheet was showing, so the mode is not a dead
+            end for somebody who arrived through a square.{% endcomment %}
+            {% if history_is_open %}
+            <button type="button" class="pp-cpick__histswitch" data-cpick-history-switch
+                    aria-pressed="false">From your history</button>
+            {% endif %}
+
             <label class="sr-only" for="cpick-q">Search for a game</label>
             <input id="cpick-q" class="stg-input pp-cpick__search" type="search" autocomplete="off"
                    placeholder="Search for a game" data-cpick-q>
@@ -204,7 +240,22 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             {% comment %}`role="list"` for the reason the grid above spells out: preflight's
             `list-style: none` makes WebKit drop the implicit list role, and these rows are the
             sheet's actionable content on the same iOS Safari. The grid got it and these did not.{% endcomment %}
-            <ul class="pp-cpick__rows" role="list" data-cpick-rows></ul>
+            {% comment %}A BLOCK, NOT A PARAGRAPH. Four facts a hunter needs before pressing anything here,
+            and a wall of prose is the wrong shape for facts -- the date the rule measures from is the anchor,
+            so it leads and the rest reads as a short scannable list.{% endcomment %}
+            <div class="pp-cpick__note" id="cpick-note" data-cpick-note hidden>
+                <p class="pp-cpick__note-lead" data-cpick-note-lead></p>
+                {% comment %}`role="list"` for the reason the two lists above spell out: preflight ships
+                `ol,ul,menu{list-style:none}` and WebKit drops the implicit role from a list styled that way --
+                and this one is additionally `display: flex`, which strips it in Chrome too. Without it these
+                four facts announce as four loose runs of text, with no count and no list, immediately before
+                the only irreversible action in the feature.{% endcomment %}
+                <ul class="pp-cpick__note-facts" role="list" data-cpick-note-facts></ul>
+            </div>
+
+            {% comment %}`aria-describedby` points at the note above, so a reader reaching the offers is told
+            what that block said. The note explains this list and was associated with nothing.{% endcomment %}
+            <ul class="pp-cpick__rows" role="list" data-cpick-rows aria-describedby="cpick-note"></ul>
 
             {% comment %}THE CATCH-UP BLOCK, and it is separate from the rows above for one reason: these
             are the only offers that land a square COMPLETE and therefore LOCKED. Keeping them together
@@ -231,7 +282,13 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             <div class="pp-cpick__footask" data-cpick-ask hidden>
                 {% comment %}`id` because the pressed card points `aria-describedby` at this, so a screen
                 reader reaching the ring hears the question rather than only seeing it.{% endcomment %}
-                <p class="pp-cpick__ask-text" id="cpick-ask-text" data-cpick-ask-text></p>
+                {% comment %}TWO LINES, because a confirmation asks ONE thing and costs ANOTHER, and running
+                them together made the cost the tail of a sentence nobody finishes. The question leads; the
+                consequence sits under it in the warning tone.{% endcomment %}
+                <div class="pp-cpick__ask-body" id="cpick-ask-text">
+                    <p class="pp-cpick__ask-text" data-cpick-ask-text></p>
+                    <p class="pp-cpick__ask-cost" data-cpick-ask-cost hidden></p>
+                </div>
                 <div class="pp-cpick__ask-row pp-cpick__ask-row--foot">
                     {% comment %}THE SAFE BUTTON FIRST, and named after what it keeps -- the house recipe
                     (`.stg-confirm__row`, used by account deletion in Settings). Labels are set by the script,

@@ -111,6 +111,7 @@
     color: var(--disc, var(--pp-primary));
 }
 .pp-csq-shelf__icon svg { width: 18px; height: 18px; }
+
 .pp-csq-shelf__title {
     font-family: var(--pp-font-display);
     font-size: 0.95rem;
@@ -131,7 +132,15 @@
 
 @media (min-width: 1024px) {
     /* SEVEN COLUMNS, the same grid the page draws, so the five card columns inside the 5-span match the
-       flat grid's width exactly. `align-items: start` keeps a one-line head from stretching to the row. */
+       flat grid's width exactly.
+       `align-items: start` SIZES THE BAND BY ITS CONTENT. It was briefly `stretch`, so the band filled the
+       shelf's whole height; the owner looked at it and preferred the slice (2026-09-28).
+
+       THE SPACE BESIDE IT IS LEFT EMPTY ON PURPOSE. Everything considered for it -- a per-discipline progress
+       bar, the names of the jobs still missing -- only restates what the five squares beside it already show,
+       and filling space with a restatement is worse than leaving it. Worth revisiting when the rewards chunk
+       lands: "6,000 XP per square, N still open here" would be a number that exists nowhere else on the
+       page. */
     .pp-csq-shelf:not(.pp-csq-shelf--plain) {
         display: grid;
         grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -762,6 +771,71 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    supplementary and 10.5px was below the floor this same file argues for 200 lines up. */
 .pp-cpick__row-note { font-size: 12px; font-weight: 700; color: var(--pp-text-mute); }
 
+/* A HISTORY OFFER'S THREE FACTS, weighted. They were one dim run-on line that wrapped to three or four rows in
+   a ~128px column and left every card a different height. */
+.pp-cpick__dest { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; min-width: 0; }
+/* The destination letter, which is what a hunter scans this panel for. */
+.pp-cpick__dest-key {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: var(--pp-radius-sm);
+    font-family: var(--pp-font-display);
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 18%, var(--pp-bg-3));
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 38%, transparent);
+}
+.pp-cpick__dest-when {
+    /* 12px, the design system's floor -- this file argues for it twice elsewhere and then set 11px here. */
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+/* The replacement is the only one of the three that costs anything, so it is the only one that is warned. It
+   truncates rather than wrapping: the card's height is shared with its neighbours and a long game name must not
+   be what makes one row taller than the next. `title` keeps the full name reachable. */
+.pp-cpick__dest-swap {
+    min-width: 0;
+    max-width: 100%;
+    padding: 0 6px;
+    border-radius: 999px;
+    /* 12px, NOT 10.5px, and this was the sharpest contradiction in the pass: the comment above says this
+       chip is "the only one warned, because it is the only one that costs anything", and then set it in the
+       SMALLEST type on the card -- below the game name (12px) and below the date beside it. 10.5px is also the
+       exact value this file rejects twice, once 40 lines up ("10.5px was below the floor this same file argues
+       for") and once at the search rows ("under the 12px type floor"). Safe to raise because the chip
+       ELLIPSISES: wider text cannot make it wrap, which is what the height fix depends on. */
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 40%, transparent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* EQUAL HEIGHTS ACROSS A ROW. The cards are grid items, so their `<li>`s already stretch -- but the BUTTON
+   inside did not fill its cell, so a card with a wrapped label stood taller than the one beside it and the
+   shorter one floated with dead space under it. */
+/* `:not(.pp-cpick__ask)` IS THE WHOLE POINT OF THIS SELECTOR. `askInRow` inserts its confirmation as a
+   SIBLING `<li class="pp-cpick__ask">` in this same container, and `.pp-cpick__ask` declares no `display` --
+   so the bare `.pp-cpick__rows > li` (0,1,1) beat it (0,1,0) and turned the prompt into a flex ROW: the
+   question, the cost line and the two answer buttons side by side in a third of the width each. The
+   `flex-wrap: nowrap` added for the mobile button fix then made them shrink rather than wrap, so that fix
+   made this one worse. Verified in the built bundle, not just the source. */
+.pp-cpick__rows > li:not(.pp-cpick__ask) { display: flex; }
+.pp-cpick__rows > li:not(.pp-cpick__ask) > .pp-cpick__row { height: 100%; }
+
 /* SEARCH RESULTS ARE A LIST, NOT A GALLERY, and that is a correction rather than a preference.
    They shared `.pp-cpick__rows`' two-column grid, which is right for the slot panel (uniform cards, one
    action each) and wrong here: a search result carries a VARIABLE number of actions, one per square the
@@ -913,15 +987,39 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     border: 1px solid color-mix(in oklab, var(--pp-warning) 45%, transparent);
     background: color-mix(in oklab, var(--pp-warning) 10%, var(--pp-bg-2));
 }
+/* THE QUESTION, then THE COST. One run-on sentence made the consequence the tail of something nobody
+   finishes reading, on the only irreversible action in the feature. */
+.pp-cpick__ask-body { min-width: 0; }
 .pp-cpick__ask-text {
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1.35;
+    font-family: var(--pp-font-display);
+    font-size: 0.86rem;
+    font-weight: 800;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
     color: var(--pp-text);
 }
+.pp-cpick__ask-cost {
+    margin-top: 3px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: color-mix(in oklab, var(--pp-warning) 62%, #fff);
+}
+/* THE TWO ANSWERS STAY ON ONE LINE, at every width, and `nowrap` is what does it rather than a media query.
+   `flex-wrap: wrap` decides by each item's NATURAL size and wraps before it shrinks anything. At 375px the
+   sheet is 345px BORDER-BOX (`min(92vw, 44rem)`, and this sheet has a 1px border), so 343px of content; the
+   foot's 20px sides leave 303px and the pair's 8px gap leaves 295px. An earlier version said 297px and called
+   it "exact" -- it had forgotten the border, which is a small error in a sentence whose whole claim was
+   precision. The overflow itself is ESTIMATED at ~366px from an average glyph advance: a reason to believe the
+   diagnosis, confirmed by the owner seeing the buttons stacked, rather than a measurement of the labels.
+
+   `nowrap` plus `min-width: 0` lets them shrink instead, and the longer label wraps to two lines inside its
+   own button, which is where a long sentence should break. The 44px floor keeps both the same height when that
+   happens. The fix does not depend on which pair fits: whether "Keep <game>" / "Replace it" shrinks at all is
+   the same estimate, so it is not claimed here. */
 .pp-cpick__ask-row {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     justify-content: flex-end;
     margin-top: 10px;
@@ -930,7 +1028,12 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cpick__ask-go {
     /* 44px, like every other control in this sheet -- these two are the ones it would hurt most to mis-tap. */
     min-height: 44px;
-    padding: 8px 16px;
+    /* `min-width: 0` is the half that matters: a flex item's floor is its min-content width unless this says
+       otherwise, and at that floor the row still overflowed rather than letting the text wrap. */
+    min-width: 0;
+    /* Tighter at base, restored at `md:`, which is the project's mobile-first direction. Buys 16px across the
+       pair at exactly the width where it is needed. */
+    padding: 8px 12px;
     font: inherit;
     font-size: 12px;
     font-weight: 700;
@@ -955,6 +1058,117 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cpick__ask-keep:focus-visible,
 .pp-cpick__ask-go:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (min-width: 768px) {
+    .pp-cpick__ask-keep,
+    .pp-cpick__ask-go { padding: 8px 16px; }
+}
+
+/* THE HISTORY IMPORTER'S TWO DOORS. The page one sits under the Horizon in the header card, where it reads
+   as a thing you can do to this run; the sheet one sits above the search field and toggles.
+
+   `.pp-cta--ghost` for the page button rather than a primary: importing is a shortcut, not the main way to
+   fill a run, and a filled primary there would compete with the squares themselves. */
+.pp-cpick__histcta { font-size: 12px; }
+.pp-cpick__histhint {
+    margin-top: 6px;
+    /* 12px, not 0.72rem (11.5px) -- the same decision `.pp-cpick__catchup-note` records further down, for the
+       same reason. This is the page's whole explanation of an irreversible one-time feature, so it is not
+       supplementary copy and does not get to spend a point of legibility. */
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--pp-text-dim);
+}
+
+/* The in-sheet toggle: a quiet chip, warning-toned when ACTIVE because every offer behind it locks a square.
+   `aria-pressed` carries the state for assistive tech; this only makes it visible. */
+.pp-cpick__histswitch {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    margin-bottom: 10px;
+    padding: 6px 12px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--pp-text-dim);
+    background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+    -webkit-appearance: none;
+    appearance: none;
+}
+.pp-cpick__histswitch[aria-pressed="true"] {
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 14%, var(--pp-bg-2));
+    border-color: color-mix(in oklab, var(--pp-warning) 45%, transparent);
+}
+@media (hover: hover) {
+    .pp-cpick__histswitch:hover { border-color: color-mix(in oklab, var(--pp-primary) 45%, transparent); }
+}
+.pp-cpick__histswitch:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* The history panel's explainer. Warning-toned like the catch-up block, and for the same reason: everything
+   below it lands a square COMPLETE and LOCKED. */
+.pp-cpick__note {
+    margin-top: 10px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 40%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 9%, var(--pp-bg-2));
+    /* 12px, NOT 0.74rem (11.8px), for the reason `.pp-cpick__catchup-note` states beside its own 12px: this
+       is warning text for the only irreversible action on a run, which is the worst place on the page to spend
+       a point of legibility. The first version set 11.8px while its comment claimed to be "warning-toned like
+       the catch-up block, and for the same reason" -- diverging on the exact property that block's comment
+       argues about. */
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--pp-text);
+}
+/* THE ANCHOR LINE. The date is the one fact a hunter cannot infer, so it leads and it is the thing their eye
+   lands on -- display face, warning-toned, tabular so it does not jitter if it ever re-renders. */
+.pp-cpick__note-lead {
+    font-family: var(--pp-font-display);
+    font-size: 0.82rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    color: var(--pp-warning);
+    font-variant-numeric: tabular-nums;
+}
+/* PROSE, NOT AN ANCHOR. `showNote` reuses the lead element for the closed-importer explanation, which is two
+   or three sentences -- and the styling above is specified for a DATE ("display face, warning-toned,
+   tabular"). A paragraph in it reads as a shouted headline. */
+.pp-cpick__note-lead--prose {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: normal;
+    color: var(--pp-text);
+    font-variant-numeric: normal;
+}
+/* THE FACTS, as a list rather than a paragraph. Each one is a separate decision input, and prose hides that.
+   The markers are drawn rather than inherited so they sit at the warning tone without a `list-style` that
+   Tailwind's preflight has already removed. */
+.pp-cpick__note-facts { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+.pp-cpick__note-facts li {
+    position: relative;
+    padding-left: 13px;
+    color: var(--pp-text-dim);
+}
+.pp-cpick__note-facts li::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 0.52em;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--pp-warning) 70%, transparent);
+}
+/* The "look further" hint is guidance rather than a rule, so it reads as an aside. */
+.pp-cpick__note-facts .pp-cpick__note-fact--more { color: var(--pp-text-mute); font-style: italic; }
+.pp-cpick__note-facts .pp-cpick__note-fact--more::before { background: var(--pp-text-mute); }
 
 /* THE CATCH-UP BLOCK. Warning-toned because every offer inside it lands the square COMPLETE and LOCKED --
    the one irreversible action on a run. The tone is the warning; the confirmation is the service's. */
@@ -1000,7 +1214,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     gap: 12px;
     flex-wrap: wrap;
 }
-.pp-cpick__footask .pp-cpick__ask-text { flex: 1 1 14rem; }
+.pp-cpick__footask .pp-cpick__ask-body { flex: 1 1 14rem; }
 /* No top margin here: in the foot the buttons sit BESIDE the question when there is room, and only wrap
    under it on a narrow screen. In the inline prompt they are always on their own line. */
 .pp-cpick__ask-row--foot { margin-top: 0; }

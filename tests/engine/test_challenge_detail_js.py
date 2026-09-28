@@ -348,6 +348,12 @@ def test_the_dialog_height_is_capped_in_dvh():
     # THE FOUR THAT WERE MISSING, and they are the ones with no guard at all: `els.title`, `els.sub`,
     # `els.catchupTitle` and `els.catchupNote` are written unconditionally in the render path.
     'data-cpick-title', 'data-cpick-sub', 'data-cpick-catchup-title', 'data-cpick-catchup-note',
+    # AND THE FIVE ADDED SINCE, which fail the OTHER way and are worse for it. `showNote`, `showNoteBlock`
+    # and `askInFoot` all guard their elements and return early, so renaming one of these removes the whole
+    # four-fact warning -- or the confirmation's cost line -- with no test failing and no console error.
+    # A silent disappearance immediately before the only irreversible action in the feature.
+    'data-cpick-note', 'data-cpick-note-lead', 'data-cpick-note-facts',
+    'data-cpick-ask-cost', 'data-cpick-history-switch',
 ])
 def test_every_hook_the_js_reads_is_in_the_template(selector):
     """A renamed hook takes the picker down, and the first version of this docstring had that backwards.
@@ -694,7 +700,10 @@ def test_an_occupied_square_warns_before_it_is_replaced():
     # THE GUARD'S SHAPE, not just the copy. Asserting the sentence was present passed with the condition
     # stubbed to `false` -- the words existed and gated nothing.
     assert 'if (!occupant) { assign(row.slug, key, false, pick); return; }' in JS
-    assert "already has ' + occupant + '. Replace it with '" in JS
+    # THE QUESTION AND THE COST, split. It was one run-on sentence; the consequence is now its own line, so
+    # the pin follows both halves rather than the sentence that joined them.
+    assert "'Put ' + row.name + ' in ' + keyLabel + '?'" in JS
+    assert "already has ' + occupant + ', and it would be replaced.'" in JS
     # The safe answer is NAMED after what it keeps, per the house recipe -- not "Cancel".
     assert "'Keep ' + occupant" in JS
 
@@ -1298,7 +1307,8 @@ def test_the_question_reaches_the_live_region():
     attribute before focus ever returns to the card."""
     body = JS_CODE[JS_CODE.index('function askInFoot('):]
     body = body[:body.index('els.askKeep.focus();')]
-    assert 'say(message);' in body
+    # The cost line is announced with the question, or a screen reader hears half of it.
+    assert "say(message + (cost ? ' ' + cost : ''));" in body
 
 
 def test_a_detached_card_is_never_ringed():
@@ -1313,3 +1323,360 @@ def test_the_dispatcher_checks_every_element_the_foot_bar_needs():
     `els.askKeep && els.askGo`. Gating the dispatcher on the container alone could raise a bar with no working
     answers -- a question only Escape could dismiss."""
     assert 'if (els.ask && els.askText && els.askKeep && els.askGo) {' in JS_CODE
+
+
+def test_the_two_answers_never_stack_at_mobile_width():
+    """THE OWNER'S NOTE. At 375px the sheet is 345px and the foot leaves 297px for the pair, while "Leave it
+    empty" beside "Use it and lock the square" wants ~366px at its natural size -- and `flex-wrap: wrap` decides
+    by natural size and wraps BEFORE it shrinks anything, so the two answers stacked. The replace pair
+    ("Keep <game>" / "Replace it") fits, which is why only some prompts showed it.
+
+    `nowrap` plus `min-width: 0` is the fix: the buttons shrink and the long label wraps to two lines inside its
+    own button, which is where a sentence should break. Not a media query -- the behaviour is right at every
+    width, and a breakpoint would only move where it broke."""
+    row = CSS_CODE[CSS_CODE.index('.pp-cpick__ask-row {'):]
+    row = row[:row.index('}')]
+    assert 'flex-wrap: nowrap;' in row
+    assert 'flex-wrap: wrap;' not in row
+
+    buttons = CSS_CODE[CSS_CODE.index('.pp-cpick__ask-keep,'):]
+    buttons = buttons[:buttons.index('}')]
+    assert 'min-width: 0;' in buttons, 'without this the floor is min-content and the row overflows instead'
+    # Mobile-first: the tighter padding is the base and `md:` restores it.
+    assert 'padding: 8px 12px;' in buttons
+    assert '.pp-cpick__ask-go { padding: 8px 16px; }' in CSS_CODE
+
+
+# ── the sheet's third mode ────────────────────────────────────────────────────────────────────────
+
+def test_the_sheet_knows_which_of_three_panels_it_is_showing():
+    """`load()` encoded this in its own argument -- a key meant the square's pool, a null key meant the search --
+    which worked while there were two. The history panel is reachable from two places and has to survive a
+    keystroke in the search box, so the mode is a thing the sheet knows rather than a shape of the last call."""
+    assert "var mode = 'slot';" in JS_CODE
+    # SET BY THE RENDERERS, not the loaders. It used to be assigned before the fetch, so a request that FAILED
+    # left `mode` naming a panel that never arrived -- and the next keystroke filtered a pool that was not on
+    # screen. Each renderer owns it now, so it can only describe what a reader is looking at.
+    for renderer, expected in (('function renderSlotPanel(panel) {', "mode = 'slot';"),
+                               ('function renderSearchPanel(panel) {', "mode = 'search';"),
+                               ('function renderHistoryPanel(panel) {', "mode = 'history';")):
+        body = JS_CODE[JS_CODE.index(renderer):]
+        body = body[:body.index('\n        }') + 1]
+        assert expected in body, '%s does not claim its own mode' % renderer
+    # And neither loader may set it.
+    for loader in ('function load(key, query) {', 'function loadHistory(query) {'):
+        body = JS_CODE[JS_CODE.index(loader):]
+        body = body[:body.index('\n        }') + 1]
+        assert 'mode =' not in body, '%s sets the mode before its reply lands' % loader
+
+
+def test_typing_in_history_mode_filters_history():
+    """Falling through to the catalogue search would answer a different question from the one the panel is
+    asking, and an empty box here means "all of my history" rather than "back to the square"."""
+    body = JS_CODE[JS_CODE.index('var run = function () {'):]
+    body = body[:body.index('};')]
+    assert "if (mode === 'history') { loadHistory(term); return; }" in body
+    # Before the empty-box branch, or an empty box would leave history mode.
+    assert body.index("mode === 'history'") < body.index('if (!term)')
+
+
+def test_the_mode_does_not_survive_a_reset():
+    """A sheet reopened from a square must not still be in history mode -- typing would filter history under a
+    square's title, and the note would explain a rule the panel is no longer applying."""
+    body = JS_CODE[JS_CODE.index('function reset() {'):]
+    body = body[:body.index('\n        }') + 1]
+    assert "mode = 'slot';" in body
+    # `leaveHistory()` is what clears the note, the placeholder and the toggle's pressed state. Asserting
+    # `showNote('')` here pinned the old inline copy of those three lines rather than the property.
+    assert 'leaveHistory();' in body
+
+
+def test_both_other_panels_undress_the_history_mode():
+    """The note, the placeholder and the toggle's pressed state all belong to one panel, so they cannot survive
+    into one they do not describe. One function, called by both, rather than three lines copied twice."""
+    assert 'function leaveHistory()' in JS_CODE
+    # SCOPED TO EACH RENDERER'S OWN BODY, not to an arbitrary character window. A 400-char slice passed for
+    # `renderSlotPanel` and failed for `renderSearchPanel` purely because the call sits further down in the
+    # second one -- a measurement of line lengths rather than of the property.
+    for renderer in ('function renderSlotPanel(panel) {', 'function renderSearchPanel(panel) {'):
+        body = JS_CODE[JS_CODE.index(renderer):]
+        body = body[:body.index('\n        }') + 1]
+        assert 'leaveHistory();' in body, '%s does not undress history mode' % renderer
+
+
+def test_the_history_panel_names_the_date_it_measures_from():
+    """"Since you joined" is not something a hunter can check; a date is. `TimeFormatter.absolute` is the same
+    formatter the catch-up rows use, so the two blocks cannot disagree about how a date reads."""
+    body = JS_CODE[JS_CODE.index("function renderHistoryPanel("):]
+    body = body[:body.index('function showNote(')]
+    # THE LEAD STRING, not `TimeFormatter.absolute` -- that also matches the per-row date further down, so the
+    # loose form stayed green with the date removed from the note entirely.
+    assert "'Since you joined Platinum Pursuit on ' + joined" in body
+    assert 'showNoteBlock(' in body
+    # ONE-TIME FIRST, in every place the importer is described (owner, 2026-09-28): a head start somebody
+    # expects again on their second run is a disappointment we wrote ourselves.
+    assert 'A one-time head start, for your first A-Z Challenge only.' in body
+    # And the asymmetry the owner asked to have explained, in the place it is met.
+    assert 'Job Coverage runs do not use the importer.' in body
+
+
+def test_the_in_sheet_toggle_is_not_a_dead_end():
+    """A hunter who arrived through a square and then pressed this should be able to get back to that square's
+    pool without closing the sheet."""
+    body = JS_CODE[JS_CODE.index('els.histSwitch.addEventListener'):]
+    body = body[:body.index('});')]
+    assert "if (mode === 'history') {" in body
+    assert 'load(openKey' in body
+
+
+def test_the_page_door_opens_the_sheet_with_no_square_in_mind():
+    """The flow it exists for: a hunter who knows their library covers half the alphabet should not have to pick
+    a letter first. So it clears `openKey` -- otherwise the toggle would offer to go "back" to a square the
+    hunter never opened."""
+    body = JS_CODE[JS_CODE.index("querySelectorAll('[data-cpick-history]')"):]
+    body = body[:body.index('});\n            });') + 4]
+    assert 'reset();' in body
+    assert 'openKey = null;' in body
+    assert "loadHistory('');" in body
+
+
+def test_the_confirmations_safe_answer_names_what_it_keeps():
+    """"LEAVE IT EMPTY" IS A PROMISE ABOUT A SQUARE THAT MAY NOT BE EMPTY.
+
+    The history panel is the first surface to advertise `replaces X`, and its offers go straight to `assign` --
+    so the only question a hunter saw said the square would be left EMPTY while it held a game the other answer
+    would silently destroy forever. The house convention is that the safe button is named after what it KEEPS,
+    which is exactly what makes a two-button prompt readable.
+
+    Read off the BOARD rather than plumbed through `assign`'s four call sites: the board is the truth at the
+    moment the question is asked, and it is the same frozen snapshot the square itself shows.
+    """
+    assert 'function occupantFor(key)' in JS_CODE
+    assert "querySelector('.pp-csq__name')" in JS_CODE
+    body = JS_CODE[JS_CODE.index('function offerConfirmation('):]
+    body = body[:body.index('\n        }') + 1]
+    assert "occupant ? 'Keep ' + occupant : 'Leave it empty'" in body
+    # And the message says what it costs, which the server's sentence cannot know.
+    assert 'would be replaced.' in body
+
+
+def test_the_history_toggle_is_withheld_when_there_is_nowhere_to_go_back_to():
+    """THE DEAD END IN THE PRIMARY FLOW. Arriving through the PAGE door means no square was ever opened, so the
+    toggle's `load(openKey)` was `load(null)` -- an empty catalogue search answering "Type at least two
+    letters", a panel the hunter never asked for and could not get out of except by pressing the toggle again.
+
+    Withheld rather than relabelled: with nowhere to return to there is nothing for it to do, and the sheet's
+    close button is the way out."""
+    body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
+    body = body[:body.index('function showNote(')]
+    assert 'els.histSwitch.hidden = (openKey === null);' in body
+    # And it comes back for a panel that does have a square behind it.
+    leave = JS_CODE[JS_CODE.index('function leaveHistory()'):]
+    leave = leave[:leave.index('\n        }') + 1]
+    assert 'els.histSwitch.hidden = false;' in leave
+
+
+def test_the_page_door_focuses_the_sheet_and_defers_its_load():
+    """BOTH HALVES THE SQUARE DOOR DOES DELIBERATELY, and this one was missing both. `showModal`'s own focusing
+    steps land on the close button -- the least useful control in the sheet -- and content already present in a
+    live region when it enters the tree is not announced, which is why the square door wraps its load in a
+    zero-delay timeout and spends four lines explaining it."""
+    body = JS_CODE[JS_CODE.index("querySelectorAll('[data-cpick-history]')"):]
+    body = body[:body.index('});\n            });') + 4]
+    assert 'dialog.focus();' in body
+    assert 'window.setTimeout(function () { loadHistory(' in body
+
+
+def test_the_toggle_drops_an_open_confirmation():
+    """Nothing disables the toggle while the foot is asking, so without this a hunter could switch panels and
+    then press "Use it and lock the square" for an offer that is no longer on screen."""
+    body = JS_CODE[JS_CODE.index('els.histSwitch.addEventListener'):]
+    body = body[:body.index('});')]
+    assert 'dropPrompts();' in body
+    assert body.index('dropPrompts();') < body.index("mode === 'history'")
+
+
+def test_an_empty_history_panel_does_not_claim_the_hunter_has_nothing():
+    """THE SERVER COMPUTES `scan_truncated` AND THE CLIENT HAS TO USE IT. It was computed, documented in three
+    places as the thing that stops the panel lying, and then dropped by the view -- so the client said "Nothing
+    here yet" for a hunter whose importable games simply sat past the window. The data fix is worthless without
+    the delivery."""
+    # EXACTLY ONCE. It was serialized twice (a patch script run a second time), and a duplicate dict key is
+    # legal Python -- so the mutation that deleted one copy left the other and this assertion passed while
+    # pinning nothing. Counting is what makes it a pin.
+    views = (ROOT / 'challenges' / 'views.py').read_text(encoding='utf-8')
+    assert views.count("'scan_truncated': panel['scan_truncated'],") == 1
+    body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
+    body = body[:body.index('function showNote(')]
+    assert 'panel.scan_truncated' in body
+    assert 'Nothing in the first batch' in body
+    # Split across two source lines now that the note is a list; matched in halves rather than as one literal.
+    assert 'Search for a ' in body and 'game to look further' in body
+
+
+def test_the_history_panel_does_not_advertise_rows_it_cannot_reach():
+    """`N+ ready to place` promised a further page on a panel with NO pagination, and `more` can be true purely
+    because the window filled -- which says nothing about how many offers exist. Say what is on screen and how
+    to look further."""
+    body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
+    body = body[:body.index('function showNote(')]
+    assert "'+ ready to place'" not in body
+    assert "' ready to place'" in body
+    assert 'search to look further' in body
+
+
+def test_the_history_note_says_the_rule_is_an_instant_not_a_day():
+    """The rule is `when > joined_at` on full timestamps, and the copy named only a DATE -- so a game finished at
+    breakfast on the day somebody signed up in the evening is excluded while satisfying the sentence as written.
+    A hunter hunting for it would think the list was broken."""
+    body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
+    body = body[:body.index('function showNote(')]
+    assert 'earlier that same day' in body
+
+
+def test_a_closed_history_panel_announces_why():
+    """The reason is the ENTIRE content of a closed panel, and it was written into a plain `<p>` that is not a
+    live region and receives no focus -- so a screen reader heard "Not available on this run" and never learned
+    why."""
+    body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
+    body = body[:body.index('function showNote(')]
+    assert "say(els.sub.textContent + '. ' + why);" in body
+
+
+# ── the design pass, 2026-09-28 ───────────────────────────────────────────────────────────────────
+
+def test_the_importer_says_it_is_one_time_everywhere_it_is_described():
+    """OWNER'S NOTE: a head start somebody expects to get again on their second run is a disappointment we
+    wrote ourselves. Every surface that describes the importer has to say "first" before it says what it does --
+    the page hint, the panel's own facts, and the explanation when it is spent."""
+    tpl = _template_code(
+        (ROOT / 'templates' / 'challenges' / 'challenge_detail.html').read_text(encoding='utf-8'))
+    assert 'A one-time head start' in tpl
+    assert 'first A-Z Challenge only' in tpl
+
+    body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
+    body = body[:body.index('function showNote(')]
+    assert 'A one-time head start, for your first A-Z Challenge only.' in body
+
+    spent = JS_CODE[JS_CODE.index('function historyClosedNote('):]
+    spent = spent[:spent.index('\n        }') + 1]
+    assert 'one-time head start for your FIRST A-Z Challenge' in spent
+
+
+def test_the_history_note_is_a_lead_and_a_list_not_a_paragraph():
+    """FOUR FACTS DECIDE WHETHER A HUNTER PRESSES ANYTHING HERE, and prose hides that they are four. The date is
+    the only one they cannot infer, so it leads; the rest are a list. "What would a top-tier product do with
+    this text" was the owner's question, and the answer was not a paragraph."""
+    assert 'function showNoteBlock(lead, facts)' in JS_CODE
+    assert '.pp-cpick__note-lead' in CSS_CODE
+    assert '.pp-cpick__note-facts' in CSS_CODE
+    body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
+    body = body[:body.index('function showNote(')]
+    assert 'showNoteBlock(' in body
+    # The facts are separate strings, not one concatenated block.
+    facts = body[body.index('showNoteBlock('):]
+    facts = facts[:facts.index(');')]
+    assert facts.count("',") >= 3, 'the facts must be separate lines, not one paragraph'
+
+
+def test_the_confirmation_separates_the_question_from_its_cost():
+    """A confirmation asks ONE thing and costs ANOTHER, and running them together made the cost the tail of a
+    sentence nobody finishes -- on the only irreversible action in the feature. The question leads in display
+    type; the consequence sits under it in the warning tone."""
+    assert 'data-cpick-ask-cost' in (
+        (ROOT / 'templates' / 'challenges' / 'challenge_detail.html').read_text(encoding='utf-8'))
+    assert '.pp-cpick__ask-cost' in CSS_CODE
+    # Both surfaces carry it: the foot sets the element, the row builds one.
+    foot = JS_CODE[JS_CODE.index('function askInFoot('):]
+    foot = foot[:foot.index('\n        }') + 1]
+    assert 'els.askCost.textContent = cost' in foot
+    row = JS_CODE[JS_CODE.index('function askInRow('):JS_CODE.index('function occupantFor(')]
+    assert "costLine.className = 'pp-cpick__ask-cost';" in row
+    # And the server's sentence is the COST, not the headline.
+    conf = JS_CODE[JS_CODE.index('function offerConfirmation('):]
+    conf = conf[:conf.index('\n        }') + 1]
+    assert "'Put ' + data.contract_name + ' in ' + labelFor(key) + '?'" in conf
+    assert conf.index("'Put '") < conf.index('data.error')
+
+
+def test_a_history_card_weights_its_three_facts_and_cannot_wrap_them():
+    """IT WAS ONE DIM RUN-ON LINE -- `Goes in A . finished Mar 3, 2024 . replaces Alan Wake` -- which wrapped to
+    three or four rows in a ~128px column, made every card a different height, and buried the destructive fact
+    at the end in the quietest type on the card.
+
+    Three facts, three weights: the destination is a chip (what the panel is scanned for), the date is quiet and
+    loses its day (the month is the recognisable part and the day was most of the wrap), and the replacement is
+    the only one warned, because it is the only one that costs anything.
+    """
+    assert 'function historyLabel(row, when)' in JS_CODE
+    for cls in ('.pp-cpick__dest-key', '.pp-cpick__dest-when', '.pp-cpick__dest-swap'):
+        assert cls in CSS_CODE, '%s is not styled' % cls
+    body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
+    body = body[:body.index('function showNote(')]
+    # MONTH AND YEAR, no day -- SCOPED TO THE ROWS LOOP. The note's lead legitimately keeps its day: the join
+    # date is the rule's anchor and wants precision, where a card's date only has to be recognisable. An
+    # earlier version of this assertion banned the pattern across the whole function and failed on the lead.
+    cards = body[body.index('panel.rows.forEach('):]
+    assert "{ year: 'numeric', month: 'short' }" in cards
+    assert "day: 'numeric'" not in cards, 'the day is what made these labels wrap'
+    # The swap chip truncates rather than wrapping, or one long game name makes a row taller than its
+    # neighbour -- which is the thing being fixed.
+    swap = CSS_CODE[CSS_CODE.index('.pp-cpick__dest-swap {'):]
+    swap = swap[:swap.index('}')]
+    assert 'text-overflow: ellipsis' in swap and 'white-space: nowrap' in swap
+
+
+def test_the_offer_cards_in_a_row_are_the_same_height():
+    """The `<li>`s stretch because they are grid items, but the BUTTON inside did not fill its cell -- so a card
+    with a wrapped label stood taller than the one beside it and the shorter one floated with dead space
+    under it."""
+    # `:not(.pp-cpick__ask)` IS PART OF THE PIN, not noise. `askInRow` inserts its confirmation as a SIBLING
+    # `<li class="pp-cpick__ask">` in this same container, and the bare selector (0,1,1) beat `.pp-cpick__ask`
+    # (0,1,0) -- turning the prompt into a flex ROW with the question, the cost and both answers side by side
+    # in a third of the width each. Dropping the exclusion brings that back.
+    assert '.pp-cpick__rows > li:not(.pp-cpick__ask) { display: flex; }' in CSS_CODE
+    assert '.pp-cpick__rows > li:not(.pp-cpick__ask) > .pp-cpick__row { height: 100%; }' in CSS_CODE
+    assert '.pp-cpick__rows > li { display: flex; }' not in CSS_CODE, (
+        'the unscoped form flattens the inline confirmation'
+    )
+
+
+# ── two rules this stylesheet and these templates argue for, now enforced rather than remembered ───
+
+def test_no_type_in_this_stylesheet_falls_below_the_12px_floor():
+    """THE FLOOR IS ARGUED FOR THREE TIMES IN THIS FILE and was broken twice in one afternoon -- a 10.5px chip
+    carrying the one destructive fact on a card, and an 11.5px page hint that is the whole explanation of an
+    irreversible feature. Both were written directly beneath comments rejecting those exact values.
+
+    A GENERAL GUARD, not a pin on the two classes that broke it. The rule is file-wide, so the next sub-floor
+    size should fail without anybody remembering to add a test for it. `rem` is resolved at the project's 16px
+    root; a genuine exception (an uppercase micro-label, say) should be added here deliberately with its reason
+    rather than by lowering the bound.
+    """
+    import re as _re
+
+    offenders = []
+    for value, unit in _re.findall(r'font-size:\s*([0-9.]+)(px|rem)', CSS):
+        px = float(value) * (16.0 if unit == 'rem' else 1.0)
+        if px < 12.0:
+            offenders.append('%s%s (%.1fpx)' % (value, unit, px))
+    assert offenders == [], 'type below the 12px floor: %s' % ', '.join(sorted(set(offenders)))
+
+
+def test_every_list_in_the_challenge_templates_declares_its_role():
+    """TAILWIND'S PREFLIGHT SHIPS `ol,ul,menu{list-style:none}`, and WebKit drops the implicit `list` role from a
+    list styled that way -- so on iOS Safari, the dominant screen-reader pairing for a 375px-first page, a bare
+    `<ul>` announces nothing at all. `display: flex` strips it in Chrome too, which one of these lists has.
+
+    These templates state that rule in three separate comments and then shipped a fourth list without it. A
+    general guard, so the next one cannot rely on somebody remembering.
+    """
+    import re as _re
+
+    for name in ('challenge_detail.html', 'my_challenges.html'):
+        path = ROOT / 'templates' / 'challenges' / name
+        if not path.exists():
+            continue
+        body = _template_code(path.read_text(encoding='utf-8'))
+        for tag in _re.findall(r'<ul\b[^>]*>', body):
+            assert 'role="list"' in tag, '%s has a list with no role: %s' % (name, tag)

@@ -1,9 +1,9 @@
-"""The picker's two panels: what they offer, and what they cost.
+"""The picker's three panels: what they offer, and what they cost.
 
 WHAT IS WORTH PINNING HERE is not that the panels return data, but the three things that would each ship
 silently:
 
-**Flatness.** Both panels are bounded slices over a pool that already runs to the hundreds per letter in
+**Flatness.** Every panel is a bounded slice over a pool that already runs to the hundreds per letter in
 prod and is growing ~150/day. A per-row lookup passes every functional test in this file -- and I shipped
 exactly that once already, calling `fitting_keys` per search result, which is 24 queries for a page. The
 query-count tests are the only thing that can see it.
@@ -31,6 +31,7 @@ from challenges.models import (
     Challenge,
 )
 from challenges.services import challenge_service as svc
+from challenges.services import eligibility
 from challenges.services import picker
 from tests.factories import (
     ConceptFactory,
@@ -711,3 +712,290 @@ def test_a_job_panel_does_not_even_ask_whether_the_importer_is_open():
     counts = [q['sql'] for q in captured.captured_queries
               if 'FROM "challenges_challenge"' in q['sql'] and 'COUNT' in q['sql'].upper()]
     assert counts == [], 'a jobs panel must not pay the importer run count'
+
+
+# ── history_panel: the first-run importer's own view ──────────────────────────────────────────────
+
+def test_the_history_panel_offers_a_finished_game_under_its_letter():
+    """THE POINT OF THE VIEW. A hunter arriving with a library that already covers half the alphabet should be
+    able to see all of it at once, rather than opening 26 squares to find out."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Astro Bot')
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    panel = picker.history_panel(profile, challenge)
+
+    assert panel['open'] is True
+    assert [r['name'] for r in panel['rows']] == ['Astro Bot']
+    assert panel['rows'][0]['key'] == 'A'
+    assert panel['rows'][0]['key_label'] == 'A'
+    assert panel['rows'][0]['completed_at'] is not None
+
+
+def test_the_history_panel_costs_the_same_for_three_letters_as_for_one():
+    """ONE QUERY FOR THE POOL, not one per letter -- asking `completed_contracts` 26 times would be 26 queries to
+    draw one panel, which is a shape this branch has shipped once and had to undo.
+
+    ASSERTED AS A DIFFERENCE of zero rather than as an absolute. An earlier version of this test counted the
+    statements and asserted `< 15`, which passes for any per-letter implementation with three letters, and then
+    carried an `assert pool_reads or True` that could not fail at all. Comparing one row against three is the
+    only form that can see the thing being pinned."""
+    one = _member()
+    _joined(one, timezone.now() - timezone.timedelta(days=365))
+    one_run = svc.start(one, CHALLENGE_TYPE_AZ)
+    _platted_at(one, _contract('Astro Bot'), timezone.now() - timezone.timedelta(days=30))
+
+    three = _member()
+    _joined(three, timezone.now() - timezone.timedelta(days=365))
+    three_run = svc.start(three, CHALLENGE_TYPE_AZ)
+    for name in ('Astro Bot', 'Bloodborne', 'Celeste'):
+        _platted_at(three, _contract(name), timezone.now() - timezone.timedelta(days=30))
+
+    with CaptureQueriesContext(connection) as small:
+        picker.history_panel(one, one_run)
+    with CaptureQueriesContext(connection) as big:
+        panel = picker.history_panel(three, three_run)
+
+    assert sorted(r['key'] for r in panel['rows']) == ['A', 'B', 'C']
+    assert len(big.captured_queries) == len(small.captured_queries), (
+        'three letters cost %d queries where one cost %d' % (
+            len(big.captured_queries), len(small.captured_queries))
+    )
+
+
+def test_a_game_finished_before_you_joined_is_not_in_your_history_panel():
+    """THE FAIRNESS RULE, and it is the whole reason the view says what it says. Only work done since the
+    account existed counts; anything earlier is the hunter's history rather than this run's."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    old = _contract('Astro Bot')
+    _platted_at(profile, old, timezone.now() - timezone.timedelta(days=800))
+
+    panel = picker.history_panel(profile, challenge)
+
+    assert panel['open'] is True
+    assert panel['rows'] == []
+
+
+def test_the_history_panel_is_closed_on_a_job_coverage_run():
+    """A-Z ONLY (owner, 2026-09-28). A job is a shape of game rather than a name, and a contract carrying six
+    jobs could not be offered under one square the way a letter can."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    panel = picker.history_panel(profile, challenge)
+
+    assert panel['open'] is False
+    assert panel['closed_reason'] == 'jobs'
+    assert panel['rows'] == []
+
+
+def test_the_history_panel_is_closed_once_you_have_finished_a_run():
+    """The importer is first-run only, and `importer_is_available` owns that rule -- so the panel cannot drift
+    from what `assign` will accept."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    _spend_the_importer(profile)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Astro Bot')
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    panel = picker.history_panel(profile, challenge)
+
+    assert panel['open'] is False
+    assert panel['closed_reason'] == 'spent'
+
+
+def test_every_history_panel_has_the_same_keys_whatever_the_branch():
+    """ONE FUNCTION, ONE DICT SHAPE -- the rule both sibling panels broke first. The caller renders a panel
+    either way, because an explanation is a panel too, and a second shape is a `KeyError` on one branch."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    az = svc.start(profile, CHALLENGE_TYPE_AZ)
+    _platted_at(profile, _contract('Astro Bot'), timezone.now() - timezone.timedelta(days=30))
+    jobs = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    spent = _member()
+    _joined(spent, timezone.now() - timezone.timedelta(days=365))
+    _spend_the_importer(spent)
+    spent_run = svc.start(spent, CHALLENGE_TYPE_AZ)
+
+    shapes = [set(picker.history_panel(p, c)) for p, c in
+              ((profile, az), (profile, jobs), (spent, spent_run))]
+    assert shapes[0] == shapes[1] == shapes[2]
+    assert 'closed_reason' in shapes[0] and 'joined_at' in shapes[0] and 'more' in shapes[0]
+
+
+def test_the_history_panel_reports_more_as_a_boolean_not_a_count():
+    """A COUNT WOULD BE A NUMBER ABOUT THE WRONG SET. Membership depends on the completion DATE, which comes
+    from trophy data, so an honest total would mean dating the whole pool rather than the slice. A candidate
+    count is the bug this branch already fixed once, where a tally advertised forty above a block holding
+    none."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    for i in range(3):
+        _platted_at(profile, _contract('Astro Bot %d' % i),
+                    timezone.now() - timezone.timedelta(days=30))
+
+    small = picker.history_panel(profile, challenge, limit=2)
+    roomy = picker.history_panel(profile, challenge, limit=20)
+
+    assert small['more'] is True
+    assert roomy['more'] is False
+    assert 'total' not in small
+
+
+def test_a_game_already_in_the_run_is_not_offered_again_by_history():
+    """The same exclusion the square picker's pool applies, on the live FK: a game placed in one square must not
+    be offered for another, or one completion fills two."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Astro Bot')
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+    svc.assign(challenge, profile, 'A', done, acknowledge_lock=True)
+
+    panel = picker.history_panel(profile, challenge)
+
+    assert [r['name'] for r in panel['rows']] == []
+
+
+def test_a_history_offer_names_what_it_would_replace():
+    """A square holding an unfinished pick is still fair game -- reassigning it is allowed -- but the offer
+    locks it permanently, so the row has to say what it would displace. The same fact the search panel carries,
+    from the same slots already in memory."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    svc.assign(challenge, profile, 'A', _contract('Aliens'))
+    done = _contract('Astro Bot')
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    panel = picker.history_panel(profile, challenge)
+
+    row = [r for r in panel['rows'] if r['name'] == 'Astro Bot'][0]
+    assert row['occupant'] == 'Aliens'
+
+
+def test_the_history_pool_refuses_a_jobs_challenge_outright():
+    """A CALLER BUG, not a case to degrade for. `completed_contracts_across_keys` annotates the one letter a
+    contract fits, and a jobs contract carries up to six -- there is no single answer to put on the row. The
+    panel guards the type before it gets here; this is the floor under that."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    with pytest.raises(ValueError, match='A-Z only'):
+        eligibility.completed_contracts_across_keys(profile, challenge, {'A'})
+
+
+def test_pre_join_games_cannot_hide_every_importable_one():
+    """THE BUG THE WINDOW EXISTS FOR, and it was a mean one.
+
+    The panel used to slice `PAGE` candidates ALPHABETICALLY and only then drop the ones completed before the
+    account existed. A hunter with a page's worth of pre-join completions early in the alphabet filled the whole
+    slice with them, so the panel reported nothing at all while a post-join game sat under Z -- the same lie
+    this module fixed once in the other direction (a tally advertising forty above a block holding none),
+    inverted.
+    """
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    for i in range(picker.PAGE + 2):
+        _platted_at(profile, _contract('Ape Escape %02d' % i),
+                    timezone.now() - timezone.timedelta(days=800))
+    _platted_at(profile, _contract('Zelda'), timezone.now() - timezone.timedelta(days=30))
+
+    panel = picker.history_panel(profile, challenge)
+
+    assert [r['name'] for r in panel['rows']] == ['Zelda']
+    assert panel['showing'] == 1
+
+
+def test_an_empty_history_panel_says_which_kind_of_empty_it_is():
+    """"Nothing importable" IS A CLAIM THIS FUNCTION CANNOT ALWAYS MAKE. With the window full and no offer in
+    it, all the panel knows is that nothing in the first `HISTORY_SCAN` candidates qualified -- so it reports
+    the window was truncated and lets the client point at the search box rather than implying the hunter has
+    nothing."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    for i in range(picker.HISTORY_SCAN + 1):
+        _platted_at(profile, _contract('Ape Escape %03d' % i),
+                    timezone.now() - timezone.timedelta(days=800))
+
+    panel = picker.history_panel(profile, challenge)
+
+    assert panel['open'] is True
+    assert panel['rows'] == []
+    assert panel['scan_truncated'] is True
+    assert panel['more'] is True
+
+    # And the honest opposite: a small pool that WAS fully examined says so.
+    small = _member()
+    _joined(small, timezone.now() - timezone.timedelta(days=365))
+    small_run = svc.start(small, CHALLENGE_TYPE_AZ)
+    _platted_at(small, _contract('Ape Escape'), timezone.now() - timezone.timedelta(days=800))
+
+    panel = picker.history_panel(small, small_run)
+
+    assert panel['rows'] == []
+    assert panel['scan_truncated'] is False
+    assert panel['more'] is False
+
+
+def test_the_history_panel_costs_what_it_says():
+    """MEASURED, because the first version of the cost docstring was wrong in every branch: it claimed a pool
+    COUNT this function never runs, counted five items and called them four, and said the slots are read on a
+    branch that returns before touching them."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    az = svc.start(profile, CHALLENGE_TYPE_AZ)
+    jobs = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    with CaptureQueriesContext(connection) as on_jobs:
+        picker.history_panel(profile, jobs)
+    assert len(on_jobs.captured_queries) == 0, 'a jobs run returns before asking anything'
+
+    with CaptureQueriesContext(connection) as empty:
+        picker.history_panel(profile, az)
+    assert len(empty.captured_queries) == 3, 'the gate, the slots, the candidate window'
+
+    spent = _member()
+    _joined(spent, timezone.now() - timezone.timedelta(days=365))
+    _spend_the_importer(spent)
+    spent_run = svc.start(spent, CHALLENGE_TYPE_AZ)
+    with CaptureQueriesContext(connection) as shut:
+        picker.history_panel(spent, spent_run)
+    assert len(shut.captured_queries) == 1, 'only the gate; the slots are never read'
+
+
+def test_the_date_read_touches_the_window_and_not_the_pool():
+    """THE EXPENSIVE HALF, bounded. `importable_dates` reads trophy data, so its input has to be the window
+    rather than everything the hunter has ever completed -- and the query count must not move when the pool
+    grows past the window."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    for i in range(6):
+        _platted_at(profile, _contract('Ape Escape %02d' % i),
+                    timezone.now() - timezone.timedelta(days=30))
+
+    with CaptureQueriesContext(connection) as small:
+        picker.history_panel(profile, challenge)
+
+    for i in range(picker.HISTORY_SCAN):
+        _platted_at(profile, _contract('Bloodborne %03d' % i),
+                    timezone.now() - timezone.timedelta(days=30))
+
+    with CaptureQueriesContext(connection) as big:
+        picker.history_panel(profile, challenge)
+
+    assert len(big.captured_queries) == len(small.captured_queries), (
+        'the pool grew and the query count moved: %d vs %d' % (
+            len(big.captured_queries), len(small.captured_queries))
+    )

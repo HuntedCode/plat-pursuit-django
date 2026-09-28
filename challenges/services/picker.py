@@ -1,7 +1,7 @@
 """What the picker offers, for one slot or for one search. Read-only: nothing here writes.
 
-TWO PANELS, ONE COMPONENT, because a hunter arrives with one of two questions and neither is a subset of
-the other:
+THREE PANELS, ONE COMPONENT, because a hunter arrives with one of three questions and none is a subset of
+another:
 
 - **slot-first** (`slot_panel`): "this square is empty -- what can I put in it?" The natural flow for A-Z,
   where you are filling alphabet gaps.
@@ -9,6 +9,9 @@ the other:
   for Job Coverage, where one game carries up to six jobs and the answer is genuinely unknown to the
   hunter. For A-Z it is nearly trivial (a game fits exactly one letter), which is why the two flows earn
   their keep rather than duplicating each other.
+- **history-first** (`history_panel`): "what have I already finished that counts?" The first-run importer's
+  own view, spanning every open letter at once rather than one square. Reachable from the run page and from
+  the top of the sheet, because a hunter looking for it is not thinking about a particular square yet.
 
 NOTHING HERE DECIDES ANYTHING. Every rule comes from `eligibility` or `challenge_service`:
 `eligible_contracts` for the pool, `fitting_keys` for which slots a game suits, `catchup_offers` for
@@ -17,10 +20,15 @@ in what order. `challenge_service.assign` remains the only authority on whether 
 and it re-checks everything -- so a stale panel can only ever produce a refusal, never a bad write.
 
 BOUNDED, DELIBERATELY. Prod holds ~2,390 live contracts and grows ~150/day with ~4,000 queued, so a
-single letter's pool already runs to the hundreds and will reach four figures. Every list here is a
-`PAGE`-sized slice with a DB `COUNT` beside it, and the expensive per-hunter work (`completion_dates`, 3-5
-queries) touches only the slice -- never the pool. Ordering is `Lower('name')` in the database, per
-the project's front-facing-name rule.
+single letter's pool already runs to the hundreds and will reach four figures. Every list here is a bounded
+slice, and the expensive per-hunter work (`completion_dates`) touches only the slice -- never the pool.
+Ordering is `Lower('name')` in the database, per the project's front-facing-name rule.
+
+THE TWO SLOT-SHAPED PANELS carry a DB `COUNT` beside their slice, because "12 of 340" is a fact a hunter can
+act on. `history_panel` deliberately does NOT: membership there depends on a completion date read from trophy
+data, so an honest total would mean dating the whole pool. It reports a boolean instead, and its window is
+`HISTORY_SCAN`-sized rather than `PAGE`-sized. An earlier version of this paragraph said "every list here is a
+`PAGE`-sized slice with a DB `COUNT` beside it", which stopped being true when the third panel landed.
 """
 from django.db.models.functions import Lower
 
@@ -35,6 +43,28 @@ from trophies.templatetags.job_icons import has_icon
 #: One page of offers. 24 rather than a round 20 or 25 because it divides by 2, 3 and 4, so the grid it
 #: feeds has no ragged last row at any of the picker's column counts.
 PAGE = 24
+
+#: HOW MANY CANDIDATES THE HISTORY PANEL DATES to fill one page of `PAGE` offers, and it has to be a
+#: multiple because membership is not knowable in SQL.
+#:
+#: The pool is "completed, and fits an open letter". Whether a candidate is IMPORTABLE depends on its
+#: completion date, which lives in trophy data and costs a bounded-but-real read -- so the panel dates a
+#: window and filters, rather than filtering and then paging.
+#:
+#: SLICING TO `PAGE` FIRST WAS A BUG, and a mean one: a hunter with two dozen pre-join completions early in
+#: the alphabet had every one of them fill the window, so the panel said "Nothing here yet" while a
+#: post-join game sat under Z. That is the same lie this module fixed once already in the other direction
+#: (a tally advertising forty above a block holding none), inverted.
+#:
+#: WHY NOT ORDER BY A DETECTION STAMP so the likely-importable ones come first: because it does not
+#: separate them for the only hunters who can use the importer. `EarnedContract`'s stamps record when WE
+#: NOTICED, and a first-run hunter's first sync notices a 2019 platinum and last week's within minutes of
+#: each other. The stamps are useless as a proxy for exactly the population this panel serves.
+#:
+#: FOUR PAGES, not more: the window's cost is the row count `completion_dates` resolves member concepts and
+#: trophies for, and 96 contracts is a bounded read. Beyond that, `scan_truncated` tells the panel to say so
+#: rather than imply there is nothing.
+HISTORY_SCAN = PAGE * 4
 
 #: A search term shorter than this matches most of the catalogue, so it is treated as no term at all --
 #: the same floor `gamelists.services.game_search` applies, and for the same reason: an unbounded
@@ -176,10 +206,8 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
     already loaded, so the intersection and the `filled` map both cost nothing. A completed square is excluded (it never reopens); a
     filled but unfinished one is offered, because reassigning it is allowed.
 
-    SEVEN QUERIES, flat in the result count: the run's slots, the search COUNT, the search slice, three
-    for the slice's covers, one for which of them this hunter has completed, one for the fitting keys, and
-    one for the job catalogue on a jobs run. An earlier version called `fitting_keys` per row, which made
-    it 24 more.
+    THE PER-ROW VERSION OF THIS, for the record: an earlier one called `fitting_keys` once per result, which
+    added 24 queries to a page and is the shape the counts above exist to keep honest.
     """
     # SCRUBBED FIRST. `clean_term` strips control bytes before measuring, so `?q=%00%00` -- two characters,
     # enough to clear a length floor -- becomes the empty string here instead of reaching `icontains` and
@@ -260,6 +288,117 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
             'key_labels': {k: _key_name(atoms, k) for k in atoms},
             'key_atoms': {k: _key_look(a) for k, a in atoms.items()},
             'filled': filled}
+
+
+def history_panel(profile, challenge, *, query='', limit=PAGE):
+    """Everything the history-first panel draws: games this hunter finished that a square will accept.
+
+    ONE SHAPE, ALWAYS, open or closed. The caller renders a panel either way -- an explanation is a panel too --
+    and a second dict shape is how a view gets a `KeyError` on one branch. Both of this module's other panels
+    have been bitten by exactly that.
+
+    WHY IT IS A PANEL AND NOT A FILTER on the square picker: that one is scoped to ONE letter, and the whole
+    point of a history view is "show me everything from my history, wherever it fits". There is no square to
+    hang it off.
+
+    THE COUNT IS A BOOLEAN, deliberately. `more` says the candidate slice filled up; there is no total, because
+    an honest one is not affordable. Membership depends on the completion DATE, which comes from trophy data
+    (`importable_dates`, 3-5 queries over the tables the whale rule protects), so counting the importable ones
+    across the whole pool would mean dating the whole pool. A count of CANDIDATES would be the bug this branch
+    already fixed once, where `catchup_total` advertised forty above a block holding none.
+
+    QUERY COST, MEASURED (see `test_the_history_panel_costs_what_it_says`). The first version of this
+    paragraph was wrong in every branch -- it claimed a pool COUNT this function never runs, counted five
+    items and called them four, and said the slots are read on a branch that returns before touching them:
+
+    - a Job Coverage run: **0**. It returns on the type check, before the gate and before the slots.
+    - the importer spent: **1**, the gate's COUNT. The slots are still never read.
+    - open, nothing in the window matched: **3** -- the gate, the slots, the candidate window.
+    - open, with offers: the above plus three for the covers and `importable_dates`' 2-5 over trophy data.
+
+    NONE OF IT SCALES WITH THE HUNTER'S LIBRARY. The date read is the expensive half and it touches only the
+    window (`HISTORY_SCAN` rows at most), never the pool.
+    """
+    joined_at = getattr(getattr(profile, 'user', None), 'date_joined', None)
+    shut = {
+        'open': False, 'joined_at': joined_at, 'query': clean_term(query),
+        'rows': [], 'showing': 0, 'more': False, 'scan_truncated': False,
+    }
+
+    # THE TYPE RULE FIRST, because it is the one a hunter cannot change by doing anything. A Job Coverage run
+    # has no history importer at all: a job is a shape of game rather than a name, and what protects a thin job
+    # square is the hatch, which applies to both types.
+    if challenge.challenge_type != CHALLENGE_TYPE_AZ:
+        return dict(shut, closed_reason='jobs')
+    # `importer_is_available` owns the rest of the rule, so this cannot drift from what `assign` will accept.
+    if not svc.importer_is_available(profile, challenge.challenge_type):
+        return dict(shut, closed_reason='spent')
+    if joined_at is None:
+        return dict(shut, closed_reason='no_join_date')
+
+    slots = list(challenge.slots.all())
+    # NOT-COMPLETED RATHER THAN EMPTY, matching both other panels: a finished square never reopens, and a
+    # filled-but-unfinished one is fair game because reassigning it is allowed. The row carries its occupant so
+    # the offer can say what it would replace, exactly as a search result does.
+    open_keys = {s.key for s in slots if not s.is_completed}
+    occupants = {s.key: s.contract_name for s in slots if s.is_filled and not s.is_completed}
+    if not open_keys:
+        return dict(shut, open=True, closed_reason='')
+
+    pool = _narrow(
+        eligibility.completed_contracts_across_keys(profile, challenge, open_keys), query)
+    # A WINDOW OF CANDIDATES, then the date filter, then a page. See `HISTORY_SCAN`: filtering first is not
+    # available (membership is not a SQL predicate) and paging first hides importable games behind pre-join
+    # ones. `scan` is bounded whatever the hunter's library holds.
+    scan = list(pool.order_by(*BY_NAME)[:HISTORY_SCAN])
+    dates = eligibility.importable_dates(profile, scan, joined_at) if scan else {}
+
+    importable = [c for c in scan if dates.get(c.id) is not None]
+    rows = importable[:limit]
+    # WAS THE WINDOW EXHAUSTIVE? If it filled, there are candidates nobody dated, so "nothing importable"
+    # would be a claim this function cannot make. The panel says something honest instead.
+    scan_truncated = len(scan) >= HISTORY_SCAN
+
+    covers = covers_by_contract(rows)
+    return {
+        'open': True,
+        'closed_reason': '',
+        'joined_at': joined_at,
+        'query': clean_term(query),
+        'rows': [_history_row(c, dates[c.id], occupants, covers) for c in rows],
+        'showing': len(rows),
+        # THERE MAY BE MORE, either because the page was full or because the window was. Not "there are N
+        # more": the honest total is not affordable, and a candidate count is a number about the wrong set.
+        'more': len(importable) > limit or scan_truncated,
+        # AND WHETHER "NOTHING" MEANS NOTHING. With an empty page and a truncated window the panel must not
+        # imply the hunter has nothing importable -- it only knows that nothing in the first `HISTORY_SCAN`
+        # candidates was. The client says which, and points at the search box.
+        'scan_truncated': scan_truncated,
+    }
+
+
+def _history_row(contract, when, occupants, covers):
+    """One history offer: the game, the square it lands in, and when the work happened.
+
+    `initial` IS THE DATABASE'S ANSWER, annotated by the pool rather than recomputed here.
+
+    THE REASON IS DRIFT, NOT A KNOWN DISAGREEMENT, and the first version of this docstring had it backwards: it
+    said a Python `contract.name[0].upper()` "would reintroduce the fold divergence". That is the same claim
+    `eligibility.fitting_keys` records as FALSE after measuring it -- every character where Python yields two
+    letters is left alone by Postgres, so both answers are "not a single A-Z letter" and the two agree on
+    today's catalogue. Resurrecting a retracted claim in a new file is worse than never having made it.
+
+    What is true is narrower and enough: the pool already asked Postgres for this value, so reading it back is
+    free and cannot drift from the filter that selected the row, whatever a future ICU upgrade does to folding.
+    """
+    row = _row(contract, covers)
+    row['key'] = contract.initial
+    row['key_label'] = label_for_key(contract.initial)
+    # The date the WORK happened, read from trophy data -- never an `EarnedContract` detection stamp, which
+    # records when we noticed. `importable_dates` is where that distinction lives.
+    row['completed_at'] = when
+    row['occupant'] = occupants.get(contract.initial) or ''
+    return row
 
 
 # ── internals ─────────────────────────────────────────────────────────────────────────────────────

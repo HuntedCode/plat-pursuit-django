@@ -27,6 +27,7 @@ from challenges.views import (
     AssignSlotView,
     ChallengeDetailView,
     ClearSlotView,
+    HistoryPickerView,
     SearchPickerView,
     SlotPickerView,
     HideChallengeView,
@@ -478,8 +479,13 @@ urlpatterns = [
     path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
     path('my-challenges/start/<str:challenge_type>/', StartChallengeView.as_view(),
          name='challenge_start'),
-    # THE PICKER'S FOUR DOORS, under the personal path because every one of them is about the hunter's own
-    # run -- two reads that need the hunter's completions to answer, and two writes.
+    # THE PICKER'S FIVE DOORS, under the personal path because every one of them is about the hunter's own
+    # run -- three reads that need the hunter's completions to answer, and two writes.
+    # THE HISTORY VIEW, beside the search door because it is the same kind of thing: a read over the whole
+    # catalogue rather than about one square. No `<slug:key>`, deliberately -- the point of it is that the
+    # hunter is not thinking about a particular square yet.
+    path('my-challenges/<int:challenge_id>/history/', HistoryPickerView.as_view(),
+         name='challenge_history'),
     path('my-challenges/<int:challenge_id>/search/', SearchPickerView.as_view(),
          name='challenge_search'),
     # `<slug:key>`, NOT `<str:key>`, and this is a fix rather than tidying. `str` matches `[^/]+`, so

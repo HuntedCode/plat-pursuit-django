@@ -136,14 +136,31 @@
             foot: dialog.querySelector('[data-cpick-foot]'),
             ask: dialog.querySelector('[data-cpick-ask]'),
             askText: dialog.querySelector('[data-cpick-ask-text]'),
+            askCost: dialog.querySelector('[data-cpick-ask-cost]'),
             askKeep: dialog.querySelector('[data-cpick-ask-keep]'),
             askGo: dialog.querySelector('[data-cpick-ask-go]'),
+            note: dialog.querySelector('[data-cpick-note]'),
+            noteLead: dialog.querySelector('[data-cpick-note-lead]'),
+            noteFacts: dialog.querySelector('[data-cpick-note-facts]'),
+            histSwitch: dialog.querySelector('[data-cpick-history-switch]'),
             // Outside the dialog: the page's own counters, which every write moves.
             tally: document.querySelector('[data-cpick-tally]'),
             horizon: runHorizon(),
         };
 
         var challengeId = grid.getAttribute('data-challenge-id');
+
+        //: WHICH OF THE THREE PANELS IS ON SCREEN. `load()` used to encode this in its own argument -- a key
+        //: meant the square's pool, a null key meant the search -- which worked while there were two. The
+        //: history panel is reachable from two places and has to survive a keystroke in the search box, so the
+        //: mode is a thing the sheet knows rather than a shape of the last call.
+        //:
+        //: SET WHEN A PANEL ARRIVES, never when one is requested, and the difference is a real bug rather than
+        //: a preference. The loaders used to assign it before the fetch, so a request that FAILED left `mode`
+        //: describing a panel that never rendered -- and the next keystroke then filtered a pool that was not
+        //: on screen. Exactly the hazard the identity guard in each loader exists to prevent, reintroduced one
+        //: level up. Each renderer owns it now, so it can only ever describe what a reader is looking at.
+        var mode = 'slot';
 
         //: The card the foot is currently asking about, and what to run if the answer is yes.
         //: Held here rather than on the element because the callback is a closure over the row.
@@ -266,10 +283,16 @@
             name.textContent = row.name;
             button.appendChild(name);
             if (label) {
-                var note = document.createElement('span');
-                note.className = 'pp-cpick__row-note';
-                note.textContent = label;
-                button.appendChild(note);
+                // A NODE OR A STRING. The catch-up rows pass a sentence; the history rows pass a built element,
+                // because three facts with three different weights are not a sentence.
+                if (label.nodeType) {
+                    button.appendChild(label);
+                } else {
+                    var note = document.createElement('span');
+                    note.className = 'pp-cpick__row-note';
+                    note.textContent = label;
+                    button.appendChild(note);
+                }
             }
             button.addEventListener('click', function () { onPick(row, button); });
             // WRAPPED IN AN `<li>`, because both row containers are `<ul>`s and a `<button>` is not valid
@@ -282,6 +305,8 @@
         function renderSlotPanel(panel) {
             // Any open prompt belonged to the panel being replaced.
             dropPrompts();
+            mode = 'slot';
+            leaveHistory();
             els.title.textContent = panel.label;
             els.sub.textContent = panel.total === panel.showing
                 ? panel.total + (panel.total === 1 ? ' game fits' : ' games fit')
@@ -346,7 +371,20 @@
             });
         }
 
+        /** Undress the history mode. Both other renderers call it, so the note, the placeholder and the
+         *  toggle's pressed state cannot survive into a panel they do not describe. */
+        function leaveHistory() {
+            showNote('');
+            if (els.histSwitch) {
+                els.histSwitch.setAttribute('aria-pressed', 'false');
+                // Unhidden again: it is only withheld while history mode has nowhere to go back to.
+                els.histSwitch.hidden = false;
+            }
+            if (els.q) { els.q.placeholder = 'Search for a game'; }
+        }
+
         function renderSearchPanel(panel) {
+            mode = 'search';
             dropPrompts();
             els.title.textContent = 'Search';
             els.sub.textContent = panel.too_short
@@ -359,6 +397,7 @@
             els.clear.hidden = true;
             els.rows.textContent = '';
             els.rows.classList.add('pp-cpick__rows--search');
+            leaveHistory();
 
             if (panel.too_short) { say('Type at least two letters.'); return; }
             if (!panel.rows.length) { say('No games match that.'); return; }
@@ -468,11 +507,11 @@
                         pick.addEventListener('click', function () {
                             if (!occupant) { assign(row.slug, key, false, pick); return; }
                             ask(pick,
-                                      keyLabel + ' already has ' + occupant + '. Replace it with '
-                                      + row.name + '?',
-                                      'Replace it',
-                                      'Keep ' + occupant,
-                                      function () { assign(row.slug, key, false, pick); });
+                                'Put ' + row.name + ' in ' + keyLabel + '?',
+                                keyLabel + ' already has ' + occupant + ', and it would be replaced.',
+                                'Replace it',
+                                'Keep ' + occupant,
+                                function () { assign(row.slug, key, false, pick); });
                         });
                         keys.appendChild(pick);
                     });
@@ -548,6 +587,53 @@
             return svg;
         }
 
+        /** A history offer's label: three facts with three different weights, not one run-on line.
+         *
+         *  It was `'Goes in A \u00b7 finished Mar 3, 2024 \u00b7 replaces Alan Wake'` in a single dim
+         *  `.pp-cpick__row-note`, which wrapped to three or four lines in a ~128px column, made every card a
+         *  different height, and buried the destructive fact at the end in the quietest type on the card.
+         *
+         *  So: the destination is a badge (the thing being scanned for), the date is a quiet line, and the
+         *  replacement is a warning chip -- because it is the only one of the three that costs anything.
+         */
+        function historyLabel(row, when) {
+            var wrap = document.createElement('span');
+            wrap.className = 'pp-cpick__dest';
+
+            // `keyChip`, not `badge`, and the reason is narrower than the first version of this comment
+            // claimed. It said "this file bans the word" -- it does not: a pin asserts `'badge' not in JS_CODE`,
+            // and `JS_CODE` has the comments stripped, so the word is fine in prose (it appears in the
+            // docstring seven lines up) and only a `badge` in CODE trips it. The pin exists because the house
+            // status pill is `.bd-chip` and DaisyUI's `.badge` tints from different tokens; a local variable
+            // must not be what weakens it. This element is a bespoke chip, not `.bd-chip`, so it is not what
+            // the pin is about either way -- the rename is to keep the pin working, nothing more.
+            var keyChip = document.createElement('span');
+            keyChip.className = 'pp-cpick__dest-key';
+            keyChip.textContent = row.key_label;
+            wrap.appendChild(keyChip);
+
+            if (when) {
+                var date = document.createElement('span');
+                date.className = 'pp-cpick__dest-when';
+                date.textContent = when;
+                wrap.appendChild(date);
+            }
+            if (row.occupant) {
+                var swapChip = document.createElement('span');
+                swapChip.className = 'pp-cpick__dest-swap';
+                // `title` for a POINTER hover, and that is the whole claim. An earlier version added "and to
+                // AT", which is wrong by mechanism: `title` on a non-focusable `<span>` is not announced by
+                // NVDA or JAWS and is unreachable by touch. The full name does reach assistive tech, but
+                // through `textContent` -- CSS truncation shortens the rendering, never the text -- so it is
+                // already in the button's accessible name. On a touch device the full name is genuinely
+                // unavailable until the confirmation names it, which it now does.
+                swapChip.title = 'Replaces ' + row.occupant;
+                swapChip.textContent = 'replaces ' + row.occupant;
+                wrap.appendChild(swapChip);
+            }
+            return wrap;
+        }
+
         /** The lead-in above several square buttons, so the pills read as answers to a question. */
         function lead(text) {
             var span = document.createElement('span');
@@ -585,6 +671,175 @@
             });
         }
 
+
+        function loadHistory(query) {
+            var seq = ++requestSeq;
+            say('Loading...');
+            PP.API.request('/my-challenges/' + challengeId + '/history/?q='
+                           + encodeURIComponent(query || '')).then(function (panel) {
+                // THE SAME IDENTITY GUARD the other loads use. Two panels can be in flight when somebody
+                // types quickly or toggles the mode mid-request, and applying the older one shows the wrong
+                // pool under the right title.
+                if (seq !== requestSeq) { return; }
+                renderHistoryPanel(panel);
+            }).catch(function (err) {
+                if (seq !== requestSeq) { return; }
+                fail_from(err, 'That did not load. Try again.');
+            });
+        }
+
+        /** What the closed importer says, in the hunter's terms rather than the flag's. */
+        function historyClosedNote(reason) {
+            if (reason === 'jobs') {
+                return 'The history importer is for the A-Z Challenge. On a Job Coverage run, a game you have '
+                    + 'already finished can only fill a square when very few games are left for that job.';
+            }
+            if (reason === 'spent') {
+                return 'The importer is a one-time head start for your FIRST A-Z Challenge, and you have '
+                    + 'already finished one -- so this run is played from here.';
+            }
+            // A REASON THIS BUILD DOES NOT KNOW. Naming a cause here would be inventing one -- the previous
+            // text asserted "we could not work out when your account was created", which would be a
+            // confidently wrong explanation for the first `closed_reason` added after it. Say the true,
+            // smaller thing.
+            if (reason === 'no_join_date') {
+                return 'We could not work out when your account was created, so there is nothing to measure '
+                    + 'against here.';
+            }
+            return 'The history importer is not available on this run.';
+        }
+
+        function renderHistoryPanel(panel) {
+            // Any open prompt belonged to the panel being replaced.
+            dropPrompts();
+            mode = 'history';
+            els.title.textContent = 'From your history';
+            els.rows.textContent = '';
+            els.rows.classList.remove('pp-cpick__rows--search');
+            els.catchup.hidden = true;
+            els.current.textContent = '';
+            els.clear.hidden = true;
+            if (els.histSwitch) {
+                els.histSwitch.setAttribute('aria-pressed', 'true');
+                // NO BOGUS "BACK". Arriving through the PAGE door means no square was ever opened, so
+                // `load(openKey)` would be `load(null)` -- an empty catalogue search that answers "Type at
+                // least two letters", a panel the hunter has never seen and did not ask for. That was a dead
+                // end in the feature's primary flow, and both a comment and a test name claimed otherwise.
+                // With nowhere to return to, the toggle is not offered; the sheet's own close button is the
+                // way out.
+                els.histSwitch.hidden = (openKey === null);
+            }
+            if (els.q) { els.q.placeholder = 'Search your history'; }
+
+            if (!panel.open) {
+                els.sub.textContent = 'Not available on this run';
+                var why = historyClosedNote(panel.closed_reason);
+                showNote(why);
+                // THE REASON, NOT JUST THE HEADLINE. `showNote` writes into a plain `<p>`, so a screen reader
+                // heard four words ("Not available on this run") and never learned why -- and the why is the
+                // entire content of a closed panel.
+                say(els.sub.textContent + '. ' + why);
+                return;
+            }
+
+            // THE DATE IS NAMED, not implied. "Since you joined" is not something a hunter can check; a date
+            // is. `TimeFormatter.absolute` is the same formatter the catch-up rows use, so the two blocks
+            // cannot disagree about how a date reads.
+            var joined = panel.joined_at && PP.TimeFormatter && PP.TimeFormatter.absolute
+                ? PP.TimeFormatter.absolute(panel.joined_at,
+                                            { year: 'numeric', month: 'short', day: 'numeric' })
+                : null;
+            showNoteBlock(
+                joined ? 'Since you joined Platinum Pursuit on ' + joined
+                       : 'Since you joined Platinum Pursuit',
+                [
+                    // ONE-TIME FIRST (owner, 2026-09-28). A head start somebody expects again on their second
+                    // run is a disappointment we wrote ourselves.
+                    'A one-time head start, for your first A-Z Challenge only.',
+                    'Each game fills its letter immediately, and that square can never be changed.',
+                    // THE RULE IS AN INSTANT, NOT A DAY. A game finished at breakfast on the day somebody
+                    // signed up in the evening does not qualify, and a hunter hunting for it would otherwise
+                    // think the list was broken.
+                    'Anything finished earlier that same day, or before it, does not count.',
+                    // THE ASYMMETRY, explained where it is met: a hunter running both types otherwise gets two
+                    // answers about one game and no way to reconcile them.
+                    'Job Coverage runs do not use the importer.',
+                ]
+            );
+
+            if (!panel.rows.length) {
+                // WHICH KIND OF EMPTY. With the window truncated, all the server knows is that nothing in the
+                // first batch of candidates qualified -- so claiming the hunter has nothing importable would be
+                // the same lie the window was added to stop, one layer up.
+                els.sub.textContent = panel.query
+                    ? 'Nothing here matches that'
+                    : (panel.scan_truncated ? 'Nothing in the first batch' : 'Nothing here yet');
+                if (panel.scan_truncated && !panel.query) {
+                    // APPENDED AS A FACT, not concatenated onto a paragraph -- the block is a list now.
+                    var li = document.createElement('li');
+                    li.className = 'pp-cpick__note-fact--more';
+                    li.textContent = 'We checked your earliest games by name and none qualified. Search for a '
+                        + 'game to look further.';
+                    if (els.noteFacts) { els.noteFacts.appendChild(li); }
+                }
+                say(els.sub.textContent);
+                return;
+            }
+            // NO "+" HERE. There is no pagination on this panel, so a plus sign names rows the hunter cannot
+            // reach -- and `more` can be true purely because the WINDOW filled, which says nothing about how
+            // many more offers exist. Say what is on screen and how to look further.
+            els.sub.textContent = panel.showing + ' ready to place';
+            if (panel.more) { els.sub.textContent += ' \u00b7 search to look further'; }
+            panel.rows.forEach(function (row) {
+                // MONTH AND YEAR, no day, because the day was never the recognisable part: "Mar 2024" is what
+                // places a game in a hunter's memory.
+                //
+                // IT IS NOT WHAT FIXED THE WRAPPING, which the first version of this comment claimed. At 375px
+                // the label column is ~131px and the chip plus "Mar 3, 2024" comes to ~99px -- it fitted
+                // already. What stopped the ragged heights was the ellipsis on the swap chip and the
+                // equal-height rules; this is a legibility choice that happens to buy a little room.
+                var when = row.completed_at && PP.TimeFormatter && PP.TimeFormatter.absolute
+                    ? PP.TimeFormatter.absolute(row.completed_at, { year: 'numeric', month: 'short' })
+                    : null;
+                els.rows.appendChild(offerButton(row, historyLabel(row, when), function (picked, button) {
+                    assign(picked.slug, row.key, false, button);
+                }));
+            });
+            say('From your history: ' + els.sub.textContent);
+        }
+
+        /** One sentence in the note block, for the cases that only have to explain themselves. */
+        function showNote(text) {
+            if (!els.note) { return; }
+            if (els.noteFacts) { els.noteFacts.textContent = ''; }
+            if (els.noteLead) {
+                els.noteLead.textContent = text || '';
+                // PROSE, not the date's display styling. This element is specified as the anchor line for a
+                // DATE; a two-sentence explanation set in it read as a shouted headline.
+                els.noteLead.classList.add('pp-cpick__note-lead--prose');
+            }
+            els.note.hidden = !text;
+        }
+
+        /** THE OPEN CASE: an anchor line and a short list, rather than a paragraph.
+         *
+         *  Four facts decide whether a hunter presses anything here -- when the window starts, that it is
+         *  one-time, that a press is permanent, and what does not count. As prose they were a block nobody
+         *  would read at the moment they most need to; as a lead plus a list they are scannable, and the date
+         *  (the only one they cannot infer) gets to be the thing their eye lands on.
+         */
+        function showNoteBlock(lead, facts) {
+            if (!els.note || !els.noteLead || !els.noteFacts) { return; }
+            els.noteLead.classList.remove('pp-cpick__note-lead--prose');
+            els.noteLead.textContent = lead;
+            els.noteFacts.textContent = '';
+            facts.forEach(function (fact) {
+                var li = document.createElement('li');
+                li.textContent = fact;
+                els.noteFacts.appendChild(li);
+            });
+            els.note.hidden = false;
+        }
 
         /**
          * Is the sheet still the thing the hunter is looking at?
@@ -711,18 +966,18 @@
          *  meant an irreversible, permanently locking write happened with no confirmation at all. The foot
          *  needs no anchor, so there is nothing left to fall through to.
          */
-        function ask(anchor, message, goLabel, keepLabel, onGo) {
+        function ask(anchor, message, cost, goLabel, keepLabel, onGo) {
             var host = anchor && anchor.closest ? anchor.closest('li') : null;
             var list = host && host.parentNode;
             if (host && list && list.classList.contains('pp-cpick__rows--search')) {
-                askInRow(anchor, host, list, message, goLabel, keepLabel, onGo);
+                askInRow(anchor, host, list, message, cost, goLabel, keepLabel, onGo);
                 return;
             }
             // THE WHOLE TRIO, because `askInFoot` dereferences all three and the button listeners are
             // wired behind `els.askKeep && els.askGo`. Gating on the container alone could raise a bar
             // with no working answers -- a question only Escape could dismiss.
             if (els.ask && els.askText && els.askKeep && els.askGo) {
-                askInFoot(anchor, message, goLabel, keepLabel, onGo);
+                askInFoot(anchor, message, cost, goLabel, keepLabel, onGo);
                 return;
             }
             // Neither surface exists, which means the sheet's markup is not what this script was written
@@ -759,10 +1014,14 @@
         }
 
         /** The foot presentation: the grid holds still and the pressed card takes a ring. */
-        function askInFoot(anchor, message, goLabel, keepLabel, onGo) {
+        function askInFoot(anchor, message, cost, goLabel, keepLabel, onGo) {
             closeFootAsk(false);
             footAnchor = anchor || null;
             els.askText.textContent = message;
+            if (els.askCost) {
+                els.askCost.textContent = cost || '';
+                els.askCost.hidden = !cost;
+            }
             els.askKeep.textContent = keepLabel;
             els.askGo.textContent = goLabel;
             els.ask.setAttribute('data-clear-was', els.clear && !els.clear.hidden ? 'shown' : 'hidden');
@@ -785,13 +1044,13 @@
             // takes: the reader is on the button, and `closeFootAsk` strips the attribute before focus ever
             // returns to the card. The status region is already `role="status" aria-live="polite"` and already
             // announces the cancellation, so announcing the question is the smaller half of the same idea.
-            say(message);
+            say(message + (cost ? ' ' + cost : ''));
             // THE SAFE BUTTON, per the house convention: focusing the destructive one turns a stray Enter
             // into the thing the prompt exists to prevent.
             els.askKeep.focus();
         }
 
-        function askInRow(anchor, host, list, message, goLabel, keepLabel, onGo) {
+        function askInRow(anchor, host, list, message, cost, goLabel, keepLabel, onGo) {
             // ONE QUESTION AT A TIME, which `askInFoot` gets for free by owning a single bar and this had to
             // be told. A search result carries up to six key pills and none is disabled while a prompt is
             // open, so pressing a second occupied square inserted a SECOND prompt -- both with live Go
@@ -806,6 +1065,12 @@
             text.className = 'pp-cpick__ask-text';
             text.textContent = message;
             prompt.appendChild(text);
+            if (cost) {
+                var costLine = document.createElement('p');
+                costLine.className = 'pp-cpick__ask-cost';
+                costLine.textContent = cost;
+                prompt.appendChild(costLine);
+            }
 
             var row = document.createElement('div');
             row.className = 'pp-cpick__ask-row';
@@ -823,6 +1088,7 @@
 
             var close = function (restoreFocus) {
                 openPromptClose = null;
+                if (anchor && anchor.removeAttribute) { anchor.removeAttribute('aria-describedby'); }
                 if (prompt.parentNode) { prompt.parentNode.removeChild(prompt); }
                 // FOCUS GOES BACK to what was pressed, which a native confirm did for free and a built one
                 // has to do on purpose -- otherwise a keyboard user lands at the top of the document.
@@ -841,19 +1107,49 @@
             // handler decide needs no assumption about any of that.
             openPromptClose = function () { close(true); };
 
+            // ANNOUNCED, AND DESCRIBED, matching the foot. This surface said nothing at all: a screen reader
+            // heard only the focused button's label ("Keep Alan Wake, button") with no question and no cost.
+            // The missing question was pre-existing; the cost line is new, so the pass had added an
+            // unannounced consequence to one of its two surfaces.
+            prompt.id = prompt.id || 'cpick-ask-row';
+            if (anchor && anchor.setAttribute) { anchor.setAttribute('aria-describedby', prompt.id); }
+            say(message + (cost ? ' ' + cost : ''));
+
             list.insertBefore(prompt, host.nextSibling);
             // THE SAFE BUTTON, per the house convention. Focusing the destructive one turns a stray Enter
             // into the thing the prompt exists to prevent.
             keep.focus();
         }
 
+        /** What the square currently holds, read off the board rather than plumbed through every caller.
+         *
+         *  The board is the truth at the moment the question is asked, and it is the same value the square
+         *  itself shows (the frozen snapshot, `_square_body.html`'s `.pp-csq__name`). Reading it here means all
+         *  three panels get an accurate confirmation without `assign` having to carry an occupant argument
+         *  through four call sites.
+         */
+        function occupantFor(key) {
+            var square = grid.querySelector('[data-key="' + cssEscape(key) + '"]');
+            var name = square && square.querySelector('.pp-csq__name');
+            return name ? name.textContent.trim() : '';
+        }
+
         function offerConfirmation(data, slug, key, button) {
-            // The server's own words, so the warning and the rule cannot drift apart.
+            // THE SAFE ANSWER HAS TO BE TRUE. It was hardcoded to "Leave it empty", which is a promise about a
+            // square that may not be empty: the history panel is the first surface to advertise "replaces X",
+            // and pressing its offer went straight to `assign` -- so the only question a hunter saw said the
+            // square would be left EMPTY while it was holding a game that the other answer would silently
+            // destroy. Naming what is kept is the house convention and the whole point of it.
+            var occupant = occupantFor(key);
+            // THE QUESTION IS OURS, THE CONSEQUENCE IS THE SERVER'S. `data.error` is the sentence that explains
+            // the lock, and it belongs on the cost line rather than as the headline -- a hunter scanning this
+            // needs "what am I about to do" first and "what it costs" second.
             ask(button,
-                      data.error + ' (' + data.contract_name + ' \u2192 ' + labelFor(key) + ')',
-                      'Use it and lock the square',
-                      'Leave it empty',
-                      function () { assign(slug, key, true, button); });
+                'Put ' + data.contract_name + ' in ' + labelFor(key) + '?',
+                data.error + (occupant ? ' ' + occupant + ' would be replaced.' : ''),
+                'Use it and lock the square',
+                occupant ? 'Keep ' + occupant : 'Leave it empty',
+                function () { assign(slug, key, true, button); });
         }
 
         function labelFor(key) {
@@ -993,6 +1289,15 @@
             // The search layout is a CLASS on the rows container, so it has to come off too -- it was the
             // one piece of the last panel that `reset()` left behind.
             els.rows.classList.remove('pp-cpick__rows--search');
+            // THE MODE IS PART OF THE SHEET'S STATE. A sheet reopened from a square must not still be in
+            // history mode -- typing would filter history under a square's title, and the note would explain a
+            // rule the panel is no longer applying. `leaveHistory` undresses the rest.
+            //
+            // This block first landed in `renderSlotPanel`, which already calls `leaveHistory()` and has its
+            // mode set by `load()` -- so it was three duplicated lines there and nothing here, which is the
+            // one place that has to forget.
+            mode = 'slot';
+            leaveHistory();
             els.catchupRows.textContent = '';
             els.catchupTitle.textContent = '';
             els.catchupNote.textContent = '';
@@ -1044,6 +1349,10 @@
         if (els.q) {
             var run = function () {
                 var term = els.q.value.trim();
+                // IN HISTORY MODE, TYPING FILTERS THE HISTORY. Falling through to the catalogue search would
+                // answer a different question from the one the panel is asking, and an empty box here means
+                // "all of my history" rather than "back to the square".
+                if (mode === 'history') { loadHistory(term); return; }
                 // AN EMPTY BOX RETURNS TO THE SQUARE'S OWN POOL rather than searching for nothing -- the
                 // slot panel is the resting state of this sheet, not a search result with no term.
                 if (!term) { load(openKey, ''); return; }
@@ -1053,6 +1362,45 @@
             };
             els.q.addEventListener('input', PP.debounce ? PP.debounce(run, 250) : run);
         }
+
+        // THE IN-SHEET TOGGLE. Pressing it in history mode goes BACK to whatever the sheet was showing, so a
+        // hunter who arrived through a square is not stranded in a panel about the whole run.
+        if (els.histSwitch) {
+            els.histSwitch.addEventListener('click', function () {
+                // THE OPEN QUESTION BELONGS TO THE PANEL BEING REPLACED. Nothing disables this while the foot
+                // is asking, so without it a hunter could switch panels and then press "Use it and lock the
+                // square" for an offer that is no longer on screen.
+                dropPrompts();
+                if (mode === 'history') {
+                    if (els.q) { els.q.value = ''; }
+                    load(openKey, '');
+                    return;
+                }
+                if (els.q) { els.q.value = ''; }
+                loadHistory('');
+            });
+        }
+
+        // THE PAGE'S DOOR. Opens the sheet straight into history mode with no square in mind, which is the
+        // flow it exists for: a hunter who knows their library covers half the alphabet should not have to
+        // pick a letter first.
+        Array.prototype.forEach.call(
+            document.querySelectorAll('[data-cpick-history]'),
+            function (button) {
+                button.addEventListener('click', function () {
+                    reset();
+                    openKey = null;
+                    if (!dialog.open) { dialog.showModal(); }
+                    // FOCUS THE SHEET, not whatever `showModal` lands on -- which is the close button, the
+                    // least useful control in it. The square door does this deliberately and explains why it
+                    // does not jump to the search field; this door was simply missing both halves.
+                    dialog.focus();
+                    // AND A TICK LATER, because content already present in a live region when it enters the
+                    // tree is not announced. The square door wraps its load for exactly this reason and the
+                    // comment there spells it out; calling straight through meant "Loading..." was silent.
+                    window.setTimeout(function () { loadHistory(''); }, 0);
+                });
+            });
 
         if (els.askKeep && els.askGo) {
             els.askKeep.addEventListener('click', function () {

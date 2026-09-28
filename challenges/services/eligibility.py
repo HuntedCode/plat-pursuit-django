@@ -239,6 +239,58 @@ def completed_contract_ids(profile, contracts):
     )
 
 
+def completed_contracts_across_keys(profile, challenge, keys):
+    """Already-completed contracts that fit ANY of `keys`, annotated with the letter each one fits.
+
+    THE HISTORY IMPORTER'S POOL, and it needs a shape neither existing pool has. `completed_contracts` answers
+    one slot; a dedicated history view asks about every open letter at once, and calling it per letter would be
+    26 queries to draw one panel. This is one, and the `initial` annotation comes back with each row so the
+    caller does not have to recompute which square a game belongs in.
+
+    A-Z ONLY, asserted rather than branched. The importer is A-Z only (owner, 2026-09-28) and a job square has
+    no equivalent of "the letter this game fits" -- a contract carries up to six jobs, so one row could not
+    carry one answer. A jobs challenge reaching here is a caller bug, not a case to degrade for.
+
+    `Upper(Substr(name, 1, 1))` RATHER THAN `name__istartswith`, which is what `_shape` uses for one letter.
+    Both are Postgres-side (`istartswith` compiles to `UPPER(name) LIKE UPPER('X%')`), so the divergence this
+    module's header warns about -- Python's full Unicode case mapping against libc's per-character fold -- does
+    not arise between them. It is also not a third spelling: `fitting_keys_for` already answers "which letter
+    does this contract fit?" with exactly this expression, and this is the same question asked of a set.
+
+    THE SAME `used` EXCLUSION as `_slot_pool`, on the live FK, so a game already placed in this run is not
+    offered again -- but UNCONDITIONAL, where `_slot_pool` keeps the slot's own occupant in its pool.
+
+    THE REASON IS NOT "a history offer is always for an empty square", which is what this said first and is
+    false: `history_panel` offers every NOT-COMPLETED square, filled ones included, and carries an `occupant`
+    so the offer can name what it would replace. The real reason is narrower. `_slot_pool`'s exception exists so
+    a reassignment sees the same pool size an empty slot would, which is what keeps `hatch_is_open` from opening
+    a contract early. This function feeds no threshold, so it has nothing to protect -- and the one case the
+    exception would cover here is a square whose occupant the hunter has finished since placing it, in the
+    window before detection completes the square. Hiding it from its own letter for that window is the better
+    outcome anyway: live detection is about to complete it and stamp `live`, which is what actually happened,
+    rather than `import`.
+    """
+    if challenge.challenge_type != CHALLENGE_TYPE_AZ:
+        raise ValueError('the history importer is A-Z only; got %r' % challenge.challenge_type)
+    letters = set(AZ_LETTERS)
+    wanted = {k for k in keys if k in letters}
+    if not wanted:
+        return live_contracts().none()
+
+    used = (
+        challenge.slots
+        .filter(contract_id__isnull=False)
+        .values_list('contract_id', flat=True)
+    )
+    return (
+        live_contracts()
+        .annotate(initial=Upper(Substr('name', 1, 1)))
+        .filter(initial__in=wanted)
+        .filter(Exists(_completed_by(profile)))
+        .exclude(pk__in=used)
+    )
+
+
 def _completed_by(profile):
     """Correlated subquery: has this hunter completed the outer contract?
 

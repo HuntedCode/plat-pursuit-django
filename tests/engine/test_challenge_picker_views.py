@@ -92,6 +92,10 @@ def _clear_url(challenge, key):
     return reverse('challenge_clear', args=[challenge.pk, key])
 
 
+def _history_url(challenge):
+    return reverse('challenge_history', args=[challenge.id])
+
+
 def _search_url(challenge):
     return reverse('challenge_search', args=[challenge.pk])
 
@@ -102,7 +106,7 @@ def _body(resp):
 
 # ── every door refuses without a session, in JSON ─────────────────────────────────────────────────
 
-@pytest.mark.parametrize('door', ['slot', 'search', 'assign', 'clear'])
+@pytest.mark.parametrize('door', ['slot', 'search', 'history', 'assign', 'clear'])
 def test_no_door_redirects_an_anonymous_caller(client, door):
     """A redirect here comes back to `fetch` as a 200 HTML login page, which `PlatPursuit.API` reports as
     success -- the failure that shipped on `challenge_hide`. Every door is pinned, not just the ones that
@@ -111,6 +115,7 @@ def test_no_door_redirects_an_anonymous_caller(client, door):
     urls = {
         'slot': (_slot_url(challenge, 'B'), 'get'),
         'search': (_search_url(challenge), 'get'),
+        'history': (_history_url(challenge), 'get'),
         'assign': (_assign_url(challenge, 'B'), 'post'),
         'clear': (_clear_url(challenge, 'B'), 'post'),
     }
@@ -391,7 +396,7 @@ def test_a_read_door_refuses_post(client, url_name, args):
 
 # ── the audit's findings, pinned ───────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize('door', ['slot', 'search'])
+@pytest.mark.parametrize('door', ['slot', 'search', 'history'])
 def test_a_nul_byte_in_the_search_term_is_not_a_500(client, door):
     """`?q=%00%00` WAS AN UNHANDLED 500. `MIN_QUERY` is a length floor and says nothing about content, so two
     NUL bytes cleared it and reached `name__icontains`; psycopg refuses NUL in a text parameter
@@ -402,7 +407,11 @@ def test_a_nul_byte_in_the_search_term_is_not_a_500(client, door):
     profile = _hunter(client)
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
     _contract('Bloodborne')
-    url = _slot_url(challenge, 'B') if door == 'slot' else _search_url(challenge)
+    # THREE READ DOORS NOW. The ternary silently sent 'history' to the search url, which would
+    # have pinned the wrong endpoint while reading as coverage.
+    url = {'slot': lambda: _slot_url(challenge, 'B'),
+           'search': lambda: _search_url(challenge),
+           'history': lambda: _history_url(challenge)}[door]()
 
     resp = client.get(url, {'q': '\x00\x00'})
 
@@ -544,3 +553,49 @@ def test_a_real_key_still_routes_for_both_challenge_types(client):
 
     assert client.get(_slot_url(az, 'B')).status_code == 200
     assert client.get(_slot_url(jobs, 'card-shark')).status_code == 200
+
+
+def test_the_history_door_serves_the_panel(client):
+    """The third read, on the same recipe as the other two."""
+    profile = _hunter(client)
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Astro Bot')
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    resp = client.get(reverse('challenge_history', args=[challenge.id]))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['open'] is True
+    assert data['joined_at'] is not None
+    assert [r['name'] for r in data['rows']] == ['Astro Bot']
+    assert data['rows'][0]['key'] == 'A'
+    assert data['rows'][0]['completed_at'] is not None
+
+
+def test_the_history_door_explains_a_closed_importer_rather_than_refusing(client):
+    """A closed importer is not an error: it is a thing to explain, and the reasons differ. A 403 would give the
+    client nothing to say."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    resp = client.get(reverse('challenge_history', args=[challenge.id]))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data['open'] is False
+    assert data['closed_reason'] == 'jobs'
+    assert data['rows'] == []
+
+
+def test_the_history_door_is_shut_on_a_finished_run(client):
+    """`_EditableRunMixin`, for the same reason the other two reads use it: every row is an offer, and an offer
+    on a finished run is one nothing can act on."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    Challenge.objects.filter(pk=challenge.pk).update(is_complete=True, completed_at=timezone.now())
+
+    resp = client.get(reverse('challenge_history', args=[challenge.id]))
+
+    assert resp.status_code == 404

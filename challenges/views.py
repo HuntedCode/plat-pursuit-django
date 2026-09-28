@@ -39,7 +39,7 @@ from django.views import View
 from django.views.generic import DetailView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
-from challenges.models import CHALLENGE_TYPE_CHOICES, Challenge
+from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CHOICES, Challenge
 from challenges.services import challenge_service as svc
 from challenges.services import picker
 from challenges.services import slot_render
@@ -254,6 +254,26 @@ class ChallengeDetailView(DetailView):
             round(challenge.completed_count / challenge.total_slots * 100)
             if challenge.total_slots else 0
         )
+        # WHETHER TO OFFER THE HISTORY IMPORTER AT ALL, and the order is the cost.
+        #
+        # `can_edit` first, so a visitor's page pays NOTHING: they cannot use the importer, and once the Hall
+        # of Fame exists most reads of this page are visitors. `is_linked` second because the door requires it
+        # and this used to omit it -- an owner whose profile is unlinked was shown the button and got a 403
+        # rendered as a generic "that did not load", which is the flag and the door disagreeing.
+        #
+        # THE TYPE CHECK IS GONE FROM HERE, because `importer_is_available` already makes it as its own first
+        # term and short-circuits on it. Having it twice saved nothing -- not a query, not a row -- and made
+        # the test named for it vacuous: deleting the duplicate changed no behaviour at all.
+        #
+        # DELIBERATELY NOT "is anything importable?", which is the expensive question: that needs the date read
+        # over trophy data (`importable_dates`, the tables the whale rule protects) and would run on every view
+        # of the page. So the button may open an empty panel, which says plainly which kind of empty it is --
+        # the cheap honest answer rather than the costly certain one.
+        context['history_is_open'] = (
+            context['can_edit']
+            and challenge.profile.is_linked
+            and svc.importer_is_available(challenge.profile, challenge.challenge_type)
+        )
         # THE PUBLIC TRAIL, not the owner's. This route lives under `/community/challenges/` precisely
         # because the page is somebody's artefact rather than their working surface, and the trail has to
         # agree with that: `My Pursuit` and `My Challenges` are both login-gated, so an anonymous reader
@@ -406,6 +426,52 @@ class SlotPickerView(_SlotView):
         panel = picker.slot_panel(request.user.profile, challenge, key,
                                   query=request.GET.get('q', ''), slot=slot)
         return JsonResponse(_panel_json(panel))
+
+
+class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
+    """What this hunter has already finished that a square will still accept. GET, and the third read.
+
+    `_EditableRunMixin` FOR THE SAME REASON THE OTHER TWO USE IT: every row here is an offer, and an offer on a
+    finished or hidden run is one nothing can act on. The panel's own gates are about the IMPORTER (A-Z, first
+    run, a join date to measure against); this one is about the RUN.
+
+    THE PANEL ANSWERS ITS OWN CLOSED CASE rather than this view translating it into a status code. A closed
+    importer is not an error -- it is a thing to explain, and the reasons differ ("this is Job Coverage", "you
+    have already finished one"), so the client needs the reason rather than a 403. Same argument the disabled
+    Start button makes on My Challenges: render the refusal, do not redirect to it.
+    """
+
+    @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
+                                method='GET', block=True))
+    def get(self, request, challenge_id):
+        challenge = self.editable_run(request, challenge_id)
+        if challenge is None:
+            return self.not_found()
+        panel = picker.history_panel(request.user.profile, challenge,
+                                    query=request.GET.get('q', ''))
+        return JsonResponse({
+            'open': panel['open'],
+            'closed_reason': panel['closed_reason'],
+            # ISO, so the client formats it with `TimeFormatter` like every other date in this sheet rather
+            # than receiving a string it cannot re-style.
+            'joined_at': panel['joined_at'].isoformat() if panel['joined_at'] else None,
+            'query': panel['query'],
+            'showing': panel['showing'],
+            'more': panel['more'],
+            # WHETHER "NOTHING" MEANS NOTHING. Computed by the panel and, until now, dropped here -- so
+            # three comments claimed the client explains which kind of empty it is while the client was
+            # never told. The data fix is worthless without the delivery.
+            'scan_truncated': panel['scan_truncated'],
+            'rows': [{
+                'slug': r['slug'],
+                'name': r['name'],
+                'cover': _cover_url(r['cover']),
+                'key': r['key'],
+                'key_label': r['key_label'],
+                'completed_at': r['completed_at'].isoformat() if r['completed_at'] else None,
+                'occupant': r['occupant'],
+            } for r in panel['rows']],
+        })
 
 
 class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
