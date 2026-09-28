@@ -233,16 +233,16 @@ class ChallengeDetailView(DetailView):
         # (`challenge_service.start`'s resume branch) -- editing one in place would mean filling squares
         # on a run that is on nobody's page and in no hub.
         #
-        # NOTHING RENDERS THIS YET, and that is worth admitting rather than dressing up. An earlier
-        # comment here claimed it was "asked once rather than three times in the template"; the template
-        # asks zero times, because its two read-only notes name the specific reason (finished / hidden)
-        # instead of the general one, which is better copy. So this is an invariant with a test and no
-        # consumer until 4b's picker gates on it.
+        # FOUR READERS NOW, and this comment has been wrong in both directions. It first claimed the
+        # template asked "once rather than three times"; then, correctly, that it asked zero times and the
+        # key was an invariant waiting for 4b's picker. Both are out of date: the template gates the square's
+        # tag, the dialog, the script tag and the square's screen-reader line on it, and the picker's four
+        # doors ask the same three conditions of the run through `_EditableRunMixin`.
         #
-        # It is kept rather than deleted for one reason: `not is_deleted` was MISSING from the first
-        # version, and the bug was only visible because it made a template branch unreachable. The picker
-        # would have had to re-derive the same predicate, with nothing to notice if it missed the same
-        # condition again. The tests are the point; the context key is how they reach it.
+        # That the doors ask SEPARATELY is deliberate rather than duplication: this key decides what to
+        # RENDER, and the mixin decides what to SERVE. A page rendered a second ago is not evidence about
+        # the run's state now -- a background sync can complete the final square between the two -- so the
+        # door has to re-ask, exactly as `assign` re-checks everything the picker offered.
         context['can_edit'] = (context['is_owner']
                                and not challenge.is_complete
                                and not challenge.is_deleted)
@@ -335,49 +335,82 @@ class _ChallengeJsonView(LoginRequiredAPIMixin, _LinkedProfileJson, _ChallengeAc
     """
 
 
-class _SlotView(_ChallengeJsonView):
-    """Resolves a run AND one of its slots, which all four picker doors need.
+class _EditableRunMixin:
+    """Every picker door acts on a run the hunter can still CHANGE, so they all resolve the same way.
 
-    THE KEY COMES FROM THE URL, so it is untrusted: `slot_panel` returns None and the writes raise for a
-    key this run has no slot for. Both answer 404 rather than validating the string, because "not a slot of
-    this run" and "not this hunter's run" should be indistinguishable from outside.
+    A FINISHED OR HIDDEN RUN IS NOT ONE. `_lock_challenge` refuses every write on either, so without this
+    the read doors answered 200 with a complete offer list whose every click could only 400 -- after doing
+    the whole pool scan and, on a thin slot, the five-query trophy read. The writes were already safe; the
+    reads were doing expensive work to build a lie.
+
+    THIS IS THE CONSUMER `can_edit` WAS WAITING FOR. `ChallengeDetailView` kept that predicate with a
+    comment saying 4b's picker would gate on it, and the first version of 4b did not -- so the key was dead
+    and the justification for keeping it was false. Same three conditions, asked here of the run rather than
+    of the page.
+    """
+
+    def editable_run(self, request, challenge_id):
+        challenge = self.get_challenge(request, challenge_id)
+        if challenge is None or challenge.is_complete or challenge.is_deleted:
+            # 404, not 403: "you cannot edit this" and "this is not yours" must be indistinguishable from
+            # outside, and the client's handling for both is the same -- reload and see the truth.
+            return None
+        return challenge
+
+
+class _SlotView(_EditableRunMixin, _ChallengeJsonView):
+    """Resolves an editable run AND one of its slots, which the three slot-scoped doors need.
+
+    THE KEY COMES FROM THE URL, so it is untrusted: this answers 404 rather than validating the string,
+    because "not a slot of this run" and "not this hunter's run" should be indistinguishable from outside.
+
+    ONE QUERY FOR THE SLOT, not two. An earlier version asked `slots.filter(key=key).exists()` here and
+    `slot_panel` then asked `slots.filter(key=key).first()` for the same row. This hands the slot forward.
     """
 
     def resolve(self, request, challenge_id, key):
-        challenge = self.get_challenge(request, challenge_id)
-        if challenge is None or not challenge.slots.filter(key=key).exists():
-            return None
-        return challenge
+        challenge = self.editable_run(request, challenge_id)
+        if challenge is None:
+            return None, None
+        slot = challenge.slots.filter(key=key).first()
+        if slot is None:
+            return None, None
+        return challenge, slot
 
 
 class SlotPickerView(_SlotView):
     """What can fill this square. GET, because it reads.
 
     RATE LIMITED despite being a read: it runs an `icontains` over an unindexed column when a term is
-    given, and one open panel per keystroke is the shape that turns a search box into a scan loop. The
-    limit is generous enough for typing and answers 429 rather than degrading.
+    given, and one open panel per keystroke is the shape that turns a search box into a scan loop.
+
+    A TRIPPED LIMIT ANSWERS 403, NOT 429, and saying otherwise was wrong. `Ratelimited` subclasses
+    `PermissionDenied`; `RatelimitMiddleware` is not installed, and `handler429` is an allauth convention
+    that nothing in Django dispatches to -- so the refusal renders through the 403 path, as HTML, without
+    the `error` key the client reads. `api/game_flag_views.py` already records this and this docstring
+    re-asserted the comfortable version. The client still fails correctly (`response.ok` is false) but says
+    something generic; making these doors answer JSON on a tripped limit needs a `handler403` or the
+    middleware, and belongs with the other 22 `method='GET'` limiters rather than in this chunk.
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
                                 method='GET', block=True))
     def get(self, request, challenge_id, key):
-        challenge = self.resolve(request, challenge_id, key)
+        challenge, slot = self.resolve(request, challenge_id, key)
         if challenge is None:
             return self.not_found()
         panel = picker.slot_panel(request.user.profile, challenge, key,
-                                  query=request.GET.get('q', ''))
-        if panel is None:
-            return self.not_found()
+                                  query=request.GET.get('q', ''), slot=slot)
         return JsonResponse(_panel_json(panel))
 
 
-class SearchPickerView(_ChallengeJsonView):
+class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
     """Which squares this game could fill. GET, and the contract-first half of the picker."""
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
                                 method='GET', block=True))
     def get(self, request, challenge_id):
-        challenge = self.get_challenge(request, challenge_id)
+        challenge = self.editable_run(request, challenge_id)
         if challenge is None:
             return self.not_found()
         panel = picker.search_panel(request.user.profile, challenge, request.GET.get('q', ''))
@@ -410,7 +443,7 @@ class AssignSlotView(_SlotView):
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
                                 method='POST', block=True))
     def post(self, request, challenge_id, key):
-        challenge = self.resolve(request, challenge_id, key)
+        challenge, _slot = self.resolve(request, challenge_id, key)
         if challenge is None:
             return self.not_found()
 
@@ -444,7 +477,7 @@ class ClearSlotView(_SlotView):
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
                                 method='POST', block=True))
     def post(self, request, challenge_id, key):
-        challenge = self.resolve(request, challenge_id, key)
+        challenge, _slot = self.resolve(request, challenge_id, key)
         if challenge is None:
             return self.not_found()
         try:
@@ -491,6 +524,13 @@ def _panel_json(panel):
         'current_name': panel['current_name'],
         'total': panel['total'],
         'showing': panel['showing'],
+        # `locked` and `catchup_more` travel because the client cannot derive either: a locked square looks
+        # like an ordinary one with no offers, and a truncated catch-up list looks like a complete one.
+        # Both ARE read -- `challenge-detail.js` renders a locked panel differently and says when the
+        # catch-up list is cut short. An earlier version of this comment claimed a consumer that did not
+        # exist yet, which is how a field ships and then quietly means nothing.
+        'locked': panel['locked'],
+        'catchup_more': panel['catchup_more'],
         'rows': [{'slug': r['slug'], 'name': r['name'], 'cover': _cover_url(r['cover'])}
                  for r in panel['rows']],
         'catchup': [{

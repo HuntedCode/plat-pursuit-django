@@ -88,7 +88,7 @@ def _card(slot, covers, atoms):
     atom = atoms.get(slot.key)
     return {
         'key': slot.key,
-        'label': atom['name'] if atom else _label_for_key(slot.key),
+        'label': atom['name'] if atom else label_for_key(slot.key),
         'job': atom,
         'is_filled': slot.is_filled,
         'is_completed': slot.is_completed,
@@ -97,8 +97,11 @@ def _card(slot, covers, atoms):
     }
 
 
-def _label_for_key(key):
+def label_for_key(key):
     """What a square calls itself when no job atom names it.
+
+    PUBLIC because the picker needs the same degradation: without it the same square read
+    "Card Shark" on the grid and `card-shark` in the panel that opened over it.
 
     TWO CALLERS' WORTH OF TRAFFIC, and the earlier name plus its docstring got the proportions exactly
     backwards -- it was called `_fallback_label`, said "reachable one way only", and then four paragraphs

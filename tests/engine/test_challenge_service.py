@@ -744,7 +744,7 @@ def test_importability_turns_on_the_join_date():
     _platted_at(profile, after, joined + timezone.timedelta(days=1))
     _platted_at(profile, before, joined - timezone.timedelta(days=1))
 
-    importable = eligibility.importable_ids(profile, [after, before], joined)
+    importable = set(eligibility.importable_dates(profile, [after, before], joined))
 
     assert importable == {after.id}
 
@@ -847,7 +847,7 @@ def test_hiding_a_finished_run_is_allowed():
 
 
 def test_a_completion_exactly_at_the_join_moment_is_not_importable():
-    """The equality boundary. `importable_ids` compares STRICTLY, and without this test flipping `>` to
+    """The equality boundary. `importable_dates` compares STRICTLY, and without this test flipping `>` to
     `>=` breaks nothing -- the other importer tests are a day either side."""
     profile = _member()
     joined = timezone.now() - timezone.timedelta(days=100)
@@ -855,7 +855,7 @@ def test_a_completion_exactly_at_the_join_moment_is_not_importable():
     contract = _contract('Exactly Then')
     _platted_at(profile, contract, joined)
 
-    assert eligibility.importable_ids(profile, [contract], joined) == set()
+    assert set(eligibility.importable_dates(profile, [contract], joined)) == set()
 
 
 def test_completion_dates_ignores_another_hunters_trophies():
@@ -1229,3 +1229,49 @@ def test_the_confirmation_comes_after_every_other_refusal():
         svc.assign(challenge, profile, 'Q', wrong_letter)
 
     assert not isinstance(caught.value, svc.ConfirmationRequired)
+
+
+# ── the duplicate guard, keyed on the live FK ─────────────────────────────────────────────────────
+
+def test_a_staff_slug_edit_cannot_let_one_game_fill_two_squares():
+    """THE DOUBLE-PAYOUT HOLE, and it had no test until an audit found it.
+
+    The guard matched on `contract_slug`, the frozen snapshot. A Job Coverage game carries up to six jobs, so
+    after staff edited that contract's slug the guard no longer recognised the game already sitting in one
+    square -- and accepted it into a second. One completion, two squares, and since the job-XP guard is keyed
+    on the slot, two payouts from one game. That is precisely what "one payout per job per challenge"
+    forbids, and what `clear`'s refusal exists to protect.
+
+    `challenge_service`'s own module header argues the live FK over the snapshot for exactly this reason; the
+    argument had been applied to detection and not to this guard. A staff rename is routine churn, not an
+    exotic case.
+    """
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    two = list(Job.objects.order_by('slug')[:2])
+    game = _contract('Astro Bot', jobs=two)
+    svc.assign(challenge, profile, two[0].slug, game)
+
+    Contract.objects.filter(pk=game.pk).update(slug='renamed-by-staff')
+    game.refresh_from_db()
+
+    with _refuses('already in another square'):
+        svc.assign(challenge, profile, two[1].slug, game)
+
+    assert challenge.slots.filter(contract_id=game.pk).count() == 1
+
+
+def test_a_renamed_contract_also_leaves_the_slots_pool():
+    """The other half of the same bug: the pool excluded already-placed games by slug too, so a renamed one
+    was offered again. The picker and `assign` were wrong together -- so the refusal a hunter would expect
+    became an acceptance, with no disagreement between the two to notice."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    two = list(Job.objects.order_by('slug')[:2])
+    game = _contract('Astro Bot', jobs=two)
+    svc.assign(challenge, profile, two[0].slug, game)
+
+    Contract.objects.filter(pk=game.pk).update(slug='renamed-by-staff')
+
+    pool = eligibility.eligible_contracts(profile, challenge, two[1].slug)
+    assert game.pk not in set(pool.values_list('pk', flat=True))

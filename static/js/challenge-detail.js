@@ -11,13 +11,21 @@
  * server answers 409 and this offers the dialog. A stale panel can therefore only ever produce a refusal,
  * never a bad write -- which is the property that lets this file be optimistic about nothing.
  *
- * THE CLOSE ROUTINE IS A FOURTH COPY, and that is a deliberate choice rather than an oversight.
- * `gamelists.js`, `game-flag.js` and `list-detail.js` each carry it, and it is six separate bug fixes deep
- * (the queue, the reduced-motion path, the `pseudoElement` guard, the cleared fallback timer, the direct
- * close for swipes, and firing toasts only after the modal is gone). The rule in `utils.js`'s own history is
- * that extracting a helper and leaving duplicates behind is worse than the duplication -- "delegate and
- * delete" -- and deleting three shipped copies is not this chunk's business. So: a fourth copy, with every
- * subtlety carried across and named, and a `refactor/` branch owed that migrates all four together.
+ * THE CLOSE ROUTINE IS THE SECOND COPY OF THE MATURE VERSION, not the fourth, and the difference matters
+ * because the miscount WAS the justification. The first version of this header said `gamelists.js`,
+ * `game-flag.js` and `list-detail.js` "each carry it" and priced extraction as deleting three equal
+ * implementations. The second version corrected that by enumerating what each sibling lacked -- and got
+ * THAT wrong too, in the other direction.
+ *
+ * So, without a count: `list-detail.js` is the only file with all six of these guards (verified). The other
+ * two carry some and not others. The conclusion that survives all three attempts is the one that never
+ * depended on the tally -- extraction here is a forward port, not a demolition, and this project's
+ * convention (`GameAdder`, `AnchoredMenu`) is to extract when a SECOND caller appears, which is now.
+ *
+ * It is still duplicated here, and that is a scope call rather than a principled one: extracting properly
+ * means migrating `list-detail.js`'s shipped dialog in the same change, which is a `refactor/` branch and
+ * not a picker. The six subtleties below are ported faithfully and each is named. What has changed is that
+ * the reason given is true.
  */
 (function () {
     'use strict';
@@ -43,6 +51,9 @@
             catchupRows: dialog.querySelector('[data-cpick-catchup-rows]'),
             current: dialog.querySelector('[data-cpick-current]'),
             clear: dialog.querySelector('[data-cpick-clear]'),
+            // Outside the dialog: the page's own counters, which every write moves.
+            tally: document.querySelector('[data-cpick-tally]'),
+            horizon: document.querySelector('.pp-horizon'),
         };
 
         var challengeId = grid.getAttribute('data-challenge-id');
@@ -52,6 +63,14 @@
         // the second square's title.
         var openKey = null;
         var requestSeq = 0;
+        // One write at a time. See `assign`.
+        var writing = false;
+        //: How long a success message stays up, and therefore how long the reload waits for it.
+        //: One number for both, because the version with two had them disagree by 4.3 seconds.
+        var TOAST_MS = 2600;
+        // Set the moment a swipe commits, because `dismissableSheet` signals a dismissal in no
+        // other way the page can see. Cleared on the next open.
+        var dismissed = false;
 
         // ── the choreographed close ───────────────────────────────────────────────────────────────
         // A QUEUE, not a single callback. The early return for "a close is already running" is the one exit
@@ -105,7 +124,25 @@
         // ── rendering ─────────────────────────────────────────────────────────────────────────────
 
         function say(message) {
-            if (els.status) { els.status.textContent = message || ''; }
+            if (!els.status) { return; }
+            els.status.textContent = message || '';
+            els.status.classList.remove('pp-cpick__status--error');
+        }
+
+        /** A refusal, toned so it does not read as "Loading...", and routed somewhere visible. */
+        function fail(message) {
+            if (!stillOpen()) { reportAway(message); return; }
+            if (!els.status) { return; }
+            els.status.textContent = message;
+            els.status.classList.add('pp-cpick__status--error');
+        }
+
+        function fail_from(err, fallback) {
+            if (PP.API && PP.API.failureOr) {
+                PP.API.failureOr(err, fallback).then(fail).catch(function () { fail(fallback); });
+                return;
+            }
+            fail(fallback);
         }
 
         function art(row) {
@@ -141,7 +178,7 @@
                 note.textContent = label;
                 button.appendChild(note);
             }
-            button.addEventListener('click', function () { onPick(row); });
+            button.addEventListener('click', function () { onPick(row, button); });
             // WRAPPED IN AN `<li>`, because both row containers are `<ul>`s and a `<button>` is not valid
             // as their direct child -- the parser tolerates it and assistive tech stops counting the list.
             var item = document.createElement('li');
@@ -156,18 +193,23 @@
                 : 'showing ' + panel.showing + ' of ' + panel.total;
 
             els.rows.textContent = '';
+            els.rows.classList.remove('pp-cpick__rows--search');
             panel.rows.forEach(function (row) {
-                els.rows.appendChild(offerButton(row, null, function (picked) {
-                    assign(picked.slug, panel.key, false);
+                els.rows.appendChild(offerButton(row, null, function (picked, button) {
+                    assign(picked.slug, panel.key, false, button);
                 }));
             });
 
+            // THE COUNT GOES THROUGH THE LIVE REGION. It used to go only to `els.sub`, which is not one, so
+            // "12 games fit" was never announced and a screen-reader user got silence on every successful
+            // load. The subtitle keeps it visually; `say` is what makes it audible.
             if (!panel.rows.length) {
-                say(panel.query
-                    ? 'Nothing matches that here.'
-                    : 'No games left for this square.');
+                say(panel.query ? 'Nothing matches that here.' : 'No games left for this square.');
             } else {
-                say('');
+                // NAMED, not just counted. `aria-labelledby` points at the title, but nothing announces
+                // that element changing -- so the dialog's announced name stayed "Choose a game" and a
+                // screen-reader user never learned which square they had opened.
+                say(panel.label + ': ' + els.sub.textContent);
             }
 
             renderCatchup(panel);
@@ -203,8 +245,8 @@
                 var label = row.via === 'import'
                     ? (when ? 'From your history, ' + when : 'From your history')
                     : 'Supply is thin here';
-                els.catchupRows.appendChild(offerButton(row, label, function (picked) {
-                    assign(picked.slug, panel.key, false);
+                els.catchupRows.appendChild(offerButton(row, label, function (picked, button) {
+                    assign(picked.slug, panel.key, false, button);
                 }));
             });
         }
@@ -220,30 +262,37 @@
             els.current.textContent = '';
             els.clear.hidden = true;
             els.rows.textContent = '';
+            els.rows.classList.add('pp-cpick__rows--search');
 
-            if (panel.too_short) { say(''); return; }
+            if (panel.too_short) { say('Type at least two letters.'); return; }
             if (!panel.rows.length) { say('No games match that.'); return; }
-            say('');
+            say(els.sub.textContent);
 
             panel.rows.forEach(function (row) {
                 var card = document.createElement('li');
                 var block = document.createElement('div');
-                // `--static`: this card is NOT the button. The squares it could fill are, below
-                // it -- so the card must not carry a pointer cursor or a hover lift promising a
-                // press that does nothing.
+                // `--static`: this card is NOT the button. The squares it could fill are, inside it -- so
+                // the card must not carry a pointer cursor or a hover lift promising a press that does
+                // nothing.
                 block.className = 'pp-cpick__row pp-cpick__row--static';
                 block.appendChild(art(row));
+                // A COLUMN BESIDE THE COVER, because a search result is a row rather than a card: it carries
+                // a variable number of actions (one per square the game fits, up to six) and they need width
+                // to sit at a real size.
+                var main = document.createElement('div');
+                main.className = 'pp-cpick__row-main';
                 var name = document.createElement('span');
                 name.className = 'pp-cpick__row-name';
                 name.textContent = row.name;
-                block.appendChild(name);
+                main.appendChild(name);
+                block.appendChild(main);
 
                 if (row.already_in_run) {
-                    block.appendChild(note('Already in this run'));
+                    main.appendChild(note('Already in this run'));
                 } else if (!row.keys.length) {
                     // EXPLAINS ITSELF rather than rendering without a button. "No square open" and "this
                     // game fits nothing" look identical to a hunter unless one of them says so.
-                    block.appendChild(note(row.is_completed_by_you
+                    main.appendChild(note(row.is_completed_by_you
                         ? 'No open square for this'
                         : 'Nowhere to put this yet'));
                 } else {
@@ -255,11 +304,20 @@
                         var pick = document.createElement('button');
                         pick.type = 'button';
                         pick.className = 'pp-cpick__key';
-                        pick.textContent = row.key_labels[key] || key;
-                        pick.addEventListener('click', function () { assign(row.slug, key, false); });
+                        var keyLabel = row.key_labels[key] || key;
+                        pick.textContent = keyLabel;
+                        // THE NAME HAS TO CARRY BOTH. The visible pill says only the square ("Cartographer"),
+                        // and the game's name sits in a sibling element associated with nothing -- so a
+                        // keyboard user tabbing the results heard "A, button", "B, button" with no idea which
+                        // game they were placing, and two results that fit the same job produced two buttons
+                        // with identical names.
+                        pick.setAttribute('aria-label', 'Put ' + row.name + ' in ' + keyLabel);
+                        pick.addEventListener('click', function () {
+                            assign(row.slug, key, false, pick);
+                        });
                         keys.appendChild(pick);
                     });
-                    block.appendChild(keys);
+                    main.appendChild(keys);
                 }
                 card.appendChild(block);
                 els.rows.appendChild(card);
@@ -290,33 +348,64 @@
                 if (key) { renderSlotPanel(panel); } else { renderSearchPanel(panel); }
             }).catch(function (err) {
                 if (seq !== requestSeq) { return; }
-                say_failure(err, 'That did not load. Try again.');
+                fail_from(err, 'That did not load. Try again.');
             });
         }
 
+
         /**
-         * Say why something failed, in the server's own words when it sent any.
+         * Is the sheet still the thing the hunter is looking at?
          *
-         * ASYNC, and that is not a detail. `API.failureOr` is `async` -- it awaits `failureBody`, which
-         * reads the response stream -- so it returns a PROMISE. An earlier version of this function handed
-         * that promise straight to `textContent`, which renders the string "[object Promise]" at a hunter
-         * who is being told why their square did not save. Reading the signature would have caught it;
-         * assuming it did not.
+         * THE GUARD `list-detail.js` HAS AND THIS DID NOT, and its absence was the worst defect in this
+         * file. Press a catch-up offer, press Escape, let the 409 land: `offerConfirmation` fired a bare
+         * `window.confirm` over a page with no sheet behind it, quoting a warning about a decision the
+         * hunter had already walked away from -- and pressing OK stamped the square complete and LOCKED IT
+         * FOREVER. The one action on a run that cannot be undone was reachable from a dismissed dialog.
          *
-         * GUARDED ON THE METHOD, not the namespace. Static files are hashed and served independently, so a
-         * browser can hold a cached older `utils.js` against this fresh file -- and `if (!PP.API)` passes on
-         * a stale bundle that simply lacks this one method. The exposure is worst exactly here, inside a
-         * rejection handler, where failing to report a failure is invisible.
+         * It also fixes the quieter half: a write that FAILED after dismissal wrote its reason into
+         * `.pp-cpick__status`, inside a `display: none` dialog. Invisible, unannounced, no reload -- the
+         * hunter was told nothing at all and had no reason to suspect anything.
+         *
+         * `dismissed` IS THE THIRD CONDITION, and without it this guard had a hole big enough to drive the
+         * original bug back through. `dismissableSheet` does not touch `dialog.open` or `.is-closing`: it
+         * drags the sheet with an inline transform, then translates it off-screen and waits 200ms before
+         * calling `onClose` -- which is the first thing that closes the dialog. So for the whole drag, which
+         * the hunter controls and can hold indefinitely, plus that 200ms, a sheet that has visibly LEFT THE
+         * SCREEN still reported itself open. Swiping away and letting a 409 land put the permanent-lock
+         * confirm back on a bare page. Touch is the platform `handle:` was added for, so this was the most
+         * likely way to hit it, not the least.
          */
-        function say_failure(err, fallback) {
-            if (PP.API && PP.API.failureOr) {
-                PP.API.failureOr(err, fallback).then(say).catch(function () { say(fallback); });
-                return;
-            }
-            say(fallback);
+        function stillOpen() {
+            return dialog.open && !dialog.classList.contains('is-closing') && !dismissed;
         }
 
-        function assign(slug, key, confirmed) {
+        /** Report a failure where the hunter can actually see it: the sheet if it is up, a toast if not. */
+        function reportAway(message) {
+            if (PP.ToastManager && PP.ToastManager.error) { PP.ToastManager.error(message); }
+            else if (PP.ToastManager && PP.ToastManager.show) { PP.ToastManager.show(message, 'error'); }
+        }
+
+        function assign(slug, key, confirmed, button) {
+            // IN-FLIGHT LOCKOUT. Nothing disabled the offer, and `requestSeq` guarded only `load()`, so the
+            // same offer could be sent twice (two writes, two reload timers, two success toasts) and two
+            // DIFFERENT offers could toast two games for one square.
+            //
+            // The style for it did NOT already exist, whatever an earlier version of this comment said:
+            // the same change that started setting `disabled` had deleted `.pp-cpick__row[disabled]` as
+            // dead CSS. So a pressed offer looked identical to an unpressed one and the only feedback was
+            // a 12px "Saving..." line. Both are back and both are pinned.
+            if (writing) { return; }
+            // AND NOT DURING THE EXIT. The dialog stays displayed and interactive for the 180ms of
+            // `cpickOut`, so an offer pressed inside that window committed a write and delivered a toast
+            // plus a reload after a dismissal the hunter believed had cancelled it. `list-detail.js` guards
+            // its submit the same way.
+            if (!stillOpen()) { return; }
+            writing = true;
+            if (button) { button.disabled = true; }
+            var release = function () {
+                writing = false;
+                if (button) { button.disabled = false; }
+            };
             var body = new FormData();
             body.append('contract', slug);
             if (confirmed) { body.append('confirm', '1'); }
@@ -325,26 +414,35 @@
                 '/my-challenges/' + challengeId + '/slot/' + encodeURIComponent(key) + '/assign/',
                 { method: 'POST', body: body }
             ).then(function (slot) {
-                applySlot(slot);
+                release();
                 // AFTER THE CLOSE, not beside it. A modal `<dialog>` makes everything outside it inert and
                 // takes it out of the accessibility tree, and the toast region lives outside -- so a toast
                 // raised while this is open renders behind the top-layer backdrop and announces nothing.
-                close(function () { toast(slot.game_name + ' is in ' + labelFor(key) + '.'); });
+                close(function () { applySlot(slot, slot.game_name + ' is in ' + labelFor(key) + '.'); });
             }).catch(function (err) {
+                release();
                 var response = err && err.response;
                 if (response && response.status === 409) {
                     response.json().then(function (data) {
-                        offerConfirmation(data, slug, key);
+                        // A CONFIRMATION FOR A DISMISSED SHEET IS NOT A CONFIRMATION. If the hunter has
+                        // walked away, the answer is "nothing happened", not a prompt over a bare page that
+                        // can still lock a square permanently.
+                        if (!stillOpen()) { return; }
+                        offerConfirmation(data, slug, key, button);
                     }).catch(function () {
-                        say('That square would be locked. Try again.');
+                        // NO INVENTED REASON. This used to assert "That square would be locked. Try again."
+                        // -- stating the lock as fact when the cause is unknown (a proxy's 409, a non-JSON
+                        // error document), and telling the hunter to retry something that would 409 forever
+                        // because nothing on this path ever sends `confirm`.
+                        fail('That did not go through. Reload and try again.');
                     });
                     return;
                 }
-                say_failure(err, 'That did not save.');
+                fail_from(err, 'That did not save.');
             });
         }
 
-        function offerConfirmation(data, slug, key) {
+        function offerConfirmation(data, slug, key, button) {
             // NATIVE `confirm()`, the same call `list-detail.js` uses for its own destructive action and for
             // the same reason: this is a modal `<dialog>` already, and a second layered dialog inside the
             // top layer is a fight with focus and with the backdrop that buys nothing. The text is the
@@ -352,7 +450,7 @@
             var proceed = window.confirm(
                 data.error + '\n\n' + data.contract_name + ' -> ' + labelFor(key));
             if (!proceed) { say('Nothing changed.'); return; }
-            assign(slug, key, true);
+            assign(slug, key, true, button);
         }
 
         function labelFor(key) {
@@ -365,47 +463,101 @@
             return window.CSS && window.CSS.escape ? window.CSS.escape(value) : value;
         }
 
-        function toast(message) {
-            if (PP.ToastManager) { PP.ToastManager.show(message, 'success'); }
+        function toast(message, ms) {
+            // GUARDED ON THE METHOD, not the namespace: a cached older `utils.js` against this fresh file
+            // would pass an `if (PP.ToastManager)` check and then throw on a method it lacks.
+            if (PP.ToastManager && PP.ToastManager.show) {
+                PP.ToastManager.show(message, 'success', ms || TOAST_MS);
+            }
         }
 
         // ── applying a write to the page ──────────────────────────────────────────────────────────
 
-        function applySlot(slot) {
-            // A FULL RELOAD OF THE SQUARE would be simpler and is wrong: the reveal animation would replay
-            // for one cell in a settled grid, which reads as the page glitching. So the square's state
-            // classes and its text are updated in place, and the counters with them.
+        /**
+         * Show what changed, say so, and then let the server re-render the square.
+         *
+         * THE TIMING IS THE FIX HERE. This used to start a fixed 900ms reload timer and fire the toast
+         * afterwards, under a comment claiming the page reloaded "once the toast has been seen".
+         * `ToastManager` defaults to 5000ms, and 900 minus the 180ms exit left the toast about 700ms --
+         * fourteen per cent of its life -- before a full navigation destroyed it, cutting the live-region
+         * announcement off mid-sentence. So the toast now gets an explicit duration and the reload waits for
+         * it, and the two numbers are declared next to each other where they cannot drift.
+         *
+         * WHY RELOAD AT ALL: a filled square needs cover art this reply does not carry, and a completed one
+         * stops being a button. Both are the server's render, and a second renderer here could disagree with
+         * it. `my-challenges.js` makes the same call for the same reason.
+         */
+        function applySlot(slot, message) {
             var square = grid.querySelector('[data-key="' + cssEscape(slot.key) + '"]');
             if (square) {
                 square.classList.toggle('pp-csq--filled', slot.is_filled && !slot.is_completed);
                 square.classList.toggle('pp-csq--empty', !slot.is_filled);
                 square.classList.toggle('pp-csq--done', slot.is_completed);
+                // A COMPLETED SQUARE STOPS BEING PRESSABLE IMMEDIATELY. The server will render it as a
+                // `<div>`, but until the reload it is still a `<button data-cpick-open>` with a hover lift --
+                // so it could be re-opened, and every offer inside it would then be refused.
+                if (slot.is_completed) {
+                    square.removeAttribute('data-cpick-open');
+                    square.disabled = true;
+                }
             }
-            var tally = document.querySelector('[data-cpick-tally]');
-            if (tally) { tally.textContent = slot.completed_count; }
-            var horizon = document.querySelector('.pp-horizon');
-            if (horizon && slot.total_slots) {
+            if (els.tally) { els.tally.textContent = slot.completed_count; }
+            if (els.horizon && slot.total_slots) {
                 var pct = Math.round(slot.completed_count / slot.total_slots * 100);
-                horizon.style.setProperty('--horizon-progress', pct + '%');
-                horizon.setAttribute('aria-valuenow', String(pct));
+                els.horizon.style.setProperty('--horizon-progress', pct + '%');
+                els.horizon.setAttribute('aria-valuenow', String(pct));
             }
-            // THE SQUARE'S CONTENTS ARE NOT REBUILT HERE. A filled square needs cover art this reply does
-            // not carry, and a completed one stops being a button entirely -- both are the server's render.
-            // So the page is reloaded once the toast has been seen, which keeps one renderer for a square.
-            window.setTimeout(function () { window.location.reload(); }, 900);
+            if (message) { toast(message, TOAST_MS); }
+            window.setTimeout(function () { window.location.reload(); }, TOAST_MS + 200);
         }
 
         // ── wiring ────────────────────────────────────────────────────────────────────────────────
+
+        /** Blank every part of the sheet, so nothing from the last square survives into this one. */
+        function reset() {
+            dismissed = false;
+            els.q.value = '';
+            els.rows.textContent = '';
+            // The search layout is a CLASS on the rows container, so it has to come off too -- it was the
+            // one piece of the last panel that `reset()` left behind.
+            els.rows.classList.remove('pp-cpick__rows--search');
+            els.catchupRows.textContent = '';
+            els.catchupTitle.textContent = '';
+            els.catchupNote.textContent = '';
+            els.catchup.hidden = true;
+            els.current.textContent = '';
+            els.clear.hidden = true;
+            els.clear.disabled = false;
+            // The static name until the panel lands: a dialog whose accessible name is a bare letter is not
+            // usefully named, and the one it overwrites says what the sheet is for.
+            els.title.textContent = 'Choose a game';
+            els.sub.textContent = '';
+            say('');
+        }
 
         grid.addEventListener('click', function (e) {
             var square = e.target.closest ? e.target.closest('[data-cpick-open]') : null;
             if (!square || !grid.contains(square)) { return; }
             openKey = square.getAttribute('data-key');
-            els.q.value = '';
-            els.rows.textContent = '';
-            els.catchup.hidden = true;
-            load(openKey, '');
+            // EVERYTHING, not just the lists. This cleared `q`, `rows` and `catchup` and left the TITLE, the
+            // subtitle, the "Currently: <game>" line and the Clear button holding the last square's values
+            // -- so opening B after filling A showed "A / Currently: Elden Ring / [Clear this square]" for
+            // the whole round trip, and longer if the load failed. `aria-labelledby` points at that title,
+            // so a screen reader announced the dialog as "A" while B was loading. Worst of it: Clear was
+            // VISIBLE and its handler posts to `openKey`, which had already advanced to B -- a destructive
+            // control labelled with one square and acting on another.
+            reset();
+            // SHOWN BEFORE LOADED, and the order is the point. `load()` writes "Loading..." into the status
+            // region, which lives INSIDE the dialog -- so while the dialog was still `display: none` that
+            // mutation happened outside the rendered tree and no screen reader ever observed it. Opening the
+            // picker was silent. `reset()` above means the sheet is never shown holding the last square's
+            // state, so there is nothing to hide by loading first.
             dialog.showModal();
+            // ONE FRAME LATER, because `showModal()` and a synchronous `load()` put the live region into the
+            // tree ALREADY CONTAINING "Loading..." -- and initial content of a newly-rendered region is not
+            // announced. Fixing the order was necessary and not sufficient. `ToastManager` defers its own
+            // announcement for exactly this reason.
+            window.setTimeout(function () { load(openKey, ''); }, 0);
             // THE DIALOG, not the search field. Focusing the field opens the soft keyboard over the panel
             // before a hunter has seen what is in it, and on a sheet whose first job is to SHOW options that
             // is the wrong first move. They can reach the field with one tap or one Tab.
@@ -428,15 +580,28 @@
         if (els.clear) {
             els.clear.addEventListener('click', function () {
                 if (!openKey) { return; }
+                // THE SAME LOCK `assign` TAKES, which this was outside. Two quick presses meant two clear
+                // POSTs, two `close()` drains, two toasts and two reload timers -- exactly what the flag was
+                // added to prevent, in the one write it did not cover. Worse, Clear stays live during an
+                // in-flight assign, so the two could race one slot and the hunter could be told both
+                // "Elden Ring is in A." and "A is empty again."
+                if (writing) { return; }
+                writing = true;
+                els.clear.disabled = true;
+                var release = function () {
+                    writing = false;
+                    els.clear.disabled = false;
+                };
                 say('Clearing...');
                 PP.API.request(
                     '/my-challenges/' + challengeId + '/slot/' + encodeURIComponent(openKey) + '/clear/',
                     { method: 'POST', body: new FormData() }
                 ).then(function (slot) {
-                    applySlot(slot);
-                    close(function () { toast(labelFor(slot.key) + ' is empty again.'); });
+                    release();
+                    close(function () { applySlot(slot, labelFor(slot.key) + ' is empty again.'); });
                 }).catch(function (err) {
-                    say_failure(err, 'That did not clear.');
+                    release();
+                    fail_from(err, 'That did not clear.');
                 });
             });
         }
@@ -461,7 +626,12 @@
                 // A DIRECT close, not the choreographed one. The helper has already animated the sheet
                 // off-screen by the time it calls this and clears the transform first, so handing it
                 // `close` made a flicked sheet slide away, POP BACK into view, then play a second exit.
-                onClose: function () { if (dialog.close && dialog.open) { dialog.close(); } },
+                onClose: function () {
+                    // MARKED BEFORE CLOSED, so anything still in flight sees the dismissal even though the
+                    // helper has been sliding the sheet away for 200ms already.
+                    dismissed = true;
+                    if (dialog.close && dialog.open) { dialog.close(); }
+                },
             });
         }
     }

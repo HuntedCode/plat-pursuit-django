@@ -18,11 +18,22 @@ Params: card (from `slot_render.slot_cards`).{% endcomment %}
     switches to `contain` for the generic PS placeholder, which is not art and must not be cropped.
 
     The first squares are NOT lazy, because lazy-loading an image already on screen defers the page's own
-    LCP candidate to wait for a scroll that has already happened. Twenty-one is three rows of seven: at
-    1024x768 roughly 2.4 rows sit inside the fold, so a threshold of 14 left the third row lazy while
-    visible.{% endcomment %}
+    LCP candidate to wait for a scroll that has already happened.
+
+    SEVEN, which is the widest the grid ever gets (7 columns at `lg:`), so the FIRST ROW is never lazy at
+    any breakpoint. That is the whole requirement: what `loading="lazy"` really costs is preload-scanner
+    priority, and priority only matters for what is on screen immediately.
+
+    Both earlier values were reasoned at one breakpoint and wrong at another. 21 was three rows of seven,
+    which cost a 375px phone about fifteen eager fetches for images seven rows down. 6 was two rows of
+    three, which made index 6 -- the TOP-RIGHT CELL of the first row at `lg:` -- lazy, and the comment
+    justifying it refuted itself in its own closing sentence.
+
+    ONE HONEST LIMITATION: this indexes SQUARES, not images, because an empty square has none. A run whose
+    first seven squares are all empty therefore has no eager cover at all. That is the early-run case, where
+    there is barely any art to load anyway.{% endcomment %}
     <img src="{{ card.cover.display_image_url }}" alt="" decoding="async"
-         {% if forloop.counter0 >= 21 %}loading="lazy"{% endif %}
+         {% if forloop.counter0 >= 7 %}loading="lazy"{% endif %}
          class="pp-csq__art{% if not card.cover.has_cover_art %} pp-csq__art--icon{% endif %}">
     {% comment %}The scrim rides with the ART only. Over `.pp-csq__noart` -- a designed dark field with
     nothing beneath it -- it solved no legibility problem and took that field's own glyph below the

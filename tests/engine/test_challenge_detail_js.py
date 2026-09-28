@@ -1,8 +1,9 @@
 """`challenge-detail.js`, pinned by SOURCE TEXT because this project has no JS test runner.
 
-WHY THIS FILE EXISTS AT ALL. The picker's close routine is a fourth copy of a sequence that is six separate
-bug fixes deep, and every one of those fixes is invisible: drop it and the dialog still opens, still closes,
-still writes. What breaks is a toast that never fires, an exit that plays twice, or a dialog stranded open.
+WHY THIS FILE EXISTS AT ALL. The picker's close routine duplicates a sequence that is six separate bug
+fixes deep, and every one of those fixes is invisible: drop it and the dialog still opens, still closes,
+still writes. (It was called "a fourth copy" here and in the JS; the JS now declines to count, because two
+successive attempts at the tally were both wrong.) What breaks is a toast that never fires, an exit that plays twice, or a dialog stranded open.
 None of that shows up in a Python suite, and there is nothing else to catch it.
 
 SO THESE ARE STRUCTURAL PINS, not behaviour tests, and they are honest about that. They assert that a
@@ -11,6 +12,7 @@ guard works; it can only stop somebody deleting it while tidying, which is the f
 happens. `project_js_source_text_pins` records the convention -- and that a JS-only change can therefore
 fail the Python suite, which is the point.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -20,9 +22,53 @@ JS = (ROOT / 'static' / 'js' / 'challenge-detail.js').read_text(encoding='utf-8'
 CSS = (ROOT / 'static' / 'css' / 'components' / 'challenges.css').read_text(encoding='utf-8')
 
 
+def _code_only(source):
+    """`source` with its comment lines removed, for assertions about what is ABSENT.
+
+    WHY THIS EXISTS, written down because I have made the same mistake five times on this branch: an
+    assertion that something is absent will match the COMMENT explaining why it is absent. `'innerHTML' not
+    in JS` failed against "never `innerHTML`"; `'backdrop-filter' not in CSS` failed against "never a
+    `backdrop-filter`"; `'That square would be locked' not in JS` failed against the comment recording that
+    the string used to be there. Each time I fixed the one assertion and not the habit.
+
+    Two ways out: carry the syntax of the thing (`innerHTML =`, `backdrop-filter:`), which works when the
+    thing HAS syntax, or strip the commentary, which works when it does not -- a piece of removed copy has
+    no syntax to match on. This is the second.
+
+    Line-based rather than a real parse: a `//` inside a string literal would be stripped wrongly, and there
+    is no such line in either file. A tokenizer for two files' worth of absence checks is not the trade.
+    """
+    out = []
+    in_block = False
+    for line in source.splitlines():
+        stripped = line.strip()
+        if in_block:
+            if '*/' in stripped:
+                in_block = False
+            continue
+        if stripped.startswith('/*'):
+            if '*/' not in stripped:
+                in_block = True
+            continue
+        if stripped.startswith(('//', '*')):
+            continue
+        out.append(line)
+    return '\n'.join(out)
+
+
+#: The two sources with commentary removed. Use these for `not in` and the full text for `in`.
+JS_CODE = _code_only(JS)
+CSS_CODE = _code_only(CSS)
+
+
 def test_the_file_is_there_and_is_not_a_stub():
-    """A pin file whose subject shrank to nothing would otherwise pass every assertion below by vacuity."""
-    assert len(JS) > 4000
+    """A pin file whose subject shrank to nothing would otherwise pass every assertion below by vacuity.
+
+    MEASURED ON CODE, not on bytes. This file is mostly comment by design, so a byte count would have been
+    satisfied by the header alone with the whole implementation deleted."""
+    code = [ln for ln in JS.splitlines()
+            if ln.strip() and not ln.strip().startswith(('*', '/*', '//', '*/'))]
+    assert len(code) > 250, 'only %d lines of code' % len(code)
 
 
 # ── the close routine's six subtleties ────────────────────────────────────────────────────────────
@@ -32,7 +78,10 @@ def test_the_after_callbacks_are_a_queue_not_a_single_slot():
     with its toast callback, and hits the "already closing" early return -- so a single-slot `after` is
     dropped and the hunter is never told their square was filled. Queue first, return second."""
     assert 'pendingAfter.push(after)' in JS
-    assert 'pendingAfter = []' in JS
+    # THE DRAIN'S RESET, not the declaration. `'pendingAfter = []'` alone was satisfied by
+    # `var pendingAfter = [];` at the top of the closure, so it pinned nothing about draining.
+    assert 'var queued = pendingAfter;' in JS
+    assert 'queued.forEach(function (fn) { fn(); });' in JS
     # The push must come BEFORE the early return, or the queue changes nothing.
     assert JS.index('pendingAfter.push(after)') < JS.index("contains('is-closing')")
 
@@ -60,15 +109,22 @@ def test_the_fallback_timer_is_cleared_inside_done():
 def test_there_is_a_fallback_timer_at_all():
     """A dropped `animationend` -- a backgrounded tab, a mid-animation style recalc -- would otherwise leave
     the dialog open, `.is-closing`, and un-closable."""
+    # ANCHORED TO ITS OWN STATEMENT. `'}, 400);'` alone matched any 400ms timeout anywhere in the file;
+    # slicing to the next `);` stopped inside `removeEventListener('animationend', onEnd);` instead.
     assert 'closeTimer = setTimeout(' in JS
-    assert '}, 400);' in JS
+    start = JS.index('closeTimer = setTimeout(')
+    rest = JS[start:]
+    following = rest.find('setTimeout(', len('closeTimer = setTimeout('))
+    statement = rest if following == -1 else rest[:following]
+    assert ', 400);' in statement, 'the fallback timer is no longer 400ms'
 
 
 def test_the_swipe_closes_directly_rather_than_choreographed():
     """`dismissableSheet` has already animated the sheet off-screen and cleared its transform by the time it
     calls `onClose`. Handing it the choreographed close made a flicked sheet slide away, POP BACK into view,
     then play a second 180ms exit."""
-    assert 'onClose: function () { if (dialog.close && dialog.open) { dialog.close(); } }' in JS
+    assert 'dismissed = true;' in JS
+    assert 'if (dialog.close && dialog.open) { dialog.close(); }' in JS
 
 
 # ── the sheet, the focus, and the ways out ────────────────────────────────────────────────────────
@@ -86,6 +142,17 @@ def test_opening_focuses_the_dialog_and_not_the_search_field():
     assert 'dialog.showModal();' in JS
     assert 'dialog.focus();' in JS
     assert JS.index('dialog.showModal();') < JS.index('dialog.focus();')
+
+
+def test_the_sheet_is_shown_before_it_is_loaded():
+    """THE ORDERING THAT ACTUALLY MATTERED on those same lines, and it was the wrong way round.
+
+    `load()` writes "Loading..." into the status region, which lives INSIDE the dialog -- so while the dialog
+    was still `display: none` the mutation happened outside the rendered tree and no screen reader observed
+    it. Opening the picker announced nothing at all. Showing first is safe because `reset()` has already
+    blanked the sheet, so it is never displayed holding the previous square's state.
+    """
+    assert JS.index('dialog.showModal();') < JS.index("load(openKey, '');")
 
 
 def test_escape_and_the_backdrop_both_route_through_the_close():
@@ -115,12 +182,18 @@ def test_the_toast_fires_after_the_close_not_beside_it():
     """A modal `<dialog>` makes everything outside it inert and takes it out of the accessibility tree, and
     the toast region lives outside -- so a toast raised while the sheet is open renders behind the top-layer
     backdrop and announces nothing."""
-    assert 'close(function () { toast(' in JS
+    assert 'close(function () { applySlot(' in JS
+    assert 'if (message) { toast(message, TOAST_MS); }' in JS
 
 
-def test_stale_replies_are_discarded_on_identity():
-    """Two panels can be in flight when somebody types quickly or opens a second square. Applying the older
-    reply shows the wrong pool under the right title -- guarded on a sequence number, not on nullness."""
+def test_stale_replies_are_discarded_by_sequence():
+    """Two panels can be in flight when somebody types quickly or opens a second square, and applying the
+    older reply shows the wrong pool under the right title.
+
+    A MONOTONIC SEQUENCE, and the earlier name for this test said "identity" -- which is what the module
+    comment claimed too. `openKey` is compared to nothing anywhere; the guard is `seq !== requestSeq`. The
+    mechanism is right and the word was wrong, which matters because "identity" sent a reader looking for a
+    comparison that does not exist."""
     assert 'var seq = ++requestSeq;' in JS
     assert 'if (seq !== requestSeq) { return; }' in JS
 
@@ -135,7 +208,7 @@ def test_the_failure_message_helper_is_awaited_and_feature_tested():
     this one method. The exposure is worst here, inside a rejection handler, where failing to report a
     failure is invisible."""
     assert 'PP.API && PP.API.failureOr' in JS
-    assert '.then(say)' in JS
+    assert '.then(fail)' in JS
 
 
 def test_names_are_written_as_text_never_as_markup():
@@ -144,15 +217,18 @@ def test_names_are_written_as_text_never_as_markup():
     # MATCHED AS AN ASSIGNMENT, not as a word. A bare `'innerHTML' not in JS` failed against this file's
     # own comment ("`textContent`, never `innerHTML`") -- an absence assertion has to carry the syntax of the
     # thing it forbids, or the prose explaining the rule breaks the test for the rule.
-    assert 'innerHTML =' not in JS and '.innerHTML=' not in JS
-    assert 'insertAdjacentHTML' not in JS
+    for forbidden in ('innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write'):
+        assert forbidden not in JS_CODE, '%s reaches the DOM as markup' % forbidden
     assert 'name.textContent = row.name;' in JS
 
 
 def test_offers_are_wrapped_in_list_items():
     """Both row containers are `<ul>`s, and a `<button>` is not valid as their direct child -- the parser
-    tolerates it and assistive tech stops counting the list."""
+    tolerates it and assistive tech stops counting the list.
+
+    BOTH builders, because this pinned only `offerButton`'s and the search panel builds its own."""
     assert "var item = document.createElement('li');" in JS
+    assert "var card = document.createElement('li');" in JS
 
 
 # ── the CSS half of the same contract ─────────────────────────────────────────────────────────────
@@ -176,10 +252,14 @@ def test_the_backdrop_is_a_flat_dim_not_a_blur():
     """A `backdrop-filter` re-samples the page behind it every frame, which is the mobile-GPU trap this
     project has hit before."""
     assert '.pp-cpick::backdrop { background:' in CSS
-    cpick = CSS[CSS.index('.pp-cpick {'):]
-    # THE DECLARATION, with its colon. Without it this matched the comment directly above the rule, which
-    # says "never a `backdrop-filter`" -- so the sentence explaining the rule was failing the test for it.
-    assert 'backdrop-filter:' not in cpick
+    # SCOPED TO THE PICKER'S OWN BLOCK, not to the rest of the file. This used to slice to end-of-file, so
+    # any future component appended below would have failed the PICKER's test.
+    # SCOPED TO THE PICKER'S OWN BLOCK, and taken from the comment-free view: this used to slice to
+    # end-of-file (so a later component could fail the PICKER's test) and to match the comment above the
+    # rule, which says "never a `backdrop-filter`".
+    start = CSS_CODE.index('.pp-cpick {')
+    cpick = CSS_CODE[start:CSS_CODE.index('.pp-cpick__foot', start)]
+    assert 'backdrop-filter' not in cpick
 
 
 def test_the_dialog_height_is_capped_in_dvh():
@@ -193,10 +273,238 @@ def test_the_dialog_height_is_capped_in_dvh():
     'data-cpick-open', 'data-cpick-close', 'data-cpick-q', 'data-cpick-status',
     'data-cpick-rows', 'data-cpick-catchup', 'data-cpick-catchup-rows',
     'data-cpick-current', 'data-cpick-clear', 'data-cpick-tally', 'data-challenge-id',
+    # THE FOUR THAT WERE MISSING, and they are the ones with no guard at all: `els.title`, `els.sub`,
+    # `els.catchupTitle` and `els.catchupNote` are written unconditionally in the render path.
+    'data-cpick-title', 'data-cpick-sub', 'data-cpick-catchup-title', 'data-cpick-catchup-note',
 ])
 def test_every_hook_the_js_reads_is_in_the_template(selector):
-    """A renamed hook is silent: `querySelector` returns null, the guard skips it, and that part of the
-    picker simply stops working with nothing in the console."""
+    """A renamed hook takes the picker down, and the first version of this docstring had that backwards.
+
+    It said the failure was silent -- "`querySelector` returns null, the guard skips it". There are no
+    guards in the render path: `els.title.textContent`, `els.sub`, `els.rows.forEach`, `els.catchup.hidden`,
+    `els.current` and `els.q.value` are all dereferenced unconditionally. A renamed hook is a **TypeError**
+    that aborts the render and leaves the sheet stuck on "Loading...".
+
+    Which is a better reason for this test to exist, not a worse one -- and the four hooks it omitted are
+    precisely the unguarded ones."""
     template = (ROOT / 'templates' / 'challenges' / 'challenge_detail.html').read_text(encoding='utf-8')
     assert selector in JS, '%s is not read by the script' % selector
     assert selector in template, '%s is not rendered by the template' % selector
+
+
+# ── the JS's hand-built URLs must agree with the urlconf ──────────────────────────────────────────
+
+@pytest.mark.django_db
+@pytest.mark.parametrize('url_name, args', [
+    ('challenge_slot', (7, 'card-shark')),
+    ('challenge_search', (7,)),
+    ('challenge_assign', (7, 'card-shark')),
+    ('challenge_clear', (7, 'card-shark')),
+])
+def test_the_scripts_urls_agree_with_the_urlconf(url_name, args):
+    """The JS builds its endpoints by string concatenation, so a route rename breaks it SILENTLY -- the
+    panel would simply say "That did not load" and nothing would reach a log with a cause in it.
+
+    DERIVED FROM `reverse()` RATHER THAN RESTATED. Splitting the real URL on its arguments leaves the
+    literal path fragments, and each of those must appear in the script. Writing the expected URLs out by
+    hand would pin this test's copy of them instead of the script's.
+    """
+    from django.urls import reverse
+
+    url = reverse(url_name, args=args)
+    literals = [part for part in re.split(r'|'.join(re.escape(str(a)) for a in args), url) if part]
+
+    for fragment in literals:
+        assert fragment in JS, (
+            '%s builds %r, but the script does not contain the fragment %r'
+            % (url_name, url, fragment))
+
+
+# ── the guards the audit found missing ────────────────────────────────────────────────────────────
+
+def test_a_dismissed_sheet_cannot_confirm_an_irreversible_write():
+    """THE WORST DEFECT ANY AUDIT ON THIS BRANCH FOUND.
+
+    Press a catch-up offer, press Escape, let the 409 land: `offerConfirmation` fired a bare `window.confirm`
+    over a page with no sheet behind it, quoting a warning about a decision the hunter had walked away from
+    -- and pressing OK stamped the square complete and LOCKED IT FOREVER. The one action on a run that
+    cannot be undone was reachable from a dismissed dialog.
+
+    `list-detail.js` has exactly this guard and it was not ported with the rest of the routine.
+    """
+    assert 'function stillOpen()' in JS
+    assert 'if (!stillOpen()) { return; }' in JS
+    # THE THIRD CONDITION, and its absence put the original bug straight back. `dismissableSheet` touches
+    # neither `dialog.open` nor `.is-closing` -- it drags the sheet with a transform, then translates it
+    # off-screen and waits 200ms before calling `onClose`. So through the whole drag (hunter-controlled,
+    # unbounded) plus that delay, a sheet that had visibly left the screen still reported itself open, and a
+    # 409 landing in that window put the permanent-lock confirm on a bare page. Touch is the platform the
+    # drag handle exists for, so this was the likely path, not the exotic one.
+    assert "return dialog.open && !dialog.classList.contains('is-closing') && !dismissed;" in JS
+
+
+def test_a_failure_after_dismissal_is_reported_somewhere_visible():
+    """`say()` writes into the dialog. After a dismissal that element is `display: none`, so a failed write
+    was invisible AND unannounced, with no reload -- the hunter was told nothing and had no reason to
+    suspect anything."""
+    assert 'function reportAway(' in JS
+    assert 'if (!stillOpen()) { reportAway(message); return; }' in JS
+
+
+def test_only_one_write_can_be_in_flight():
+    """Nothing disabled an offer and `requestSeq` guarded only `load()`, so the same offer could be sent
+    twice -- two writes, two reload timers and two success toasts -- and two DIFFERENT offers could toast two
+    games for one square. The stylesheet already shipped the disabled look before anything set it."""
+    # BOTH WRITES, and the claim used to be false: `clear` was entirely outside the flag, so two quick
+    # presses meant two POSTs, two toasts and two reload timers -- the very thing the flag was added for, in
+    # the one write it did not cover. `JS.count('release();') >= 2` could not tell "both paths" from "twice
+    # on one path", which is how that passed.
+    assert JS.count('if (writing) { return; }') == 2, 'assign and clear must both take the lock'
+    assert JS.count('writing = true;') == 2
+    # EXCLUDING THE DECLARATION. `var writing = false;` is the initialiser, not a release, so counting the
+    # bare string found three -- the same trap as counting `pendingAfter = []` and matching its `var` line.
+    assert JS.count('var writing = false;') == 1
+    assert JS.count('writing = false;') - JS.count('var writing = false;') == 2, (
+        'each lock needs its own release')
+    assert 'if (button) { button.disabled = true; }' in JS
+    assert 'els.clear.disabled = true;' in JS
+    # AND THE STYLE EXISTS. It was deleted as "dead CSS" by the same change that started setting the
+    # attribute, so the guard was real and completely invisible -- a pressed offer looked exactly like an
+    # unpressed one, with a 12px "Saving..." line as the only feedback.
+    assert '.pp-cpick__row:disabled' in CSS
+    assert '.pp-cpick__key:disabled' in CSS
+
+
+def test_the_panel_is_fully_reset_before_it_is_shown():
+    """It used to clear the lists and leave the title, the subtitle, the "Currently: <game>" line and the
+    Clear button holding the LAST square's values -- so opening B after filling A showed A's title (which
+    `aria-labelledby` announces) and a live Clear button whose handler posts to B."""
+    assert 'function reset()' in JS
+    for cleared in ("els.current.textContent = ''", 'els.clear.hidden = true',
+                    "els.title.textContent = 'Choose a game'", "els.sub.textContent = ''"):
+        assert cleared in JS, '%s is not reset' % cleared
+    # THE ORDERING THAT MATTERS. This asserted `function reset()` came before `reset();`, which function
+    # hoisting makes meaningless -- it was pinning source layout, not behaviour. What has to hold is that the
+    # sheet is reset BEFORE it is shown.
+    assert JS.index('reset();') < JS.index('dialog.showModal();')
+
+
+def test_the_reload_waits_for_the_toast_it_fires():
+    """The comment used to say the page reloaded "once the toast has been seen". `ToastManager` defaults to
+    5000ms and the timer was 900ms, so the toast got about 700ms before a navigation destroyed it and cut
+    the live-region announcement off mid-sentence. One constant now feeds both."""
+    assert 'var TOAST_MS =' in JS
+    assert 'toast(message, TOAST_MS)' in JS
+    assert 'window.location.reload(); }, TOAST_MS + 200);' in JS
+
+
+def test_a_completed_square_stops_being_pressable_at_once():
+    """The server will re-render it as a `<div>`, but until the reload it is still a button with a hover
+    lift -- so it could be re-opened, and every offer inside it would then be refused."""
+    assert "square.removeAttribute('data-cpick-open');" in JS
+    assert 'square.disabled = true;' in JS
+
+
+def test_each_square_button_in_a_search_result_names_its_game():
+    """The visible pill says only the square, and the game's name sits in a sibling associated with nothing
+    -- so a keyboard user heard "A, button", "B, button" with no idea which game they were placing, and two
+    results fitting the same job produced two identically-named buttons."""
+    assert "pick.setAttribute('aria-label', 'Put ' + row.name + ' in ' + keyLabel);" in JS
+
+
+def test_a_non_json_409_does_not_invent_a_reason():
+    """It used to assert "That square would be locked. Try again." -- stating the lock as fact when the cause
+    is unknown, and telling the hunter to retry something that would 409 forever, because nothing on that
+    path ever sends `confirm`."""
+    assert 'That square would be locked' not in JS_CODE
+    assert "fail('That did not go through. Reload and try again.');" in JS
+
+
+def test_a_refusal_does_not_look_like_progress():
+    """Every failure wrote into the status line in the same dim grey as "Loading..." and "Saving...", so a
+    refusal was visually identical to progress. The donor dialog has a toned error box for exactly this."""
+    assert "els.status.classList.add('pp-cpick__status--error');" in JS
+    assert "els.status.classList.remove('pp-cpick__status--error');" in JS
+    assert '.pp-cpick__status--error' in CSS
+
+
+def test_the_result_count_reaches_the_live_region():
+    """It went only to `els.sub`, which is not one -- so "12 games fit" was never announced and a
+    screen-reader user got silence on every successful load."""
+    assert 'say(els.sub.textContent);' in JS
+
+
+def test_the_editable_square_has_a_pointer_cursor():
+    """Tailwind v4 dropped preflight's `button { cursor: pointer }`, so the 26 pressable squares -- the
+    page's primary interaction -- showed the default arrow. Every other button in that file sets it."""
+    block = CSS[CSS.index('.pp-csq {'):CSS.index('.pp-csq--empty')]
+    assert 'cursor: pointer;' in block
+    assert 'div.pp-csq { cursor: default; }' in CSS, 'a read-only square must not claim to be pressable'
+
+
+@pytest.mark.parametrize('selector, floor', [
+    ('.pp-cpick__key {', '44px'),
+    ('.pp-cpick__search {', '44px'),
+])
+def test_the_pickers_own_controls_clear_the_touch_floor(selector, floor):
+    """`.pp-cpick__key` is the commit action for contract-first mode and was a 20px box with a 10px label;
+    `.pp-cpick__search` inherited `.stg-input`'s ~36.6px, and the donor file carries that exact fix with its
+    reasoning. Both are under the design system's 44px floor."""
+    start = CSS.index(selector)
+    rule = CSS[start:CSS.index('}', start)]
+    assert 'min-height: %s' % floor in rule
+
+
+# ── round-2: holes found in round-1's fixes ───────────────────────────────────────────────────────
+
+def test_a_press_during_the_closing_animation_does_not_commit():
+    """The dialog stays displayed and interactive for the 180ms of `cpickOut`, so an offer pressed inside that
+    window wrote, toasted and reloaded after a dismissal the hunter believed had cancelled it. This is the
+    seventh thing `list-detail.js` does that the first port of its close routine left behind."""
+    body = JS[JS.index('function assign('):JS.index('function offerConfirmation(')]
+    assert 'if (!stillOpen()) { return; }' in body
+
+
+def test_the_loading_message_is_written_a_frame_after_the_dialog_opens():
+    """Fixing the ORDER was necessary and not sufficient. `showModal()` plus a synchronous `load()` put the
+    live region into the tree already holding "Loading...", and the initial content of a newly-rendered region
+    is not announced -- so opening the picker stayed silent. `ToastManager` defers its own announcement for
+    exactly this reason."""
+    assert "window.setTimeout(function () { load(openKey, ''); }, 0);" in JS
+
+
+def test_reset_clears_the_search_layout_class_and_the_catchup_copy():
+    """`reset()`'s job is that nothing from the last square survives, and three things did: the rows
+    container's `--search` modifier, and the catch-up title and note. None was visible today (the catch-up
+    block is `hidden`, and only one renderer touches the class) which is exactly why it would have stayed
+    wrong."""
+    body = JS[JS.index('function reset()'):JS.index('grid.addEventListener')]
+    assert "els.rows.classList.remove('pp-cpick__rows--search');" in body
+    assert "els.catchupTitle.textContent = '';" in body
+    assert "els.catchupNote.textContent = '';" in body
+    assert 'dismissed = false;' in body, 'a new open must clear the previous dismissal'
+
+
+def test_the_sheet_announces_which_square_it_opened():
+    """`aria-labelledby` points at the title, but nothing announces that element changing -- so the dialog's
+    announced name stayed "Choose a game" and a screen-reader user never learned which square was open."""
+    assert "say(panel.label + ': ' + els.sub.textContent);" in JS
+
+
+def test_a_disabled_square_stops_lifting_under_the_cursor():
+    """Browsers DO apply `:hover` to a disabled button. A just-completed square is disabled by the JS and then
+    waits a couple of seconds for the page to re-render it as a `<div>`, and through that window it kept the
+    hover lift the JS had just taken away."""
+    assert 'button.pp-csq:not(:disabled):hover' in CSS
+    assert 'button.pp-csq:hover {' not in CSS_CODE
+
+
+def test_the_first_grid_row_is_never_lazy_at_any_breakpoint():
+    """`loading="lazy"` costs preload-scanner priority, which only matters for what is on screen at once. The
+    widest the grid gets is 7 columns, so the threshold has to be at least 7 -- it was 21 (three rows of
+    seven, costing a phone fifteen fetches for row-seven images) and then 6, which made the top-right cell of
+    the FIRST row lazy on desktop."""
+    partial = (ROOT / 'templates' / 'challenges' / 'partials' / '_square_body.html').read_text(encoding='utf-8')
+    assert 'forloop.counter0 >= 7' in partial
+    # And the grid's widest track count, so the two cannot drift apart silently.
+    assert 'repeat(7, minmax(0, 1fr))' in CSS

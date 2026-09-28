@@ -482,11 +482,21 @@ urlpatterns = [
     # run -- two reads that need the hunter's completions to answer, and two writes.
     path('my-challenges/<int:challenge_id>/search/', SearchPickerView.as_view(),
          name='challenge_search'),
-    path('my-challenges/<int:challenge_id>/slot/<str:key>/', SlotPickerView.as_view(),
+    # `<slug:key>`, NOT `<str:key>`, and this is a fix rather than tidying. `str` matches `[^/]+`, so
+    # `%00` decoded to a NUL byte, reached `slots.filter(key=key)`, and psycopg refused it at
+    # parameter-dump time -- an unhandled `DataError` and a 500 on all three doors, repeatable by any
+    # linked hunter on their own run. `resolve`'s docstring claimed the key was untrusted and answered
+    # 404; for that one input it answered 500.
+    #
+    # `slug` matches `[-a-zA-Z0-9_]+`, which accepts every real key ('B' and 'card-shark' alike) and
+    # rejects NUL and every metacharacter at the ROUTER, before a query exists to poison. The same class
+    # of bug as the search term's, in the sibling parameter, found only because the fix for one of them
+    # re-asserted immunity for both.
+    path('my-challenges/<int:challenge_id>/slot/<slug:key>/', SlotPickerView.as_view(),
          name='challenge_slot'),
-    path('my-challenges/<int:challenge_id>/slot/<str:key>/assign/', AssignSlotView.as_view(),
+    path('my-challenges/<int:challenge_id>/slot/<slug:key>/assign/', AssignSlotView.as_view(),
          name='challenge_assign'),
-    path('my-challenges/<int:challenge_id>/slot/<str:key>/clear/', ClearSlotView.as_view(),
+    path('my-challenges/<int:challenge_id>/slot/<slug:key>/clear/', ClearSlotView.as_view(),
          name='challenge_clear'),
     # THE RUN'S OWN PAGE, under `/community/challenges/` rather than `/my-challenges/`, because it is
     # PUBLIC: a finished run is something you show somebody, and the Hall of Fame links here. The

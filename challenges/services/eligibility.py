@@ -179,13 +179,18 @@ def _slot_pool(challenge, key):
     `exclude(key=key)` is the load-bearing half: see the module docstring. Without it a reassignment sees
     a pool one smaller than an empty slot would, and the hatch opens early.
     """
+    # THE LIVE FK for the same reason `challenge_service.assign`'s duplicate guard uses it: a staff slug
+    # edit leaves the snapshot stale, and a pool that stops excluding an already-placed game offers it
+    # again. `contract_id__isnull=False` rather than `exclude(contract_slug='')` so the two agree exactly
+    # -- a slot whose contract row was deleted has a slug and no FK, and it cannot be re-offered anyway
+    # because `assign` requires a live contract.
     used = (
         challenge.slots
-        .exclude(contract_slug='')
+        .filter(contract_id__isnull=False)
         .exclude(key=key)
-        .values_list('contract_slug', flat=True)
+        .values_list('contract_id', flat=True)
     )
-    return _shape(challenge, key).exclude(slug__in=used)
+    return _shape(challenge, key).exclude(pk__in=used)
 
 
 def eligible_contracts(profile, challenge, key):
@@ -248,8 +253,8 @@ def _completed_by(profile):
 def hatch_is_open(profile, challenge, key):
     """Is this slot's pool down to `HATCH_THRESHOLD` or fewer, lifting the completed-contract rule?
 
-    A COUNT in the database, asked about ONE slot: today only by `challenge_service.assign`, and by a
-    picker when one exists (no view layer is built yet). Never mapped over a whole run for a page
+    A COUNT in the database, asked about ONE slot: by `challenge_service.assign` and by the picker's
+    catch-up block, which reaches it through `catchup_offers`. Never mapped over a whole run for a page
     render -- that would be 26 counts per view, and the page does not need to know.
     """
     return eligible_contracts(profile, challenge, key).count() <= HATCH_THRESHOLD
@@ -336,21 +341,17 @@ def completion_dates(profile, contracts):
         if moments:
             out[contract_id] = min(moments)
     return out
+def importable_dates(profile, contracts, joined_at):
+    """{contract_id: datetime} for the importable ones -- the same set, with the dates kept.
 
-
-def importable_ids(profile, contracts, joined_at):
-    """Ids of `contracts` this hunter completed AFTER `joined_at`, i.e. importable on a first run.
-
-    `joined_at` is `CustomUser.date_joined`; `Profile` carries no creation timestamp. That predates PSN
-    linking, which makes this the generous reading of "after you joined" -- deliberately, since the
-    alternative punishes somebody for the gap between signing up and linking.
-
-    STRICTLY after: a completion timestamped exactly at the join moment is not importable. A boundary no
-    real data reaches, pinned so the comparison cannot drift unnoticed.
+    THE DATES WERE ALREADY COMPUTED and were being discarded. `completion_dates` costs five queries over
+    trophy data, and the picker needs to SHOW the date beside each importable offer, so it asked a second
+    time: ten queries where five do, on the tables the whale rule is about. `importable_ids` is now this
+    function's keys.
     """
     if joined_at is None:
-        return set()
-    return {cid for cid, when in completion_dates(profile, contracts).items() if when > joined_at}
+        return {}
+    return {cid: when for cid, when in completion_dates(profile, contracts).items() if when > joined_at}
 
 
 def member_concepts_by_contract(contracts):

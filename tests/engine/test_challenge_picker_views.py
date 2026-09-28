@@ -387,3 +387,160 @@ def test_a_read_door_refuses_post(client, url_name, args):
     resp = client.post(reverse(url_name, args=(challenge.pk,) + args))
 
     assert resp.status_code == 405
+
+
+# ── the audit's findings, pinned ───────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize('door', ['slot', 'search'])
+def test_a_nul_byte_in_the_search_term_is_not_a_500(client, door):
+    """`?q=%00%00` WAS AN UNHANDLED 500. `MIN_QUERY` is a length floor and says nothing about content, so two
+    NUL bytes cleared it and reached `name__icontains`; psycopg refuses NUL in a text parameter
+    ("PostgreSQL text fields cannot contain NUL (0x00) bytes") and the `DataError` was caught by nothing.
+    Repeatable at the read limit by any linked hunter on their own run.
+
+    The term is now scrubbed BEFORE it is measured, so this is the empty string -- no term at all."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    _contract('Bloodborne')
+    url = _slot_url(challenge, 'B') if door == 'slot' else _search_url(challenge)
+
+    resp = client.get(url, {'q': '\x00\x00'})
+
+    assert resp.status_code == 200
+
+
+def test_a_control_character_term_is_treated_as_no_term(client):
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    _contract('Bloodborne')
+    _contract('Brothers')
+
+    body = _body(client.get(_slot_url(challenge, 'B'), {'q': '\x00\x01\x02'}))
+
+    assert body['total'] == 2, 'a term of control bytes should filter nothing, not error'
+    assert body['query'] == ''
+
+
+def test_an_absurdly_long_term_is_truncated_rather_than_refused(client):
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    resp = client.get(_slot_url(challenge, 'B'), {'q': 'x' * 5000})
+
+    assert resp.status_code == 200
+    assert len(_body(resp)['query']) <= 120
+
+
+@pytest.mark.parametrize('state', ['finished', 'hidden'])
+def test_the_picker_doors_refuse_a_run_that_cannot_be_changed(client, state):
+    """They answered 200 with a full offer list for a run where `_lock_challenge` refuses every write -- after
+    doing the whole pool scan and, on a thin slot, the five-query trophy read. Expensive work to build a list
+    of buttons that could only 400."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    if state == 'finished':
+        Challenge.objects.filter(pk=challenge.pk).update(is_complete=True, completed_at=timezone.now())
+    else:
+        svc.hide(challenge, profile)
+
+    assert client.get(_slot_url(challenge, 'B')).status_code == 404
+    assert client.get(_search_url(challenge), {'q': 'blood'}).status_code == 404
+    assert client.post(_assign_url(challenge, 'B'), {'contract': 'x'}).status_code == 404
+    assert client.post(_clear_url(challenge, 'B')).status_code == 404
+
+
+def test_a_locked_square_says_so_instead_of_building_offers(client):
+    """A completed square can never be reassigned, so every query spent building its pool is spent building
+    a refusal. The panel answers in one query and tells the client it is locked."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    slot = svc.assign(challenge, profile, 'B', _contract('Bloodborne'))
+    svc.mark_slot_completed(slot)
+    _contract('Brothers')
+
+    body = _body(client.get(_slot_url(challenge, 'B')))
+
+    assert body['locked'] is True
+    assert body['rows'] == []
+    assert body['total'] == 0
+    assert body['current_name'] == 'Bloodborne'
+
+
+def test_the_catchup_block_says_when_it_is_showing_everything(client):
+    """A truncated list that looks complete is a lie, so the panel says which it is.
+
+    BOTH BRANCHES, and the first version of this test only exercised one. It used a single candidate against
+    a limit of 24, so it never reached the full-slice path -- which was the branch that was WRONG: it
+    reported `pool.count()`, every completed game in the slot's pool with no lifting filter, so a hunter
+    could see an empty catch-up block beside a count of forty. The test would have passed with the number
+    hard-coded.
+    """
+    profile = _hunter(client)
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Brothers', with_game=False)
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    body = _body(client.get(_slot_url(challenge, 'B')))
+
+    assert len(body['catchup']) == 1
+    assert body['catchup_more'] is False, 'one candidate is not a truncated list'
+
+
+def test_the_catchup_block_says_when_it_is_cut_short(client):
+    """THE BRANCH THAT WAS WRONG. The slice fills, so there may be more -- and the old code answered that
+    with a count of the whole completed pool, including everything no rule lifts."""
+    profile = _hunter(client)
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    for i in range(3):
+        done = _contract('Brothers %d' % i, with_game=False)
+        _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    # `limit` is the panel's page size; the door does not expose it, so drive the service directly.
+    from challenges.services import picker
+    panel = picker.slot_panel(profile, challenge, 'B', limit=2)
+
+    assert len(panel['catchup']) == 2
+    assert panel['catchup_more'] is True
+
+
+@pytest.mark.parametrize('door', ['slot', 'assign', 'clear'])
+def test_a_nul_byte_in_the_url_key_is_not_a_500(client, door):
+    """THE SIBLING OF THE SEARCH-TERM BUG, in the function whose docstring claimed immunity to it.
+
+    `<str:key>` matched `[^/]+`, so `%00` decoded to a NUL, reached `slots.filter(key=key)` and psycopg
+    refused it at parameter-dump time -- an unhandled `DataError` and a 500 on all three slot doors,
+    repeatable by any linked hunter on their own run. `<slug:key>` rejects it at the router, before there is
+    a query to poison.
+
+    Asserted as "not a 500" rather than "is a 404", because the meaningful property is that an untrusted URL
+    segment cannot reach the database, and a router that declines to match is one correct way to get there.
+    """
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    suffix = {'slot': '', 'assign': 'assign/', 'clear': 'clear/'}[door]
+    path = '/my-challenges/%d/slot/%%00/%s' % (challenge.pk, suffix)
+
+    resp = client.get(path) if door == 'slot' else client.post(path)
+
+    # 404 for the GET door, 405 for the POST ones -- and the 405 is this project's own documented quirk, not
+    # a surprise: `handler404` is GET-only, so a 404 reached by a POST comes back listing GET/HEAD/OPTIONS.
+    # `_ChallengeActionView`'s docstring records the same thing for `Http404` raised inside a view.
+    #
+    # The property under test is that an untrusted URL segment never reaches the database. Either status is a
+    # correct way to get there; a 500 is not. My first version of this test asserted `== 404` while its own
+    # docstring said "asserted as not a 500", and the POST doors failed it for the right reason.
+    assert resp.status_code in (404, 405), 'expected a refusal, got %s' % resp.status_code
+    assert resp.status_code != 500
+
+
+def test_a_real_key_still_routes_for_both_challenge_types(client):
+    """The guard above must not have narrowed the door: `slug` has to accept an uppercase letter and a
+    hyphenated job slug, which are the only two shapes a key ever takes."""
+    profile = _hunter(client)
+    az = svc.start(profile, CHALLENGE_TYPE_AZ)
+    jobs = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    assert client.get(_slot_url(az, 'B')).status_code == 200
+    assert client.get(_slot_url(jobs, 'card-shark')).status_code == 200

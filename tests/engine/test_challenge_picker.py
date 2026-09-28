@@ -451,9 +451,14 @@ def test_the_slot_panel_does_not_scale_with_its_pool(challenge_type):
     assert twelve == four, 'tripling the pool changed the query count'
 
 
-def test_the_importers_five_query_date_read_is_skipped_when_nothing_is_importable():
-    """`completion_dates` reads trophy data in five queries. A hatch row displays no date, so paying for
-    one would be five queries for nothing on every thin slot a hunter opens after their first run."""
+def test_the_importers_date_read_is_skipped_when_nothing_is_importable():
+    """`completion_dates` reads trophy data in three to five queries, and a hatch row displays no date -- so
+    paying for one would be queries spent on nothing, on every thin slot a hunter opens after their first run.
+
+    WHAT IT PINS NOW is the `importer_is_available` gate inside `catchup_offers`. The `_with_dates` skip its
+    first docstring described has been DELETED: the dates come back with the labels from one call, which is
+    what removed the double read. The oracle below is unchanged and still correct; only the thing it guards
+    moved. (It also said "five queries", which overstated a 3-5 range.)"""
     profile = _member()
     _spend_the_importer(profile)
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
@@ -481,3 +486,51 @@ def test_the_importers_five_query_date_read_is_skipped_when_nothing_is_importabl
     assert 'trophies_profilegame' not in sql, (
         'the trophy-date read ran for a hatch-only panel, where no row displays a date'
     )
+
+
+def test_the_trophy_date_read_happens_exactly_once_per_panel():
+    """THE PIN THE FLATNESS TESTS CANNOT BE. Both of those assert only that the count does not change as the
+    pool grows -- and restoring the double `completion_dates` raises both sides equally, so both stay green.
+    That is the same trap the comment further up this file records falling into.
+
+    `trophies_profilegame` is the oracle because `completion_dates` reads it unconditionally as its second
+    date source, and nothing else on this path touches it. COUNTED rather than tested for presence: presence
+    proves the read happened, and the defect was that it happened twice.
+    """
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Brothers', with_game=False)
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    with CaptureQueriesContext(connection) as captured:
+        panel = picker.slot_panel(profile, challenge, 'B')
+
+    assert panel['catchup'][0]['via'] == COMPLETED_VIA_IMPORT, 'the fixture must exercise the import path'
+    # QUERIES, not MENTIONS. One statement names its table several times (SELECT list, FROM, WHERE), so
+    # counting occurrences in the joined SQL reported six for a single read.
+    reads = [q for q in captured.captured_queries if 'trophies_profilegame' in q['sql']]
+    assert len(reads) == 1, (
+        'the trophy-date read ran %d times; it used to run twice because `importable_ids` computed the '
+        'dates and threw them away' % len(reads))
+
+
+def test_the_search_panel_also_keys_the_duplicate_check_on_the_live_fk():
+    """THE THIRD PLACE the FK fix had to reach, and the only one that had no test. `assign` and the pool were
+    both pinned; the picker's `already_in_run` was not -- so the panel could still have offered a renamed
+    game that `assign` would then refuse."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    two = list(Job.objects.order_by('slug')[:2])
+    game = _contract('Astro Bot', jobs=two)
+    svc.assign(challenge, profile, two[0].slug, game)
+
+    Contract.objects.filter(pk=game.pk).update(slug='renamed-by-staff')
+
+    panel = picker.search_panel(profile, challenge, 'astro')
+
+    # `already_in_run` IS the answer; `keys` deliberately still lists what the game fits. The row explains
+    # itself with the flag rather than rendering as though it fits nowhere -- "already placed" and "fits
+    # nothing" are different facts and a hunter needs to be told which. An earlier version of this test
+    # asserted `keys == []` and was wrong about the design, not about the fix.
+    assert panel['rows'][0]['already_in_run'] is True

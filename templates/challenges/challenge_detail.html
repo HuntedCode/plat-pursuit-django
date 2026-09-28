@@ -143,7 +143,10 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             nothing while this is open -- the same reason `ToastManager` builds a per-dialog region.{% endcomment %}
             <p class="pp-cpick__status" data-cpick-status role="status" aria-live="polite"></p>
 
-            <ul class="pp-cpick__rows" data-cpick-rows></ul>
+            {% comment %}`role="list"` for the reason the grid above spells out: preflight's
+            `list-style: none` makes WebKit drop the implicit list role, and these rows are the
+            sheet's actionable content on the same iOS Safari. The grid got it and these did not.{% endcomment %}
+            <ul class="pp-cpick__rows" role="list" data-cpick-rows></ul>
 
             {% comment %}THE CATCH-UP BLOCK, and it is separate from the rows above for one reason: these
             are the only offers that land a square COMPLETE and therefore LOCKED. Keeping them together
@@ -152,7 +155,7 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             <section class="pp-cpick__catchup" data-cpick-catchup hidden>
                 <h3 class="pp-cpick__catchup-title" data-cpick-catchup-title></h3>
                 <p class="pp-cpick__catchup-note" data-cpick-catchup-note></p>
-                <ul class="pp-cpick__rows" data-cpick-catchup-rows></ul>
+                <ul class="pp-cpick__rows" role="list" data-cpick-catchup-rows></ul>
             </section>
         </div>
 

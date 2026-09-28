@@ -454,7 +454,16 @@ def assign(challenge, profile, key, contract, *, acknowledge_lock=False):
 
     _refuse_if_wrong_shape(locked, key, contract)
 
-    if locked.slots.exclude(pk=slot.pk).filter(contract_slug=contract.slug).exists():
+    # MATCHED ON THE LIVE FK, not on the frozen snapshot. A staff edit to `Contract.slug` breaks a slug
+    # match and leaves the FK correct -- this module's own header says so, and the point had been applied
+    # to detection but not here. The cost was a double payout: a jobs game already in one square could be
+    # accepted into a second, because neither this guard nor the pool's exclusion recognised it any more.
+    #
+    # The DB constraint `challengeslot_unique_contract` still keys on `contract_slug`, so it does not back
+    # this rule up for a renamed contract. It is a backstop rather than the rule, and the row lock above
+    # closes the race this guard would otherwise leave -- but the mismatch is worth a migration in its own
+    # right, and is NOT fixed here.
+    if locked.slots.exclude(pk=slot.pk).filter(contract_id=contract.id).exists():
         raise ChallengeError('That game is already in another square of this run.')
 
     completed_via = None
@@ -465,12 +474,6 @@ def assign(challenge, profile, key, contract, *, acknowledge_lock=False):
                 'You have already finished that one. Pick a game you can still complete.'
             )
 
-    slot.contract = contract
-    slot.contract_slug = contract.slug
-    slot.contract_name = contract.name
-    slot.assigned_at = timezone.now()
-    fields = ['contract', 'contract_slug', 'contract_name', 'assigned_at']
-
     if completed_via is not None and not acknowledge_lock:
         # AFTER every other check, so a confirmation is only ever asked for a placement that would
         # actually succeed. Asking first and refusing second would train a hunter to confirm a dialog that
@@ -479,6 +482,16 @@ def assign(challenge, profile, key, contract, *, acknowledge_lock=False):
             'You have already finished that one, so this square will be complete and locked straight '
             'away. Confirm to use it.',
             via=completed_via, contract_name=contract.name)
+
+    # ASSIGNED AFTER THE RAISE, not before it. Nothing escaped when these four lines sat above -- no DB
+    # write happens until `save()` and `@transaction.atomic` rolls back regardless -- but it left a loaded
+    # gun: a future caller that caught `ConfirmationRequired` and then saved this same instance would
+    # commit a completing placement nobody acknowledged, with `is_completed` still False.
+    slot.contract = contract
+    slot.contract_slug = contract.slug
+    slot.contract_name = contract.name
+    slot.assigned_at = timezone.now()
+    fields = ['contract', 'contract_slug', 'contract_name', 'assigned_at']
 
     if completed_via is not None:
         slot.is_completed = True
@@ -540,19 +553,33 @@ def catchup_reasons(profile, challenge, key, contracts):
     NEVER MAP THIS OVER A WHOLE RUN. `hatch_is_open` is a COUNT per slot, so 26 slots is 26 counts; the
     docstring there says the same thing. One slot, when its picker opens.
     """
+    return {cid: via for cid, (via, _) in catchup_offers(profile, challenge, key, contracts).items()}
+
+
+def catchup_offers(profile, challenge, key, contracts):
+    """{contract_id: (via, completed_at)} -- the labels AND the dates, computed once.
+
+    THE DATE COMES BACK WITH THE LABEL because working it out is the expensive half and the picker needs
+    both. `importable_ids` derives its set from `completion_dates` (five queries over `Trophy`,
+    `EarnedTrophy` and `ProfileGame`) and then throws the dates away; the picker then asked for them again.
+    Ten queries over exactly the tables the whale rule exists to protect, per panel open, where five do.
+
+    `completed_at` is None for a `hatch` row, which displays no date -- the hatch is about our supply
+    being thin, not about when the hunter did anything.
+    """
     contracts = list(contracts)
     if not contracts:
         return {}
 
-    reasons = {}
+    offers = {}
     if importer_is_available(profile, challenge.challenge_type):
         joined_at = getattr(getattr(profile, 'user', None), 'date_joined', None)
-        for contract_id in eligibility.importable_ids(profile, contracts, joined_at):
-            reasons[contract_id] = COMPLETED_VIA_IMPORT
+        for contract_id, when in eligibility.importable_dates(profile, contracts, joined_at).items():
+            offers[contract_id] = (COMPLETED_VIA_IMPORT, when)
     if eligibility.hatch_is_open(profile, challenge, key):
         for contract in contracts:
-            reasons.setdefault(contract.id, COMPLETED_VIA_HATCH)
-    return reasons
+            offers.setdefault(contract.id, (COMPLETED_VIA_HATCH, None))
+    return offers
 
 
 def _why_a_completed_contract_is_allowed(profile, challenge, key, contract):
