@@ -219,9 +219,18 @@ def importer_is_available(profile, challenge_type):
     """Is the first-run history importer open to this hunter?
 
     A-Z ONLY (owner, 2026-09-28). The importer shipped for both types and that was wrong: it is a fix for a
-    specific unfairness in the ALPHABET, where a hunter arrives with a library full of games that already
-    cover half the letters and the run would otherwise ask them to re-earn work they have done. Job Coverage
-    has no equivalent claim -- a job is a shape of game rather than a name, its squares are not scarce in the
+    specific unfairness in the ALPHABET, where a hunter already holds completions covering half the letters
+    and the run would otherwise ask them to re-earn work they have done.
+
+    SAID MORE CAREFULLY THAN IT WAS, because the wider phrasing contradicted the shipped predicate: this used
+    to say a hunter "arrives with a library" full of such games, and a library they arrived WITH is exactly
+    what `eligibility.importable_dates` excludes (`when > joined_at`). Only completions earned after the
+    account existed import, so this rewards time spent here rather than a back catalogue. The boundary is the
+    signup INSTANT and not the day (`date_joined` is a datetime), so a contract finished an hour after
+    joining does import -- the claim to avoid is the wider one about a library, not the narrow one about the
+    clock. That is the anchor working as intended, but no copy anywhere may promise the wider thing.
+
+    Job Coverage has no equivalent claim -- a job is a shape of game rather than a name, its squares are not scarce in the
     same way, and the thing that actually protects a thin job square is the hatch, which applies to BOTH
     types and always did (`eligibility.hatch_is_open` has never looked at the challenge type).
 
@@ -233,9 +242,15 @@ def importer_is_available(profile, challenge_type):
     faithful one -- abandoning a run should not burn the catch-up, and completing one closes it permanently,
     so it cannot be farmed.
 
-    ONE GATE, and that is why this is the only place it changed. `catchup_offers` is the single caller, and
-    both the picker's offers and `assign`'s own permission check reach the rule through it -- so the panel
-    cannot offer an import the write would refuse, or the reverse.
+    ONE GATE, and that is why this is the only place it changed. Three callers reach it -- `catchup_offers`,
+    `picker.history_panel` and `ChallengeDetailView` (whether the page's door opens at all) -- and not one of
+    them re-expresses the rule, which is the property that matters. So the panel cannot offer an import the
+    write would refuse, or the reverse.
+
+    An earlier version of this docstring said `catchup_offers` was the SINGLE caller, which was never true of
+    the page door and stopped being true of the panel the day the history importer got its own view. The
+    claim to make about a gate like this is that nothing copies it, not that nothing else calls it -- a
+    caller count is a fact about the codebase today and rots on the next feature.
     """
     return challenge_type == CHALLENGE_TYPE_AZ and completed_run_count(profile, challenge_type) == 0
 

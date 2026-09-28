@@ -73,6 +73,24 @@ player does*, not for content — Mind ↔ Heart are the think/feel faculties:
 (`★combo` jobs — Vanguard = Shooter+Sci-fi, Mage = RPG+Fantasy, Mascot = Comedy+Platform —
 override their base genre job. Freelancer is the no-specialization fallback, housed in Finesse.)
 
+> **EVERY JOB IN THIS TABLE IS A REQUIRED CHALLENGE SQUARE, Freelancer included.** A Job Coverage
+> Challenge run is built from `Job.objects` with no filter, so the catalogue here IS the win condition —
+> see [challenge-systems.md](../../features/challenge-systems.md). Two consequences for anyone editing it:
+>
+> - **Do not delete a `Job` while runs are live.** `Challenge.total_slots` is frozen at creation, so the
+>   square survives the deletion — but a game's eligibility for it is derived from the `Contract.jobs` M2M,
+>   which cascades away, so the square becomes unfillable and that hunter's run becomes unwinnable.
+> - **Thin supply for a job is a challenge problem, not just a board problem.** The thinnest jobs are the
+>   ones mapped from small genres (Card Shark, Maestro), and they are thin *structurally* — a growing pool
+>   does not resolve them, because the genre is what is small. Worse, supply is per-hunter: a job with a
+>   healthy catalogue count can still be down to nothing for somebody who has finished all of it. The
+>   Challenge system's scarcity hatch is what covers that, letting an already-completed game fill a square
+>   whose eligible pool is down to `HATCH_THRESHOLD`. That rule exists because of this table's shape.
+>
+> Freelancer is the one to watch. It is a residual assignment, so closing the Adventure/Action rule gap
+> would stop its supply *growing* rather than shrink it (`Contract.jobs` is stored and staff-confirmed, so
+> existing rows do not move) — but check its count before closing that gap, because it is a required square.
+
 ### `Contract` — a Job Board entry (the curated game)
 | field | notes |
 |---|---|
@@ -114,6 +132,17 @@ Existence + tier timestamps make grants idempotent (we never pay the same tier t
 
 One row per (job × tier) per earn. **Never recompute history** (a reconciliation revoke DELETES rows; nothing ever *rewrites* one) — value changes and double-XP
 weekends are captured here permanently, and a reversal subtracts the *recorded* amount.
+
+**A second source is now reserved here: `source='challenge'`.** A completed Job Coverage square is meant to
+pay its job, and because `grant_job_xp` has no idempotency for null-`earned_contract` grants — while this
+ledger is append-only, so a double-pay can only be *offset*, never removed — the guard was built into the
+schema before the payout: `xpgrant_challenge_once_per_slot` (unique on profile + job + source + `source_id`,
+where `source_id` is the `ChallengeSlot` id) and `xpgrant_challenge_needs_source_id`, which is what makes the
+unique mean anything, since a NULL `source_id` collides with nothing. **Nothing writes those rows yet** — the
+redemption path is the Challenge rebuild's reward chunk. Two notes for whoever builds it: the source choice
+list is *not* exhaustive of what is in the table (`seed_career_demo` writes an unlisted `'seed'`), and
+`recompute_profile_job_xp` aggregates every grant with no source filter, so challenge grants survive a
+reconcile's rebuild correctly. See [challenge-systems.md](../../features/challenge-systems.md).
 
 ### `ProfileJobXP` — the read cache
 | field | notes |

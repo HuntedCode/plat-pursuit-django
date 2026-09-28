@@ -56,7 +56,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Marks & Roles](features/marks-and-roles.md) | Site-wide name marks (staff/mod/supporter), precedence, the display_mark denorm, the role split |
 | [Support Roadmap](features/support-roadmap.md) | The public roadmap: certainty tiers, content constants, no-dates rules, the storefront band |
 | [Badge Art Reveal](features/badge-art-reveal.md) | Community platinum-driven badge-artwork reveal event: site-wide progress banner + event page (carousel + grid), art auto-released as the community earns badge platinums |
-| [Challenge Systems](features/challenge-systems.md) | **RETIRED 2026-08** (design reference for the planned rewrite): A-Z, Calendar, and Genre platinum challenges |
+| [Challenge Systems](features/challenge-systems.md) | **Rebuilt from scratch on `feature/challenges/rebuild`, in progress.** Two types (A-Z, Job Coverage), squares atomised on `Contract`, the catch-up rules (scarcity hatch + first-run history import), detection, and what is not built yet |
 | [Comment System (Legacy)](features/comment-system.md) | Read-only legacy: surviving moderation/vote endpoints, why no new comments are accepted |
 | [Game Lists](features/game-lists.md) | **Rebuilt 2026-09, staff-gated.** Hunter-curated lists of games: three surfaces, a service that owns every write, entries keyed on `Concept`, follow/like, and the un-hide checklist |
 | [Community Flags](features/community-flags.md) | User-submitted game data quality flags (delisted, shovelware, VR, buggy trophies) |

@@ -1,10 +1,11 @@
 /**
  * Challenge detail: the picker that fills a square.
  *
- * TWO MODES, ONE DIALOG. Pressing an empty or unfinished square opens it SLOT-FIRST (what fits here?);
- * typing in the search box switches it CONTRACT-FIRST (where does this game go?). They are one sheet
- * because they answer the same question from two directions, and because the catch-up warning, the
- * confirmation and the refusal handling would otherwise be written twice.
+ * THREE MODES, ONE DIALOG. Pressing an empty or unfinished square opens it SLOT-FIRST (what fits here?);
+ * typing in the search box switches it CONTRACT-FIRST (where does this game go?); and the history door
+ * opens it on the first-run importer, spanning every open letter at once. They are one sheet because they
+ * answer the same question from different directions, and because the catch-up warning, the confirmation
+ * and the refusal handling would otherwise be written three times.
  *
  * NOTHING HERE DECIDES ANYTHING. The panels come from the server, which owns eligibility, the hatch
  * threshold, the importer's date rule and the import-vs-hatch label. The confirmation is the same: the

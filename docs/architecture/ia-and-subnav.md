@@ -80,11 +80,31 @@ that is merely *new* still has to fit one of the four.
 ("hunters are another thing you browse"), and while a profile is mostly PSN data, you look for a
 community member where the community is. It keeps `/hunters/` — a sub-nav move, not a URL move.
 
+### Challenges: a public page under a hub that does not exist yet
+
+Worth recording because it looks like a mistake and is not. The rebuilt Challenge system ships two
+surfaces, at two prefixes, for two different reasons:
+
+| Surface | Route name | Prefix | Why there |
+|---|---|---|---|
+| My Challenges | `my_challenges`, plus `challenge_start` and the run's write doors | `/my-challenges/` | personal, login-gated, a working surface |
+| A run's own page | `challenge_detail` | `community/challenges/<id>/` | **public.** A finished run is something you show somebody |
+
+So a public page already lives under `community/challenges/` while `community/challenges/` itself is still
+the coming-soon placeholder (`ChallengesComingSoonView`, route name `challenges`). That is deliberate: the
+run page is somebody's artefact rather than a hub item, and it needs a permanent public address before the
+hub that will index it exists. The Hall of Fame will fill the index when it is built.
+
+It has one consequence already handled: the run page's breadcrumb is the PUBLIC trail, not the owner's.
+Pointing it at *My Pursuit → My Challenges* sent anonymous readers to a login screen from a page that never
+asked them to sign in, and sent signed-in visitors to THEIR OWN runs from a page about somebody else's.
+
 **What did NOT move, and why the line holds:**
 
-- **My Lists and My Challenges will stay in My Pursuit → Tools.** The private side of a public system is
+- **My Lists and My Challenges stay in My Pursuit → Tools.** The private side of a public system is
   still personal and login-gated, exactly as *Collection* stays in My Pursuit while *Badges* sits in
-  Browse. A hub is not a feature's address; it is a mode.
+  Browse. A hub is not a feature's address; it is a mode. (`/my-challenges/` shipped there in
+  `feature/challenges/rebuild`, so this one is settled rather than planned.)
 - **Leaderboards stays raw PSN standings.** Challenge boards and the Hall of Fame will go to
   Community, because what they rank is participation in a PlatPursuit activity rather than a PSN
   fact.

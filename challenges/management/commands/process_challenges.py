@@ -17,10 +17,19 @@ It also claimed a square "can never hold a non-live contract", which is FALSE an
 `test_a_draft_contract_still_completes_a_square_it_already_occupies` in this feature's own detection
 suite. `assign` refuses a draft and `eligibility._shape` filters `is_live`, but both bind at ASSIGN
 time: nothing un-assigns a square when staff later un-publish its contract, and the FK is `SET_NULL`
-rather than `PROTECT`. What is actually true is narrower -- a square holding an un-published contract is
-unreachable by EITHER detector, because `mark_contract_reached` is only ever called for live contracts,
-so no `EarnedContract` row is stamped and there is nothing to find. Not a hole this sweep closes; a case
-neither path covers.
+rather than `PROTECT`.
+
+THE REPLACEMENT CLAIM WAS ALSO TOO WIDE, which is the part worth recording, because it sounded narrow
+enough to be safe: it said a square holding an un-published contract is unreachable by EITHER detector,
+since `mark_contract_reached` only runs for live contracts. That is the same test's scenario, and the
+test asserts the opposite. Neither detector reads `is_live` -- both ask only whether an `EarnedContract`
+row EXISTS -- and un-publishing does not take a reached stamp back, so a square assigned while its
+contract was live completes perfectly well afterwards. (`mark_contract_reached` has no `is_live` check
+of its own either; its CALLERS filter.)
+
+What is actually true is the other order: a contract un-published BEFORE the hunter's completion was
+ever detected has no stamp, so there is nothing for either path to find. Not a hole this sweep closes;
+the one case neither path covers.
 
 MUST RUN AFTER `process_contracts`, which is why it sits immediately after it in `nightly.STEPS`. A
 square completes when an `EarnedContract` row exists, and that command is what creates one -- running

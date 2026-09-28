@@ -150,9 +150,13 @@ def slot_groups(challenge):
     # EVERY BUCKET IS EMITTED, and the leftover clause is the whole point rather than defensive padding.
     # Iterating the canonical five plus `''` silently DROPPED any other discipline together with its
     # squares: `slot_keys_for` builds a run from `Job.objects` with no discipline filter, and
-    # `Job.discipline` is `choices=` only -- which Postgres does not enforce -- so a sixth discipline added
-    # to `Job.DISCIPLINES` without a matching `DISCIPLINE_LABELS` entry gave a 26-slot run that drew 25
-    # squares, tallied `x/26`, and left one square with no DOM and therefore no way to ever fill it.
+    # `Job.discipline` is `choices=` only -- which Postgres does not enforce -- so a discipline added to
+    # `Job.DISCIPLINES` (or written straight into the column) without a matching `DISCIPLINE_LABELS` entry
+    # would give a run that DREW fewer squares than it counted: the tally says `x/total_slots` while one
+    # square has no DOM and therefore no way to ever fill it. Stated as a hazard rather than as history,
+    # which an earlier version of this comment got wrong twice over -- `Job.DISCIPLINES` and
+    # `DISCIPLINE_LABELS` currently carry the same five, so it has not happened, and the "26-slot run" it
+    # described was an A-Z square count on a jobs board.
     # `job_render.discipline_order` already plans for this exact case ("an unseeded discipline sorts last"),
     # so the catalogue contemplates it even though the labels dict did not.
     #

@@ -111,5 +111,11 @@ Fast early promotions (a division every ~3 games at Recruit) widening to ~60 gam
 - **Tiers carry prestige, not the curve.** Don't be tempted to re-add curve escalation "to make high levels feel earned" — that breaks modifier fungibility. Use tier spacing instead.
 - **The ledger is append-only; the cache is `Sum(ledger)`.** Any future "remove / decay / expire XP" feature MUST delete or write a negating ledger row, **never** just decrement `ProfileJobXP` — `recompute_job_xp` rebuilds from the ledger and would resurrect the removed XP.
 - **`grant_job_xp` has NO built-in idempotency for non-contract sources.** Contracts are guarded by `unique_together(earned_contract, job, tier)` + the accepted timestamps. Quests/events (null `earned_contract`) are unconstrained — the first quest/event integration must own idempotency (e.g. `get_or_create` on `(profile, job, source, source_id)` or a partial unique index), or it will double-pay into the permanent ledger.
+  **A first claimant now exists: `source='challenge'`**, reserved by the Challenge rebuild for a completed Job
+  Coverage square. It took the partial-unique route (`xpgrant_challenge_once_per_slot` on profile + job +
+  source + `source_id`, where `source_id` is the `ChallengeSlot` id) **plus a check constraint requiring
+  `source_id`** — because Postgres treats NULLs as distinct, so without the second one a grant written with no
+  `source_id` collides with nothing and the unique index buys nothing at all. Copy both, not just the first.
+  Nothing writes those rows yet; the payout is the rebuild's reward chunk.
 - **The model is named `ContractXPGrant` but is source-agnostic.** A rename to `JobXPGrant` is optional polish; the `source` field is what matters.
 - **Lab display:** the cap-based "mastered" state is gone — the Lab shows the element's prestige **tier** (rank on the tile/detail + a "N to <next tier>" goal). Done.
