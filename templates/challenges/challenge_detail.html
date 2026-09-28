@@ -55,13 +55,17 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
         </div>
     </section>
 
-    {% comment %}THE GRID. Columns, gaps, the three square states and the entrance all live in
-    `components/challenges.css` (`.pp-csq-grid` / `.pp-csq`) rather than in utilities here, for the same
-    reason `.pp-gtile-grid` does: a 26-cell layout with four breakpoints is a component, and spelling it
-    in classes puts the one decision this page makes in the hardest place to read it.
+    {% comment %}THE BOARD AND ITS GRIDS. Columns, gaps, the three square states and the entrance all
+    live in `components/challenges.css` (`.pp-csq-board` / `.pp-csq-shelf` / `.pp-csq-grid` / `.pp-csq`)
+    rather than in utilities here, for the same reason `.pp-gtile-grid` does: a 25-or-26-cell layout with
+    four breakpoints is a component, and spelling it in classes puts the one decision this page makes in
+    the hardest place to read it.
 
-    A REAL LIST, because the squares are one. 26 sibling divs each ending in screen-reader text read as
-    one undelimited run of prose with no cell boundary and no count; a list gives "list, 26 items" and a
+    THE BOARD is where the run's id and the click delegation live, because a jobs run has FIVE grids and
+    anything that assumed one would only ever have found the first.
+
+    A REAL LIST, because the squares are one. Sibling divs each ending in screen-reader text read as one
+    undelimited run of prose with no cell boundary and no count; a list gives "list, N items" and a
     boundary between each.
 
     `role="list"` IS NOT BELT-AND-BRACES HERE. Tailwind's preflight ships `ol,ul,menu{list-style:none}`,
@@ -69,8 +73,52 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     dominant screen-reader pairing for a page whose base layout is 375px, the bare `<ul>` announced
     nothing at all and the sentence above would have been false. The explicit role is what makes it
     true.{% endcomment %}
-    <ul class="pp-csq-grid" role="list" data-challenge-id="{{ challenge.id }}">
-        {% for card in cards %}
+    <div class="pp-csq-board" data-challenge-id="{{ challenge.id }}">
+        {% for group in groups %}
+        {% comment %}ONE SHELF PER DISCIPLINE on a jobs run, and a single plain grid for A-Z.
+
+        A Job Coverage run is 25 squares that are really five groups of five -- the radar's disciplines -- and
+        laying them out seven across broke every group mid-row, so the structure was invisible.
+
+        THE CARDS DO NOT CHANGE SIZE, which is the constraint. At `lg:` the shelf is a SEVEN-column grid
+        matching the page's own, with the head spanning 2 and the cards spanning 5; the inner grid divides
+        that span into 5 columns with 4 gaps, which is exactly the width a card had in the flat 7-column
+        grid. The gap both grids use is one `--csq-gap` declaration on the board, so that stays true when
+        it moves. Below `lg:` the head sits above and the cards keep the page's ordinary columns.
+
+        `<section>` ONLY WHEN THERE IS A HEAD TO NAME IT. A section with no accessible name is exposed as a
+        plain generic, not a region, in every engine -- so an unnamed one buys nothing and an A-Z run, which
+        has a single unlabelled group, gets a `<div>` instead of a semantically empty landmark. Where there
+        IS a label, `aria-labelledby` points at the `<h2>`, which is what actually promotes the element to a
+        named region and gives assistive tech a way to move between disciplines. The same id names the list,
+        so "list, 5 items" is attributed to Combat rather than floating free.
+
+        `group.dom_id` RATHER THAN A SLUG BUILT HERE. Two groups can share a slug-derived id -- a deleted
+        `Job` leaves a blank slug, and a job whose discipline is literally `other` produces the same string --
+        and duplicate ids make every `aria-labelledby` resolve to the FIRST heading. `slot_groups` stamps a
+        deduplicated id instead.{% endcomment %}
+        {% if group.label %}
+        <section class="pp-csq-shelf" aria-labelledby="{{ group.dom_id }}"
+                 {% if group.slug %}style="--disc: var(--disc-{{ group.slug }}, var(--pp-primary));"{% endif %}>
+            <div class="pp-csq-shelf__head">
+                {% comment %}A group whose `Job` rows were deleted has no icon, and `job_icon_use` renders
+                nothing for a blank name -- so the span is only emitted when there is a glyph to put in it,
+                rather than leaving an empty box contributing the head's gap.{% endcomment %}
+                {% if group.icon %}
+                <span class="pp-csq-shelf__icon" aria-hidden="true">{% job_icon_use group.icon '' %}</span>
+                {% endif %}
+                <h2 class="pp-csq-shelf__title" id="{{ group.dom_id }}">{{ group.label }}</h2>
+                {% comment %}Per-discipline progress, which is what the label area is for: the page's tally
+                says how the RUN is going and cannot say how this discipline is. `challenge-detail.js`
+                rewrites this after a write, because nothing else moves it.{% endcomment %}
+                <p class="pp-csq-shelf__sub">{{ group.done }} of {{ group.total }} done</p>
+            </div>
+        {% else %}
+        <div class="pp-csq-shelf pp-csq-shelf--plain">
+        {% endif %}
+            <ul class="pp-csq-grid" role="list"
+                {% if group.label %}aria-labelledby="{{ group.dom_id }}"{% endif %}>
+        {% for card in group.cards %}
         {% comment %}THE `<li>` IS THE GRID ITEM; the square inside it is the thing you look at and, for
         its owner, press. Splitting them is what lets an editable square be a real `<button>` while a
         read-only one stays a `<div>`: a cell that takes focus and does nothing is worse than one that
@@ -88,20 +136,23 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
         {% if can_edit and not card.is_completed %}
             <button type="button"
                     class="{{ square_class }}{% if card.is_filled %} pp-csq--filled{% else %} pp-csq--empty{% endif %}"
-                    style="--rev: {{ forloop.counter0 }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}"
+                    style="--rev: {{ card.index }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}"
                     data-cpick-open data-key="{{ card.key }}">
                 {% include 'challenges/partials/_square_body.html' %}
             </button>
         {% else %}
             <div class="{{ square_class }}{% if card.is_completed %} pp-csq--done{% elif card.is_filled %} pp-csq--filled{% else %} pp-csq--empty{% endif %}"
-                 style="--rev: {{ forloop.counter0 }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}">
+                 style="--rev: {{ card.index }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}">
                 {% include 'challenges/partials/_square_body.html' %}
             </div>
         {% endif %}
         </li>
         {% endwith %}
         {% endfor %}
-    </ul>
+            </ul>
+        {% if group.label %}</section>{% else %}</div>{% endif %}
+        {% endfor %}
+    </div>
 
     {% comment %}TWO INDEPENDENT NOTES, not an if/else. They were nested, and the inner condition was
     always true: inside `{% templatetag openblock %} if is_owner and not can_edit {% templatetag closeblock %}`

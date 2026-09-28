@@ -30,15 +30,120 @@
  * line naming its state in words.
  */
 
+/* ── THE BOARD AND ITS SHELVES ─────────────────────────────────────────────────────────────────────
+ * A Job Coverage run is 25 squares that are really FIVE groups of five -- the radar's disciplines -- and
+ * a flat seven-across grid broke every group mid-row, so the structure was invisible. Each discipline now
+ * gets a labelled shelf.
+ *
+ * THE CARDS DO NOT CHANGE SIZE, which was the constraint, and the arithmetic is the whole trick. At `lg:`
+ * the shelf is a SEVEN-column grid matching the page's own; the head spans 2 and the cards span 5. The
+ * cards' own grid then divides that span into 5 columns with 4 gaps -- and 5 columns of a 7-column track
+ * plus their gaps is exactly 5 card-widths plus 4 gaps, so a card is the same 131px it was in the flat
+ * grid.
+ *
+ * THE GAP IS ONE DECLARATION, `--csq-gap` on the board, and that is what makes the paragraph above
+ * survive editing. It said "derived rather than hardcoded" while the shelf's gap was a hand-copied `12px`
+ * duplicate of the grid's: changing the grid's `md:` gap to 10px would have left the shelf on 12 and
+ * silently GROWN every card by 1.6px (131.43 -> 133.03 at 1024), with nothing to notice it because the
+ * shelf still had 7 tracks. The first version of this sentence said "shrunk", which is the right magnitude
+ * with the sign inverted -- a narrower inner gap leaves MORE width for the same five cards. Both read the
+ * same property now, so the claim is structural instead of aspirational.
+
+ * THE OVERRIDES LIVE ON `.pp-csq-board`, not on either grid, and that is the mechanism rather than a
+ * placement preference: a custom property flows DOWN, so the shelf could never read a value declared on the
+ * grid nested inside it. Moving them onto `.pp-csq-grid` would leave the shelf's own 7-column gap stuck on
+ * the base value at every breakpoint.
+ *
+ * BELOW `lg:` the head sits above its cards and the cards keep the page's ordinary column count (3 at
+ * base, 4 at `sm:`, 6 at `md:`). NOT because five across will not fit -- five at 768px would be 137.6px,
+ * which is LARGER than the 112.7px six across gives, and an earlier version of this comment asserted the
+ * opposite. The reason is the no-resize constraint: those counts are what the page drew before, so they
+ * are what it draws now.
+ * ─────────────────────────────────────────────────────────────────────────────────────────────────── */
+.pp-csq-board {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    /* THE ONE GAP, read by both the shelf's 7-column grid and the cards' own grid. Declared on their
+       common ancestor because a custom property flows down: the shelf could not read a value set on the
+       grid inside it. Per breakpoint below, beside the column counts it has to agree with. */
+    --csq-gap: 8px;
+}
+@media (min-width: 640px)  { .pp-csq-board { --csq-gap: 10px; } }
+@media (min-width: 768px)  { .pp-csq-board { --csq-gap: 12px; } }
+
+/* A-Z gets ONE unlabelled group, so its page is unchanged: no head, no shelf layout, just the grid.
+   No `display` rule is needed -- the element is a `<div>` and the `lg:` grid rule below excludes this
+   class, so an explicit `block` was inert. */
+
+.pp-csq-shelf__head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.pp-csq-shelf__icon {
+    display: inline-flex;
+    color: color-mix(in oklab, var(--disc, var(--pp-primary)) 60%, #fff);
+}
+.pp-csq-shelf__icon svg { width: 18px; height: 18px; }
+.pp-csq-shelf__title {
+    font-family: var(--pp-font-display);
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, #fff);
+}
+/* `tabular-nums` because this number CHANGES IN PLACE when a square completes, and proportional
+   digits would shift the words beside it. `.jdoss__stats` and `.jsheet__head-avg` on Career set it
+   for the same reason. */
+.pp-csq-shelf__sub {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--pp-text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 1024px) {
+    /* SEVEN COLUMNS, the same grid the page draws, so the five card columns inside the 5-span match the
+       flat grid's width exactly. `align-items: start` keeps a one-line head from stretching to the row. */
+    .pp-csq-shelf:not(.pp-csq-shelf--plain) {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        /* The fallback is this rule's own breakpoint value: `--csq-gap` is inherited from the board,
+           and a shelf somehow rendered outside one would otherwise compute `gap: normal` (zero). */
+        gap: var(--csq-gap, 12px);
+        align-items: start;
+    }
+    .pp-csq-shelf__head {
+        grid-column: span 2;
+        /* Stacked in the leftover space rather than strung along it, and nudged down so the title sits on
+           the squares' top edge instead of floating above them. */
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        margin: 4px 0 0;
+    }
+    .pp-csq-shelf__head .pp-csq-shelf__icon svg { width: 22px; height: 22px; }
+    .pp-csq-shelf__title { font-size: 1.05rem; }
+    .pp-csq-shelf:not(.pp-csq-shelf--plain) .pp-csq-grid {
+        grid-column: span 5;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+}
+
 .pp-csq-grid {
     display: grid;
     /* THREE at 375px, which is what the 3:4 aspect allows: 109px per cell inside the page gutter,
        where a cover still reads as a cover. Four would be 79.75px, which is a thumbnail. */
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;   /* (375 - 32 gutter - 2x8 gap) / 3 = 109.0px per cell */
+    gap: var(--csq-gap, 8px);   /* 8px at base: (375 - 32 gutter - 2x8 gap) / 3 = 109.0px per cell */
 }
-@media (min-width: 640px)  { .pp-csq-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; } }
-@media (min-width: 768px)  { .pp-csq-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 640px)  { .pp-csq-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 768px)  { .pp-csq-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
 /* SEVEN at desktop, chosen for CELL SIZE: (1024 - 32 - 6x12) / 7 is ~131px, which is the widest a
    square gets before the 3:4 aspect makes the grid taller than it needs to be.
    NOT chosen to avoid a ragged last row, which an earlier comment here claimed. That claim was
@@ -101,7 +206,9 @@
    next chunk makes these squares clickable.
 
    CAPPED at 12 steps, so the last square starts at 420ms rather than 875ms (25 x 35ms) and the grid
-   has fully arrived by ~840ms instead of ~1.3s. `--rev` is stamped per square from the loop counter.
+   has fully arrived by ~840ms instead of ~1.3s. `--rev` is stamped per square from `card.index`, which
+   `slot_render.slot_cards` assigns across the WHOLE run -- it was a template loop counter until the
+   squares were grouped into shelves, where a per-group counter would have restarted every five.
    An earlier version of this comment said "nearly two seconds", which was the right instinct about an
    uncapped cascade and roughly double the real figure. */
 @media (prefers-reduced-motion: no-preference) {
@@ -665,6 +772,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-cpick__key:hover { background: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-bg-2)); }
 }
 .pp-cpick__key:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* A job button rings in its own discipline. The generic primary ring read as a cyan outline around a
+   red or amber pill -- two accent systems on one control. */
+.pp-cpick__key--job:focus-visible { outline-color: var(--disc, var(--pp-primary)); }
 
 /* The lead-in above several square buttons, so the pills read as answers rather than as tags. Only ever
    rendered when a game fits more than one square -- a single square spells the whole sentence into its own
@@ -685,6 +795,36 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cpick__row-head .pp-cpick__row-name { flex: 1 1 auto; min-width: 0; }
 .pp-cpick__row-chip { flex: none; }
+
+/* A JOBS SQUARE BUTTON WEARS ITS DISCIPLINE -- the same `--disc` the squares themselves read, so the
+   button that fills a Finesse square and the Finesse square look like one thing. Set inline per button,
+   because one result row can offer six squares from six disciplines at once.
+
+   DELIBERATELY ABOVE `--taken`, so that at rest the warning tone wins: the two base rules are both one
+   class, and a square that already holds a game must read as a replacement rather than as a discipline.
+   ORDER IS NOT ENOUGH FOR THE HOVER PAIR, which is where this first went wrong -- see `--taken:not(:disabled)`
+   below. (`--sentence` is NOT part of that argument, though an earlier version of this comment listed it: it
+   sets `text-align` and `border-radius`, shares no property with this rule, and so cannot contend with it.) */
+.pp-cpick__key--job {
+    color: color-mix(in oklab, var(--disc, var(--pp-primary)) 60%, #fff);
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, var(--pp-bg-2));
+    border-color: color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, transparent);
+}
+@media (hover: hover) {
+    .pp-cpick__key--job:not(:disabled):hover {
+        background: color-mix(in oklab, var(--disc, var(--pp-primary)) 26%, var(--pp-bg-2));
+    }
+    /* A DISABLED JOB BUTTON KEEPS ITS DISCIPLINE. Without this, `.pp-cpick__key:disabled:hover` paints it
+       the generic primary tint. THIS RULE WINS ON SOURCE ORDER, NOT SPECIFICITY: both selectors are one
+       class plus two pseudo-classes (0-3-0), so they tie and the later one applies. An earlier version of
+       this comment said the generic rule "outspecifies" it, which would have made the fix impossible rather
+       than order-dependent -- and it is the ordering that has to survive somebody moving this block. */
+    .pp-cpick__key--job:disabled:hover {
+        background: color-mix(in oklab, var(--disc, var(--pp-primary)) 14%, var(--pp-bg-2));
+    }
+}
+/* Sized to the 12px type beside it rather than to the 20px the sprite's other callers use. */
+.pp-cpick__key svg { width: 15px; height: 15px; flex: none; }
 
 /* THE SINGLE-SQUARE BUTTON. In A-Z a game fits exactly one letter, so this carries a sentence ("Add this
    game to S") instead of a bare letter that looked like one option among several.
@@ -708,7 +848,27 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     white-space: normal;
 }
 @media (hover: hover) {
-    .pp-cpick__key--taken:hover { background: color-mix(in oklab, var(--pp-warning) 24%, var(--pp-bg-2)); }
+    /* `:not(:disabled)` IS HERE TO LEVEL THE SPECIFICITY so that SOURCE ORDER can decide, which is a
+       different claim from the one this comment first made ("here for specificity", implying specificity
+       decides). Without it the selector is 0-2-0 against `.pp-cpick__key--job:not(:disabled):hover`'s
+       0-3-0 and loses whatever the order; with it both are 0-3-0 and this one wins because it is LATER.
+       So the ordering is load-bearing and has to survive somebody moving this block --
+       `test_the_replace_warning_wins_the_hover_state_too` asserts it for that reason.
+
+       What it fixed: hovering a taken JOB button painted it the discipline fill while its text and border
+       stayed amber, so the one moment the replacement warning exists for was the one moment it was lost. */
+    .pp-cpick__key--taken:not(:disabled):hover {
+        background: color-mix(in oklab, var(--pp-warning) 24%, var(--pp-bg-2));
+    }
+    /* AND THE DISABLED STATE, because a disabled taken button is reachable -- which the first version of the
+       comment above denied ("it cannot, since a finished game never gets `--taken`"). A finished game indeed
+       never gets `--taken`, but `assign()` sets `button.disabled = true` for the in-flight lockout, and a
+       taken button is precisely what reaches it after the replace prompt is confirmed. So for the length of
+       the round trip `:not(:disabled)` stopped matching and the generic disabled hover took the background:
+       the fill flipped off the amber warning mid-write, with the cursor still on it. */
+    .pp-cpick__key--taken:disabled:hover {
+        background: color-mix(in oklab, var(--pp-warning) 14%, var(--pp-bg-2));
+    }
 }
 .pp-cpick__key-swap { font-weight: 700; opacity: 0.85; }
 

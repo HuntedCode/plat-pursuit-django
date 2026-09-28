@@ -76,11 +76,18 @@ NAME_MAX_LENGTH = 60
 #: to see which applied.
 #:
 #: `live`   -- assigned, then completed, detected by the sync hook or the nightly sweep.
-#: `import` -- landed complete at assignment, via the first-run history importer.
-#: `hatch`  -- landed complete at assignment, via the scarcity hatch (see `HATCH_THRESHOLD`).
+#: `import` -- landed complete at assignment, via the history importer: **A-Z runs only**, first run
+#:             only, and only for a completion earned after the hunter joined.
+#: `hatch`  -- landed complete at assignment, via the scarcity hatch (see `HATCH_THRESHOLD`). **Both
+#:             types**, any run.
 #:
-#: `import` WINS when both apply. It is the more specific rule (first run only) and the one with a
-#: fairness date behind it, so it is the more honest label for what happened.
+#: `import` WINS when both apply, which is only ever on A-Z. It is the more specific rule and the one with
+#: a fairness date behind it, so it is the more honest label for what happened.
+#:
+#: A JOBS SLOT STAMPED `import` IS A HISTORICAL ROW, not a live possibility: the importer applied to both
+#: types until 2026-09-28. Nothing rejects such a row and no reader treats it specially -- it renders as any
+#: other completed square, and it is an honest record of the rule as it stood when it was written. Rewriting
+#: it would assert a hatch that may not have been open, or a detection that never happened.
 COMPLETED_VIA_LIVE = 'live'
 COMPLETED_VIA_IMPORT = 'import'
 COMPLETED_VIA_HATCH = 'hatch'

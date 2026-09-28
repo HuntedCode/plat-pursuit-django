@@ -17,6 +17,8 @@ art, which is exactly the shape CLAUDE.md's `raw_response` rule exists for -- so
 an EXACT number and then re-measured with the squares filled, because a per-square cover lookup passes
 every functional test in this file while quietly being the May 2026 OOM again.
 """
+import re
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -63,6 +65,16 @@ def _contract(name):
 
 def _az_run(profile):
     return svc.start(profile, CHALLENGE_TYPE_AZ)
+
+
+def _cards(resp):
+    """Every card of a run, flattened out of its groups.
+
+    The page draws GROUPS now -- one labelled shelf per discipline on a jobs run, and a single unlabelled
+    group for A-Z, whose page is therefore unchanged. Most of these tests are about a SQUARE rather than
+    about the grouping, so they read the flat list through here and stay about what they were about.
+    """
+    return [card for group in resp.context['groups'] for card in group['cards']]
 
 
 def _url(challenge):
@@ -189,7 +201,7 @@ def test_an_anonymous_visitor_does_not_crash_the_owner_check(client):
 def test_an_az_run_draws_one_square_per_letter(client):
     challenge = _az_run(_hunter())
 
-    cards = client.get(_url(challenge)).context['cards']
+    cards = _cards(client.get(_url(challenge)))
 
     assert [c['label'] for c in cards] == list('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
@@ -199,7 +211,7 @@ def test_a_jobs_run_labels_its_squares_with_job_NAMES(client):
     content bug rather than a missing catalogue lookup."""
     challenge = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
 
-    labels = {c['label'] for c in client.get(_url(challenge)).context['cards']}
+    labels = {c['label'] for c in _cards(client.get(_url(challenge)))}
 
     # Equality against the catalogue is the whole assertion. A second `labels & slugs` check looked like
     # a stronger guarantee and was implied by this one -- it could only ever fire if one job's NAME
@@ -222,7 +234,7 @@ def test_an_empty_square_is_empty_and_a_filled_one_is_not(client):
     challenge = _az_run(profile)
     svc.assign(challenge, profile, 'A', _contract('Astro Bot'))
 
-    cards = {c['key']: c for c in client.get(_url(challenge)).context['cards']}
+    cards = {c['key']: c for c in _cards(client.get(_url(challenge)))}
 
     assert cards['A']['is_filled'] is True
     assert cards['A']['game_name'] == 'Astro Bot'
@@ -248,7 +260,7 @@ def test_a_completed_square_is_marked_as_such(client):
     slot = svc.assign(challenge, profile, 'K', _contract('Katamari Damacy'))
     svc.mark_slot_completed(slot)
 
-    cards = {c['key']: c for c in client.get(_url(challenge)).context['cards']}
+    cards = {c['key']: c for c in _cards(client.get(_url(challenge)))}
 
     assert cards['K']['is_completed'] is True
     assert cards['J']['is_completed'] is False
@@ -287,7 +299,7 @@ def test_a_square_shows_the_name_it_was_ASSIGNED_not_the_live_one(client):
 
     Contract.objects.filter(pk=contract.pk).update(name='Zzz Renamed By Staff')
 
-    cards = {c['key']: c for c in client.get(_url(challenge)).context['cards']}
+    cards = {c['key']: c for c in _cards(client.get(_url(challenge)))}
 
     assert cards['B']['game_name'] == 'Bloodborne'
     assert 'Zzz Renamed By Staff' not in client.get(_url(challenge)).content.decode()
@@ -304,7 +316,7 @@ def test_a_square_survives_its_contract_being_deleted(client):
 
     contract.delete()
 
-    cards = {c['key']: c for c in client.get(_url(challenge)).context['cards']}
+    cards = {c['key']: c for c in _cards(client.get(_url(challenge)))}
 
     assert cards['D']['game_name'] == 'Demon Souls'
     assert cards['D']['is_completed'] is True
@@ -530,7 +542,7 @@ def test_a_deleted_job_leaves_a_square_with_a_readable_name(client, slug, expect
     challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
     Job.objects.filter(slug=slug).delete()
 
-    cards = {c['key']: c for c in client.get(_url(challenge)).context['cards']}
+    cards = {c['key']: c for c in _cards(client.get(_url(challenge)))}
 
     assert cards[slug]['label'] == expected
 
@@ -778,3 +790,257 @@ def test_the_tally_is_addressable_so_a_write_can_move_it(client):
     body = client.get(_url(challenge)).content.decode()
 
     assert 'data-cpick-tally' in body
+
+
+# ── the discipline shelves ────────────────────────────────────────────────────────────────────────
+
+def test_a_jobs_run_is_grouped_into_five_discipline_shelves(client):
+    """25 squares are really five groups of five -- the radar's disciplines -- and a flat seven-across grid
+    broke every group mid-row, so the structure was invisible."""
+    challenge = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+
+    groups = client.get(_url(challenge)).context['groups']
+
+    assert [g['label'] for g in groups] == ['Combat', 'Exploration', 'Mind', 'Heart', 'Finesse']
+    assert all(g['total'] == 5 for g in groups)
+    assert sum(g['total'] for g in groups) == 25
+
+
+def test_the_shelf_order_is_the_radars_not_the_alphabets(client):
+    """Sorting the `discipline` COLUMN gives combat, exploration, finesse, heart, mind -- which agrees with
+    the canonical order for two disciplines and then diverges, the kind of wrong that reads as right.
+    `DISCIPLINE_LABELS` is the one definition of the sequence."""
+    from trophies.services.job_render import DISCIPLINE_LABELS
+
+    challenge = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+
+    groups = client.get(_url(challenge)).context['groups']
+
+    assert [g['slug'] for g in groups] == list(DISCIPLINE_LABELS)
+    assert [g['slug'] for g in groups] != sorted(g['slug'] for g in groups), (
+        'alphabetical and canonical must differ, or this test proves nothing'
+    )
+
+
+def test_an_az_run_is_one_unlabelled_group_so_its_page_is_unchanged(client):
+    """The alphabet has no sub-structure, so A-Z draws a single plain grid exactly as before -- not 26 groups
+    of one, and not a labelled shelf."""
+    challenge = _az_run(_hunter())
+
+    groups = client.get(_url(challenge)).context['groups']
+
+    assert len(groups) == 1
+    assert groups[0]['label'] == ''
+    assert len(groups[0]['cards']) == 26
+    body = client.get(_url(challenge)).content.decode()
+    assert 'pp-csq-shelf--plain' in body
+    assert 'pp-csq-shelf__head' not in body
+
+
+def test_each_shelf_reports_its_own_progress(client):
+    """What the label area is FOR. The page's tally says how the RUN is going and cannot say how one
+    discipline is."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    contract = _contract('Astro Bot')
+    contract.jobs.add(job)
+    svc.mark_slot_completed(svc.assign(challenge, profile, job.slug, contract))
+
+    groups = {g['slug']: g for g in client.get(_url(challenge)).context['groups']}
+
+    assert groups[job.discipline]['done'] == 1
+    for slug, group in groups.items():
+        if slug != job.discipline:
+            assert group['done'] == 0
+
+
+def test_every_card_knows_its_position_in_the_whole_run(client):
+    """`forloop.counter0` restarts per GROUP -- five at a time on a jobs run -- so the lazy-image threshold of
+    seven would never be reached and all 25 covers would load eagerly, silently undoing an earlier fix. The
+    index is stamped once, across the run."""
+    challenge = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+
+    cards = _cards(client.get(_url(challenge)))
+
+    assert [c['index'] for c in cards] == list(range(25))
+
+
+def test_the_board_is_what_carries_the_run_id(client):
+    """A jobs run draws FIVE grids, so anything binding to `.pp-csq-grid` would have found only the first --
+    the click delegation, and every square lookup after a write."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'class="pp-csq-board" data-challenge-id="%d"' % challenge.id in body
+    assert body.count('class="pp-csq-grid" role="list"') == 5
+
+
+def test_a_job_whose_discipline_is_not_in_the_labels_still_gets_drawn():
+    """A SQUARE THAT EXISTS MUST BE DRAWABLE, which the grouping quietly stopped honouring. `slot_keys_for`
+    builds a run from `Job.objects` with NO discipline filter and `Job.discipline` is `choices=` only, which
+    Postgres does not enforce -- so a sixth discipline seeded without a matching `DISCIPLINE_LABELS` entry
+    gave a run with a slot that had no group, no DOM, and therefore no way to ever be filled. The tally said
+    x/26 while the page drew 25."""
+    profile = _hunter()
+    job = Job.objects.order_by('slug').first()
+    Job.objects.filter(pk=job.pk).update(discipline='archaeology')
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    groups = slot_render.slot_groups(challenge)
+
+    assert sum(g['total'] for g in groups) == challenge.total_slots
+    assert any(job.slug in [c['key'] for c in g['cards']] for g in groups)
+    # NAMED AFTER ITSELF. This asserted `'Other'` when it was written, which was asserting the wrong
+    # answer: two unmapped disciplines both read "Other" and were indistinguishable from each other and from
+    # the deleted-`Job` group. See `test_an_unmapped_discipline_is_named_after_itself_not_lumped_into_other`.
+    # What matters here is that it is NOT silently folded into a real discipline.
+    unknown = [g for g in groups if job.slug in [c['key'] for c in g['cards']]][0]
+    assert unknown['label'] == 'Archaeology'
+    assert unknown['slug'] not in ('combat', 'exploration', 'mind', 'heart', 'finesse')
+    # And it sorts after the five canonical shelves rather than displacing them.
+    assert [g['slug'] for g in groups][:1] == ['combat']
+
+
+def test_every_group_reports_progress_whatever_the_challenge_type():
+    """ONE FUNCTION, ONE DICT SHAPE. The A-Z branch omitted `done`/`total` because its template never draws a
+    head, so a Python consumer reading `group['total']` raised `KeyError` on exactly one challenge type --
+    the kind of difference that stays invisible until it is a 500."""
+    for challenge_type in (CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS):
+        challenge = svc.start(_hunter(), challenge_type)
+
+        groups = slot_render.slot_groups(challenge)
+
+        for group in groups:
+            assert group['done'] == 0
+            assert group['total'] == len(group['cards'])
+        assert sum(g['total'] for g in groups) == challenge.total_slots
+
+
+def test_each_shelf_is_a_named_region_and_so_is_its_list(client):
+    """A `<section>` WITH NO ACCESSIBLE NAME IS NOT A REGION -- every engine exposes it as a plain generic, and
+    the `<h2>` inside does not name it. So five unnamed sections bought nothing: no landmark, no way for
+    assistive tech to move between disciplines. `aria-labelledby` pointing at the heading is what promotes it,
+    and naming the `<ul>` the same way attributes "list, 5 items" to Combat rather than leaving it floating.
+    """
+    challenge = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert body.count('<section class="pp-csq-shelf"') == 5
+    for slug in ('combat', 'exploration', 'mind', 'heart', 'finesse'):
+        assert 'aria-labelledby="csq-shelf-%s"' % slug in body
+        assert 'id="csq-shelf-%s"' % slug in body
+    # Both the section and the list, so the count is attributed to the discipline.
+    assert body.count('aria-labelledby="csq-shelf-combat"') == 2
+
+
+def test_an_az_run_gets_a_plain_div_not_an_unnamed_landmark(client):
+    """The alphabet has one unlabelled group, so there is no heading to name a region with -- and a `<section>`
+    that cannot be named is a semantically empty wrapper pretending to be a landmark. A `<div>` is honest."""
+    challenge = _az_run(_hunter())
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert '<div class="pp-csq-shelf pp-csq-shelf--plain">' in body
+    assert '<section class="pp-csq-shelf"' not in body
+    # `id="csq-shelf-` and `aria-labelledby`, NOT a bare `csq-shelf-`: that substring also occurs inside the
+    # class `pp-csq-shelf--plain`, so the loose form failed on markup that was entirely correct. The eighth
+    # time on this branch an assertion has matched something other than what it meant to read.
+    assert 'id="csq-shelf-' not in body
+    assert 'aria-labelledby' not in body
+    # Still one grid of 26, still announced as a list.
+    assert body.count('class="pp-csq-grid" role="list"') == 1
+
+
+def test_the_sprite_is_on_a_jobs_page_for_a_viewer_who_cannot_edit_it(client):
+    """THE GRID DRAWS GLYPHS FOR EVERYBODY, not only for the owner who can open a picker. `job_icon_sprite` is
+    emitted on challenge type alone, and it has to be: a non-owner and a finished run both render 25 squares
+    whose icons are `<use>` references, so gating the sprite on `can_edit` would leave every one of them
+    pointing at nothing. The existing pin did not distinguish the viewer."""
+    owner = _hunter()
+    challenge = svc.start(owner, CHALLENGE_TYPE_JOBS)
+    _hunter(client)  # somebody else, signed in
+
+    body = client.get(_url(challenge)).content.decode()
+
+    assert 'id="jobicon-' in body
+    assert 'href="#jobicon-' in body
+    # And the picker's script is NOT shipped to them, which is the thing that IS gated on editability.
+    assert 'challenge-detail.js' not in body
+
+
+def test_an_az_shelf_reports_real_progress_rather_than_a_hardcoded_zero():
+    """THE A-Z BRANCH COMPUTES `done`, it does not fake it. Every other test reads a fresh run, where 0 is
+    both the right answer and the answer a hardcoded literal would give -- so `'done': 0` would have passed
+    the suite."""
+    profile = _hunter()
+    challenge = _az_run(profile)
+    contract = _contract('Astro Bot')
+    svc.mark_slot_completed(svc.assign(challenge, profile, 'A', contract))
+
+    groups = slot_render.slot_groups(challenge)
+
+    assert len(groups) == 1
+    assert groups[0]['done'] == 1
+    assert groups[0]['total'] == 26
+
+
+def test_grouping_the_squares_costs_no_query_beyond_drawing_them():
+    """THE VIEW CALLS `slot_groups`, but both flatness pins call `slot_cards` -- so a query added inside the
+    grouping layer would be invisible to the tests that exist to catch exactly that. Asserted as a DIFFERENCE
+    so this stays about the grouping rather than re-pinning the whole page's cost."""
+    challenge = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+
+    with CaptureQueriesContext(connection) as cards:
+        slot_render.slot_cards(challenge)
+    with CaptureQueriesContext(connection) as groups:
+        slot_render.slot_groups(challenge)
+
+    assert len(groups.captured_queries) == len(cards.captured_queries)
+
+
+def test_no_two_shelves_can_share_a_dom_id(client):
+    """`aria-labelledby` HAS TO RESOLVE TO THE RIGHT HEADING. Duplicate ids make every shelf point at the
+    first matching one, so several would announce the same discipline -- worse than having no name.
+
+    Both colliding groups are reachable by the route the leftover branch exists for: `Job.discipline` is
+    `choices=` with no database constraint. A deleted `Job` leaves a blank slug, and a job whose discipline is
+    literally `other` produced the same string, so `slug|default:'other'` gave two `csq-shelf-other`.
+    """
+    profile = _hunter(client)
+    jobs = list(Job.objects.order_by('slug')[:2])
+    Job.objects.filter(pk=jobs[0].pk).update(discipline='other')
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    Job.objects.filter(pk=jobs[1].pk).delete()
+
+    body = client.get(_url(challenge)).content.decode()
+
+    ids = re.findall(r'id="(csq-shelf-[^"]*)"', body)
+    assert len(ids) == len(set(ids)), 'duplicate shelf ids: %r' % ids
+    # Every `aria-labelledby` names an id that exists exactly once.
+    refs = set(re.findall(r'aria-labelledby="(csq-shelf-[^"]*)"', body))
+    assert refs
+    for ref in refs:
+        assert ids.count(ref) == 1
+
+
+def test_an_unmapped_discipline_is_named_after_itself_not_lumped_into_other():
+    """TWO SHELVES BOTH TITLED "Other" is not a name. An earlier version returned `'Other'` for every unmapped
+    discipline, so two jobs seeded under different unmapped values were indistinguishable from each other AND
+    from the squares whose `Job` row was deleted. `label_for_key` already degrades a slug to a readable name
+    for the same reason; this does the same thing."""
+    profile = _hunter()
+    job = Job.objects.order_by('slug').first()
+    Job.objects.filter(pk=job.pk).update(discipline='deep_sea_archaeology')
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    groups = slot_render.slot_groups(challenge)
+    mine = [g for g in groups if job.slug in [c['key'] for c in g['cards']]][0]
+
+    assert mine['label'] == 'Deep Sea Archaeology'
+    assert mine['dom_id'] == 'csq-shelf-deep_sea_archaeology'
+    # The blank-slug group keeps "Other", because there is no job left to name it after.
+    assert slot_render._discipline_label('') == 'Other'

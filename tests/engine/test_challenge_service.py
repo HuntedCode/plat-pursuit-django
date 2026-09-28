@@ -10,7 +10,7 @@ code. Those are the ones a future reader will be tempted to "simplify":
 - **A finished square never clears.** This is load-bearing for the XP economy, not tidiness: the job-XP
   guard is keyed on the slot, so clearing a paid square and refilling it is exactly how one job gets
   paid twice in one run.
-- **An already-completed contract is refused, unless the importer or the hatch lifts it** -- and the two
+- **An already-completed contract is refused, unless the hatch (either type) or the A-Z-only importer lifts it** -- and the two
   are labelled differently on purpose, because `import` carries a fairness date and `hatch` carries an
   admission that our supply failed the hunter.
 - **The beta gate refuses with a message rather than redirecting.** When Challenges was parked the
@@ -119,9 +119,27 @@ def _joined(profile, when):
 
 @contextlib.contextmanager
 def _refuses(fragment):
-    """Assert a `ChallengeError` whose message a hunter could read, and which says the right thing."""
-    with pytest.raises(svc.ChallengeError, match=fragment):
+    """Assert a REFUSAL: a `ChallengeError` that is not a confirmation stop, saying the right thing.
+
+    THE TYPE CHECK IS THE POINT, and without it this helper could pass on the opposite outcome.
+    `ConfirmationRequired` SUBCLASSES `ChallengeError` (deliberately -- a caller that only knows the base
+    class then declines to write and shows the message), and the two messages for an already-finished game
+    both open with "You have already finished that one". So `pytest.raises(ChallengeError, match=...)` was
+    satisfied either by "pick a game you can still complete" (a refusal) or by "confirm to use it" (a stop
+    that a second call turns into a WRITE).
+
+    That is not a hypothetical: a test written to prove the importer is closed on a Job Coverage run passed
+    with the gate deleted, because the importer opening turned the refusal into a confirmation whose message
+    shared the fragment being matched. Assert the outcome, not a substring of the prose describing it.
+    """
+    with pytest.raises(svc.ChallengeError) as caught:
         yield
+    assert not isinstance(caught.value, svc.ConfirmationRequired), (
+        'this is a confirmation STOP, not a refusal -- confirming it would write. Assert '
+        '`pytest.raises(svc.ConfirmationRequired)` directly, as the two stop tests do.'
+    )
+    assert fragment in str(caught.value), '%r not in %r' % (fragment, str(caught.value))
+
 
 
 # ── gates ────────────────────────────────────────────────────────────────────────────────────────
@@ -1275,3 +1293,114 @@ def test_a_renamed_contract_also_leaves_the_slots_pool():
 
     pool = eligibility.eligible_contracts(profile, challenge, two[1].slug)
     assert game.pk not in set(pool.values_list('pk', flat=True))
+
+
+# ── the importer belongs to A-Z alone ─────────────────────────────────────────────────────────────
+
+def test_the_importer_is_closed_on_a_job_coverage_run():
+    """A-Z ONLY (owner, 2026-09-28), and nothing covered this before -- the gate read the run count and never
+    the type, so a fresh hunter's Job Coverage run offered history imports for months of dev use.
+
+    The importer answers an unfairness specific to the ALPHABET: a hunter arrives with a library that already
+    covers half the letters. A job is a shape of game rather than a name, and what protects a thin job square
+    is the hatch."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+
+    assert svc.importer_is_available(profile, CHALLENGE_TYPE_AZ) is True
+    assert svc.importer_is_available(profile, CHALLENGE_TYPE_JOBS) is False
+
+
+def test_a_job_square_refuses_a_finished_game_when_supply_is_thick():
+    """THE WRITE DOOR, not just the panel. `assign` reaches the rule through the same `catchup_offers`, so
+    gating the importer in one place has to close both -- and with supply thick the hatch cannot explain the
+    fill either, so there is nothing left to lift the exclusion."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    done = _contract('Astro Bot', jobs=[job])
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+    # Thick supply, so the hatch is shut and only the importer could have allowed this.
+    for i in range(HATCH_THRESHOLD + 2):
+        _contract(f'Filler {i}', jobs=[job])
+
+    with _refuses('already finished that one'):
+        svc.assign(challenge, profile, job.slug, done)
+
+
+def test_the_hatch_still_lifts_a_job_square_when_supply_is_thin():
+    """THE OTHER HALF, so the fix cannot be read as "job runs have no catch-up". The hatch never looked at
+    the challenge type and still does not: a thin job square is our curation gap, and it pays in full."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    done = _contract('Astro Bot', jobs=[job])
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+
+    slot = svc.assign(challenge, profile, job.slug, done, acknowledge_lock=True)
+
+    assert slot.is_completed is True
+    assert slot.completed_via == COMPLETED_VIA_HATCH
+
+
+def test_an_az_square_still_imports_from_history():
+    """THE POSITIVE CONTROL beside the two negatives, so "A-Z only" is pinned as a restriction rather than as
+    a removal."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    done = _contract('Astro Bot')
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+    for i in range(HATCH_THRESHOLD + 2):
+        _contract(f'Another A Game {i}')
+
+    slot = svc.assign(challenge, profile, 'A', done, acknowledge_lock=True)
+
+    assert slot.completed_via == COMPLETED_VIA_IMPORT
+
+
+def test_a_second_job_coverage_run_is_numbered():
+    """THE ONE JOBS CONSUMER OF `completed_run_count`, and it had no test.
+
+    Restricting the importer to A-Z left `_auto_name` as the only thing that asks this question about a jobs
+    run -- and an audit proved the gap by making `completed_run_count` return 0 for every non-A-Z type, which
+    left the entire challenge suite green. The consequence of that regression is not an exception: it is a
+    hunter's second, third and tenth Job Coverage run all being called "Job Coverage Challenge" forever.
+
+    This is the invariant a future "simplify: fold the type check down into the count" refactor would break
+    silently, which is exactly why the docstring's claim that it "sets the run's ordinal for BOTH types" needs
+    something behind it.
+    """
+    profile = _member()
+    first = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    assert first.name == 'Job Coverage Challenge'
+    Challenge.objects.filter(pk=first.pk).update(is_complete=True, completed_at=timezone.now())
+
+    second = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    assert second.name == 'Job Coverage Challenge (Run 2)'
+    # And the A-Z ordinal is counted separately, so finishing one type does not number the other.
+    assert svc.start(profile, CHALLENGE_TYPE_AZ).name == 'A-Z Challenge'
+
+
+def test_the_jobs_hatch_does_not_care_when_the_game_was_finished():
+    """THE HATCH AND THE IMPORTER'S DATE RULE, DISENTANGLED. The other jobs-hatch test uses a completion dated
+    AFTER the account was created, so on the jobs side the two rules were never separated -- a future change
+    that made the hatch consult the join date would have passed.
+
+    A pre-join completion is the case that can only be the hatch: the importer would refuse it on the date even
+    if it applied to this type, which it no longer does."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    done = _contract('Astro Bot', jobs=[job])
+    # BEFORE the account existed, so no reading of the importer could allow it.
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=800))
+
+    slot = svc.assign(challenge, profile, job.slug, done, acknowledge_lock=True)
+
+    assert slot.is_completed is True
+    assert slot.completed_via == COMPLETED_VIA_HATCH

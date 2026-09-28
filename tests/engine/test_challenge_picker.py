@@ -329,7 +329,9 @@ def test_a_jobs_search_offers_every_job_the_game_fills():
     panel = picker.search_panel(profile, challenge, 'astro')
 
     assert set(panel['rows'][0]['keys']) == {j.slug for j in jobs}
-    assert panel['rows'][0]['key_labels'][jobs[0].slug] == jobs[0].name
+    # The names are RUN-LEVEL: every result offers the same squares under the same names, so they arrive
+    # once rather than repeated on each of 24 rows.
+    assert panel['key_labels'][jobs[0].slug] == jobs[0].name
 
 
 def test_a_short_term_returns_nothing_and_says_why():
@@ -534,3 +536,178 @@ def test_the_search_panel_also_keys_the_duplicate_check_on_the_live_fk():
     # nothing" are different facts and a hunter needs to be told which. An earlier version of this test
     # asserted `keys == []` and was wrong about the design, not about the fix.
     assert panel['rows'][0]['already_in_run'] is True
+
+
+# ── the square buttons wear their job ─────────────────────────────────────────────────────────────
+
+def test_a_jobs_search_button_carries_its_jobs_glyph_and_discipline():
+    """A button offering the Slayer square should look like the Slayer square. Both facts come off the same
+    `job_atom` the grid already draws from, so the panel cannot invent a second answer to "what colour is a
+    Finesse job?"."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    _contract('Astro Bot', jobs=[job])
+
+    panel = picker.search_panel(profile, challenge, 'astro')
+
+    assert panel['rows'][0]['keys'] == [job.slug]
+    # RUN-LEVEL: the map describes the run's squares, so it covers the whole catalogue rather than only
+    # the keys this one game reaches.
+    assert panel['key_atoms'][job.slug] == {'icon': job.icon, 'disc_slug': job.discipline}
+    assert len(panel['key_atoms']) == Job.objects.count()
+
+
+def test_an_az_search_button_has_no_glyph_because_a_letter_has_none():
+    """A-Z keys are letters. `key_atoms` returns `{}` for that type, so the map is empty rather than carrying
+    an entry with blank fields -- the client tests for the entry, not for its contents."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    _contract('Bloodborne')
+
+    panel = picker.search_panel(profile, challenge, 'blood')
+
+    assert panel['rows'][0]['keys'] == ['B']
+    assert panel['key_atoms'] == {}
+    assert panel['key_labels'] == {}
+
+
+def test_a_glyph_the_sprite_does_not_carry_is_not_sent():
+    """THE TWO PATHS MUST AGREE. `job_icon_use` renders nothing for an unknown name, so a server-drawn icon
+    is simply absent; a `<use href="#jobicon-typo">` built in JavaScript instead resolves to an empty box
+    that still takes its width. The validation happens on this side so the browser never needs the registry.
+    """
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    Job.objects.filter(pk=job.pk).update(icon='not-a-lucide-glyph')
+    _contract('Astro Bot', jobs=[job])
+
+    panel = picker.search_panel(profile, challenge, 'astro')
+
+    assert panel['key_atoms'][job.slug]['icon'] == ''
+    # The discipline still arrives: an unknown glyph costs the icon, not the colour.
+    assert panel['key_atoms'][job.slug]['disc_slug'] == job.discipline
+
+
+def test_sending_the_atoms_costs_no_extra_query():
+    """The atoms REPLACED a slug-to-name read of the same 25-row catalogue rather than joining it. A second
+    catalogue query per panel would be the kind of cost that looks free in review."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    jobs = list(Job.objects.order_by('slug')[:3])
+    _contract('Astro Bot', jobs=jobs)
+
+    with CaptureQueriesContext(connection) as jobs_run:
+        picker.search_panel(profile, challenge, 'astro')
+
+    az = svc.start(_member(), CHALLENGE_TYPE_AZ)
+    with CaptureQueriesContext(connection) as az_run:
+        picker.search_panel(az.profile, az, 'astro')
+
+    # A jobs run pays exactly ONE query more than A-Z: its catalogue. Asserting the difference rather than an
+    # absolute keeps this about the atoms instead of re-pinning the whole panel's cost.
+    assert len(jobs_run) - len(az_run) == 1
+
+
+def test_a_deleted_job_takes_its_square_out_of_the_search_offers_entirely():
+    """WRITTEN TO PROVE A DEGRADATION, AND IT FOUND THERE IS NONE. The intent was that a `Job` deleted under a
+    live run reads "Card Shark" rather than `card-shark` in the panel, matching what the grid does. It cannot:
+    the search panel derives its keys from the `Contract.jobs` M2M, and deleting the `Job` cascades those rows,
+    so the key is not renamed -- it is gone.
+
+    Which is the more important fact, and is what this pins. `total_slots` is frozen at creation, so the
+    square remains on the grid with its stored `key` (degraded by `label_for_key` there) while no search result
+    can ever be offered for it again -- the run becomes unwinnable. Staff deleting a `Job` with live runs
+    against it is the problem; this test is the record of what it costs.
+    """
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job, other = list(Job.objects.order_by('slug')[:2])
+    slug = job.slug
+    _contract('Astro Bot', jobs=[job, other])
+
+    Job.objects.filter(pk=job.pk).delete()
+
+    panel = picker.search_panel(profile, challenge, 'astro')
+    row = panel['rows'][0]
+
+    assert slug not in row['keys']
+    # The run-level map is the catalogue, and the `Job` is gone from it too.
+    assert slug not in panel['key_atoms']
+    # Its co-tenant is untouched, so this is the one key going missing rather than the whole row failing.
+    assert other.slug in row['keys']
+    # And the square is still there on the grid, which is why the run is now unwinnable rather than shortened.
+    assert challenge.slots.filter(key=slug).exists()
+
+
+def test_a_search_that_found_nothing_does_not_read_the_catalogue():
+    """`covers_by_contract` early-returns on an empty list and this did not, so typing one character past the
+    last match still spent a query naming 25 squares no row would offer -- on every keystroke."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    with CaptureQueriesContext(connection) as captured:
+        panel = picker.search_panel(profile, challenge, 'nothingmatchesthis')
+
+    assert panel['rows'] == []
+    assert panel['key_atoms'] == {}
+    tables = [q['sql'] for q in captured.captured_queries if 'trophies_job' in q['sql']]
+    assert tables == [], 'an empty result must not read the job catalogue'
+
+
+def test_every_search_panel_has_the_same_keys_whatever_the_branch():
+    """ONE FUNCTION, ONE DICT SHAPE -- the same rule `slot_groups` broke on the A-Z branch. The too-short
+    early return went stale the moment the run-level maps were added to the full return, and the caller got a
+    `KeyError` on exactly one input: a one-character search."""
+    profile = _member()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    _contract('Astro Bot', jobs=list(Job.objects.order_by('slug')[:1]))
+
+    full = picker.search_panel(profile, challenge, 'astro')
+    short = picker.search_panel(profile, challenge, 'a')
+    empty = picker.search_panel(profile, challenge, 'nothingmatchesthis')
+
+    assert set(full) == set(short) == set(empty)
+    assert short['too_short'] is True
+
+
+def test_a_job_slot_panel_offers_no_history_import():
+    """The panel and the write door have to agree, and they do because both reach the rule through
+    `catchup_offers`. With supply thick there is no catch-up block at all on a jobs run."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    done = _contract('Astro Bot', jobs=[job])
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+    for i in range(HATCH_THRESHOLD + 2):
+        _contract(f'Filler {i}', jobs=[job])
+
+    panel = picker.slot_panel(profile, challenge, job.slug)
+
+    assert panel['catchup'] == []
+
+
+def test_a_job_panel_does_not_even_ask_whether_the_importer_is_open():
+    """`challenge_type == CHALLENGE_TYPE_AZ and completed_run_count(...) == 0` short-circuits, so the run
+    count is never queried for a jobs run. A comparison rather than a round trip, which is what lets the
+    cost paragraph say a Job Coverage panel pays none of the importer's price."""
+    profile = _member()
+    _joined(profile, timezone.now() - timezone.timedelta(days=365))
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    done = _contract('Astro Bot', jobs=[job])
+    _platted_at(profile, done, timezone.now() - timezone.timedelta(days=30))
+    for i in range(HATCH_THRESHOLD + 2):
+        _contract(f'Filler {i}', jobs=[job])
+
+    with CaptureQueriesContext(connection) as captured:
+        picker.slot_panel(profile, challenge, job.slug)
+
+    # `FROM "challenges_challenge"` WITH ITS CLOSING QUOTE. A bare `challenges_challenge` is a PREFIX of
+    # `challenges_challengeslot`, so it matched the pool's own "not already in this run" subquery and the
+    # test failed against queries that had nothing to do with the importer.
+    counts = [q['sql'] for q in captured.captured_queries
+              if 'FROM "challenges_challenge"' in q['sql'] and 'COUNT' in q['sql'].upper()]
+    assert counts == [], 'a jobs panel must not pay the importer run count'

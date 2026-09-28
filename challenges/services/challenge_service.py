@@ -204,10 +204,11 @@ def _lock_slot(locked_challenge, key):
 def completed_run_count(profile, challenge_type):
     """How many runs of this type this hunter has FINISHED. One query, and the answer to two questions.
 
-    It sets the run's ordinal in `_auto_name`, and it decides whether the history importer is available
-    (`importer_is_available`). Deliberately counts COMPLETIONS rather than runs created: a hunter who
-    starts a run, hides it and starts again has not finished anything, and should not be treated as
-    though they had.
+    It sets the run's ordinal in `_auto_name` for BOTH types, and it is half of whether the history
+    importer is available -- the other half being that the importer is A-Z only, which
+    `importer_is_available` owns rather than this. Deliberately counts COMPLETIONS rather than runs created:
+    a hunter who starts a run, hides it and starts again has not finished anything, and should not be
+    treated as though they had.
     """
     return Challenge.objects.filter(
         profile=profile, challenge_type=challenge_type, is_complete=True,
@@ -217,11 +218,26 @@ def completed_run_count(profile, challenge_type):
 def importer_is_available(profile, challenge_type):
     """Is the first-run history importer open to this hunter?
 
-    "Their first completion, not any subsequent ones" (owner, 2026-09-26), read as *has never completed
-    one* rather than *this is literally run 1*. The generous reading, and the faithful one: abandoning a
-    run should not burn the catch-up, and completing one closes it permanently, so it cannot be farmed.
+    A-Z ONLY (owner, 2026-09-28). The importer shipped for both types and that was wrong: it is a fix for a
+    specific unfairness in the ALPHABET, where a hunter arrives with a library full of games that already
+    cover half the letters and the run would otherwise ask them to re-earn work they have done. Job Coverage
+    has no equivalent claim -- a job is a shape of game rather than a name, its squares are not scarce in the
+    same way, and the thing that actually protects a thin job square is the hatch, which applies to BOTH
+    types and always did (`eligibility.hatch_is_open` has never looked at the challenge type).
+
+    So a Job Coverage run now has exactly one catch-up rule instead of two, and it is the one that describes
+    its real failure mode: our supply for that job was too thin.
+
+    THE SECOND HALF, unchanged: "their first completion, not any subsequent ones" (owner, 2026-09-26), read
+    as *has never completed one* rather than *this is literally run 1*. The generous reading, and the
+    faithful one -- abandoning a run should not burn the catch-up, and completing one closes it permanently,
+    so it cannot be farmed.
+
+    ONE GATE, and that is why this is the only place it changed. `catchup_offers` is the single caller, and
+    both the picker's offers and `assign`'s own permission check reach the rule through it -- so the panel
+    cannot offer an import the write would refuse, or the reverse.
     """
-    return completed_run_count(profile, challenge_type) == 0
+    return challenge_type == CHALLENGE_TYPE_AZ and completed_run_count(profile, challenge_type) == 0
 
 
 def _auto_name(profile, challenge_type):
@@ -422,8 +438,15 @@ def assign(challenge, profile, key, contract, *, acknowledge_lock=False):
     not selectable at all -- it would land the slot complete instantly. Two rules lift that, and they
     are checked in this order because the labels are not interchangeable:
 
-    - the **importer** (first run only, and only for a completion earned after the hunter joined), and
-    - the **hatch** (any run, but only when supply for this slot is down to `HATCH_THRESHOLD`).
+    - the **importer** (**A-Z only**; first run only; and only for a completion earned after the hunter
+      joined), and
+    - the **hatch** (**both types**; any run; but only when supply for this slot is down to
+      `HATCH_THRESHOLD`).
+
+    THE TYPE AXIS IS STATED ON BOTH LINES ON PURPOSE. This listed only the first-run-versus-any-run
+    distinction, which reads as "both apply to everything, they differ in when" -- and that was the
+    description a reader of the write door would have trusted. On a Job Coverage run there is exactly ONE
+    catch-up rule.
 
     `import` wins when both apply: it is the more specific rule and the one with a fairness date behind
     it, so it is the more honest label for what happened.
@@ -540,15 +563,18 @@ def catchup_reasons(profile, challenge, key, contracts):
     PRECEDENCE IS `import` OVER `hatch`, and the two labels are not interchangeable: `import` carries a
     fairness date (the completion post-dates the account), `hatch` carries an admission that our supply
     for this slot failed the hunter. A square records which one applied, and a hunter reading their own
-    finished run is entitled to see it. So the ordering below is load-bearing: `importable_ids` writes
-    first and the hatch pass uses `setdefault`.
+    finished run is entitled to see it. So the ordering below is load-bearing: the importer pass writes
+    first and the hatch pass uses `setdefault`. (Precedence only ever bites on A-Z, since that is the only
+    type where both rules can apply at once.)
 
     THE BULK FORM IS THE REAL ONE. The picker needs this for a page of results at once, and the
     single-contract caller (`assign`) is the special case -- expressed that way round because the
     alternative is two spellings of a precedence rule, and the picker offering `hatch` where `assign`
     records `import` would mislabel a permanently locked, XP-bearing square. Costs are unchanged either
-    way: `importer_is_available` is one query, `importable_ids` batches over the whole list, and
-    `hatch_is_open` is one COUNT about one slot.
+    way: `importer_is_available` is one query on an A-Z run and ZERO on a jobs run (the type check
+    short-circuits before the count), `importable_dates` batches over the whole list, and `hatch_is_open` is
+    one COUNT about one slot. It said `importable_ids`, which was renamed when the dates stopped being
+    thrown away.
 
     NEVER MAP THIS OVER A WHOLE RUN. `hatch_is_open` is a COUNT per slot, so 26 slots is 26 counts; the
     docstring there says the same thing. One slot, when its picker opens.
@@ -560,7 +586,7 @@ def catchup_offers(profile, challenge, key, contracts):
     """{contract_id: (via, completed_at)} -- the labels AND the dates, computed once.
 
     THE DATE COMES BACK WITH THE LABEL because working it out is the expensive half and the picker needs
-    both. `importable_ids` derives its set from `completion_dates` (five queries over `Trophy`,
+    both. `importable_dates` derives its set from `completion_dates` (five queries over `Trophy`,
     `EarnedTrophy` and `ProfileGame`) and then throws the dates away; the picker then asked for them again.
     Ten queries over exactly the tables the whale rule exists to protect, per panel open, where five do.
 

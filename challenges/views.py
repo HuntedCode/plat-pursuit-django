@@ -226,7 +226,10 @@ class ChallengeDetailView(DetailView):
         challenge = self.object
         viewer = self._viewer()
 
-        context['cards'] = slot_render.slot_cards(challenge)
+        # GROUPS, not a flat list. A-Z comes back as one unlabelled group so its page is unchanged;
+        # Job Coverage comes back as five, one per discipline, which is the structure the flat grid
+        # was hiding by laying five groups of five out seven across.
+        context['groups'] = slot_render.slot_groups(challenge)
         context['is_owner'] = viewer is not None and viewer.id == challenge.profile_id
         # WHETHER THE OWNER MAY CHANGE THIS RUN. Two conditions beyond ownership, and a run fails either:
         # a FINISHED run has nothing left to change (completed squares lock, and every square is
@@ -425,11 +428,14 @@ class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
                 'name': r['name'],
                 'cover': _cover_url(r['cover']),
                 'keys': r['keys'],
-                'key_labels': r['key_labels'],
                 'already_in_run': r['already_in_run'],
                 'is_completed_by_you': r['is_completed_by_you'],
             } for r in panel['rows']],
-            # {key: the game currently in it}, so a result can name what it would replace.
+            # THE THREE RUN-LEVEL MAPS, all keyed on a square. They describe the run's squares, not any one
+            # result, so they are sent once instead of on each of 24 rows: what each square is called, the
+            # glyph and discipline it wears, and the game currently in it.
+            'key_labels': panel['key_labels'],
+            'key_atoms': panel['key_atoms'],
             'filled': panel['filled'],
         })
 
@@ -507,8 +513,10 @@ def _square_html(slot):
     to drift from `_square_body.html`. This way the template stays the only thing that knows what a square
     looks like.
 
-    `can_edit=True` because only an editable run reaches a write door at all (`_EditableRunMixin`), and no
-    `forloop`, so the swapped-in square is never lazy -- which is right for one image arriving alone.
+    `can_edit=True` because only an editable run reaches a write door at all (`_EditableRunMixin`), and
+    `card_for` stamps `index = 0`, so the swapped-in square is never lazy -- which is right for one image
+    arriving alone. That used to read "no `forloop`", which stopped being how the partial decides when the
+    squares were grouped into shelves and the index moved onto the card.
     """
     return render_to_string('challenges/partials/_square_body.html',
                             {'card': slot_render.card_for(slot), 'can_edit': True})

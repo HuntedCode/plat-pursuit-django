@@ -34,7 +34,10 @@
 
     function boot() {
         var dialog = document.getElementById('cpick');
-        var grid = document.querySelector('.pp-csq-grid');
+        // THE BOARD, not a grid. A jobs run draws one grid per discipline, so `querySelector` on
+        // `.pp-csq-grid` would have bound the click delegation to the FIRST shelf and left the other
+        // four dead -- and `labelFor`/`applySlot` would have searched only that shelf for a square.
+        var grid = document.querySelector('.pp-csq-board');
         // NO DIALOG MEANS NO OWNER. The template renders it only for a hunter who can change this run, so a
         // visitor's page has no picker to wire and this exits before touching anything.
         if (!dialog || !grid || !dialog.showModal || !PP.API) { return; }
@@ -317,8 +320,10 @@
                     // decision.
                     var single = row.keys.length === 1;
                     // A FINISHED GAME IS NOT PLACEABLE FROM HERE. The ordinary path refuses it outright, and
-                    // the two rules that DO lift it -- the hatch and the first-run importer -- are offered
-                    // inside the square's own panel, in the warning block that explains the square will lock.
+                    // the rules that DO lift it are offered inside the square's own panel, in the warning
+                    // block that explains the square will lock: the hatch on either challenge type, and the
+                    // first-run history importer on A-Z only. This said "the two rules" unconditionally,
+                    // which is one rule too many on a Job Coverage run.
                     // So the squares are shown and disabled: the game is still worth finding, and the chip on
                     // the title says why nothing can be done with it.
                     //
@@ -331,17 +336,31 @@
                     var keys = document.createElement('div');
                     keys.className = 'pp-cpick__keys';
                     row.keys.forEach(function (key) {
-                        var keyLabel = row.key_labels[key] || key;
+                        // OFF THE PANEL, not the row: what a square is called and what it wears belong
+                        // to the run, so they arrive once rather than repeated on every result.
+                        var keyLabel = (panel.key_labels || {})[key] || key;
                         var occupant = (panel.filled || {})[key];
                         var pick = document.createElement('button');
                         pick.type = 'button';
                         pick.disabled = finished;
                         pick.className = 'pp-cpick__key' + (single ? ' pp-cpick__key--sentence' : '');
+                        // THE JOB'S OWN GLYPH AND COLOUR, so the button offering the Slayer square looks
+                        // like the Slayer square. A-Z keys have no atom and get neither -- a letter has no
+                        // icon and no discipline.
+                        var atom = (panel.key_atoms || {})[key];
+                        if (atom) {
+                            pick.classList.add('pp-cpick__key--job');
+                            pick.style.setProperty(
+                                '--disc', 'var(--disc-' + atom.disc_slug + ', var(--pp-primary))');
+                        }
                         // THE SENTENCE EITHER WAY. A disabled button that describes the action it would
                         // perform is clearer than one showing a bare letter -- the DISABLED STATE is what
                         // says "not possible", so the words do not have to, and stripping them left a lone
                         // "S" that read like the pill this change existed to get rid of.
                         pick.textContent = single ? 'Add this game to ' + keyLabel : keyLabel;
+                        // AFTER the text, never before: assigning `textContent` removes every child, so an
+                        // icon appended above this line would be silently discarded.
+                        if (atom && atom.icon) { pick.insertBefore(jobIcon(atom.icon), pick.firstChild); }
                         // AN OCCUPIED SQUARE SAYS SO BEFORE IT IS PRESSED. Picking a game for a square that
                         // already holds one silently replaced it -- easy to do by accident, since the search
                         // panel says nothing about the rest of the run.
@@ -392,6 +411,35 @@
             span.className = 'bd-chip bd-chip--' + tone + ' pp-cpick__row-chip';
             span.textContent = text;
             return span;
+        }
+
+        /** A job's glyph, referenced out of the sprite this page already emitted.
+         *
+         *  `<use href="#jobicon-NAME">` is exactly what the server-side `job_icon_use` produces, so one
+         *  sprite serves the grid and the picker alike and no path data is duplicated into JavaScript.
+         *  `challenge_detail.html` emits `job_icon_sprite` for a jobs run, and an A-Z run never reaches here
+         *  because its keys carry no atom. The name is validated server-side (`_key_look`), so this is never
+         *  asked for a glyph the sprite lacks.
+         *
+         *  `createElementNS` rather than `innerHTML`: an SVG element built through the HTML parser lands in
+         *  the wrong namespace and draws nothing.
+         */
+        function jobIcon(name) {
+            var NS = 'http://www.w3.org/2000/svg';
+            var svg = document.createElementNS(NS, 'svg');
+            // The presentation attributes `job_icon_use` sets; the symbol carries geometry only and these
+            // cascade into it.
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', 'currentColor');
+            svg.setAttribute('stroke-width', '2');
+            svg.setAttribute('stroke-linecap', 'round');
+            svg.setAttribute('stroke-linejoin', 'round');
+            svg.setAttribute('aria-hidden', 'true');
+            var use = document.createElementNS(NS, 'use');
+            use.setAttribute('href', '#jobicon-' + name);
+            svg.appendChild(use);
+            return svg;
         }
 
         /** The lead-in above several square buttons, so the pills read as answers to a question. */
@@ -646,6 +694,17 @@
                     square.removeAttribute('data-cpick-open');
                     square.disabled = true;
                 }
+            }
+            // THE SHELF'S OWN COUNTER, which nothing else moves. The header tally and the horizon both
+            // update below, and the square gets its ring -- but "0 of 5 done" on the discipline that just
+            // advanced kept saying 0 until a reload, and that counter is the entire justification for the
+            // label area existing. Counted off the DOM rather than from the payload: the reply describes one
+            // slot and says nothing about disciplines, and the shelf's own squares are already the truth.
+            var shelf = square ? square.closest('.pp-csq-shelf') : null;
+            var sub = shelf ? shelf.querySelector('.pp-csq-shelf__sub') : null;
+            if (sub) {
+                sub.textContent = shelf.querySelectorAll('.pp-csq--done').length
+                    + ' of ' + shelf.querySelectorAll('.pp-csq').length + ' done';
             }
             if (els.tally) { els.tally.textContent = slot.completed_count; }
             if (els.horizon && slot.total_slots) {

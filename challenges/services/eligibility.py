@@ -346,8 +346,8 @@ def importable_dates(profile, contracts, joined_at):
 
     THE DATES WERE ALREADY COMPUTED and were being discarded. `completion_dates` costs five queries over
     trophy data, and the picker needs to SHOW the date beside each importable offer, so it asked a second
-    time: ten queries where five do, on the tables the whale rule is about. `importable_ids` is now this
-    function's keys.
+    time: ten queries where five do, on the tables the whale rule is about. What used to be a separate
+    `importable_ids` is now this function's keys.
     """
     if joined_at is None:
         return {}

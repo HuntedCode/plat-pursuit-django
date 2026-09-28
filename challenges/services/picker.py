@@ -27,9 +27,10 @@ from django.db.models.functions import Lower
 from challenges.models import CHALLENGE_TYPE_AZ
 from challenges.services import challenge_service as svc
 from challenges.services import eligibility
-from challenges.services.slot_render import covers_by_contract, label_for_key
+from challenges.services.slot_render import covers_by_contract, key_atoms, label_for_key
 from trophies.models import Job
 from trophies.services.job_render import job_atom
+from trophies.templatetags.job_icons import has_icon
 
 #: One page of offers. 24 rather than a round 20 or 25 because it divides by 2, 3 and 4, so the grid it
 #: feeds has no ragged last row at any of the picker's column counts.
@@ -78,14 +79,17 @@ def slot_panel(profile, challenge, key, *, query='', limit=PAGE, slot=None):
 
     It rises with completed candidates present, which is the feature working:
     - `importer_is_available` (one) is paid whether the importer is open OR spent -- it is the query that
-      ANSWERS that, so a spent importer does not save it;
+      ANSWERS that, so a spent importer does not save it. A JOB COVERAGE run pays none of it: the importer
+      is A-Z only, and that gate is a comparison rather than a query, so it short-circuits before the count;
     - an open importer adds `completion_dates`, which is 3-5 queries (member concepts, then `Trophy`, then
       `EarnedTrophy` only if a platinum exists, then `ProfileGame`) -- not "five over trophy data", which
       overstated both the count and how many of them touch trophy tables;
     - `hatch_is_open` adds one COUNT.
 
-    So a first-run hunter on a thin slot pays 13-15 here, and a hunter with no completed candidates pays
-    six whatever their importer state. None of it scales with the POOL, only with `limit`.
+    So a first-run hunter on a thin A-Z slot pays 13-15 here, and a hunter with no completed candidates pays
+    six whatever their importer state. A JOB COVERAGE slot never reaches the top of that range at all: the
+    importer is A-Z only, so its only catch-up is the hatch's single COUNT. None of it scales with the POOL,
+    only with `limit`.
     """
     # THE VIEW ALREADY HAS IT. `_SlotView.resolve` fetches the slot to decide whether the key is real, and
     # this used to fetch the same row again -- one wasted query on every panel open. Passing it in keeps the
@@ -153,6 +157,20 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
 
     Returns empty-handed for a term under `MIN_QUERY` rather than running the scan.
 
+    QUERY COST, MEASURED rather than counted by eye -- the previous figure said SEVEN and enumerated eight
+    items, and the fix that skips the catalogue on an empty result made the whole paragraph conditional:
+
+    - **9** for a Job Coverage search that matched something: the run's slots, the pool COUNT, the pool
+      slice, three for the covers, the completed-contract check, the fitting-keys read, and the 25-row job
+      catalogue;
+    - **8** for the same on A-Z, which needs no catalogue;
+    - **3** when nothing matched, at either type. `covers_by_contract` early-returns on an empty list and so
+      now does the catalogue read, which is what `test_a_search_that_found_nothing_does_not_read_the_...`
+      exists to hold -- a search issues one of these per keystroke, including the ones typed past the last
+      match.
+
+    None of it scales with the number of results, only with `limit`.
+
     THE SLOTS COME FROM MEMORY. `fitting_keys_for` says which keys a game suits at all; which of those are
     actually OPEN, and which of those already hold something, are questions about this run's own slots --
     already loaded, so the intersection and the `filled` map both cost nothing. A completed square is excluded (it never reopens); a
@@ -168,7 +186,11 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
     # raising the `DataError` that was an unhandled 500.
     query = clean_term(query)
     if not query:
-        return {'query': query, 'total': 0, 'showing': 0, 'rows': [], 'too_short': True, 'filled': {}}
+        # EVERY KEY THE FULL RETURN HAS. One function returning two dict shapes is how the caller gets a
+        # `KeyError` on exactly one branch -- which is what happened the moment `key_labels` and
+        # `key_atoms` moved to run level and this line was not updated with them.
+        return {'query': query, 'total': 0, 'showing': 0, 'rows': [], 'too_short': True,
+                'key_labels': {}, 'key_atoms': {}, 'filled': {}}
 
     slots = list(challenge.slots.all())
     open_keys = {s.key for s in slots if not s.is_completed}
@@ -194,7 +216,14 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
     covers = covers_by_contract(rows)
     completed = eligibility.completed_contract_ids(profile, rows)
     keys_by_contract = eligibility.fitting_keys_for(challenge, rows)
-    labels = _job_names(challenge)
+    # ATOMS, not just names. A button offering the Slayer square should look like the Slayer square --
+    # the job's icon, tinted by its discipline -- and the atom is where all three live. No extra query: this
+    # replaced a slug-to-name read of the same 25-row catalogue.
+    #
+    # SKIPPED WHEN THE SEARCH FOUND NOTHING, like `covers_by_contract` above it, which early-returns on an
+    # empty list. A no-result search still went and read the 25-row catalogue to name squares no row would
+    # offer -- one query per keystroke that typed past the last match.
+    atoms = key_atoms(challenge) if rows else {}
 
     out = []
     for contract in rows:
@@ -202,9 +231,9 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
         already_here = contract.id in used_ids
         out.append({
             **_row(contract, covers),
-            # Every key it could go in, named for display. A jobs game routinely offers several.
-            'keys': sorted(keys, key=lambda k: labels.get(k, k)),
-            'key_labels': {k: labels.get(k, k) for k in keys},
+            # Every key it could go in, in display order. A jobs game routinely offers several. The NAMES
+            # and the icons are run-level, below: they describe the squares, not this game.
+            'keys': sorted(keys, key=lambda k: _key_name(atoms, k)),
             # WHY it cannot be placed, when it cannot -- so the row explains itself instead of just
             # rendering without a button.
             'already_in_run': already_here,
@@ -212,8 +241,24 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
         })
 
     return {'query': query, 'total': total, 'showing': len(rows), 'rows': out, 'too_short': False,
-            # Run-level rather than per-row: every result offers the same squares, so repeating this on
-            # each row would be the same map 24 times.
+            # RUN-LEVEL, ALL THREE, because none of them is a fact about a particular result: every row
+            # offers the same squares, under the same names and icons, with the same occupants. Both were
+            # per-row while this very function already explained, for `filled`, why that is wrong -- 24 rows
+            # x up to 6 keys of identical facts, measured at ~10 KB against ~1.9 KB, on a payload a search
+            # issues per keystroke.
+            #
+            # PRECISELY: `key_labels` was per-row from the day the search panel was built, and `key_atoms` was
+            # added per-row earlier in this same branch and hoisted hours later. Saying they "moved to run
+            # level" implies both had shipped that way; only the first ever did.
+            #
+            # WHAT THEY ACTUALLY COVER is the JOB CATALOGUE, not this run's frozen squares, and an earlier
+            # version of this comment said "the same 25 squares" as though those were the same thing. They
+            # diverge in both directions: a `Job` deleted after `start()` leaves a square with no entry here,
+            # and a `Job` added after it gets an entry with no square. Neither matters, because the buttons
+            # come from each row's `keys` and never from these maps -- but the maps are the catalogue, and
+            # "25" is a jobs-only number in any case (A-Z has 26 squares and gets `{}`).
+            'key_labels': {k: _key_name(atoms, k) for k in atoms},
+            'key_atoms': {k: _key_look(a) for k, a in atoms.items()},
             'filled': filled}
 
 
@@ -320,16 +365,37 @@ def _atom_for(challenge, key):
     return job_atom(job) if job else None
 
 
-def _job_names(challenge):
-    """{slug: name} for a jobs run, empty for A-Z. One query for the 25-row catalogue.
+def _key_name(atoms, key):
+    """What a square key is called: the job's name, or the key itself for an A-Z letter.
 
-    THERE ARE SEVERAL WAYS TO NAME A JOB in this app -- `_atom_for` (one slug, with its icon and
-    discipline), this one (the catalogue as slug to name), `slot_render._key_atoms` (the catalogue as
-    atoms), and `slot_render.label_for_key` (a slug degraded to a readable name when the row is gone). They
-    answer different questions and the overlap is real. An earlier version of this note counted them and
-    declared a limit, in the same change that imported a fourth -- and this branch has already been wrong
-    once about a count of its own copies. Consolidation is worth doing; asserting a number is not.
+    ONE FEWER WAY TO NAME A JOB. This replaced a `_job_names` that read the catalogue as its own
+    slug-to-name dict -- a second query and a second shape for a subset of what the atoms carry.
+
+    THE `label_for_key` BRANCH IS THE A-Z PATH, and it runs for every key of every A-Z search result.
+    `key_atoms` returns `{}` for that type by design, so `atoms.get(key)` always misses and a letter is named
+    by `label_for_key`, which returns a one-character key unchanged. Delete the branch and `?q=blood` on an
+    A-Z run is a `TypeError` on `None`, i.e. a 500.
+
+    THIS DOCSTRING HAS NOW BEEN WRONG TWICE, which is worth recording rather than quietly fixing again.
+    Version one said the branch existed to stop a deleted `Job` reading `card-shark` here; a test written to
+    prove that disproved it -- the keys come from the `Contract.jobs` M2M, so deleting the `Job` makes the key
+    DISAPPEAR rather than degrade (see `test_a_deleted_job_takes_its_square_out_of_the_search_offers_...`).
+    Version two then declared the branch "unreachable from `search_panel`" and justified it by saying
+    `slot_panel` reaches the same question -- both false. `slot_panel` never calls this; it calls
+    `label_for_key` directly, because it has a key and no atoms dict. And the A-Z case was in front of me the
+    whole time, contradicting the first line of this very docstring.
     """
-    if challenge.challenge_type == CHALLENGE_TYPE_AZ:
-        return {}
-    return dict(Job.objects.values_list('slug', 'name'))
+    atom = atoms.get(key)
+    return atom['name'] if atom else label_for_key(key)
+
+
+def _key_look(atom):
+    """The two presentation facts a square button needs from its job: the glyph and the discipline.
+
+    THE ICON IS VALIDATED HERE rather than trusted by the client. `job_icon_use` renders nothing at all for a
+    name the sprite does not carry; a `<use href="#jobicon-typo">` built in JavaScript instead resolves to an
+    empty box that still takes its width. Asking `has_icon` on this side keeps the two paths agreeing without
+    handing the registry to the browser.
+    """
+    icon = atom['icon']
+    return {'icon': icon if has_icon(icon) else '', 'disc_slug': atom['disc_slug']}

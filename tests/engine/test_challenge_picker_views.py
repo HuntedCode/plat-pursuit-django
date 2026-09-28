@@ -205,7 +205,7 @@ def test_the_search_door_says_which_squares_a_game_fits(client):
     body = _body(client.get(_search_url(challenge), {'q': 'astro'}))
 
     assert set(body['rows'][0]['keys']) == {j.slug for j in jobs}
-    assert body['rows'][0]['key_labels'][jobs[0].slug] == jobs[0].name
+    assert body['key_labels'][jobs[0].slug] == jobs[0].name
 
 
 def test_a_short_search_term_says_so_rather_than_returning_nothing(client):

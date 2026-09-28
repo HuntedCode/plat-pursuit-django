@@ -39,7 +39,7 @@ from gamelists.services.covers import cover_games_for, sort_key
 from challenges.models import CHALLENGE_TYPE_AZ
 from challenges.services.eligibility import member_concepts_by_contract
 from trophies.models import Job
-from trophies.services.job_render import job_atom
+from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, job_atom
 
 
 def slot_cards(challenge):
@@ -62,9 +62,19 @@ def slot_cards(challenge):
     """
     slots = list(challenge.slots.select_related('contract'))
     covers = covers_by_contract([s.contract for s in slots if s.contract_id])
-    atoms = _key_atoms(challenge)
+    atoms = key_atoms(challenge)
 
-    return [_card(slot, covers, atoms) for slot in slots]
+    cards = [_card(slot, covers, atoms) for slot in slots]
+    # POSITION IN THE WHOLE RUN, stamped here rather than read from `forloop` in the template.
+    #
+    # The template used `forloop.counter0` for two things: the entrance stagger and the lazy-image
+    # threshold. Grouping the squares into shelves restarts that counter per GROUP -- five per shelf on a
+    # jobs run -- so the threshold of seven would never be reached and all 25 covers would load eagerly,
+    # silently undoing a fix made two rounds earlier. It also frees the partial from needing a loop at all,
+    # which is what lets a single square be re-rendered on its own after a write.
+    for index, card in enumerate(cards):
+        card['index'] = index
+    return cards
 
 
 def card_for(slot):
@@ -83,8 +93,132 @@ def card_for(slot):
     catalogue, and one for an empty square. It is a single slot, so nothing here scales with the run.
     """
     covers = covers_by_contract([slot.contract] if slot.contract_id else [])
-    atoms = _key_atoms(slot.challenge)
-    return _card(slot, covers, atoms)
+    atoms = key_atoms(slot.challenge)
+    card = _card(slot, covers, atoms)
+    # Position zero: one image arriving on its own is never lazy, and the partial no longer
+    # depends on a `forloop` being absent to get that answer.
+    card['index'] = 0
+    return card
+
+
+def slot_groups(challenge):
+    """The run's squares, grouped the way the page should draw them.
+
+    `[{label, slug, icon, cards, done, total, dom_id}]`, the same seven keys for both challenge types --
+    `done`/`total` were once omitted on the A-Z branch, which made `group['total']` a `KeyError` on exactly
+    one type.
+
+    WHY GROUPS AT ALL. A Job Coverage run is 25 squares that are really FIVE groups of five -- the radar's
+    disciplines -- and they were being laid out seven across, so every group broke mid-row and the structure
+    was invisible. The owner called it: "5 groupings of 5 spread across rows of 7 just looks wrong".
+
+    A-Z GETS ONE UNLABELLED GROUP, not 26 groups of one. The alphabet has no sub-structure, so the template
+    draws a single grid exactly as before and nothing about that page changes.
+
+    ORDER COMES FROM `DISCIPLINE_LABELS`, via `job_render`, because that dict IS the canonical radar
+    sequence -- combat, exploration, mind, heart, finesse -- and sorting the `discipline` COLUMN gives the
+    alphabetical one instead, which agrees for two disciplines and then diverges.
+
+    GROUPED BY DICT, NOT BY ADJACENCY, and the distinction is load-bearing rather than pedantic. An earlier
+    version of this said `slot_keys_for` had already stamped `position` in this order "so the slots arrive
+    grouped; this only has to segment them". That holds for the canonical five on an untouched catalogue and
+    fails two ways otherwise: `discipline_order()` collapses every unseeded discipline to one sort value, so
+    two unknown disciplines interleave; and a `Job.discipline` edited AFTER a run was created moves nothing,
+    because `position` is frozen. Bucketing into a dict is correct under both -- a group's cards need not be
+    contiguous -- and the cards within a group still come out in the order the run froze.
+
+    NO EXTRA QUERIES over `slot_cards`: the labels and icons are module constants, and the atoms carry the
+    discipline each square belongs to.
+    """
+    cards = slot_cards(challenge)
+    if challenge.challenge_type == CHALLENGE_TYPE_AZ:
+        # `done`/`total` ARE INCLUDED even though the A-Z template never draws a head. One function
+        # returning two dict shapes means a Python consumer reading `group['total']` raises `KeyError`
+        # on exactly one challenge type -- the kind of difference that is invisible until it is a 500.
+        return _with_dom_ids([{'label': '', 'slug': '', 'icon': '', 'cards': cards,
+                               'done': sum(1 for c in cards if c['is_completed']),
+                               'total': len(cards)}])
+
+    by_discipline = {}
+    for card in cards:
+        # A card whose `Job` row was deleted has no atom and so no discipline. It lands in a group of its
+        # own rather than being dropped -- a square that exists must be drawable, and `label_for_key` has
+        # already given it something readable to say.
+        slug = (card['job'] or {}).get('disc_slug') or ''
+        by_discipline.setdefault(slug, []).append(card)
+
+    # EVERY BUCKET IS EMITTED, and the leftover clause is the whole point rather than defensive padding.
+    # Iterating the canonical five plus `''` silently DROPPED any other discipline together with its
+    # squares: `slot_keys_for` builds a run from `Job.objects` with no discipline filter, and
+    # `Job.discipline` is `choices=` only -- which Postgres does not enforce -- so a sixth discipline added
+    # to `Job.DISCIPLINES` without a matching `DISCIPLINE_LABELS` entry gave a 26-slot run that drew 25
+    # squares, tallied `x/26`, and left one square with no DOM and therefore no way to ever fill it.
+    # `job_render.discipline_order` already plans for this exact case ("an unseeded discipline sorts last"),
+    # so the catalogue contemplates it even though the labels dict did not.
+    #
+    # Canonical order first, then whatever is left in the order it arrived -- which is `position` order, so
+    # an unlabelled discipline lands where the run froze it.
+    leftovers = [s for s in by_discipline if s and s not in DISCIPLINE_LABELS]
+    groups = []
+    for slug in list(DISCIPLINE_LABELS) + leftovers + ['']:
+        if slug not in by_discipline:
+            continue
+        members = by_discipline[slug]
+        groups.append({
+            'label': _discipline_label(slug),
+            'slug': slug,
+            'icon': DISCIPLINE_ICON.get(slug, ''),
+            'cards': members,
+            # Per-discipline progress, which is what the label area is FOR: a hunter reading a shelf
+            # wants to know how much of that discipline is left, and the page-level tally cannot say.
+            'done': sum(1 for c in members if c['is_completed']),
+            'total': len(members),
+        })
+    return _with_dom_ids(groups)
+
+
+def _discipline_label(slug):
+    """What a shelf calls itself.
+
+    THE UNKNOWN CASE USED TO READ "Other", which was wrong in the same way a raw slug is wrong: two jobs
+    seeded under different unmapped disciplines produced two shelves both titled "Other", indistinguishable
+    from each other and from the group of squares whose `Job` row was deleted. A hunter cannot act on that.
+
+    So an unmapped discipline is named after ITSELF -- `archaeology` reads "Archaeology" -- which is the same
+    degradation `label_for_key` applies to a job slug that has lost its row, for the same reason. The truly
+    nameless case is the blank slug, where there is no `Job` left to ask, and that one keeps "Other".
+    """
+    if slug in DISCIPLINE_LABELS:
+        return DISCIPLINE_LABELS[slug]
+    if not slug:
+        return 'Other'
+    return slug.replace('-', ' ').replace('_', ' ').title()
+
+
+def _with_dom_ids(groups):
+    """A DOM id per group, unique within the page, for `aria-labelledby` to point at.
+
+    WHY UNIQUENESS IS CORRECTNESS HERE, not tidiness. Each shelf names itself by pointing
+    `aria-labelledby` at its own `<h2>`; duplicate ids mean every one of them resolves to the FIRST
+    matching heading, so several shelves would announce the same discipline. That is worse than no name.
+
+    The id was built inline from `slug|default:'other'`, which collides: a blank slug (a deleted `Job`) and a
+    job whose discipline is literally `other` both produce `csq-shelf-other`. `Job.discipline` is `choices=`
+    with no database constraint, which is the premise this whole leftover branch exists for, so the second
+    half of that is reachable by the same route as the first.
+
+    Suffixed rather than hashed or indexed, so the common five keep readable, stable, assertable ids.
+    """
+    seen = set()
+    for group in groups:
+        base = 'csq-shelf-%s' % (group['slug'] or 'other')
+        dom_id, suffix = base, 2
+        while dom_id in seen:
+            dom_id = '%s-%d' % (base, suffix)
+            suffix += 1
+        seen.add(dom_id)
+        group['dom_id'] = dom_id
+    return groups
 
 
 def _card(slot, covers, atoms):
@@ -127,7 +261,7 @@ def label_for_key(key):
     backwards -- it was called `_fallback_label`, said "reachable one way only", and then four paragraphs
     later said "every A-Z square reaches this function". The second is the true one:
 
-    - EVERY A-Z SQUARE, on every render. `_key_atoms` returns `{}` for that type, so the lookup always
+    - EVERY A-Z SQUARE, on every render. `key_atoms` returns `{}` for that type, so the lookup always
       misses and this is the normal label producer for 26 of every 26 squares. `'A'` returns `'A'`.
     - A JOB SQUARE ONLY IF ITS `Job` ROW WAS DELETED under a live run. `total_slots` is frozen at
       creation so the catalogue cannot move under a run, and this is the one place that promise is not
@@ -184,8 +318,13 @@ def covers_by_contract(contracts):
     return out
 
 
-def _key_atoms(challenge):
+def key_atoms(challenge):
     """{job slug: job_atom} for the run's squares, empty for A-Z.
+
+    PUBLIC on the same condition that promoted `covers_by_contract` and `label_for_key` above: a second
+    consumer. The picker's search panel needs the icon and the discipline for every square a game fits, so
+    that a button offering the Slayer square looks like the Slayer square. It read the catalogue as a
+    separate slug-to-name dict before, which was a second query and a second shape for a subset of this.
 
     A-Z needs nothing -- the key IS the label, and a dict lookup that always misses is cheaper than a
     branch in the template. Job Coverage needs the catalogue, which is 25 rows in one query; without it

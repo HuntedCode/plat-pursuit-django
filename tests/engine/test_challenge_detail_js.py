@@ -56,6 +56,35 @@ def _code_only(source):
     return '\n'.join(out)
 
 
+#: A `{% comment %}...{% endcomment %}` block, note argument and all (`{% comment "why" %}` is legal), and
+#: a `{# ... #}` comment. Non-greedy and DOTALL so each matches one span rather than everything between the
+#: first opener and the last closer.
+_TPL_BLOCK_COMMENT = re.compile(r'\{%\s*comment\b.*?%\}.*?\{%\s*endcomment\s*%\}', re.S)
+#: `{# #}` IS SINGLE-LINE in Django, so this must not cross one. With `re.S` an unpaired `{#` -- in a URL
+#: or a query string, say -- pairs with the next real `{# #}` anywhere below it and deletes every line
+#: between them from the text an absence assertion inspects. That is the vacuous-pass hazard this helper
+#: exists to prevent, reintroduced by the flag.
+_TPL_INLINE_COMMENT = re.compile(r'\{#[^\n]*?#\}')
+
+
+def _template_code(source):
+    """A Django template with its `{% comment %}` blocks and `{# #}` comments removed.
+
+    THE SAME HAZARD AS `_code_only`, in the third language this file reads. An assertion that a template no
+    longer uses `forloop` matched the comment SAYING it no longer uses `forloop` -- the seventh time on this
+    branch that an absence assertion has been satisfied by the prose explaining the absence.
+
+    `_code_only` strips `//` and `/* */`, which a Django template does not use, so it could not help here.
+    Same idea, different comment syntax.
+
+    SPANS, NOT LINES, and the first version got this wrong in precisely the way it existed to prevent. It
+    dropped any LINE containing `{% comment %}`, so a line carrying markup plus a trailing comment lost the
+    markup too -- and an absence assertion cannot fail on code it was never shown. An audit found it; nothing
+    in the suite could have, because every such assertion would have passed.
+    """
+    return _TPL_INLINE_COMMENT.sub('', _TPL_BLOCK_COMMENT.sub('', source))
+
+
 #: The two sources with commentary removed. Use these for `not in` and the full text for `in`.
 JS_CODE = _code_only(JS)
 CSS_CODE = _code_only(CSS)
@@ -543,15 +572,30 @@ def test_a_disabled_square_stops_lifting_under_the_cursor():
     assert 'button.pp-csq:hover {' not in CSS_CODE
 
 
-def test_the_first_grid_row_is_never_lazy_at_any_breakpoint():
+def test_the_lazy_threshold_matches_the_grids_widest_row():
     """`loading="lazy"` costs preload-scanner priority, which only matters for what is on screen at once. The
-    widest the grid gets is 7 columns, so the threshold has to be at least 7 -- it was 21 (three rows of
+    widest a single grid gets is 7 columns, so the threshold has to be at least 7 -- it was 21 (three rows of
     seven, costing a phone fifteen fetches for row-seven images) and then 6, which made the top-right cell of
-    the FIRST row lazy on desktop."""
+    the first row lazy on desktop.
+
+    THIS WAS CALLED `..._the_first_grid_row_is_never_lazy_at_any_breakpoint`, and that stopped being true when
+    the squares were grouped into shelves. A jobs run's shelves begin at indexes 0, 5, 10, 15 and 20, so the
+    first row of shelves 2-5 IS lazy. What the threshold still pins is the relationship between it and the
+    widest row a grid can draw, which is what the number was chosen from -- hence the rename rather than a
+    deletion."""
     partial = (ROOT / 'templates' / 'challenges' / 'partials' / '_square_body.html').read_text(encoding='utf-8')
-    assert 'forloop.counter0 >= 7' in partial
-    # And the grid's widest track count, so the two cannot drift apart silently.
-    assert 'repeat(7, minmax(0, 1fr))' in CSS
+    # `card.index`, not `forloop.counter0`: a loop counter restarts per discipline shelf, so the
+    # threshold would never be reached and every cover would load eagerly.
+    assert 'card.index >= 7' in partial
+    # OVER THE CODE, not the commentary -- the comment explaining that `forloop` is gone contains the word.
+    assert 'forloop' not in _template_code(partial), (
+        'the partial must not depend on a loop it may be rendered outside'
+    )
+    # AND THE GRID'S OWN WIDEST TRACK COUNT, scoped to the rule that sets it. `repeat(7, minmax(0, 1fr))`
+    # appears TWICE in this stylesheet now -- once on `.pp-csq-shelf` and once on `.pp-csq-grid` -- so the
+    # bare `in CSS` form could be satisfied by the shelf while the grid drifted to 8, which is the exact
+    # drift it was written to catch.
+    assert '.pp-csq-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); } }' in CSS
 
 
 # ── owner feedback, 2026-09-28 ─────────────────────────────────────────────────────────────────────
@@ -717,3 +761,185 @@ def test_the_prompt_spans_the_row_grid():
     cell beside the offers it is asking about."""
     ask = CSS[CSS.index('.pp-cpick__ask {'):]
     assert 'grid-column: 1 / -1;' in ask[:ask.index('}')]
+
+
+def test_the_script_binds_to_the_board_and_not_to_one_grid():
+    """A jobs run draws FIVE grids, one per discipline shelf. `querySelector('.pp-csq-grid')` returns the
+    FIRST -- so the click delegation would have covered Combat and left the other four shelves dead, and
+    `labelFor`/`applySlot` would have searched only that shelf for the square they had just written.
+
+    Found by mutation: swapping the selector back broke nothing in the suite, because every other test about
+    the board checks the MARKUP rather than what the script reads."""
+    assert "document.querySelector('.pp-csq-board')" in JS
+    assert "querySelector('.pp-csq-grid')" not in JS_CODE
+    # And the board is what carries the id the URLs are built from.
+    assert "grid.getAttribute('data-challenge-id')" in JS
+
+
+def test_the_template_stripper_keeps_code_that_shares_a_line_with_a_comment():
+    """THE HELPER IS NOW LOAD-BEARING for several absence assertions, and its first version had the very hole
+    it exists to close: it dropped whole LINES, so markup sharing a line with a comment disappeared from the
+    text a `not in` assertion inspects -- and such an assertion cannot fail on code it never sees."""
+    kept = _template_code('<a href="x">{% comment %}why{% endcomment %}</a>')
+    assert 'href="x"' in kept and '</a>' in kept
+    assert 'why' not in kept
+
+    # A block spanning lines, with a note argument, and an inline `{# #}` -- all three forms.
+    kept = _template_code(
+        '{% comment "note" %}\nforloop\n{% endcomment %}\n<b>real</b>{# forloop #}')
+    assert '<b>real</b>' in kept
+    assert 'forloop' not in kept
+
+    # Two separate blocks must not swallow the code between them.
+    kept = _template_code('{% comment %}a{% endcomment %}KEEP{% comment %}b{% endcomment %}')
+    assert 'KEEP' in kept
+
+
+def test_the_shelf_counter_moves_when_a_square_completes():
+    """THE ONE COUNTER A WRITE DID NOT MOVE. The header tally and the horizon are both patched after a
+    placement and the square gets its ring -- but the discipline shelf kept reading "0 of 5 done" until a
+    reload, and per-discipline progress is the entire justification for the label area existing.
+
+    Counted off the DOM rather than from the reply, which describes one slot and knows nothing about
+    disciplines."""
+    assert "closest('.pp-csq-shelf')" in JS_CODE
+    assert "querySelectorAll('.pp-csq--done')" in JS_CODE
+    assert "pp-csq-shelf__sub" in JS_CODE
+    # Inside `applySlot`, not somewhere that runs on load only.
+    body = JS_CODE[JS_CODE.index('function applySlot('):]
+    body = body[:body.index('\n        }') + 1]
+    assert "closest('.pp-csq-shelf')" in body
+
+
+def test_one_gap_declaration_feeds_both_grids():
+    """THE NO-RESIZE CONSTRAINT RESTED ON TWO COPIES OF `12px`. The shelf's 7-column gap and the cards' own
+    gap have to be equal or the derivation stops holding, and they were independent declarations -- changing
+    the grid's `md:` gap would have GROWN every card by 1.6px with nothing to notice it, because the shelf
+    still had 7 tracks (131.43 -> 133.03 at 1024: a narrower inner gap leaves more width for the same five
+    cards, so the first version of this sentence had the right magnitude and the wrong sign). A comment
+    claimed the arithmetic was "derived rather than hardcoded" while it was exactly hardcoded."""
+    assert '--csq-gap: 8px' in CSS_CODE
+    # `var(--csq-gap, <fallback>)` in both consumers. The fallback is each rule's own breakpoint value, so a
+    # grid or shelf somehow rendered outside `.pp-csq-board` gets a sane gap instead of computing `normal`.
+    assert 'gap: var(--csq-gap, 12px)' in CSS_CODE
+    assert 'gap: var(--csq-gap, 8px)' in CSS_CODE
+    # Neither grid may carry its own literal gap any more.
+    shelf = CSS_CODE[CSS_CODE.index('.pp-csq-shelf:not(.pp-csq-shelf--plain) {'):]
+    assert 'gap: 12px' not in shelf[:shelf.index('}')]
+
+
+def test_the_search_buttons_glyph_is_built_after_its_text_and_in_the_svg_namespace():
+    """TWO WAYS TO RENDER NOTHING, both of which this change hit or nearly hit.
+
+    Assigning `textContent` REMOVES every child, so an icon appended before that line is silently discarded --
+    the first version of this change did exactly that and rendered no icons at all. And an SVG element built
+    through the HTML parser lands in the XHTML namespace and draws nothing, which is why the glyph is
+    assembled with `createElementNS` rather than from a markup string.
+    """
+    text_at = JS_CODE.index("pick.textContent = single ? 'Add this game to '")
+    glyph_at = JS_CODE.index('pick.insertBefore(jobIcon(')
+    assert text_at < glyph_at, 'the glyph must be inserted after the text that would erase it'
+
+    body = JS_CODE[JS_CODE.index('function jobIcon('):]
+    body = body[:body.index('\n        }') + 1]
+    assert "createElementNS(NS, 'svg')" in body
+    assert "createElementNS(NS, 'use')" in body
+    assert 'innerHTML' not in body
+
+
+def test_the_glyph_references_the_sprite_rather_than_carrying_path_data():
+    """One sprite serves the grid and the picker. Inlining Lucide paths into JavaScript would be a second copy
+    of the registry, drifting from `job_icons._ICONS` the first time a glyph is corrected."""
+    assert "'#jobicon-' + name" in JS_CODE
+    assert '<path' not in JS_CODE
+
+
+def test_the_discipline_tint_loses_to_the_replace_warning():
+    """SAME SPECIFICITY, so the later rule wins and the order is the whole mechanism. A square that already
+    holds a game is warning-toned because pressing it replaces something; a decorative discipline tint must
+    not be what a hunter sees instead of that warning."""
+    assert CSS_CODE.index('.pp-cpick__key--job {') < CSS_CODE.index('.pp-cpick__key--taken {')
+
+
+def test_a_disabled_job_button_keeps_its_discipline_under_the_cursor():
+    """Without this rule, `.pp-cpick__key:disabled:hover` paints a disabled job button the generic primary
+    tint instead of its discipline.
+
+    IT WINS ON SOURCE ORDER, NOT SPECIFICITY, and this docstring said the opposite: that the generic rule
+    "outspecifies the tint whatever the order". Both selectors are one class plus two pseudo-classes --
+    (0,3,0) each -- so they tie and the later one applies. Worse, the CSS comment beside the rule had ALREADY
+    been corrected on exactly this point in the same round; this was the wrong version, resurrected into a
+    test. If it were true the fix would be impossible rather than order-dependent.
+    """
+    assert '.pp-cpick__key--job:disabled:hover' in CSS_CODE
+    # The ordering the fix actually rests on.
+    assert (CSS_CODE.index('.pp-cpick__key:disabled:hover')
+            < CSS_CODE.index('.pp-cpick__key--job:disabled:hover'))
+
+
+def test_the_tint_itself_is_pinned_not_just_the_glyph():
+    """THE TWO LINES THAT ARE THE FEATURE were unpinned. An audit deleted the class and the `--disc` write and
+    the whole suite still passed: the buttons would have rendered as plain cyan pills carrying a glyph, which
+    is half the change silently gone. The existing pins covered the sprite reference and the DOM order -- the
+    mechanics -- and nothing covered the result."""
+    assert "pick.classList.add('pp-cpick__key--job')" in JS_CODE
+    assert "pick.style.setProperty(" in JS_CODE
+    assert "'var(--disc-' + atom.disc_slug + ', var(--pp-primary))'" in JS_CODE
+    # Both inside the `if (atom)` branch, so an A-Z letter gets neither.
+    block = JS_CODE[JS_CODE.index('var atom = (panel.key_atoms || {})[key];'):]
+    block = block[:block.index('pick.textContent')]
+    assert "classList.add('pp-cpick__key--job')" in block
+    assert 'setProperty(' in block
+
+
+def test_the_glyph_is_sized_because_the_svg_carries_no_dimensions():
+    """`jobIcon` sets no `width`/`height` attributes -- only `viewBox` -- so with no CSS rule the glyph falls
+    back to the UA's default replaced-element size inside the pill. The server-rendered callers escape this by
+    passing a Tailwind class; the JS-built one has only this rule."""
+    assert '.pp-cpick__key svg { width: 15px; height: 15px; flex: none; }' in CSS_CODE
+    # And the element genuinely has no intrinsic size to fall back on.
+    body = JS_CODE[JS_CODE.index('function jobIcon('):]
+    body = body[:body.index('\n        }') + 1]
+    assert "setAttribute('width'" not in body
+    assert "setAttribute('height'" not in body
+
+
+def test_the_replace_warning_wins_the_hover_state_too():
+    """WHERE THE FIRST VERSION OF THIS WAS WRONG, and the test that claimed to cover it looked at the wrong
+    pair of rules. `.pp-cpick__key--job:not(:disabled):hover` is 0-3-0 (one class, `:not(:disabled)`, `:hover`)
+    and `.pp-cpick__key--taken:hover` was 0-2-0 -- and specificity beats source order, so hovering a taken JOB
+    button painted it the discipline fill while its text and border stayed amber. The one moment the
+    replacement warning exists for was the one moment it lost.
+
+    `:not(:disabled)` on the taken rule levels the specificity, and it is later in source, so it wins."""
+    assert '.pp-cpick__key--taken:not(:disabled):hover' in CSS_CODE
+    assert '.pp-cpick__key--taken:hover' not in CSS_CODE, (
+        'the 0-2-0 form loses to the job tint on specificity whatever the order'
+    )
+    # Later in source than the job hover, which is the other half of the fix.
+    assert (CSS_CODE.index('.pp-cpick__key--job:not(:disabled):hover')
+            < CSS_CODE.index('.pp-cpick__key--taken:not(:disabled):hover'))
+
+
+def test_the_gap_overrides_live_on_the_board_not_on_a_grid():
+    """THE MECHANISM, which the sibling test above does not reach. A custom property flows DOWN, so the
+    shelf's 7-column grid can only read `--csq-gap` from an ancestor -- move the breakpoint overrides onto
+    `.pp-csq-grid` and the shelf stays on the base value at every width while the cards change, which is the
+    silent resize the property was introduced to prevent. The previous assertions passed under exactly that
+    move."""
+    assert '.pp-csq-board { --csq-gap: 10px; }' in CSS_CODE
+    assert '.pp-csq-board { --csq-gap: 12px; }' in CSS_CODE
+    # And no grid declares its own, which would shadow the board's for its own subtree only.
+    grid = CSS_CODE[CSS_CODE.index('.pp-csq-grid {'):]
+    assert '--csq-gap:' not in grid[:grid.index('}')]
+
+
+def test_the_shelf_counter_writes_the_same_sentence_the_server_does():
+    """TWO RENDERERS FOR ONE STRING, which is the shape this file exists to guard. The server writes
+    "N of M done" and the client rewrites it after a placement; if either changes shape, a shelf's label
+    silently changes wording the moment a square is filled."""
+    tpl = _template_code(
+        (ROOT / 'templates' / 'challenges' / 'challenge_detail.html').read_text(encoding='utf-8'))
+    assert '{{ group.done }} of {{ group.total }} done' in tpl
+    assert "+ ' of ' +" in JS_CODE
+    assert "+ ' done'" in JS_CODE
