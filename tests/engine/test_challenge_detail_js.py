@@ -183,7 +183,7 @@ def test_the_toast_fires_after_the_close_not_beside_it():
     the toast region lives outside -- so a toast raised while the sheet is open renders behind the top-layer
     backdrop and announces nothing."""
     assert 'close(function () { applySlot(' in JS
-    assert 'if (message) { toast(message, TOAST_MS); }' in JS
+    assert 'if (message) { toast(message); }' in JS
 
 
 def test_stale_replies_are_discarded_by_sequence():
@@ -217,8 +217,16 @@ def test_names_are_written_as_text_never_as_markup():
     # MATCHED AS AN ASSIGNMENT, not as a word. A bare `'innerHTML' not in JS` failed against this file's
     # own comment ("`textContent`, never `innerHTML`") -- an absence assertion has to carry the syntax of the
     # thing it forbids, or the prose explaining the rule breaks the test for the rule.
-    for forbidden in ('innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write'):
+    for forbidden in ('outerHTML', 'insertAdjacentHTML', 'document.write'):
         assert forbidden not in JS_CODE, '%s reaches the DOM as markup' % forbidden
+
+    # ONE DELIBERATE `innerHTML`, and exactly one. It swaps in the square the SERVER re-rendered after a
+    # write -- the markup comes from `partials/_square_body.html`, the same template the page used, never
+    # from anything composed here. Pinned as a count plus its exact shape rather than as a blanket ban,
+    # because the ban is what a future reader would otherwise delete when they needed the one use.
+    uses = [ln.strip() for ln in JS_CODE.splitlines() if 'innerHTML' in ln]
+    assert uses == ['if (slot.html) { square.innerHTML = slot.html; }'], (
+        'unexpected innerHTML use(s): %r' % uses)
     assert 'name.textContent = row.name;' in JS
 
 
@@ -389,13 +397,18 @@ def test_the_panel_is_fully_reset_before_it_is_shown():
     assert JS.index('reset();') < JS.index('dialog.showModal();')
 
 
-def test_the_reload_waits_for_the_toast_it_fires():
-    """The comment used to say the page reloaded "once the toast has been seen". `ToastManager` defaults to
-    5000ms and the timer was 900ms, so the toast got about 700ms before a navigation destroyed it and cut
-    the live-region announcement off mid-sentence. One constant now feeds both."""
-    assert 'var TOAST_MS =' in JS
-    assert 'toast(message, TOAST_MS)' in JS
-    assert 'window.location.reload(); }, TOAST_MS + 200);' in JS
+def test_nothing_waits_on_a_reload_any_more():
+    """THE WHOLE MECHANISM IS GONE, and the history is worth keeping because it took three attempts.
+
+    First a 900ms reload timer that started before the toast fired, so the toast got ~700ms of a 5000ms life
+    and the live-region announcement was cut off mid-sentence. Then `TOAST_MS`, one constant feeding both, so
+    the reload genuinely waited -- correct, and still 2.8s of stall plus a page flash, an 840ms entrance
+    replay and a scroll to top, 26 times for a full run. The owner filled a run and counted them.
+
+    Now the write reply carries the square's markup and there is no navigation at all, so there is nothing
+    for a duration to coordinate."""
+    assert 'window.location.reload' not in JS_CODE
+    assert 'TOAST_MS' not in JS_CODE
 
 
 def test_a_completed_square_stops_being_pressable_at_once():
@@ -408,8 +421,12 @@ def test_a_completed_square_stops_being_pressable_at_once():
 def test_each_square_button_in_a_search_result_names_its_game():
     """The visible pill says only the square, and the game's name sits in a sibling associated with nothing
     -- so a keyboard user heard "A, button", "B, button" with no idea which game they were placing, and two
-    results fitting the same job produced two identically-named buttons."""
-    assert "pick.setAttribute('aria-label', 'Put ' + row.name + ' in ' + keyLabel);" in JS
+    results fitting the same job produced two identically-named buttons.
+
+    BUILT FROM THE VISIBLE TEXT rather than composed separately, so the accessible name always CONTAINS the
+    label a voice-control user would say -- which a hand-written "Put X in Y" stopped doing the moment the
+    single-square case started reading "Add this game to S"."""
+    assert "pick.setAttribute('aria-label', pick.textContent + ' \\u2014 ' + row.name);" in JS
 
 
 def test_a_non_json_409_does_not_invent_a_reason():
@@ -508,3 +525,71 @@ def test_the_first_grid_row_is_never_lazy_at_any_breakpoint():
     assert 'forloop.counter0 >= 7' in partial
     # And the grid's widest track count, so the two cannot drift apart silently.
     assert 'repeat(7, minmax(0, 1fr))' in CSS
+
+
+# ── owner feedback, 2026-09-28 ─────────────────────────────────────────────────────────────────────
+
+def test_a_write_no_longer_reloads_the_page():
+    """THE OWNER FILLED A RUN AND COUNTED THE RELOADS. Two versions of this existed -- a 900ms timer whose
+    toast never finished, then a 2.8s one that did -- and both were defensible on the same ground: a filled
+    square needs cover art the reply did not carry, so a client composing it would be a second renderer free
+    to drift from the template.
+
+    The reply now carries `html` for the one square that changed, rendered by the SAME partial the page used.
+    One renderer, no navigation."""
+    assert 'window.location.reload' not in JS_CODE
+    assert 'if (slot.html) { square.innerHTML = slot.html; }' in JS
+    # `TOAST_MS` existed only so a reload timer could wait for the toast.
+    assert 'TOAST_MS' not in JS_CODE
+
+
+def test_the_swapped_square_markup_comes_from_the_server():
+    """`innerHTML` is otherwise forbidden in this file, so the one place it is used has to be unmistakably
+    server-rendered markup rather than anything composed from data."""
+    assert '_square_html' in (ROOT / 'challenges' / 'views.py').read_text(encoding='utf-8')
+    assert 'def card_for(' in (ROOT / 'challenges' / 'services' / 'slot_render.py').read_text(encoding='utf-8')
+
+
+def test_a_single_square_spells_out_the_whole_sentence():
+    """In A-Z a game fits exactly one letter, and a lone pill reading "S" looked like a choice among options
+    that do not exist. The owner asked for the wording spelled out."""
+    assert "pick.textContent = single ? 'Add this game to ' + keyLabel : keyLabel;" in JS
+    assert "var single = row.keys.length === 1;" in JS
+    # Several squares keep the pills, with a lead-in so they read as answers to a question.
+    assert "main.appendChild(lead('Add this game to:'));" in JS
+
+
+def test_a_finished_game_is_marked_in_the_search_results():
+    """The server has been sending `is_completed_by_you` all along -- one indexed query over the page -- and
+    only one narrow branch read it, so a search result gave no hint that placing it would complete the square
+    immediately. The chip is the house primitive, never DaisyUI's badge."""
+    assert "if (row.is_completed_by_you) { main.appendChild(chip('Finished', 'success')); }" in JS
+    assert "'bd-chip bd-chip--' + tone" in JS
+    assert 'badge' not in JS_CODE
+
+
+def test_an_occupied_square_warns_before_it_is_replaced():
+    """Picking a game for a square that already holds one replaced it silently, and the search panel says
+    nothing about the rest of the run -- so it was easy to do by accident. Two warnings now: the button is
+    warning-toned and names what it would replace, and a confirm asks."""
+    assert "pick.classList.add('pp-cpick__key--taken');" in JS
+    assert "swap(' (replaces ' + occupant + ')')" in JS
+    assert '.pp-cpick__key--taken' in CSS
+    # THE GUARD'S SHAPE, not just the copy. Asserting the sentence was present passed with the condition
+    # stubbed to `false` -- the words existed and gated nothing, which is the version of this test that
+    # reassures without protecting.
+    assert 'if (occupant && !window.confirm(' in JS
+    assert "already has ' + occupant + '." in JS
+    # And the refusal has to stop the write, not merely be reachable.
+    guard = JS[JS.index('if (occupant && !window.confirm('):]
+    assert guard[:guard.index('assign(')].count('return;') == 1
+
+
+def test_the_replace_warning_needs_the_servers_filled_map():
+    """The occupant's name comes from the run's own slots, which the panel already had in memory -- so this
+    costs nothing and is a snapshot of what the square displays."""
+    views = (ROOT / 'challenges' / 'views.py').read_text(encoding='utf-8')
+    picker = (ROOT / 'challenges' / 'services' / 'picker.py').read_text(encoding='utf-8')
+    assert "'filled': filled" in picker
+    assert "'filled': panel['filled']," in views
+    assert "var occupant = (panel.filled || {})[key];" in JS

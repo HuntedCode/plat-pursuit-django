@@ -31,6 +31,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from trophies.mixins import LoginRequiredAPIMixin
 from trophies.models import Contract
 from django.http import JsonResponse
+from django.template.loader import render_to_string
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
@@ -428,6 +429,8 @@ class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
                 'already_in_run': r['already_in_run'],
                 'is_completed_by_you': r['is_completed_by_you'],
             } for r in panel['rows']],
+            # {key: the game currently in it}, so a result can name what it would replace.
+            'filled': panel['filled'],
         })
 
 
@@ -492,14 +495,34 @@ def _cover_url(game):
     return game.display_image_url if game is not None else None
 
 
+def _square_html(slot):
+    """The one square, re-rendered by the template that draws every other square.
+
+    THIS IS WHAT REPLACED THE PAGE RELOAD. Filling a square used to navigate, so a hunter filling all 26
+    watched the page flash, the entrance cascade replay and the scroll jump to the top, 26 times. The reply
+    now carries the markup for the square that changed.
+
+    RENDERED SERVER-SIDE ON PURPOSE. The alternative was for the client to patch in cover art, a check
+    glyph and a screen-reader line it would have to compose itself -- a second renderer for squares, free
+    to drift from `_square_body.html`. This way the template stays the only thing that knows what a square
+    looks like.
+
+    `can_edit=True` because only an editable run reaches a write door at all (`_EditableRunMixin`), and no
+    `forloop`, so the swapped-in square is never lazy -- which is right for one image arriving alone.
+    """
+    return render_to_string('challenges/partials/_square_body.html',
+                            {'card': slot_render.card_for(slot), 'can_edit': True})
+
+
 def _slot_json(challenge, slot):
-    """One square's state after a write, plus the run's counters.
+    """One square's state after a write, plus the run's counters and the square's new markup.
 
     The counters travel with it because every write moves them and the page shows them in two places (the
     tally and the Horizon). Returning them here means the client never has to guess or re-fetch.
     """
     challenge.refresh_from_db()
     return {
+        'html': _square_html(slot),
         'key': slot.key,
         'is_filled': slot.is_filled,
         'is_completed': slot.is_completed,

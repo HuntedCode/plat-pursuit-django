@@ -65,9 +65,6 @@
         var requestSeq = 0;
         // One write at a time. See `assign`.
         var writing = false;
-        //: How long a success message stays up, and therefore how long the reload waits for it.
-        //: One number for both, because the version with two had them disagree by 4.3 seconds.
-        var TOAST_MS = 2600;
         // Set the moment a swipe commits, because `dismissableSheet` signals a dismissal in no
         // other way the page can see. Cleared on the next open.
         var dismissed = false;
@@ -285,6 +282,11 @@
                 name.className = 'pp-cpick__row-name';
                 name.textContent = row.name;
                 main.appendChild(name);
+                // ALREADY FINISHED, marked. The server has been sending this all along -- one indexed query
+                // over the page, via `completed_contract_ids` -- and only one narrow branch read it, so a
+                // search result gave no hint that placing it would complete the square on the spot. The chip
+                // is the house primitive, not DaisyUI's badge.
+                if (row.is_completed_by_you) { main.appendChild(chip('Finished', 'success')); }
                 block.appendChild(main);
 
                 if (row.already_in_run) {
@@ -298,21 +300,40 @@
                 } else {
                     // ONE BUTTON PER SQUARE IT FITS. A jobs game routinely fits several, and choosing the
                     // game is not the same decision as choosing the slot.
+                    //
+                    // BUT A-Z ONLY EVER FITS ONE, and a lone pill reading "S" looked like a choice among
+                    // options that do not exist. So a single square gets the sentence spelled out and the
+                    // several-squares case gets a lead-in, which is also the honest difference between the
+                    // two run types: in A-Z the letter is a fact about the game, and in Job Coverage it is a
+                    // decision.
+                    var single = row.keys.length === 1;
+                    if (!single) { main.appendChild(lead('Add this game to:')); }
                     var keys = document.createElement('div');
                     keys.className = 'pp-cpick__keys';
                     row.keys.forEach(function (key) {
+                        var keyLabel = row.key_labels[key] || key;
+                        var occupant = (panel.filled || {})[key];
                         var pick = document.createElement('button');
                         pick.type = 'button';
-                        pick.className = 'pp-cpick__key';
-                        var keyLabel = row.key_labels[key] || key;
-                        pick.textContent = keyLabel;
-                        // THE NAME HAS TO CARRY BOTH. The visible pill says only the square ("Cartographer"),
-                        // and the game's name sits in a sibling element associated with nothing -- so a
-                        // keyboard user tabbing the results heard "A, button", "B, button" with no idea which
-                        // game they were placing, and two results that fit the same job produced two buttons
-                        // with identical names.
-                        pick.setAttribute('aria-label', 'Put ' + row.name + ' in ' + keyLabel);
+                        pick.className = 'pp-cpick__key' + (single ? ' pp-cpick__key--wide' : '');
+                        pick.textContent = single ? 'Add this game to ' + keyLabel : keyLabel;
+                        // AN OCCUPIED SQUARE SAYS SO BEFORE IT IS PRESSED. Picking a game for a square that
+                        // already holds one silently replaced it -- easy to do by accident, since the search
+                        // panel says nothing about the rest of the run.
+                        if (occupant) {
+                            pick.classList.add('pp-cpick__key--taken');
+                            pick.appendChild(swap(' (replaces ' + occupant + ')'));
+                        }
+                        // THE NAME CARRIES THE GAME, because the pill alone names only the square and the
+                        // game sits in a sibling associated with nothing. The visible text is contained in
+                        // the accessible name, so the two do not disagree for voice control.
+                        pick.setAttribute('aria-label', pick.textContent + ' \u2014 ' + row.name);
                         pick.addEventListener('click', function () {
+                            if (occupant && !window.confirm(
+                                    keyLabel + ' already has ' + occupant + '.\n\n'
+                                    + 'Replace it with ' + row.name + '?')) {
+                                return;
+                            }
                             assign(row.slug, key, false, pick);
                         });
                         keys.appendChild(pick);
@@ -327,6 +348,31 @@
         function note(text) {
             var span = document.createElement('span');
             span.className = 'pp-cpick__row-note';
+            span.textContent = text;
+            return span;
+        }
+
+        /** A house chip (`components/chips.css`), never DaisyUI's `.badge` -- they tint from different tokens
+         *  and read as two different greens side by side. */
+        function chip(text, tone) {
+            var span = document.createElement('span');
+            span.className = 'bd-chip bd-chip--' + tone + ' pp-cpick__row-chip';
+            span.textContent = text;
+            return span;
+        }
+
+        /** The lead-in above several square buttons, so the pills read as answers to a question. */
+        function lead(text) {
+            var span = document.createElement('span');
+            span.className = 'pp-cpick__lead';
+            span.textContent = text;
+            return span;
+        }
+
+        /** The "(replaces X)" half of an occupied square's button, quieter than the square's own name. */
+        function swap(text) {
+            var span = document.createElement('span');
+            span.className = 'pp-cpick__key-swap';
             span.textContent = text;
             return span;
         }
@@ -463,39 +509,45 @@
             return window.CSS && window.CSS.escape ? window.CSS.escape(value) : value;
         }
 
-        function toast(message, ms) {
+        function toast(message) {
+            // NO EXPLICIT DURATION any more. It existed only so a reload timer could wait for the toast, and
+            // there is no reload -- so `ToastManager`'s own default is the right answer again.
             // GUARDED ON THE METHOD, not the namespace: a cached older `utils.js` against this fresh file
             // would pass an `if (PP.ToastManager)` check and then throw on a method it lacks.
             if (PP.ToastManager && PP.ToastManager.show) {
-                PP.ToastManager.show(message, 'success', ms || TOAST_MS);
+                PP.ToastManager.show(message, 'success');
             }
         }
 
         // ── applying a write to the page ──────────────────────────────────────────────────────────
 
         /**
-         * Show what changed, say so, and then let the server re-render the square.
+         * Swap in the square the server just re-rendered, move the counters, and say what happened.
          *
-         * THE TIMING IS THE FIX HERE. This used to start a fixed 900ms reload timer and fire the toast
-         * afterwards, under a comment claiming the page reloaded "once the toast has been seen".
-         * `ToastManager` defaults to 5000ms, and 900 minus the 180ms exit left the toast about 700ms --
-         * fourteen per cent of its life -- before a full navigation destroyed it, cutting the live-region
-         * announcement off mid-sentence. So the toast now gets an explicit duration and the reload waits for
-         * it, and the two numbers are declared next to each other where they cannot drift.
+         * NO RELOAD. There were two before this: a 900ms one whose toast never finished, then a 2.8s one
+         * that did. Both were defensible for the same reason -- a filled square needs cover art the reply
+         * did not carry, a completed one needs its check glyph, and a client composing those would be a
+         * second renderer free to drift from the template. Both were also wrong about the cost: filling 26
+         * squares meant 26 full navigations, each flashing the page, replaying the grid's 840ms entrance and
+         * scrolling to the top. The owner filled a run and said so.
          *
-         * WHY RELOAD AT ALL: a filled square needs cover art this reply does not carry, and a completed one
-         * stops being a button. Both are the server's render, and a second renderer here could disagree with
-         * it. `my-challenges.js` makes the same call for the same reason.
+         * The reply now carries `html` for the one square that changed, rendered by
+         * `partials/_square_body.html` -- the same template the page used. One renderer, no navigation, and
+         * the toast gets its whole life.
          */
         function applySlot(slot, message) {
             var square = grid.querySelector('[data-key="' + cssEscape(slot.key) + '"]');
             if (square) {
+                // THE SERVER'S MARKUP, not markup built here. `slot.html` is the same partial the page
+                // rendered, so a swapped square cannot look different from one that was there on load.
+                if (slot.html) { square.innerHTML = slot.html; }
                 square.classList.toggle('pp-csq--filled', slot.is_filled && !slot.is_completed);
                 square.classList.toggle('pp-csq--empty', !slot.is_filled);
                 square.classList.toggle('pp-csq--done', slot.is_completed);
-                // A COMPLETED SQUARE STOPS BEING PRESSABLE IMMEDIATELY. The server will render it as a
-                // `<div>`, but until the reload it is still a `<button data-cpick-open>` with a hover lift --
-                // so it could be re-opened, and every offer inside it would then be refused.
+                // A COMPLETED SQUARE STOPS BEING PRESSABLE. It stays a `<button>` rather than becoming the
+                // `<div>` a fresh render would produce -- swapping the tag would mean rebuilding the element
+                // and losing focus with it -- so it is disabled and loses its open hook instead. `:disabled`
+                // carries the same cursor and kills the hover lift, so it reads identically.
                 if (slot.is_completed) {
                     square.removeAttribute('data-cpick-open');
                     square.disabled = true;
@@ -507,8 +559,7 @@
                 els.horizon.style.setProperty('--horizon-progress', pct + '%');
                 els.horizon.setAttribute('aria-valuenow', String(pct));
             }
-            if (message) { toast(message, TOAST_MS); }
-            window.setTimeout(function () { window.location.reload(); }, TOAST_MS + 200);
+            if (message) { toast(message); }
         }
 
         // ── wiring ────────────────────────────────────────────────────────────────────────────────

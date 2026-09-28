@@ -67,6 +67,26 @@ def slot_cards(challenge):
     return [_card(slot, covers, atoms) for slot in slots]
 
 
+def card_for(slot):
+    """One slot's card, for redrawing a single square after a write.
+
+    WHY THIS EXISTS: filling a square used to reload the whole page. That was defensible while the only
+    alternative was a second renderer in JavaScript -- a filled square needs cover art the write reply did
+    not carry, a completed one needs its check glyph, and a client that rebuilt those could drift from the
+    template that draws them everywhere else. But the cost landed on the hunter: 26 squares means 26 full
+    navigations, each flashing the page, replaying the grid's entrance and scrolling to the top.
+
+    So the server re-renders the one square it just changed and hands back the markup. Still ONE renderer --
+    `partials/_square_body.html`, the same file the page uses -- and no reload.
+
+    FOUR QUERIES for a filled square (its contract, then three for the cover), one for a jobs run's
+    catalogue, and one for an empty square. It is a single slot, so nothing here scales with the run.
+    """
+    covers = covers_by_contract([slot.contract] if slot.contract_id else [])
+    atoms = _key_atoms(slot.challenge)
+    return _card(slot, covers, atoms)
+
+
 def _card(slot, covers, atoms):
     """One square.
 

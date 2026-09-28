@@ -644,6 +644,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cpick__keys { display: flex; flex-wrap: wrap; gap: 6px; }
 .pp-cpick__key {
     /* 12px type and a 44px box: this is the commit action for half the picker's design, not a tag. */
+    display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
     font-size: 12px; font-weight: 800; line-height: 1.2;
     min-height: 44px; padding: 6px 12px; border-radius: 999px;
     color: var(--pp-primary);
@@ -658,6 +659,43 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-cpick__key:hover { background: color-mix(in oklab, var(--pp-primary) 28%, var(--pp-bg-2)); }
 }
 .pp-cpick__key:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* The lead-in above several square buttons, so the pills read as answers rather than as tags. Only ever
+   rendered when a game fits more than one square -- a single square spells the whole sentence into its own
+   button instead. */
+.pp-cpick__lead {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--pp-text-dim);
+}
+
+/* A game the hunter has already finished. Sits under the name so the row reads "game, finished" rather than
+   making the state compete with the title. */
+.pp-cpick__row-chip { align-self: flex-start; }
+
+/* THE SINGLE-SQUARE BUTTON. In A-Z a game fits exactly one letter, so the pill carries a sentence ("Add this
+   game to S") instead of a bare letter that looked like one option among several. Full width because it is
+   the row's only action, and left-aligned because it is now a phrase rather than a token. */
+.pp-cpick__key--wide {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+    border-radius: var(--pp-radius-md);
+}
+
+/* A square that already holds a game. Warning-toned rather than primary, because pressing it REPLACES
+   something -- the tone is the first warning and the confirmation is the second. */
+.pp-cpick__key--taken {
+    color: var(--pp-warning);
+    background: color-mix(in oklab, var(--pp-warning) 14%, var(--pp-bg-2));
+    border-color: color-mix(in oklab, var(--pp-warning) 38%, transparent);
+    /* A phrase, not a token, so it wraps instead of forcing the row wide. */
+    white-space: normal;
+}
+@media (hover: hover) {
+    .pp-cpick__key--taken:hover { background: color-mix(in oklab, var(--pp-warning) 24%, var(--pp-bg-2)); }
+}
+.pp-cpick__key-swap { font-weight: 700; opacity: 0.85; }
 
 /* THE CATCH-UP BLOCK. Warning-toned because every offer inside it lands the square COMPLETE and LOCKED --
    the one irreversible action on a run. The tone is the warning; the confirmation is the service's. */

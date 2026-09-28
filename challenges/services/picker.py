@@ -153,9 +153,9 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
 
     Returns empty-handed for a term under `MIN_QUERY` rather than running the scan.
 
-    THE SLOTS COME FROM MEMORY. `fitting_keys_for` says which keys a game suits at all; which of those
-    are actually OPEN is a question about this run's own slots, which are already loaded -- so the
-    intersection costs nothing and no query asks it. A completed square is excluded (it never reopens); a
+    THE SLOTS COME FROM MEMORY. `fitting_keys_for` says which keys a game suits at all; which of those are
+    actually OPEN, and which of those already hold something, are questions about this run's own slots --
+    already loaded, so the intersection and the `filled` map both cost nothing. A completed square is excluded (it never reopens); a
     filled but unfinished one is offered, because reassigning it is allowed.
 
     SEVEN QUERIES, flat in the result count: the run's slots, the search COUNT, the search slice, three
@@ -168,10 +168,14 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
     # raising the `DataError` that was an unhandled 500.
     query = clean_term(query)
     if not query:
-        return {'query': query, 'total': 0, 'showing': 0, 'rows': [], 'too_short': True}
+        return {'query': query, 'total': 0, 'showing': 0, 'rows': [], 'too_short': True, 'filled': {}}
 
     slots = list(challenge.slots.all())
     open_keys = {s.key for s in slots if not s.is_completed}
+    # WHAT IS ALREADY IN EACH SQUARE, so a result can warn before it replaces something. Free: the slots are
+    # already in memory, and the name is the snapshot the square itself shows. Completed squares are absent
+    # from `open_keys` anyway, so this only ever describes a square a hunter could still overwrite.
+    filled = {s.key: s.contract_name for s in slots if s.is_filled and not s.is_completed}
     # THE LIVE FK, NOT THE FROZEN SLUG. Keyed on `contract_slug` this missed a contract whose slug staff
     # had edited since assignment -- so a Job Coverage game already in the `slayer` square reported
     # `already_in_run: False`, and `assign` (which had the same bug) accepted it into `card-shark` too.
@@ -207,7 +211,10 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
             'is_completed_by_you': contract.id in completed,
         })
 
-    return {'query': query, 'total': total, 'showing': len(rows), 'rows': out, 'too_short': False}
+    return {'query': query, 'total': total, 'showing': len(rows), 'rows': out, 'too_short': False,
+            # Run-level rather than per-row: every result offers the same squares, so repeating this on
+            # each row would be the same map 24 times.
+            'filled': filled}
 
 
 # ── internals ─────────────────────────────────────────────────────────────────────────────────────
