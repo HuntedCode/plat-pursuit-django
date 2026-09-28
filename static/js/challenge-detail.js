@@ -560,6 +560,16 @@
                 els.horizon.setAttribute('aria-valuenow', String(pct));
             }
             if (message) { toast(message); }
+
+            // THE RUN FINISHING IS A MODE CHANGE, not a square update, and it was the one thing the removed
+            // reload had been quietly handling. When the last square completes, `can_edit` turns false: the
+            // header gains its "Finished" chip, the read-only note appears, the picker stops shipping and
+            // every square becomes a `<div>`. Patching all of that here would be the second renderer this
+            // design exists to avoid -- so this is the one case that still reloads, once per run instead of
+            // once per square, at the moment a hunter has most reason to expect the page to change.
+            if (slot.is_complete) {
+                window.setTimeout(function () { window.location.reload(); }, 1200);
+            }
         }
 
         // ── wiring ────────────────────────────────────────────────────────────────────────────────

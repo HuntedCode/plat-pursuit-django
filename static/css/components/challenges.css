@@ -119,8 +119,16 @@
    outranked `a.pp-csq:hover` at (0,2,1) -- meaning the empty square, the one a hunter actually clicks
    to fill, would have been the only square with no hover feedback. Invisible today because the grid is
    read-only, and it would have shipped as reviewed CSS the moment 4b rendered a button. */
-/* A READ-ONLY square is a `<div>` and must not claim to be pressable. */
-div.pp-csq { cursor: default; }
+/* NOT PRESSABLE, so not a pointer. TWO shapes reach this, and only one of them was covered:
+   a read-only square, which renders as a `<div>`, and a square the JS has just DISABLED because the write
+   completed it -- which stays a `<button>` on purpose, since swapping the tag would rebuild the element and
+   throw focus away mid-interaction.
+
+   The `:disabled` half was missing while I was claiming it worked. `:not(:disabled)` went onto the hover
+   rules, so a disabled square correctly stopped lifting -- and `cursor: pointer` above still applied to it,
+   so it went on advertising itself as pressable for as long as it sat there. */
+div.pp-csq,
+button.pp-csq:disabled { cursor: default; }
 
 .pp-csq--empty {
     --csq-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -133,8 +141,6 @@ div.pp-csq { cursor: default; }
 /* FILLED but not finished: assigned, in progress. A primary-tinted border is the whole treatment --
    the cover art is already doing the talking, and a second accent would put three colours in a
    26-cell grid. */
-div.pp-csq { cursor: default; }
-
 .pp-csq--filled {
     border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
 }

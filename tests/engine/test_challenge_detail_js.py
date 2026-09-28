@@ -61,6 +61,17 @@ JS_CODE = _code_only(JS)
 CSS_CODE = _code_only(CSS)
 
 
+def _reloads():
+    """Every line that navigates, so the pins can talk about HOW MANY rather than banning them.
+
+    A blanket "no reload" was right when there were none, and is the kind of assertion someone deletes the
+    day one is genuinely needed. There is exactly one: the run FINISHING is a mode change (the header gains
+    a chip, the read-only note appears, `can_edit` turns false, every square becomes a `<div>`), and
+    patching all of that client-side would be the second renderer this design exists to avoid.
+    """
+    return [ln.strip() for ln in JS_CODE.splitlines() if 'location.reload' in ln]
+
+
 def test_the_file_is_there_and_is_not_a_stub():
     """A pin file whose subject shrank to nothing would otherwise pass every assertion below by vacuity.
 
@@ -407,8 +418,8 @@ def test_nothing_waits_on_a_reload_any_more():
 
     Now the write reply carries the square's markup and there is no navigation at all, so there is nothing
     for a duration to coordinate."""
-    assert 'window.location.reload' not in JS_CODE
     assert 'TOAST_MS' not in JS_CODE
+    assert len(_reloads()) == 1, 'the per-square reloads are gone; only the run-finishing one remains'
 
 
 def test_a_completed_square_stops_being_pressable_at_once():
@@ -456,7 +467,11 @@ def test_the_editable_square_has_a_pointer_cursor():
     page's primary interaction -- showed the default arrow. Every other button in that file sets it."""
     block = CSS[CSS.index('.pp-csq {'):CSS.index('.pp-csq--empty')]
     assert 'cursor: pointer;' in block
-    assert 'div.pp-csq { cursor: default; }' in CSS, 'a read-only square must not claim to be pressable'
+    # BOTH non-pressable shapes. `div.pp-csq` covers a read-only square; `button.pp-csq:disabled` covers one
+    # the JS has just completed, which stays a `<button>` on purpose -- and which kept `cursor: pointer` for
+    # as long as it sat there, while a comment of mine claimed `:disabled` had dealt with it.
+    assert 'div.pp-csq,' in CSS
+    assert 'button.pp-csq:disabled { cursor: default; }' in CSS
 
 
 @pytest.mark.parametrize('selector, floor', [
@@ -537,10 +552,17 @@ def test_a_write_no_longer_reloads_the_page():
 
     The reply now carries `html` for the one square that changed, rendered by the SAME partial the page used.
     One renderer, no navigation."""
-    assert 'window.location.reload' not in JS_CODE
     assert 'if (slot.html) { square.innerHTML = slot.html; }' in JS
     # `TOAST_MS` existed only so a reload timer could wait for the toast.
     assert 'TOAST_MS' not in JS_CODE
+    # NO PER-SQUARE RELOAD. Exactly one survives and it is gated on the RUN finishing -- see `_reloads`.
+    assert len(_reloads()) == 1
+    # GATED, not merely present: the reload must sit inside the run-finishing branch, close enough to it
+    # that no other statement can have come between. Measured in characters because the alternative is
+    # embedding a newline in the assertion, which is how the last two attempts at this broke.
+    gate = 'if (slot.is_complete) {'
+    assert gate in JS_CODE
+    assert 0 < JS_CODE.index('location.reload') - JS_CODE.index(gate) < 120
 
 
 def test_the_swapped_square_markup_comes_from_the_server():
@@ -593,3 +615,16 @@ def test_the_replace_warning_needs_the_servers_filled_map():
     assert "'filled': filled" in picker
     assert "'filled': panel['filled']," in views
     assert "var occupant = (panel.filled || {})[key];" in JS
+
+
+def test_the_run_finishing_is_the_only_thing_that_reloads():
+    """THE ONE THING REMOVING THE RELOAD BROKE, found by asking what the reload had been masking.
+
+    A reload corrects everything the client failed to update, so taking it out exposes whatever was never
+    being updated. `is_complete` was sent by the server and read by nobody: filling the LAST square left the
+    header with no "Finished" chip, no read-only note, and a picker that should have stopped shipping. The
+    run's completion is a change of MODE rather than of one square, and patching it client-side would be the
+    second renderer this whole design avoids -- so it reloads, once per run.
+    """
+    assert 'if (slot.is_complete) {' in JS_CODE
+    assert len(_reloads()) == 1
