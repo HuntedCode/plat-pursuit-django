@@ -675,16 +675,25 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-dim);
 }
 
-/* A game the hunter has already finished. Sits under the name so the row reads "game, finished" rather than
-   making the state compete with the title. */
-.pp-cpick__row-chip { align-self: flex-start; }
+/* THE TITLE LINE: the name, and its state at the end of the same line. The chip used to sit underneath,
+   where it read as a separate fact about the row rather than part of its heading and spent a line of height.
+   `min-width: 0` on the name is what lets the 2-line clamp shrink instead of shoving the chip out. */
+.pp-cpick__row-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+.pp-cpick__row-head .pp-cpick__row-name { flex: 1 1 auto; min-width: 0; }
+.pp-cpick__row-chip { flex: none; }
 
-/* THE SINGLE-SQUARE BUTTON. In A-Z a game fits exactly one letter, so the pill carries a sentence ("Add this
-   game to S") instead of a bare letter that looked like one option among several. Full width because it is
-   the row's only action, and left-aligned because it is now a phrase rather than a token. */
-.pp-cpick__key--wide {
-    width: 100%;
-    justify-content: flex-start;
+/* THE SINGLE-SQUARE BUTTON. In A-Z a game fits exactly one letter, so this carries a sentence ("Add this
+   game to S") instead of a bare letter that looked like one option among several.
+
+   SIZED TO ITS TEXT, not to the row. It was `width: 100%` on the reasoning that it is the row's only action
+   -- which made a short phrase into a bar stretching the whole panel, and read as heavier than the thing it
+   does. A softer radius than the pill because it is a phrase rather than a token; a 999px lozenge around a
+   sentence is a shape for a tag. */
+.pp-cpick__key--sentence {
     text-align: left;
     border-radius: var(--pp-radius-md);
 }
@@ -702,6 +711,63 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-cpick__key--taken:hover { background: color-mix(in oklab, var(--pp-warning) 24%, var(--pp-bg-2)); }
 }
 .pp-cpick__key-swap { font-weight: 700; opacity: 0.85; }
+
+/* THE INLINE PROMPT, which replaced a native `window.confirm`. Two buttons on the house recipe
+   (`.stg-confirm__row`, used by account deletion in Settings): the SAFE one first and focused, and named
+   after what it preserves rather than "Cancel".
+
+   It spans the row grid so a multi-column catch-up list gets one wide prompt rather than a cell, and it is
+   warning-toned because both things it asks about are irreversible-ish: replacing a square's game, or
+   completing and locking a square for good. */
+.pp-cpick__ask {
+    grid-column: 1 / -1;
+    padding: 12px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid color-mix(in oklab, var(--pp-warning) 45%, transparent);
+    background: color-mix(in oklab, var(--pp-warning) 10%, var(--pp-bg-2));
+}
+.pp-cpick__ask-text {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+    color: var(--pp-text);
+}
+.pp-cpick__ask-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 10px;
+}
+.pp-cpick__ask-keep,
+.pp-cpick__ask-go {
+    /* 44px, like every other control in this sheet -- these two are the ones it would hurt most to mis-tap. */
+    min-height: 44px;
+    padding: 8px 16px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: var(--pp-radius-sm);
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.pp-cpick__ask-keep {
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-primary) 16%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+}
+.pp-cpick__ask-go {
+    color: var(--pp-bg-0);
+    background: var(--pp-warning);
+    border: 1px solid transparent;
+}
+@media (hover: hover) {
+    .pp-cpick__ask-keep:hover { box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 25%, transparent); }
+    .pp-cpick__ask-go:hover { box-shadow: 0 0 12px color-mix(in oklab, var(--pp-warning) 35%, transparent); }
+}
+.pp-cpick__ask-keep:focus-visible,
+.pp-cpick__ask-go:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
 /* THE CATCH-UP BLOCK. Warning-toned because every offer inside it lands the square COMPLETE and LOCKED --
    the one irreversible action on a run. The tone is the warning; the confirmation is the service's. */

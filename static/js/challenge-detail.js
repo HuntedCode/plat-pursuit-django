@@ -184,6 +184,8 @@
         }
 
         function renderSlotPanel(panel) {
+            // Any open prompt belonged to the panel being replaced.
+            dropPrompts();
             els.title.textContent = panel.label;
             els.sub.textContent = panel.total === panel.showing
                 ? panel.total + (panel.total === 1 ? ' game fits' : ' games fit')
@@ -249,6 +251,7 @@
         }
 
         function renderSearchPanel(panel) {
+            dropPrompts();
             els.title.textContent = 'Search';
             els.sub.textContent = panel.too_short
                 ? 'Type at least two letters'
@@ -278,15 +281,21 @@
                 // to sit at a real size.
                 var main = document.createElement('div');
                 main.className = 'pp-cpick__row-main';
+                // THE TITLE AND ITS STATE SHARE A LINE, the chip at the end of it. Stacked underneath, the
+                // chip read as a second fact about the row rather than as part of its heading, and cost a
+                // line of height on every finished result.
+                var head = document.createElement('span');
+                head.className = 'pp-cpick__row-head';
                 var name = document.createElement('span');
                 name.className = 'pp-cpick__row-name';
                 name.textContent = row.name;
-                main.appendChild(name);
+                head.appendChild(name);
                 // ALREADY FINISHED, marked. The server has been sending this all along -- one indexed query
                 // over the page, via `completed_contract_ids` -- and only one narrow branch read it, so a
                 // search result gave no hint that placing it would complete the square on the spot. The chip
                 // is the house primitive, not DaisyUI's badge.
-                if (row.is_completed_by_you) { main.appendChild(chip('Finished', 'success')); }
+                if (row.is_completed_by_you) { head.appendChild(chip('Finished', 'success')); }
+                main.appendChild(head);
                 block.appendChild(main);
 
                 if (row.already_in_run) {
@@ -307,6 +316,17 @@
                     // two run types: in A-Z the letter is a fact about the game, and in Job Coverage it is a
                     // decision.
                     var single = row.keys.length === 1;
+                    // A FINISHED GAME IS NOT PLACEABLE FROM HERE. The ordinary path refuses it outright, and
+                    // the two rules that DO lift it -- the hatch and the first-run importer -- are offered
+                    // inside the square's own panel, in the warning block that explains the square will lock.
+                    // So the squares are shown and disabled: the game is still worth finding, and the chip on
+                    // the title says why nothing can be done with it.
+                    //
+                    // Deliberately WITHOUT copy promising the exception. Whether a rule lifts it is per-slot
+                    // and per-hunter (`catchup_offers`), and answering that for every search result would be
+                    // a query each -- so a note saying "open the square to use it" would be a promise this
+                    // panel cannot keep.
+                    var finished = !!row.is_completed_by_you;
                     if (!single) { main.appendChild(lead('Add this game to:')); }
                     var keys = document.createElement('div');
                     keys.className = 'pp-cpick__keys';
@@ -315,12 +335,17 @@
                         var occupant = (panel.filled || {})[key];
                         var pick = document.createElement('button');
                         pick.type = 'button';
-                        pick.className = 'pp-cpick__key' + (single ? ' pp-cpick__key--wide' : '');
+                        pick.disabled = finished;
+                        pick.className = 'pp-cpick__key' + (single ? ' pp-cpick__key--sentence' : '');
+                        // THE SENTENCE EITHER WAY. A disabled button that describes the action it would
+                        // perform is clearer than one showing a bare letter -- the DISABLED STATE is what
+                        // says "not possible", so the words do not have to, and stripping them left a lone
+                        // "S" that read like the pill this change existed to get rid of.
                         pick.textContent = single ? 'Add this game to ' + keyLabel : keyLabel;
                         // AN OCCUPIED SQUARE SAYS SO BEFORE IT IS PRESSED. Picking a game for a square that
                         // already holds one silently replaced it -- easy to do by accident, since the search
                         // panel says nothing about the rest of the run.
-                        if (occupant) {
+                        if (occupant && !finished) {
                             pick.classList.add('pp-cpick__key--taken');
                             pick.appendChild(swap(' (replaces ' + occupant + ')'));
                         }
@@ -329,12 +354,13 @@
                         // the accessible name, so the two do not disagree for voice control.
                         pick.setAttribute('aria-label', pick.textContent + ' \u2014 ' + row.name);
                         pick.addEventListener('click', function () {
-                            if (occupant && !window.confirm(
-                                    keyLabel + ' already has ' + occupant + '.\n\n'
-                                    + 'Replace it with ' + row.name + '?')) {
-                                return;
-                            }
-                            assign(row.slug, key, false, pick);
+                            if (!occupant) { assign(row.slug, key, false, pick); return; }
+                            askInline(pick,
+                                      keyLabel + ' already has ' + occupant + '. Replace it with '
+                                      + row.name + '?',
+                                      'Replace it',
+                                      'Keep ' + occupant,
+                                      function () { assign(row.slug, key, false, pick); });
                         });
                         keys.appendChild(pick);
                     });
@@ -343,6 +369,13 @@
                 card.appendChild(block);
                 els.rows.appendChild(card);
             });
+        }
+
+        /** Remove any inline prompt. A re-render replaces the rows a prompt was anchored to. */
+        function dropPrompts() {
+            Array.prototype.forEach.call(
+                dialog.querySelectorAll('.pp-cpick__ask'),
+                function (el) { if (el.parentNode) { el.parentNode.removeChild(el); } });
         }
 
         function note(text) {
@@ -488,15 +521,76 @@
             });
         }
 
+        /**
+         * Ask, inside the sheet, right where the thing being confirmed is.
+         *
+         * NOT `window.confirm`. That was the first version and it was wrong in three ways beyond simply
+         * looking foreign inside a designed sheet: it renders chrome we do not control, it cannot be styled
+         * to say which of the two answers is the safe one, and -- the real defect -- a native dialog SURVIVES
+         * its sheet. Dismiss the picker with a request in flight and the confirm sat there over a bare page,
+         * still able to lock a square permanently. A guard was added for that; an inline prompt removes the
+         * whole class, because a prompt that lives in the sheet leaves with it.
+         *
+         * ON THE HOUSE RECIPE (`.stg-confirm__row` in `components/settings-page.css`): two buttons, the SAFE
+         * one first and focused, and the safe one named after what it preserves ("Keep Sly Cooper") rather
+         * than "Cancel" -- so a reader who only reads the buttons still knows what each does. Account
+         * deletion in Settings is built the same way.
+         *
+         * Spans the row grid, so on a multi-column catch-up list it is one wide prompt rather than a cell.
+         */
+        function askInline(anchor, message, goLabel, keepLabel, onGo) {
+            var host = anchor && anchor.closest ? anchor.closest('li') : null;
+            var list = host && host.parentNode;
+            if (!host || !list) { onGo(); return; }
+
+            var prompt = document.createElement('li');
+            prompt.className = 'pp-cpick__ask';
+            var text = document.createElement('p');
+            text.className = 'pp-cpick__ask-text';
+            text.textContent = message;
+            prompt.appendChild(text);
+
+            var row = document.createElement('div');
+            row.className = 'pp-cpick__ask-row';
+            var keep = document.createElement('button');
+            keep.type = 'button';
+            keep.className = 'pp-cpick__ask-keep';
+            keep.textContent = keepLabel;
+            var go = document.createElement('button');
+            go.type = 'button';
+            go.className = 'pp-cpick__ask-go';
+            go.textContent = goLabel;
+            row.appendChild(keep);
+            row.appendChild(go);
+            prompt.appendChild(row);
+
+            var close = function (restoreFocus) {
+                if (prompt.parentNode) { prompt.parentNode.removeChild(prompt); }
+                // FOCUS GOES BACK to what was pressed, which a native confirm did for free and a built one
+                // has to do on purpose -- otherwise a keyboard user lands at the top of the document.
+                if (restoreFocus && anchor && anchor.focus && document.contains(anchor)) { anchor.focus(); }
+            };
+            keep.addEventListener('click', function () { close(true); say('Nothing changed.'); });
+            go.addEventListener('click', function () { close(false); onGo(); });
+            // Escape answers the prompt, not the sheet: the narrower thing wins, which is what a reader
+            // pressing it expects.
+            prompt.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') { e.stopPropagation(); close(true); }
+            });
+
+            list.insertBefore(prompt, host.nextSibling);
+            // THE SAFE BUTTON, per the house convention. Focusing the destructive one turns a stray Enter
+            // into the thing the prompt exists to prevent.
+            keep.focus();
+        }
+
         function offerConfirmation(data, slug, key, button) {
-            // NATIVE `confirm()`, the same call `list-detail.js` uses for its own destructive action and for
-            // the same reason: this is a modal `<dialog>` already, and a second layered dialog inside the
-            // top layer is a fight with focus and with the backdrop that buys nothing. The text is the
-            // server's, so the warning and the rule cannot drift apart.
-            var proceed = window.confirm(
-                data.error + '\n\n' + data.contract_name + ' -> ' + labelFor(key));
-            if (!proceed) { say('Nothing changed.'); return; }
-            assign(slug, key, true, button);
+            // The server's own words, so the warning and the rule cannot drift apart.
+            askInline(button,
+                      data.error + ' (' + data.contract_name + ' \u2192 ' + labelFor(key) + ')',
+                      'Use it and lock the square',
+                      'Leave it empty',
+                      function () { assign(slug, key, true, button); });
         }
 
         function labelFor(key) {

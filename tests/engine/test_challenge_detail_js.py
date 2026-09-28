@@ -183,10 +183,22 @@ def test_the_409_is_handled_as_a_confirmation_and_not_a_failure():
 
 
 def test_the_confirmation_text_comes_from_the_server():
-    """So the warning and the rule cannot drift apart. A second copy of "this locks the square" in the
-    client is a second thing to forget to update."""
-    assert 'window.confirm(' in JS
+    """So the warning and the rule cannot drift apart. A second copy of "this locks the square" in the client
+    is a second thing to forget to update."""
     assert 'data.error' in JS
+    assert 'askInline(button,' in JS
+
+
+def test_no_confirmation_is_a_native_pop_up():
+    """NATIVE `confirm()` WAS THE FIRST VERSION and it was wrong beyond looking foreign inside a designed
+    sheet: it renders chrome we do not control, it cannot say which of the two answers is the safe one, and a
+    native dialog SURVIVES its sheet -- dismiss the picker with a request in flight and the confirm sat over a
+    bare page, still able to lock a square permanently.
+
+    An inline prompt removes that class STRUCTURALLY rather than by guard: a prompt that lives in the sheet
+    leaves with it."""
+    assert 'window.confirm' not in JS_CODE
+    assert 'confirm(' not in JS_CODE.replace('askInline(', '').replace('offerConfirmation(', '')
 
 
 def test_the_toast_fires_after_the_close_not_beside_it():
@@ -575,19 +587,31 @@ def test_the_swapped_square_markup_comes_from_the_server():
 def test_a_single_square_spells_out_the_whole_sentence():
     """In A-Z a game fits exactly one letter, and a lone pill reading "S" looked like a choice among options
     that do not exist. The owner asked for the wording spelled out."""
-    assert "pick.textContent = single ? 'Add this game to ' + keyLabel : keyLabel;" in JS
     assert "var single = row.keys.length === 1;" in JS
+    # THE SENTENCE EITHER WAY, enabled or not. Stripping it from a disabled button left a lone "S" -- exactly
+    # the bare pill this change existed to remove -- when the DISABLED STATE is what says "not possible".
+    assert "pick.textContent = single ? 'Add this game to ' + keyLabel : keyLabel;" in JS
     # Several squares keep the pills, with a lead-in so they read as answers to a question.
     assert "main.appendChild(lead('Add this game to:'));" in JS
+    # SIZED TO ITS TEXT. It was `width: 100%` on the reasoning that it is the row's only action, which turned
+    # a short phrase into a bar across the whole panel and read heavier than what it does.
+    sentence = CSS[CSS.index('.pp-cpick__key--sentence {'):]
+    assert 'width: 100%' not in sentence[:sentence.index('}')]
 
 
 def test_a_finished_game_is_marked_in_the_search_results():
     """The server has been sending `is_completed_by_you` all along -- one indexed query over the page -- and
     only one narrow branch read it, so a search result gave no hint that placing it would complete the square
     immediately. The chip is the house primitive, never DaisyUI's badge."""
-    assert "if (row.is_completed_by_you) { main.appendChild(chip('Finished', 'success')); }" in JS
+    assert "if (row.is_completed_by_you) { head.appendChild(chip('Finished', 'success')); }" in JS
     assert "'bd-chip bd-chip--' + tone" in JS
     assert 'badge' not in JS_CODE
+    # ON THE TITLE'S LINE, at the end of it. Stacked underneath it read as a separate fact about the row
+    # rather than part of its heading, and spent a line of height on every finished result.
+    assert "head.className = 'pp-cpick__row-head';" in JS
+    assert '.pp-cpick__row-head {' in CSS
+    # `min-width: 0` is what lets the clamped name shrink instead of pushing the chip out of the row.
+    assert '.pp-cpick__row-head .pp-cpick__row-name { flex: 1 1 auto; min-width: 0; }' in CSS
 
 
 def test_an_occupied_square_warns_before_it_is_replaced():
@@ -600,11 +624,12 @@ def test_an_occupied_square_warns_before_it_is_replaced():
     # THE GUARD'S SHAPE, not just the copy. Asserting the sentence was present passed with the condition
     # stubbed to `false` -- the words existed and gated nothing, which is the version of this test that
     # reassures without protecting.
-    assert 'if (occupant && !window.confirm(' in JS
-    assert "already has ' + occupant + '." in JS
-    # And the refusal has to stop the write, not merely be reachable.
-    guard = JS[JS.index('if (occupant && !window.confirm('):]
-    assert guard[:guard.index('assign(')].count('return;') == 1
+    # THE GUARD'S SHAPE, not just the copy. Asserting the sentence was present passed with the condition
+    # stubbed to `false` -- the words existed and gated nothing.
+    assert 'if (!occupant) { assign(row.slug, key, false, pick); return; }' in JS
+    assert "already has ' + occupant + '. Replace it with '" in JS
+    # The safe answer is NAMED after what it keeps, per the house recipe -- not "Cancel".
+    assert "'Keep ' + occupant" in JS
 
 
 def test_the_replace_warning_needs_the_servers_filled_map():
@@ -628,3 +653,67 @@ def test_the_run_finishing_is_the_only_thing_that_reloads():
     """
     assert 'if (slot.is_complete) {' in JS_CODE
     assert len(_reloads()) == 1
+
+
+def test_a_finished_game_cannot_be_placed_from_the_search_panel():
+    """It is still worth FINDING -- so the row renders, the chip says why, and the squares it fits are shown
+    and disabled.
+
+    The ordinary path refuses a finished game outright. The two rules that DO lift it, the hatch and the
+    first-run importer, are offered inside the square's own panel in the block that warns the square will
+    lock -- which is where that decision belongs, with its confirmation.
+
+    AND NO COPY PROMISING THE EXCEPTION. Whether a rule lifts it is per-slot and per-hunter, so answering it
+    for every search result would cost a query each; a note saying "open the square to use it" would be a
+    promise this panel cannot keep.
+    """
+    assert 'var finished = !!row.is_completed_by_you;' in JS
+    assert 'pick.disabled = finished;' in JS
+    assert '.pp-cpick__key:disabled' in CSS
+    # And the replace warning is suppressed, because there is no press for it to warn about.
+    assert 'if (occupant && !finished) {' in JS
+
+
+def test_the_inline_prompt_follows_the_house_confirm_recipe():
+    """`.stg-confirm__row` (account deletion in Settings) is the pattern: two buttons, the SAFE one first and
+    FOCUSED, and named after what it preserves rather than "Cancel" -- so somebody who reads only the buttons
+    still knows what each does. Focusing the destructive one turns a stray Enter into the thing the prompt
+    exists to prevent."""
+    body = JS[JS.index('function askInline('):JS.index('function offerConfirmation(')]
+    assert 'row.appendChild(keep);' in body
+    assert body.index('row.appendChild(keep);') < body.index('row.appendChild(go);'), 'safe answer first'
+    assert 'keep.focus();' in body
+    assert '.pp-cpick__ask-keep' in CSS and '.pp-cpick__ask-go' in CSS
+
+
+def test_the_prompt_returns_focus_to_what_was_pressed():
+    """A native confirm did this for free; a built one has to do it on purpose, or a keyboard user who answers
+    "keep" lands at the top of the document."""
+    body = JS[JS.index('function askInline('):JS.index('function offerConfirmation(')]
+    assert 'if (restoreFocus && anchor && anchor.focus && document.contains(anchor)) { anchor.focus(); }' in body
+    assert "keep.addEventListener('click', function () { close(true); say('Nothing changed.'); });" in body
+    # And the destructive answer does NOT restore focus -- the square it wrote to is about to be re-rendered.
+    assert "go.addEventListener('click', function () { close(false); onGo(); });" in body
+
+
+def test_escape_answers_the_prompt_rather_than_the_sheet():
+    """The narrower thing wins, which is what somebody pressing it expects -- otherwise a prompt they were
+    reading takes the whole picker with it."""
+    body = JS[JS.index('function askInline('):JS.index('function offerConfirmation(')]
+    assert "if (e.key === 'Escape') { e.stopPropagation(); close(true); }" in body
+
+
+def test_a_re_render_drops_any_open_prompt():
+    """A prompt is anchored to a row, and both renderers replace the rows wholesale -- so one left behind
+    would be a question about a game that is no longer on screen."""
+    assert 'function dropPrompts()' in JS
+    for renderer in ('function renderSlotPanel(panel) {', 'function renderSearchPanel(panel) {'):
+        after = JS[JS.index(renderer):]
+        assert 'dropPrompts();' in after[:200], '%s does not drop prompts' % renderer
+
+
+def test_the_prompt_spans_the_row_grid():
+    """The rows are a 2-3 column grid on the slot panel, so without this a prompt would render as one narrow
+    cell beside the offers it is asking about."""
+    ask = CSS[CSS.index('.pp-cpick__ask {'):]
+    assert 'grid-column: 1 / -1;' in ask[:ask.index('}')]
