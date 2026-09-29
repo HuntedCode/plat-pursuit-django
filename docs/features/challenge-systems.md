@@ -399,6 +399,7 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `challenges/services/rewards.py` | **every reward write**: the XP redemption, the titles, the completion hook |
 | `challenges/views.py` | two page views, three JSON read endpoints (the picker panels, all `GET`), six thin POST actions (start, assign, clear, hide, redeem, redeem-all) |
 | `challenges/management/commands/process_challenges.py` | the nightly sweep |
+| `challenges/management/commands/seed_challenge_demo.py` | **dev only**: runs in every reward state, so the panel and the pip can be looked at without finishing 25 contracts |
 | `templates/challenges/` | `my_challenges.html`, `challenge_detail.html`, `partials/_square_body.html` |
 | `static/js/challenge-detail.js` | the picker's three modes, the reward panel's claims, and the board's entrance |
 | `templates/challenges/partials/_rewards_panel.html` | the reward panel and its ledger of finished squares |

@@ -1,6 +1,6 @@
 # Management Commands
 
-PlatPursuit has **102 custom management commands** spread across 8 Django apps: `trophies` (65), `core` (23), `notifications` (5), `users` (4), `milestones` (2), `art_reveal` (1), `challenges` (1), `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
+PlatPursuit has **103 custom management commands** spread across 8 Django apps: `trophies` (65), `core` (23), `notifications` (5), `users` (4), `challenges` (2), `milestones` (2), `art_reveal` (1), `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
 
 ---
 
@@ -122,6 +122,7 @@ PlatPursuit has **102 custom management commands** spread across 8 Django apps: 
 | Command | Purpose | Key Flags | Typical Usage |
 |---------|---------|-----------|---------------|
 | `process_challenges` | Complete Challenge squares whose Contract the owner has now finished. Detection only: stamps the SLOT's own `is_completed`/`completed_at`/`completed_via='live'`, never the Contract's, and grants no XP. The nightly counterpart to the sync hook -- it catches a Contract published AFTER a square was assigned, and a re-earn after `reconcile_contracts` deleted the `EarnedContract` row. **Runs nightly, and it MUST come immediately after `process_contracts`**: a square completes when an `EarnedContract` row exists, and that step is what creates one. Scales with runs in flight, not with the userbase -- a slot names its own contract, so this never walks profiles the way `process_contracts` has to. | `--user <psn_username>`, `--dry-run` | `python manage.py process_challenges --dry-run` |
+| `seed_challenge_demo` | **DEV-ONLY.** Seed a profile with Challenge runs in every state a reward surface can be in -- a finished Job Coverage run with nothing claimed (the ledger at its longest), one in progress with some squares already paid (both row states on one panel), and an A-Z run (which draws no payout panel at all). Exists so those states can be LOOKED AT without finishing 25 contracts by hand. Picks REAL live contracts so the cover art is real, and writes **no** `EarnedContract` rows -- a square is completed through `mark_slot_completed` directly, so the command never invents trophies or contract credit for an account. Refuses `DEBUG=False` without `--force`, because the pre-claimed squares pay real grants into the append-only XP ledger. `--reset` removes only the runs it tagged and the grants it paid (by slot id, before the slots go), then rebuilds the XP cache from the real ledger. It will **not adopt a run it did not create** -- an active run of that type means the scenario is skipped with a warning. | `--user <psn_username>`, `--reset`, `--list`, `--force` | `python manage.py seed_challenge_demo --user jeffrey --reset` |
 
 ---
 
