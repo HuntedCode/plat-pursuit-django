@@ -209,6 +209,125 @@ def test_a_hunters_own_run_is_never_adopted_or_deleted(catalogue):
     assert DEMO_TAG not in real.name
 
 
+# ── --wipe, the way out of the deadlock ──────────────────────────────────────────────────────────
+
+@override_settings(DEBUG=True)
+def test_wipe_clears_the_profiles_own_runs_so_seeding_can_proceed(catalogue):
+    """THE DEADLOCK THIS EXISTS FOR. The seeder refuses to adopt a run it did not create, `--reset` is scoped
+    to the demo tag, and `ChallengeAdmin` has `has_delete_permission -> False` -- so a dev profile that had
+    ever pressed Start could not be seeded and had no way to clear itself."""
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    own = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    _seed(profile)
+    assert not _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_AZ).exists(), 'blocked, as designed'
+
+    _seed(profile, wipe=True)
+
+    assert not Challenge.objects.filter(pk=own.pk).exists()
+    assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_AZ).exists()
+
+
+@override_settings(DEBUG=True)
+def test_wipe_clears_a_HIDDEN_run_too(catalogue):
+    """THE CASE THE OWNER HIT. Hiding a run feels like clearing it and does not: `start` RESUMES a hidden run
+    rather than dealing a fresh one, so the one-active-per-type slot is still occupied as far as seeding is
+    concerned -- and a hidden run is invisible on the page, so there is nothing to hide again or finish.
+
+    (`Challenge.objects` deliberately does not filter soft-deleted rows, which is what lets one query reach
+    it at all -- a default manager that hid them would have made this impossible to write.)
+    """
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    own = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    svc.hide(own, profile)
+    own.refresh_from_db()
+    assert own.is_deleted is True
+
+    _seed(profile, wipe=True)
+
+    assert not Challenge.objects.filter(pk=own.pk).exists()
+    assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_JOBS).count() == 2
+
+
+@override_settings(DEBUG=True)
+def test_wipe_takes_the_challenge_grants_with_it(catalogue):
+    """Same grants-before-slots order as `--reset`, for the same reason: a challenge grant's `source_id` IS
+    the slot id, so once the slots are gone the rows cannot be identified again and would sit in the ledger
+    forever, counted by every recompute."""
+    from django.db.models import Sum
+
+    profile = _hunter()
+    _seed(profile)
+    assert ContractXPGrant.objects.filter(profile=profile, source='challenge').exists()
+
+    _seed(profile, wipe=True)
+
+    # The wipe removed the first seed's grants; the re-seed paid a fresh set.
+    assert ContractXPGrant.objects.filter(profile=profile, source='challenge').count() == MIXED_CLAIMED
+    for cache in ProfileJobXP.objects.filter(profile=profile):
+        ledger = (ContractXPGrant.objects.filter(profile=profile, job=cache.job)
+                  .aggregate(t=Sum('amount'))['t'] or 0)
+        assert cache.total_xp == ledger
+
+
+@override_settings(DEBUG=True)
+def test_wipe_leaves_other_profiles_alone(catalogue):
+    """It is scoped to one profile. Pinned because "remove every run" is one missing filter away from
+    removing every run on the site."""
+    from challenges.services import challenge_service as svc
+
+    mine, theirs = _hunter(), _hunter()
+    other_run = svc.start(theirs, CHALLENGE_TYPE_AZ)
+
+    _seed(mine, wipe=True)
+
+    assert Challenge.objects.filter(pk=other_run.pk).exists()
+
+
+@override_settings(DEBUG=True)
+def test_wipe_leaves_non_challenge_xp_alone(catalogue):
+    """It deletes grants by `source='challenge'` and slot id, so a contract's XP is untouchable by it."""
+    profile = _hunter()
+    job = Job.objects.order_by('slug').first()
+    ContractXPGrant.objects.create(profile=profile, job=job, amount=4321, source='contract')
+
+    _seed(profile, wipe=True)
+
+    assert ContractXPGrant.objects.filter(profile=profile, source='contract', amount=4321).exists()
+
+
+@override_settings(DEBUG=True)
+def test_reset_does_not_imply_wipe(catalogue):
+    """They are different promises. `--reset` re-seeds; `--wipe` destroys a profile's runs, which on a dev
+    box is scratch data and anywhere else is somebody's progress."""
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    own = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    _seed(profile, reset=True)
+
+    assert Challenge.objects.filter(pk=own.pk).exists()
+
+
+@override_settings(DEBUG=False)
+def test_wipe_is_behind_the_debug_guard(catalogue):
+    """The most destructive flag on the most dev-only command still answers to the same gate."""
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    own = svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    with pytest.raises(CommandError, match='dev database'):
+        _seed(profile, wipe=True)
+
+    assert Challenge.objects.filter(pk=own.pk).exists()
+
+
 # ── the guards ───────────────────────────────────────────────────────────────────────────────────
 
 @override_settings(DEBUG=False)

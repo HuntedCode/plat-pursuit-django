@@ -247,7 +247,10 @@
 
                     {% if card.state == 'active' %}
                     {% comment %}HIDE, and it confirms first. The word is "Hide" everywhere a hunter can see
-                    it, because that is what it does -- the run keeps every square and Start brings it back.
+                    it, because that is what it does -- the run keeps every square and RESUME brings it back.
+                    (The dialog said "Start" until the owner caught it. The service function is `start`, and
+                    that code name leaked into the copy: the BUTTON on a hidden run's card says Resume, so
+                    naming Start pointed at a control that is not on the page.)
                     Somebody expecting a delete needs telling that BEFORE they act, which is what the
                     dialog is for. Only on an active run: a hidden one is already hidden.{% endcomment %}
                     <button type="button" class="pp-cta pp-cta--ghost" data-chal-hide

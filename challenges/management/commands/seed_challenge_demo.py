@@ -2,7 +2,15 @@
 ledger, the pip and the Start card can all be LOOKED AT without finishing twenty-five contracts by hand.
 
     python manage.py seed_challenge_demo --user <psn_username> --reset   # re-runnable
-    python manage.py seed_challenge_demo --user <psn_username> --list    # just print the URLs
+    python manage.py seed_challenge_demo --user <psn_username> --list    # print what is there, write nothing
+    python manage.py seed_challenge_demo --user <psn_username> --wipe    # remove ALL of that profile's runs
+
+`--wipe` EXISTS BECAUSE THE SAFE VERSION DEADLOCKED. This command refuses to adopt a run it did not create
+(see `_start_fresh` for why -- adopting one made `--reset` delete real progress), `--reset` only removes runs
+it tagged, and the admin is read-only by design. So a profile that already had its own A-Z or Job Coverage run
+could not be seeded and had no way to clear it: hiding a run does not free the slot either, because `start`
+RESUMES a hidden run rather than creating a fresh one. `--wipe` removes every run of that profile, demo or
+not, and says how many. It is deliberately not implied by `--reset`.
 
 DEV-ONLY, and it refuses to run with `DEBUG = False` unless `--force` is passed, because unlike
 `seed_career_demo` this one can write into the APPEND-ONLY job-XP ledger (the "some squares already
@@ -66,6 +74,10 @@ class Command(BaseCommand):
                             help='Remove previously seeded demo runs (and their XP) first.')
         parser.add_argument('--list', action='store_true',
                             help='Print the URLs of runs already seeded and exit. Writes nothing.')
+        parser.add_argument('--wipe', action='store_true',
+                            help="Remove ALL of this profile's challenge runs first, demo or not. The way "
+                                 "out when the profile's own runs block seeding -- hiding does not free the "
+                                 "slot, and the admin cannot delete.")
         parser.add_argument('--force', action='store_true',
                             help='Allow running with DEBUG=False. This command writes to the XP ledger.')
 
@@ -85,7 +97,9 @@ class Command(BaseCommand):
         # ONE TRANSACTION for the writes, so a failure half way through does not leave a profile holding
         # three runs of one type and no way to reach the fourth. `--list` is outside it, being read-only.
         with transaction.atomic():
-            if opts['reset']:
+            if opts['wipe']:
+                self._wipe(profile)
+            elif opts['reset']:
                 self._reset(profile)
             self._seed(profile)
 
@@ -130,6 +144,36 @@ class Command(BaseCommand):
         self.stdout.write('  reset: %d demo run(s), %d seeded grant(s) removed; real XP rebuilt.'
                           % (runs, paid))
 
+    def _wipe(self, profile):
+        """Remove EVERY challenge run of this profile, demo or not, and the challenge XP tied to them.
+
+        THE ESCAPE HATCH, and it needs to exist because the safe behaviour deadlocked. `_start_fresh` will
+        not adopt a run this command did not create, `--reset` is scoped to the demo tag, `ChallengeAdmin` has
+        `has_delete_permission -> False`, and hiding a run does not help because `start` RESUMES a hidden one.
+        A dev profile that had ever pressed Start was therefore unseedable with no way back.
+
+        It takes the same grants-before-slots order as `_reset` and for the same reason: a challenge grant's
+        `source_id` IS the slot id, so once the slots are gone the rows cannot be identified again.
+
+        DESTRUCTIVE ON PURPOSE and never implied by `--reset`, because on a dev profile the runs are scratch
+        data and on any other one they are somebody's progress. The `DEBUG` guard above is what keeps the two
+        apart.
+        """
+        runs = Challenge.objects.filter(profile=profile)
+        slot_ids = list(ChallengeSlot.objects.filter(challenge__in=runs).values_list('pk', flat=True))
+
+        grants = ContractXPGrant.objects.filter(
+            profile=profile, source=rewards.XP_SOURCE, source_id__in=slot_ids)
+        paid = grants.count()
+        grants.delete()
+        n = runs.count()
+        runs.delete()
+
+        contract_service.recompute_profile_job_xp(profile)
+        self.stdout.write(self.style.WARNING(
+            '  wiped: %d run(s) (demo AND real), %d challenge grant(s); real XP from other sources rebuilt.'
+            % (n, paid)))
+
     # ── seeding ───────────────────────────────────────────────────────────────────────────────────
 
     def _seed(self, profile):
@@ -159,8 +203,9 @@ class Command(BaseCommand):
         challenge, outcome = svc.start_reporting(profile, challenge_type)
         if outcome != svc.CREATED:
             self.stdout.write(self.style.WARNING(
-                '  skipped "%s": %s already has a run of this type in progress (%s). Finish or hide it, '
-                'or seed a scratch profile -- this command will not adopt a run it did not create.'
+                '  skipped "%s": %s already has a run of this type (%s), and this command will not adopt a '
+                'run it did not create. Re-run with --wipe to clear this profile\'s runs first. (Hiding does '
+                'NOT help: `start` resumes a hidden run rather than dealing a fresh one.)'
                 % (label, profile.psn_username, challenge.name)))
             return None
         self._tag(challenge, label)
@@ -255,6 +300,21 @@ class Command(BaseCommand):
     def _report(self, profile):
         runs = list(Challenge.objects.filter(profile=profile, name__contains=DEMO_TAG)
                     .order_by('challenge_type', 'pk'))
+        # EVERYTHING ELSE THIS PROFILE HAS, because those are what block seeding and there was no way to see
+        # them. A hidden run is included and marked: it does not free the one-active-per-type slot, which is
+        # the least obvious thing about this whole flow.
+        others = list(Challenge.objects.filter(profile=profile).exclude(name__contains=DEMO_TAG)
+                      .order_by('challenge_type', 'pk'))
+        if others:
+            self.stdout.write('')
+            self.stdout.write(self.style.MIGRATE_HEADING(
+                "%s's own runs (NOT seeded; these block seeding)" % profile.psn_username))
+            for run in others:
+                state = 'finished' if run.is_complete else ('hidden' if run.is_deleted else 'active')
+                self.stdout.write('  [%s] %s -- %d/%d squares'
+                                  % (state, run.name, run.completed_count, run.total_slots))
+            self.stdout.write('  Clear them with --wipe if you want the demo runs instead.')
+
         if not runs:
             self.stdout.write(self.style.WARNING('No seeded demo runs for %s.' % profile.psn_username))
             return

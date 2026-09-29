@@ -619,6 +619,22 @@ def test_both_write_doors_share_one_rate_limit_bucket():
                 views.CHALLENGE_REDEEM_RATELIMIT_GROUP}) == 3, 'two kinds share a bucket value'
 
 
+def test_the_hide_dialog_names_the_button_the_hunter_will_see():
+    """IT NAMED THE WRONG ONE. The dialog said "pressing Start brings this same run back" -- but once a run
+    is hidden its card's verb is RESUME (`{'active': 'Continue', 'resumable': 'Resume', 'empty': 'Start'}`),
+    so the copy pointed at a control that is not on the page. The service function is `start`, and that code
+    name leaked into user-facing text.
+
+    PINNED BY SOURCE TEXT, which is how this project pins JS. The wrong word survived review and a test pass;
+    the owner's browser pass is what caught it.
+    """
+    js = (ROOT / 'static' / 'js' / 'my-challenges.js').read_text(encoding='utf-8')
+    dialog = js[js.index('window.confirm('):js.index('if (!ok)')]
+
+    assert 'pressing Resume brings this same run back' in dialog
+    assert 'pressing Start' not in dialog, 'a hidden run has no Start button'
+
+
 def test_the_write_endpoints_light_the_rail():
     """T5: an item shipping without a `_URL_NAME_TO_SLUG_OVERRIDES` line is SILENT -- the strip renders
     with nothing lit. The map's own comment says so, and the two lines this page added were untested;

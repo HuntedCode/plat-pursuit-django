@@ -14,7 +14,7 @@
  * about a thing that already exists. Naming the run in the prompt matters more than the chrome does.
  *
  * WHAT THE COPY HAS TO DO, and it is the reason this confirms at all. Hiding is reversible and loses
- * nothing -- the run keeps every square and Start brings it back. But somebody who came looking for
+ * nothing -- the run keeps every square and Resume brings it back. But somebody who came looking for
  * Delete needs telling that BEFORE they act, not after, and a bare "Hide this?" does not tell them.
  */
 (function () {
@@ -42,7 +42,7 @@
         var ok = window.confirm(
             'Hide ' + name + '?\n\n'
             + 'It comes off your profile and out of the hub, but nothing is lost -- every square you have '
-            + 'finished stays finished, and pressing Start brings this same run back.'
+            + 'finished stays finished, and pressing Resume brings this same run back.'
         );
         if (!ok) { return; }
 
