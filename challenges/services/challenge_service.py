@@ -776,12 +776,26 @@ def _recount(challenge):
     challenge.completed_count = counts['completed'] or 0
     fields = ['filled_count', 'completed_count', 'updated_at']
 
-    if not challenge.is_complete and challenge.completed_count >= challenge.total_slots:
+    just_completed = not challenge.is_complete and challenge.completed_count >= challenge.total_slots
+    if just_completed:
         challenge.is_complete = True
         challenge.completed_at = timezone.now()
         fields += ['is_complete', 'completed_at']
 
     challenge.save(update_fields=fields)
+
+    # THE REWARDS HOOK LIVES HERE, and this line is the reason this function is worth having. TWO writes
+    # can finish a run -- `mark_slot_completed` (detection) and `assign` (a catch-up placement lands its
+    # square complete) -- and both go through this one aggregate, so this is the only place the flip
+    # happens once. Hooking either call site alone would miss half of every hunter's completions.
+    #
+    # AFTER the save, so the title is granted against a run that is already stamped complete: the ordinal
+    # comes from `completed_run_count`, which counts completed runs, and this run has to be one of them.
+    # Imported inside the function because `rewards` imports back into this module for that count.
+    if just_completed:
+        from challenges.services import rewards
+        rewards.on_run_completed(challenge)
+
     return challenge
 
 

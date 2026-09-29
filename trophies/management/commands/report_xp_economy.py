@@ -15,13 +15,21 @@ Run on PROD; sweep alternatives with --t / --k:
     python manage.py report_xp_economy --t 6000 --k 2000
 
 Read-only, catalog-bounded. Models the auto-assigned feed (no curation trim).
+
+IT ALSO MODELS THE JOB COVERAGE CHALLENGE BONUS, which is the one XP source that does NOT come from the
+contract feed: a completed square pays `CHALLENGE_SLOT_JOB_XP` to that square's single job, once per run,
+on top of the contract's own payout. It is reported separately rather than folded into the supply, because
+it is bounded by RUNS COMPLETED (a hunter's choice, repeatable) rather than by the catalogue -- so adding
+it to the per-job supply column would imply a ceiling that does not exist. Use `--runs` to ask what N
+completed runs are worth.
 """
 from collections import Counter, defaultdict
 
 from django.core.management.base import BaseCommand
 
 from trophies.services.job_detection import simulate_stage_jobs, CATALOG_ORDER
-from trophies.util_modules.constants import CONTRACT_XP_TOTAL, JOB_XP_PER_LEVEL
+from trophies.util_modules.constants import (CHALLENGE_SLOT_JOB_XP, CONTRACT_XP_TOTAL,
+                                             JOB_XP_PER_LEVEL)
 from trophies.util_modules.leveling import JOB_TIERS, tier_for_level
 
 
@@ -38,9 +46,15 @@ class Command(BaseCommand):
                             help=f'Total XP per Contract (default {CONTRACT_XP_TOTAL}).')
         parser.add_argument('--k', type=int, default=JOB_XP_PER_LEVEL,
                             help=f'XP per level, flat (default {JOB_XP_PER_LEVEL}).')
+        parser.add_argument('--slot-xp', type=int, default=CHALLENGE_SLOT_JOB_XP,
+                            help=f'XP per completed Job Coverage square '
+                                 f'(default {CHALLENGE_SLOT_JOB_XP}).')
+        parser.add_argument('--runs', type=int, default=1,
+                            help='How many completed Job Coverage runs to model (default 1).')
 
     def handle(self, *args, **options):
         t, k = options['t'], options['k']
+        slot_xp, runs = options['slot_xp'], max(0, options['runs'])
 
         per_stage = simulate_stage_jobs()
         if not per_stage:
@@ -85,6 +99,24 @@ class Command(BaseCommand):
         w(f'  Job level  min / median / max:         {lv_sorted[0]} / {lv_sorted[len(lv_sorted)//2]} / {lv_sorted[-1]}')
         w('  Tier mix (jobs per tier):              ' +
           ', '.join(f'{name} {tier_counts.get(name, 0)}' for _, _, name in JOB_TIERS if tier_counts.get(name)))
+
+        if slot_xp and runs:
+            # ONE SQUARE PER JOB PER RUN, which is what makes this arithmetic and not a simulation: a run
+            # has exactly one square per job in the catalogue, and a square pays its own job once. So N
+            # runs add N x slot_xp to EVERY job, evenly -- the one XP source in the system that cannot
+            # skew the per-job spread, only lift the whole floor.
+            per_job = slot_xp * runs
+            jobs = len(CATALOG_ORDER)
+            bonus_levels = {slug: _level(int(supply.get(slug, 0)) + per_job, k) for slug in CATALOG_ORDER}
+            w('')
+            w(head(f'Job Coverage Challenge bonus  ({runs} completed run(s), {slot_xp:,} / square)'))
+            w(f'  Bonus XP per job:                      {per_job:>6,}')
+            w(f'  Bonus XP total (every square):         {per_job * jobs:>6,}')
+            w(f'  Job levels bought per job:             {per_job // k:>6,}'
+              f'   (a square is {slot_xp / k:g} levels)')
+            w(f'  Pursuer Level, contracts only:         {pursuer_level:>6,}')
+            w(f'  Pursuer Level, with the bonus:         {sum(bonus_levels.values()):>6,}'
+              f'   (+{sum(bonus_levels.values()) - pursuer_level:,})')
 
         w('')
         w(head('Tier ladder  (level -> XP -> ~genre completions at T/2 each)'))

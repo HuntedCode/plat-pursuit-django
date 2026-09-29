@@ -160,5 +160,23 @@
       "created_at": "2026-04-30T00:00:00Z",
       "updated_at": "2026-04-30T00:00:00Z"
     }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 10,
+    "fields": {
+      "name": "challenge_completed",
+      "notification_type": "challenge_completed",
+      "title_template": "🏆 {challenge_name} complete",
+      "message_template": "Every square filled. Your title is waiting on the run.",
+      "icon": "🏆",
+      "action_url_template": "/community/challenges/{challenge_id}/",
+      "action_text": "View the run",
+      "auto_trigger_enabled": false,
+      "trigger_event": "",
+      "priority": "normal",
+      "created_at": "2026-09-28T00:00:00Z",
+      "updated_at": "2026-09-28T00:00:00Z"
+    }
   }
 ]

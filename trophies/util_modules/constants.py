@@ -132,9 +132,10 @@ JOB_XP_PER_LEVEL = 3000        # FLAT, CAP-LESS curve: every job level costs thi
 #:
 #: It lives HERE rather than in the `challenges` app on purpose: this file is where the economy is
 #: legible in one place, so that `report_xp_economy` CAN read it. An XP value hidden inside a feature
-#: app is an XP value the economy audit cannot see. Note the tense -- that command imports
-#: `CONTRACT_XP_TOTAL` and `JOB_XP_PER_LEVEL` and does not yet import this one. Wiring it in belongs
-#: with the chunk that starts paying the XP, not with the chunk that names the number.
+#: app is an XP value the economy audit cannot see. That command now imports this one and reports the
+#: bonus separately from the contract supply (`--runs`, `--slot-xp`), because this source is bounded by
+#: runs completed rather than by the catalogue -- folding it into the supply column would imply a ceiling
+#: that does not exist.
 #:
 #: NOTE WHAT THIS NUMBER IS, because it equals `CONTRACT_XP_TOTAL` and that invites the wrong reading.
 #: T is a whole contract's payout SPLIT EVENLY across its 1-6 jobs; this is the same figure aimed at
