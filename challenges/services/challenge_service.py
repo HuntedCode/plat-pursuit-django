@@ -74,6 +74,7 @@ from challenges.models import (
     COMPLETED_VIA_IMPORT,
     COMPLETED_VIA_LIVE,
     Challenge,
+    ChallengeQuerySet,
     ChallengeSlot,
 )
 from challenges.services import eligibility
@@ -942,12 +943,19 @@ def completed_counts(profile, challenge_type):
     THE TWO FUNCTIONS STAY, and this does not replace them: every other caller wants exactly one of the two
     and should not have to know the other exists. Nor does this become "the" reader -- a caller wanting one
     number should ask for that number, which is the difference between a shared query and a shared shape.
+
+    THE FILTER IS `ChallengeQuerySet.VISIBLE`, not a copy of it, and that is not tidiness. That constant
+    exists precisely so the predicate has ONE spelling, and its own comment records the bug from having two:
+    add a term to `visible()` -- the candidate it names is a suspended profile -- and anonymous readers would
+    respect it while signed-in ones would not. A literal `Q(is_deleted=False)` here would have made the Start
+    card's "N finished before" diverge from the Finished list on that day, which is the exact failure
+    `visible_completed_count` was added to fix.
     """
     return Challenge.objects.filter(
         profile=profile, challenge_type=challenge_type, is_complete=True,
     ).aggregate(
         all=models.Count('pk'),
-        visible=models.Count('pk', filter=models.Q(is_deleted=False)),
+        visible=models.Count('pk', filter=ChallengeQuerySet.VISIBLE),
     )
 
 

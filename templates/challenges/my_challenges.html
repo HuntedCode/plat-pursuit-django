@@ -202,7 +202,12 @@
                 </p>
                 {% endif %}
 
-                <div class="flex items-center gap-2 mt-3 flex-wrap">
+                {% comment %}`mt-auto` so the two cards' primary actions align. The A-Z card has no XP line
+                (it pays no job XP) while the jobs card does, so at `md:` the reward lines are one and two
+                lines tall respectively -- and two cards side by side with their Start buttons at different
+                heights reads as unfinished. Pushing the row to the bottom makes the height difference land
+                in the whitespace above it instead.{% endcomment %}
+                <div class="flex items-center gap-2 mt-3 mt-auto flex-wrap">
                     {% comment %}A FORM, not a link. Starting or resuming a run writes, so it is a POST with
                     a CSRF token -- and a plain form works with no JavaScript, which is the sturdier version
                     of a navigation.

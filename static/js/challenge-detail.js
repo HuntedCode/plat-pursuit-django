@@ -157,7 +157,7 @@
             else if (PP.ToastManager && PP.ToastManager.show) { PP.ToastManager.show(message, kind || 'success'); }
         }
 
-        function apply(ctx, data, button) {
+        function apply(ctx, data, button, byKeyboard) {
             var wrap = ctx.wrap;
             var board = ctx.board;
             if (data.rewards_html) {
@@ -165,6 +165,11 @@
                 // Read off `data-countup` rather than the rendered text, because the text can be
                 // mid-animation and because `toLocaleString` formatting makes parsing it locale-dependent --
                 // the same two reasons `applySlot` gives for the run's own tally.
+                //
+                // THE FIGURE IS THE CLAIMED TOTAL NOW, so this always counts UP. It used to be the amount
+                // WAITING, which fell on every claim -- a reward number ticking down to zero -- and was
+                // rendered only while something was owed, so Claim-all (which clears everything by
+                // definition) and the final single claim never animated at all.
                 var oldEl = wrap.querySelector('[data-countup]');
                 var before = oldEl ? parseInt(oldEl.dataset.countup || '', 10) : NaN;
                 // THE WRAPPER'S CONTENTS, not the panel itself: `outerHTML` is banned in this file (markup
@@ -189,9 +194,23 @@
                     || wrap.querySelector('.pp-cpay');
                 // ONLY FOR A KEYBOARD PRESS. Moving focus after a MOUSE click scrolls a hunter who clicked
                 // row 23 back up to the top of the panel -- paying for a keyboard fix with a mouse user's
-                // scroll position. `:focus-visible` on the pressed button is the browser's own answer to
-                // "was this keyboard-driven", and `preventScroll` covers the rest.
-                var byKeyboard = button && button.matches && button.matches(':focus-visible');
+                // scroll position.
+                //
+                // THE ANSWER IS DECIDED AT CLICK TIME AND PASSED IN, and the version that asked here was
+                // dead code in every browser. It read `button.matches(':focus-visible')` -- but `post`
+                // DISABLES the button before the request, and disabling a focused element blurs it per
+                // spec, so by the time this ran the button could not match `:focus` at all. The branch was
+                // unreachable for keyboard and mouse alike, and the test that "pinned" it only checked that
+                // the string appeared in this file.
+                //
+                // It was also a hazard rather than merely useless: `matches()` THROWS on a selector the
+                // engine cannot parse, and `:focus-visible` predates neither Chrome 86 nor Safari 15.4. A
+                // throw here lands after the panel swap and before the square swap, so the promise rejects,
+                // the catch reports "Could not claim that XP" for XP that WAS paid, and every pip stays on
+                // the board -- the same bug the `data-key` fix exists to kill, through a different door.
+                //
+                // `event.detail === 0` is the plain fact instead: Enter or Space on a `<button>` fires a
+                // click with `detail: 0`, a pointer click with `detail >= 1`. No selector, nothing to throw.
                 if (next && next.focus && byKeyboard) {
                     // `tabindex="-1"` only when it is NOT a button, so a heading or the panel root can take
                     // focus without joining the tab order.
@@ -209,10 +228,10 @@
             });
         }
 
-        function post(ctx, url, button) {
+        function post(ctx, url, button, byKeyboard) {
             if (button) { button.disabled = true; }
             PP.API.post(url, {}).then(function (data) {
-                apply(ctx, data, button);
+                apply(ctx, data, button, byKeyboard);
                 // LEFT DISABLED ONLY IF THE NODE IS GONE. The swap destroys the button, so re-enabling it
                 // is meaningless -- but if the reply carried no panel (a shape change, a truncated body),
                 // the button is still on screen and must not be stranded.
@@ -251,11 +270,14 @@
             // RESOLVED PER CLICK, so a restored page posts to the run it is actually showing.
             var ctx = context();
             if (!ctx) { return; }
+            // `detail === 0` IS THE KEYBOARD, read before anything disables the button (see `apply`).
+            var byKeyboard = event.detail === 0;
             if (one) {
                 post(ctx, '/my-challenges/' + ctx.id + '/slot/'
-                     + encodeURIComponent(one.getAttribute('data-cpay-claim')) + '/redeem/', one);
+                     + encodeURIComponent(one.getAttribute('data-cpay-claim')) + '/redeem/',
+                     one, byKeyboard);
             } else {
-                post(ctx, '/my-challenges/' + ctx.id + '/redeem-all/', all);
+                post(ctx, '/my-challenges/' + ctx.id + '/redeem-all/', all, byKeyboard);
             }
         });
     }

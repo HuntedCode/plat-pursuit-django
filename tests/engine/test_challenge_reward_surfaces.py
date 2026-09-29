@@ -232,6 +232,9 @@ def test_an_unclaimed_square_carries_a_pip_on_the_page(client):
     Job.objects.filter(slug=jobs[0].slug).delete()
     body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
     assert body.count('pp-csq__pip') == len(jobs) - 1
+    # AND THE SQUARE IS STILL DRAWN. Without this, a mutation that dropped atom-less squares from the grid
+    # entirely would satisfy the count too -- "the pip went" and "the square went" are different facts.
+    assert 'data-key="%s"' % jobs[0].slug in body
 
 
 def test_a_completed_square_carries_its_key_so_a_claim_can_find_it(client):
@@ -444,24 +447,22 @@ def test_an_a_z_page_shows_its_title_and_no_xp_panel(client):
     assert 'job XP waiting' not in body, 'there is no job XP on an A-Z run to wait for'
 
 
-def test_an_a_z_run_with_nothing_left_to_earn_draws_no_panel(client):
-    """An empty bordered surface card between the header and the board reads as a broken block, so the
-    section is gated on the panel having something to say."""
+def test_an_a_z_run_draws_no_reward_panel(client):
+    """A-Z PAYS NO XP, so there is no payout panel at all -- not an empty one.
+
+    The title used to live in the panel, which made an A-Z run render a full-width bordered card containing
+    one line of text: exactly the "empty card reads as a broken block" failure the gate was written to
+    avoid, catching a different case than the one that bit. The title is a fact about the RUN, so it moved
+    to the header card beside the Finished/Hidden chip, and the section is now gated on the payout alone.
+    """
     profile = _hunter(client)
-    for _ in range(2):
-        run = svc.start(profile, CHALLENGE_TYPE_AZ)
-        for slot in run.slots.order_by('position'):
-            contract = _contract('%sn Ordinary Game' % slot.key)
-            svc.assign(run, profile, slot.key, contract)
-            EarnedContract.objects.create(profile=profile, contract=contract, has_platinum=True,
-                                          platinum_reached_at=timezone.now())
-        svc.detect_for_profile(profile)
+    run = svc.start(profile, CHALLENGE_TYPE_AZ)
 
-    third = svc.start(profile, CHALLENGE_TYPE_AZ)
-    body = client.get(reverse('challenge_detail', args=[third.id])).content.decode()
+    body = client.get(reverse('challenge_detail', args=[run.id])).content.decode()
 
-    assert rewards.summary(third)['title_name'] is None
-    assert 'data-cpay-wrap' not in body
+    assert 'data-cpay-wrap' not in body, 'an A-Z run has no payout panel'
+    # And the title is still on the page, in the header card where it belongs.
+    assert 'A-Z Champion' in body
 
 
 def test_the_start_card_says_what_each_type_is_worth(client):
@@ -534,7 +535,12 @@ def test_the_pip_does_not_share_the_key_chips_corner():
     # horizontal position at all -- three ways to reintroduce the bug this guard is named for.
     assert 'left: 6px' in key, 'the chip owns the top-left; if that moved, this guard needs rewriting'
     assert 'right: 6px' in check and 'width: 18px' in check, 'the check owns the top-right'
-    assert 'left' not in pip, 'the pip must not be anchored left, where the key chip lives'
+    # A DECLARATION, not a substring. `'left' not in pip` false-trips on any `padding-left`, `border-left`,
+    # `text-align: left` or the word "left" in an in-block comment -- and is DEFEATED by
+    # `inset-inline-start: 6px`, which anchors the pip left again while passing both assertions.
+    import re
+    assert re.search(r'(^|\s)(left|inset-inline-start)\s*:', pip) is None, (
+        'the pip must not be anchored left, where the key chip lives')
     assert 'right: 28px' in pip, (
         'the pip must clear the check: 6px edge + its 18px + a 4px gap')
 
@@ -560,11 +566,23 @@ def test_the_focus_target_survives_the_last_claim():
 
     js = (Path(__file__).resolve().parents[2] / 'static' / 'js'
           / 'challenge-detail.js').read_text(encoding='utf-8')
+    # COMMENTS STRIPPED, because the absence assertion below matched the comment that EXPLAINS the absence.
+    # `test_challenge_detail_js.py` records the same trap for `innerHTML`: an absence assertion has to carry
+    # the syntax of the thing it forbids, or the prose about the rule breaks the test for the rule.
+    code = '\n'.join(ln for ln in js.splitlines()
+                     if not ln.lstrip().startswith(('//', '*', '/*', '*/')))
 
-    assert "wrap.querySelector('.pp-cpay')" in js, 'the fallback must reach the panel root'
+    assert "wrap.querySelector('.pp-cpay')" in code, 'the fallback must reach the panel root'
     # And only for a keyboard press: moving focus after a mouse click scrolls the hunter back to the top.
-    assert "matches(':focus-visible')" in js
-    assert 'preventScroll: true' in js
+    #
+    # `event.detail === 0`, NOT `matches(':focus-visible')`. This assertion used to require the latter --
+    # which was dead code, because `post` disables the button before the request and a disabled element is
+    # blurred, so it could never match. A source-text pin cannot see that, so the test certified a branch
+    # that never ran. It also cannot see a `matches()` that THROWS on an older engine, which is the other
+    # half of why the selector is gone.
+    assert 'event.detail === 0' in code, 'keyboard-ness must be read at click time, before the disable'
+    assert "matches(':focus-visible')" not in code, 'a disabled button can never match :focus-visible'
+    assert 'preventScroll: true' in code
 
 
 def test_every_claim_button_is_distinguishable_to_a_screen_reader(client):
@@ -576,9 +594,12 @@ def test_every_claim_button_is_distinguishable_to_a_screen_reader(client):
     body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
 
     import re
-    labels = re.findall(r'aria-label="Claim ([^"]+) XP"', body)
+    labels = re.findall(r'aria-label="Claim [\d,]+ XP for ([^"]+)"', body)
     assert len(labels) == 3
     assert len(set(labels)) == 3, 'each row names its own job: %r' % labels
     # THE JOB'S NAME, not its slug: `card-shark` in an accessible name reads as a content bug, and the
     # slug would satisfy a distinctness check just as well.
     assert set(labels) == {job.name for job in jobs}, labels
+    # The figure is in the name too, so the label says what pressing it is worth. WCAG 2.5.3 still holds:
+    # the visible word "Claim" is contained in the accessible name.
+    assert 'aria-label="Claim %s XP for' % '{:,}'.format(CHALLENGE_SLOT_JOB_XP) in body

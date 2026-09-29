@@ -88,9 +88,11 @@ def cards_for(slots):
     `index = 0` for every card, exactly as `card_for` does and for the same reason: these squares are
     arriving one at a time into a page that already exists, so none of them should be lazy.
 
-    ONE RUN'S SLOTS, not an arbitrary mix. `key_atoms` takes a challenge, so a batch spanning two runs
-    would silently label half of them from the wrong catalogue -- hence the first slot decides, and callers
-    have no reason to mix (both doors act on a single run).
+    ONE RUN'S SLOTS, not an arbitrary mix: `key_atoms` takes a challenge, so the first slot decides for the
+    batch. Both doors act on a single run, so no caller mixes them. (The consequence of mixing would be jobs
+    squares LOSING their names and icons, not being labelled from the wrong catalogue -- `key_atoms` returns
+    either the whole job catalogue or `{}`, and no job slug can collide with a one-character A-Z key. An
+    earlier version of this paragraph claimed the worse thing.)
 
     IT FETCHES THE CONTRACTS ITSELF, and the first version did not -- which left the N+1 this function was
     written to remove. `[s.contract for s in slots]` lazy-loads one row per slot unless the caller happened
@@ -106,8 +108,19 @@ def cards_for(slots):
     if not slots:
         return []
     contract_ids = {s.contract_id for s in slots if s.contract_id}
+    # `only()` because the pk and `igdb_id` are all `covers_by_contract` reads, and without it this pulls
+    # every column of up to 25 rows including `Contract.notes`, a TextField of staff curation prose -- the
+    # bytes-not-shape axis of the project's whale rule, and the same reason the cover chain defers
+    # `raw_response`.
+    #
+    # AND `is_live` IS IN THE LIST, which is not optional and not obvious: `Contract.from_db` stashes
+    # `instance._was_live = instance.is_live` to detect the went-live TRANSITION, so every instance loaded
+    # without that column pays a deferred single-row SELECT to satisfy the model's own hook. Omitting it
+    # turned this batch straight back into the per-slot N+1 the function exists to remove -- caught by the
+    # flatness test rather than by review, which is the whole reason that test measures instead of asserting.
     covers = covers_by_contract(
-        list(Contract.objects.filter(pk__in=contract_ids)) if contract_ids else [])
+        list(Contract.objects.filter(pk__in=contract_ids).only('igdb_id', 'is_live'))
+        if contract_ids else [])
     atoms = key_atoms(slots[0].challenge)
     cards = []
     for slot in slots:

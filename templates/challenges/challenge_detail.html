@@ -32,6 +32,20 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                         {% elif challenge.is_deleted %}
                         <span class="bd-chip bd-chip--ghost shrink-0">Hidden</span>
                     {% endif %}
+                        {% comment %}THE TITLE THIS RUN EARNED, or is playing for. It began life in the
+                        reward panel and does not belong there: a title is an identity fact about the run,
+                        not a payout, and an A-Z run pays no XP -- so the panel became a full-width bordered
+                        card containing one line of text, which is exactly the "empty card reads as a broken
+                        block" failure its own gate was written to avoid. Here it sits with the run's other
+                        state chips, where a reader is already looking for what this run IS.
+
+                        `title_earned` comes from the service rather than being inferred from
+                        `is_complete`, because inferring it in the template is how the two tenses get
+                        swapped.{% endcomment %}
+                        {% if rewards.title_name %}
+                        <span class="bd-chip bd-chip--accent shrink-0"
+                              title="{% if rewards.title_earned %}Earned{% else %}Awarded when this run is finished{% endif %}">{{ rewards.title_name }}</span>
+                        {% endif %}
                     </div>
                     {% comment %}THE BYLINE, and it is the reason this page is public at all: a run belongs
                     to a hunter, and a page about somebody's run that does not say whose is an orphan.
@@ -106,11 +120,19 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     inside of, and a class with no rule behind it is what the class-coverage test exists to catch. The
     wrapper also means the panel's own root is never the node being replaced, so nothing here needs
     `outerHTML` -- which this page's JS bans outright.{% endcomment %}
-    {% comment %}GATED ON THERE BEING SOMETHING TO SAY. The panel renders nothing at all when a run has
-    neither a title to name nor XP to pay -- an A-Z run belonging to a hunter with two completions already --
-    and an empty bordered card between the header and the board reads as a broken block.{% endcomment %}
-    {% if rewards.title_name or rewards.per_square %}
-    <section class="scard" data-cpay-wrap>
+    {% comment %}THE PAYOUT PANEL, for the one challenge type that has a payout. With the title moved up
+    into the header card, an A-Z run has nothing to put here -- so the section does not render at all rather
+    than drawing a bordered surface around a single sentence.
+
+    `mb-3` because `.pp-gbrowse` sets no `gap` and `.scard` no `margin-bottom`: without it this card's bottom
+    hairline sits flush on the first row of squares, and the board's top spacing changes depending on whether
+    the panel rendered. `mb-3` is the design system's own card-stacking token.
+
+    NAMED, via `aria-labelledby`. An unnamed `<section>` is exposed as a plain generic and buys nothing --
+    the argument is already written out at the board's own landmark below, and this section was the
+    counterexample to it.{% endcomment %}
+    {% if rewards.per_square %}
+    <section class="scard mb-3" data-cpay-wrap aria-labelledby="cpay-head">
         {% include 'challenges/partials/_rewards_panel.html' %}
     </section>
     {% endif %}

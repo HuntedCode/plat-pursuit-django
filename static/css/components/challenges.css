@@ -1273,52 +1273,60 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     line-height: 1.5;
     letter-spacing: 0.02em;
     color: var(--pp-bg-0);
-    background: var(--pp-warning);
-    border-radius: var(--pp-radius-sm);
+    /* `--pp-accent`, not `--pp-warning`: on this page a solid warning fill is the picker's CONFIRM button,
+       i.e. "yes, do the irreversible thing". An unclaimed reward is not a caution. */
+    background: var(--pp-accent);
+    /* The key chip's 6px, so the two rectangular corner marks on one square are the same shape. */
+    border-radius: var(--pp-radius-md);
     box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
 }
 
 /* THE PANEL. `.scard` provides the surface; this is the inside of it. */
 .pp-cpay { display: flex; flex-direction: column; gap: 12px; }
 
-.pp-cpay__title {
+/* THE BLOCK'S NAME. Every other block on this page has an icon and a title; this one shipped without
+   either, so a reader met a large accent number and a lowercase caption with nothing saying what it was. */
+.pp-cpay__name {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-.pp-cpay__titlelabel {
+    align-items: center;
+    gap: 6px;
+    margin: 0;
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--pp-text-dim);
+    color: var(--pp-text-mute);
 }
-.pp-cpay__titlename {
-    font-family: var(--pp-font-display, inherit);
-    font-size: 1.125rem;
-    font-weight: 800;
-    color: var(--pp-text);
-}
+.pp-cpay__icon { width: 14px; height: 14px; color: var(--pp-accent); flex-shrink: 0; }
 
-/* THE HEADLINE AND THE BULK ACTION, side by side where there is room and stacked at 375px. `align-items:
-   flex-end` so the button's baseline sits with the caption rather than floating beside the big number. */
+/* THE HEADLINE AND THE ACTION. `align-items: flex-end` so the button sits with the caption rather than
+   floating beside the number; the tally rung supplies the line-height that makes that land. */
 .pp-cpay__head {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px 12px;
 }
-.pp-cpay__xp {
-    display: block;
-    font-size: 1.75rem;
-    --pp-tally-glow: var(--pp-warning);
-}
+.pp-cpay__figure { min-width: 0; }
+.pp-cpay__act { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* THE CLAIMED TOTAL. Sized by the Tally rungs (`--md`, `--lg` at `md:`) rather than a raw `font-size`, so it
+   carries the `opsz` axis; the rung is applied in the markup. Only the COLOUR lives here.
+
+   `--pp-accent`, NOT `--pp-warning`. On this page warning already means "about to do something
+   irreversible" -- the picker's confirm button is a solid `--pp-warning` fill, and `my_challenges.html`
+   writes the rule down ("would read as something needs attention"). A reward glowing in the alarm colour is
+   the wrong sentence. `--pp-accent` is the visual identity's named warm-orange earn colour. */
+.pp-cpay__xp { display: block; color: var(--pp-accent); }
 .pp-cpay__cap {
     display: block;
+    margin-top: 2px;
     font-size: 0.75rem;
     color: var(--pp-text-dim);
 }
+/* What is still owed: a fact at body size, never a second headline. */
+.pp-cpay__owed { font-size: 0.8125rem; font-weight: 700; color: var(--pp-accent); }
 
 .pp-cpay__rows {
     display: flex;
@@ -1328,33 +1336,24 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     padding: 0;
 }
 
-/* ONE ROW PER OWED SQUARE. `display: flex` on the row is what strips WebKit's implicit list role from the
-   parent `<ul>`, which is why the markup declares `role="list"` explicitly -- the same trap the picker's
-   rows documented. */
+/* ONE ROW PER FINISHED SQUARE. `display: flex` on the row is what strips WebKit's implicit list role from
+   the parent `<ul>`, which is why the markup declares `role="list"` explicitly -- the same trap the picker's
+   rows documented.
+
+   `--pp-radius-md`, matching every other row and panel box in this file (the picker's status line, its
+   sentence chip, its confirm block, its row boxes). 4px was the tightest radius on the page. */
 .pp-cpay__row {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
+    min-height: 44px;
     background: var(--pp-bg-1);
     border: 1px solid var(--pp-border);
-    border-radius: var(--pp-radius-sm);
+    border-radius: var(--pp-radius-md);
 }
 /* The chip brings its own colour from the discipline; it must not stretch or shrink away. */
 .pp-cpay__chip { flex: 0 0 auto; }
-/* THE FALLBACK, for a row whose job left the catalogue and so has no atom to build a real chip from. It
-   borrows the chip's shape rather than rendering a bare word, so the ledger stays a column of pills. */
-.pp-cpay__chip--plain {
-    display: inline-flex;
-    align-items: center;
-    padding: 3px 8px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--pp-text-dim);
-    background: var(--pp-bg-2, var(--pp-bg-1));
-    border: 1px solid var(--pp-border);
-    border-radius: 999px;
-}
 /* `min-width: 0` so a long game name can shrink rather than pushing the button off the row -- a flex item
    will not go below min-content without it, which is how the claim button ends up clipped. */
 .pp-cpay__game {
@@ -1367,48 +1366,72 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-dim);
 }
 /* 44px, because the argument for moving the claim OFF the square was that a ~109px tile cannot give a
-   button a real target. A 29px button in the panel would not have delivered that -- `.pp-cta`'s padding and
-   0.8rem type come to about that, and it has no `min-height` of its own. */
-.pp-cpay__claim {
-    flex: 0 0 auto;
-    min-height: 44px;
-}
+   button a real target. `.pp-cta` is about 29px and declares no `min-height`, so without this the panel was
+   not honouring the reason it exists. The row carries the same floor, so a paid row does not collapse 4px
+   under a claimable one. */
+.pp-cpay__claim { flex: 0 0 auto; min-height: 44px; }
 
 /* BOTH STATES RENDERED, ONE REVEALED -- the contract card's `.rp-accept` / `.rp-cta__done` pattern, not a
    new one. The row survives a server re-render in either state with no markup surgery. */
 .pp-cpay__claimed {
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     flex: 0 0 auto;
     font-size: 0.8125rem;
     font-weight: 700;
     color: var(--pp-success);
 }
-.pp-cpay__row--paid .pp-cpay__claim { display: none; }
-.pp-cpay__row--paid .pp-cpay__claimed { display: inline-flex; }
+.pp-cpay__tick { width: 14px; height: 14px; }
+/* MIXED AGAINST `--pp-bg-1`, NOT `transparent`. Against transparent the tint resolved to the `.scard`'s own
+   `--pp-bg-2`, so claiming a row RAISED its surface to the card's level and erased it as a row -- paid and
+   unpaid read as two elevations rather than two states, and `.scard`'s own comment documents that exact
+   hazard ("they used to dissolve into them"). */
 .pp-cpay__row--paid {
     border-color: color-mix(in oklab, var(--pp-success) 40%, transparent);
-    background: color-mix(in oklab, var(--pp-success) 7%, transparent);
+    background: color-mix(in oklab, var(--pp-success) 7%, var(--pp-bg-1));
 }
 
-/* A finished square whose job was deleted: in the ledger, with no button, saying why. */
+/* A finished square whose job was deleted: in the ledger, with nothing to claim, saying so. */
 .pp-cpay__gone {
     flex: 0 0 auto;
     font-size: 0.75rem;
     color: var(--pp-text-dim);
 }
 
-.pp-cpay__empty,
-.pp-cpay__paid {
+.pp-cpay__foot {
     margin: 0;
     font-size: 0.75rem;
     color: var(--pp-text-dim);
 }
 
-/* AT 375px the headline and the button stack, and the button goes full width rather than sitting as a
-   narrow tap target in the middle of a row. */
-@media (max-width: 480px) {
-    .pp-cpay__head > .pp-cta { width: 100%; }
-    .pp-cpay__xp { font-size: 1.5rem; }
+/* THE PANEL AS A FOCUS TARGET. The client moves focus here when a claim destroys the button that was
+   pressed, and without a visible ring that landing is invisible -- or, worse, the UA draws its own around a
+   block that can be 1,600px tall. */
+.pp-cpay:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 4px;
+    border-radius: var(--pp-radius-md);
+}
+
+/* 640px, the house phone-only escape hatch and the width the board itself steps at. It was 480px, which is
+   a breakpoint nothing else on this page has -- so between 481 and 639 the head did not stack while the
+   board was still three columns, which is exactly where the panel is tightest.
+
+   THE GAME NAME STACKS, not the button. At 375px the row's three children have 303px between them: the job
+   chip holds its intrinsic width (~140-200px), the button is an unshrinkable ~70px, and the name was left
+   with 13-93px -- an ellipsis and maybe one letter, for the only column that says WHICH GAME filled the
+   square. On its own line it gets the full width. Stacking the BUTTON instead would double every row. */
+@media (max-width: 640px) {
+    .pp-cpay__head > .pp-cpay__act { width: 100%; justify-content: space-between; }
+    .pp-cpay__row { flex-wrap: wrap; }
+    .pp-cpay__game { flex: 1 0 100%; order: 3; }
+    .pp-cpay__claim { margin-left: auto; }
+}
+@media (min-width: 768px) {
+    /* The bigger rung at tablet and up, where there is room for it. Still below the header card's own
+       30px tally, so the run's progress stays the loudest number on the page. */
+    .pp-cpay__xp { font-size: 2rem; font-variation-settings: "opsz" 40, "wght" 800; line-height: 0.92; }
 }
 
 /* THE REWARD LINE on a Start card: what finishing this type is worth, before a hunter commits. Compact
@@ -1428,4 +1451,4 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-dim);
 }
 .pp-cwr__title { font-weight: 700; color: var(--pp-text); }
-.pp-cwr__xp { color: var(--pp-warning); font-weight: 700; }
+.pp-cwr__xp { color: var(--pp-accent); font-weight: 700; }
