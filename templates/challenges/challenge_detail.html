@@ -91,6 +91,30 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
         </div>
     </section>
 
+    {% comment %}WHAT THE RUN IS WORTH, and where its XP is claimed. Between the header and the board on
+    purpose: a hunter arriving at a finished run should meet the reward before the twenty-five squares that
+    earned it, and one arriving mid-run should know what the next square pays without scrolling past the
+    grid to find out.
+
+    RENDERED FOR EVERYBODY, not just the owner, because "what is this worth" is the question a visitor to
+    the Hall of Fame is asking too -- they simply get no Claim buttons (`is_owner` gates those inside the
+    partial, not this include).
+
+    ON A SURFACE, never bare on the page background: the same rule every other block on this page follows.
+    {% endcomment %}
+    {% comment %}A DATA HOOK, not a class: `data-cpay-wrap` is the stable node a claim's reply swaps the
+    inside of, and a class with no rule behind it is what the class-coverage test exists to catch. The
+    wrapper also means the panel's own root is never the node being replaced, so nothing here needs
+    `outerHTML` -- which this page's JS bans outright.{% endcomment %}
+    {% comment %}GATED ON THERE BEING SOMETHING TO SAY. The panel renders nothing at all when a run has
+    neither a title to name nor XP to pay -- an A-Z run belonging to a hunter with two completions already --
+    and an empty bordered card between the header and the board reads as a broken block.{% endcomment %}
+    {% if rewards.title_name or rewards.per_square %}
+    <section class="scard" data-cpay-wrap>
+        {% include 'challenges/partials/_rewards_panel.html' %}
+    </section>
+    {% endif %}
+
     {% comment %}THE BOARD AND ITS GRIDS. Columns, gaps, the three square states and the entrance all
     live in `components/challenges.css` (`.pp-csq-board` / `.pp-csq-shelf` / `.pp-csq-grid` / `.pp-csq`)
     rather than in utilities here, for the same reason `.pp-gtile-grid` does: a 25-or-26-cell layout with
@@ -177,8 +201,18 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                 {% include 'challenges/partials/_square_body.html' %}
             </button>
         {% else %}
+            {% comment %}`data-key` ON THIS BRANCH TOO, and its absence was a real bug rather than an
+            omission. It used to live only on the editable `<button>` above -- but a square carrying
+            unclaimed XP is by definition COMPLETE, so on every page load it renders here, with no key for
+            the client to find. A claim's reply carries re-rendered squares that could never be matched:
+            the panel updated, the toast fired, and 25 orange XP pips stayed on the board until a manual
+            reload. It only ever appeared to work when the square had completed in the same session, where
+            `applySlot` leaves the key on the now-disabled button.
+
+            It is an identifier, not an affordance. Nothing about having one makes a div interactive.{% endcomment %}
             <div class="{{ square_class }}{% if card.is_completed %} pp-csq--done{% elif card.is_filled %} pp-csq--filled{% else %} pp-csq--empty{% endif %}"
-                 style="--rev: {{ card.index }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}">
+                 style="--rev: {{ card.index }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}"
+                 data-key="{{ card.key }}">
                 {% include 'challenges/partials/_square_body.html' %}
             </div>
         {% endif %}

@@ -32,6 +32,8 @@ from challenges.views import (
     SlotPickerView,
     HideChallengeView,
     MyChallengesView,
+    RedeemAllView,
+    RedeemSlotView,
     StartChallengeView,
 )
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
@@ -511,6 +513,13 @@ urlpatterns = [
          name='challenge_detail'),
     path('my-challenges/<int:challenge_id>/hide/', HideChallengeView.as_view(),
          name='challenge_hide'),
+    # THE REWARD DOORS, under `/my-challenges/` with every other write even though the surface they serve
+    # is the PUBLIC run page. The split is by who may call, not by where the button is drawn: claiming is
+    # something only the owner can do, and `/my-challenges/` is this feature's owner-only prefix.
+    path('my-challenges/<int:challenge_id>/slot/<slug:key>/redeem/', RedeemSlotView.as_view(),
+         name='challenge_redeem'),
+    path('my-challenges/<int:challenge_id>/redeem-all/', RedeemAllView.as_view(),
+         name='challenge_redeem_all'),
 
     # Rate My Games wizard (ratings-only). Rehoused 2026-08 from /community/ to a root path under the
     # My Pursuit hub: it is login-required, noindex, and works only on YOUR library -- a personal tool

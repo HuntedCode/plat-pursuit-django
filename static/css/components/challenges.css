@@ -1235,3 +1235,197 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     border-color: color-mix(in oklab, var(--pp-warning) 60%, transparent);
     box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-warning) 45%, transparent);
 }
+
+/* ══ THE REWARD PANEL, and the square's unclaimed mark ════════════════════════════════════════════
+
+   WHY THE CLAIM IS NOT ON THE SQUARE, since that is the obvious place for it and this file is where the
+   square's size is decided: a square is ~109px at 375px. A button inside one is either under the 44px
+   touch floor or the only thing in the tile, and `slot_render` already records that the job chip does not
+   fit a square for the same reason. So the square carries a MARK and the panel carries the ACTION.
+
+   THE PANEL'S BUTTON THEREFORE HAS TO MEET THAT FLOOR, which it did not when this argument was first
+   written: `.pp-cta` is about 29px tall and has no `min-height`, so the reason given for moving the claim
+   off the square was not being honoured by the place it moved to. `.pp-cpay__claim` sets it below.
+*/
+
+/* THE PIP, and its position is a correction. It shipped at top-LEFT on the reasoning that the completed
+   check owns the top-right -- true, and beside the point: `.pp-csq__key` is ALREADY at `top: 6px; left: 6px;
+   z-index: 3`, the identical box, and a square with unclaimed XP is always filled and so always draws that
+   chip. The orange badge painted straight over the job's discipline icon (or the A-Z letter) on every
+   unclaimed square, at every breakpoint.
+
+   So it sits to the LEFT OF THE CHECK instead: 6px edge + the check's 18px + a 4px gap. Both corners are
+   now accounted for, which is what the first version of this comment only claimed to have done. */
+.pp-csq__pip {
+    position: absolute;
+    top: 6px;
+    right: 28px;
+    z-index: 3;
+    /* 12px, NOT the 10px this first shipped at. The stylesheet has a general guard against type below
+       12px and the guard is right: this label sits on a saturated fill at 109px wide, which is the least
+       forgiving place on the page to read two characters. Tight padding and a 1.5 line-height put the badge
+       at 18px -- exactly the check's height -- so the two corners balance. (The prose said "a 1
+       line-height", which would have been 12px and would NOT have balanced; the declaration was right and
+       the comment was wrong about it.) */
+    padding: 0 4px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    color: var(--pp-bg-0);
+    background: var(--pp-warning);
+    border-radius: var(--pp-radius-sm);
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+}
+
+/* THE PANEL. `.scard` provides the surface; this is the inside of it. */
+.pp-cpay { display: flex; flex-direction: column; gap: 12px; }
+
+.pp-cpay__title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.pp-cpay__titlelabel {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pp-text-dim);
+}
+.pp-cpay__titlename {
+    font-family: var(--pp-font-display, inherit);
+    font-size: 1.125rem;
+    font-weight: 800;
+    color: var(--pp-text);
+}
+
+/* THE HEADLINE AND THE BULK ACTION, side by side where there is room and stacked at 375px. `align-items:
+   flex-end` so the button's baseline sits with the caption rather than floating beside the big number. */
+.pp-cpay__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+}
+.pp-cpay__xp {
+    display: block;
+    font-size: 1.75rem;
+    --pp-tally-glow: var(--pp-warning);
+}
+.pp-cpay__cap {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--pp-text-dim);
+}
+
+.pp-cpay__rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+}
+
+/* ONE ROW PER OWED SQUARE. `display: flex` on the row is what strips WebKit's implicit list role from the
+   parent `<ul>`, which is why the markup declares `role="list"` explicitly -- the same trap the picker's
+   rows documented. */
+.pp-cpay__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--pp-bg-1);
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-sm);
+}
+/* The chip brings its own colour from the discipline; it must not stretch or shrink away. */
+.pp-cpay__chip { flex: 0 0 auto; }
+/* THE FALLBACK, for a row whose job left the catalogue and so has no atom to build a real chip from. It
+   borrows the chip's shape rather than rendering a bare word, so the ledger stays a column of pills. */
+.pp-cpay__chip--plain {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--pp-text-dim);
+    background: var(--pp-bg-2, var(--pp-bg-1));
+    border: 1px solid var(--pp-border);
+    border-radius: 999px;
+}
+/* `min-width: 0` so a long game name can shrink rather than pushing the button off the row -- a flex item
+   will not go below min-content without it, which is how the claim button ends up clipped. */
+.pp-cpay__game {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    color: var(--pp-text-dim);
+}
+/* 44px, because the argument for moving the claim OFF the square was that a ~109px tile cannot give a
+   button a real target. A 29px button in the panel would not have delivered that -- `.pp-cta`'s padding and
+   0.8rem type come to about that, and it has no `min-height` of its own. */
+.pp-cpay__claim {
+    flex: 0 0 auto;
+    min-height: 44px;
+}
+
+/* BOTH STATES RENDERED, ONE REVEALED -- the contract card's `.rp-accept` / `.rp-cta__done` pattern, not a
+   new one. The row survives a server re-render in either state with no markup surgery. */
+.pp-cpay__claimed {
+    display: none;
+    flex: 0 0 auto;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--pp-success);
+}
+.pp-cpay__row--paid .pp-cpay__claim { display: none; }
+.pp-cpay__row--paid .pp-cpay__claimed { display: inline-flex; }
+.pp-cpay__row--paid {
+    border-color: color-mix(in oklab, var(--pp-success) 40%, transparent);
+    background: color-mix(in oklab, var(--pp-success) 7%, transparent);
+}
+
+/* A finished square whose job was deleted: in the ledger, with no button, saying why. */
+.pp-cpay__gone {
+    flex: 0 0 auto;
+    font-size: 0.75rem;
+    color: var(--pp-text-dim);
+}
+
+.pp-cpay__empty,
+.pp-cpay__paid {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--pp-text-dim);
+}
+
+/* AT 375px the headline and the button stack, and the button goes full width rather than sitting as a
+   narrow tap target in the middle of a row. */
+@media (max-width: 480px) {
+    .pp-cpay__head > .pp-cta { width: 100%; }
+    .pp-cpay__xp { font-size: 1.5rem; }
+}
+
+/* THE REWARD LINE on a Start card: what finishing this type is worth, before a hunter commits. Compact
+   because the card is a summary -- the run's own page carries the panel, this is one line of it. */
+.pp-cwr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+}
+.pp-cwr__label {
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pp-text-dim);
+}
+.pp-cwr__title { font-weight: 700; color: var(--pp-text); }
+.pp-cwr__xp { color: var(--pp-warning); font-weight: 700; }

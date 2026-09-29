@@ -1,0 +1,103 @@
+{% load humanize %}
+{% comment %}WHAT THIS RUN IS WORTH, and the place its XP is claimed.
+
+WHY THE CLAIM BUTTON IS NOT ON THE SQUARE. A square is ~109px wide at 375px -- `slot_render` already
+records that the job chip does not fit one, which is why a square draws the atom's parts by hand -- so a
+button inside it would be either below the 44px touch floor or the only thing in the tile. A reward has its
+own surface instead: full-width rows with room for an icon, a name and a real target.
+
+SERVER-RENDERED AND RE-RENDERED, like `_square_body.html`: a redeem changes the headline, the row list and
+the Claim-all count together, so the reply carries this markup rather than having the client patch four
+things and drift from what this file says a reward looks like.
+
+Params: challenge, rewards (`rewards.summary`), is_owner.{% endcomment %}
+
+<div class="pp-cpay">
+    {% comment %}THE TITLE, for both types, and the tense comes from the service rather than from
+    `is_complete` here -- `title_earned` is what distinguishes "you hold this" from "this is what finishing
+    it gets you", and inferring it in the template is how the two get swapped.{% endcomment %}
+    {% if rewards.title_name %}
+    <p class="pp-cpay__title">
+        <span class="pp-cpay__titlelabel">{% if rewards.title_earned %}Title earned{% else %}Title on completion{% endif %}</span>
+        <span class="pp-cpay__titlename">{{ rewards.title_name }}</span>
+    </p>
+    {% endif %}
+
+    {% if rewards.per_square %}
+    {% comment %}THE HEADLINE ONLY WHEN SOMETHING IS OWED. A 28px "+0 job XP waiting" reads as a failure,
+    which is the same argument the claimed-total line below makes for hiding its own zero -- this block
+    used to show it anyway, so the file contradicted itself two paragraphs apart.{% endcomment %}
+    {% if rewards.pending_xp %}
+    <div class="pp-cpay__head">
+        <div>
+            {% comment %}`.pp-tally` + `|intcomma` + a `+`, which is the house way to show an XP figure --
+            there is no formatter to reach for and inventing one here would be a second spelling. `--glow`
+            marks it as a reward rather than a label, per the tally primitive's own note.{% endcomment %}
+            <span class="pp-cpay__xp pp-tally pp-tally--glow">+<span data-countup="{{ rewards.pending_xp }}">{{ rewards.pending_xp|intcomma }}</span></span>
+            <span class="pp-cpay__cap">job XP waiting</span>
+        </div>
+        {% comment %}COUNTS THE CLAIMABLE, not the rows: the rows are every finished square including the
+        ones already paid, so counting them would offer "Claim all (25)" with nothing left to claim.{% endcomment %}
+        {% if is_owner and rewards.claimable_count %}
+        <button type="button" class="pp-cta" data-cpay-all>
+            Claim all ({{ rewards.claimable_count }})
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% comment %}A LEDGER OF THE RUN'S FINISHED SQUARES, paid ones included -- so a claim flips a row rather
+    than deleting it, which is what the dual-state markup below needs to mean anything.
+
+    `row.claimable` is the same predicate the write uses, so a Claim button can never offer a payout the
+    write would skip. A square whose `Job` left the catalogue is neither paid nor claimable: it keeps its
+    place in the ledger and simply has no button, because a finished square disappearing from its own record
+    is worse than one that cannot be claimed.{% endcomment %}
+    {% if rewards.rows %}
+    <ul class="pp-cpay__rows" role="list">
+        {% for row in rewards.rows %}
+        <li class="pp-cpay__row{% if row.is_paid %} pp-cpay__row--paid{% endif %}" data-cpay-row="{{ row.key }}">
+            {% if row.job %}
+            {% include 'partials/jobs/_job_chip.html' with job=row.job xp=row.xp job_title=row.label extra_class='pp-cpay__chip' %}
+            {% else %}
+            <span class="pp-cpay__chip pp-cpay__chip--plain">{{ row.label }}</span>
+            {% endif %}
+            <span class="pp-cpay__game" title="{{ row.game_name }}">{{ row.game_name }}</span>
+            {% if is_owner and row.is_paid or is_owner and row.claimable %}
+            {% comment %}BOTH STATES RENDERED, one revealed by CSS off `.pp-cpay__row--paid`, which is the
+            contract card's pattern (`.rp-accept` / `.rp-cta__done`) rather than a new one. It means a claim
+            needs no markup surgery and the row survives being re-rendered in either state.{% endcomment %}
+            {% comment %}`aria-label` because the visible word is the same on every row: in a screen
+            reader's button list, twenty-five "Claim" buttons are indistinguishable, and only sequential
+            reading supplies the context a sighted reader gets from the row.{% endcomment %}
+            <button type="button" class="pp-cta pp-cta--ghost pp-cpay__claim"
+                    aria-label="Claim {{ row.label }} XP"
+                    data-cpay-claim="{{ row.key }}">Claim</button>
+            <span class="pp-cpay__claimed">Claimed &check;</span>
+            {% elif is_owner %}
+            {% comment %}Its job left the catalogue, so nothing can pay it. Said plainly to the OWNER rather
+            than left as a row with a missing button, which reads as a bug.
+
+            AND NOT TO A VISITOR: "Job removed" is a staff catalogue artefact, and a Hall of Fame reader
+            looking at somebody else's run has no use for it and no way to act on it. They see the row
+            without a control, which is what every row looks like to them anyway.{% endcomment %}
+            <span class="pp-cpay__gone">Job removed</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="pp-cpay__empty">
+        {% if rewards.paid_xp %}Every finished square has been claimed.{% else %}Finish a square to earn its job XP.{% endif %}
+    </p>
+    {% endif %}
+
+    {% comment %}The running total, kept quiet: it is context for the number above, not a second headline.
+    Absent at zero rather than shown as "0 claimed", which reads like a failure.{% endcomment %}
+    {% if rewards.paid_xp %}
+    <p class="pp-cpay__paid">{{ rewards.paid_xp|intcomma }} XP claimed so far, {{ rewards.per_square|intcomma }} per square.</p>
+    {% else %}
+    <p class="pp-cpay__paid">{{ rewards.per_square|intcomma }} job XP per finished square, paid to that square's job.</p>
+    {% endif %}
+    {% endif %}
+</div>

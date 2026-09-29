@@ -307,6 +307,83 @@ def redeem_all(challenge, profile):
     return paid, granted
 
 
+# ── what the page says it is worth ──────────────────────────────────────────────────────────────────
+
+def summary(challenge):
+    """Everything a reward surface needs, in one shape and a bounded number of queries.
+
+    ONE READER FOR THREE SURFACES -- the run page's panel, the row list inside it, and the Start card's
+    "what this is worth" line -- because the alternative is three places deciding independently what a
+    square pays, and they would disagree the first time the figure moved.
+
+    `rows` IS EVERY FINISHED SQUARE, paid or not, and that is a correction rather than a preference. Owed-only
+    rows meant claiming a square DELETED its row, so the "Claimed" half of the panel's dual-state markup could
+    never render and the CSS for it was dead the day it was written -- while citing the contract card's
+    pattern, where both states are always present and one is revealed. The panel is a ledger of the run's
+    finished squares, which is what makes that pattern true here.
+
+    THREE STATES PER ROW, because a square has three: `is_paid` (done), `claimable` (a button), and neither
+    (its `Job` left the catalogue, so nothing can ever pay it -- shown without a button rather than hidden,
+    since a finished square vanishing from its own ledger is worse than one that cannot be claimed).
+    `claimable` is exactly `redeemable_slots`, so the button and the write agree by construction.
+
+    Each row carries its job ATOM (icon, discipline colour, name) rather than a slug, because
+    `_job_chip.html` wants an atom and rebuilding one in the template is how two spellings of a job appear on
+    one page.
+
+    A-Z gets `per_square = 0` and no rows, and that is the honest answer rather than an empty special case:
+    an A-Z run pays a title, which `title_*` carries for both types.
+
+    QUERY COST is FOUR on a jobs run and ONE on an A-Z one, and the first version of this paragraph got
+    every clause of that wrong. The four: the title ordinal's COUNT, `key_atoms`, the claimable keys, and the
+    finished rows. The paid total is a Python sum over rows already in hand, not an aggregate. None of them
+    touches trophy data or the hunter's library -- all are bounded by the run (<= 25 rows) -- which is the
+    property that matters, and it is also why the honest figure is worth stating rather than a smaller one.
+    """
+    from challenges.services.slot_render import key_atoms, label_for_key
+
+    ordinal = completion_ordinal(challenge)
+    # WHAT THE NEXT COMPLETION EARNS, not what this one did, when the run is unfinished: a hunter looking at
+    # a run in progress is asking what finishing it gets them. `completion_ordinal` returns 0 for an
+    # unfinished run, so the count of finished runs plus one is the ordinal it is playing for.
+    if ordinal == 0:
+        from challenges.services.challenge_service import completed_run_count
+        prospective = completed_run_count(challenge.profile, challenge.challenge_type) + 1
+    else:
+        prospective = ordinal
+
+    atoms = key_atoms(challenge)
+    is_jobs = challenge.challenge_type == CHALLENGE_TYPE_JOBS
+    # TWO READS, not one per row: the set of claimable keys, then the finished squares. `values_list` on the
+    # first because only the keys are wanted, and a set membership test per row costs nothing.
+    claimable = set(redeemable_slots(challenge).values_list('key', flat=True))
+    finished = (challenge.slots.filter(is_completed=True).order_by('position')
+                if is_jobs else ChallengeSlot.objects.none())
+    rows = [{
+        'key': slot.key,
+        'label': atoms[slot.key]['name'] if slot.key in atoms else label_for_key(slot.key),
+        'job': atoms.get(slot.key),
+        'game_name': slot.contract_name,
+        'xp': CHALLENGE_SLOT_JOB_XP,
+        'is_paid': slot.xp_redeemed_at is not None,
+        'claimable': slot.key in claimable,
+    } for slot in finished]
+
+    paid = sum(CHALLENGE_SLOT_JOB_XP for row in rows if row['is_paid'])
+
+    return {
+        'per_square': CHALLENGE_SLOT_JOB_XP if is_jobs else 0,
+        'pending_xp': len(claimable) * CHALLENGE_SLOT_JOB_XP,
+        'claimable_count': len(claimable),
+        'paid_xp': paid,
+        'rows': rows,
+        # The title this run has earned, or is playing for. `title_earned` is what distinguishes them, so
+        # the template never has to infer it from `is_complete` and get the tense wrong.
+        'title_name': title_for(challenge.challenge_type, prospective),
+        'title_earned': challenge.is_complete and ordinal > 0,
+    }
+
+
 # ── the completion titles ─────────────────────────────────────────────────────────────────────────
 
 def title_for(challenge_type, ordinal):

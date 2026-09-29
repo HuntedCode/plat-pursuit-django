@@ -38,7 +38,7 @@ from gamelists.services.covers import cover_games_for, sort_key
 
 from challenges.models import CHALLENGE_TYPE_AZ
 from challenges.services.eligibility import member_concepts_by_contract
-from trophies.models import Job
+from trophies.models import Contract, Job
 from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, job_atom
 
 
@@ -74,6 +74,46 @@ def slot_cards(challenge):
     # which is what lets a single square be re-rendered on its own after a write.
     for index, card in enumerate(cards):
         card['index'] = index
+    return cards
+
+
+def cards_for(slots):
+    """Cards for several slots of ONE run, sharing the cover map and the catalogue read.
+
+    THE BATCH VERSION OF `card_for`, added when a caller appeared that needed it: a Claim-all reply
+    re-renders every square it paid, and looping the single-slot builder over 25 of them meant 25 cover
+    resolutions and 25 reads of the same 25-row job catalogue. `card_for`'s docstring is right that nothing
+    in IT scales with the run; the caller was what scaled.
+
+    `index = 0` for every card, exactly as `card_for` does and for the same reason: these squares are
+    arriving one at a time into a page that already exists, so none of them should be lazy.
+
+    ONE RUN'S SLOTS, not an arbitrary mix. `key_atoms` takes a challenge, so a batch spanning two runs
+    would silently label half of them from the wrong catalogue -- hence the first slot decides, and callers
+    have no reason to mix (both doors act on a single run).
+
+    IT FETCHES THE CONTRACTS ITSELF, and the first version did not -- which left the N+1 this function was
+    written to remove. `[s.contract for s in slots]` lazy-loads one row per slot unless the caller happened
+    to `select_related`, and `redeem_all`'s queryset cannot: it is a `select_for_update`, where joining the
+    contract in would take a row lock on the catalogue as well. So a 25-square Claim all measured 33 queries,
+    25 of them the identical single-row contract fetch -- better than the 125 it replaced, and not the flat
+    cost the docstring implied.
+
+    Asking here rather than pushing `select_related` onto callers is also the right place for it: a batch
+    helper that depends on how its caller built the queryset is a trap for the next caller.
+    """
+    slots = list(slots)
+    if not slots:
+        return []
+    contract_ids = {s.contract_id for s in slots if s.contract_id}
+    covers = covers_by_contract(
+        list(Contract.objects.filter(pk__in=contract_ids)) if contract_ids else [])
+    atoms = key_atoms(slots[0].challenge)
+    cards = []
+    for slot in slots:
+        card = _card(slot, covers, atoms)
+        card['index'] = 0
+        cards.append(card)
     return cards
 
 
@@ -242,6 +282,14 @@ def _card(slot, covers, atoms):
     26 cards and read by nobody, which is the shape of a dict that grows a field per guess. They come
     back when a reader does: `completed_via` when the picker needs to show a square's provenance,
     `contract_slug` when a square links to its game.
+
+    `xp_pending` ARRIVED WITH A READER, which is what that rule asks. It marks a square holding unclaimed
+    job XP, so the grid can show where the reward panel's rows came from. Three terms, and the third is the
+    one that is easy to miss: the square must be COMPLETE, must not be paid yet, and its job must still be
+    in the catalogue -- because a square whose `Job` was deleted can never be paid, and marking it would
+    promise XP that `redeem_all` skips. `atom` presence IS that catalogue check: `key_atoms` is built from
+    `Job` rows, so a missing atom means a missing job. It is False for every A-Z square, where `atoms` is
+    empty by construction and there is no XP to claim.
     """
     atom = atoms.get(slot.key)
     return {
@@ -252,6 +300,7 @@ def _card(slot, covers, atoms):
         'is_completed': slot.is_completed,
         'game_name': slot.contract_name,
         'cover': covers.get(slot.contract_id),
+        'xp_pending': bool(slot.is_completed and slot.xp_redeemed_at is None and atom is not None),
     }
 
 

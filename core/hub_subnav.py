@@ -372,6 +372,10 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'challenge_clear': ('my_pursuit', 'my_challenges'),
     'challenge_start': ('my_pursuit', 'my_challenges'),
     'challenge_hide': ('my_pursuit', 'my_challenges'),
+    # The reward doors. They serve the PUBLIC run page, but they live under `/my-challenges/` because only
+    # an owner may call them -- and this map is keyed on the route, so they belong with their siblings here.
+    'challenge_redeem': ('my_pursuit', 'my_challenges'),
+    'challenge_redeem_all': ('my_pursuit', 'my_challenges'),
     'profile_detail': ('community', 'profiles'),
     'trophy_case': ('community', 'profiles'),
     # Reviews archived 2026-05. The notice page matches the COMMUNITY hub by prefix (2026-09) --

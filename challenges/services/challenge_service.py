@@ -930,6 +930,27 @@ def visible_completed_count(profile, challenge_type):
     ).count()
 
 
+def completed_counts(profile, challenge_type):
+    """Both completed-run counts in ONE query: `{'all': n, 'visible': n}`.
+
+    TWO QUESTIONS, ONE SCAN. `completed_run_count` counts hidden finished runs and
+    `visible_completed_count` does not, and both are right for what they answer -- but My Challenges needs
+    each once per card (the reward line's ordinal, and "N finished before"). Without this, adding the reward
+    line would have taken the page from two COUNTs over this table to four. A filtered aggregate answers
+    both in one pass, so the page kept its previous cost while gaining the line.
+
+    THE TWO FUNCTIONS STAY, and this does not replace them: every other caller wants exactly one of the two
+    and should not have to know the other exists. Nor does this become "the" reader -- a caller wanting one
+    number should ask for that number, which is the difference between a shared query and a shared shape.
+    """
+    return Challenge.objects.filter(
+        profile=profile, challenge_type=challenge_type, is_complete=True,
+    ).aggregate(
+        all=models.Count('pk'),
+        visible=models.Count('pk', filter=models.Q(is_deleted=False)),
+    )
+
+
 def resumable_run(profile, challenge_type):
     """The hidden run `start` would bring back, or None. Read-only: no lock, no write.
 

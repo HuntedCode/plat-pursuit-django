@@ -284,13 +284,19 @@ def test_names_are_written_as_text_never_as_markup():
     for forbidden in ('outerHTML', 'insertAdjacentHTML', 'document.write'):
         assert forbidden not in JS_CODE, '%s reaches the DOM as markup' % forbidden
 
-    # ONE DELIBERATE `innerHTML`, and exactly one. It swaps in the square the SERVER re-rendered after a
-    # write -- the markup comes from `partials/_square_body.html`, the same template the page used, never
-    # from anything composed here. Pinned as a count plus its exact shape rather than as a blanket ban,
-    # because the ban is what a future reader would otherwise delete when they needed the one use.
-    uses = [ln.strip() for ln in JS_CODE.splitlines() if 'innerHTML' in ln]
-    assert uses == ['if (slot.html) { square.innerHTML = slot.html; }'], (
-        'unexpected innerHTML use(s): %r' % uses)
+    # THREE DELIBERATE `innerHTML` USES, and exactly three. Every one swaps in markup the SERVER rendered
+    # from a partial the page itself uses -- `_square_body.html` for a square, `_rewards_panel.html` for the
+    # reward panel -- and never anything composed here. Pinned as an exact list rather than as a blanket ban,
+    # because the ban is what a future reader would otherwise delete when they needed one of the uses.
+    #
+    # ADDING TO THIS LIST IS A DECISION, not maintenance: each entry is a place where a string becomes DOM,
+    # and the only reason these are safe is that the string came from a Django template with autoescaping on.
+    uses = sorted(ln.strip() for ln in JS_CODE.splitlines() if 'innerHTML' in ln)
+    assert uses == sorted([
+        'if (slot.html) { square.innerHTML = slot.html; }',
+        'wrap.innerHTML = data.rewards_html;',
+        'if (cell && square.html) { cell.innerHTML = square.html; }',
+    ]), 'unexpected innerHTML use(s): %r' % uses
     assert 'name.textContent = row.name;' in JS
 
 

@@ -579,25 +579,44 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     # break while the sharing was still perfectly correct.
     calls = [' '.join(c.split()) for c in re.findall(r'ratelimit\((.*?)\)\)', src, re.S)]
 
-    # PARTITIONED BY GROUP, because not every door in this file is a write any more. The picker added two
-    # READ doors on a deliberately looser bucket -- the search runs while somebody is typing, and the
-    # writes' 30/m would cut them off mid-word. An earlier version of this test asserted that EVERY
-    # `ratelimit` call in the file was identical, which was true when there were only two and went red the
-    # moment a read door arrived. The property worth keeping is narrower: each KIND shares one bucket.
+    # PARTITIONED BY GROUP, because not every door in this file is a write any more. THREE kinds now, and
+    # each exists because sharing with another would break something concrete:
+    #
+    # - WRITES (start, hide, assign, clear) share one bucket so create-hide-create cannot outrun one door
+    #   by using the other;
+    # - READS (the picker's panels) are deliberately looser -- the search runs while somebody is typing,
+    #   and the writes' 30/m would cut them off mid-word;
+    # - REDEEMS arrived with the reward panel, which renders one Claim button PER FINISHED SQUARE, up to 25.
+    #   Claiming them one at a time is what the UI invites, so on the write bucket a hunter exhausts 30/m by
+    #   themselves -- and a tripped `block=True` limit renders through the 403 HTML path with no `error`
+    #   key, so the toast goes generic AND assign/clear/hide are locked out for the rest of the minute.
+    #
+    # An earlier version asserted that EVERY `ratelimit` call in the file was identical, which was true when
+    # there were two and went red the moment a read door arrived. The property worth keeping is narrower:
+    # each KIND shares one bucket, and the kinds do not share with each other.
     writes = [c for c in calls if 'group=CHALLENGE_WRITE_RATELIMIT_GROUP' in c]
     reads = [c for c in calls if 'group=CHALLENGE_READ_RATELIMIT_GROUP' in c]
+    redeems = [c for c in calls if 'group=CHALLENGE_REDEEM_RATELIMIT_GROUP' in c]
 
-    assert len(writes) + len(reads) == len(calls), f'a door is on an unknown bucket: {calls}'
+    assert len(writes) + len(reads) + len(redeems) == len(calls), f'a door is on an unknown bucket: {calls}'
 
     assert len(writes) >= 4, 'start, hide, assign and clear must all be rate limited'
     assert len(set(writes)) == 1, f'the write doors do not share one bucket: {set(writes)}'
 
-    assert len(reads) >= 2, 'both picker reads must be rate limited'
+    assert len(reads) >= 3, 'all three picker reads must be rate limited (slot, search, history)'
     assert len(set(reads)) == 1, f'the read doors do not share one bucket: {set(reads)}'
 
-    # AND THE TWO KINDS MUST NOT SHARE. Reads being looser is the whole reason they have their own group,
-    # so a future tidy-up that collapses them would hand the search box the writes' budget.
-    assert set(writes) != set(reads)
+    assert len(redeems) == 2, 'both redeem doors must be rate limited'
+    assert len(set(redeems)) == 1, f'the redeem doors do not share one bucket: {set(redeems)}'
+
+    # AND NO TWO KINDS MAY SHARE -- asserted on the group VALUES, which is what `django_ratelimit` keys a
+    # bucket on. An earlier version compared the three decorators' SOURCE TEXT, which differs by the name of
+    # the constant and therefore could never fail: setting
+    # `CHALLENGE_REDEEM_RATELIMIT_GROUP = 'challenges:write'` would have collided the buckets for real and
+    # sailed through. The assertion did exactly what it said and nothing the comment above it claimed.
+    assert len({views.CHALLENGE_WRITE_RATELIMIT_GROUP,
+                views.CHALLENGE_READ_RATELIMIT_GROUP,
+                views.CHALLENGE_REDEEM_RATELIMIT_GROUP}) == 3, 'two kinds share a bucket value'
 
 
 def test_the_write_endpoints_light_the_rail():
@@ -610,7 +629,7 @@ def test_the_write_endpoints_light_the_rail():
     # them today -- but the map's own comment is that a missing line is SILENT, and a future non-JSON
     # fallback would inherit the gap rather than announce it.
     for name in ('challenge_start', 'challenge_hide', 'challenge_slot', 'challenge_search',
-                 'challenge_assign', 'challenge_clear'):
+                 'challenge_assign', 'challenge_clear', 'challenge_redeem', 'challenge_redeem_all'):
         assert _URL_NAME_TO_SLUG_OVERRIDES.get(name) == ('my_pursuit', 'my_challenges'), name
 
 

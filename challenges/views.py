@@ -30,6 +30,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 
 from trophies.mixins import LoginRequiredAPIMixin
 from trophies.models import Contract
+from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.shortcuts import redirect
@@ -39,8 +40,10 @@ from django.views import View
 from django.views.generic import DetailView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
-from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CHOICES, Challenge
+from challenges.models import (CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CHOICES, CHALLENGE_TYPE_JOBS,
+                               Challenge)
 from challenges.services import challenge_service as svc
+from challenges.services import rewards
 from challenges.services import picker
 from challenges.services import slot_render
 from core.previews import previewing
@@ -49,6 +52,14 @@ from core.previews import previewing
 #: on runs is structural (one active per type) rather than numeric, but the RATE is not bounded by it:
 #: hiding frees nothing and starting resumes, yet each still writes and each still takes a row lock.
 CHALLENGE_WRITE_RATELIMIT_GROUP = 'challenges:write'
+
+#: THE REWARD DOORS GET THEIR OWN BUDGET, and the reason is the panel's shape: it renders one Claim button
+#: per finished square, up to 25, and claiming them one at a time is what the UI invites. On the shared write
+#: bucket that exhausts 30/m by itself -- and a tripped `block=True` limit raises `Ratelimited`, which
+#: renders through the 403 HTML path with no `error` key, so the toast reads a generic failure AND assign,
+#: clear and hide are locked out too. Claiming is also idempotent per square, so a flood cannot double-pay;
+#: the limit is about lock contention on `ProfileJobXP`, not about correctness.
+CHALLENGE_REDEEM_RATELIMIT_GROUP = 'challenges:redeem'
 
 #: A SEPARATE BUCKET from the writes, and named rather than left implicit. `django_ratelimit` keys a
 #: bucket on the group AND the rate, so reusing the write group at a different rate would give the
@@ -168,6 +179,10 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # `add`s that produced nonsense. A number the page shows is a number the view owes it.
         planned = (run.filled_count - run.completed_count) if run else 0
         progress = round(run.completed_count / run.total_slots * 100) if run else 0
+        # BOTH COUNTS IN ONE QUERY. The card needs the visible tally for "N finished before" and the true
+        # tally (hidden runs included) for the reward line's ordinal -- two different questions over one
+        # table, so `completed_counts` answers them in a single scan rather than two per card.
+        counts = svc.completed_counts(profile, challenge_type)
         return {
             'type': challenge_type,
             'label': label,
@@ -180,7 +195,43 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
             'verb': {'active': 'Continue', 'resumable': 'Resume', 'empty': 'Start'}[state],
             # Keyed `visible_...` to match what it holds. Named `completed_run_count` it invited back
             # the very confusion it was added to fix -- the two functions differ on hidden runs.
-            'visible_completed_count': svc.visible_completed_count(profile, challenge_type),
+            'visible_completed_count': counts['visible'],
+            # WHAT FINISHING IT IS WORTH, on the one surface a hunter sees before committing.
+            #
+            # THE ORDINAL IS THE NEXT COMPLETION'S, not this run's: a hunter reading this card is asking
+            # what they are playing for. `completed_run_count` counts finished runs including hidden ones
+            # (the right population for a rule), so +1 is the ordinal the next finish earns -- and
+            # `title_for` returns None past the second, which correctly leaves a third-run card with no
+            # title line rather than a wrong one.
+            #
+            # NO QUERY OF ITS OWN beyond that count: the XP figure is the shared constant, so this cannot
+            # quote a different number from the run page's panel.
+            'reward': self._reward(challenge_type, counts['all']),
+        }
+
+    @staticmethod
+    def _reward(challenge_type, completed):
+        """`{title_name, per_square}` for the next completion of this type, or None if it earns no title.
+
+        TAKES THE COUNT rather than fetching one, so the card's single `completed_counts` query serves this
+        too. `completed` is the TRUE count including hidden finished runs, because that is the population
+        the title rule uses -- hiding a finished run must not hand its title out again.
+
+        A-Z REPORTS NO XP AT ALL rather than zero, and the template shows the line only when there is a
+        figure: a letter is not a job, so there is nothing for job XP to land in (owner, 2026-09-28).
+        Rendering "0 XP" would answer a question nobody asked and read as a bug.
+        """
+        # NOT None WHEN THERE IS NO TITLE, which is the bug this replaced. Returning None dropped the
+        # whole reward line, so a hunter with two completed Job Coverage runs saw a card advertising NOTHING
+        # while 6,000 XP a square was still being paid -- and the run page, which gates on `per_square`,
+        # said otherwise. Two surfaces disagreeing is the exact failure the one-reader rule exists to stop.
+        name = rewards.title_for(challenge_type, completed + 1)
+        per_square = CHALLENGE_SLOT_JOB_XP if challenge_type == CHALLENGE_TYPE_JOBS else 0
+        if name is None and not per_square:
+            return None
+        return {
+            'title_name': name,
+            'per_square': per_square,
         }
 
 
@@ -282,6 +333,15 @@ class ChallengeDetailView(DetailView):
         #
         # `gamelists` settled this one app over: the public list detail trails Home / Game Lists / name,
         # never My Lists.
+        #
+        # WHAT THIS RUN PAYS. One reader for the panel here and for the fragment a redeem returns, so a
+        # claim cannot make the page and the reply disagree about what is owed.
+        #
+        # PAID FOR BY EVERY READER, visitor included, which is deliberate: "what is this worth" is the
+        # question a Hall of Fame visitor is asking, and the cost is one COUNT plus the owed rows (<= 25),
+        # bounded by the run rather than by the hunter's library. Compare `history_is_open` above, which is
+        # gated on `can_edit` precisely because ITS question is expensive.
+        context['rewards'] = rewards.summary(challenge)
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Challenges', 'url': reverse_lazy('challenges')},
@@ -567,6 +627,16 @@ def _cover_url(game):
     return game.display_image_url if game is not None else None
 
 
+def _square_body_html(card):
+    """One square's body from a card that is already built. The template half of `_square_html`.
+
+    SPLIT OUT so a batch of squares can share one cover map and one catalogue read -- see `_redeem_json`
+    for what looping the single-slot version cost.
+    """
+    return render_to_string('challenges/partials/_square_body.html',
+                            {'card': card, 'can_edit': True})
+
+
 def _square_html(slot):
     """The one square, re-rendered by the template that draws every other square.
 
@@ -584,8 +654,105 @@ def _square_html(slot):
     arriving alone. That used to read "no `forloop`", which stopped being how the partial decides when the
     squares were grouped into shelves and the index moved onto the card.
     """
-    return render_to_string('challenges/partials/_square_body.html',
-                            {'card': slot_render.card_for(slot), 'can_edit': True})
+    return _square_body_html(slot_render.card_for(slot))
+
+
+def _rewards_html(challenge):
+    """The reward panel, re-rendered by the template that draws it on page load.
+
+    THE SAME ARGUMENT AS `_square_html`, one surface over: a redeem changes the panel's headline, its owed
+    rows and its Claim-all count at once, and having the client patch four things means a second renderer
+    free to drift from the partial. The reply carries the markup instead.
+
+    `can_edit` IS NOT THE GATE HERE, unlike every other write on this page. A finished run is exactly when
+    a hunter has the most XP to claim, and `_EditableRunMixin` would 404 it -- so the panel renders for the
+    OWNER of any run, finished or hidden, and `is_owner` is what it asks.
+    """
+    return render_to_string('challenges/partials/_rewards_panel.html',
+                            {'challenge': challenge, 'rewards': rewards.summary(challenge),
+                             'is_owner': True})
+
+
+def _redeem_json(challenge, slots, granted):
+    """What both redeem doors answer with.
+
+    ONE SHAPE FOR ONE AND FOR ALL, because the client's handling is identical: swap the squares that
+    changed, swap the panel, announce the XP. `squares` is a list even when one square was paid, so the
+    caller has no branch either.
+
+    BATCHED, and the unbatched version was a real cost rather than a theoretical one. `card_for` resolves
+    one slot's cover AND re-reads the job catalogue, which its docstring correctly says does not scale with
+    the run -- true of the function, false of a caller looping it over 25 paid squares. That was ~125
+    queries for one press of Claim all. `slot_render.cards_for` shares one cover map and one catalogue read
+    across the batch.
+
+    NO `pending_xp`: it was a duplicate COUNT of a figure already inside `rewards_html`, and nothing in the
+    client ever read it.
+
+    NO `refresh_from_db` EITHER, which was here with a false reason attached ("the panel's paid total is read
+    off the slots and the instance in hand was loaded before the write"). `summary` re-queries the slots
+    itself, so nothing it reports comes off this instance except `is_complete` and `completed_at` -- neither
+    of which a redeem touches. It was a query buying nothing.
+    """
+    return {
+        'granted': granted,
+        'squares': [{'key': card['key'], 'html': _square_body_html(card)}
+                    for card in slot_render.cards_for(slots)],
+        'rewards_html': _rewards_html(challenge),
+    }
+
+
+class RedeemSlotView(_ChallengeJsonView):
+    """Claim one completed square's job XP.
+
+    NOT ON `_EditableRunMixin`, and that is the whole reason this class does its own resolving: that mixin
+    404s a finished run, and a finished run is the normal case for a payout -- a hunter who has just filled
+    their twenty-fifth square has twenty-five squares to claim. Every other precondition belongs to the
+    service, which re-asserts them under the run's row lock.
+
+    RATE LIMITED like the other writes. The service is idempotent per square, so a flood cannot double-pay;
+    the limit is there because each call is a transaction that locks `ProfileJobXP` rows, and a held key
+    should not be able to queue those behind each other.
+    """
+
+    @method_decorator(ratelimit(group=CHALLENGE_REDEEM_RATELIMIT_GROUP, key='user', rate='60/m',
+                                method='POST', block=True))
+    def post(self, request, challenge_id, key):
+        challenge = self.get_challenge(request, challenge_id)
+        if challenge is None:
+            return self.not_found()
+        try:
+            slot, granted = rewards.redeem_slot(challenge, request.user.profile, key)
+        except svc.ChallengeError as exc:
+            # `RewardError` subclasses `ChallengeError`, so this one clause covers both -- which is why it
+            # is a subclass. A sibling exception would have 500d every refusal on this page.
+            return self.fail(exc)
+        return JsonResponse(_redeem_json(challenge, [slot], granted))
+
+
+class RedeemAllView(_ChallengeJsonView):
+    """Claim every completed square that is still owed, in one transaction.
+
+    ONE CALL RATHER THAN A LOOP FROM THE CLIENT: a full run is twenty-five payouts, and twenty-five
+    sequential POSTs would take the `ProfileJobXP` lock twenty-five times, run twenty-five levelling passes
+    and twenty-five career-standing recomputes for one press of one button.
+
+    NOTHING OWED IS NOT AN ERROR. The service returns `([], 0)` and this answers 200 with `granted: 0`, so
+    a hunter double-pressing sees nothing alarming -- and neither does one whose sync completed a square in
+    another tab.
+    """
+
+    @method_decorator(ratelimit(group=CHALLENGE_REDEEM_RATELIMIT_GROUP, key='user', rate='60/m',
+                                method='POST', block=True))
+    def post(self, request, challenge_id):
+        challenge = self.get_challenge(request, challenge_id)
+        if challenge is None:
+            return self.not_found()
+        try:
+            slots, granted = rewards.redeem_all(challenge, request.user.profile)
+        except svc.ChallengeError as exc:
+            return self.fail(exc)
+        return JsonResponse(_redeem_json(challenge, slots, granted))
 
 
 def _slot_json(challenge, slot):

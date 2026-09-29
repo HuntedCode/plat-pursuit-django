@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load humanize static %}
 
 {% block title %}My Challenges{% endblock %}
 {% comment %}NOINDEX, NOFOLLOW. A login-gated page about one hunter's own runs, exactly as
@@ -175,6 +175,30 @@
                 {% if card.visible_completed_count %}
                 <p class="text-[0.7rem] text-base-content/40 mt-1">
                     {{ card.visible_completed_count }} finished before
+                </p>
+                {% endif %}
+
+                {% comment %}WHAT IT IS WORTH, before you commit. This card is the only surface a hunter sees
+                before starting, so leaving the reward off it made the reward a surprise -- and a hunter
+                choosing between the two types could not compare them without starting one.
+
+                THE TITLE IS THE REWARD BOTH TYPES SHARE, so it leads, and the XP line only appears where
+                there is XP: A-Z pays a title and nothing else, ever (owner) -- a letter is not a job, so
+                there is nothing for job XP to land in. Saying "no XP" would answer a question nobody asked.
+
+                `card.reward` comes from the view, which reads `rewards.title_for` and the shared constant --
+                the same source the run page's panel uses, so the two cannot quote different figures.{% endcomment %}
+                {% if card.reward %}
+                <p class="pp-cwr">
+                    <span class="pp-cwr__label">Reward</span>
+                    {% comment %}THE TITLE SPAN IS GATED, not the whole line: past the second completion
+                    there is no new title to earn, and the XP is still paid. Gating the line lost both.{% endcomment %}
+                    {% if card.reward.title_name %}
+                    <span class="pp-cwr__title">{{ card.reward.title_name }}</span>
+                    {% endif %}
+                    {% if card.reward.per_square %}
+                    <span class="pp-cwr__xp">+{{ card.reward.per_square|intcomma }} job XP per square</span>
+                    {% endif %}
                 </p>
                 {% endif %}
 

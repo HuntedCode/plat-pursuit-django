@@ -99,6 +99,167 @@
         });
     }
 
+    /** Escape a value for use inside an attribute selector, where `CSS.escape` exists.
+     *
+     *  HOISTED OUT OF `boot` when the reward panel became a second consumer: the picker looks a square up by
+     *  its key and so does a claim, and a slug like `card-shark` is fine either way while a key is
+     *  URL-supplied and should not be pasted into a selector raw. Module scope rather than a copy, because
+     *  two spellings of an escape is how one of them stops escaping.
+     */
+    function cssEscape(value) {
+        return window.CSS && window.CSS.escape ? window.CSS.escape(value) : value;
+    }
+
+    /** The reward panel: claim one square's job XP, or every owed square at once.
+     *
+     *  WIRED SEPARATELY FROM THE PICKER, and that separation is load-bearing rather than tidy. `boot`
+     *  returns early without a picker dialog, and the dialog renders only for a run that can still be
+     *  CHANGED -- so on a finished run, where every square is claimable, anything wired after that guard
+     *  never runs. This is called before it.
+     *
+     *  THE SERVER OWNS THE PANEL'S MARKUP. A claim moves the headline, the row's state, the Claim-all count
+     *  and the squares' pips at once; the reply carries the re-rendered panel and the re-rendered squares,
+     *  so there is no second renderer here to drift from the templates. The client's whole job is to swap
+     *  what arrived, tick the number, and say what happened.
+     *
+     *  IDEMPOTENT BY THE SERVER, not by disabling buttons: the stamp under the run's row lock is what makes
+     *  a double press safe. The button is disabled during the request for feedback, not for correctness.
+     */
+    function wireRewards() {
+        // NOTHING IS CAPTURED HERE, and that is the fix for a real bug rather than a style preference.
+        // `onPageReady` calls its function again on `htmx:historyRestore`, which replaces the history
+        // element's innerHTML -- so a `wrap` or a `challengeId` read once at load is, after a Back
+        // navigation, a DETACHED node and the PREVIOUS run's id. Pressing Claim then posted to the wrong
+        // challenge, wrote into a node nobody could see, and left the button disabled for good. The
+        // picker's own wiring re-reads its id on every call for the same reason; this now does too.
+        //
+        // Only the listener is bound once, because it lives on `document`, which survives a restore.
+        if (!PP.API) { return; }
+
+        function context() {
+            var board = document.querySelector('.pp-csq-board');
+            var wrap = document.querySelector('[data-cpay-wrap]');
+            var id = board && board.getAttribute('data-challenge-id');
+            // NO PANEL MEANS NOTHING TO CLAIM -- and note WHY that is now true, because an earlier version
+            // of this comment named two cases the guard could not actually catch. The wrapper used to be
+            // emitted unconditionally for every viewer and both run types, so it never fired for "an A-Z run
+            // renders only the title line" or for "a visitor gets no buttons". It fires now because the page
+            // gates the section on there being a title or XP to show at all. A visitor still reaches here
+            // and simply finds no buttons to press, which costs nothing.
+            return (board && wrap && id) ? { board: board, wrap: wrap, id: id } : null;
+        }
+
+        function say(message, kind) {
+            // `ToastManager` is optional and its methods are not uniform -- the same feature-test the rest
+            // of this file uses, for the same reason: a stub with only `show` would pass a truthiness check
+            // and then throw on `success`.
+            if (kind === 'error' && PP.ToastManager && PP.ToastManager.error) { PP.ToastManager.error(message); }
+            else if (PP.ToastManager && PP.ToastManager.show) { PP.ToastManager.show(message, kind || 'success'); }
+        }
+
+        function apply(ctx, data, button) {
+            var wrap = ctx.wrap;
+            var board = ctx.board;
+            if (data.rewards_html) {
+                // TICK FROM THE OLD NUMBER, not from zero: this is a change to a figure already on screen.
+                // Read off `data-countup` rather than the rendered text, because the text can be
+                // mid-animation and because `toLocaleString` formatting makes parsing it locale-dependent --
+                // the same two reasons `applySlot` gives for the run's own tally.
+                var oldEl = wrap.querySelector('[data-countup]');
+                var before = oldEl ? parseInt(oldEl.dataset.countup || '', 10) : NaN;
+                // THE WRAPPER'S CONTENTS, not the panel itself: `outerHTML` is banned in this file (markup
+                // reaching the DOM by any other route than a server partial is how an escaping mistake
+                // becomes an XSS), and swapping the inside of a node that never moves is both allowed and
+                // simpler -- nothing has to re-find the panel afterwards.
+                wrap.innerHTML = data.rewards_html;
+                var fresh = wrap.querySelector('[data-countup]');
+                if (fresh && PP.countUp && !isNaN(before)) {
+                    PP.countUp(fresh, 600, { from: before });
+                }
+                // FOCUS HAS TO GO SOMEWHERE. The swap destroys the button that was pressed, and a
+                // keyboard user is otherwise dropped onto `<body>` and has to tab the whole page back.
+                //
+                // THE PANEL ROOT IS THE LAST RESORT, and it has to be: the first version fell back to the
+                // XP headline, which lives INSIDE the same `pending_xp` block as Claim-all -- so the two
+                // were co-extensive and the fallback was unreachable. The case it was written for is
+                // claiming the LAST owed square, where that whole block disappears and neither selector
+                // matched. `.pp-cpay` is always rendered, so this fallback is real.
+                var next = wrap.querySelector('[data-cpay-all]')
+                    || wrap.querySelector('.pp-cpay__xp')
+                    || wrap.querySelector('.pp-cpay');
+                // ONLY FOR A KEYBOARD PRESS. Moving focus after a MOUSE click scrolls a hunter who clicked
+                // row 23 back up to the top of the panel -- paying for a keyboard fix with a mouse user's
+                // scroll position. `:focus-visible` on the pressed button is the browser's own answer to
+                // "was this keyboard-driven", and `preventScroll` covers the rest.
+                var byKeyboard = button && button.matches && button.matches(':focus-visible');
+                if (next && next.focus && byKeyboard) {
+                    // `tabindex="-1"` only when it is NOT a button, so a heading or the panel root can take
+                    // focus without joining the tab order.
+                    if (!next.hasAttribute('tabindex') && next.tagName !== 'BUTTON') {
+                        next.setAttribute('tabindex', '-1');
+                    }
+                    next.focus({ preventScroll: true });
+                }
+            }
+            // THE SQUARES THAT CHANGED lose their pips. Server markup again, from the same partial the page
+            // rendered, so a swapped square cannot look different from one that was there on load.
+            (data.squares || []).forEach(function (square) {
+                var cell = board.querySelector('[data-key="' + cssEscape(square.key) + '"]');
+                if (cell && square.html) { cell.innerHTML = square.html; }
+            });
+        }
+
+        function post(ctx, url, button) {
+            if (button) { button.disabled = true; }
+            PP.API.post(url, {}).then(function (data) {
+                apply(ctx, data, button);
+                // LEFT DISABLED ONLY IF THE NODE IS GONE. The swap destroys the button, so re-enabling it
+                // is meaningless -- but if the reply carried no panel (a shape change, a truncated body),
+                // the button is still on screen and must not be stranded.
+                if (button && !data.rewards_html) { button.disabled = false; }
+                if (data.granted) {
+                    // The figure, formatted the way every other XP number on the site is.
+                    say('+' + data.granted.toLocaleString() + ' job XP claimed');
+                } else {
+                    // NOTHING OWED IS NOT AN ERROR -- the service returns zero rather than refusing, and a
+                    // hunter whose other tab claimed first should not be told off for pressing a button.
+                    say('Nothing left to claim here', 'info');
+                }
+            }).catch(function (err) {
+                // The refusal the SERVER wrote, when it wrote one: every reward refusal is a sentence
+                // (`RewardError`), and replacing it with a generic message throws away the only part a
+                // hunter can act on. `failureOr` is the shared helper for exactly this.
+                var fallback = 'Could not claim that XP.';
+                if (PP.API.failureOr) {
+                    PP.API.failureOr(err, fallback).then(function (m) { say(m, 'error'); })
+                        .catch(function () { say(fallback, 'error'); });
+                } else {
+                    say(fallback, 'error');
+                }
+                if (button) { button.disabled = false; }
+            });
+        }
+
+        // DELEGATED ON THE DOCUMENT, not on the panel, because the panel is REPLACED by every claim --
+        // `outerHTML` detaches the node a listener would have been bound to, so the second claim would do
+        // nothing. The same reason the board delegates rather than binding 26 squares.
+        document.addEventListener('click', function (event) {
+            if (!event.target.closest) { return; }
+            var one = event.target.closest('[data-cpay-claim]');
+            var all = one ? null : event.target.closest('[data-cpay-all]');
+            if (!one && !all) { return; }
+            // RESOLVED PER CLICK, so a restored page posts to the run it is actually showing.
+            var ctx = context();
+            if (!ctx) { return; }
+            if (one) {
+                post(ctx, '/my-challenges/' + ctx.id + '/slot/'
+                     + encodeURIComponent(one.getAttribute('data-cpay-claim')) + '/redeem/', one);
+            } else {
+                post(ctx, '/my-challenges/' + ctx.id + '/redeem-all/', all);
+            }
+        });
+    }
+
     function boot(first) {
         // EVERY VIEWER, before the guard below sends a visitor home -- but ONCE.
         //
@@ -112,6 +273,11 @@
         // window below would bake `--horizon-progress: 0%` into the markup, making the served target `0%`
         // for good.
         if (first) { intro(); }
+
+        // BEFORE THE PICKER'S GUARD, and gated on `first` for the same reason `intro` is: the click handler
+        // lives on `document`, so binding it twice would send two requests per press -- one of which would
+        // then be refused as already-redeemed, turning a successful claim into an error toast.
+        if (first) { wireRewards(); }
 
         var dialog = document.getElementById('cpick');
         // THE BOARD, not a grid. A jobs run draws one grid per discipline, so `querySelector` on
@@ -1157,10 +1323,6 @@
             var square = grid.querySelector('[data-key="' + cssEscape(key) + '"]');
             var job = square && square.querySelector('.pp-csq__job');
             return job ? job.textContent.trim() : key;
-        }
-
-        function cssEscape(value) {
-            return window.CSS && window.CSS.escape ? window.CSS.escape(value) : value;
         }
 
         function toast(message) {

@@ -22,12 +22,13 @@ no services and no templates with it; the few lessons worth carrying forward are
 | The run's page (`community/challenges/<id>/`) | **built** |
 | The picker: square-first, contract-first, history | **built** |
 | Public hub + Hall of Fame | **NOT built.** `community/challenges/` is still the coming-soon placeholder |
-| Rewards (titles, job-XP payout, notification) | **NOT built.** `ChallengeSlot.xp_redeemed_at` has no writer |
+| Rewards (titles, job-XP payout, notification) | **built.** `challenges/services/rewards.py` is the only writer |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
 
-Nothing anywhere currently states what a challenge is **worth** — no XP figure, no title name. That is
-part of the rewards chunk and is a deliberate gap, not an oversight.
+What a challenge is worth is now stated on both surfaces a hunter sees — the Start card before they
+commit, and the run's own page — from one reader, so the two cannot quote different figures. See
+[Rewards](#rewards) below.
 
 ---
 
@@ -197,6 +198,94 @@ reasons; the step list is the single definition of the order.
 
 ---
 
+## Rewards
+
+`challenges/services/rewards.py` is the only thing that writes one.
+
+| | A-Z Challenge | Job Coverage Challenge |
+|---|---|---|
+| On completion | a title | a title |
+| Per finished square | nothing | `CHALLENGE_SLOT_JOB_XP` to that square's job, **redeemed by the hunter** |
+| Titles | A-Z Champion (1st completion), A-Z Legend (2nd) | Job Challenge Champion, Job Challenge Legend |
+| Badge + holo | deferred to a follow-up branch | deferred |
+
+**A-Z pays no job XP, ever** — not "not yet". A letter is not a job, so there is nothing for job XP to land
+in, and inventing a target would be a random payout into a system it does not belong to. The rule is
+enforced in the service rather than by a constraint, because no table constraint can see a slot's challenge
+*type*: that lives one FK away.
+
+**Paid per square, as they finish.** Not gated on the run completing. I argued for gating it, on the theory
+that hiding a run released the one-active-run constraint and so allowed a bank-hide-restart farm — that was
+wrong: `start_reporting` is resume-before-create, so pressing Start un-hides the same run and there is no
+route to a second run of a type without finishing the first.
+
+**The catch-up rules pay full.** A square filled by the history importer or the scarcity hatch pays exactly
+what a live one pays. The hatch covers *our* supply gap, and the importer is a head start we offered; neither
+is the hunter's shortcut.
+
+### The three guards on one payout
+
+The job-XP ledger is append-only: rows are never rewritten, and the only honest reversal is a negating row.
+So a double-pay cannot be undone, only offset — and `grant_job_xp` has no idempotency of its own for
+non-contract sources. Three things stand behind one square's XP:
+
+| Guard | What it catches |
+|---|---|
+| `ChallengeSlot.xp_redeemed_at` | the second press, as a **sentence** a hunter can read |
+| `xpgrant_challenge_once_per_slot` | a bug past the stamp, as an `IntegrityError` rather than free XP |
+| `xpgrant_challenge_needs_source_id` | a grant naming no slot, which is what makes the row above mean anything (Postgres treats NULLs as distinct) |
+
+The property that actually prevents a double-pay is **not** statement order: it is that the stamp and the
+grant happen in one atomic block under the *run's* row lock, with every precondition re-read on the locked
+row. A second request blocks on the lock, reads the stamp, and refuses before reaching the ledger.
+
+### What the grant must be wrapped in
+
+`grant_job_xp_bulk` logs job-tier milestones and nothing else. `accept_contracts_bulk` brackets it with a
+Pursuer level reading before and after; `rewards._grant` does the same, and that bracket is **not optional**.
+`ranks_crossed(old, new)` only returns ranks in `(old, new]`, so a rank crossed by an unbracketed payout is
+never logged *and never loggable* — the next claim starts from the already-raised level. A full run is fifty
+job levels, so the visible damage was permanently blank dates on Career hero rungs the hunter really crossed.
+`first_claim` is derived there too, so a hunter whose first job XP ever is a redeem keeps their onboarding
+flag. No multiplier: a double-XP weekend does not scale challenge XP, because "exactly two job levels a
+square" is the promise the figure makes.
+
+### The completion ordinal is a property of the run
+
+Which completion a run *is* — first or second — is counted as "completed runs finished no later than this
+one", not as a live count of the set. The difference is recovery: with a live count, a title write that
+failed on run 1 could never be backfilled, because once run 2 finished the count read 2 and re-granted the
+*second* title, leaving the first unreachable by any code path. `grant_completion_title(challenge)` is now a
+safe backfill from a shell for any completed run.
+
+### Where the reward is shown
+
+| Surface | What it says |
+|---|---|
+| The Start card (`/my-challenges/`) | the title the next completion earns, and the per-square XP where there is any |
+| The run's page | a panel: the title, the XP waiting, and a **ledger** of finished squares |
+| A finished square on the grid | an `XP` pip while its XP is unclaimed |
+
+The panel renders for **everybody**, visitor included — "what is this worth" is the Hall of Fame's own
+question — and the Claim buttons are gated on ownership inside the partial. The claim is deliberately *not*
+on the square: a square is ~109px at 375px, so a button there is either under the touch floor or the only
+thing in the tile.
+
+The panel's rows are every finished square, paid ones included, with three states (paid / claimable / its
+`Job` was deleted). Owed-only rows meant a claim deleted its row, so the "Claimed" state could never render.
+The claimable count is the write's own predicate, so a Claim button cannot promise a payout the service skips.
+
+### The notification
+
+`challenge_completed` was already a `NotificationTemplate` choice; its template **row** ships in
+`notifications/fixtures/initial_templates.json` and must be loaded (see the deploy checklist). It is sent
+from `transaction.on_commit(..., robust=True)`: the callback runs after commit on the caller's thread, which
+for the nightly sweep is inside no guard at all, so an escaping exception would abort the whole command. The
+inbox is parked, so this row is **write-only** for now — do not add a route, a bell or a poller to make it
+visible.
+
+---
+
 ## Constraints
 
 Written in the database because a shell and a data migration write around the service. (The admin is the
@@ -307,11 +396,13 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `challenges/services/eligibility.py` | the pools, the hatch count, the importer's date |
 | `challenges/services/picker.py` | the three panels — read-only, decides nothing |
 | `challenges/services/slot_render.py` | the board: squares, discipline shelves, covers |
-| `challenges/views.py` | two page views, three JSON read endpoints (the picker panels, all `GET`), four thin POST actions |
+| `challenges/services/rewards.py` | **every reward write**: the XP redemption, the titles, the completion hook |
+| `challenges/views.py` | two page views, three JSON read endpoints (the picker panels, all `GET`), six thin POST actions (start, assign, clear, hide, redeem, redeem-all) |
 | `challenges/management/commands/process_challenges.py` | the nightly sweep |
 | `templates/challenges/` | `my_challenges.html`, `challenge_detail.html`, `partials/_square_body.html` |
-| `static/js/challenge-detail.js` | the picker's three modes and the board's entrance |
-| `static/css/components/challenges.css` | `.pp-csq*` (the board) and `.pp-cpick*` (the sheet), BEM throughout |
+| `static/js/challenge-detail.js` | the picker's three modes, the reward panel's claims, and the board's entrance |
+| `templates/challenges/partials/_rewards_panel.html` | the reward panel and its ledger of finished squares |
+| `static/css/components/challenges.css` | `.pp-csq*` (the board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), BEM throughout |
 
 **Related docs:** [job-board-contracts.md](../design/rebuild/job-board-contracts.md) for the Contract and
 Job model the slot atom comes from, [xp-economy.md](../design/rebuild/xp-economy.md) for the ledger the
