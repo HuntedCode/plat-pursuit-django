@@ -328,6 +328,39 @@ def test_wipe_is_behind_the_debug_guard(catalogue):
     assert Challenge.objects.filter(pk=own.pk).exists()
 
 
+# ── the notification template, which this command is most likely to surface ──────────────────────
+
+@override_settings(DEBUG=True)
+def test_it_says_how_to_install_the_notification_template_when_it_is_missing(catalogue, capsys):
+    """Completing a run fires the completion notification, and this command completes runs -- so on a database
+    without the fixture loaded it emits "challenge_completed template missing" from three layers down. The
+    sender degrades on purpose, which is what makes that log line easy to read as a bug in the feature.
+
+    The test DB has no fixtures loaded, so this is the default state here.
+    """
+    from notifications.models import NotificationTemplate
+
+    assert not NotificationTemplate.objects.filter(name='challenge_completed').exists()
+    profile = _hunter()
+
+    call_command('seed_challenge_demo', user=profile.psn_username)
+
+    out = capsys.readouterr().out
+    assert 'loaddata notifications/fixtures/initial_templates.json' in out
+    assert 'Nothing is broken' in out
+
+
+@override_settings(DEBUG=True)
+def test_it_stays_quiet_once_the_template_is_there(catalogue, capsys):
+    """A hint that fires when there is nothing to fix trains people to ignore it."""
+    profile = _hunter()
+    call_command('loaddata', 'notifications/fixtures/initial_templates.json', verbosity=0)
+
+    call_command('seed_challenge_demo', user=profile.psn_username)
+
+    assert 'loaddata notifications' not in capsys.readouterr().out
+
+
 # ── the guards ───────────────────────────────────────────────────────────────────────────────────
 
 @override_settings(DEBUG=False)

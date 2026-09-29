@@ -103,6 +103,7 @@ class Command(BaseCommand):
                 self._reset(profile)
             self._seed(profile)
 
+        self._warn_if_the_notification_template_is_missing()
         self._report(profile)
 
     # ── the profile ───────────────────────────────────────────────────────────────────────────────
@@ -296,6 +297,29 @@ class Command(BaseCommand):
         challenge.save(update_fields=['name'])
 
     # ── what to go and look at ────────────────────────────────────────────────────────────────────
+
+    def _warn_if_the_notification_template_is_missing(self):
+        """Tell the operator, rather than leaving a log line to explain itself.
+
+        COMPLETING A RUN FIRES THE COMPLETION NOTIFICATION, and this command completes runs -- so on a
+        database where the fixture has not been loaded, running it emits "challenge_completed template
+        missing" from `rewards._notify_completion`, three layers below anything the operator asked for. The
+        sender degrades on purpose (a missing template must never cost a hunter their completion), which is
+        exactly what makes it easy to mistake for a bug in the feature.
+
+        The row ships in the fixture; a dev database simply has to load it. Said here because this command is
+        the thing most likely to surface the gap.
+        """
+        from notifications.models import NotificationTemplate
+
+        if NotificationTemplate.objects.filter(name='challenge_completed').exists():
+            return
+        self.stdout.write('')
+        self.stdout.write(self.style.WARNING(
+            'The `challenge_completed` notification template is not in this database, so completing a run '
+            'logged a warning and sent nothing. Nothing is broken -- the sender degrades rather than failing '
+            'a completion -- and the inbox is parked, so the row would be write-only anyway. To silence it:'))
+        self.stdout.write('    python manage.py loaddata notifications/fixtures/initial_templates.json')
 
     def _report(self, profile):
         runs = list(Challenge.objects.filter(profile=profile, name__contains=DEMO_TAG)
