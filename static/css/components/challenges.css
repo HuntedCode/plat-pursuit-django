@@ -1244,8 +1244,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    fit a square for the same reason. So the square carries a MARK and the panel carries the ACTION.
 
    THE PANEL'S BUTTON THEREFORE HAS TO MEET THAT FLOOR, which it did not when this argument was first
-   written: `.pp-cta` is about 29px tall and has no `min-height`, so the reason given for moving the claim
-   off the square was not being honoured by the place it moved to. `.pp-cpay__claim` sets it below.
+   written: `.pp-cta` is about 32px tall (0.45rem padding twice, 0.8rem text, 1px borders) and has no
+   `min-height`, so the reason given for moving the claim off the square was not being honoured by the place it
+   moved to. Two comments in this file said 29px, which is where that figure came from and it was never right. `.pp-cpay__claim` sets it below.
 */
 
 /* THE PIP, and its position is a correction. It shipped at top-LEFT on the reasoning that the completed
@@ -1285,17 +1286,23 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cpay { display: flex; flex-direction: column; gap: 12px; }
 
 /* THE BLOCK'S NAME. Every other block on this page has an icon and a title; this one shipped without
-   either, so a reader met a large accent number and a lowercase caption with nothing saying what it was. */
+   either, so a reader met a large accent number and a lowercase caption with nothing saying what it was.
+
+   AND IT WAS TOO QUIET FOR WHAT IT LABELS: at 12px muted it announced a top-level stacked card more faintly
+   than `.pp-csq-shelf__title` announces a section INSIDE the free content below it. A card title and a
+   subsection title reading as one family, with the card the louder of the two, is the order a page needs.
+   `tabindex="-1"` is set by the client, not here -- it is a focus landing after a claim, never a tab stop. */
 .pp-cpay__name {
     display: flex;
     align-items: center;
     gap: 6px;
     margin: 0;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+    font-family: var(--pp-font-display);
+    font-size: 0.9375rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--pp-text-mute);
+    color: var(--pp-accent);
 }
 .pp-cpay__icon { width: 14px; height: 14px; color: var(--pp-accent); flex-shrink: 0; }
 
@@ -1366,13 +1373,51 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-dim);
 }
 /* 44px, because the argument for moving the claim OFF the square was that a ~109px tile cannot give a
-   button a real target. `.pp-cta` is about 29px and declares no `min-height`, so without this the panel was
+   button a real target. `.pp-cta` is about 32px and declares no `min-height`, so without this the panel was
    not honouring the reason it exists. The row carries the same floor, so a paid row does not collapse 4px
-   under a claimable one. */
-.pp-cpay__claim { flex: 0 0 auto; min-height: 44px; }
+   under a claimable one.
 
-/* BOTH STATES RENDERED, ONE REVEALED -- the contract card's `.rp-accept` / `.rp-cta__done` pattern, not a
-   new one. The row survives a server re-render in either state with no markup surgery. */
+   CLAIM-ALL TOO, and it was the omission that mattered most: the per-row button got the floor and the PRIMARY
+   control of the feature -- the one a hunter reaches for on a finished run, on a phone -- was left at bare
+   `.pp-cta`'s ~32px. The design system allows sub-44px only for secondary controls, and this is the opposite
+   of one. The disclosure's summary is a control as well, so it carries the floor on the same rule. */
+.pp-cpay__claim,
+.pp-cpay [data-cpay-all] { flex: 0 0 auto; min-height: 44px; }
+/* The summary's floor lives in its own styling rule below, not here: it needs no `flex` (its parent
+   `<details>` is not a flex container, so the shorthand was inert) and a selector with two rules is one that
+   anything reading "the rule for X" resolves by source order. */
+
+/* THE PAID STATE. Not a revealed second half of a dual-state row -- the template is an if/elif chain, so
+   exactly one of claim / claimed / nothing-to-claim exists in the DOM. That comment claimed the contract
+   card's "both rendered, one revealed" pattern for markup that never did it.
+
+   WHAT THAT COST WAS THE BEAT, which is the part worth having: `.rp-row--just-accepted` flashes the row and
+   scales its "Claimed" label in, so a claim on the Contracts board is acknowledged where it happened. Here the
+   whole ledger is replaced by server markup, so there was nothing to animate -- a hunter returning from the
+   ceremony found rows that were simply already green.
+
+   IT IS ON THE DISCLOSURE, NOT THE ROW, and that is a correction: a row version shipped first and could never
+   be seen. Every row the flash targets has just BECOME paid, so the re-render puts it inside
+   `.pp-cpay__done`, which the server always emits closed -- `display: none`, so the animation never runs, and
+   the class then sits there until the hunter expands the receipts later and gets a flash at an unrelated
+   moment. Dead motion plus a misfire.
+   Opening the disclosure to fix it was the obvious move and is wrong: on a 25-square Claim-all it dumps the
+   entire ~2,300px ledger back onto the page at exactly the moment the collapse exists to prevent. So the beat
+   lands on the thing that is visible AND did change -- the `Claimed (N)` line, whose count just went up. */
+.pp-cpay__done--just-paid {
+    --rpf-glow: inset 0 0 0 2px color-mix(in oklab, var(--pp-success) 55%, transparent),
+                inset 0 0 30px color-mix(in oklab, var(--pp-success) 22%, transparent);
+    animation: rpAcceptFlash 0.7s ease;
+}
+.pp-cpay__done--just-paid > .pp-cpay__done-sum {
+    color: var(--pp-success);
+    animation: rpDoneIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.08s both;
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-cpay__done--just-paid,
+    .pp-cpay__done--just-paid > .pp-cpay__done-sum { animation: none; }
+}
+
 .pp-cpay__claimed {
     display: inline-flex;
     align-items: center;
@@ -1392,6 +1437,64 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     background: color-mix(in oklab, var(--pp-success) 7%, var(--pp-bg-1));
 }
 
+/* THE CLAIMED ROWS, COLLAPSED. A finished run has 25 of them and every one is inert, so they are a record
+   rather than a list -- and 25 records above the board is ~1,250px on desktop, ~2,300px at 375px where the
+   rows wrap. Closed by default: a hunter opening this page wants the squares, and anyone who wants the
+   receipts is one press away.
+
+   A REAL CONTROL, so it takes the 44px floor on the rule two blocks up and the hover treatment the rest of
+   this page's controls get.
+
+   AND IT DRAWS ITS OWN CHEVRON, because `display: flex` overrides `<summary>`'s UA `display: list-item` and so
+   removes the native marker in every engine. An earlier version of this comment claimed the opposite -- that
+   the native marker was kept, and that it is what tells a screen reader this is a disclosure. Both halves were
+   wrong: the marker was gone, and the expanded/collapsed state comes from `<details>`/`<summary>` semantics,
+   not from a triangle. What was actually shipped was an uppercase label with no affordance at all, and on a
+   finished run that line is the only thing between the panel's head and its foot.
+
+   `.gd-more > summary` is the precedent for doing it this way (`list-style: none` plus the WebKit
+   pseudo-element, then supply the affordance yourself). */
+.pp-cpay__done {
+    margin-top: 8px;
+    border-top: 1px solid var(--pp-divider);
+    padding-top: 8px;
+}
+.pp-cpay__done-sum {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+    cursor: pointer;
+    list-style: none;
+    min-height: 44px;   /* a control, so the same floor the Claim buttons take */
+    transition: color 0.15s ease;
+}
+.pp-cpay__done-sum::-webkit-details-marker { display: none; }
+/* THE CHEVRON, rotating on open. A pseudo-element rather than an inline SVG because it is pure affordance --
+   `aria-hidden` by nature, nothing for a screen reader to skip. */
+.pp-cpay__done-sum::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.18s ease;
+    flex-shrink: 0;
+}
+.pp-cpay__done[open] > .pp-cpay__done-sum::before { transform: rotate(45deg); }
+.pp-cpay__done-sum:hover { color: var(--pp-text); }
+.pp-cpay__done-sum:focus-visible {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 2px;
+    border-radius: var(--pp-radius-sm);
+}
+/* The open list needs the same rhythm as the one above it, not the summary's. */
+.pp-cpay__rows--done { margin-top: 8px; }
+
 /* A finished square whose job was deleted: in the ledger, with nothing to claim, saying so. */
 .pp-cpay__gone {
     flex: 0 0 auto;
@@ -1405,9 +1508,14 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-dim);
 }
 
-/* THE PANEL AS A FOCUS TARGET. The client moves focus here when a claim destroys the button that was
-   pressed, and without a visible ring that landing is invisible -- or, worse, the UA draws its own around a
-   block that can be 1,600px tall. */
+/* THE FOCUS LANDINGS, and this rule used to name only the one that cannot be reached. A claim destroys the
+   button that was pressed, so the client moves focus to the next best thing -- Claim-all if anything is still
+   owed, otherwise the block's own heading. `.pp-cpay` is last in that chain and has no known way to fire,
+   because the heading is always rendered; styling it alone meant the landing a keyboard user actually gets
+   was whatever the UA draws around a `tabindex="-1"` node.
+   The heading is also the better landing to announce: "Reward" tells a screen-reader user where they are,
+   where the bare figure would have read out only digits. */
+.pp-cpay__name:focus-visible,
 .pp-cpay:focus-visible {
     outline: 2px solid var(--pp-primary);
     outline-offset: 4px;
@@ -1429,9 +1537,68 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-cpay__claim { margin-left: auto; }
 }
 @media (min-width: 768px) {
-    /* The bigger rung at tablet and up, where there is room for it. Still below the header card's own
-       30px tally, so the run's progress stays the loudest number on the page. */
-    .pp-cpay__xp { font-size: 2rem; font-variation-settings: "opsz" 40, "wght" 800; line-height: 0.92; }
+    /* THE `--lg` RUNG, RESTATED, because CSS cannot swap a class at a breakpoint. It is `.pp-tally--lg`
+       verbatim -- and it was that minus `letter-spacing`, which made it a rung that exists nowhere in
+       `tally.css`. Dropping to only `font-size` is the other option and is wrong here: a 32px number at
+       `--md`'s `opsz 28` is a scaled-up small number, which is exactly what the axis exists to prevent and
+       what the template's own comment argues against one file over.
+       Still below the header card's own 30px tally, so the run's progress stays the loudest number. */
+    .pp-cpay__xp {
+        font-size: 2rem;
+        font-variation-settings: "opsz" 40, "wght" 800;
+        line-height: 0.92;
+        letter-spacing: -0.01em;
+    }
+}
+
+/* WHAT IS OWED, on a Start card. A LINK rather than a chip, because the XP can belong to a run this card is
+   not offering (a finished run is neither active nor resumable) or to a hidden one, which is not reachable from
+   this page at all -- so it is the route, not a decoration.
+
+   IT BORROWS THE NAV PILL'S MARK so the two read as the same signal: the `XP` lozenge in accent, then the
+   figure in plain text. The nav can only afford the mark; a card has room for the number too.
+
+   44px, because it is a control on a page a hunter reaches on a phone. `align-self: flex-start` so it takes
+   its content's width rather than the card's -- a full-width bar here would read as the card's primary action,
+   which it is not. */
+.pp-cowed {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: 6px;
+    min-height: 44px;
+    margin-top: 8px;
+    padding: 0 10px;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid color-mix(in oklab, var(--pp-accent) 40%, transparent);
+    background: color-mix(in oklab, var(--pp-accent) 10%, transparent);
+    color: var(--pp-text);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: box-shadow 0.15s ease, background 0.15s ease;
+}
+.pp-cowed:hover {
+    background: color-mix(in oklab, var(--pp-accent) 16%, transparent);
+    box-shadow: 0 0 14px color-mix(in oklab, var(--pp-accent) 26%, transparent);
+}
+.pp-cowed:focus-visible { outline: 2px solid var(--pp-accent); outline-offset: 2px; }
+/* The nav pill's own recipe, at card scale: same word, same colour, so a hunter who saw the mark up there
+   recognises it down here.
+
+   12px, NOT THE NAV'S 0.56rem. That 9px is a documented exception for a DECORATIVE mark in the chrome, where a
+   nav item has no room -- and this file carries its own 12px floor, which caught the copied value. A card has
+   the room, and the floor is about whether a word can be read. */
+.pp-cowed__mark {
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: var(--pp-accent);
+    color: var(--pp-bg-0);
+    font-size: 0.75rem;
+    font-weight: 900;
+    line-height: 1.4;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 /* THE REWARD LINE on a Start card: what finishing this type is worth, before a hunter commits. Compact

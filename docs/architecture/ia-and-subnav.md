@@ -287,6 +287,21 @@ both halves of what lives here, where "Membership" would name only one of them.
 - **Dynamic items** resolve their own URL (kwargs) before reaching the template; pass them via the
   `extras` tuple (the Profile item is the surviving example). Prefer piggybacking existing cache
   keys over new per-request DB reads.
+- **Attention marks** (2026-09-30) are per-viewer chips on an EXISTING item, so they come through
+  `build_rendered_items(..., tags={slug: (text, kind, aria)})` rather than `extras`. `tags` overrides an
+  item's chip ATOMICALLY {DASH} text, `tag_kind` and `tag_aria` together {DASH} so an entry with no text leaves the
+  config's own `'Soon'` untouched, and a mark can never wear a label's word or vice versa.
+  `RenderedSubnavItem.tag_kind` picks the look: `''` is the amber `'Soon'` chip, `count` the nav's primary
+  number, `xp` its accent lozenge. The marks must NOT borrow amber: on this site amber means "not ready yet",
+  which is the opposite of what a claimable reward says.
+
+  Today's only producer is `_subnav_marks` in `plat_pursuit/context_processors.py`: the My Pursuit strip's
+  Career item carries the claimable-contract count and My Challenges carries the XP mark, because the parent
+  nav item AGGREGATES and, with two pages now paying job XP, could not say which one it meant. It piggybacks
+  the nav's two cached keys (`career:claimable:<pk>`, `career:chalxp:<pk>`) exactly as the bullet above asks,
+  is gated on the `my_pursuit` hub key before any read, honours `?preview=career-markers` the same way the nav
+  does, and fails closed. Note `hub_subnav` is registered BEFORE `career_attention`, so the strip is the one
+  that pays a cold miss.
 
 ### The strip: desktop row + mobile collapse-to-grid
 

@@ -23,7 +23,11 @@
     background: color-mix(in oklab, var(--cta-c, var(--pp-primary)) 16%, transparent);
     border: 1px solid color-mix(in oklab, var(--cta-c, var(--pp-primary)) 45%, transparent);
     border-radius: var(--pp-radius-sm);
-    transition: box-shadow 0.15s ease;
+    /* `opacity` JOINS THE TRANSITION so the inert state arrives rather than snapping. Every request-bound
+       button on the site dims to 0.55 the instant it is pressed (see the `:disabled` rule below) and the jump
+       was the only feedback a slow connection got. A 0.15s fade is not a progress cue, but it is the
+       difference between a button that went dead and one that is working. */
+    transition: box-shadow 0.15s ease, opacity 0.15s ease;
     cursor: pointer;
 }
 

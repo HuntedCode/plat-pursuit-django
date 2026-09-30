@@ -19,12 +19,30 @@ data-nav-* hooks + the #nav-sync data-url-* attrs. The sync-search dropdown keep
     hub_subnav context processor; marked by a single primary underline. {% endcomment %}
     <div class="pp-nav__hubs hidden lg:flex">
         {% if user.is_authenticated %}
-        <a href="{% url 'career' %}" class="pp-navhub{% if hub_section == 'my_pursuit' %} is-active{% endif %}"{% if hub_section == 'my_pursuit' %} aria-current="page"{% endif %}{% if career_claimable or career_new_contracts %} aria-label="My Pursuit{% if career_claimable %}, {{ career_claimable }} contract{{ career_claimable|pluralize }} ready to claim{% endif %}{% if career_new_contracts %}, new contracts on the board{% endif %}"{% endif %}>
+        <a href="{% url 'career' %}" class="pp-navhub{% if hub_section == 'my_pursuit' %} is-active{% endif %}"{% if hub_section == 'my_pursuit' %} aria-current="page"{% endif %}{% if career_claimable or career_unclaimed_xp or career_new_contracts %} aria-label="My Pursuit{% if career_claimable %}, {{ career_claimable }} contract{{ career_claimable|pluralize }} ready to claim{% endif %}{% if career_unclaimed_xp %}, Job XP waiting to be claimed{% endif %}{% if career_new_contracts %}, new contracts on the board{% endif %}"{% endif %}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>My Pursuit{% comment %}
-            A COUNT for work that is theirs and waiting, a WORD for news. Both show at once above
-            1280px; below that CSS keeps only the count, because the row has no width to spare.
-            The label carries the same thing in words: the markers are aria-hidden, so a screen
-            reader hears one sentence rather than a number read out of context.{% endcomment %}{% if career_claimable %}<span class="pp-navhub__n" aria-hidden="true">{% if career_claimable > 9 %}9+{% else %}{{ career_claimable }}{% endif %}</span>{% endif %}{% if career_new_contracts %}<span class="pp-navhub__new" aria-hidden="true">New</span>{% endif %}</a>
+            A COUNT for work that is theirs and waiting, then a WORD for claimable Challenge XP, then a
+            WORD for news. All three show at once only above 1280px; below that the CSS keeps the FIRST that
+            applies, which is not always the count -- a hunter with no claimable contracts sees the XP pill
+            there. The label carries the same thing in words: the markers are aria-hidden, so a screen reader
+            hears one sentence rather than a number read out of context. The XP block below covers what that
+            marker means and why it says a word.{% endcomment %}{% if career_claimable %}<span class="pp-navhub__n" aria-hidden="true">{% if career_claimable > 9 %}9+{% else %}{{ career_claimable }}{% endif %}</span>{% endif %}{% comment %}THE XP PILL sits between the count and New, which is the precedence order: contracts you
+    can claim, then Challenge XP you can claim, then news. `aria-hidden` like its siblings -- the whole state is one sentence in
+    the anchor's `aria-label`, because three pills announced separately is three interruptions for one
+    fact.
+
+    IT SAYS "XP", NOT "!". A lone exclamation mark at 0.62rem inside a 17px circle reads as a DIGIT --
+    the owner saw a `1` -- and it sits directly beside a badge that really is digits, which is the one
+    shape this marker must not take. Same correction the New pill made when it shipped as a 7px dot: a
+    mark has to be decoded, a word is read.
+
+    AND IT MEANS "WAITING TO BE CLAIMED", not "waiting to be shown". It briefly meant the latter, when the
+    XP ceremony was going to be deferred to the next Career visit; the celebration fires on the run page
+    now, so there is no such thing as an unseen one. That makes this the same KIND of marker as the count
+    beside it -- something of yours, waiting -- which is why they share a shape family and differ by
+    content.{% endcomment %}
+    {% if career_unclaimed_xp %}<span class="pp-navhub__xp" aria-hidden="true">XP</span>{% endif %}
+    {% if career_new_contracts %}<span class="pp-navhub__new" aria-hidden="true">New</span>{% endif %}</a>
         {% endif %}
         <a href="{% url 'games_list' %}" class="pp-navhub{% if hub_section == 'browse' %} is-active{% endif %}"{% if hub_section == 'browse' %} aria-current="page"{% endif %}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Browse</a>

@@ -154,11 +154,16 @@ def hub_subnav(request):
         # Support hub.
         is_member = is_auth and bool(getattr(request.user, 'premium_tier', ''))
         items = build_rendered_items(hub, is_authenticated=is_auth, is_member=is_member,
-                                     active_slug=active_slug)
+                                     active_slug=active_slug, tags=_subnav_marks(request, hub.key))
         active_label = next((i.label for i in items if i.slug == active_slug), '')
 
         return {
             'hub_section': hub.key,
+            # THE MARKED ITEMS, for the collapsed mobile bar. Its own list rather than a flag, because the bar
+            # draws the marks themselves and needs their text, kind and spoken form -- and only the ATTENTION
+            # marks: a config chip like 'Soon' is a label on one item, not something waiting for the hunter, and
+            # summarising it on the bar would say "look in here" about a page that is not ready yet.
+            'hub_subnav_marks': [i for i in items if i.tag_kind],
             'hub_subnav_label': hub.label,
             'hub_subnav_icon': hub.icon,
             'hub_subnav_items': items,
@@ -212,16 +217,109 @@ def moderation_alert(request):
         return {}
 
 
-def career_attention(request):
-    """The two markers on the My Pursuit nav item: a claim COUNT and a NEW pill.
+#: The XP mark's three parts. A CONSTANT because the aria clause is a literal SHARED with `navbar.html`,
+#: `mobile_tabbar.html` and `challenge-detail.js` (which strips it from the accessible name after a claim) --
+#: that coupling is pinned by a test, and a fourth loose copy here would have sat outside the pin.
+_XP_MARK = ('XP', 'xp', 'Job XP waiting to be claimed')
 
-    A number for work that is theirs and waiting; a word for news. Two counts side by side would
-    compete, and only one of them is a reason to go somewhere.
+
+def _count_mark(count):
+    """The claimable-contract chip: `(text, kind, aria)`.
+
+    THE SAME `9+` CAP THE NAV BADGE USES, and the same split -- the cap in the chip, the RAW number in the
+    spoken label, because "9+ contracts" is a worse sentence than the count. A rail pill is
+    `white-space: nowrap`, so a three-digit chip pushes its neighbours into the overflow sheet.
+
+    Its own function so the preview door and the real path cannot format it differently.
+    """
+    return ('9+' if count > 9 else str(count), 'count',
+            '%d contract%s ready to claim' % (count, '' if count == 1 else 's'))
+
+
+def _subnav_marks(request, hub_key):
+    """Attention chips for the My Pursuit strip: `{slug: (text, kind, aria)}`, or None.
+
+    WHY THE STRIP NEEDS ITS OWN, when the parent nav item already carries them: the parent AGGREGATES. It says
+    "something of yours is waiting" and, now that TWO pages pay job XP, it cannot say which -- the owner hit
+    exactly that, reading a lit XP pill with no idea where to claim. So the strip disambiguates: Career carries
+    the claimable-CONTRACT count, My Challenges the XP mark. Each item says its own thing (owner, 2026-09-30).
+
+    IT SHARES THE NAV'S TWO CACHE KEYS, so the per-request total is the same whichever processor runs first --
+    and `hub_subnav` is registered BEFORE `career_attention` in settings, so today THIS is the one that pays a
+    cold miss and the nav collects the hits. (An earlier version had that backwards, which would mislead anyone
+    profiling a slow first render of `/career/`.) On a warm cache it is two extra Redis GETs per My Pursuit
+    render; there is no request-local memo.
+
+    MY PURSUIT ONLY, gated before anything is read: this runs on every page of the site, and `/games/` has no
+    business paying for a question about somebody's contracts.
+    """
+    if hub_key != 'my_pursuit':
+        return None
+    try:
+        from trophies.services import career_attention as svc
+
+        # THE PROFILE LOOKUP IS INSIDE THE TRY, which is a correction. `hasattr(user, 'profile')` is a
+        # reverse-OneToOne DB query and `hasattr` swallows only `AttributeError` -- so a `DatabaseError` there
+        # escaped to `hub_subnav`'s blanket handler, which returns `{'hub_section': None}` and takes away the
+        # WHOLE STRIP rather than a chip. This processor runs first, so it is the earliest profile lookup on a
+        # My Pursuit page and the likeliest one to raise.
+        user = getattr(request, 'user', None)
+        if not (user and user.is_authenticated and hasattr(user, 'profile')):
+            return None
+
+        count = svc.claimable_count(user.profile)
+        unclaimed_xp = svc.has_unclaimed_challenge_xp(user.profile)
+
+        # THE PREVIEW DOOR, honoured here too, and resolved the SAME WAY the nav's own processor resolves it --
+        # `forced[0] if not None else (count or 3)`, then drop a zero. `?preview=career-markers` exists because
+        # these marks only show when there is something to say, which makes them the hardest thing on the site
+        # to look at deliberately; a door that lit the three NAV markers and left the strip bare would read as a
+        # broken feature rather than as a preview.
+        #
+        # MIRRORED RATHER THAN REINVENTED: the first version branched early with its own default and rendered a
+        # chip reading "0" at `&n=0` -- the one combination the door exists to produce, since that is how the XP
+        # mark is seen on its own. Two code paths deciding what a preview means is how a door starts showing a
+        # state the real page cannot.
+        forced = svc.preview_counts(request)
+        if forced is not None:
+            count = forced[0] if forced[0] is not None else (count or 3)
+            unclaimed_xp = forced[2]
+
+        marks = {}
+        if count:
+            marks['career'] = _count_mark(count)
+        if unclaimed_xp:
+            marks['my_challenges'] = _XP_MARK
+        return marks or None
+    except Exception:
+        # FAILS CLOSED like every other marker: a hunter loses a chip for one render, nobody gains one, and
+        # the strip is wayfinding -- it must never be the reason a page 500s.
+        logger.debug('Could not resolve sub-nav attention marks', exc_info=True)
+        return None
+
+
+def career_attention(request):
+    """The three markers on the My Pursuit nav item: a claim COUNT, an XP mark, and a NEW pill.
+
+    A number for contracts waiting to be claimed; the word XP for Challenge job XP waiting to be
+    claimed; the word NEW for news. Only the first is a count, because only the first is a quantity a
+    hunter acts on one at a time -- a run with four paid-up squares is one press of Claim all.
+
+    PRECEDENCE, when more than one applies (owner, 2026-09-29): count, then the XP mark, then New.
+    Two kinds of waiting reward, then news: contracts first because the count is a QUANTITY worked
+    through one at a time, Challenge XP second because it is one press however many squares are owed,
+    and news last because it is the only one that is not theirs yet.
+
+    The nav has room for all three only above 1280px; below that, and on the mobile tab bar, the CSS
+    shows the first that applies -- see `chrome.css`, where the width budget is quantified.
 
     Anonymous and profile-less viewers return an empty dict before anything happens, which is the
-    whole cost for them. For everyone else it is one cached per-user count plus one cached
-    SITE-WIDE value compared against a marker already on the user object -- see
-    `trophies.services.career_attention` for why that second half is free.
+    whole cost for them. For everyone else it is TWO cached per-user reads (the claim count and the
+    challenge-XP flag) plus one cached SITE-WIDE value compared against a marker already on the user
+    object -- see `trophies.services.career_attention` for why that last half is free. On a double
+    miss that is three queries, not one: this paragraph said one for as long as there were two
+    markers and one per-user read, and a stale cost figure in the one file that runs on every page
+    is how the next marker gets budgeted against a number that is wrong by a factor.
 
     Fails closed, like `whats_new_unread` and `moderation_alert` above: a hunter loses a marker for
     one render, nobody gains one. A nav that 500s because a badge could not be counted would be a
@@ -234,13 +332,19 @@ def career_attention(request):
         from trophies.services import career_attention as svc
         count = svc.claimable_count(user.profile)
         new = svc.has_new_contracts(user)
+        # Job XP earned on a Challenge square and not yet claimed. A WORD rather than a number: a
+        # hunter with four paid-up squares presses Claim all once, so "how many" is not the question,
+        # and the count beside it stays the only quantity on the item.
+        unclaimed_xp = svc.has_unclaimed_challenge_xp(user.profile)
         # `?preview=career-markers` (staff): the markers only show when there is something to say,
         # which makes them the hardest thing here to look at on purpose. See `svc.preview_counts`.
         forced = svc.preview_counts(request)
         if forced is not None:
             count = forced[0] if forced[0] is not None else (count or 3)
             new = forced[1]
-        return {'career_claimable': count, 'career_new_contracts': new}
+            unclaimed_xp = forced[2]
+        return {'career_claimable': count, 'career_new_contracts': new,
+                'career_unclaimed_xp': unclaimed_xp}
     except Exception:
         logger.debug("Failed to resolve the My Pursuit attention markers", exc_info=True)
         return {}

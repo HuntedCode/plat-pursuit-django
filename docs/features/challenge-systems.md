@@ -250,6 +250,46 @@ job levels, so the visible damage was permanently blank dates on Career hero run
 flag. No multiplier: a double-XP weekend does not scale challenge XP, because "exactly two job levels a
 square" is the promise the figure makes.
 
+### The celebration is the Contract claim's, not a copy of it
+
+A redeem plays the same full-screen claim ceremony a Contract claim plays: the award arrives, the XP flows
+into the job it levelled, the bar fills and the level ticks up. `static/js/claim-ceremony.js` is the player
+and **`contract_service.ceremony_payload` is the one builder** — extracted from `claim` when this path
+needed it, so "the same animation" is structural rather than a resemblance somebody has to maintain. The
+challenge path varies exactly one thing: the eyebrow line, because the player's default counts Contract slugs
+and a square's payout has none (it would have announced "Contract claimed" over a challenge reward).
+
+**It fires in the same response as the payout, and it has to.** The first design deferred it to the hunter's
+next Career visit, with the nav marker standing until they had seen it. That cannot work: every number in the
+payload is a difference between a reading taken before the grant and one taken after, and a level is a
+*threshold* — so any other payout landing in the gap (a Contract claim in another tab, a sync) would be
+attributed to the square, and a tier bloom a Contract had earned would play over a square's reward. That is
+the mechanism the design was abandoned on, before it shipped, rather than an incident anyone observed. The
+payload is therefore built inside the write, by the one function that holds both readings, and handed back in
+the redeem's reply under `claim`.
+
+Consequences worth knowing:
+
+- The page needs `{% job_icon_sprite %}` (the player draws job icons by `<use href="#jobicon-...">`) and
+  `claim-ceremony.js`. Both are emitted only for a Job Coverage run, and the script only for its **owner**:
+  a visitor to the Hall of Fame has no Claim button and should not download the animation.
+- `claim-ceremony.css` is imported by `input.css`, so it is already in the compiled bundle. No page tag.
+- The reply's `granted` figure still travels, because the toast is the **fallback** for when the player
+  cannot run (a missing module, a payload with no job to animate). A toast *and* a full-screen ceremony
+  announcing the same number would be two answers to one question.
+- Unlike the Career page, this path does **not** reload afterwards: the same reply already carries the
+  re-rendered panel and squares, which are applied before the overlay opens — so the page behind it is
+  already correct when the ceremony closes.
+- **Not reloading has one cost, and it is the nav.** The chrome is server-rendered, so the XP pill on My
+  Pursuit was rendered before the claim and clearing its cached answer does nothing to the lozenge already on
+  screen. The reply therefore also carries `xp_pending` (profile-wide — another run may still owe), and the
+  client removes the pill *and* its clause from the nav item's `aria-label` when it is false. The Career page
+  gets this free by reloading; this one has to do by hand the one thing the reload was doing for it.
+- **The panel's reward total ticks on dismissal, not on the swap.** Started with the swap it played out behind
+  the scrim fade and the ceremony, so the number the panel is built around never animated for anybody.
+
+**A full Claim all is a long ceremony, and that is the decision** (owner, 2026-09-30). Twenty-five squares means five pages of job tiles: roughly 12 to 28 seconds, with the Continue control inert until every page has auto-played, so the only early exits are Escape or tapping the scrim. Career's contract claims are usually one to five jobs, so this is a pre-existing property of the shared player that a challenge makes routine rather than rare. It was weighed and kept: finishing all twenty-five jobs is a once-per-run event and the long payoff is the reward, and a hunter who wants a shorter moment can claim squares one at a time from the panel. Do not "fix" the pacing without asking — and note that any change lands in `claim-ceremony.js`, so it would change Career too.
+
 ### The completion ordinal is a property of the run
 
 Which completion a run *is* — first or second — is counted as "completed runs finished no later than this
@@ -265,6 +305,24 @@ safe backfill from a shell for any completed run.
 | The Start card (`/my-challenges/`) | the title the next completion earns, and the per-square XP where there is any |
 | The run's page | a panel: the title, the XP waiting, and a **ledger** of finished squares |
 | A finished square on the grid | an `XP` pip while its XP is unclaimed |
+| The **My Pursuit** nav item, site-wide | an `XP` pill while any square anywhere is finished and unclaimed |
+| The **My Challenges** sub-nav item | the same `XP` mark, so the strip says which of the two paying pages it meant |
+| The Job Coverage card on `/my-challenges/` | a link: `XP  +N waiting`, with the figure |
+
+**The card's indicator is scoped per TYPE, across every run — not to the run the card is showing**, and that is
+the whole design rather than a detail. `card['run']` is the ACTIVE run, or a resumable one, or nothing; a
+FINISHED run with unclaimed squares is none of those. Scoped to the card's run, a hunter who finished a run
+without claiming saw a card reading "Start" while 150,000 XP sat on a run the page never mentioned — which is
+exactly how the site-wide pill came to look stuck. It is a LINK for the same reason: when the owed run is not
+the one the card offers, the card's own button does not lead to it, and when that run is HIDDEN this is the
+only route to it at all. `rewards.owed_runs(profile)` answers it in one aggregated query for the whole page.
+
+The nav pill is the third marker on that item (count, then XP, then New) and is documented with its siblings
+in [job-board-contracts.md](../design/rebuild/job-board-contracts.md#the-nav-markers-trophiesservicescareer_attentionpy):
+one `EXISTS` over a partial index, cached per hunter, armed when a square completes and spent by the redeem,
+both on commit. Its predicate is `redeemable_slots`', so it cannot light for a square the payout would skip — other than for
+up to the marker's own TTL, since the answer is cached for 300s and a `Job` deletion goes through neither
+writer. `seed_challenge_demo --list` prints the live answer AND the cached one, and says so when they differ.
 
 The panel renders for **everybody**, visitor included — "what is this worth" is the Hall of Fame's own
 question — and the Claim buttons are gated on ownership inside the partial. The claim is deliberately *not*
@@ -274,6 +332,41 @@ thing in the tile.
 The panel's rows are every finished square, paid ones included, with three states (paid / claimable / its
 `Job` was deleted). Owed-only rows meant a claim deleted its row, so the "Claimed" state could never render.
 The claimable count is the write's own predicate, so a Claim button cannot promise a payout the service skips.
+
+**The ledger is in two lists, split by what a hunter can act on** (owner, 2026-09-30). Rows with a Claim
+button stay in the open list; paid rows collapse behind a `Claimed (N)` disclosure. The reason is height: a
+finished run has 25 finished squares, which was ~1,250px of ledger on desktop and ~2,300px at 375px where the
+rows wrap — all of it above the board the page is about, and on a finished run (the page most likely to be
+read by somebody else) every row of it inert. A fully-paid run is now one line. `<details>` rather than a JS
+toggle, because the panel is re-rendered from the server on every claim and a JS-managed open state would be
+destroyed by each swap.
+
+**The headline measures what has been CLAIMED, for the whole run**, and the foot carries what a full run pays.
+Swapping the headline's meaning part-way through a run was the alternative and was rejected: a hunter reading
+one number that means two things depending on when they look is worse than a zero on a fresh run.
+
+**A claim is acknowledged on the receipts drawer**, after the ceremony closes
+(`.pp-cpay__done--just-paid`, reusing the Contract card's own `rpAcceptFlash` / `rpDoneIn` keyframes). This had
+to be added by hand: the panel is replaced by server markup rather than flipping a class, so unlike the
+Contract board there was nothing to animate — a hunter returning from the overlay found rows that were simply
+already green.
+
+**On the drawer rather than the row, and that is a correction.** A per-row version shipped first and could
+never be seen: every row a claim pays has just *become* paid, so the re-render puts it inside the `<details>`,
+which the server always emits closed — content in a closed `<details>` is `display: none`, so the animation
+never ran, and the class then sat on the row and fired whenever the hunter expanded the receipts later.
+Opening the drawer to fix it would undo the collapse decision on a 25-square Claim-all. The `Claimed (N)` line
+is visible and its count is exactly what changed.
+
+**The drawer does not remember being open.** The server emits it closed on every render, so a hunter who
+expanded the receipts finds them shut after their next claim. Accepted cost, not a feature — and the reason
+the acknowledgement could not live inside the list.
+
+**Known seam, deliberately unresolved:** the challenge XP thread is `--pp-accent` (square pip, nav pill, panel
+tally) and hands off to a `--pp-primary` ceremony at the most emphatic beat. Recolouring the ceremony is not an
+option — the Career page shares it — and `visual-identity.md` does not name either colour "the earn colour",
+so there is nothing to appeal to. What accent buys is separation: the XP pill sits beside a claimable-contract
+count in primary, and hue tells the two kinds of waiting apart as well as content does.
 
 ### The notification
 

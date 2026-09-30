@@ -518,17 +518,23 @@ aged out — and a filtered link would land the reader on an empty board.
 
 ### The nav markers (`trophies/services/career_attention.py`)
 
-Two markers on the **My Pursuit** nav item, in the navbar and the mobile tab bar. That item goes
-straight to `/career/`, so it is the only place either signal needs to be.
+Three markers on the **My Pursuit** nav item, in the navbar and the mobile tab bar. That item goes
+straight to `/career/`, so it is the only place any of them needs to be.
 
 | Marker | Means | Shape |
 |---|---|---|
 | Count | rewards this hunter has earned and not taken | a NUMBER — "how many" is answerable without a click, and is the whole reason to go |
+| XP pill | a Job Coverage Challenge square is finished and unclaimed | a WORD, for the reason below: it shipped as a `!` glyph and read as a `1` at desktop size |
 | New pill | contracts announced since they last looked | a WORD — the correction the avatar's own New marker already made: a dot has to be decoded, a word is read |
 
-Both can show at once. The count comes first, so the order is always "what is yours, then what is
-new". On the tab bar they ride the icon and the pill yields to the count: four items across a 375px
-phone has no room for both.
+**Order of precedence: count, then XP, then New** — yours-and-countable, then yours, then the world's. At
+`>=1280px` all three can show at once; below that only the first live one renders, and on the tab bar only
+one ever does. Four items across a 375px phone has no room for a second lozenge, let alone a third.
+
+**The XP pill says a word, not a symbol, and that is the second time this lesson was paid for.** The New
+marker shipped as a 7px dot and was corrected to a word; the XP marker then shipped as a `!` and was corrected
+the same way, because at desktop size a glyph small enough to fit the lozenge reads as a `1`. A marker on a
+nav item has room for about two characters and no room at all to be decoded.
 
 **This renders on every page of the site**, including the Django admin, so cost is the design:
 
@@ -536,14 +542,46 @@ phone has no room for both.
   stamps that decide "claimable" live there, so it is one indexed query over a handful of rows
   rather than `annotated_contracts`' four correlated subqueries across every live contract. Cached
   per hunter (5 min) and cleared by `contract_service.claim`.
-- **The pill** costs nothing per hunter. "Is anything new to you" is a comparison between a marker
+- **The New pill** costs nothing per hunter. "Is anything new to you" is a comparison between a marker
   already on `request.user` (loaded by authentication) and a SITE-WIDE maximum — so the only fetch
   is one value shared by every visitor, cached 15 minutes and cleared by `mark_announced`.
+- **The XP pill** is one `EXISTS` over a partial index that carries only the squares in flight
+  (`chalslot_unclaimed_xp_idx`), so a hunter with a long claimed history costs what a fresh one does. Cached
+  per hunter (5 min), armed when a square completes and spent by the redeem, both on commit. It is the only
+  marker that reads **another app's** models, so it has its own `try/except` returning `False`: without one, a
+  `DatabaseError` in `challenges` reaches the context processor's blanket handler, which returns an empty dict
+  — costing the hunter the count and the New pill too, over the marker that is third in precedence.
+  Its predicate is exactly `rewards.redeemable_slots`', so it can never light for a square the payout door
+  would skip. Hidden runs count: hiding is visibility, not a pause, and the door still pays them.
+
+### The sub-nav marks (2026-09-30)
+
+The parent My Pursuit item AGGREGATES — it says "something of yours is waiting". Once TWO pages paid job XP
+(Career's Contracts and a Job Coverage Challenge's squares) that stopped being enough: the owner read a lit XP
+pill with no way to tell where to claim. So the **My Pursuit sub-nav strip disambiguates**, each item carrying
+only its own signal:
+
+| Strip item | Mark | Why |
+|---|---|---|
+| Career | the claimable-contract COUNT (`9+` capped) | contracts are worked one at a time, so "how many" is answerable |
+| My Challenges | the `XP` mark | one press of Claim all however many squares are owed |
+
+Built on `RenderedSubnavItem.tag`, the per-item chip that already existed for `'Soon'`, with a new `tag_kind`
+choosing the look: `count` is primary, `xp` is accent — the parent nav's own vocabulary. They do **not**
+borrow the `'Soon'` chip's amber, because on this site amber means "not ready yet", which is the opposite of
+what a claimable reward says.
+
+**They cost nothing.** `_subnav_marks` in `plat_pursuit/context_processors.py` reads the same two cached
+per-profile values the navbar reads on every page, so the answers are already in the cache by the time the
+strip asks. Gated on the `my_pursuit` hub key before any read, so `/games/` pays nothing, and it fails closed
+like every other marker.
 
 **Previewing them.** They only appear when there is something to say, which makes them the hardest
 thing here to look at deliberately -- you need an unclaimed reward and an unseen announcement at the
-same moment. `?preview=career-markers` (staff/moderator, any page) lights both; `&n=12` forces the
-count to see the `9+` cap, `&n=0` leaves the New pill on its own. Writes nothing, like every other preview
+same moment. `?preview=career-markers` (staff/moderator, any page) lights all three; `&n=12` forces the
+count to see the `9+` cap, `&n=0` leaves the XP and New pills without it. The third marker joined this door
+rather than getting one of its own: a preview that lit two of three would be showing a combination a hunter
+can never see, which is the opposite of what the door is for. Writes nothing, like every other preview
 door -- they all go through `core/previews.py` now, because this was the third copy of the same four
 lines and the first two had already drifted once.
 

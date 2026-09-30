@@ -1,15 +1,20 @@
 /**
- * ClaimCeremony -- the "what just happened" payoff when a Pursuer banks Contract XP.
+ * ClaimCeremony -- the "what just happened" payoff when a Pursuer banks job XP.
  *
  * A rare, deliberate moment (you claim seldom, especially the forced onboarding "claim all"),
  * so it earns its own full-screen overlay: the award arrives, the XP flows into the jobs it
  * leveled, their bars fill and their levels tick up. Driven ENTIRELY by the server's `claim`
- * payload (see contract_service.claim) -- no DB, no reads -- so the same code powers the real
- * claim flow AND the DEBUG replay harness.
+ * payload (built by contract_service.ceremony_payload) -- no DB, no reads -- so the same code powers
+ * every real claim flow AND the DEBUG replay harness.
+ *
+ * TWO DOORS PAY JOB XP and both play this: the Career page's Contract claim, and the Job Coverage
+ * Challenge's square redemption (challenges/services/rewards.py). They share the BUILDER, not just
+ * the player, which is what makes "the same animation" a fact rather than a resemblance. The only
+ * thing a caller may vary is `eyebrow` (see below).
  *
  * Usage:  PlatPursuit.ClaimCeremony.play(payload)  -> Promise (resolves when dismissed)
  *
- * Payload: {xp, accepted:[slug], first_claim, rank_now,
+ * Payload: {xp, accepted:[slug], eyebrow, first_claim, rank_now,
  *           jobs:[{slug,name,disc,icon,xp,from_level,to_level,from_frac,to_frac,tiers:[{key,name}]}],
  *           pursuer:{from_level,to_level,ranks:[{key,name}]}}
  *
@@ -17,7 +22,7 @@
  * are Tally (.pp-tally), the job bars are Horizon (.pp-horizon, themed to each job's discipline
  * colour) -- the same treatments the Career page's Job rows use. Icons are referenced from the
  * page's job-icon sprite (`{% job_icon_sprite %}`), so this only runs on surfaces that emit it
- * (today: the Career page). No confetti: particles are reserved for the weld-spark / scan-beam earn
+ * (the Career page; a Job Coverage Challenge run page). No confetti: particles are reserved for the weld-spark / scan-beam earn
  * vocabulary (visual-identity.md §3), which the Phase 3 promotion peaks will use.
  */
 (function () {
@@ -217,6 +222,11 @@
 
     function eyebrow(p) {
         if (p.first_claim) return 'Your Pursuit begins';
+        // THE PAYLOAD MAY NAME ITS OWN LINE, and has to be able to: the fallback below counts `accepted`,
+        // which is a list of CONTRACT slugs. A payout from any other door has none, so without this the
+        // Job Challenge's square reward was announced as "Contract claimed". The default is unchanged for
+        // the caller it was written for.
+        if (p.eyebrow) return p.eyebrow;
         var n = (p.accepted || []).length;
         return n > 1 ? (n + ' Contracts claimed') : 'Contract claimed';
     }
@@ -511,6 +521,14 @@
                 flipping = false;              // always release, even if dismissed mid-flip
                 if (torn) return;
                 jobsEl.style.animation = '';   // release; rest at natural state
+            }).catch(function (err) {
+                // THE LATCH COMES OFF WHATEVER HAPPENS. `flipping` is what stops two flips overlapping, so a
+                // throw in `buildPage`/`settlePage` skips the release above and the pager is dead for the rest
+                // of the ceremony -- silently, because nothing is watching this chain. Releasing it means the
+                // next press simply tries again. NOT a teardown: a failed page flip is no reason to close a
+                // ceremony the hunter is still reading.
+                if (window.console && console.error) { console.error('ClaimCeremony page flip failed', err); }
+                flipping = false;
             });
         }
         prevBtn.addEventListener('click', function () { flipTo(pageIdx - 1); });
@@ -553,6 +571,19 @@
         }
         doneBtn.addEventListener('click', function () { if (interactive) teardown(); });   // inert until controls are live
         root.querySelector('.ccx__scrim').addEventListener('click', teardown);
+
+        // FROM HERE THIS FUNCTION OWNS STATE OUTSIDE THE OVERLAY -- a document-level `keydown` listener and
+        // the focus it is about to take -- which is why the two blocks below are guarded and why the guard
+        // has to live here rather than in the caller. A throw past this point used to leave both behind: for
+        // the rest of the page's life every Escape keypress anywhere ran a dead ceremony's `teardown`,
+        // swallowing the key from other handlers (a challenge run page also has a `<dialog>`) and yanking
+        // focus to a node the hunter had long since left. A caller cannot clean either up; a listener and a
+        // captured `lastFocus` are not reachable from outside.
+        //
+        // THE WINDOW BEFORE THIS LINE IS THE CALLER'S TO CLEAN: one class on `<body>` (`ccx-open`), one on
+        // `#zoom-container` (`pp-receded`), and a root already appended to `<body>` -- all three reachable
+        // from outside. (This read "two body classes and a detached root"; only one of them is on body, and
+        // the root is attached by then, which is the whole reason it needs removing.)
         document.addEventListener('keydown', onKey);
         doneBtn.focus();   // focus lands in the dialog immediately (not on the background board)
 
@@ -649,11 +680,29 @@
                     if (btn) {
                         btn.addEventListener('click', function () {
                             if (torn) return;
-                            if (pr.rank_up) mountLadder(pr.ladder);   // the NEW rank's bar is waiting on return
-                            revealControls();                          // NOW Continue + the arrows appear on the job screen
-                            finaleEl.classList.remove('is-in', 'is-glow', 'is-hand', 'is-scan', 'is-held');
-                            setTimeout(function () { finaleEl.hidden = true; }, 360);   // fade out -> the job screen
-                            if (doneBtn && doneBtn.focus) doneBtn.focus();              // hand focus to the footer Continue
+                            // GUARDED, because this listener is the LAST unprotected door into `buildLadder`
+                            // and the only one reached from user input. `build()` uses `ladder_pre` on a
+                            // rank-up, so a malformed `pursuer.ladder` survives the build and first arrives
+                            // HERE -- outside the reduced-motion `try` and outside the chain's `.catch`. A
+                            // throw would skip `revealControls()` and the class removal below it, leaving the
+                            // overlay stuck on the finale with a dead Continue and the footer permanently
+                            // inert: Escape and the scrim the only exits, and anything awaiting `dismissed`
+                            // (a challenge run page defers a count-up to it) waiting on one of those.
+                            //
+                            // Closing is the graceful failure: it is what Continue does anyway, and it
+                            // resolves `dismissed` so the caller's own follow-up still runs.
+                            try {
+                                if (pr.rank_up) mountLadder(pr.ladder);   // the NEW rank's bar is waiting on return
+                                revealControls();                          // NOW Continue + the arrows appear on the job screen
+                                finaleEl.classList.remove('is-in', 'is-glow', 'is-hand', 'is-scan', 'is-held');
+                                setTimeout(function () { finaleEl.hidden = true; }, 360);   // fade out -> the job screen
+                                if (doneBtn && doneBtn.focus) doneBtn.focus();              // hand focus to the footer Continue
+                            } catch (err) {
+                                if (window.console && console.error) {
+                                    console.error('ClaimCeremony finale failed to hand back', err);
+                                }
+                                teardown();
+                            }
                         });
                         btn.focus();
                     }
@@ -662,10 +711,20 @@
 
         // ---- reduced motion: show page 1 settled, hand over the arrows, no autoplay ----
         if (isReduced) {
-            root.classList.add('is-in', 'is-static');
-            xpEl.textContent = Number(payload.xp).toLocaleString();
-            settlePage(firstTiles, pages[0]);
-            finishAll();   // builds the resting footer ladder; no takeover in reduced motion
+            // GUARDED, AND THIS IS THE ONE BRANCH THAT NEEDS IT. Everything here runs synchronously inside
+            // `play`, after the listener and focus are taken -- so a throw (a malformed `pursuer.ladder`
+            // reaching `buildLadder`, say) propagates to whoever called `play` with the ceremony half-built
+            // and its `keydown` handler still on `document`. The full-motion path below cannot do that: its
+            // work is in a promise chain, so a failure there never reaches the caller synchronously.
+            try {
+                root.classList.add('is-in', 'is-static');
+                xpEl.textContent = Number(payload.xp).toLocaleString();
+                settlePage(firstTiles, pages[0]);
+                finishAll();   // builds the resting footer ladder; no takeover in reduced motion
+            } catch (e) {
+                teardown();    // removes the listener, both body classes and the root; restores focus
+                throw e;       // re-thrown: a ceremony that cannot build is this file's bug to report
+            }
             return dismissed;
         }
 
@@ -714,6 +773,15 @@
                 })
                     .then(function () { if (!torn) return wait(650); })   // let the fully-filled bar rest a beat
                     .then(function () { return playFinale(); });
+            })
+            // THE CHAIN CANNOT BE ALLOWED TO DIE QUIETLY. `play` returns `dismissed`, not this chain, so a
+            // throw in here is an unhandled rejection: the overlay would sit at whatever frame it reached
+            // with its controls still inert, and `dismissed` would only resolve if the hunter found Escape or
+            // the scrim. Anything waiting on the promise -- the challenge page defers its reward count-up to
+            // it -- would wait for that too. Tearing down turns a broken animation into a closed one.
+            .catch(function (err) {
+                if (window.console && console.error) { console.error('ClaimCeremony failed mid-play', err); }
+                teardown();
             });
 
         return dismissed;

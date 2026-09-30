@@ -58,9 +58,15 @@
 }
 .pp-navhub svg { width: 16px; height: 16px; }
 
-/* ── My Pursuit's two attention markers ──────────────────────────────────────────────────────────
- * A COUNT for work that is theirs and waiting, a WORD ("NEW") for news. Both can show at once above
- * 1280px; below that only one does -- see the xl gate further down, which is not a style choice.
+/* ── My Pursuit's three attention markers ────────────────────────────────────────────────────────
+ * A COUNT for contracts waiting to be claimed, the word XP for Challenge job XP waiting to be claimed,
+ * and the word NEW for news. All three can show above 1280px; below that only the first that applies
+ * does -- see the xl gate further down, which is not a style choice.
+ *
+ * PRECEDENCE: count, then the XP pill, then NEW (owner, 2026-09-29). Two kinds of waiting reward and
+ * then news -- contracts first because the count is a QUANTITY worked through one at a time, XP second
+ * because it is one press however many squares are owed. The order is enforced twice: by DOM order for
+ * the layout, and by the sibling selectors in the narrow band for the exclusivity.
  *
  * The avatar's What's New marker learned the shape rule the hard way and the block below it records
  * it: "what keeps the two apart is SHAPE, not colour". These are separated by CONTENT -- a numeral
@@ -70,9 +76,17 @@
  * the active underline across its full width; a corner pill would sit on it.
  *
  * THEY ARE NOT CHEAP IN WIDTH. `.pp-navhub` is `display: inline-flex; gap: 6px`, so each span costs
- * its own box PLUS a 6px flex gap -- ~29px for the count and ~42px for NEW, 71px for the pair. The
- * hub row has ~604px to share with the search field at the `lg` container step, so that 71px is the
- * difference between a comfortable search bar and a three-character one.
+ * its own box PLUS a 6px flex gap -- ~29px for the count, ~42px for NEW, and ~31px for XP. ~102px for
+ * all three, which is why all three only ever show at `>=1280px`; below that the media query at the foot of
+ * this file suppresses down to one.
+ *
+ * XP IS TWO CHARACTERS, WHICH COSTS ~8px MORE THAN THE `!` IT REPLACED, and that is the right trade: the
+ * mark was being read as a `1` beside a badge that is literally digits. Eight pixels above 1280px, where
+ * all three can show, is cheaper than a marker nobody can identify. Below 1280px it costs those same eight
+ * pixels whenever XP is the marker that WINS -- a hunter with no claimable contracts and an unclaimed square
+ * sees it there, drawn at ~31px against the `!` circle's ~23px. (An earlier version of this said it cost
+ * nothing at all in that band "because only one marker is ever drawn there", which confuses one marker with
+ * no marker.)
  *
  * The count is PRIMARY, not the queue badge's error red: red on this nav would read as something
  * wrong, and a claim waiting is the opposite of that. It is the best news the site has for them. */
@@ -87,6 +101,62 @@
     font-variant-numeric: tabular-nums;
     box-shadow: 0 0 8px -2px var(--pp-primary);
 }
+/* THE XP PILL. Job XP earned on a Challenge square and not yet claimed -- so it is the same KIND of thing
+   as the count beside it, and differs only in that "how many" is not a useful question: a run with four
+   paid-up squares is one press of Claim all, not four errands.
+
+   IT BRIEFLY MEANT SOMETHING ELSE. For about an hour it meant "claimed but not yet SEEN", back when the XP
+   ceremony was going to be deferred to the hunter's next Career visit. The celebration fires on the run page
+   now, in the same response as the payout, so nothing is ever unseen -- and the pill points at the thing
+   still outstanding, which is the claim.
+
+   IT SHIPPED AS `!` AND THAT WAS WRONG. At 0.62rem inside a 17px circle a lone exclamation mark reads as a
+   DIGIT -- the owner saw a `1` -- and it sits directly beside `.pp-navhub__n`, which really is digits. The
+   one shape this marker must not take is a number's. So it says a WORD, which is the correction the New
+   pill in this same file already made when it shipped as a 7px dot: a mark has to be decoded, a word is
+   read. A single character of punctuation is closer to that dot than to a word.
+
+   IT THEREFORE TAKES NEW'S SHAPE, not the count's circle: both are words, so both are lozenges, and the
+   count stays the only round one. That is the shape axis the block above says keeps these separable. Every
+   type value is New's as well -- size, weight, line-height, tracking, caps. The one dimension that differs is
+   1px of horizontal padding (5px against New's 6px), which is two characters against three rather than a
+   principle; the `--tab` variants below are identical to each other. Worth stating, because "takes New's
+   geometry" read as "these two rules are the same" and they are not quite.
+
+   `--pp-accent` rather than `--pp-primary` is the one departure, and the honest reason is the SECOND one
+   below, not the first. `visual-identity.md` names accent the "warm-orange forge-spark accent" and does NOT
+   name it the earn colour -- the site's actual earn moment, the claim ceremony, is `--pp-primary`. The seam
+   that leaves (an accent thread through pip, pill and panel, handing off to a primary overlay) is recorded in
+   `challenge-systems.md` rather than papered over by recolouring an overlay the Career page shares.
+   What accent really buys is the next sentence: two word-pills side by side
+   are told apart by hue as well as by content, which they need to be now that there are two of them. */
+.pp-navhub__xp {
+    display: inline-flex; align-items: center; padding: 1px 5px; margin-left: 1px;
+    border-radius: 999px; background: var(--pp-accent); color: var(--pp-bg-0);
+    font-size: 0.56rem; font-weight: 900; line-height: 1.4; letter-spacing: 0.04em;
+    text-transform: uppercase; white-space: nowrap;
+    box-shadow: 0 0 7px -1px var(--pp-accent);
+}
+/* ITS EXIT, because a claim is the one thing that removes it and the page does not reload. `challenge-detail.js`
+   sets this class, then removes the node on `transitionend` -- so the marker fades rather than blinking out of
+   existence, which is the standard this file's siblings are held to ("is the exit choreographed as carefully as
+   the entrance?").
+
+   IT ALSO PACES A HAND-OFF. Below 1280px and on the tab bar, NEW is suppressed by the XP pill's own presence
+   (`.pp-navhub__xp ~ .pp-navhub__new`), so deleting the node instantly makes a New lozenge appear in the same
+   spot in the same frame. Fading first turns that into a hand-off: the orange leaves, then the primary arrives.
+   Transform + opacity only, so nothing here can jank a nav that sits over the whole page. */
+.pp-navhub__xp--leaving {
+    opacity: 0;
+    transform: scale(0.82);
+    transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.3, 0, 0.8, 0.15);
+    box-shadow: none;   /* fade the glow with it; a glow that outlives its pill reads as a leftover */
+}
+@media (prefers-reduced-motion: reduce) {
+    /* No fade, and the client's `transitionend` never fires -- so its timeout is what removes the node. */
+    .pp-navhub__xp--leaving { transition: none; }
+}
+
 /* A WORD, NOT A LIGHT -- the same correction the avatar's What's New marker made, and for the same
    reason it records four hundred lines down: a dot has to be decoded, a word is read. It shipped
    here as a 7px dot on the argument that this nav item is roomier than a 38px avatar carrying a sync
@@ -107,15 +177,23 @@
    in monochrome instead of in reds. Without the glow the pills read as objects sitting on a lit
    item, which is what they are. */
 .pp-navhub.is-active .pp-navhub__n,
+.pp-navhub.is-active .pp-navhub__xp,
 .pp-navhub.is-active .pp-navhub__new { box-shadow: none; }
 
 /* ONE AT A TIME BELOW 1280px, which is the same exclusivity the tab bar has and for the same
    reason: no room. The `lg` container step is 1024px wide from 1024 all the way to 1279, so the
-   whole band shares one layout, and at that width the hub row plus both pills leaves the search
-   field about 80px -- roughly three characters of typing. The count wins because it is the half
-   that is about the reader's own work. Above 1280 the row has the space and both show. */
+   whole band shares one layout, and at that width the hub row plus TWO pills already leaves the search
+   field about 80px -- roughly three characters of typing. The count wins because it is the one that is
+   about the reader's own work. Above 1280 the row has the space and all three can show. */
 @media (max-width: 1279px) {
-    .pp-navhub__n ~ .pp-navhub__new { display: none; }
+    /* ONE AT A TIME, in precedence order. A general sibling selector is what expresses it: anything that
+       follows a marker already shown is suppressed, so the count beats both, and the XP mark beats NEW when
+       there is no count. Three pills would cost ~102px here, and the sentence above this media query is what
+       says there is no such room: with TWO pills the search field is already down to about 80px, which is
+       what is LEFT rather than what is spare. */
+    .pp-navhub__n ~ .pp-navhub__xp,
+    .pp-navhub__n ~ .pp-navhub__new,
+    .pp-navhub__xp ~ .pp-navhub__new { display: none; }
 
     /* AND THE ICONS GO, in the same band and for the same reason. A fifth hub (Community) plus
        "Support" becoming "Support Us" added roughly 136px to a row this file documents as having
@@ -133,9 +211,12 @@
     .pp-nav__hubs .pp-navhub { gap: 0; }
 }
 
-/* THE TAB BAR carries the same pair on the ICON rather than the label: four items across a 375px
+/* THE TAB BAR carries all three markers on the ICON rather than the label: four items across a 375px
    phone, so anything beside the word pushes the row. `.mobile-tabbar-ico` is the positioning
-   context; the icon itself keeps its own size. */
+   context; the icon itself keeps its own size. Only ever ONE of them is drawn here -- the same
+   precedence the narrow desktop band uses, enforced by the `--tab` suppression rules below. That is what
+   lets the two WORD pills share an anchor (`top: -6px; left: 10px`) without colliding; the count sits a
+   little differently at `-5px / 12px`, being a circle rather than a lozenge. */
 .mobile-tabbar-ico { position: relative; display: inline-flex; }
 .pp-navhub__n--tab {
     position: absolute; top: -5px; left: 12px; margin: 0;
@@ -149,14 +230,27 @@
    design system's 12px floor for readable content, below even the 0.55rem it reserves for
    DECORATIVE marks, and on the one screen CLAUDE.md says must stay readable at 375px. A word that
    has to be read at 8px is being decoded, which is the argument the dot lost. */
+/* ONE RULE FOR BOTH WORD PILLS. The XP pill rides the icon like its siblings and takes the NEW pill's anchor
+   rather than the count's: it is a word of the same length class, so it grows outward from the same place and
+   cannot end up under the neighbouring tab. Sharing a position is safe because only one marker is ever drawn
+   here (the exclusivity rules below). 0.56rem matches both siblings and the design system's floor for a
+   decorative mark -- the New pill's own comment records shipping at 8px and being pulled back for that reason.
+   These were two byte-identical rulesets with this observation sitting between them; lightningcss merges them
+   in `output.css` regardless, so the duplication only ever cost the reader. */
+.pp-navhub__xp--tab,
 .pp-navhub__new--tab {
     position: absolute; top: -6px; left: 10px; margin: 0;
     padding: 1px 4px; font-size: 0.56rem;
     border: 2px solid var(--pp-bg-1);
 }
-/* Both at once on an icon this small would overlap, so the word steps aside for the count -- the
-   count already says there is something waiting, which is the more urgent half. */
-.pp-navhub__n--tab ~ .pp-navhub__new--tab { display: none; }
+/* ONE MARK AT A TIME, in precedence order. Here it is not a width budget but a physical overlap: the
+   item is ~93px and each pill is absolutely positioned on the same 20px icon, so two would sit on top
+   of each other. The count wins because it is the half with something to do; the XP mark beats NEW
+   because a reward of yours outranks news. A general sibling selector says exactly that -- anything
+   following a mark already shown is suppressed. */
+.pp-navhub__n--tab ~ .pp-navhub__xp--tab,
+.pp-navhub__n--tab ~ .pp-navhub__new--tab,
+.pp-navhub__xp--tab ~ .pp-navhub__new--tab { display: none; }
 @media (hover: hover) { .pp-navhub:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.04); } }
 .pp-navhub:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-navhub.is-active { color: var(--pp-primary); }
@@ -623,9 +717,42 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
 }
-/* UNCHANGED WHEN ACTIVE, deliberately. The label turns primary on the active pill; a chip that
-   turned primary with it would be the same invisibility again, one state over. Amber on the
-   primary-tinted active pill stays legible and stays distinct. */
+/* ATTENTION CHIPS, which are not labels. 'Soon' is amber because amber means "not ready yet" on this site --
+   exactly the wrong thing to say about a reward that IS ready. These two carry the same signals the parent My
+   Pursuit nav item does, so they borrow its vocabulary: the claimable COUNT is primary, unclaimed XP is accent,
+   and the pair is told apart by colour and by content (a number against a word) the same way the nav's are.
+
+   They keep the chip's GEOMETRY -- `em`-based padding on the pill's own font size -- so a marked pill is the
+   same HEIGHT as its neighbours. It is NOT the same width: a chip adds ~28px, and `subnav.js measure()` re-folds
+   the rail on width, which is the whole reason the count is capped at `9+`. (An earlier version of this said
+   "the rail does not reflow", which the cap's own justification contradicts one file over.) */
+.pp-subpill__tag--count {
+    background: color-mix(in oklab, var(--pp-primary) 20%, transparent);
+    border-color: color-mix(in oklab, var(--pp-primary) 48%, transparent);
+    color: var(--pp-primary);
+    font-variant-numeric: tabular-nums;
+}
+.pp-subpill__tag--xp {
+    background: color-mix(in oklab, var(--pp-accent) 20%, transparent);
+    border-color: color-mix(in oklab, var(--pp-accent) 48%, transparent);
+    color: var(--pp-accent);
+}
+
+/* THE COUNT CHIP INVERTS ON THE ACTIVE PILL, because it is the one case the rule below was written for and
+   the one place it was being broken. On `/career/` the Career pill is active -- primary label on a primary-tinted
+   background -- and a primary-on-primary chip beside it is the invisibility that comment forbids, in the exact
+   spot a hunter is standing when they act on the count. Solid fill + the page background as the text colour is
+   what the nav's own badge does, so it reads as the same object. The XP mark needs no equivalent: accent on a
+   primary-tinted pill is already distinct, and My Challenges being active means the hunter is already there. */
+.pp-subpill.is-active .pp-subpill__tag--count {
+    background: var(--pp-primary);
+    border-color: transparent;
+    color: var(--pp-bg-0);
+}
+
+/* AMBER UNCHANGED WHEN ACTIVE, deliberately. The label turns primary on the active pill; a 'Soon' chip that
+   turned primary with it would be the same invisibility. Amber on the primary-tinted active pill stays legible
+   and stays distinct. */
 .pp-subpill.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 13%, transparent); }
 
 /* Overflow "More" trigger + dropdown (JS shows it only when the rail overflows). */
@@ -651,6 +778,12 @@
 .pp-sub__mhub { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-dim); flex-shrink: 0; }
 .pp-sub__mdot { color: var(--pp-text-mute); flex-shrink: 0; }
 .pp-sub__mcur { font-size: 0.82rem; font-weight: 700; color: var(--pp-primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* THE MARKS ON THE COLLAPSED BAR. `flex-shrink: 0` is the load-bearing part: `.pp-sub__mcur` is the only
+   flexible child and already ellipsises, so at 375px a long page name gives way and the marks stay. Without it
+   flexbox would shrink the chips instead and clip a two-character word.
+   No size of its own -- the base chip is `em`-based and the button is `font: inherit`, so it lands near 11.5px,
+   which is larger than the rail's and right for a phone. */
+.pp-sub__mtag { flex-shrink: 0; margin-left: 0; }   /* the base chip's 0.45em is for inline flow; this bar has `gap` */
 .pp-sub__mchev { margin-left: auto; width: 16px; height: 16px; color: var(--pp-text-mute); flex-shrink: 0; transition: transform var(--pp-dur) var(--pp-ease); }
 .pp-sub__mbar[aria-expanded="true"] .pp-sub__mchev { transform: rotate(180deg); }
 .pp-sub__sheet { position: absolute; left: 0; right: 0; top: 100%; z-index: 40; padding: 10px 12px 12px;

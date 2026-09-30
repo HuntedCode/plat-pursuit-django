@@ -131,8 +131,17 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     NAMED, via `aria-labelledby`. An unnamed `<section>` is exposed as a plain generic and buys nothing --
     the argument is already written out at the board's own landmark below, and this section was the
     counterexample to it.{% endcomment %}
+    {% comment %}`pp-head-cascade` BECAUSE EVERY OTHER BLOCK ON THIS PAGE HAS AN ENTRANCE and this one did
+    not: the header card's body cascades, the board's squares stagger in, and the reward card between them
+    simply appeared. Career runs the cascade on both of its stacked cards, which is the precedent.
+
+    ON THE SECTION, whose direct child is the panel root -- so the panel rises as one block rather than its
+    parts trickling in, which is right for a card that is not the page's header. And `challenge-detail.js`
+    REMOVES the class before its first swap: the section survives a claim but its contents are replaced, so
+    leaving it would replay the entrance on every claim, which reads as the panel arriving again rather than
+    updating.{% endcomment %}
     {% if rewards.per_square %}
-    <section class="scard mb-3" data-cpay-wrap aria-labelledby="cpay-head">
+    <section class="scard mb-3 pp-head-cascade" data-cpay-wrap aria-labelledby="cpay-head">
         {% include 'challenges/partials/_rewards_panel.html' %}
     </section>
     {% endif %}
@@ -380,5 +389,16 @@ which is the case the animation is most for.
 
 The picker half still bails on its own guard (`boot` exits when there is no dialog), so a visitor gets the
 entrance and nothing else.{% endcomment %}
+{% comment %}THE CLAIM CEREMONY, for the one viewer who can trigger one. Gated on both halves of that: a
+payout exists only on a Job Coverage run (`per_square` is 0 for A-Z), and only its owner gets Claim buttons.
+A visitor reading the Hall of Fame can never open this overlay, so they should not download it.
+
+BEFORE `challenge-detail.js`, which feature-tests `PlatPursuit.ClaimCeremony` at click time rather than at
+load -- so the order is for clarity, not correctness. The sprite it draws job icons from is emitted at the top
+of this template under the same jobs-run condition.
+
+NO CSS TAG: `claim-ceremony.css` is imported by `input.css`, so its rules are already in the compiled
+bundle every page loads.{% endcomment %}
+{% if is_owner and rewards.per_square %}<script src="{% static 'js/claim-ceremony.js' %}"></script>{% endif %}
 <script src="{% static 'js/challenge-detail.js' %}"></script>
 {% endblock %}

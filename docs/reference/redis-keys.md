@@ -301,9 +301,10 @@ one.
 |-------------|-----|---------|
 | `career:claimable:<profile_id>` | 300s | How many contracts this hunter can claim -- the nav's count badge. |
 | `contracts:latest_announced` | 900s | The newest `announced_at` on the board, SITE-WIDE. One value for every visitor. |
+| `career:chalxp:<profile_id>` | 300s | Whether any Job Coverage Challenge square is finished and unclaimed -- the nav's `XP` pill. A bool, read with `is not None`. (It shipped as `1`/`0` on the belief that `cache.get` cannot tell a stored `False` from a miss. It can: `False` round-trips and only `None` is the miss sentinel. The int would not have helped anyway, since `0` is falsy too -- the real hazard is a truthiness read, and no stored type survives that.) |
 
-Both render on every page of the site, which is why they are cached at all -- and why the second one
-is deliberately not per-user: "is anything new to you" is a comparison between a marker already on
+All three render on every page of the site, which is why they are cached at all -- and why
+`contracts:latest_announced` is deliberately not per-user: "is anything new to you" is a comparison between a marker already on
 `request.user` and that global maximum, so the per-hunter half costs nothing.
 
 Unlike the moderation count above, these ARE cached, and the difference is the audience: every
@@ -315,8 +316,24 @@ signed-in hunter on every page, against about ten moderator accounts.
 |---|---|
 | `career:claimable:<id>` | `contract_service.claim` (spends a reward, **on commit** -- clearing inside the transaction lets a concurrent render re-cache the pre-claim count) and `mark_contract_reached` (creates one) |
 | `contracts:latest_announced` | `contract_announcer.mark_announced` |
+| `career:chalxp:<id>` | `challenges.services.rewards._grant` (spends it, **on commit**) and `challenge_service._recount` (arms it, when a recount finds the completed count has RISEN -- not on every recount, which would spend a DELETE on each of 25 assignments). Also `seed_challenge_demo`'s `--reset`/`--wipe`, which delete runs without going through either writer. |
 
-The second of those was missing at first, and it is the worse half to lose: the hunter is on the site
+The challenge pill's query is one `EXISTS`. `chalslot_unclaimed_xp_idx` (`is_completed=True,
+xp_redeemed_at IS NULL`, keyed on `challenge`) is the partial index built for it, carrying only the squares in
+flight -- so the rows that can answer are a handful however long a hunter's claimed history is. Whether the
+planner picks it up has NOT been confirmed with `EXPLAIN` against prod-shaped data; the predicate is
+`challenge__profile`, so it has to reach the hunter's runs first. It asks **exactly** `rewards.redeemable_slots`' predicate (they share one `_owed()`),
+deliberately: a pill that lit for a square the payout door would skip sends somebody to a page with nothing
+to press. One residual staleness window: deleting a `Job` un-owes its squares without going through either
+writer, so the pill can be up to a TTL out of date after a staff deletion. Bounded and not wired to a signal. It also has its own
+`try/except` returning `False`, because it is the only marker that reads another app's models and the context
+processor's blanket handler would otherwise drop all three.
+
+**Precedence**, when more than one is live: the claimable count, then the `XP` pill, then `New`. At `<=1279px`
+only one renders (`chrome.css` suppresses the others), because three lozenges on the My Pursuit item
+overflow the nav.
+
+`mark_contract_reached` was missing at first, and it is the worse half to lose: the hunter is on the site
 WHILE the sync runs, so every page render re-arms the key with a fresh 300s at a zero count moments
 before the reward lands. The badge would then be empty for close to the full TTL at exactly the
 moment it had something to say -- while `/career/`'s own rail, uncached, already showed the reward. An empty board is cached as an empty string, because `cache.get` cannot tell a

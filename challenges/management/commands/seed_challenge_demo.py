@@ -50,6 +50,8 @@ from challenges.services import challenge_service as svc
 from challenges.services import rewards
 from trophies.models import Contract, ContractXPGrant, Job, Profile
 from trophies.services import contract_service
+from trophies.services.career_attention import CHALLENGE_XP_TTL
+from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
 
 #: In every seeded run's name. The reset scope, and a visible marker that a run is not the hunter's own.
 DEMO_TAG = '[demo]'
@@ -142,6 +144,7 @@ class Command(BaseCommand):
         # Rebuild the cache from what is LEFT, which is the real ledger. Without this the profile keeps
         # levels bought by XP whose grants no longer exist.
         contract_service.recompute_profile_job_xp(profile)
+        self._forget_nav_marker(profile)
         self.stdout.write('  reset: %d demo run(s), %d seeded grant(s) removed; real XP rebuilt.'
                           % (runs, paid))
 
@@ -171,9 +174,30 @@ class Command(BaseCommand):
         runs.delete()
 
         contract_service.recompute_profile_job_xp(profile)
+        self._forget_nav_marker(profile)
         self.stdout.write(self.style.WARNING(
             '  wiped: %d run(s) (demo AND real), %d challenge grant(s); real XP from other sources rebuilt.'
             % (n, paid)))
+
+    @staticmethod
+    def _forget_nav_marker(profile):
+        """Drop the cached "XP waiting" answer, on commit.
+
+        BOTH REMOVAL PATHS NEED THIS. Deleting runs takes their unclaimed squares with them, so the pill's
+        answer changes -- and the two writers that normally invalidate it (a square completing, a claim) are
+        not involved. Without it the pill advertises XP on runs that no longer exist for up to the full TTL,
+        which on a dev box is exactly when somebody is looking at the nav on purpose.
+
+        ON COMMIT, AND THROUGH `rewards._forget_xp_marker`, which is a correction rather than a preference.
+        Both call sites are inside this command's `transaction.atomic()`, so a bare delete ran BEFORE the runs
+        were actually gone -- the window `_grant` and `contract_service.claim` both use `on_commit` to avoid,
+        and which this branch's own comments cite as the original bug. A bare `forget_challenge_xp` also has no
+        guard, so a Redis outage would roll back an entire wipe-and-seed over an ornament; `_forget_xp_marker`
+        is the best-effort wrapper that exists for exactly that.
+        """
+        from challenges.services.rewards import _forget_xp_marker
+
+        transaction.on_commit(lambda: _forget_xp_marker(profile))
 
     # ── seeding ───────────────────────────────────────────────────────────────────────────────────
 
@@ -335,11 +359,19 @@ class Command(BaseCommand):
                 "%s's own runs (NOT seeded; these block seeding)" % profile.psn_username))
             for run in others:
                 state = 'finished' if run.is_complete else ('hidden' if run.is_deleted else 'active')
-                self.stdout.write('  [%s] %s -- %d/%d squares'
-                                  % (state, run.name, run.completed_count, run.total_slots))
+                self.stdout.write('  [%s] %s -- %d/%d squares%s'
+                                  % (state, run.name, run.completed_count, run.total_slots,
+                                     self._owed_clause(run)))
             self.stdout.write('  Clear them with --wipe if you want the demo runs instead.')
 
+        # THE PILL SECTION BEFORE THE EARLY RETURN, which is where it belongs and is not where it shipped.
+        # It sat after this `return`, so a profile with real runs and no seeded ones -- the shape of every
+        # account that is not a fresh demo, including the one that produced the bug report this exists for --
+        # got no pill diagnostic at all. The three tests all seeded first, so none of them saw it.
+        self._report_nav_pill(profile)
+
         if not runs:
+            self.stdout.write('')
             self.stdout.write(self.style.WARNING('No seeded demo runs for %s.' % profile.psn_username))
             return
 
@@ -359,3 +391,64 @@ class Command(BaseCommand):
         w('')
         w('Signed out (or a private window) on any run URL above gives you the VISITOR view:')
         w('the reward panel with no Claim buttons, which is what the Hall of Fame will show.')
+
+    @staticmethod
+    def _owed_clause(run):
+        """", N owed (X XP)" for a jobs run that has unclaimed squares, or ''.
+
+        A-Z runs owe nothing by definition, so they get no clause rather than a zero.
+        """
+        owed = rewards.redeemable_slots(run).count()
+        if not owed:
+            return ''
+        return ', %d owed (%s XP)' % (owed, '{:,}'.format(owed * CHALLENGE_SLOT_JOB_XP))
+
+    def _report_nav_pill(self, profile):
+        """Why the My Pursuit "XP" pill is lit or dark, traced to the runs responsible.
+
+        THE DIAGNOSTIC THIS COMMAND WAS MISSING, and the owner's report is what showed it: the pill looked
+        stuck after claiming everything he could find, and nothing here could say whether it was wrong or
+        whether some run still owed. Three things make that hard to see from the page alone -- the pill is
+        PROFILE-WIDE (any run, not the one you are looking at), HIDDEN runs count (they owe real XP and the
+        payout door still pays them) while My Challenges does not list them, and the answer is CACHED.
+
+        BOTH ANSWERS ARE PRINTED, and that is a correction: this claimed it "cannot disagree with the pill for
+        a reason of its own" because it asks the same predicate. The pill does not ask the predicate -- it asks
+        `career_attention.has_unclaimed_challenge_xp`, a 300-second cached wrapper. So a stale key is a reason
+        of the pill's own, and it is the likeliest cause of a pill that looks stuck: the live answer reads dark
+        while the browser stays lit for up to five minutes. A diagnostic that printed only the live answer
+        would have denied a real bug, which is worse than not having one.
+        """
+        from trophies.services.career_attention import has_unclaimed_challenge_xp
+
+        lit = rewards.has_unclaimed_xp(profile)
+        cached = has_unclaimed_challenge_xp(profile)
+        owing = [(run, rewards.redeemable_slots(run).count())
+                 for run in Challenge.objects.filter(profile=profile,
+                                                     challenge_type=CHALLENGE_TYPE_JOBS).order_by('pk')]
+        owing = [(run, n) for run, n in owing if n]
+
+        w = self.stdout.write
+        w(self.style.MIGRATE_HEADING('The My Pursuit "XP" pill'))
+        if cached != lit:
+            # THE MOST USEFUL LINE THIS COMMAND PRINTS, when it prints it. The browser reads the cached
+            # answer; everything else here reads the live one.
+            w(self.style.ERROR(
+                '  THE CACHE DISAGREES: the browser is showing %s and the truth is %s. The key expires within '
+                '%ds, or a claim / a completed square clears it.'
+                % ('LIT' if cached else 'dark', 'LIT' if lit else 'dark', CHALLENGE_XP_TTL)))
+        if not lit:
+            w('  dark -- nothing owed anywhere.')
+            return
+        total = sum(n for _run, n in owing)
+        w(self.style.WARNING('  LIT -- %d square(s) owed, %s XP, across %d run(s):'
+                             % (total, '{:,}'.format(total * CHALLENGE_SLOT_JOB_XP), len(owing))))
+        for run, n in owing:
+            flag = ' [HIDDEN -- not listed on My Challenges]' if run.is_deleted else ''
+            w('    %d owed: %s%s' % (n, run.name, flag))
+            w('      %s' % reverse('challenge_detail', args=[run.pk]))
+        if not owing:
+            # BELT AND BRACES, and worth printing rather than swallowing: the pill and this listing ask the
+            # same predicate, so disagreeing means one of them is broken and that is the bug report.
+            w(self.style.ERROR('    ...but no run reports an owed square. The pill and this listing '
+                               'disagree, which should be impossible -- they share `_owed()`.'))

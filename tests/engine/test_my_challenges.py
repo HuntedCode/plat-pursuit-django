@@ -218,20 +218,23 @@ def test_the_pages_own_query_cost_is_exact(rf):
             view.get_context_data()
         return len(captured.captured_queries)
 
-    # Two EMPTY cards: 3 reads each (active, resumable, visible-completed) + 2 for the history.
-    assert cost() == 8
+    # Two EMPTY cards: 3 reads each (active, resumable, visible-completed) + 2 for the history + ONE for the
+    # owed-XP table. That last one is asked once for the PAGE, not once per card -- the cards slice its result
+    # -- which is the property the numbers below pin: adding a third challenge type must not add a query.
+    assert cost() == 9
 
     svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.start(profile, CHALLENGE_TYPE_JOBS)
     # Two ACTIVE cards: `resumable_run` is short-circuited, so one query fewer each.
-    assert cost() == 6
+    assert cost() == 7
 
     for i in range(12):
         Challenge.objects.create(
             profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name=f'Old {i}', total_slots=26,
             is_complete=True, completed_at=timezone.now())
-    # AND IT DOES NOT GROW: the history is one count plus one bounded slice however many runs exist.
-    assert cost() == 6
+    # AND IT DOES NOT GROW: the history is one count plus one bounded slice however many runs exist, and the
+    # owed-XP read is one `values().annotate()` however many runs owe.
+    assert cost() == 7
 
 
 # ── the beta gate, rendered rather than redirected ───────────────────────────────────────────────

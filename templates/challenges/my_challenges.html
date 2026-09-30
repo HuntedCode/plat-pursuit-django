@@ -202,6 +202,38 @@
                 </p>
                 {% endif %}
 
+                {% comment %}WHAT IS WAITING TO BE CLAIMED, which is a different question from what the run
+                is worth: the line above says what a square PAYS, this says what is owed right now (owner,
+                2026-09-30). It exists because the nav's XP pill is profile-wide and this page was not, so a
+                hunter could read a lit pill and find no page that explained it.
+
+                A LINK, NOT A CHIP, and that is the point of it. The XP may be owed on a run this card is NOT
+                offering -- a finished run is neither active nor resumable, so the card would say "Start" while
+                the XP sat on a run nothing here mentions, and a hidden run is not reachable from this page at
+                all. The chip goes straight to the run that owes.
+
+                THE FIGURE, not just "XP": the hunter is deciding whether to go and claim, and "+24,000" answers
+                that where a bare mark would need a visit to interpret. The nav keeps the bare mark, because
+                there it is one of three competing for a nav item's width.{% endcomment %}
+                {% if card.owed %}
+                <a class="pp-cowed" href="{% url 'challenge_detail' card.owed.run_id %}"
+                   {% comment %}`same_run` IS TESTED FIRST IN BOTH COPIES, which fixes a real
+                   disagreement rather than tidying. `resumable_run` returns a HIDDEN run -- that is its
+                   whole purpose, and this card renders one with a "Hidden" chip and a Resume button -- so
+                   `hidden` and `same_run` can both be true. Branching on `hidden` first made the spoken
+                   form say "of a hidden run", pointing away from the very run the card was offering, while
+                   the visible text said nothing at all. Two copies of one fact have to branch on the same
+                   thing in the same order.{% endcomment %}
+                   aria-label="Claim {{ card.owed.xp|intcomma }} job XP waiting on {{ card.owed.squares }} finished square{{ card.owed.squares|pluralize }}{% if not card.owed.same_run %}{% if card.owed.hidden %} of a hidden run{% else %} of another run{% endif %}{% endif %}{% if card.owed.more %}, and {{ card.owed.more }} other run{{ card.owed.more|pluralize }} also owes XP{% endif %}">
+                    <span class="pp-cowed__mark" aria-hidden="true">XP</span>
+                    {% comment %}"on another run" IS THE HALF THAT STOPS A MISREAD. On an empty card the button
+                    below says Start, and Start creates a NEW run and pays nothing -- so a bare "+150,000
+                    waiting" directly above it invites exactly the wrong press. The clause only appears when the
+                    XP is somewhere the card's own button does not lead.{% endcomment %}
+                    <span aria-hidden="true">+{{ card.owed.xp|intcomma }} waiting{% if not card.owed.same_run %} on another run{% endif %}</span>
+                </a>
+                {% endif %}
+
                 {% comment %}`mt-auto` so the two cards' primary actions align. The A-Z card has no XP line
                 (it pays no job XP) while the jobs card does, so at `md:` the reward lines are one and two
                 lines tall respectively -- and two cards side by side with their Start buttons at different

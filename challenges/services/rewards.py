@@ -51,6 +51,7 @@ nullable FK, so a second would have rippled through `badge_adapters`, `sync_seri
 import logging
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from challenges.models import CHALLENGE_TYPE_JOBS, Challenge, ChallengeSlot
@@ -131,26 +132,136 @@ def _lock_run(challenge, profile):
 
 # ── the job-XP redemption ─────────────────────────────────────────────────────────────────────────
 
+def _owed():
+    """The predicate for "this square is owed job XP": finished, unpaid, job still in the catalogue.
+
+    THREE QUERIES ASK IT and they must never drift: `redeemable_slots` is what the payout door pays,
+    `has_unclaimed_xp` is what the nav pill lights for, and `owed_runs` is what the page and the seeder's
+    diagnostic point AT. The docstrings of the first two said "the same predicate as the write, deliberately"
+    while spelling the three terms out twice -- so the invariant was a claim held together by one test rather
+    than by the code. Edit one copy and the pill sends hunters to a page with nothing to press, which is the one
+    way an attention marker is worse than none.
+
+    THE PROFILE-WIDE SCOPE IS HOISTED TOO, into `_owed_slots`, and for the same reason: `has_unclaimed_xp` and
+    `owed_runs` both need "this hunter's jobs runs" on top of this predicate, and that pair was written out
+    twice within twenty lines. It is the half that decides whether the pill and the page agree about the same
+    hunter.
+
+    A FUNCTION RATHER THAN A MODULE CONSTANT because the `key__in` term holds a queryset. A `Q` built once at
+    import would share that queryset object across every caller for the life of the process; it is only ever
+    compiled as a subquery, so nothing has been observed to go wrong, but a fresh one per call costs nothing
+    and needs no reasoning about when a queryset caches its rows.
+
+    THE CATALOGUE TERM IS NOT DEFENSIVE PADDING -- it is what stops the page lying. `redeem_all` skips a
+    square whose `Job` was deleted (one staff deletion must not cost a hunter the other squares) and
+    deliberately leaves it unstamped, so without this term that square stays "owed" forever: the page offers
+    6,000 XP, Claim all pays nothing, and the "nothing owed is not an error" rule means it says nothing at
+    all.
+    """
+    return Q(is_completed=True, xp_redeemed_at__isnull=True, key__in=Job.objects.values('slug'))
+
+
 def redeemable_slots(challenge):
     """The squares of `challenge` that are owed job XP: completed, not yet paid, job still in the catalogue.
 
     A QUERYSET rather than a list, because its two callers want different things: one counts it, the other
     locks it.
 
-    THE CATALOGUE TERM IS NOT DEFENSIVE PADDING -- it is what stops the page lying. `redeem_all` skips a
-    square whose `Job` was deleted (one staff deletion must not cost a hunter the other squares) and
-    deliberately leaves it unstamped, so without this filter that square stays "owed" forever: the page
-    offers 6,000 XP, Claim all pays nothing, and the "nothing owed is not an error" rule means it says
-    nothing at all. Filtering here makes one predicate answer for both surfaces.
+    THE TERMS LIVE IN `_owed()`, which is also what the nav marker asks -- see there for why the
+    catalogue term is load-bearing rather than defensive.
 
     Ordered by `position` for a stable read; slot-lock order cannot deadlock anyway, because every slot
     writer takes the run's row lock first.
     """
     if challenge.challenge_type != CHALLENGE_TYPE_JOBS:
         return ChallengeSlot.objects.none()
-    return (challenge.slots
-            .filter(is_completed=True, xp_redeemed_at__isnull=True, key__in=Job.objects.values('slug'))
-            .order_by('position'))
+    return challenge.slots.filter(_owed()).order_by('position')
+
+
+def has_unclaimed_xp(profile):
+    """Does this hunter have Job XP waiting to be claimed anywhere? For the nav marker.
+
+    THE PROFILE-WIDE FORM of `redeemable_slots`, and it has to be its own query rather than a loop over
+    runs: the marker renders on every page of the site for every signed-in hunter, including the Django
+    admin, so it gets one `EXISTS` and nothing else. `chalslot_unclaimed_xp_idx` is the partial index built
+    for the slot half of it; whether the planner picks it up has not been checked with `EXPLAIN` on
+    prod-shaped data, so treat that as the intent rather than as a measured plan.
+
+    THE SAME PREDICATE AS THE WRITE, and the same profile scope as the page: both come from `_owed_slots`,
+    which is `_owed()` plus "this hunter's jobs runs". A marker that lit for a square `redeem_all` will skip
+    would send a hunter to a page with nothing to press, which is the one way an attention marker can be worse
+    than no marker -- and a marker that disagreed with `owed_runs` would light with no run to point at.
+
+    HIDDEN RUNS COUNT. Hiding is visibility, not a pause: detection keeps completing a hidden run's squares
+    and the payout door still pays them, so the XP is owed and the marker says so.
+    """
+    return _owed_slots(profile).exists()
+
+
+def _owed_slots(profile):
+    """Every square of this hunter's that is owed job XP. The queryset both profile-wide readers start from.
+
+    `_owed()` is the per-square predicate; this adds the two terms that make it about a HUNTER -- their runs,
+    and only the jobs type. Written out in both callers first, which is the duplication `_owed()`'s own
+    docstring argues against: the pill and the page disagreeing about one hunter is the failure, and a term
+    edited in one place is how it happens.
+
+    HIDDEN RUNS ARE IN. `ChallengeManager.get_queryset` deliberately does not filter `is_deleted`, and a join
+    bypasses it anyway -- which is correct here: a hidden run's squares owe real XP and the payout door still
+    pays them.
+
+    THE TYPE TERM IS SCOPING, NOT PROTECTION, and a mutation run is what established that: dropping it changes
+    nothing observable, because `_owed()`'s catalogue term (`key__in=Job.objects.values('slug')`) already
+    excludes every A-Z square -- an A-Z key is a LETTER and can never be a job slug. It stays because it says
+    what this queryset is about, and because it would become load-bearing the moment a third challenge type
+    keyed its slots on something a job slug could collide with. Worth writing down rather than leaving as a
+    guard somebody later trusts for a job it is not doing.
+    """
+    return ChallengeSlot.objects.filter(_owed(), challenge__profile=profile,
+                                        challenge__challenge_type=CHALLENGE_TYPE_JOBS)
+
+
+def owed_runs(profile):
+    """Every run of this hunter's that owes job XP, newest first. ONE query, aggregated in the database.
+
+    Returns `[{'challenge_id', 'challenge_type', 'owed', 'xp', 'is_hidden'}]`.
+
+    NOT SCOPED TO A RUN, and that is the whole reason it exists. `pending_xp(run)` answers for one run, which
+    is wrong for every surface that has to point a hunter AT the XP: My Challenges' card shows the ACTIVE run
+    (or a resumable one, or none), and a FINISHED run with unclaimed squares is neither -- so a card can read
+    "Start" while a run nobody is looking at owes 150,000 XP. The nav pill is profile-wide for the same reason,
+    and the gap between the two is what made it look stuck.
+
+    HIDDEN RUNS ARE INCLUDED AND FLAGGED. They owe real XP and the payout door still pays them, so leaving them
+    out would make this disagree with the pill -- but My Challenges does not list them, so a caller that wants
+    to send somebody somewhere needs to know which link is to a run they cannot otherwise reach.
+
+    AGGREGATED IN THE DATABASE, per the per-user queryset rule: one `values().annotate(Count)` over the partial
+    index, returning at most a handful of rows, rather than fetching slots and counting them in Python. A
+    hunter's runs are bounded by how many they have finished, so this cannot grow with a library.
+
+    ORDERED NEWEST-CREATED FIRST (`-challenge_id`), which is what a caller wanting "one run to link to"
+    should use. It is NOT "the run they were last on" -- an earlier version of this line claimed that, and a
+    hunter who resumed an older hidden run and filled squares there was last on the one that sorts second.
+    Nothing tracks per-run activity, and adding a column for a tie-break nobody has asked for is not worth it.
+
+    `.order_by` IS LOAD-BEARING, not cosmetic: `ChallengeSlot.Meta.ordering` is `['position', 'pk']`, and an
+    inherited ordering is injected into the `GROUP BY` -- which would have grouped by slot and returned one row
+    per square instead of one per run.
+    """
+    from django.db.models import Count
+
+    rows = (_owed_slots(profile)
+            .values('challenge_id', 'challenge__challenge_type', 'challenge__is_deleted')
+            .annotate(owed=Count('id'))
+            .order_by('-challenge_id'))
+    return [{
+        'challenge_id': row['challenge_id'],
+        'challenge_type': row['challenge__challenge_type'],
+        'owed': row['owed'],
+        'xp': row['owed'] * CHALLENGE_SLOT_JOB_XP,
+        'is_hidden': row['challenge__is_deleted'],
+    } for row in rows]
 
 
 def pending_xp(challenge):
@@ -167,8 +278,34 @@ def pending_xp(challenge):
     return redeemable_slots(challenge).count() * CHALLENGE_SLOT_JOB_XP
 
 
+def _eyebrow(count):
+    """The ceremony's own line for a challenge payout. ONE SQUARE OR N, in the page's own noun.
+
+    IT HAS TO TRAVEL WITH THE PAYLOAD. The player's default line counts `accepted`, which is a list of
+    CONTRACT slugs -- so a challenge payout, which has none, would have been announced as "Contract claimed"
+    over a square's reward. The player keeps that default for its original caller and reads this when a
+    caller sends one.
+
+    `first_claim` still wins in the player ("Your Pursuit begins"), and should: a hunter's first job XP ever
+    is the bigger fact whichever door paid it.
+    """
+    return ('%d squares claimed' % count) if count > 1 else 'Square claimed'
+
+
 def _grant(grants, profile):
-    """`grant_job_xp_bulk`, wrapped in the bookkeeping that primitive does not do. Returns the XP granted.
+    """`grant_job_xp_bulk`, wrapped in the bookkeeping that primitive does not do.
+
+    Returns `(granted_xp, ceremony_payload)`.
+
+    THE CEREMONY IS BUILT HERE AND NOWHERE ELSE, because this is the only function inside the bracket. The
+    payload's numbers are differences between a reading taken before the grant and one taken after, and the
+    before reading cannot be reconstructed later: a level is a threshold, so any other payout landing in the
+    gap (a contract claim in another tab, a sync) would be attributed to this square. That was tried, in the
+    version of this feature that deferred the ceremony to the next Career visit, and it is what killed that
+    design.
+
+    It is the SAME builder the contract claim uses (`contract_service.ceremony_payload`), which is what makes
+    "the same animation" structural rather than a resemblance. The only thing this path adds is the eyebrow.
 
     ONE HELPER SO NEITHER PATH CAN FORGET, which is exactly how the first version of this file lost data:
     both call sites called the primitive bare, and `grant_job_xp_bulk` logs JOB_TIER milestones only. A
@@ -187,14 +324,48 @@ def _grant(grants, profile):
     the hunter before they start, and a weekend that silently made it three would break the one promise the
     number makes. The ledger row therefore records `1.00`, which is the truth about what was paid.
     """
-    from trophies.services.contract_service import (_has_any_job_xp, _log_rank_milestones,
-                                                    _pursuer_level, grant_job_xp_bulk)
+    from trophies.services.contract_service import (_has_any_job_xp, _levels_snapshot,
+                                                    _log_rank_milestones, _pursuer_level,
+                                                    ceremony_payload, grant_job_xp_bulk)
 
+    # BOUNDED TO THE JOBS THIS WRITE PAYS -- at most 25, one per square -- never the hunter's library. Job
+    # PK is its slug, which is why `pk` and `key` are interchangeable through this file.
+    job_by_id = {g['job'].pk: g['job'] for g in grants}
     first_claim = not _has_any_job_xp(profile)
+    pre = _levels_snapshot(profile, job_by_id.keys())
     before = _pursuer_level(profile)
     granted = grant_job_xp_bulk(profile, grants, first_claim=first_claim)
-    _log_rank_milestones(profile, before, _pursuer_level(profile), first_claim)
-    return granted
+    # ONE READING AFTER, SHARED. The milestone bracket and the ceremony both need the post-grant Pursuer
+    # level, and it was being read twice -- two extra queries inside the run, slot and ProfileJobXP row
+    # locks, for a value that cannot change between them (same transaction, nothing written in between).
+    after = _pursuer_level(profile)
+    _log_rank_milestones(profile, before, after, first_claim)
+    ceremony = ceremony_payload(profile, job_by_id, pre, before, total=granted, accepted=[],
+                                first_claim=first_claim, eyebrow=_eyebrow(len(grants)),
+                                post_pursuer=after)
+
+    # SETTLE THE NAV MARKER, on commit. The pill says "Job XP waiting to be claimed", and this is the only
+    # thing that can spend it -- so leaving it lit after a claim would be the feature contradicting itself
+    # on screen, in the one moment the hunter is looking straight at it.
+    #
+    # `on_commit` rather than inline, for the reason `contract_service.claim` writes down at its own
+    # invalidation: a concurrent render between the cache clear and the commit would re-cache the PRE-claim
+    # answer with a fresh TTL, and the pill would survive the claim by up to the full five minutes.
+    transaction.on_commit(lambda: _forget_xp_marker(profile))
+    return granted, ceremony
+
+
+def _forget_xp_marker(profile):
+    """Drop the cached "XP waiting" answer so the nav picks up the claim.
+
+    BEST-EFFORT, exactly like `contract_service._forget_nav_badge`: a cache that is down must never fail the
+    payout that called it. The marker is an ornament on somebody else's transaction.
+    """
+    try:
+        from trophies.services.career_attention import forget_challenge_xp
+        forget_challenge_xp(profile)
+    except Exception:
+        logger.debug('Could not clear the challenge-XP nav marker', exc_info=True)
 
 
 def _job_for(slot):
@@ -209,7 +380,14 @@ def _job_for(slot):
 
 @transaction.atomic
 def redeem_slot(challenge, profile, key):
-    """Pay one completed Job Coverage square's XP to its job. Returns `(slot, amount)`.
+    """Pay one completed Job Coverage square's XP to its job. Returns `(slot, amount, ceremony)`.
+
+    THE THIRD VALUE IS THE ANIMATION, and it is a return value rather than something the view rebuilds
+    because it can only be built in here (see `_grant`). A THREE-TUPLE rather than a dict or a hidden
+    attribute, deliberately: every caller that USES the result breaks loudly at the unpack the moment this
+    changes, which for a function that writes to an append-only XP ledger is the failure mode to want. (Not
+    every caller: `seed_challenge_demo` discards the return and was untouched by the change. An earlier
+    version of this said "every existing caller", which claimed a guarantee the shape does not give.)
 
     ORDER OF OPERATIONS, and it is the point of the function:
       1. lock the run, then the slot row (`_lock_run` explains why not `_lock_challenge`);
@@ -246,18 +424,18 @@ def redeem_slot(challenge, profile, key):
     slot.xp_redeemed_at = timezone.now()
     slot.save(update_fields=['xp_redeemed_at'])
 
-    granted = _grant([{
+    granted, ceremony = _grant([{
         'job': job,
         'amount': CHALLENGE_SLOT_JOB_XP,
         'source': XP_SOURCE,
         'source_id': slot.pk,
     }], profile)
-    return slot, granted
+    return slot, granted, ceremony
 
 
 @transaction.atomic
 def redeem_all(challenge, profile):
-    """Pay every square `challenge` owes, in one transaction. Returns `(slots, amount)`.
+    """Pay every square `challenge` owes, in one transaction. Returns `(slots, amount, ceremony)`.
 
     ONE TRANSACTION AND ONE GRANT CALL, not a loop over `redeem_slot`, for two reasons. A loop would take
     and release the `ProfileJobXP` lock once per square, which is the shape that deadlocks against a
@@ -267,13 +445,15 @@ def redeem_all(challenge, profile):
 
     NOT AN ERROR WHEN THERE IS NOTHING OWED. A hunter pressing "Claim all" twice has not done anything
     wrong, and the second press is the one that would otherwise be a refusal for a state they cannot see.
-    Returns `([], 0)`.
+    Returns `([], 0, None)` -- and `None` rather than an empty payload, because the ceremony is a thing that
+    either happened or did not. The player's own guard is `!payload.jobs.length`, so either would be silent;
+    `None` is the one a reader cannot mistake for a claim that paid nothing.
     """
     locked = _lock_run(challenge, profile)
 
     slots = list(redeemable_slots(locked).select_for_update())
     if not slots:
-        return [], 0
+        return [], 0, None
 
     jobs = {job.slug: job for job in Job.objects.filter(slug__in=[s.key for s in slots])}
     now = timezone.now()
@@ -295,7 +475,7 @@ def redeem_all(challenge, profile):
                        'source': XP_SOURCE, 'source_id': slot.pk})
 
     if not grants:
-        return [], 0
+        return [], 0, None
 
     # ONE FIELD, and not `updated_at`: `ChallengeSlot` does not have that column. Worth stating because
     # the sibling `ProfileJobXP` write in `contract_service` DOES set its own `updated_at` by hand right
@@ -303,8 +483,8 @@ def redeem_all(challenge, profile):
     # irrelevant here for a different reason.
     ChallengeSlot.objects.bulk_update(paid, ['xp_redeemed_at'])
 
-    granted = _grant(grants, profile)
-    return paid, granted
+    granted, ceremony = _grant(grants, profile)
+    return paid, granted, ceremony
 
 
 # ── what the page says it is worth ──────────────────────────────────────────────────────────────────
@@ -317,15 +497,23 @@ def summary(challenge):
     square pays, and they would disagree the first time the figure moved.
 
     `rows` IS EVERY FINISHED SQUARE, paid or not, and that is a correction rather than a preference. Owed-only
-    rows meant claiming a square DELETED its row, so the "Claimed" half of the panel's dual-state markup could
-    never render and the CSS for it was dead the day it was written -- while citing the contract card's
-    pattern, where both states are always present and one is revealed. The panel is a ledger of the run's
-    finished squares, which is what makes that pattern true here.
+    rows meant claiming a square DELETED its row, so the "Claimed" state could never render and its CSS was
+    dead the day it was written. The panel is a ledger of the run's finished squares, which is what lets a
+    claim FLIP a row rather than remove it.
+
+    IT IS NOT THE CONTRACT CARD'S "both states rendered, one revealed" PATTERN, which this docstring used to
+    claim and the markup never did. The template is TWO LOOPS over `rows`, split on `is_paid`: an unpaid row
+    renders in the open list and a paid one inside the disclosure, so a row appears in exactly one place and
+    there is nothing to reveal. (This sentence used to describe an if/elif chain on `claimable`/`is_paid`, which
+    is the shape the split REPLACED -- and the open loop's paid arm was deleted as unreachable in the same
+    change.) The panel re-renders server-side after a claim instead of flipping a class, which is why the
+    acknowledgement had to be added by hand rather than inherited.
 
     THREE STATES PER ROW, because a square has three: `is_paid` (done), `claimable` (a button), and neither
     (its `Job` left the catalogue, so nothing can ever pay it -- shown without a button rather than hidden,
-    since a finished square vanishing from its own ledger is worse than one that cannot be claimed).
-    `claimable` is exactly `redeemable_slots`, so the button and the write agree by construction.
+    since a finished square vanishing from its own ledger is worse than one that cannot be claimed). Exactly
+    one renders; they are not three states of one element. `claimable` is exactly `redeemable_slots`, so the
+    button and the write agree by construction.
 
     Each row carries its job ATOM (icon, discipline colour, name) rather than a slug, because
     `_job_chip.html` wants an atom and rebuilding one in the template is how two spellings of a job appear on
@@ -369,13 +557,28 @@ def summary(challenge):
         'claimable': slot.key in claimable,
     } for slot in finished]
 
-    paid = sum(CHALLENGE_SLOT_JOB_XP for row in rows if row['is_paid'])
+    paid_rows = [row for row in rows if row['is_paid']]
 
     return {
         'per_square': CHALLENGE_SLOT_JOB_XP if is_jobs else 0,
         'pending_xp': len(claimable) * CHALLENGE_SLOT_JOB_XP,
         'claimable_count': len(claimable),
-        'paid_xp': paid,
+        'paid_xp': len(paid_rows) * CHALLENGE_SLOT_JOB_XP,
+        # THE LEDGER SPLIT, computed here because the template must not decide what a hunter can act on.
+        # `paid_count` labels the disclosure the paid rows collapse behind: 25 finished rows above the board
+        # was ~1,250px on desktop and ~2,300px at 375px (the rows wrap), all of it before the thing the page
+        # is about -- and on a finished run, the page most likely to be read by somebody else, every one of
+        # them is inert. The claimable rows stay out in the open because they are the ones with a button.
+        'paid_count': len(paid_rows),
+        # AND THE OPEN LIST'S OWN COUNT, so the template can decide whether to render a `<ul>` at all. Gating
+        # it on `rows` was wrong once everything is paid: every row moved into the disclosure and an EMPTY
+        # `<ul role="list">` was left behind above it, with its own top margin. A template cannot subtract, so
+        # the figure belongs here.
+        'unpaid_count': len(rows) - len(paid_rows),
+        # WHAT A WHOLE RUN PAYS, so the panel can answer "what is this worth" without the headline changing
+        # what it measures part-way through a run (owner, 2026-09-30). `total_slots` is the run's own length,
+        # so this is right for either type and does not hardcode 25.
+        'full_xp': (CHALLENGE_SLOT_JOB_XP * challenge.total_slots) if is_jobs else 0,
         'rows': rows,
         # The title this run has earned, or is playing for. `title_earned` is what distinguishes them, so
         # the template never has to infer it from `is_complete` and get the tense wrong.

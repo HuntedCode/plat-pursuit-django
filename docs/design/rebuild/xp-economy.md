@@ -116,6 +116,23 @@ Fast early promotions (a division every ~3 games at Recruit) widening to ~60 gam
   source + `source_id`, where `source_id` is the `ChallengeSlot` id) **plus a check constraint requiring
   `source_id`** — because Postgres treats NULLs as distinct, so without the second one a grant written with no
   `source_id` collides with nothing and the unique index buys nothing at all. Copy both, not just the first.
-  Nothing writes those rows yet; the payout is the rebuild's reward chunk.
+  **It writes now**: `challenges.services.rewards.redeem_slot` / `redeem_all`, one flat 6,000 per finished
+  square, stamped by `ChallengeSlot.xp_redeemed_at` under the run's row lock so a second press is a sentence
+  rather than an `IntegrityError`.
+- **A grant is BRACKETED or its Pursuer milestones are lost forever.** `grant_job_xp_bulk` logs JOB_TIER
+  milestones and nothing else, so the caller must read `_pursuer_level` before and after and call
+  `_log_rank_milestones`. This is not cosmetic: `ranks_crossed(old, new)` is `old < min <= new`, so a rank an
+  unbracketed grant crossed is never logged **and can never be logged afterwards** — the next claim starts
+  from the already-raised level, and the Career hero shows a permanently blank date on a rung the hunter
+  really did cross. The challenge redeem lost exactly this in its first version; both its paths now go through
+  one `_grant` helper so neither can forget. `accept_contracts_bulk` is the original of that envelope.
+- **The claim ceremony is ONE builder, and it only works inside the write.**
+  `contract_service.ceremony_payload` builds the payload both doors answer with (`static/js/claim-ceremony.js`
+  plays it); it was extracted from `claim` when the challenge redeem needed the same animation. Every number
+  in it is a difference between a reading taken before the grant and one taken after, so it **cannot** be
+  rebuilt on a later request: a level is a threshold, and any other payout landing in the gap gets attributed
+  to this one. A design that deferred the challenge celebration to the hunter's next Career visit was
+  abandoned on precisely that reasoning: a tier bloom a Contract claim had earned would have played over a
+  challenge square's reward. It never shipped, so that is the mechanism and not a reported incident.
 - **The model is named `ContractXPGrant` but is source-agnostic.** A rename to `JobXPGrant` is optional polish; the `source` field is what matters.
 - **Lab display:** the cap-based "mastered" state is gone — the Lab shows the element's prestige **tier** (rank on the tile/detail + a "N to <next tier>" goal). Done.

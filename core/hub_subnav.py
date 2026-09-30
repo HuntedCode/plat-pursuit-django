@@ -84,6 +84,13 @@ class RenderedSubnavItem:
     HubSubnavItem. It has to be repeated here rather than read off the config: the
     template only ever sees these, which is exactly why the first cut rendered nothing
     -- the `{% if item.tag %}` was true of the config object the template never gets.
+
+    ``tag_kind`` picks the chip's LOOK: '' is the default amber 'Soon' chip, 'count' the nav's
+    primary number, 'xp' its accent lozenge. It exists because the two attention marks added in
+    2026-09 -- a claimable-contract count on Career, unclaimed challenge XP on My Challenges --
+    are not labels like 'Soon'. They are the same signals the parent My Pursuit nav item carries,
+    and the nav tells its three markers apart by shape and colour; a sub-nav drawing them as amber
+    'Soon' chips would contradict that one level down, and on this site amber means "not ready yet".
     """
     slug: str
     label: str
@@ -92,6 +99,7 @@ class RenderedSubnavItem:
     group: str = ''
     tag: str = ''
     tag_aria: str = ''
+    tag_kind: str = ''
 
 
 @dataclass(frozen=True)
@@ -480,6 +488,7 @@ def build_rendered_items(
     is_member: bool = False,
     active_slug: str | None = None,
     extras: tuple[RenderedSubnavItem, ...] = (),
+    tags: dict[str, tuple[str, str, str]] | None = None,
 ) -> tuple[RenderedSubnavItem, ...]:
     """
     Return the hub's sub-nav items resolved into ``RenderedSubnavItem``s
@@ -492,6 +501,15 @@ def build_rendered_items(
     - ``extras`` are appended at the end of the strip and are passed
       through unchanged (caller is responsible for URL resolution since
       extras may need kwargs, e.g. the Fundraiser tab).
+    - ``tags`` OVERRIDES a config item's chip, as ``{slug: (text, kind, aria)}``. Attention
+      marks are per-viewer and per-request (a claimable count, unclaimed XP), so they cannot
+      live in ``HUB_SUBNAV_CONFIG`` the way 'Soon' does -- and they are an override rather
+      than an ``extras`` entry because they attach to an item that already exists. An empty
+      or missing text leaves the config's own chip ENTIRELY alone -- text, kind and aria together.
+      That last part is a fix: `tag_aria` used to fall back independently of `tag`, so
+      ``{'challenges': ('', '', 'now available')}`` left the chip reading 'Soon' while a screen
+      reader heard "now available". The chip's three parts are one atomic override, which is the
+      same backwards-announcement hazard ``HubSubnavItem.tag_aria``'s own comment records.
     """
     rendered: list[RenderedSubnavItem] = []
     for item in hub.items:
@@ -507,8 +525,15 @@ def build_rendered_items(
             url = reverse(item.url_name)
         except NoReverseMatch:
             continue
+        tag, tag_kind, tag_aria = (tags or {}).get(item.slug) or ('', '', '')
+        # ALL THREE OR NONE. An override with no TEXT is not an override -- taking its `aria` or its `kind`
+        # anyway would let a chip read 'Soon' while announcing something else, or wear a mark's colour with a
+        # label's word.
+        override = bool(tag)
         rendered.append(RenderedSubnavItem(
             slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group,
-            tag=item.tag, tag_aria=item.tag_aria))
+            tag=tag if override else item.tag,
+            tag_aria=tag_aria if override else item.tag_aria,
+            tag_kind=tag_kind if override else ''))
     rendered.extend(extras)
     return tuple(rendered)

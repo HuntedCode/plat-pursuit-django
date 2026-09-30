@@ -129,7 +129,10 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
 
-        context['cards'] = [self._card(profile, key, label)
+        # ONE QUERY FOR BOTH CARDS, aggregated in the database. Asked here rather than inside `_card` so
+        # the page reads the owed table once however many types there are.
+        owed = rewards.owed_runs(profile)
+        context['cards'] = [self._card(profile, key, label, owed)
                             for key, label in CHALLENGE_TYPE_CHOICES]
         # `completed()` carries its own ordering (newest finish first) and is built on `visible()`, so a
         # run hidden after finishing correctly drops out of the hunter's own history too -- hiding means
@@ -161,7 +164,7 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
     #: history wants its own page rather than a bigger number here.
     HISTORY_LIMIT = 24
 
-    def _card(self, profile, challenge_type, label):
+    def _card(self, profile, challenge_type, label, owed_runs):
         """One type's state, resolved through the service.
 
         `active` is asked first and `resumable` only when there is none, which is a DISPLAY choice
@@ -207,6 +210,54 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
             # NO QUERY OF ITS OWN beyond that count: the XP figure is the shared constant, so this cannot
             # quote a different number from the run page's panel.
             'reward': self._reward(challenge_type, counts['all']),
+            # WHAT IS WAITING TO BE CLAIMED, which is not NECESSARILY about the run the card is showing --
+            # `same_run` is the field that says which. See `_owed`.
+            'owed': self._owed(challenge_type, owed_runs, run),
+        }
+
+    @staticmethod
+    def _owed(challenge_type, owed_runs, card_run):
+        """The chip's data for unclaimed job XP of this type, or None.
+
+        `{xp, squares, run_id, hidden, more, same_run}` -- and EVERY FIGURE IS ABOUT `run_id`, the run the chip
+        links to. `xp` was a sum across every owing run while the link went to one of them, so the chip read
+        "+300,000 waiting" and landed the hunter on a panel offering 150,000. `hidden` was `any(...)` the same
+        way, so the label could call the linked run hidden when it was not. A chip that describes one run and
+        links to another is the failure this feature was built to fix, one level in.
+
+        ACROSS EVERY RUN OF THE TYPE, not just the card's. The card shows the ACTIVE run, or a resumable one,
+        or nothing -- and a FINISHED run with unclaimed squares is none of those, so a card would read "Start"
+        while the run holding the XP went unmentioned. That is precisely the report this was built from ("the XP
+        badge seems stuck"): the nav pill is profile-wide and the page was not, so the page could not explain
+        the pill.
+
+        `run_id` IS WHERE TO SEND THEM -- the newest owing run. An arbitrary but STABLE choice, and NOT "the
+        run they were last on": nothing tracks per-run activity, and `owed_runs` retracts that exact phrasing in
+        its own docstring. The chip is a LINK because when the owed run is not the one the card is offering, the
+        card's own button does not lead to it. (It is the only
+        route at all when that run is hidden, which `hidden` reports.)
+        """
+        mine = [row for row in owed_runs if row['challenge_type'] == challenge_type]
+        if not mine:
+            return None
+        first = mine[0]
+        return {
+            'xp': first['xp'],
+            'squares': first['owed'],
+            'run_id': first['challenge_id'],
+            # A HIDDEN run has no route from this page EXCEPT this link -- unless it is the card's own
+            # resumable run, which `resumable_run` deliberately returns and the card renders with a "Hidden" chip
+            # and a Resume button. So `hidden` and `same_run` can both be true, which is why the copy branches on
+            # `same_run` first. Read off the LINKED run, not `any(...)`: the label describes where the link goes.
+            'hidden': first['is_hidden'],
+            # HOW MANY OTHERS ALSO OWE, carried in the ACCESSIBLE NAME only -- the visible line stays "+X
+            # waiting" and names one run. Deliberate: the chip points at one run at a time and re-renders at the
+            # next one after a claim, with the nav pill lit meanwhile. Saying "the chip" here overstated it.
+            'more': len(mine) - 1,
+            # WHETHER THE XP IS ON THE RUN THIS CARD IS OFFERING. When it is not, the card's own button leads
+            # somewhere else -- and on an empty card that button says "Start", which would otherwise read as
+            # the route to the XP.
+            'same_run': card_run is not None and card_run.pk == first['challenge_id'],
         }
 
     @staticmethod
@@ -673,7 +724,7 @@ def _rewards_html(challenge):
                              'is_owner': True})
 
 
-def _redeem_json(challenge, slots, granted):
+def _redeem_json(challenge, slots, granted, ceremony, profile):
     """What both redeem doors answer with.
 
     ONE SHAPE FOR ONE AND FOR ALL, because the client's handling is identical: swap the squares that
@@ -689,6 +740,22 @@ def _redeem_json(challenge, slots, granted):
     NO `pending_xp`: it was a duplicate COUNT of a figure already inside `rewards_html`, and nothing in the
     client ever read it.
 
+    `claim` CARRIES THE CEREMONY, under the key the contract claim already answers with, because it is
+    played by the same module from the same payload. Null when nothing was paid; the player's own guard
+    covers that, and the client checks anyway so the toast fallback still fires.
+
+    `profile` IS PASSED IN RATHER THAN READ OFF `challenge`, for one query. `get_challenge` resolves the run
+    with `filter(pk=..., profile=...)`, and Django does not populate the FK cache from a filter kwarg -- so
+    `challenge.profile` is a fresh SELECT, on a reply that both doors already have `request.user.profile` in
+    hand for. Same object, one query fewer, on the request that just held three row locks.
+
+    `xp_pending` IS FOR THE NAV, and it is here because the nav is the one thing a claim changes that this
+    reply otherwise would not carry. The navbar and the tab bar were rendered before the claim; the service
+    clears their cached answer, but this page does not reload -- so the accent XP pill would sit on My Pursuit
+    with nothing left to claim until the hunter navigated away. The Career page gets that for free by
+    reloading after its ceremony. It is PROFILE-WIDE, not this run: another run may still owe XP, and only the
+    server can answer that. One `EXISTS`, the same query the marker itself runs.
+
     NO `refresh_from_db` EITHER, which was here with a false reason attached ("the panel's paid total is read
     off the slots and the instance in hand was loaded before the write"). `summary` re-queries the slots
     itself, so nothing it reports comes off this instance except `is_complete` and `completed_at` -- neither
@@ -696,6 +763,8 @@ def _redeem_json(challenge, slots, granted):
     """
     return {
         'granted': granted,
+        'claim': ceremony,
+        'xp_pending': rewards.has_unclaimed_xp(profile),
         'squares': [{'key': card['key'], 'html': _square_body_html(card)}
                     for card in slot_render.cards_for(slots)],
         'rewards_html': _rewards_html(challenge),
@@ -722,12 +791,12 @@ class RedeemSlotView(_ChallengeJsonView):
         if challenge is None:
             return self.not_found()
         try:
-            slot, granted = rewards.redeem_slot(challenge, request.user.profile, key)
+            slot, granted, ceremony = rewards.redeem_slot(challenge, request.user.profile, key)
         except svc.ChallengeError as exc:
             # `RewardError` subclasses `ChallengeError`, so this one clause covers both -- which is why it
             # is a subclass. A sibling exception would have 500d every refusal on this page.
             return self.fail(exc)
-        return JsonResponse(_redeem_json(challenge, [slot], granted))
+        return JsonResponse(_redeem_json(challenge, [slot], granted, ceremony, request.user.profile))
 
 
 class RedeemAllView(_ChallengeJsonView):
@@ -749,10 +818,10 @@ class RedeemAllView(_ChallengeJsonView):
         if challenge is None:
             return self.not_found()
         try:
-            slots, granted = rewards.redeem_all(challenge, request.user.profile)
+            slots, granted, ceremony = rewards.redeem_all(challenge, request.user.profile)
         except svc.ChallengeError as exc:
             return self.fail(exc)
-        return JsonResponse(_redeem_json(challenge, slots, granted))
+        return JsonResponse(_redeem_json(challenge, slots, granted, ceremony, request.user.profile))
 
 
 def _slot_json(challenge, slot):

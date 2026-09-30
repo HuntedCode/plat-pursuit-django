@@ -1,12 +1,15 @@
 /* ================================================================
- * Claim Ceremony -- the payoff overlay when a Pursuer banks Contract XP.
+ * Claim Ceremony -- the payoff overlay when a Pursuer banks job XP, from either door that pays it:
+ * the Career page's Contract claim and a Job Coverage Challenge's square redemption.
  *
  * A rare, deliberate moment, so it takes the whole screen: the award arrives, then the XP flows
  * into the jobs it leveled (bars fill, levels tick). Choreography is JS-driven
  * (static/js/claim-ceremony.js); this file is the look + the discrete state animations it toggles.
  *
  * lightningcss guards observed: NO color-mix() inside @keyframes (pre-mixed into --ccx-* / --disc-*
- * custom props, referenced as var()); the scrim blur transitions from blur(0), never `none`.
+ * custom props, referenced as var()). The blur guard this used to list is gone along with the thing it
+ * guarded -- the scrim carries no backdrop-filter at all any more, only an opacity fade over a radial dim.
+ * See the scrim rule for why.
  * ================================================================ */
 
 .ccx-open { overflow: hidden; }   /* lock the board behind the scrim */

@@ -187,18 +187,56 @@ def test_the_tag_is_distinguishable_from_the_label_beside_it():
     assert '--pp-text-mute' not in colour[0] and '--pp-text-dim' not in colour[0], (
         'the tag is coloured with the same grey as the label beside it')
 
-    # And nothing re-colours it to match the active label further down.
+    # And nothing re-colours it to MATCH the active label further down -- which is about the chip's TEXT, not
+    # about the token appearing at all. An inverted badge (solid primary fill, page-background text) is the
+    # OPPOSITE of blending, and it is what the count mark uses on the active Career pill, where a primary tint
+    # beside a primary label was exactly the invisibility this test exists to forbid.
     #
-    # THE RULE BODY, NOT THE SELECTOR LINE. This filtered lines containing both `is-active` and
-    # `pp-subpill__tag` and then checked those lines for `--pp-primary` -- but a CSS rule in this
-    # project's house style puts the selector on one line and each declaration on its own, so the
-    # only line that ever matched was the SELECTOR, which will essentially never contain a colour.
-    # The declaration was in a different list element and was never looked at. Adding
-    # `.pp-subpill.is-active .pp-subpill__tag { color: var(--pp-primary) }` in the normal form --
-    # the precise regression named above -- sailed straight through.
+    # SO THE RULE IS NARROWER ON THE TOKEN AND STRICTER ON THE FAILURE: primary TEXT is forbidden outright, and
+    # a primary BACKGROUND is allowed only with a contrasting colour declared alongside it. A rule that fills
+    # with primary and says nothing about its text inherits the label's primary and is the original bug again.
+    #
+    # PARSED BY DECLARATION, NOT BY LINE, and this is the second time that distinction has cost something here.
+    # The first version filtered LINES containing both `is-active` and `pp-subpill__tag`, so the only line it
+    # ever saw was the selector. The second filtered lines that START with `color:` -- and justified it with
+    # "this project's house style puts each declaration on its own line", which is FALSE of `chrome.css`: short
+    # rules are written on one line with `;`-separated declarations, and `color:` is routinely not first (see
+    # `.pp-subpill`, `.pp-subpill.is-active`, `.pp-sub__mcur`). So `{ margin-left: 0.3em; color:
+    # var(--pp-primary); }` -- the DOMINANT spelling of the exact regression this test is named for -- passed.
+    #
+    # Splitting on `;` and keying off the PROPERTY NAME closes that, and four neighbours with it: a wrapped
+    # declaration, `-webkit-text-fill-color` (which paints text just as well), `background-color` as distinct
+    # from `background`, and a custom property laundering the token into `color: var(--t)`.
     for block in re.finditer(r'([^{}]*is-active[^{}]*pp-subpill__tag[^{}]*)\{([^}]*)\}', css):
-        assert '--pp-primary' not in block.group(2), (
-            'the tag turns primary on the active pill, where the label is already primary')
+        selector, body = block.group(1).strip(), block.group(2)
+        decls = [d.strip() for d in body.split(';') if d.strip() and ':' in d]
+
+        def _prop(decl):
+            return decl.split(':', 1)[0].strip().lower()
+
+        text = [d for d in decls if _prop(d) in ('color', '-webkit-text-fill-color')]
+        fill = [d for d in decls if _prop(d).startswith('background')]
+        # A CUSTOM PROPERTY IS A LAUNDERING ROUTE: `--t: var(--pp-primary); color: var(--t)` reads as neither.
+        # These rules are three declarations long, so there is no legitimate need for one.
+        custom = [d for d in decls if _prop(d).startswith('--')]
+
+        assert not any('--pp-primary' in d for d in text + custom), (
+            'the tag takes the colour the active label takes: %s' % selector)
+        # `inherit` IS THE SAME BUG SPELLED DIFFERENTLY: the parent IS the active pill, whose colour is primary.
+        assert not any(_prop(d) == 'color' and d.split(':', 1)[1].strip() == 'inherit' for d in decls), (
+            'the tag inherits the active label\'s colour: %s' % selector)
+        # AN INVERTED BADGE IS ONLY SAFE IF IT IS COMPLETE, and "complete" means a colour that CONTRASTS -- not
+        # merely a `color:` line present. The comment here used to claim contrast while the code only checked for
+        # non-emptiness, so `background: var(--pp-primary); color: var(--pp-text-dim)` passed as an inversion.
+        #
+        # A FILL, NOT A BORDER. Grouping `border-*` in here was over-reach: a primary BORDER leaves the chip's
+        # own text colour standing, so it does not read as the label -- and demanding a background token
+        # alongside it would forbid a perfectly legible outline. Only a fill puts the label's colour under the
+        # chip's text.
+        if any('--pp-primary' in d for d in fill):
+            assert any('--pp-bg-' in d for d in text), (
+                'the tag fills with primary without a background-token text colour, so it reads as the active '
+                'label on its own ground: %s' % selector)
 
 
 # ── polish-pass guards ───────────────────────────────────────────────────────────────────────────

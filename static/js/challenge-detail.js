@@ -88,6 +88,14 @@
         var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         var tally = document.querySelector('[data-cpick-tally]');
         if (tally && PP.countUp) { PP.countUp(tally, 900); }
+        // THE REWARD TOTAL ROLLS TOO. The page animated one `.pp-tally` headline and left a second one 80px
+        // below it static, which is the half of "roll headline integers on reveal" that was missing -- and the
+        // panel's whole argument for making the CLAIMED total the animated number is that it only ever grows.
+        //
+        // ONLY WHEN THERE IS SOMETHING TO ROLL: on a fresh run the figure is 0, and counting up to zero is a
+        // frame of nothing. `PP.countUp` reads its own target from `data-countup`.
+        var paid = document.querySelector('[data-cpay-wrap] [data-countup]');
+        if (paid && PP.countUp && parseInt(paid.dataset.countup || '0', 10) > 0) { PP.countUp(paid, 900); }
         if (reduce) { return; }
         var hz = runHorizon();
         if (!hz) { return; }
@@ -160,6 +168,7 @@
         function apply(ctx, data, button, byKeyboard) {
             var wrap = ctx.wrap;
             var board = ctx.board;
+            var tickPlan = null;   // {el, from} for the reward total's count-up, run by `post` (see below)
             if (data.rewards_html) {
                 // TICK FROM THE OLD NUMBER, not from zero: this is a change to a figure already on screen.
                 // Read off `data-countup` rather than the rendered text, because the text can be
@@ -172,25 +181,40 @@
                 // definition) and the final single claim never animated at all.
                 var oldEl = wrap.querySelector('[data-countup]');
                 var before = oldEl ? parseInt(oldEl.dataset.countup || '', 10) : NaN;
+                // THE ENTRANCE IS SPENT. `pp-head-cascade` animates the wrapper's direct children, and the
+                // line below replaces them -- so leaving the class on would replay the card's arrival on every
+                // claim, which reads as the panel appearing again rather than updating. It has done its job by
+                // the time any claim can happen.
+                wrap.classList.remove('pp-head-cascade');
                 // THE WRAPPER'S CONTENTS, not the panel itself: `outerHTML` is banned in this file (markup
                 // reaching the DOM by any other route than a server partial is how an escaping mistake
                 // becomes an XSS), and swapping the inside of a node that never moves is both allowed and
                 // simpler -- nothing has to re-find the panel afterwards.
                 wrap.innerHTML = data.rewards_html;
                 var fresh = wrap.querySelector('[data-countup]');
-                if (fresh && PP.countUp && !isNaN(before)) {
-                    PP.countUp(fresh, 600, { from: before });
-                }
+                // THE TICK IS HANDED BACK, NOT STARTED HERE, and that is a bug fix rather than tidying. The
+                // claim ceremony opens in this same synchronous task and dims the page behind it over 320ms,
+                // then holds it for ten seconds or more -- so a 600ms count-up started here was ~40% visible
+                // through a darkening scrim and then finished out of sight. On every real claim, the one
+                // animated reward number in the feature was never actually seen; when the overlay closed the
+                // total had silently jumped. `post` runs it on dismissal instead, or straight away when no
+                // ceremony plays.
+                tickPlan = (fresh && !isNaN(before)) ? { el: fresh, from: before } : null;
                 // FOCUS HAS TO GO SOMEWHERE. The swap destroys the button that was pressed, and a
                 // keyboard user is otherwise dropped onto `<body>` and has to tab the whole page back.
                 //
-                // THE PANEL ROOT IS THE LAST RESORT, and it has to be: the first version fell back to the
-                // XP headline, which lives INSIDE the same `pending_xp` block as Claim-all -- so the two
-                // were co-extensive and the fallback was unreachable. The case it was written for is
-                // claiming the LAST owed square, where that whole block disappears and neither selector
-                // matched. `.pp-cpay` is always rendered, so this fallback is real.
+                // THREE CANDIDATES, AND THE LAST IS THE UNREACHABLE ONE. Claim-all is gone once nothing is
+                // owed, so the block's HEADING is what normally catches it -- `#cpay-head` renders for any jobs
+                // run, which makes `.pp-cpay` a terminus with no known way to fire. (Two earlier versions of
+                // this paragraph were wrong in turn: the first said the headline and Claim-all were
+                // co-extensive, which stopped being true when the panel's head lost its gate; the second still
+                // named `.pp-cpay__xp` as the middle link after it had been changed to the heading.)
+                // THE HEADING, not the figure. Focusing the number announced only its digits ("+1,000") --
+                // the caption is a sibling and the section's `aria-labelledby` is not re-read on a
+                // programmatic focus, so a screen-reader user was dropped somewhere unnamed. `#cpay-head`
+                // says "Reward", which is where they actually are, and it is always rendered.
                 var next = wrap.querySelector('[data-cpay-all]')
-                    || wrap.querySelector('.pp-cpay__xp')
+                    || wrap.querySelector('#cpay-head')
                     || wrap.querySelector('.pp-cpay');
                 // ONLY FOR A KEYBOARD PRESS. Moving focus after a MOUSE click scrolls a hunter who clicked
                 // row 23 back up to the top of the panel -- paying for a keyboard fix with a mouse user's
@@ -226,20 +250,195 @@
                 var cell = board.querySelector('[data-key="' + cssEscape(square.key) + '"]');
                 if (cell && square.html) { cell.innerHTML = square.html; }
             });
+            // AND THE NAV MARKER, which is markup the claim changed and the reply does NOT carry. The server
+            // clears its cached answer, but the navbar and the tab bar were rendered before the claim and this
+            // page does not reload -- so without this the accent "XP" pill sits on My Pursuit with nothing left
+            // to claim, for the rest of the page's life, which is exactly what `rewards._grant` says must not
+            // happen "in the one moment the hunter is looking straight at it". The Career page gets this free
+            // by reloading after its ceremony; this page deliberately does not reload, so it has to do the one
+            // thing the reload was doing for it.
+            //
+            // THE SERVER DECIDES, because the answer is profile-wide: another run may still owe XP, and the
+            // client cannot know. `false` is the only value that removes anything.
+            if (data.xp_pending === false) { dropNavMarker(); }
+            return tickPlan;
         }
 
+        /** Acknowledge the claim on the receipts drawer, once, after the ceremony has closed.
+         *
+         *  THE BEAT THE PANEL WAS MISSING. The contract card acknowledges a claim where it happened
+         *  (`.rp-row--just-accepted` flashes the row and scales its "Claimed" label in); this panel replaces its
+         *  whole ledger with server markup instead of flipping a class, so there was nothing to animate and a
+         *  hunter returning from the overlay found rows that were simply already green.
+         *
+         *  ON THE DISCLOSURE, NOT THE ROWS, and that is a correction to a version that shipped first. Every row
+         *  a claim pays has just BECOME paid, so the re-render puts it inside `.pp-cpay__done`, which the server
+         *  always emits closed -- content in a closed `<details>` is `display: none`, so the animation never
+         *  ran. Worse, the class stayed on the row, so it fired whenever the hunter expanded the receipts
+         *  later: dead motion plus a misfire at an unrelated moment.
+         *
+         *  OPENING THE DRAWER WAS THE OTHER FIX AND IS WRONG HERE: on a 25-square Claim-all it dumps the whole
+         *  ledger back onto the page at exactly the moment the collapse exists to prevent. The `Claimed (N)`
+         *  line is visible, its count is what just changed, and it is the thing a hunter would look at.
+         *
+         *  NOTHING TO KEY OFF. It does not need `data.squares`: any successful claim increments that count, and
+         *  the drawer is the same element whichever squares were paid.
+         */
+        function flashClaimed(ctx) {
+            var drawer = ctx.wrap.querySelector('.pp-cpay__done');
+            if (drawer) { drawer.classList.add('pp-cpay__done--just-paid'); }
+        }
+
+        /** Take the XP pill off the nav, in both chromes, and out of the accessible name with it.
+         *
+         *  THE LABEL IS THE HALF THAT IS EASY TO MISS. The pills are `aria-hidden`; the whole marker state is
+         *  one clause inside the nav item's `aria-label`, so removing the lozenge alone would leave a screen
+         *  reader still announcing XP waiting after it was claimed -- the same contradiction, only for the
+         *  reader who cannot see that the pill has gone.
+         *
+         *  THE CLAUSE IS A LITERAL SHARED WITH TWO TEMPLATES, which is a coupling and is pinned as one: a test
+         *  asserts this exact string appears in `navbar.html` and `mobile_tabbar.html`. Rebuilding the label
+         *  from the surviving pills instead would mean a second renderer for copy the server owns, which is the
+         *  thing this file is written to avoid.
+         */
+        function dropNavMarker() {
+            var CLAUSE = ', Job XP waiting to be claimed';
+            Array.prototype.forEach.call(document.querySelectorAll('.pp-navhub__xp'), function (pill) {
+                var item = pill.closest ? pill.closest('[aria-label]') : null;
+                if (item) {
+                    var label = item.getAttribute('aria-label') || '';
+                    if (label.indexOf(CLAUSE) !== -1) { item.setAttribute('aria-label', label.replace(CLAUSE, '')); }
+                }
+                // THE LABEL GOES FIRST, THE PIXELS FADE. The accessible name must be correct immediately --
+                // nobody should hear "XP waiting" about XP that is paid, not even for 180ms -- while the pill
+                // itself gets an exit rather than blinking out of existence.
+                //
+                // IT ALSO PACES A HAND-OFF. Below 1280px and on the tab bar, NEW is suppressed by the XP pill's
+                // own presence, so removing the node instantly makes a New lozenge appear in the same spot in
+                // the same frame. Fading first means the orange leaves before the primary arrives.
+                //
+                // BELT-AND-BRACES REMOVAL, because `transitionend` is not guaranteed: reduced motion kills the
+                // transition, and a pill inside a `display: none` branch never transitions at all. The timeout
+                // is what removes it then, and `remove` is idempotent enough -- whichever fires first wins and
+                // the other finds no `parentNode`.
+                var done = function () {
+                    if (pill.parentNode) { pill.parentNode.removeChild(pill); }
+                };
+                pill.addEventListener('transitionend', done);
+                pill.classList.add('pp-navhub__xp--leaving');
+                window.setTimeout(done, 400);
+            });
+        }
+
+        /** Play the claim ceremony if there is one to play. Returns its promise, or null if none played.
+         *
+         *  FEATURE-TESTED RATHER THAN ASSUMED, though not for the reason first written here. The claim doors
+         *  render only where `rewards.per_square` is set, which is the same condition that loads the player --
+         *  so on this page `PP.ClaimCeremony` cannot actually be missing when a claim fires, and the toast
+         *  fallback below it is unreachable today. The guard is there because that coupling lives in a template
+         *  and this file cannot see it, and because the cost of being wrong is asymmetric: a hunter told
+         *  "Could not claim that XP" for XP that was paid.
+         *
+         *  THE TRY/CATCH IS THE PART THAT MATTERS, because the guard above only covers the module being
+         *  absent. `play()` does real synchronous work before it returns a promise: it builds the overlay,
+         *  appends it to `<body>`, sets `body.ccx-open` and recedes the page. A throw there would land in
+         *  `post`'s `catch`, reporting a failure for a claim that succeeded -- and a throw after the append
+         *  would leave `.ccx` in the DOM at `z-index: 80` with its scrim still transparent, so the page looks
+         *  normal and cannot be clicked until a reload.
+         *
+         *  IT IS BELT-AND-BRACES NOW, and saying so is the point of this paragraph. `play` grew its own guards
+         *  (the reduced-motion branch tears down and re-throws; the promise chain and the finale's Continue
+         *  tear down without re-throwing), and an audit then walked every statement between the append and the
+         *  line where focus moves and found none that can throw on a payload which got past `build()` -- and
+         *  `build()` runs BEFORE the append, so its throws leave nothing behind. So this catch is unreachable
+         *  in every case anyone has constructed.
+         *
+         *  IT STAYS BECAUSE THE DIVISION IS THE USEFUL PART: everything `play` does before it takes focus is
+         *  undoable from out here (a root, a body class, a class on `#zoom-container`), and everything after is
+         *  not -- a document-level listener and a captured `lastFocus` can only be cleaned up by the file that
+         *  created them.
+         */
+        function played(claim) {
+            var Ceremony = PP.ClaimCeremony;
+            if (!Ceremony || !Ceremony.play || !claim || !claim.jobs || !claim.jobs.length) { return null; }
+            try {
+                return Ceremony.play(claim) || Promise.resolve();
+            } catch (err) {
+                // SAID OUT LOUD. The hunter gets the toast fallback, which tells them the XP landed -- but
+                // without this the only trace of a broken ceremony is an animation that did not happen, and
+                // the `err` was bound and dropped.
+                if (window.console && console.error) { console.error('claim ceremony failed to open', err); }
+                Array.prototype.forEach.call(document.querySelectorAll('.ccx'), function (el) {
+                    if (el.parentNode) { el.parentNode.removeChild(el); }
+                });
+                document.body.classList.remove('ccx-open');
+                var zoom = document.getElementById('zoom-container');
+                if (zoom) { zoom.classList.remove('pp-receded'); }
+                return null;
+            }
+        }
+
+        /** Run the reward total's count-up, if `apply` left one to run.
+         *
+         *  SEPARATED FROM THE SWAP so the moment can be chosen: on dismissal when a ceremony played, straight
+         *  away otherwise. Guarded on `PP.countUp` because it is an optional shared helper -- a bundle without
+         *  it should leave the number correct and unanimated, never throw inside a success handler.
+         */
+        function countFrom(plan) {
+            if (plan && PP.countUp) { PP.countUp(plan.el, 600, { from: plan.from }); }
+        }
+
+        // ONE CLAIM AT A TIME, and this is a guard rather than a nicety. `post` disables only the button it
+        // was handed, so pressing row 3's Claim and then row 5's before the first reply lands sent two
+        // requests -- and the second reply's panel swap DETACHES the first call's count-up target, so a tick
+        // deferred past a ~12-28s ceremony animates a node that is no longer in the document. It also stacked a
+        // second `.ccx` overlay on top of the first.
+        //
+        // A MODULE-SCOPED FLAG, not a per-button one, because the point is that the two presses are on
+        // different buttons. Cleared on every exit from `post`, success or failure.
+        var claiming = false;
+
         function post(ctx, url, button, byKeyboard) {
-            if (button) { button.disabled = true; }
+            claiming = true;
+            // `aria-busy` ALONGSIDE THE DISABLE, because the visual feedback for an in-flight claim is a dim
+            // and nothing else -- which says "dead", not "working". The dim now fades rather than snapping
+            // (`.pp-cta`'s transition), and this is the half a screen reader gets.
+            if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); }
             PP.API.post(url, {}).then(function (data) {
-                apply(ctx, data, button, byKeyboard);
+                var plan = apply(ctx, data, button, byKeyboard);
                 // LEFT DISABLED ONLY IF THE NODE IS GONE. The swap destroys the button, so re-enabling it
                 // is meaningless -- but if the reply carried no panel (a shape change, a truncated body),
                 // the button is still on screen and must not be stranded.
-                if (button && !data.rewards_html) { button.disabled = false; }
+                claiming = false;
+                if (button && !data.rewards_html) { button.disabled = false; button.removeAttribute('aria-busy'); }
                 if (data.granted) {
+                    // THE CEREMONY IS THE FEEDBACK when it can play, exactly as the Career page's claim
+                    // treats it: the award arrives, the XP flows into the jobs it leveled, the bars fill.
+                    // It is the SAME module, from the SAME server builder, so a square's reward and a
+                    // Contract's are the same moment rather than two that resemble each other.
+                    //
+                    // AFTER THE SWAPS, not before: the overlay covers the page and steps it back, so the
+                    // panel, the pips and the nav marker update out of sight and the page behind is already
+                    // correct when the ceremony closes. No reload, unlike Career -- which is why the nav
+                    // marker needed handling by hand (see `dropNavMarker`), since a reload was doing that.
+                    //
+                    // THE REWARD TOTAL TICKS ON DISMISSAL, because that is when it is on screen. Started
+                    // with the swap it played out behind a 320ms scrim fade and a ten-second ceremony, so the
+                    // number the panel is built around never animated for anybody.
+                    //
+                    // THE TOAST IS THE FALLBACK, not a duplicate: a toast and a full-screen ceremony
+                    // announcing the same number is two answers to one question.
+                    var ceremony = played(data.claim);
+                    if (ceremony) {
+                        ceremony.then(function () { countFrom(plan); flashClaimed(ctx); });
+                        return;
+                    }
+                    countFrom(plan);
+                    flashClaimed(ctx);
                     // The figure, formatted the way every other XP number on the site is.
                     say('+' + data.granted.toLocaleString() + ' job XP claimed');
                 } else {
+                    countFrom(plan);
                     // NOTHING OWED IS NOT AN ERROR -- the service returns zero rather than refusing, and a
                     // hunter whose other tab claimed first should not be told off for pressing a button.
                     say('Nothing left to claim here', 'info');
@@ -255,7 +454,8 @@
                 } else {
                     say(fallback, 'error');
                 }
-                if (button) { button.disabled = false; }
+                claiming = false;
+                if (button) { button.disabled = false; button.removeAttribute('aria-busy'); }
             });
         }
 
@@ -270,6 +470,10 @@
             // RESOLVED PER CLICK, so a restored page posts to the run it is actually showing.
             var ctx = context();
             if (!ctx) { return; }
+            // AND NOT WHILE ONE IS ALREADY RUNNING. `ccx-open` covers the case where the reply has landed and
+            // the ceremony is on screen: the overlay covers the page, but a keyboard user can still reach a
+            // button behind it if focus was left there.
+            if (claiming || document.body.classList.contains('ccx-open')) { return; }
             // `detail === 0` IS THE KEYBOARD, read before anything disables the button (see `apply`).
             var byKeyboard = event.detail === 0;
             if (one) {

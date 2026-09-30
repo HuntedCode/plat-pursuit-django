@@ -46,16 +46,19 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         {% comment %}My Pursuit (the logged-in Home / Overview lives at /). Anon-hidden: the
         personal hub is login-gated, so for logged-out visitors it is just the hero the logo already
         reaches.{% endcomment %}
-        <a href="{% url 'career' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %} aria-label="My Pursuit{% if career_claimable %}, {{ career_claimable }} contract{{ career_claimable|pluralize }} ready to claim{% endif %}{% if career_new_contracts %}, new contracts on the board{% endif %}">
+        <a href="{% url 'career' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %} aria-label="My Pursuit{% if career_claimable %}, {{ career_claimable }} contract{{ career_claimable|pluralize }} ready to claim{% endif %}{% if career_unclaimed_xp %}, Job XP waiting to be claimed{% endif %}{% if career_new_contracts %}, new contracts on the board{% endif %}">
             {% comment %} The markers ride the ICON, not the label: the bar is 4 items across a
-            375px phone, so a badge beside the word would push the row. Same count-plus-NEW pair as
-            the desktop nav, and aria-hidden for the same reason -- the link's label says it in
-            words. {% endcomment %}
+            375px phone, so a badge beside the word would push the row. Same three markers as the
+            desktop nav -- count, then the XP mark, then NEW -- and aria-hidden for the same reason:
+            the link's label says all of it in one sentence. ONE AT A TIME here, enforced in
+            `chrome.css`: the item is ~93px and a second pill would not fit beside the first.
+            {% endcomment %}
             <span class="mobile-tabbar-ico">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
                 {% if career_claimable %}<span class="pp-navhub__n pp-navhub__n--tab" aria-hidden="true">{% if career_claimable > 9 %}9+{% else %}{{ career_claimable }}{% endif %}</span>{% endif %}
+                {% if career_unclaimed_xp %}<span class="pp-navhub__xp pp-navhub__xp--tab" aria-hidden="true">XP</span>{% endif %}
                 {% if career_new_contracts %}<span class="pp-navhub__new pp-navhub__new--tab" aria-hidden="true">New</span>{% endif %}
             </span>
             <span>My Pursuit</span>

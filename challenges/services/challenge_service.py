@@ -769,6 +769,9 @@ def _recount(challenge):
     stuck if every filled square is already completed, since a completed square refuses to clear -- and
     then a repair command is the only route. An out-of-band EMPTY slot violates nothing.
     """
+    # THE PREVIOUS COMPLETED COUNT, read before the aggregate overwrites it. It is authoritative: this
+    # function is the only writer of the denormalized counters and it runs under the run's row lock.
+    was_completed = challenge.completed_count
     counts = challenge.slots.aggregate(
         filled=models.Count('pk', filter=~models.Q(contract_slug='')),
         completed=models.Count('pk', filter=models.Q(is_completed=True)),
@@ -796,6 +799,37 @@ def _recount(challenge):
     if just_completed:
         from challenges.services import rewards
         rewards.on_run_completed(challenge)
+
+    # AND THE NAV MARKER, which a completed square can ARM: on a jobs run, finishing a square creates XP
+    # waiting to be claimed, and the pill on My Pursuit says so. The paying side clears it in `rewards`.
+    #
+    # BOTH HALVES OR NEITHER, which is the lesson `career_attention`'s own comment records about the claim
+    # count: it shipped with only the spending half invalidated, so every page render re-cached a zero with
+    # a fresh TTL moments before the reward landed, and the badge stayed dark for most of its TTL at exactly
+    # the moment it had something to say.
+    #
+    # NEITHER CONDITION IS A GATE; BOTH ARE THERE FOR COST, and being exact matters because this comment
+    # read as though the first were load-bearing. Arming is a cache DELETE, so running it for a run that owes
+    # nothing could not light anything: the next read re-queries and `has_unclaimed_xp` answers on its own
+    # terms. What they buy is the absence of pointless work -- and the second one was missing, which is worse
+    # than it sounds. `_recount` runs on every `assign` and every `clear`, not only on a completion, so a
+    # hunter filling a 25-square board was spending 25 Redis DELETEs and forcing 25 misses on a key that is
+    # read on EVERY page of the site. That is precisely the cost `career_attention`'s "an attention marker
+    # must never be the reason a page got slower" rule is about, paid by the marker itself.
+    #
+    # `> was_completed` is the honest test because a completed square can never be cleared, so the count only
+    # ever rises: a rise is exactly "a square just became owed".
+    if challenge.challenge_type == CHALLENGE_TYPE_JOBS and challenge.completed_count > was_completed:
+        from challenges.services.rewards import _forget_xp_marker
+        # RESOLVED NOW, NOT IN THE CALLBACK. `challenge` came from `select_for_update()` with no
+        # `select_related('profile')`, so `challenge.profile` is a lazy fetch -- and written inside the lambda
+        # it would have run AFTER the commit, as the argument, which is OUTSIDE `_forget_xp_marker`'s own
+        # try/except. That defeats the "best effort, never fail the write that called it" guarantee the helper
+        # is built on: a hiccup on that fetch raises from Django's commit-hook runner with the write already
+        # durable, and the nightly sweep has no guard around `mark_slot_completed` at all. It also stops the
+        # closure retaining the whole `Challenge` instance until commit.
+        profile = challenge.profile
+        transaction.on_commit(lambda: _forget_xp_marker(profile))
 
     return challenge
 

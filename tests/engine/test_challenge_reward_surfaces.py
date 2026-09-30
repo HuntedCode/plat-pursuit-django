@@ -28,6 +28,9 @@ pytestmark = pytest.mark.django_db
 
 _SEQ = {'n': 0}
 
+#: Used where a CSS pin has to be anchored to the start of a line.
+NL = chr(10)
+
 
 def _hunter(client=None):
     user = UserFactory()
@@ -66,6 +69,28 @@ def _jobs_run(profile, count=2):
 def _finish_jobs_run(profile):
     """A COMPLETE jobs run, which is the state the doors must work in and a mixin would 404."""
     return _jobs_run(profile, count=Job.objects.count())
+
+
+def _panel_halves(body):
+    """(open list, collapsed disclosure) for the reward panel only.
+
+    SCOPED TO THE PANEL FIRST. Partitioning the whole page on `<details` puts EVERYTHING after the disclosure
+    into the second half -- including the board, whose squares render the same game names the ledger does -- so
+    a "not in the collapsed half" assertion was reading the rest of the document and failed on a row that was
+    correctly in the open list.
+    """
+    panel = body.split('data-cpay-wrap', 1)[1].split('</section>', 1)[0]
+    head, _sep, collapsed = panel.partition('<details')
+    return head, collapsed
+
+
+def _row_name(job):
+    """The ledger row's game name for a fixture job, which identifies the row without a test-only hook.
+
+    `_jobs_run` names each contract `Game for <slug>`, and `slot.contract_name` is what the row renders -- so
+    this is content, unique per job, and it survives markup changes that an attribute would not.
+    """
+    return 'Game for %s' % job.slug
 
 
 def _redeem_url(challenge, key):
@@ -303,10 +328,10 @@ def test_the_claim_all_reply_does_not_scale_with_the_squares_it_paid():
     def cost(count):
         profile = _hunter()
         challenge, _jobs = _jobs_run(profile, count=count)
-        slots, granted = rewards.redeem_all(challenge, profile)
+        slots, granted, _ceremony = rewards.redeem_all(challenge, profile)
         assert granted == count * CHALLENGE_SLOT_JOB_XP, 'the fixture must actually pay'
         with CaptureQueriesContext(connection) as captured:
-            challenge_views._redeem_json(challenge, slots, granted)
+            challenge_views._redeem_json(challenge, slots, granted, _ceremony, profile)
         return len(captured.captured_queries)
 
     two, five = cost(2), cost(5)
@@ -496,8 +521,13 @@ def test_the_start_card_and_the_run_page_quote_the_same_figure(client):
 
 def _challenge_css():
     from pathlib import Path
-    return (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
-            / 'challenges.css').read_text(encoding='utf-8')
+    # NEWLINES NORMALISED, because several pins in this file anchor a selector to the start of a line with
+    # `chr(10)`. `read_text` uses universal newlines today, but this repo's `core.autocrlf` converts the working
+    # copy to CRLF on its next touch, and a pin that depends on a checkout setting fails on a fresh clone rather
+    # than on a real regression.
+    raw = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
+           / 'challenges.css').read_text(encoding='utf-8')
+    return raw.replace(chr(13) + chr(10), chr(10))
 
 
 def _rule(css, selector):
@@ -545,22 +575,207 @@ def test_the_pip_does_not_share_the_key_chips_corner():
         'the pip must clear the check: 6px edge + its 18px + a 4px gap')
 
 
-def test_the_claim_button_meets_the_touch_floor():
+# ── the ledger's shape (design audit + owner decision, 2026-09-30) ───────────────────────────────
+
+def test_the_claimed_rows_collapse_and_the_claimable_ones_do_not(client):
+    """THE OWNER'S CHOICE, and the reason is height: a finished run has 25 finished squares, which was
+    ~1,250px of ledger on desktop and ~2,300px at 375px where the rows wrap -- all of it above the board the
+    page is about, and on a finished run every row of it inert.
+
+    THE SPLIT IS BY WHAT A HUNTER CAN ACT ON, not by count: rows with a Claim button stay in the open list,
+    paid rows collapse behind a disclosure labelled with how many there are. A fully-paid run is one line.
+    """
+    profile = _hunter(client)
+    challenge, jobs = _jobs_run(profile, count=3)
+    rewards.redeem_slot(challenge, profile, jobs[0].slug)
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+
+    assert 'Claimed (1)' in body, 'the disclosure says how many are inside it'
+    open_list, collapsed = _panel_halves(body)
+    assert 'data-cpay-claim' in open_list, 'the claimable rows are NOT behind the disclosure'
+    assert 'data-cpay-claim' not in collapsed, 'and nothing actionable is hidden inside it'
+    # BOTH DIRECTIONS. The three assertions above only check that claimable rows stay OUT of the disclosure --
+    # a mutation that put every row in the open list as well passed all of them, because the disclosure still
+    # rendered its own copy. What makes this a split rather than a duplication is that a paid row appears in
+    # exactly one place.
+    #
+    # IDENTIFIED BY THE GAME NAME, which the fixture makes unique per job (`Game for <slug>`). It replaced a
+    # `data-cpay-row` attribute that existed only for a post-claim flash; when that flash moved onto the drawer
+    # the attribute had no consumer left and was deleted, so pinning it would have been pinning nothing.
+    assert _row_name(jobs[0]) not in open_list, 'a paid row is not also in the open list'
+    assert _row_name(jobs[1]) not in collapsed, 'nor an unpaid one in the disclosure'
+
+
+def test_a_fully_claimed_run_collapses_its_whole_ledger(client):
+    """The Hall-of-Fame case, and the worst one for height: every square finished, every one paid, nothing to
+    act on. The open list should not render at all."""
+    profile = _hunter(client)
+    challenge, _jobs = _finish_jobs_run(profile)
+    rewards.redeem_all(challenge, profile)
+    total = Job.objects.count()
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+
+    assert 'Claimed (%d)' % total in body
+    head, collapsed = _panel_halves(body)
+    # THE LIST ELEMENT ITSELF, not just its rows, and that distinction is the whole test. Gating the open
+    # `<ul>` on `rows` rather than on the UNPAID count leaves an empty `<ul role="list">` with its own top
+    # margin sitting above the disclosure -- and an empty list contains no rows, so an assertion about rows
+    # cannot see it. A first version of this line asserted a per-row attribute's absence and a mutation run
+    # proved it caught nothing: `class="pp-cpay__rows"` is the open list (the collapsed one is
+    # `pp-cpay__rows pp-cpay__rows--done`), so that is what must be absent.
+    assert 'class="pp-cpay__rows"' not in head, 'not even an empty open ledger when nothing is owed'
+    # COUNTED BY THE CLASS ONLY A COLLAPSED ROW CARRIES. Not `pp-cpay__row`, which is a substring of both
+    # `pp-cpay__row--paid` and `pp-cpay__rows` and read 52 for 25 rows.
+    assert collapsed.count('pp-cpay__row--paid') == total, 'and every paid row is inside the disclosure'
+
+
+def test_the_panel_says_what_a_whole_run_pays(client):
+    """THE FORWARD-LOOKING NUMBER, in the foot rather than the headline (owner, 2026-09-30). The headline
+    measures what has been CLAIMED and keeps that meaning for the whole run -- so on a fresh run it is a zero,
+    and the answer to "what is this worth" goes where somebody asking it will read it instead of swapping what
+    the big number means part-way through.
+    """
+    profile = _hunter(client)
+    challenge, _jobs = _jobs_run(profile, count=1)
+    full = CHALLENGE_SLOT_JOB_XP * challenge.total_slots
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+
+    assert '{:,} for a full run'.format(full) in body
+    assert rewards.summary(challenge)['full_xp'] == full, 'and the service owns the arithmetic'
+
+
+def test_an_untouched_run_offers_the_figure_without_a_claimed_total_to_show(client):
+    """The zero state: the headline is honestly 0 and the foot still answers what the run is worth."""
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+
+    assert '{:,} for a full run'.format(CHALLENGE_SLOT_JOB_XP * challenge.total_slots) in body
+    assert rewards.summary(challenge)['paid_count'] == 0
+    assert 'Claimed (' not in body, 'and no empty disclosure'
+
+
+def test_the_reward_card_joins_the_pages_entrance(client):
+    """EVERY OTHER BLOCK ON THIS PAGE HAS ONE: the header card's body cascades and the board's squares stagger
+    in, and the reward card between them simply appeared. Career runs the cascade on both of its stacked
+    cards, which is the precedent this follows."""
+    profile = _hunter(client)
+    challenge, _jobs = _jobs_run(profile, count=1)
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+
+    assert 'scard mb-3 pp-head-cascade' in body
+
+
+def test_the_job_chip_does_not_repeat_itself_in_a_tooltip(client):
+    """`.pp-jobchip__name` renders the row's label with no clamp, so a `title` carrying the same string is
+    noise a screen reader reads twice. The `title` on the game name is the one that earns it -- that text IS
+    ellipsised."""
+    profile = _hunter(client)
+    challenge, jobs = _jobs_run(profile, count=1)
+    label = Job.objects.get(slug=jobs[0].slug).name
+
+    body = client.get(reverse('challenge_detail', args=[challenge.id])).content.decode()
+    panel = body.split('data-cpay-wrap')[1].split('</section>')[0]
+
+    assert 'title="%s"' % label not in panel, 'the chip repeats nothing'
+    assert 'pp-cpay__game" title=' in panel, 'while the ellipsised game name keeps its tooltip'
+
+
+def test_every_control_in_the_panel_meets_the_touch_floor():
     """THE ARGUMENT FOR MOVING THE CLAIM OFF THE SQUARE was that a ~109px tile cannot give a button a real
-    target -- both the panel and the stylesheet say so by name. `.pp-cta` is about 29px and declares no
-    `min-height`, so without this the reward panel did not honour the reason it exists."""
+    target -- both the panel and the stylesheet say so by name. `.pp-cta` is about 32px and declares no
+    `min-height`, so without this the reward panel did not honour the reason it exists.
+
+    ALL THREE CONTROLS, which is why this test was renamed. It pinned the per-row button only, and the one that
+    was actually missing the floor was CLAIM-ALL -- the primary control of the feature, the button a hunter
+    reaches for on a finished run, on a phone. A design audit found it at ~32px. The disclosure's summary is a
+    control too, so it is named here as well; anything else added to that rule has to keep meeting the floor or
+    this fails, which is the point of asserting the selector list rather than one selector.
+    """
     css = _challenge_css()
 
-    assert 'min-height: 44px' in _rule(css, '.pp-cpay__claim')
+    # TWO RULES NOW, and joined here rather than written as literals because `_rule` matches an exact selector
+    # at the start of a line and the stylesheet puts each selector on its own. The summary moved out of the
+    # buttons' rule because `flex: 0 0 auto` is inert on a child of a non-flex `<details>`; the attribute
+    # selector gained a `.pp-cpay` scope.
+    buttons = _rule(css, '\n'.join(['.pp-cpay__claim,', '.pp-cpay [data-cpay-all]']))
+    summary = _rule(css, '.pp-cpay__done-sum')
+
+    assert 'min-height: 44px' in buttons
+    assert 'min-height: 44px' in summary, 'the disclosure is a control too'
+
+
+def test_the_receipts_drawer_looks_like_a_control():
+    """IT HAD NO AFFORDANCE AT ALL when it shipped. `display: flex` on a `<summary>` overrides the UA's
+    `display: list-item`, which removes the native disclosure triangle in every engine -- so `CLAIMED (25)`
+    rendered as a plain uppercase label, and on a finished run that line is the only thing between the panel's
+    head and its foot. The comment above it claimed the native marker was kept.
+
+    AND ITS DIVIDER NAMED A TOKEN THAT DOES NOT EXIST (`--pp-line`). `border-top: 1px solid var(--pp-line)` is
+    a SHORTHAND, so an invalid value takes the whole declaration down to its initial values -- including
+    `border-top-style: none`. The rule was absent, not mis-coloured, which is why nothing looked obviously
+    wrong.
+    """
+    css = _challenge_css()
+    sum_rule = _rule(css, '.pp-cpay__done-sum')
+
+    assert 'list-style: none' in sum_rule, 'flex already removed the marker; say so explicitly'
+    assert '.pp-cpay__done-sum::-webkit-details-marker' in css, 'older WebKit needs the pseudo-element too'
+    # LINE-ANCHORED, because `.pp-cpay__done[open] > .pp-cpay__done-sum::before` CONTAINS the bare selector --
+    # so `'.pp-cpay__done-sum::before' in css` passed with the base rule renamed away, satisfied by the
+    # `[open]` rule alone. A mutation run found it; that is the third substring trap in this file's history
+    # (`pp-cpay__row` in `pp-cpay__row--paid`, `pp-cpay__claim` in the merged selector list).
+    assert (NL + '.pp-cpay__done-sum::before {') in css, 'and something has to replace it'
+    assert (NL + '.pp-cpay__done[open] > .pp-cpay__done-sum::before') in css, 'which turns when it opens'
+    assert 'var(--pp-divider)' in _rule(css, '.pp-cpay__done'), 'a real token, not `--pp-line`'
+
+
+def test_every_token_the_challenge_css_uses_is_defined():
+    """THE GENERAL FORM OF THE `--pp-line` BUG, which is worth a guard because its failure mode is silence: an
+    undefined custom property in a SHORTHAND kills the whole declaration, and in a longhand falls back to the
+    initial value. Either way nothing errors, nothing logs, and the rule simply does not apply.
+
+    Definitions are looked for in `input.css` (the house `:root`) and in the component files, since a token
+    scoped to one component is legitimate.
+    """
+    import re
+    from pathlib import Path
+
+    from django.conf import settings
+
+    base = Path(settings.BASE_DIR) / 'static' / 'css'
+    css = (base / 'components' / 'challenges.css').read_text(encoding='utf-8')
+    sources = [(base / 'input.css').read_text(encoding='utf-8')]
+    sources += [p.read_text(encoding='utf-8') for p in (base / 'components').glob('*.css')]
+
+    used = set(re.findall(r'var\((--(?:pp|disc)-[a-z0-9-]+)', css))
+    defined = set()
+    for text in sources:
+        defined |= set(re.findall(r'^\s*(--(?:pp|disc)-[a-z0-9-]+)\s*:', text, re.M))
+
+    assert used, 'the guard found no tokens at all, so it is measuring nothing'
+    assert not (used - defined), 'undefined in challenges.css: %s' % sorted(used - defined)
 
 
 def test_the_focus_target_survives_the_last_claim():
     """PINNED BY SOURCE TEXT, which is how this project pins JS (there is no runner).
 
-    The fallback chain has to end at something that is ALWAYS rendered. It first ended at the XP headline --
-    which lives inside the same `pending_xp` block as Claim-all, so the two were co-extensive and the
-    fallback was unreachable. The case it existed for is claiming the LAST owed square: the whole block
-    disappears, and without a real fallback a keyboard user is dropped onto `<body>`.
+    The fallback chain has to end at something that is ALWAYS rendered, because the case it exists for is
+    claiming the LAST owed square: Claim-all is gone from the swapped-in panel, and without a fallback a
+    keyboard user is dropped onto `<body>` and has to tab the whole page back.
+
+    WHICH LINK CATCHES THAT CASE HAS CHANGED, and this docstring had it backwards for a while. It said the XP
+    headline sat inside the same `pending_xp` block as Claim-all and so was co-extensive with it, making the
+    panel root the only real fallback. That was true when it was written and stopped being true when the
+    panel's head lost its gate ("a head that never disappears"): `.pp-cpay__xp` now renders for any jobs run,
+    so IT catches the last claim and `.pp-cpay` is the link with no known way to fire. The assertion below is
+    unchanged and still right -- the chain must end somewhere unconditional -- but it is belt-and-braces, not
+    the working fallback.
     """
     from pathlib import Path
 
@@ -603,3 +818,217 @@ def test_every_claim_button_is_distinguishable_to_a_screen_reader(client):
     # The figure is in the name too, so the label says what pressing it is worth. WCAG 2.5.3 still holds:
     # the visible word "Claim" is contained in the accessible name.
     assert 'aria-label="Claim %s XP for' % '{:,}'.format(CHALLENGE_SLOT_JOB_XP) in body
+
+
+# ── the owed-XP indicator, per type and across runs (owner, 2026-09-30) ──────────────────────────
+
+@pytest.mark.django_db
+def test_the_card_points_at_xp_owed_on_a_run_it_is_not_showing(client):
+    """THE CASE THE FEATURE EXISTS FOR, and the one a card-scoped version would have missed.
+
+    `card['run']` is the ACTIVE run, or a resumable one, or nothing. A FINISHED run with unclaimed squares is
+    none of those -- so before this, the Job Coverage card read "Start" while thousands of XP sat on a run the
+    page did not mention. That is what the owner reported as the nav's XP pill looking stuck: the pill is
+    profile-wide and the page was not, so nothing here could explain it.
+    """
+    profile = _hunter(client)
+    finished, _jobs = _jobs_run(profile, count=Job.objects.count())
+    assert finished.is_complete, 'the fixture needs a FINISHED run, which no card will show'
+    assert svc.active_run(profile, CHALLENGE_TYPE_JOBS) is None, 'so the card is on its empty state'
+    owed_xp = Job.objects.count() * CHALLENGE_SLOT_JOB_XP
+
+    body = client.get(reverse('my_challenges')).content.decode()
+
+    assert '+{:,} waiting'.format(owed_xp) in body, 'the figure, not a bare mark'
+    # AND IT IS A ROUTE -- read off the CHIP, not the page. This page also lists finished runs with links, so
+    # `reverse(...) in body` was true whether or not the chip carried the href, and a mutation replacing it
+    # with `#` passed. The chip's own `href` is the only thing that answers "does this go anywhere".
+    import re
+    href = re.search(r'<a class="pp-cowed" href="([^"]+)"', body)
+    assert href, 'the chip must render as a link'
+    assert href.group(1) == reverse('challenge_detail', args=[finished.pk])
+
+
+@pytest.mark.django_db
+def test_the_indicator_is_absent_once_everything_is_claimed(client):
+    profile = _hunter(client)
+    challenge, _jobs = _jobs_run(profile, count=2)
+    rewards.redeem_all(challenge, profile)
+
+    body = client.get(reverse('my_challenges')).content.decode()
+
+    # SCOPED TO THE CARDS. `'waiting' not in body` over a whole rendered document is the class of assertion
+    # that has already gone wrong twice on this branch -- it passes or fails on copy anywhere on the page.
+    cards = ''.join(c for c in body.split('<section class="card') if 'Challenge' in c)
+    assert 'pp-cowed' not in cards
+    assert 'waiting' not in cards
+
+
+@pytest.mark.django_db
+def test_an_a_z_card_never_shows_owed_xp(client):
+    """A-Z pays no job XP, so its card has nothing to owe -- and the indicator is scoped by TYPE, which is what
+    keeps a jobs run's owed XP off the A-Z card.
+
+    SLICED ON THE CARD BOUNDARY, which is the fix for a pin that could not fail. It sliced from 'A-Z' to
+    'pp-cwr', and the chip renders AFTER the reward line -- so the slice always ended before the chip's position
+    and `'pp-cowed' not in az_card` was true whatever the code did. An audit proved it: deleting the per-type
+    filter entirely, so a jobs run's XP rendered on BOTH cards, left 98 tests green. Nothing pinned the scoping.
+    """
+    profile = _hunter(client)
+    _jobs_run(profile, count=2)
+    svc.start(profile, CHALLENGE_TYPE_AZ)
+
+    body = client.get(reverse('my_challenges')).content.decode()
+    # PICKED BY LABEL, not by index. Splitting on `<section class="card` also catches the page-header card, so
+    # positional indices were off by one and silently read the wrong chunk -- a slice that lands on the wrong
+    # element is the same defect as a slice that is too short.
+    chunks = body.split('<section class="card')
+    az = next(c for c in chunks if 'A-Z Challenge' in c)
+    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+
+    assert 'pp-cowed' in jobs, 'the jobs card has one'
+    assert 'pp-cowed' not in az, 'and the A-Z card does not'
+
+
+@pytest.mark.django_db
+def test_owed_runs_is_one_aggregated_query_whatever_the_history(client):
+    """Per the per-user queryset rule: a `values().annotate(Count)` over the partial index, not a fetch and a
+    Python tally. A hunter with many finished runs must cost what a fresh one does."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    profile = _hunter()
+    # EACH RUN MUST BE FINISHED BEFORE THE NEXT EXISTS -- runs are sequential, so a loop of `_jobs_run` would
+    # RESUME the same run and then refuse to re-assign a completed square. Finishing is the only way to get a
+    # second, which is also why this fixture is expensive and two runs is the sample.
+    first, _a = _jobs_run(profile, count=Job.objects.count())
+    assert first.is_complete
+
+    with CaptureQueriesContext(connection) as one_run:
+        rows_one = rewards.owed_runs(profile)
+
+    second, _b = _jobs_run(profile, count=Job.objects.count())
+    assert second.is_complete and second.pk != first.pk
+
+    with CaptureQueriesContext(connection) as two_runs:
+        rows_two = rewards.owed_runs(profile)
+
+    assert len(one_run.captured_queries) == 1
+    assert len(two_runs.captured_queries) == 1, 'one aggregate however many runs owe'
+    assert len(rows_one) == 1 and len(rows_two) == 2, 'and each owing run is named'
+    assert all(row['xp'] == row['owed'] * CHALLENGE_SLOT_JOB_XP for row in rows_two)
+    # NEWEST FIRST -- arbitrary but STABLE. Not "the run they were last on": nothing tracks per-run activity,
+    # which `owed_runs`' own docstring says in as many words.
+    assert [row['challenge_id'] for row in rows_two] == [second.pk, first.pk]
+
+
+@pytest.mark.django_db
+def test_owed_runs_flags_a_hidden_run_and_still_counts_it():
+    """Hidden runs owe real XP and the payout door still pays them, so leaving them out would make this
+    disagree with the nav pill -- but My Challenges does not list them, so a caller sending somebody to the XP
+    needs to know the link is the only route."""
+    profile = _hunter()
+    challenge, _jobs = _jobs_run(profile, count=2)
+    svc.hide(challenge, profile)
+
+    rows = rewards.owed_runs(profile)
+
+    assert [row['challenge_id'] for row in rows] == [challenge.pk]
+    assert rows[0]['is_hidden'] is True
+
+
+@pytest.mark.django_db
+def test_the_chip_describes_the_run_it_links_to(client):
+    """EVERY FIGURE IS ABOUT THE LINKED RUN. `xp` was a SUM across every owing run while the link went to one of
+    them, so the chip advertised "+300,000 waiting" and landed the hunter on a panel offering 150,000, with
+    nothing on the page naming the other run. A chip that describes one run and links to another is the failure
+    this feature exists to fix, one level in."""
+    import re
+
+    profile = _hunter(client)
+    first, _a = _jobs_run(profile, count=Job.objects.count())
+    second, _b = _jobs_run(profile, count=Job.objects.count())
+    one_run = Job.objects.count() * CHALLENGE_SLOT_JOB_XP
+
+    body = client.get(reverse('my_challenges')).content.decode()
+    chunks = body.split('<section class="card')
+    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+
+    href = re.search(r'<a class="pp-cowed" href="([^"]+)"', jobs)
+    assert href.group(1) == reverse('challenge_detail', args=[second.pk]), 'the newest owing run'
+    assert '+{:,} waiting'.format(one_run) in jobs, "that run's figure, not the total of both"
+    assert '+{:,} waiting'.format(one_run * 2) not in jobs
+    # AND IT SAYS THERE IS MORE, in the accessible name, rather than pretending to total it.
+    assert '1 other run also owes XP' in jobs
+    del first
+
+
+@pytest.mark.django_db
+def test_the_chip_says_when_the_xp_is_not_on_the_card_s_own_run(client):
+    """THE HALF THAT STOPS A MISREAD. On an empty card the button says Start, and Start creates a NEW run and
+    pays nothing -- so a bare "+150,000 waiting" directly above it invites exactly the wrong press."""
+    profile = _hunter(client)
+    finished, _jobs = _jobs_run(profile, count=Job.objects.count())
+    assert svc.active_run(profile, CHALLENGE_TYPE_JOBS) is None, 'so the card offers Start'
+
+    body = client.get(reverse('my_challenges')).content.decode()
+
+    assert 'waiting on another run' in body
+
+
+@pytest.mark.django_db
+def test_the_chip_calls_a_run_hidden_only_when_the_linked_one_is(client):
+    """`hidden` was `any(...)` while the link was the newest run, so the label could call the linked run hidden
+    when it was not -- and the actually-hidden run, the one the docstring says this link is the only route to,
+    still had no route from this page."""
+    profile = _hunter(client)
+    older, _a = _jobs_run(profile, count=Job.objects.count())
+    svc.hide(older, profile)
+    newer, _b = _jobs_run(profile, count=Job.objects.count())
+
+    body = client.get(reverse('my_challenges')).content.decode()
+    chunks = body.split('<section class="card')
+    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+
+    assert 'of a hidden run' not in jobs, 'the LINKED run is the visible one'
+    assert reverse('challenge_detail', args=[newer.pk]) in jobs
+
+
+@pytest.mark.django_db
+def test_the_chip_says_nothing_extra_when_the_xp_is_on_the_cards_own_run(client):
+    """THE OTHER SIDE OF THE "on another run" CLAUSE, and nothing pinned it: a mutation deleting the
+    `same_run` guard from the visible span left the suite green, because the only test rendering this state
+    asserts the chip is THERE rather than what it says. A card offering the very run that owes must not tell a
+    hunter the XP is somewhere else."""
+    profile = _hunter(client)
+    challenge, _jobs = _jobs_run(profile, count=2)
+    assert svc.active_run(profile, CHALLENGE_TYPE_JOBS).pk == challenge.pk, 'the card offers this run'
+
+    body = client.get(reverse('my_challenges')).content.decode()
+    chunks = body.split('<section class="card')
+    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+
+    assert 'pp-cowed' in jobs, 'the chip is there'
+    assert 'on another run' not in jobs, 'and does not send them away from the run being offered'
+    assert 'of another run' not in jobs, 'nor say so to a screen reader'
+    assert 'of a hidden run' not in jobs
+
+
+@pytest.mark.django_db
+def test_the_chip_does_not_call_the_cards_own_resumable_run_elsewhere(client):
+    """THE CASE THE TWO COPIES DISAGREED ON. `resumable_run` deliberately returns a HIDDEN run -- that is how
+    the card offers "Resume" instead of "Start" -- so `hidden` and `same_run` can both be true. Branching the
+    aria on `hidden` FIRST made it announce "of a hidden run" about the very run the card was offering, while
+    the visible text said nothing. Both copies branch on `same_run` first now."""
+    profile = _hunter(client)
+    challenge, _jobs = _jobs_run(profile, count=2)
+    svc.hide(challenge, profile)
+    assert svc.resumable_run(profile, CHALLENGE_TYPE_JOBS).pk == challenge.pk, 'the card offers to resume it'
+
+    body = client.get(reverse('my_challenges')).content.decode()
+    chunks = body.split('<section class="card')
+    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+
+    assert 'pp-cowed' in jobs
+    assert 'of a hidden run' not in jobs, 'the card IS showing it, so it is not elsewhere'
+    assert 'on another run' not in jobs

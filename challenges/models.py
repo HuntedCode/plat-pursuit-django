@@ -396,6 +396,22 @@ class ChallengeSlot(models.Model):
         # exactly why they need it and this does not: `challengeslot_unique_position` below already
         # builds a btree on those two columns in that order. A second copy would have contradicted,
         # in the same commit, the argument for dropping `db_index` from `challenge_type`.
+        #
+        # ONE INDEX, AND IT IS PARTIAL. The nav marker asks "does this hunter have Job XP waiting to be
+        # claimed?" on every page for every signed-in hunter (behind a cache), and the rows that can answer
+        # yes are the handful in flight -- never the hundreds a played-out account accumulates. A partial
+        # index does not carry the settled ones, which is what makes it cheap enough to justify here when
+        # the Meta comment above turned down a full one.
+        #
+        # IT WAS BRIEFLY A DIFFERENT QUESTION. The first version asked "claimed and not yet CELEBRATED",
+        # because the ceremony was going to be deferred to the hunter's next Career visit. It is not: the
+        # celebration fires on this page, in the same response as the payout, exactly as a contract claim
+        # does -- so there is no such thing as an uncelebrated payout and the column that recorded one is
+        # gone. What is left is the simpler question, answerable from columns that already existed.
+        indexes = [
+            models.Index(fields=['challenge'], name='chalslot_unclaimed_xp_idx',
+                         condition=Q(is_completed=True, xp_redeemed_at__isnull=True)),
+        ]
         constraints = [
             models.UniqueConstraint(fields=['challenge', 'key'], name='challengeslot_unique_key'),
             # One slot per position, which is what makes `ordering` deterministic rather than merely

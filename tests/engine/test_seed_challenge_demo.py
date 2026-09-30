@@ -12,6 +12,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from challenges.management.commands.seed_challenge_demo import DEMO_TAG, MIXED_CLAIMED, MIXED_FILLED
@@ -442,3 +443,131 @@ def test_the_seeded_claim_pays_the_real_figure(catalogue):
     assert grants.count() == MIXED_CLAIMED
     assert {g.amount for g in grants} == {CHALLENGE_SLOT_JOB_XP}
     assert all(g.source_id is not None for g in grants), 'the slot id is half the idempotency guard'
+
+
+# ── the "why is my pill lit" diagnostic ───────────────────────────────────────────────────────────
+
+@override_settings(DEBUG=True)
+def test_the_listing_says_why_the_nav_pill_is_lit(catalogue, capsys):
+    """THE OWNER'S REPORT IS WHY THIS EXISTS: the XP pill looked stuck after claiming everything he could find,
+    and nothing in this command could say whether the pill was wrong or whether some run still owed. Two
+    properties make that invisible from the page alone -- the pill is PROFILE-WIDE, and hidden runs count while
+    My Challenges deliberately does not list them.
+    """
+    profile = _hunter()
+    _seed(profile)
+    capsys.readouterr()   # discard the seeding output
+
+    call_command('seed_challenge_demo', user=profile.psn_username, list=True)
+    out = capsys.readouterr().out
+
+    assert 'LIT' in out, 'the seeded runs leave squares owed, so it must say so'
+    assert 'across' in out and 'run(s)' in out, 'and how many runs are responsible'
+    # THE RUN URLS, because "somewhere you have unclaimed XP" is not actionable -- counted in the PILL SECTION
+    # only. `_report` prints every seeded run's URL further down, so counting them over the whole output passed
+    # whether or not the diagnostic emitted a link.
+    pill = out.split('The My Pursuit', 1)[1]
+    assert pill.count('/challenges/') >= 1
+
+
+@override_settings(DEBUG=True)
+def test_the_listing_says_the_pill_is_dark_once_nothing_is_owed(catalogue, capsys,
+                                                               django_capture_on_commit_callbacks):
+    """The other half, and the one that answers the bug report: with every square paid the diagnostic must agree
+    with the pill.
+
+    THE CAPTURE FIXTURE IS LOAD-BEARING, and leaving it out is what first made this test fail -- informatively.
+    The claim clears the cached marker from `transaction.on_commit`, which pytest's never-committing transaction
+    does not run, so the stale cached `True` survived and the diagnostic correctly reported that the browser and
+    the truth disagree. That is the tool working; the test simply was not modelling what production does.
+    """
+    profile = _hunter()
+    _seed(profile)
+    with django_capture_on_commit_callbacks(execute=True):
+        for run in Challenge.objects.filter(profile=profile, challenge_type=CHALLENGE_TYPE_JOBS):
+            rewards.redeem_all(run, profile)
+    capsys.readouterr()
+
+    call_command('seed_challenge_demo', user=profile.psn_username, list=True)
+    out = capsys.readouterr().out
+
+    assert 'dark -- nothing owed anywhere' in out
+    assert 'THE CACHE DISAGREES' not in out, 'the cached answer must have been cleared by the claim'
+    assert rewards.has_unclaimed_xp(profile) is False, 'and the live query agrees'
+
+
+@override_settings(DEBUG=True)
+def test_a_hidden_run_that_owes_xp_is_flagged_as_hidden(catalogue, capsys):
+    """THE CASE THAT CAN ONLY BE DIAGNOSED HERE. A hidden run's squares still owe XP and the payout door still
+    pays them, so the pill counts them -- but My Challenges does not list hidden runs, so a hunter can be
+    looking at a lit pill with no page that shows the run causing it."""
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    _seed(profile)
+    owing = [r for r in Challenge.objects.filter(profile=profile, challenge_type=CHALLENGE_TYPE_JOBS)
+             if rewards.redeemable_slots(r).count()]
+    svc.hide(owing[0], profile)
+    capsys.readouterr()
+
+    call_command('seed_challenge_demo', user=profile.psn_username, list=True)
+    out = capsys.readouterr().out
+
+    assert 'HIDDEN -- not listed on My Challenges' in out
+
+
+@override_settings(DEBUG=True)
+def test_the_listing_says_why_the_nav_pill_is_lit_without_any_demo_runs(catalogue, capsys):
+    """THE CASE THE DIAGNOSTIC WAS BUILT FOR AND COULD NOT REACH. `_report` returns early when the profile has
+    no `[demo]` runs, and the pill section sat after that return -- so on a real account with real runs and no
+    seeded ones, `--list` printed nothing about the pill. That is the shape of the account that produced the bug
+    report. Every other test here seeds first, which is exactly why none of them saw it.
+    """
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    svc.assign(challenge, profile, job.slug, _contract('Real Run Game', jobs=[job]))
+    svc.mark_slot_completed(challenge.slots.get(key=job.slug))
+    assert not Challenge.objects.filter(profile=profile, name__contains=DEMO_TAG).exists()
+    capsys.readouterr()
+
+    call_command('seed_challenge_demo', user=profile.psn_username, list=True)
+    out = capsys.readouterr().out
+
+    assert 'The My Pursuit' in out, 'the pill section must print with no demo runs at all'
+    assert 'LIT' in out and '1 owed' in out
+    assert reverse('challenge_detail', args=[challenge.pk]) in out, 'and link the run that owes'
+
+
+@override_settings(DEBUG=True)
+def test_the_listing_reports_a_stale_cached_pill(catalogue, capsys):
+    """THE MOST LIKELY CAUSE OF A PILL THAT LOOKS STUCK, and the one the first version of this diagnostic could
+    not see: the browser reads a 300-second cached answer while everything else here reads the live query. The
+    docstring claimed the two "cannot disagree", which was false -- the cache is a reason of the pill's own.
+
+    A diagnostic that printed only the live answer would say "dark" while the pill stayed lit, denying a real
+    problem. That is worse than having no diagnostic.
+    """
+    from challenges.services import rewards as rewards_mod
+    from challenges.services import challenge_service as svc
+    from trophies.services import career_attention
+
+    profile = _hunter()
+    challenge = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    job = Job.objects.order_by('slug').first()
+    svc.assign(challenge, profile, job.slug, _contract('Cache Game', jobs=[job]))
+    svc.mark_slot_completed(challenge.slots.get(key=job.slug))
+    # The browser's answer, now cached as LIT.
+    assert career_attention.has_unclaimed_challenge_xp(profile) is True
+    # Paid WITHOUT running the on-commit callbacks, which is what a stale key looks like from outside.
+    rewards_mod.redeem_all(challenge, profile)
+    assert rewards_mod.has_unclaimed_xp(profile) is False, 'the truth is dark'
+    capsys.readouterr()
+
+    call_command('seed_challenge_demo', user=profile.psn_username, list=True)
+    out = capsys.readouterr().out
+
+    assert 'THE CACHE DISAGREES' in out
+    assert 'showing LIT and the truth is dark' in out

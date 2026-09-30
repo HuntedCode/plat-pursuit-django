@@ -1,22 +1,37 @@
-"""The two attention markers on the My Pursuit nav item: a claim count, and a new-contracts dot.
+"""The three attention markers on the My Pursuit nav item: a claim count, an XP mark, a New pill.
 
-WHY A SEPARATE MODULE. Both answers already exist elsewhere -- `contracts_service.claimable_summary`
-and `new_contracts_modal.new_for` -- and neither can be used here. They are page-cost functions,
-built for one render of `/career/`, and this runs on EVERY page of the site for every signed-in
-hunter, including the Django admin. So these are the same two questions asked the cheap way, and the
-comments below are mostly about what makes them cheap.
+WHY A SEPARATE MODULE. All three answers already exist elsewhere -- `contracts_service.claimable_summary`,
+`challenges.services.rewards.redeemable_slots` / `pending_xp`, and `new_contracts_modal.new_for` -- and none
+of them can be used here. They are page-cost functions, built for one render of `/career/` or of a challenge
+run, and this runs on EVERY page of the site for every signed-in hunter, including the Django admin. So these
+are the same three questions asked the cheap way, and the comments below are mostly about what makes them
+cheap.
 
 THE BAR IS `whats_new_unread` in plat_pursuit/context_processors.py: zero queries, off values the
-request already has. Neither of these quite reaches that, but they get close, and the shape is the
-same -- an attention marker must never be the reason a page got slower.
+request already has. None of the three quite reaches that -- two are a cached query each and the New pill is
+a cached site-wide value -- but they get close, and the shape is the same: an attention marker must never be
+the reason a page got slower.
 
 WHAT EACH MARKER MEANS, because they are deliberately different kinds of thing:
 
   CLAIM COUNT   work waiting: rewards this hunter has earned and not taken. A NUMBER, because "how
                 many" is answerable without a click and is the whole reason to go.
+  XP PILL       Challenge job XP earned and not yet claimed. The same KIND of thing as the count --
+                something of theirs, waiting -- but a WORD rather than a number, because a run with
+                four paid-up squares is one press of Claim all and not four errands.
   NEW PILL      news: contracts announced since they last looked. A WORD, not a light -- the
                 correction the avatar's own New marker already made, and the same reason a count of
                 things that are merely new would compete with the count of things that are theirs.
+
+PRECEDENCE when more than one applies (owner, 2026-09-29): COUNT, then the XP PILL, then NEW.
+Two kinds of waiting reward, then news. Contracts come first because the count is a QUANTITY -- a
+hunter works through them one at a time -- while Challenge XP is one press of Claim all however many
+squares are owed, so it cannot be ranked by size against anything. News is last because it is the only
+one that is not theirs yet.
+
+All three fit only above 1280px; below that and on the mobile tab bar the first that applies wins,
+which is the same exclusivity the pair already had and for the same reason -- there is no room.
+`chrome.css` carries the arithmetic.
 """
 import logging
 
@@ -42,6 +57,11 @@ LATEST_TTL = 900
 
 _CLAIMABLE_KEY = 'career:claimable:%s'
 _LATEST_KEY = 'contracts:latest_announced'
+
+#: Same TTL as the claim count, and for the same reason: the TTL is not the mechanism, it only bounds a
+#: MISSED invalidation. Both writers that can change this answer clear the key explicitly.
+CHALLENGE_XP_TTL = 300
+_CHALLENGE_XP_KEY = 'career:chalxp:%s'
 
 
 def claimable_count(profile):
@@ -84,6 +104,84 @@ def forget_claimable(profile):
     hunter is looking straight at it."""
     if profile is not None:
         cache.delete(_CLAIMABLE_KEY % profile.pk)
+
+
+def has_unclaimed_challenge_xp(profile):
+    """Does this hunter have Job XP waiting to be claimed on a Challenge? Cached per hunter.
+
+    THE THIRD MARKER. It reads "XP", and unlike the count beside it there is no number -- a hunter with four
+    squares waiting does not act on them four times in any meaningful sense, they go to the run and press
+    Claim all. So the pill says what is waiting, and the count keeps being the only quantity.
+
+    IT ASKED A DIFFERENT QUESTION FOR ABOUT AN HOUR: "claimed and not yet CELEBRATED", back when the
+    ceremony was going to be deferred to the next Career visit. The celebration fires on the run page now,
+    in the same response as the payout, so nothing is ever uncelebrated -- and the marker points at the
+    thing that IS still outstanding, which is the claim itself. That also makes it the same KIND of thing as
+    the count: something of yours, waiting.
+
+    ONE `EXISTS` BEHIND A CACHE. `chalslot_unclaimed_xp_idx` is a partial index on `challenge` carrying only
+    the squares in flight, so the rows that can answer yes are a handful however long a hunter's claimed
+    history is -- their paid slots are not in it at all. Whether the planner reaches for it depends on it
+    reaching the hunter's runs first (the predicate here is `challenge__profile`, not a slot id), and that has
+    NOT been confirmed with `EXPLAIN` against prod-shaped data. The claim is about what the index makes
+    possible, not about a plan anybody has read.
+
+    THE BAR FOR THIS MODULE, restated because it applies hardest to the newest marker: this runs on EVERY
+    page for every signed-in hunter, including the Django admin. An attention marker must never be the
+    reason a page got slower.
+
+    THE CATALOGUE CAN STILL MAKE IT STALE, both ways, and it is worth naming because the shared predicate is
+    otherwise described as making the pill unable to lie. Deleting a `Job` un-owes its squares; creating one
+    back under an existing completed unpaid square re-owes them. Neither goes through either writer, so this
+    key is not cleared and the pill is wrong for up to the TTL in whichever direction.
+
+    NO CLAIM RESCUES THE FIRST CASE, which an earlier version of this paragraph said it did ("the redeem reply
+    computes a fresh answer, so a hunter who claims sees the pill go"). If the deleted job's square was the
+    only one owed, `summary` reports nothing claimable and the panel renders no Claim button at all -- there is
+    no door to press, and the TTL is the only way out. Bounded at five minutes and staff-triggered, so it is
+    left as it is rather than wired to a `Job` signal for something that happens approximately never.
+    """
+    if profile is None:
+        return False
+    key = _CHALLENGE_XP_KEY % profile.pk
+    hit = cache.get(key)
+    if hit is not None:
+        # THE BOOL IS STORED AS ITSELF, and the guard is `is not None` rather than truthiness. This shipped
+        # storing an int, justified by "`cache.get` cannot tell a stored `False` from a miss" -- which is
+        # simply not true of this cache: `False` round-trips and `is not None` separates it from a miss
+        # (checked against the configured backend). The int also would not have helped if it were true,
+        # because `0` is falsy exactly like `False`. What the real hazard would be is a future reader
+        # changing this line to `if cache.get(key):`, and no stored type survives that.
+        #
+        # The sibling `latest_announced_at` storing `''` for None is a GENUINELY different problem: there
+        # `None` IS the value being cached, so it collides with the miss sentinel.
+        return hit
+
+    # ITS OWN GUARD, because this is the only marker that reaches into ANOTHER APP's models. Without it a
+    # DatabaseError in `challenges` propagates to the context processor's blanket handler, which returns an
+    # empty dict -- so a hunter would lose the claim COUNT and the New pill too, over a marker that is third
+    # in precedence. Each marker failing alone is the shape this module's siblings already have.
+    try:
+        from challenges.services.rewards import has_unclaimed_xp
+
+        pending = has_unclaimed_xp(profile)
+    except Exception:
+        logger.debug('Could not resolve the challenge-XP marker', exc_info=True)
+        return False
+    cache.set(key, pending, CHALLENGE_XP_TTL)
+    return pending
+
+
+def forget_challenge_xp(profile):
+    """Drop the cached marker. Called by BOTH writers that can change the answer -- a square completing
+    (which arms it) and a claim (which spends it).
+
+    BOTH HALVES, because this module's own comment on the claim count records what happens with only one:
+    it shipped invalidating the spending side alone, so every page render re-cached a zero with a fresh TTL
+    moments before the reward landed, and the badge was dark for most of its TTL at exactly the moment it
+    had something to say."""
+    if profile is not None:
+        cache.delete(_CHALLENGE_XP_KEY % profile.pk)
 
 
 def latest_announced_at():
@@ -150,7 +248,13 @@ PREVIEW = 'career-markers'
 
 
 def preview_counts(request):
-    """(count, dot) forced on for a team preview, or None when this is an ordinary request.
+    """(count, dot, unclaimed_xp) forced on for a team preview, or None on an ordinary request.
+
+    A THREE-TUPLE SINCE THE THIRD MARKER ARRIVED, and it joined this door rather than getting one of its own
+    because the thing being looked at is the ROW: how three lozenges sit beside a label, which yields to which
+    below 1280px. A door that lit two of three would leave the widest case -- the one the CSS is written for
+    -- with no way to see it. (Two of three is a perfectly ordinary hunter state; an earlier version of this
+    paragraph claimed otherwise.)
 
     THE MARKERS ONLY APPEAR WHEN THERE IS SOMETHING TO SAY, which makes them the hardest thing on the
     site to look at deliberately: you need an unclaimed reward and an unseen announcement at the same
@@ -158,7 +262,7 @@ def preview_counts(request):
 
         ?preview=career-markers          both markers, using the real claim count (3 if there is none)
         ?preview=career-markers&n=12     force the count, e.g. to see the 9+ cap
-        ?preview=career-markers&n=0      the New pill alone
+        ?preview=career-markers&n=0      the New pill and the XP mark, no count
 
     An `n` that is not a number is ignored rather than refused, and you get the real count -- which
     can read as a forced one. Deliberate: this is a viewing tool on a live page, and a 400 from a
@@ -172,11 +276,11 @@ def preview_counts(request):
         return None
     raw = request.GET.get('n')
     if raw is None:
-        return None, True     # the caller substitutes the real count
+        return None, True, True     # the caller substitutes the real count
     try:
-        return max(0, min(int(raw), 999)), True
+        return max(0, min(int(raw), 999)), True, True
     except (TypeError, ValueError):
-        return None, True
+        return None, True, True
 
 
 def _parse(raw):

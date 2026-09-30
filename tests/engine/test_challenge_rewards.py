@@ -97,7 +97,7 @@ def test_redeeming_a_square_pays_its_job_the_flat_figure():
     challenge, jobs = _jobs_run_with_completed_squares(profile)
     job = jobs[0]
 
-    slot, granted = rewards.redeem_slot(challenge, profile, job.slug)
+    slot, granted, _ceremony = rewards.redeem_slot(challenge, profile, job.slug)
 
     assert granted == CHALLENGE_SLOT_JOB_XP
     assert slot.xp_redeemed_at is not None
@@ -163,7 +163,7 @@ def test_redeem_all_pays_every_owed_square_once():
     profile = _member()
     challenge, jobs = _jobs_run_with_completed_squares(profile, count=4)
 
-    paid, granted = rewards.redeem_all(challenge, profile)
+    paid, granted, _ceremony = rewards.redeem_all(challenge, profile)
 
     assert len(paid) == 4
     assert granted == 4 * CHALLENGE_SLOT_JOB_XP
@@ -178,7 +178,7 @@ def test_redeem_all_a_second_time_is_not_an_error_and_pays_nothing():
     challenge, _jobs = _jobs_run_with_completed_squares(profile, count=2)
     rewards.redeem_all(challenge, profile)
 
-    paid, granted = rewards.redeem_all(challenge, profile)
+    paid, granted, _ceremony = rewards.redeem_all(challenge, profile)
 
     assert (paid, granted) == ([], 0)
     assert ContractXPGrant.objects.filter(profile=profile, source='challenge').count() == 2
@@ -193,7 +193,7 @@ def test_redeem_all_skips_a_square_whose_job_left_the_catalogue_and_pays_the_res
     orphan_key_pk = challenge.slots.get(key=orphan_slug).pk
     Job.objects.filter(slug=orphan_slug).delete()
 
-    paid, granted = rewards.redeem_all(challenge, profile)
+    paid, granted, _ceremony = rewards.redeem_all(challenge, profile)
 
     assert granted == 2 * CHALLENGE_SLOT_JOB_XP
     assert orphan_key_pk not in {s.pk for s in paid}
@@ -253,7 +253,7 @@ def test_a_hidden_run_can_still_be_redeemed():
     challenge, jobs = _jobs_run_with_completed_squares(profile)
     svc.hide(challenge, profile)
 
-    _slot, granted = rewards.redeem_slot(challenge, profile, jobs[0].slug)
+    _slot, granted, _ceremony = rewards.redeem_slot(challenge, profile, jobs[0].slug)
 
     assert granted == CHALLENGE_SLOT_JOB_XP
 
