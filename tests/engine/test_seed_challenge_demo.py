@@ -8,6 +8,8 @@ permanently and there is nothing in the UI that would ever show it.
 It also has to produce the states it advertises. A seeder whose "finished run" is not finished wastes the
 browser pass it exists to serve, and nothing else in the suite would notice.
 """
+import string
+
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -29,15 +31,21 @@ _SEQ = {'n': 0}
 
 @pytest.fixture
 def catalogue():
-    """A live contract per job, plus a handful of letter-initial ones, so the seeder has a pool.
+    """A live contract per job, plus one per LETTER, so the seeder has a pool it can finish both types from.
 
     The dev database has a real catalogue; the test one does not, and the command's whole job is to pick
     REAL contracts out of whatever is there. So the fixture is the catalogue.
+
+    THE WHOLE ALPHABET, not the A-J it started with. The seeder now builds a FINISHED A-Z run so the Hall of
+    Fame can be looked at with a hero of each type, and a ten-letter pool cannot complete one -- so that
+    scenario would have had no coverage while every assertion around it stayed green. The thin-catalogue case
+    keeps its own test (`test_it_survives_a_catalogue_too_thin_to_fill_every_square`), which deliberately
+    does NOT take this fixture.
     """
     made = []
     for job in Job.objects.order_by('slug'):
         made.append(_contract('Alpha %s' % job.name, jobs=[job]))
-    for letter in 'ABCDEFGHIJ':
+    for letter in string.ascii_uppercase:
         made.append(_contract('%s Game For Letters' % letter))
     return made
 
@@ -106,11 +114,318 @@ def test_it_seeds_an_a_z_run_that_draws_no_panel(catalogue):
 
     _seed(profile)
 
-    az = _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_AZ).first()
-    assert az is not None
+    # THE IN-PROGRESS ONE, named explicitly. There are two A-Z runs now (one finished, one in flight) and
+    # `.first()` picked whichever the default ordering happened to put first -- so this test would have
+    # silently changed subject. `is_complete=False` is the one under test here: an unfinished A-Z run is the
+    # case that must draw no panel while still having a title to play for.
+    az = _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_AZ, is_complete=False).get()
     assert az.filled_count > 0, 'an empty board shows nothing worth looking at'
     assert rewards.summary(az)['per_square'] == 0, 'A-Z pays no job XP, so it has no panel'
-    assert rewards.summary(az)['title_name'] == 'A-Z Champion'
+
+    # `A-Z Legend`, NOT `A-Z Champion`, and the change is the feature rather than a regression. Since the
+    # seeder now finishes an A-Z run first, this one is the profile's SECOND -- so the title it is playing
+    # for is the second completion's. `rewards.summary` computes that from `completed_run_count + 1` for an
+    # unfinished run, which is exactly what a hunter looking at a run in progress is asking. A pleasant
+    # side-effect for the seeder: both A-Z titles are now reachable on one demo profile.
+    assert rewards.summary(az)['title_name'] == 'A-Z Legend'
+
+
+@override_settings(DEBUG=True)
+def test_it_seeds_a_finished_a_z_run_for_the_hall_of_fame(catalogue):
+    """THE REASON THIS SCENARIO EXISTS. Only a finished run reaches the Hall of Fame, and until this was
+    added the seeder produced exactly one finished run and it was Job Coverage -- so the A-Z hero, its
+    26-square board and its title chip could not be seen at all without finishing 26 contracts by hand.
+
+    Completing it must also grant the real title through the real service, because that `UserTitle` row is
+    what the hero's prestige chip reads (`rewards.granted_titles_for`); a run finished without one renders
+    with no chip, which is correct behaviour and would make the seeded page misleading.
+    """
+    from trophies.models import UserTitle
+
+    profile = _hunter()
+
+    _seed(profile)
+
+    az_runs = _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_AZ)
+    assert az_runs.count() == 2, 'one finished and one in flight'
+
+    finished = az_runs.get(is_complete=True)
+    assert finished.completed_count == finished.total_slots, 'every letter must be completed'
+    assert not finished.is_deleted, 'a hidden run is off the Hall of Fame'
+
+    assert UserTitle.objects.filter(profile=profile, source_type='challenge',
+                                    source_id=finished.pk).exists(), \
+        'the finished run granted no title, so the hero would render with no chip'
+
+
+@override_settings(DEBUG=True)
+def test_the_seeded_finished_runs_are_the_ones_the_hall_of_fame_lists(client, catalogue):
+    """END TO END, because every assertion above is about rows and the point is a PAGE. Two finished runs,
+    one of each type, both listed; neither in-progress run listed."""
+    profile = _hunter()
+
+    _seed(profile)
+
+    body = client.get(reverse('challenges_hall_of_fame')).content.decode()
+
+    for run in _demo_runs(profile).filter(is_complete=True):
+        assert reverse('challenge_detail', args=[run.pk]) in body, \
+            '%s is finished but not on the Hall of Fame' % run.name
+    for run in _demo_runs(profile).filter(is_complete=False):
+        assert reverse('challenge_detail', args=[run.pk]) not in body, \
+            '%s is in flight and must not be on the Hall of Fame' % run.name
+
+    assert body.count('<a class="pp-chero') == 2, 'one hero per finished run, of each type'
+
+
+# `test_it_says_so_when_the_catalogue_cannot_finish_the_a_z_run` was here and is DELETED, not moved. It had
+# the same fixture and a strict SUBSET of the assertions of `test_the_shortfall_warning_names_the_remedy`
+# below -- no mutation could break one without breaking the other, so it added a name to the suite and
+# nothing else. Recorded rather than silently dropped, so the next reader does not re-add it.
+
+@override_settings(DEBUG=True)
+def test_fill_letter_gaps_makes_the_a_z_run_finishable_on_a_thin_catalogue(client, capsys):
+    """THE CASE THE OWNER ACTUALLY HIT. No `catalogue` fixture, so the pool cannot cover the alphabet --
+    which is the shape of a real dev database, since prod's thinnest letters (Q, X, Z) sit at six to ten
+    contracts and a dev subset easily has none. Without the flag the "finished" A-Z run is not finished, so
+    it never reaches the Hall of Fame and there is nothing to look at.
+    """
+    from challenges.management.commands.seed_challenge_demo import GAP_SLUG_PREFIX
+
+    profile = _hunter()
+
+    _seed(profile, fill_letter_gaps=True)
+
+    finished = _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_AZ, is_complete=True)
+    assert finished.count() == 1, 'the flag did not get the A-Z run finished'
+    run = finished.get()
+    assert run.completed_count == run.total_slots
+
+    assert Contract.objects.filter(slug__startswith=GAP_SLUG_PREFIX).exists(), \
+        'nothing was stood up, so this test is not exercising the flag'
+    assert 'stood up a placeholder contract' in capsys.readouterr().out
+
+    # THE ACTUAL DELIVERABLE, asserted on the PAGE rather than on the row. Every assertion above is about
+    # a Challenge's columns, and the thing that was missing was a hero on a screen -- a run one square
+    # short of complete satisfies none of this and also looks fine in a `25/26`.
+    body = client.get(reverse('challenges_hall_of_fame')).content.decode()
+    assert reverse('challenge_detail', args=[run.pk]) in body, 'finished, but still not on the page'
+    # The stood-up squares have no resolvable cover, which is the honest `--bare` path rather than a
+    # broken image: the board shows holes where the catalogue had none.
+    assert 'pp-chero__sq--bare' in body
+
+
+@override_settings(DEBUG=True)
+def test_a_stand_in_never_reaches_a_public_surface():
+    """THE WORST THING THIS COMMAND COULD HAVE DONE, and it nearly did.
+
+    A stand-in must be `is_live=True` -- `eligibility._slot_pool` filters on it, so one that is not live
+    cannot fill the square it exists for. But `is_live=True` plus a non-null `went_live_at` plus a null
+    `announced_at` is EXACTLY `contract_announcer.pending_contracts()`' predicate, so the scheduled
+    `announce_contracts` would have posted "Q (placeholder for the demo A-Z run)" to the community Discord
+    as a newly published Job Board contract. The same two flags also put it inside
+    `contracts_service.new_contract_cutoff()`, so it wore the "New" chip on the public board.
+    """
+    from core.services import contract_announcer
+    from trophies.services import contracts_service
+
+    from challenges.management.commands.seed_challenge_demo import GAP_SLUG_PREFIX
+
+    _seed(_hunter(), fill_letter_gaps=True)
+    stand_ins = Contract.objects.filter(slug__startswith=GAP_SLUG_PREFIX)
+    assert stand_ins.exists(), 'nothing was stood up, so this test proves nothing'
+
+    queued = set(contract_announcer.pending_contracts().values_list('pk', flat=True))
+    assert not (queued & set(stand_ins.values_list('pk', flat=True))), \
+        'a placeholder contract is queued for the community announcement'
+
+    # AND NOT "NEW" on the public board either.
+    assert not stand_ins.filter(went_live_at__gte=contracts_service.new_contract_cutoff()).exists(), \
+        'a placeholder is inside the Latest window and will wear the New chip'
+
+
+@override_settings(DEBUG=True)
+def test_a_stand_in_a_hunter_earned_is_never_deleted():
+    """`EarnedContract.contract` is CASCADE and `ContractXPGrant.earned_contract` is CASCADE behind it, so
+    deleting a stand-in transitively deletes rows from the ledger whose own docstring calls it "Immutable
+    job-XP ledger ... NEVER recomputed" -- and which this feature's XP guard calls append-only, offsettable
+    only by a negating row. Reachable because a stand-in must be live to fill its square, so a hunter can
+    platinum it like any other contract.
+
+    `--reset`'s headline promise is that it touches no `EarnedContract`. A stray placeholder in a dev
+    catalogue is cosmetic; a hole in an append-only ledger is not.
+    """
+    from trophies.models import EarnedContract
+
+    from challenges.management.commands.seed_challenge_demo import GAP_SLUG_PREFIX
+
+    profile = _hunter()
+    _seed(profile, fill_letter_gaps=True)
+    stand_in = Contract.objects.filter(slug__startswith=GAP_SLUG_PREFIX).first()
+    assert stand_in is not None
+
+    earned = EarnedContract.objects.create(
+        profile=profile, contract=stand_in, has_platinum=True, platinum_reached_at=timezone.now())
+
+    call_command('seed_challenge_demo', user=profile.psn_username, reset=True, verbosity=0)
+
+    assert Contract.objects.filter(pk=stand_in.pk).exists(), \
+        'an earned placeholder was deleted, cascading into the append-only ledger'
+    assert EarnedContract.objects.filter(pk=earned.pk).exists(), 'the EarnedContract row was cascaded away'
+
+
+@override_settings(DEBUG=True)
+def test_the_stand_ins_carry_no_igdb_id_rather_than_an_invented_one():
+    """`igdb_id` is `null=True, blank=True, unique=True`, and null is what the field's own help text calls
+    the admin/episodic case -- a contract representing no IGDB game. A first draft put a negative number
+    there, on the stated grounds that the column was non-nullable, which was simply false.
+
+    It also matters functionally: a null `igdb_id` makes `member_concepts_by_contract` skip its lookup, so
+    the square reaches the no-art path by the same route a real episodic contract would, rather than by a
+    dangling reference to an id nothing owns.
+    """
+    from challenges.management.commands.seed_challenge_demo import GAP_SLUG_PREFIX
+
+    _seed(_hunter(), fill_letter_gaps=True)
+
+    stand_ins = Contract.objects.filter(slug__startswith=GAP_SLUG_PREFIX)
+    assert stand_ins.exists()
+    assert not stand_ins.exclude(igdb_id=None).exists(), 'a stand-in invented an igdb_id'
+    assert not stand_ins.exclude(is_live=True).exists(), 'a stand-in that is not live fills no square'
+
+
+@override_settings(DEBUG=True)
+def test_reset_removes_the_titles_its_runs_granted():
+    """THE OTHER HALF OF THE OWNER'S MISSING TITLE BAND, and pinning it took two attempts.
+
+    A `UserTitle` is tied to its run by `source_id` alone -- no FK, no cascade -- so deleting the runs left
+    the titles behind pointing at dead pks. `granted_titles_for` matches on that column, so the next seeded
+    run drew no title band: the hunter held it, the page did not show it.
+
+    NO `catalogue` FIXTURE, WHICH IS THE WHOLE POINT. `--reset` always reseeds in the same call, and
+    `grant_completion_title` now REPAIRS an orphan it meets -- so with a catalogue the new run completes,
+    the orphan is re-pointed, and the end state is correct whether or not the seeder cleaned up. The two
+    fixes mask each other, which a mutation run proved by deleting this cleanup with the test still green.
+    Without a catalogue nothing completes, no repair fires, and the cleanup is the only thing that can
+    remove the row.
+
+    That window is narrow but real: a profile wiped on a thin catalogue keeps titles for runs that no longer
+    exist, and `UserTitle` is what the display-title picker reads -- so the hunter would be offered a title
+    with nothing behind it.
+    """
+    from trophies.models import UserTitle
+
+    profile = _hunter()
+
+    # Seeded WITH a catalogue first, so there is something to orphan.
+    for job in Job.objects.order_by('slug'):
+        _contract('Alpha %s' % job.name, jobs=[job])
+    _seed(profile)
+    assert UserTitle.objects.filter(profile=profile, source_type='challenge').exists(), \
+        'the seeded runs granted no title, so this test proves nothing'
+
+    # Now take the catalogue away, so the reseed inside `--reset` completes nothing and cannot repair.
+    Contract.objects.all().delete()
+    call_command('seed_challenge_demo', user=profile.psn_username, reset=True, verbosity=0)
+
+    assert not UserTitle.objects.filter(profile=profile, source_type='challenge').exists(), \
+        'titles survived --reset with nothing to re-point them'
+
+
+@override_settings(DEBUG=True)
+def test_removing_titles_leaves_another_systems_alone():
+    """SCOPED BY `source_type`, and without that term this deletes badge and milestone titles that happen to
+    share a run's id. `UserTitle.source_id` is a bare integer with no FK, so a collision is a normal state
+    rather than a corruption."""
+    from trophies.models import Title, UserTitle
+
+    profile = _hunter()
+    for job in Job.objects.order_by('slug'):
+        _contract('Alpha %s' % job.name, jobs=[job])
+    _seed(profile)
+
+    run_id = _demo_runs(profile).filter(is_complete=True).values_list('pk', flat=True).first()
+    assert run_id is not None, 'no finished run to collide with'
+
+    # A foreign title whose `source_id` is exactly a seeded run's id.
+    foreign_title, _ = Title.objects.get_or_create(name='Some Badge Title')
+    foreign = UserTitle.objects.create(profile=profile, title=foreign_title,
+                                       source_type='badge_series', source_id=run_id)
+
+    Contract.objects.all().delete()
+    call_command('seed_challenge_demo', user=profile.psn_username, wipe=True, verbosity=0)
+
+    assert UserTitle.objects.filter(pk=foreign.pk).exists(), \
+        "another system's title was deleted because it shared a run id"
+    assert not UserTitle.objects.filter(profile=profile, source_type='challenge').exists(), \
+        'the challenge titles were not removed'
+
+
+@override_settings(DEBUG=True)
+def test_a_reseed_still_shows_the_title_band(client, catalogue):
+    """END TO END, because the two above are about rows and the symptom was a PAGE: a seeded Job Coverage
+    hero with no title band after a reseed, while the newer A-Z one showed fine.
+
+    This one DOES take the catalogue, because what it checks is the outcome the owner reported -- and that
+    outcome is correct via either half of the fix, which is exactly why it cannot stand alone.
+    """
+    profile = _hunter()
+    _seed(profile)
+    call_command('seed_challenge_demo', user=profile.psn_username, reset=True, verbosity=0)
+
+    body = client.get(reverse('challenges_hall_of_fame')).content.decode()
+
+    assert body.count('<a class="pp-chero') == 2, 'two finished runs, one of each type'
+    assert body.count('pp-chero__title') == 2, 'a reseeded finished run is missing its title band'
+    assert 'Job Challenge Champion' in body
+    assert 'A-Z Champion' in body
+
+
+@override_settings(DEBUG=True)
+def test_reset_removes_the_letter_stand_ins():
+    """They are catalogue rows in a real table, so leaving them behind means `--reset` no longer returns the
+    database to where it was -- which is the one promise that makes the command safe to re-run."""
+    from challenges.management.commands.seed_challenge_demo import GAP_SLUG_PREFIX
+
+    profile = _hunter()
+    _seed(profile, fill_letter_gaps=True)
+    assert Contract.objects.filter(slug__startswith=GAP_SLUG_PREFIX).exists()
+
+    call_command('seed_challenge_demo', user=profile.psn_username, reset=True)
+
+    # SEEDING RUNS AFTER THE RESET in the same invocation, and WITHOUT the flag this time, so nothing
+    # stands them back up. A leftover row here means the removal did not happen.
+    assert not Contract.objects.filter(slug__startswith=GAP_SLUG_PREFIX).exists(), \
+        'the placeholders survived --reset'
+
+
+@override_settings(DEBUG=True)
+def test_the_default_still_creates_no_contracts():
+    """The documented default is unchanged: this command makes no demo Contracts, because a demo Concept
+    renders the no-art placeholder and most of the questions worth asking in a browser cannot be answered
+    against a grey box. The flag is the opt-in exception for the one case where refusing costs more."""
+    from challenges.management.commands.seed_challenge_demo import GAP_SLUG_PREFIX
+
+    before = Contract.objects.count()
+
+    _seed(_hunter())
+
+    assert Contract.objects.count() == before, 'the default path invented a contract'
+    assert not Contract.objects.filter(slug__startswith=GAP_SLUG_PREFIX).exists()
+
+
+@override_settings(DEBUG=True)
+def test_the_shortfall_warning_names_the_remedy(capsys):
+    """A silently-unfinished "finished" run just does not appear on the Hall of Fame, and the owner hit
+    exactly that: `--wipe` and `--reset` both ran clean and produced no A-Z hero. The message has to name
+    the missing letters AND the flag that fixes it."""
+    _seed(_hunter())
+
+    out = capsys.readouterr().out
+
+    assert 'could not be finished' in out
+    assert 'OFF the Hall of Fame' in out
+    assert '--fill-letter-gaps' in out, 'the warning must say how to get past it'
 
 
 @override_settings(DEBUG=True)

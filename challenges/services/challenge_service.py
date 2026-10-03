@@ -132,7 +132,8 @@ def _refuse_if_beta_gated(profile):
     """A refusal with the reason in it, because the page this backs is a REAL page for free hunters.
 
     When Challenges was parked the decision was that somebody following a link into it gets told so on
-    a page, never bounced -- `tests/engine/test_challenges_coming_soon.py` pins that. The same applies
+    a page, never bounced -- `tests/engine/test_challenges_live.py` pins that (it was `test_challenges_coming_soon.py` until the real
+    pages took the URL, and was inverted rather than deleted). The same applies
     here: `trophies.mixins.PremiumRequiredMixin` would REDIRECT to `beta_access_required`, which is the
     behaviour that was rejected, so this module refuses with a message the page renders in place.
     """

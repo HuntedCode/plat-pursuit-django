@@ -569,8 +569,6 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     Asserted on the decorators' own configuration rather than by firing 31 requests: the rate is a
     number somebody may tune, and a test that breaks when they tune it teaches them to delete it.
     """
-    import re
-
     import challenges.views as views
 
     assert views.CHALLENGE_WRITE_RATELIMIT_GROUP
@@ -580,7 +578,26 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     # into the bucket identity, so changing `rate` or `key` on one door splits it just as surely -- and
     # an earlier version pinned only `group`, then asserted a COUNT of 2 that a third write door would
     # break while the sharing was still perfectly correct.
-    calls = [' '.join(c.split()) for c in re.findall(r'ratelimit\((.*?)\)\)', src, re.S)]
+    #
+    # EXTRACTED BY BALANCING PARENTHESES, not by a `ratelimit\((.*?)\)\)` regex. That regex assumed every
+    # limiter in this file is a METHOD decorator -- `@method_decorator(ratelimit(...))`, which ends in the
+    # `))` it looked for. The two public browse pages are limited at the CLASS level, so theirs end
+    # `..., name='get')` and there is no `))` to stop at: the non-greedy match ran on past the decorator and
+    # swallowed the entire class body, including its docstring. The test still failed, but for the wrong
+    # reason and with unreadable output, and an argument like `method=('GET', 'HEAD')` has an inner `)` that
+    # would have confused it either way. Balancing is what actually parses a call.
+    calls = []
+    at = src.find('ratelimit(')
+    while at != -1:
+        i, depth = at + len('ratelimit('), 1
+        while depth:
+            if src[i] == '(':
+                depth += 1
+            elif src[i] == ')':
+                depth -= 1
+            i += 1
+        calls.append(' '.join(src[at + len('ratelimit('):i - 1].split()))
+        at = src.find('ratelimit(', i)
 
     # PARTITIONED BY GROUP, because not every door in this file is a write any more. THREE kinds now, and
     # each exists because sharing with another would break something concrete:
@@ -600,8 +617,13 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     writes = [c for c in calls if 'group=CHALLENGE_WRITE_RATELIMIT_GROUP' in c]
     reads = [c for c in calls if 'group=CHALLENGE_READ_RATELIMIT_GROUP' in c]
     redeems = [c for c in calls if 'group=CHALLENGE_REDEEM_RATELIMIT_GROUP' in c]
+    # A FOURTH KIND, 2026-09-30: the two PUBLIC browse pages. It is the one kind whose doors must NOT share
+    # a bucket with each other, which is why it is partitioned as two lists rather than one -- see below.
+    browse = [c for c in calls if 'group=CHALLENGES_BROWSE_RATELIMIT_GROUP' in c]
+    hall = [c for c in calls if 'group=HALL_OF_FAME_RATELIMIT_GROUP' in c]
 
-    assert len(writes) + len(reads) + len(redeems) == len(calls), f'a door is on an unknown bucket: {calls}'
+    assert len(writes) + len(reads) + len(redeems) + len(browse) + len(hall) == len(calls), \
+        f'a door is on an unknown bucket: {calls}'
 
     assert len(writes) >= 4, 'start, hide, assign and clear must all be rate limited'
     assert len(set(writes)) == 1, f'the write doors do not share one bucket: {set(writes)}'
@@ -619,7 +641,33 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     # sailed through. The assertion did exactly what it said and nothing the comment above it claimed.
     assert len({views.CHALLENGE_WRITE_RATELIMIT_GROUP,
                 views.CHALLENGE_READ_RATELIMIT_GROUP,
-                views.CHALLENGE_REDEEM_RATELIMIT_GROUP}) == 3, 'two kinds share a bucket value'
+                views.CHALLENGE_REDEEM_RATELIMIT_GROUP,
+                views.CHALLENGES_BROWSE_RATELIMIT_GROUP,
+                views.HALL_OF_FAME_RATELIMIT_GROUP}) == 5, 'two kinds share a bucket value'
+
+    # ── THE BROWSE PAGES, where the rule INVERTS ──────────────────────────────────────────────────
+    #
+    # Every kind above shares one bucket per kind. These two must not share with EACH OTHER, and the
+    # reason is the failure that would otherwise be invisible: `django_ratelimit` derives a default group
+    # from the decorated function's module + qualname, and `method_decorator(..., name='get')` on a
+    # subclass that does not define `get` wraps the INHERITED `BaseListView.get` -- so both pages resolve
+    # to one qualname and searching the Challenges page silently spends the Hall of Fame's budget. Naming
+    # the groups explicitly is the fix, and this is the assertion that keeps them named.
+    assert len(browse) == 1, 'the Challenges browse page must be rate limited exactly once'
+    assert len(hall) == 1, 'the Hall of Fame must be rate limited exactly once'
+
+    # `key='ip'` ON BOTH, which is the other half. These are the only ANONYMOUS doors in this file, and
+    # `key='user'` buckets every anonymous caller in the world under one key -- so a single crawler would
+    # lock the page for everybody. Every other door here is behind a login, which is why they can use
+    # `key='user'` and these cannot.
+    #
+    # `method=('GET', 'HEAD')` AND NOT `method='GET'`: django_ratelimit does not count a method outside the
+    # list, and `django.views.View.setup` aliases `self.head = self.get` when a class defines no `head` --
+    # so a HEAD request ran the wrapped `get`, executed the full queryset, and was never metered. `curl -I`
+    # in a loop against `?q=` would have run the unindexed `LIKE` behind a `Profile` join for free.
+    for door in browse + hall:
+        assert "key='ip'" in door, f'an anonymous door buckets by user: {door}'
+        assert "method=('GET', 'HEAD')" in door, f'HEAD is unmetered on an anonymous door: {door}'
 
 
 def test_the_hide_dialog_names_the_button_the_hunter_will_see():

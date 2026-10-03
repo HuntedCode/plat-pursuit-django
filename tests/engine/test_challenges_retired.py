@@ -49,7 +49,7 @@ RETIRED_PATHS = (
     # canonical
     # `/community/challenges/` IS NOT HERE ANY MORE. It answers a real "coming back soon" page as of
     # 2026-09-19, holding the URL and the url_name the rebuilt browse will take so nothing that
-    # links to it has to change. `test_challenges_coming_soon.py` pins what it does and that it
+    # links to it has to change. `test_challenges_live.py` pins what it does and that it
     # stays a placeholder (noindex, no queries). Every other path below is still a 404: the rebuild
     # is not reusing them.
     '/community/challenges/az/create/',

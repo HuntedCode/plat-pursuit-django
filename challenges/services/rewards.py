@@ -605,8 +605,12 @@ def completion_ordinal(challenge):
     `A-Z Champion` becomes unreachable by any code path. Counting only runs finished no later than this one
     makes a later call for run 1 still say 1, so a backfill actually backfills.
 
-    Ties on `completed_at` count both, so two runs stamped in the same instant would both read the higher
-    ordinal. That is the safe direction: it can grant a title early, never make one unreachable.
+    Ties on `completed_at` count both, so two runs stamped in the same instant BOTH read 2 -- which means
+    ordinal 1 is unreachable for that profile and the earlier run's hero renders with no chip. An earlier
+    version of this paragraph called that "the safe direction: it can grant a title early, never make one
+    unreachable", which is exactly backwards about the tie case. It stays `lte` rather than `lt` because the
+    run being asked about must count itself, and the tie needs two separate `timezone.now()` calls to land on
+    the same microsecond -- so this is a documented sharp edge, not a live bug.
 
     Returns 0 for a run that is not complete, so callers that ask too early grant nothing.
     """
@@ -618,11 +622,80 @@ def completion_ordinal(challenge):
     ).count()
 
 
+def granted_titles_for(challenges):
+    """`{challenge_id: title name}` for runs whose completion title was actually granted. One query.
+
+    IT READS THE GRANT, NOT THE ORDINAL, and that is the whole point of the function existing rather than
+    the browse page calling `title_for(completion_ordinal(run))` per row. Two reasons, and the second is the
+    one that matters:
+
+    - COST. `completion_ordinal` is a COUNT per run, so a 24-entry page would be 24 extra queries to
+      recompute something already written down.
+    - TRUTH. This file's rule 4 contains a title-write failure rather than letting it fail the completion,
+      and `grant_completion_title` also declines to re-point a row another system already holds under the
+      same name -- it logs and leaves it. In both cases the run is finished and the hunter holds no title
+      from us. An ordinal recomputed on the page cannot know that, so it would show a prestige chip for a
+      title the hunter does not have, on the one page built to celebrate it. Reading the row means the chip
+      is absent exactly when the title is, and appears the moment a backfill grants it.
+
+    Runs with no granted title are simply absent from the map, so a caller's `.get(pk)` is the None case
+    without a second sentinel. Third and later completions earn nothing and so are legitimately absent.
+
+    MATCHED PER RUN, not by two independent `__in` clauses, and that is the third attempt at this guard.
+    The weak spot it protects: `source_id` is a bare `PositiveIntegerField` with no FK and
+    `(source_type, source_id)` carries no unique constraint, so the column is a convention rather than a key.
+
+    - A `profile_id__in={...}` set was the second attempt and it does NOT make a cross-profile read
+      impossible, though its comment said so. The set is page-wide, so a stray row whose `profile_id` is
+      *any* profile on the page passes both clauses: two hunters with finished runs on the same page, plus a
+      data migration writing hunter B's `UserTitle` against hunter A's run id, and A's hero shows B's title.
+      The set still goes in the query -- it keeps the index useful -- but the pairing is what decides, and
+      that has to happen against `(this run's profile, this run's id)`.
+    - ASCENDING `earned_at`, because `dict()` is LAST-WINS. The second attempt ordered `-earned_at`
+      descending and its comment claimed "the most recent grant wins" -- exactly inverted: descending puts
+      the newest row first and the oldest last, so the oldest won. Deterministically, and forever, since
+      `earned_at` is `auto_now_add`. Ascending is what the stated intent needs. Two rows for one run is not
+      reachable through `grant_completion_title` (one row per call), but it is through the shell backfill
+      this file advertises if a `completed_at` is ever edited, and a backfill means the later row.
+
+    ONE PASS OVER `challenges`, which is what makes it safe for any iterable including a generator. An
+    earlier version read the argument twice (once for the ids, once for the profiles) and guarded that with a
+    `list(...)`; building `owner_of` takes both values in a single comprehension, so the second pass -- and
+    the `list()` -- are gone rather than defended. A mutation run is what surfaced the dead call: deleting it
+    broke nothing.
+
+    The hazard is worth naming even though it is now structurally absent, because its failure mode was
+    SILENT. A consumed generator yields an empty map with a non-empty id set, so every prestige chip
+    disappears with no error. `test_the_title_lookup_survives_a_one_shot_iterable` fails if a second
+    `for c in challenges` ever returns.
+    """
+    #: {run id: the profile that run belongs to} -- the pairing the match is made against, built in ONE pass.
+    owner_of = {c.pk: c.profile_id for c in challenges}
+    if not owner_of:
+        return {}
+    rows = (
+        UserTitle.objects.filter(
+            source_type=TITLE_SOURCE, source_id__in=owner_of.keys(),
+            profile_id__in=set(owner_of.values()),
+        )
+        .order_by('earned_at', 'pk')
+        .values_list('source_id', 'profile_id', 'title__name')
+    )
+    return {run_id: name for run_id, profile_id, name in rows
+            if owner_of.get(run_id) == profile_id}
+
+
 def grant_completion_title(challenge):
     """Grant the title `challenge`'s ordinal earns, if any. Returns the `UserTitle` or None.
 
     IDEMPOTENT BY `get_or_create` on `(profile, title)`, which is what `unique_together` enforces anyway --
     so a second call cannot duplicate a row, and a repair can call this freely.
+
+    IDEMPOTENT IS NOT THE SAME AS CORRECT, though, and the gap cost a visible bug. `source_id` lives in
+    `defaults`, so it is written on CREATE only: an existing row kept whatever run it was first granted for.
+    `granted_titles_for` matches on that column to draw the Hall of Fame's title band, so a title whose
+    original run was hard-deleted became unreadable -- held by the hunter, invisible on the page, with
+    nothing logged. The `elif` below repairs exactly that case, and only that case.
 
     IT ALSO NOTICES A COLLISION RATHER THAN CELEBRATING IT. `UserTitle.unique_together` carries no
     `source_type`, so if a hunter already holds a title of this name from another system, `get_or_create`
@@ -647,6 +720,64 @@ def grant_completion_title(challenge):
         logger.error('challenge title %r is already held by profile %s from source %r -- the challenge '
                      'grant for run %s did nothing. One of the four challenge title names collides with '
                      'another system.', name, challenge.profile_id, user_title.source_type, challenge.pk)
+    elif not created and user_title.source_id != challenge.pk:
+        # AN ORPHANED `source_id` IS RE-POINTED, and this is the repair the docstring promises rather than a
+        # new behaviour. `source_id` is in `defaults`, so it is written on CREATE only -- an existing row of
+        # our own kept whatever run it was first granted for, silently, and `granted_titles_for` matches on
+        # exactly that column. So a title whose original run was hard-deleted could never be read again: the
+        # hunter holds it, the Hall of Fame hero shows no chip, and nothing logs.
+        #
+        # ONLY WHEN THE OLD RUN IS GONE. A `source_id` naming a live Challenge is not stale -- that run
+        # legitimately owns the title, and stealing it would move the chip to whichever run completed most
+        # recently. The narrow trigger is what makes this a repair instead of a race.
+        #
+        # Reachable in production by a hard delete or a data migration, and reachable constantly in
+        # development: `seed_challenge_demo --reset` deletes its runs and (until this was found) left their
+        # titles behind, so every reseed orphaned one. That is how it surfaced -- a seeded Job Coverage hero
+        # with no title band, reported from the browser.
+        already_named = (UserTitle.objects
+                         .filter(profile_id=challenge.profile_id, source_type=TITLE_SOURCE,
+                                 source_id=challenge.pk)
+                         .exclude(pk=user_title.pk)
+                         .exists())
+        if already_named:
+            # TWO OF OUR ROWS MUST NEVER NAME ONE RUN, and without this guard the repair created exactly
+            # that. The path is reachable entirely through supported operations:
+            #
+            #   1. run #1 finishes -> ordinal 1 -> `A-Z Champion`  (source_id = 1)
+            #   2. run #2 finishes -> ordinal 2 -> `A-Z Legend`    (source_id = 2)
+            #   3. run #1 is hard-deleted -- the event this repair exists for
+            #   4. the shell backfill this file advertises calls us for run #2. `completion_ordinal` now
+            #      counts only run #2, so it reads 1 and asks for `A-Z Champion` -- whose row is orphaned,
+            #      so the repair re-points Champion onto run #2 as well.
+            #
+            # Now `(Champion, 2)` and `(Legend, 2)` both exist, `granted_titles_for` collapses them to one
+            # entry, and the hero for a hunter with ONE finished run reads "A-Z Legend". Declining is
+            # correct: the run already has a title of ours, and which ordinal it should hold is a question
+            # for whoever is repairing the data, not for a side effect of a grant.
+            logger.warning('declining to re-point challenge title %r onto run %s for profile %s: that run '
+                           'is already named by another of our titles. The ordinals for this profile need '
+                           'a look.', name, challenge.pk, challenge.profile_id)
+        elif not Challenge.objects.filter(pk=user_title.source_id).exists():
+            # A CONDITIONAL UPDATE, not a read-modify-write. `get_or_create` ... `exists()` ... `save()`
+            # takes no lock on the `UserTitle` row, so under READ COMMITTED two callers could both read the
+            # stale `source_id`, both find the old run absent, and both write -- a lost update. Filtering on
+            # the value being replaced makes it a compare-and-swap: the second writer matches zero rows and
+            # says so. (Reachable only via the advertised backfill racing a live completion -- the live
+            # paths cannot contend, because one-active-run-per-type plus distinct names per ordinal means two
+            # completions never want the same `(profile, title)` row. Narrow, but the write was unserialised
+            # and the comment claimed the narrowness made it safe.)
+            moved = (UserTitle.objects
+                     .filter(pk=user_title.pk, source_id=user_title.source_id)
+                     .update(source_id=challenge.pk))
+            if moved:
+                logger.info('re-pointed challenge title %r for profile %s from deleted run %s to run %s',
+                            name, challenge.profile_id, user_title.source_id, challenge.pk)
+                user_title.source_id = challenge.pk
+            else:
+                logger.info('challenge title %r for profile %s was re-pointed concurrently; leaving it',
+                            name, challenge.profile_id)
+                user_title.refresh_from_db(fields=['source_id'])
     return user_title
 
 

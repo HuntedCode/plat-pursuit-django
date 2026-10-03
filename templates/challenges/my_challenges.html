@@ -29,7 +29,7 @@
 
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
                     <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ finished_total }}</span>
-                    <span class="text-[0.65rem] md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">finished</span>
+                    <span class="text-xs md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">finished</span>
                 </div>
             </div>
         </div>
@@ -173,7 +173,7 @@
                 {% endif %}
 
                 {% if card.visible_completed_count %}
-                <p class="text-[0.7rem] text-base-content/40 mt-1">
+                <p class="text-xs text-base-content/40 mt-1">
                     {{ card.visible_completed_count }} finished before
                 </p>
                 {% endif %}

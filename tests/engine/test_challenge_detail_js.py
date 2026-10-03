@@ -1679,10 +1679,19 @@ def test_every_list_in_the_challenge_templates_declares_its_role():
     """
     import re as _re
 
-    for name in ('challenge_detail.html', 'my_challenges.html'):
-        path = ROOT / 'templates' / 'challenges' / name
-        if not path.exists():
-            continue
+    # EVERY TEMPLATE IN THE APP, DISCOVERED RATHER THAN LISTED, and the hand-written list is why this guard
+    # missed one. It named only `challenge_detail.html` and `my_challenges.html`, so when
+    # `partials/_run_hero.html` grew a `<ul>` for the plaque's family band the guard had nothing to say --
+    # the fifth list in this app to ship without the role, in the app whose templates state the rule four
+    # times. A PARTIAL was all it took to evade it, which makes the enumeration the bug rather than the
+    # oversight.
+    templates = sorted((ROOT / 'templates' / 'challenges').rglob('*.html'))
+    assert templates, 'no challenge templates found, so this guard is scanning nothing'
+
+    offenders = []
+    for path in templates:
         body = _template_code(path.read_text(encoding='utf-8'))
         for tag in _re.findall(r'<ul\b[^>]*>', body):
-            assert 'role="list"' in tag, '%s has a list with no role: %s' % (name, tag)
+            if 'role="list"' not in tag:
+                offenders.append('%s: %s' % (path.name, tag))
+    assert offenders == [], 'lists with no role:\n  %s' % '\n  '.join(offenders)

@@ -1,9 +1,17 @@
 """Seed a dev profile with Challenge runs in every state a reward surface can be in, so the panel, the
-ledger, the pip and the Start card can all be LOOKED AT without finishing twenty-five contracts by hand.
+ledger, the pip, the Start card and BOTH public pages can be LOOKED AT without finishing fifty contracts
+by hand.
+
+FOUR RUNS, two per type, and the pairing is deliberate: one finished and one in progress of each. The
+finished pair is what puts a hero of each type on the Hall of Fame -- including the A-Z one, whose 26-square
+board and `A-Z Champion` chip had no way to be seen at all while the seeder produced a single finished Job
+Coverage run. The in-progress pair is what populates the Challenges browse page and the reward panel's
+mixed-state ledger.
 
     python manage.py seed_challenge_demo --user <psn_username> --reset   # re-runnable
     python manage.py seed_challenge_demo --user <psn_username> --list    # print what is there, write nothing
     python manage.py seed_challenge_demo --user <psn_username> --wipe    # remove ALL of that profile's runs
+    python manage.py seed_challenge_demo --user <psn> --reset --fill-letter-gaps   # thin catalogue; see below
 
 `--wipe` EXISTS BECAUSE THE SAFE VERSION DEADLOCKED. This command refuses to adopt a run it did not create
 (see `_start_fresh` for why -- adopting one made `--reset` delete real progress), `--reset` only removes runs
@@ -24,17 +32,35 @@ WHAT IT DOES NOT TOUCH, which is what makes `--reset` safe:
   job is to decide WHEN a square completes, and here we already know. It means the command never invents
   trophies, platinums or contract credit for a real account, so nothing it does can leak into Career, the
   boards, or a real claim.
-- **No demo Contracts.** It picks REAL live contracts out of the dev catalogue, because the whole reason to
-  look at this in a browser is the cover art: a demo Concept renders the no-art placeholder, and half the
-  questions worth asking ("does the XP pip read against a cover?") cannot be answered against a grey box.
+- **No demo Contracts, unless `--fill-letter-gaps` is passed.** By default it picks REAL live contracts out
+  of the dev catalogue, because the whole reason to look at this in a browser is the cover art: a demo
+  Concept renders the no-art placeholder, and half the questions worth asking ("does the XP pip read against
+  a cover?") cannot be answered against a grey box.
 
-So `--reset` removes exactly two things: the Challenge rows this command created (slots cascade with them)
-and the challenge XP grants it paid, identified by the slot ids it is about to delete. Then it rebuilds the
-job-XP cache from the remaining real ledger, so real levels survive.
+  `--fill-letter-gaps` is the opt-in exception, and only for letters the catalogue cannot cover at all.
+  Without it a dev database missing Q, X or Z produces no finished A-Z run, so the Hall of Fame has no A-Z
+  hero to look at -- which is a worse outcome than two or three grey squares out of twenty-six.
+  `_stand_in_for_letter` documents what those rows are, and what keeps them off the community announcer and
+  the public board's Latest window.
+
+So `--reset` removes FOUR things, each in its own method and each for a stated reason: the challenge XP
+grants it paid (by slot id, before the slots go), the completion `UserTitle` rows its finished runs earned
+(by `source_id`, same reason -- no FK ties them), the Challenge rows themselves (slots cascade with them),
+and any `--fill-letter-gaps` placeholder contracts. Then it rebuilds the job-XP cache from the remaining real
+ledger, so real levels survive.
+
+One exception inside that last removal, and it is deliberate: a placeholder a hunter has actually EARNED is
+left in place, because `EarnedContract.contract` and `ContractXPGrant.earned_contract` are both CASCADE, so
+deleting it would punch a hole in the append-only XP ledger.
+
+(An earlier version of this paragraph said "exactly two things", which was true before the titles and the
+placeholders existed.)
 
 THE RUNS ARE NAMED so they are identifiable on sight and on reset -- `DEMO_TAG` in the name, which is also
 the reset scope. A hunter's own runs are auto-named by the service and never carry it.
 """
+from datetime import timedelta
+
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -48,7 +74,7 @@ from challenges.models import (
 )
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
-from trophies.models import Contract, ContractXPGrant, Job, Profile
+from trophies.models import Contract, ContractXPGrant, EarnedContract, Job, Profile, UserTitle
 from trophies.services import contract_service
 from trophies.services.career_attention import CHALLENGE_XP_TTL
 from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
@@ -56,14 +82,36 @@ from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
 #: In every seeded run's name. The reset scope, and a visible marker that a run is not the hunter's own.
 DEMO_TAG = '[demo]'
 
+#: Slug prefix for the stand-in contracts `--fill-letter-gaps` creates, and the scope `--reset`/`--wipe`
+#: remove them by. A prefix rather than a flag field because `Contract` has no "this is fake" column and
+#: adding one to a production model for a dev command's benefit is the wrong trade.
+#:
+#: PER PROFILE, which is a correction. Keyed on the letter alone, two dev profiles seeded with
+#: `--fill-letter-gaps` SHARED the rows -- so resetting profile A deleted the contracts under profile B's
+#: completed Q/X/Z squares, `SET_NULL`ing their FK and leaving them permanently de-anchored (the snapshot
+#: keeps them filled and the check constraint still holds, which is exactly why nothing would have
+#: complained). The run deletion is per-profile, so its companion cleanup has to be too.
+GAP_SLUG_PREFIX = 'demo-az-gap-'
+
+
+def _gap_prefix(profile):
+    """The stand-in slug prefix for ONE profile. See `GAP_SLUG_PREFIX` on why this is not global."""
+    return '%s%s-' % (GAP_SLUG_PREFIX, profile.pk)
+
 #: How many squares the mixed-state jobs run fills, and how many of those are pre-claimed. Small on
 #: purpose: this scenario is about a ledger holding BOTH states at once, which six rows show as well as
 #: twenty-five and reads faster on a phone.
 MIXED_FILLED = 6
 MIXED_CLAIMED = 3
 
-#: How much of the alphabet the A-Z run fills. Enough that the board is not mostly empty, few enough that
-#: the run is obviously unfinished.
+#: How far back a `--fill-letter-gaps` stand-in's `went_live_at` is set, so it falls outside
+#: `contracts_service.new_contract_cutoff()` and cannot wear the public board's "New" chip. Comfortably
+#: past `NEW_CONTRACT_WINDOW_DAYS` rather than exactly on it, so a change to that window cannot drag a
+#: placeholder back onto the board.
+GAP_BACKDATE_DAYS = 400
+
+#: How much of the alphabet the IN-PROGRESS A-Z run fills. Enough that the board is not mostly empty, few
+#: enough that the run is obviously unfinished.
 AZ_FILLED = 9
 
 
@@ -80,6 +128,9 @@ class Command(BaseCommand):
                             help="Remove ALL of this profile's challenge runs first, demo or not. The way "
                                  "out when the profile's own runs block seeding -- hiding does not free the "
                                  "slot, and the admin cannot delete.")
+        parser.add_argument('--fill-letter-gaps', action='store_true',
+                            help='Create stand-in contracts for letters the catalogue cannot cover, so '
+                                 'the finished A-Z run can exist. Those squares show no cover art.')
         parser.add_argument('--force', action='store_true',
                             help='Allow running with DEBUG=False. This command writes to the XP ledger.')
 
@@ -103,7 +154,7 @@ class Command(BaseCommand):
                 self._wipe(profile)
             elif opts['reset']:
                 self._reset(profile)
-            self._seed(profile)
+            self._seed(profile, fill_letter_gaps=opts['fill_letter_gaps'])
 
         self._warn_if_the_notification_template_is_missing()
         self._report(profile)
@@ -138,15 +189,26 @@ class Command(BaseCommand):
             profile=profile, source=rewards.XP_SOURCE, source_id__in=slot_ids)
         paid = grants.count()
         grants.delete()
+        run_ids = list(demo.values_list('pk', flat=True))
+        titles = self._remove_titles(profile, run_ids)
         runs = demo.count()
         demo.delete()
 
         # Rebuild the cache from what is LEFT, which is the real ledger. Without this the profile keeps
         # levels bought by XP whose grants no longer exist.
+        # THE STAND-INS GO BEFORE THE RECOMPUTE. `recompute_profile_job_xp` exists because, as the note
+        # above says, "without this the profile keeps levels bought by XP whose grants no longer exist" --
+        # and it used to run BEFORE a delete that could itself remove grants, so in exactly the case the
+        # recompute is for it was computed against a ledger about to shrink. The guard inside
+        # `_remove_letter_stand_ins` now makes that unreachable, but an order that is only correct because
+        # of a guard two methods away is the kind a later edit breaks.
+        gaps = self._remove_letter_stand_ins(profile)
         contract_service.recompute_profile_job_xp(profile)
         self._forget_nav_marker(profile)
-        self.stdout.write('  reset: %d demo run(s), %d seeded grant(s) removed; real XP rebuilt.'
-                          % (runs, paid))
+        self.stdout.write('  reset: %d demo run(s), %d seeded grant(s)%s%s removed; real XP rebuilt.'
+                          % (runs, paid,
+                             ', %d title(s)' % titles if titles else '',
+                             ', %d placeholder contract(s)' % gaps if gaps else ''))
 
     def _wipe(self, profile):
         """Remove EVERY challenge run of this profile, demo or not, and the challenge XP tied to them.
@@ -170,14 +232,18 @@ class Command(BaseCommand):
             profile=profile, source=rewards.XP_SOURCE, source_id__in=slot_ids)
         paid = grants.count()
         grants.delete()
+        titles = self._remove_titles(profile, list(runs.values_list('pk', flat=True)))
         n = runs.count()
         runs.delete()
 
+        gaps = self._remove_letter_stand_ins(profile)
         contract_service.recompute_profile_job_xp(profile)
         self._forget_nav_marker(profile)
         self.stdout.write(self.style.WARNING(
-            '  wiped: %d run(s) (demo AND real), %d challenge grant(s); real XP from other sources rebuilt.'
-            % (n, paid)))
+            '  wiped: %d run(s) (demo AND real), %d challenge grant(s)%s%s; real XP from other sources '
+            'rebuilt.' % (n, paid,
+                          ', %d title(s)' % titles if titles else '',
+                          ', %d placeholder contract(s)' % gaps if gaps else '')))
 
     @staticmethod
     def _forget_nav_marker(profile):
@@ -201,17 +267,27 @@ class Command(BaseCommand):
 
     # ── seeding ───────────────────────────────────────────────────────────────────────────────────
 
-    def _seed(self, profile):
+    def _seed(self, profile, *, fill_letter_gaps):
         jobs = list(Job.objects.order_by('display_order', 'slug'))
         if not jobs:
             raise CommandError('The job catalogue is empty; seed the jobs first.')
 
-        # THE FINISHED RUN FIRST, because completing a run is what frees the one-active-per-type slot for
-        # the mixed run below. The other order means the second `start` hands back the first run.
+        # THE FINISHED RUN FIRST, for BOTH types, because completing a run is what frees the
+        # one-active-per-type slot for the in-progress one below. The other order means the second `start`
+        # hands back the first run.
         self._jobs_run(profile, jobs, fill=len(jobs), claim=0, label='finished, nothing claimed')
         self._jobs_run(profile, jobs, fill=MIXED_FILLED, claim=MIXED_CLAIMED,
                        label='in progress, %d of %d claimed' % (MIXED_CLAIMED, MIXED_FILLED))
-        self._az_run(profile)
+
+        # A FINISHED A-Z RUN, added 2026-09-30 so the Hall of Fame can be looked at with BOTH types on it.
+        # Only a finished run reaches that page, and until now the seeder produced exactly one finished run
+        # and it was Job Coverage -- so the A-Z hero, its 26-square board and its `A-Z Champion` title chip
+        # had no way to be seen at all. Completing it also grants the real title through the real service,
+        # which is what the chip reads.
+        self._az_run(profile, fill=None, label='finished', leave_some_unfinished=False,
+                     fill_letter_gaps=fill_letter_gaps)
+        self._az_run(profile, fill=AZ_FILLED, label='in progress, %d letters' % AZ_FILLED,
+                     leave_some_unfinished=True)
 
     def _start_fresh(self, profile, challenge_type, label):
         """A run this command CREATED, or None -- never one that was already there.
@@ -265,29 +341,194 @@ class Command(BaseCommand):
         challenge.refresh_from_db()
         return challenge
 
-    def _az_run(self, profile):
-        """An A-Z run part way through. It pays no XP, so it is here for the header's title chip and for
-        the fact that it draws NO reward panel at all."""
-        label = 'in progress, %d letters' % AZ_FILLED
+    def _az_run(self, profile, *, fill, label, leave_some_unfinished, fill_letter_gaps=False):
+        # `fill_letter_gaps` KEEPS ITS DEFAULT, unlike `_seed`'s, because the in-progress A-Z call does
+        # not pass it -- that run is meant to be unfinished, so standing letters up for it would be
+        # work in service of nothing. `_seed`'s default was removed: `handle` always passes the parsed
+        # option, so it could never be reached, and a mutation run proved it by flipping it with no
+        # test noticing.
+        """An A-Z run. `fill=None` means every letter, which is how the finished one is asked for.
+
+        PARAMETERISED LIKE `_jobs_run`, because there are now two of these and they differ only in how far
+        they get. `fill=None` rather than `fill=26` so the caller does not restate the alphabet's length --
+        the run's own `total_slots` is the authority, and it is what `is_complete` is measured against.
+
+        `leave_some_unfinished` is what makes the in-progress board show FILLED and COMPLETED squares side
+        by side. It must be False for the finished run, and not merely because the last squares would look
+        odd: a run only reaches `is_complete` when every square is completed, so a single merely-filled
+        square keeps it off the Hall of Fame entirely -- which is the one thing the finished run exists for.
+
+        A-Z pays no job XP, so neither run writes to the ledger; the finished one does grant the real
+        `A-Z Champion` title through `rewards.on_run_completed`, which is what the hero's chip reads.
+
+        `fill_letter_gaps` EXISTS BECAUSE A DEV CATALOGUE IS A SUBSET. The module docstring says this command
+        makes no demo Contracts, and the reason is cover art: a demo Concept renders the no-art placeholder,
+        and half the questions worth asking in a browser cannot be answered against a grey box. That holds
+        for the general case and does not hold for this one. Prod has no empty letter (its thinnest are Q, X
+        and Z at six to ten contracts), but a dev copy easily has several -- and the cost of refusing is not
+        a few grey squares, it is NO finished A-Z run at all, so the Hall of Fame has no A-Z hero and the
+        26-square board and its title chip cannot be looked at by any means short of finishing 26 contracts
+        by hand. Two or three placeholder cells out of 26 is the better trade.
+        OPT-IN, so the documented default is unchanged, and the stand-ins carry `GAP_SLUG_PREFIX` so
+        `--reset` and `--wipe` take them away again.
+        """
         challenge = self._start_fresh(profile, CHALLENGE_TYPE_AZ, label)
         if challenge is None:
             return None
 
+        # `total_slots` IS THE ALPHABET, read off the run rather than hardcoded.
+        wanted = challenge.total_slots if fill is None else fill
+
         filled = 0
         for slot in challenge.slots.order_by('position'):
-            if filled >= AZ_FILLED:
+            if filled >= wanted:
                 break
             contract = self._contract_for(profile, challenge, slot.key)
+            if contract is None and fill_letter_gaps:
+                contract = self._stand_in_for_letter(profile, slot.key)
             if contract is None:
                 continue
             svc.assign(challenge, profile, slot.key, contract)
-            # Two thirds of them finished, so the board shows filled AND completed squares side by side.
-            if filled % 3 != 2:
+            if not (leave_some_unfinished and filled % 3 == 2):
                 svc.mark_slot_completed(challenge.slots.get(key=slot.key))
             filled += 1
 
         challenge.refresh_from_db()
+
+        # SAID OUT LOUD WHEN THE CATALOGUE CANNOT FINISH IT, because a silently-unfinished "finished" run
+        # just does not appear on the Hall of Fame and there is nothing on screen to explain why. The
+        # letters most likely to be missing are the ones prod also finds thinnest (Q, X, Z).
+        if fill is None and not challenge.is_complete:
+            short = [s.key for s in challenge.slots.order_by('position') if not s.is_completed]
+            self.stdout.write(self.style.WARNING(
+                '  the A-Z run could not be finished: no live contract in this catalogue starts with '
+                '%s. It stays OFF the Hall of Fame (only complete runs are listed) and earns no title.\n'
+                '  Re-run with --fill-letter-gaps to stand those letters up with placeholder contracts '
+                '(no cover art on those squares, removed again by --reset).'
+                % ', '.join(short)))
+
         return challenge
+
+    @staticmethod
+    def _remove_titles(profile, run_ids):
+        """Delete the completion titles the runs being removed had granted. Returns how many went.
+
+        BEFORE THE RUNS, like the grants above, and for the same reason: a `UserTitle` is tied to its run by
+        `source_id` alone -- no FK, no cascade -- so once the Challenge rows are gone there is nothing left
+        to identify the titles by. They would survive forever, held by the hunter, pointing at a pk that no
+        longer exists.
+
+        AND THAT IS NOT MERELY UNTIDY. `granted_titles_for` matches `source_id` against the runs on the
+        page, so an orphan is unreadable: the next seeded run completes, `grant_completion_title` finds the
+        existing `(profile, title)` row and (before this was found) kept its stale `source_id`, and the
+        Hall of Fame hero drew no title band. That is exactly how this surfaced -- a seeded Job Coverage
+        finish with no title, reported from the browser, while the newer A-Z one showed fine because its
+        title had only ever been granted against a live run.
+
+        `rewards.grant_completion_title` now repairs an orphan it meets, so the bug is fixed on both sides.
+        This half stops them being created; that half heals the ones already out there.
+
+        SCOPED BY `source_type` AND `source_id`. Without the source term this would delete badge and
+        milestone titles that happen to share a run's id.
+        """
+        if not run_ids:
+            return 0
+        titles = UserTitle.objects.filter(
+            profile=profile, source_type=rewards.TITLE_SOURCE, source_id__in=run_ids)
+        count = titles.count()
+        titles.delete()
+        return count
+
+    def _remove_letter_stand_ins(self, profile):
+        """Delete this profile's `--fill-letter-gaps` placeholders. Returns how many went.
+
+        IT REFUSES ANY STAND-IN A HUNTER HAS ACTUALLY EARNED, and that guard is the important part. An
+        earlier version discussed exactly one relation -- `ChallengeSlot.contract` `SET_NULL` -- and
+        concluded "the worst case is survivable". It missed that `EarnedContract.contract` is **CASCADE**
+        and `ContractXPGrant.earned_contract` is **CASCADE** behind it, so deleting a stand-in transitively
+        deleted rows from the ledger whose own docstring calls it "Immutable job-XP ledger ... NEVER
+        recomputed" and which this feature's XP guard calls append-only, offsettable only by a negating row.
+        Reachable because a stand-in must be `is_live=True` to fill its square, so a hunter can platinum it
+        like any other contract -- and `_reset`'s headline promise is that it touches no `EarnedContract`.
+
+        So a stand-in with any `EarnedContract` is left in place and reported. A stray placeholder contract
+        in a dev catalogue is a cosmetic problem; a hole in an append-only ledger is not.
+
+        AFTER THE RUNS, never before. `ChallengeSlot.contract` is `SET_NULL`, so deleting a contract a live
+        square points at leaves that square filled (the snapshot survives, which is what the snapshot is
+        for) but pointing at nothing -- and a COMPLETED slot in that state must still satisfy
+        `challengeslot_completed_is_filled_dated_and_explained`, which it does, because that constraint
+        reads `contract_slug` rather than the FK. Taking the runs out first means it does not arise, and
+        both callers do.
+
+        SCOPED BY THIS PROFILE'S SLUG PREFIX. Not by name (a real contract could legitimately be named
+        that), not by `igdb_id__isnull=True` (that is the shape of every admin and episodic contract in the
+        catalogue, so it would delete real curation), and not by the shared prefix alone -- see
+        `GAP_SLUG_PREFIX` on why the profile id is part of it.
+        """
+        stand_ins = Contract.objects.filter(slug__startswith=_gap_prefix(profile))
+        earned = set(
+            EarnedContract.objects.filter(contract__in=stand_ins).values_list('contract_id', flat=True))
+        if earned:
+            self.stdout.write(self.style.WARNING(
+                '  %d placeholder contract(s) kept: a hunter has earned them, and deleting one would '
+                'cascade into the append-only job-XP ledger.' % len(earned)))
+        removable = stand_ins.exclude(pk__in=earned)
+        count = removable.count()
+        removable.delete()
+        return count
+
+    def _stand_in_for_letter(self, profile, letter):
+        """A live Contract whose name starts with `letter`, created because nothing in the catalogue does.
+
+        NO CONCEPT, NO IGDB MATCH, NO GAME, deliberately. Those three are what `covers_by_contract` needs to
+        resolve art, and inventing them would mean inventing a game that does not exist in order to put a
+        placeholder image on screen. Without them the square draws `.pp-chero__sq--bare`, which is a real
+        rendering path with its own styling -- the "contract exists, cover does not resolve" case -- so the
+        board stays honest about what it knows.
+
+        `get_or_create` on the slug so re-seeding without `--reset` reuses the same stand-in rather than
+        colliding on `Contract.slug`, which is globally unique.
+
+        `igdb_id = None`, WHICH IS THE REAL SHAPE for a contract that represents no IGDB game -- the field's
+        own help text calls that the admin/episodic case. A first draft of this put a negative number there
+        on the stated grounds that the column was non-nullable; it is `null=True, blank=True, unique=True`,
+        so that comment was false and the value was an invention. Postgres treats NULLs as distinct under a
+        unique index, so several stand-ins coexist. It also means `member_concepts_by_contract` skips its
+        igdb lookup entirely, which is how these squares reach the no-art path by the same route a real
+        episodic contract would.
+        """
+        from django.utils import timezone
+
+        slug = '%s%s' % (_gap_prefix(profile), letter.lower())
+        # IT MUST NOT REACH A PUBLIC SURFACE, and the first version did on two of them.
+        #
+        # `is_live=True` IS REQUIRED -- `eligibility._slot_pool` filters on it, so a stand-in that is not
+        # live cannot fill the square it exists for. But `is_live=True` plus a non-null `went_live_at` plus
+        # a null `announced_at` is EXACTLY `contract_announcer.pending_contracts()`' predicate, so
+        # `announce_contracts` would have posted "Q (placeholder for the demo A-Z run)" to the community
+        # Discord as a newly published Job Board contract. The same two flags also put it inside
+        # `contracts_service.new_contract_cutoff()`, so it wore the "New" chip on the public board.
+        #
+        # `announced_at` STAMPED AT CREATION takes it out of the announcer's queue permanently -- the row
+        # reads as already announced, which is the only state that is never queued. And `went_live_at` is
+        # backdated past the NEW window, so it cannot be "Latest" either. Both are lies about a row that is
+        # itself a placeholder, which is the right trade: the alternative is a dev command that can post to
+        # a real channel.
+        now = timezone.now()
+        contract, created = Contract.objects.get_or_create(
+            slug=slug,
+            defaults={
+                'name': '%s (placeholder for the demo A-Z run)' % letter,
+                'is_live': True,
+                'igdb_id': None,
+                'went_live_at': now - timedelta(days=GAP_BACKDATE_DAYS),
+                'announced_at': now,
+            },
+        )
+        if created:
+            self.stdout.write('    stood up a placeholder contract for %s' % letter)
+        return contract
 
     @staticmethod
     def _contract_for(profile, challenge, key):
@@ -375,6 +616,14 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('No seeded demo runs for %s.' % profile.psn_username))
             return
 
+        # THE GRANTED TITLES, not recomputed ones. `rewards.summary` derives `title_name`/`title_earned`
+        # from a recomputed ordinal, which is exactly the divergence `granted_titles_for` exists to prevent:
+        # if the title write was contained by this feature's rule 4, or the name collided with another
+        # system and was logged-and-left, the hunter holds nothing and the hero draws no band -- while the
+        # summary happily names a title. A diagnostic that denies the bug it exists to surface is worse than
+        # no diagnostic.
+        granted = rewards.granted_titles_for(runs)
+
         w = self.stdout.write
         w('')
         w(self.style.MIGRATE_HEADING('Seeded runs for %s' % profile.psn_username))
@@ -385,12 +634,33 @@ class Command(BaseCommand):
             w('    %d/%d squares, %s claimable, %s XP claimed'
               % (run.completed_count, run.total_slots, summary['claimable_count'],
                  '{:,}'.format(summary['paid_xp'])))
+            # WHICH PAGE EACH RUN IS ON, because that is the question two of these four exist to answer and
+            # it is not guessable from the numbers: a run one square short of complete reads as finished in
+            # a `25/26` and is nowhere near the Hall of Fame. `is_deleted` is checked too -- hiding takes a
+            # finished run off the Hall as surely as being unfinished does.
+            if run.is_deleted:
+                w('    on NEITHER public page (hidden)')
+            elif run.is_complete:
+                held = granted.get(run.pk)
+                if held:
+                    w('    on the HALL OF FAME -- title: %s' % held)
+                elif summary['title_name']:
+                    # THE DISAGREEMENT IS WORTH PRINTING, because it is the shape of a real bug: the run's
+                    # ordinal says it earned a title and no granted row names it.
+                    w('    on the HALL OF FAME -- NO title band (ordinal says %s, but no UserTitle names '
+                      'this run)' % summary['title_name'])
+                else:
+                    w('    on the HALL OF FAME -- no title (third or later completion)')
+            else:
+                w('    on the CHALLENGES browse page (in flight)')
         w('')
-        w(self.style.MIGRATE_HEADING('And the personal page'))
-        w('    %s' % reverse('my_challenges'))
+        w(self.style.MIGRATE_HEADING('And the pages'))
+        w('    %s   (yours)' % reverse('my_challenges'))
+        w('    %s   (public: runs in flight)' % reverse('challenges'))
+        w('    %s   (public: finished runs)' % reverse('challenges_hall_of_fame'))
         w('')
         w('Signed out (or a private window) on any run URL above gives you the VISITOR view:')
-        w('the reward panel with no Claim buttons, which is what the Hall of Fame will show.')
+        w('the reward panel with no Claim buttons, which is what a Hall of Fame visitor sees.')
 
     @staticmethod
     def _owed_clause(run):

@@ -36,7 +36,7 @@ comforting claim is worse than none.
 """
 from gamelists.services.covers import cover_games_for, sort_key
 
-from challenges.models import CHALLENGE_TYPE_AZ
+from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS, ChallengeSlot
 from challenges.services.eligibility import member_concepts_by_contract
 from trophies.models import Contract, Job
 from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, job_atom
@@ -128,6 +128,152 @@ def cards_for(slots):
         card['index'] = 0
         cards.append(card)
     return cards
+
+
+def boards_for(challenges):
+    """`{challenge_id: [group, ...]}` for MANY runs at once -- the board a browse entry draws.
+
+    A GROUP IS `{label, slug, squares}` and a square is `{key, label, job, cover}` -- the same three keys on
+    BOTH branches, which is a correction: the A-Z branch carried an `icon` the jobs branch had dropped, so
+    the function returned two shapes depending on challenge type. `slot_groups` keeps an `icon` because the
+    detail board's shelf heads still draw one; the hero's shelves took named tabs instead.
+
+    The shape otherwise mirrors `slot_groups`, which the run's own page uses, so the hero and the detail
+    board speak one vocabulary: A-Z comes back as ONE unlabelled group, Job Coverage as one group per
+    discipline. An EMPTY run comes back as `[]` from both branches, so `{% if board %}` is a reliable test
+    for "there is a board to draw".
+
+    IT USED TO RETURN BARE COVERS, and the squares carried `{'cover'}` alone on the stated grounds that a
+    board "is a mosaic, not a labelled grid, with the named grid one click away". The owner overruled it on
+    a browser pass, and rightly: 26 covers with no key is pretty and says nothing about what the run was.
+    An A-Z square's letter and a jobs square's discipline-tinted icon are the whole point of the board, and
+    they are also what makes the two types look like different achievements rather than one template.
+
+    FLAT ACROSS THE WHOLE PAGE, which is still the only reason a board can appear on a browse surface. None
+    of the queries below scales with the number of runs; what varies is which of them are needed at all, so
+    the cost is a RANGE and stating it as one number was wrong (`slot_cards` states its own honestly, and
+    this regressed from it):
+
+    - **6** -- a page with a jobs run, igdb-matched contracts and resolvable covers: the slots, the
+      contracts, two for membership, one for every cover, one for the job catalogue;
+    - **5** -- an A-Z-only page, where the catalogue is never read (the note on that branch says so, which
+      already contradicted the headline figure);
+    - **5** -- all-episodic contracts, where `member_concepts_by_contract` skips its igdb lookup;
+    - **4** -- contracts present but no trusted concepts, so `cover_games_for` is never called;
+    - **1 to 2** -- no filled squares at all, where `covers_by_contract` returns before issuing anything.
+
+    THE CATALOGUE IS READ ONCE, which is why this does not call `key_atoms`: that helper takes a CHALLENGE,
+    so a page of eight jobs runs would read the same 25-row catalogue eight times.
+
+    `.only(...)` ON BOTH ROW READS, for the reason `cards_for` spells out at length. `key` has joined the
+    field list because the squares are labelled now -- which is exactly the condition `_card`'s rule sets
+    for a field to exist ("they come back when a reader does"), rather than a drift back toward fetching
+    columns on spec.
+    """
+    challenges = list(challenges)
+    ids = [c.pk for c in challenges]
+    if not ids:
+        return {}
+    type_of = {c.pk: c.challenge_type for c in challenges}
+
+    slots = list(
+        ChallengeSlot.objects.filter(challenge_id__in=ids)
+        # THREE COLUMNS, which is every column a board reads. `position` stays out: `order_by` works on a
+        # deferred column, so ordering by it costs nothing to omit.
+        .only('challenge', 'contract', 'key')
+        # EXPLICIT, though `Meta.ordering` already says `position, pk`: this read spans runs, so relying on
+        # the model default would rest every board's order on a clause written for single-run reads.
+        .order_by('challenge_id', 'position', 'pk')
+    )
+
+    contract_ids = {s.contract_id for s in slots if s.contract_id}
+    covers = covers_by_contract(
+        list(Contract.objects.filter(pk__in=contract_ids).only('igdb_id', 'is_live'))
+        if contract_ids else [])
+
+    # THE CATALOGUE ONCE, AND ONLY IF NEEDED. A Hall of Fame page can legitimately hold no jobs run at all
+    # (the type filter, or simply nobody having finished one), and then this query is skipped entirely --
+    # which is what keeps an A-Z-only page at five.
+    atoms = {}
+    if any(kind == CHALLENGE_TYPE_JOBS for kind in type_of.values()):
+        atoms = {job.slug: job_atom(job) for job in Job.objects.all()}
+
+    squares = {pk: [] for pk in ids}
+    for slot in slots:
+        atom = atoms.get(slot.key)
+        squares[slot.challenge_id].append({
+            'key': slot.key,
+            # `label` IS A PLAIN STRING FOR BOTH TYPES, as on the detail square: a letter is its own label
+            # and a job's is its name, and the screen-reader line wants one spelling of "which square".
+            # `label_for_key` degrades a job slug whose `Job` row was deleted, so a square can always say
+            # something readable rather than `card-shark`.
+            'label': atom['name'] if atom else label_for_key(slot.key),
+            'job': atom,
+            'cover': covers.get(slot.contract_id),
+        })
+
+    return {pk: _board_groups(type_of[pk], squares[pk]) for pk in ids}
+
+
+def _board_groups(challenge_type, squares):
+    """`squares` arranged the way the hero should draw them -- one group for A-Z, one per discipline for jobs.
+
+    THE SAME BUCKETING RULES AS `slot_groups`, and they are not simplifications of it:
+
+    - A-Z GETS ONE UNLABELLED GROUP, not 26 groups of one. The alphabet has no sub-structure.
+    - ORDER COMES FROM `DISCIPLINE_LABELS`, because that dict IS the canonical radar sequence (combat,
+      exploration, mind, heart, finesse). Sorting the `discipline` COLUMN gives the alphabetical one, which
+      agrees for two disciplines and then diverges.
+    - BUCKETED BY DICT, NOT BY ADJACENCY. `position` is frozen at creation, so a `Job.discipline` edited
+      after a run was created moves nothing -- and `discipline_order()` collapses every unseeded discipline
+      to one sort value, so two unknown ones interleave. A group's squares need not be contiguous.
+    - EVERY BUCKET IS EMITTED. `Job.discipline` is `choices=` only, which Postgres does not enforce, so a
+      discipline with no `DISCIPLINE_LABELS` entry is reachable -- and dropping it would draw fewer squares
+      than the run counts, leaving a board that disagrees with its own tally.
+
+    No queries: the labels are module constants and the atoms are already in hand.
+    """
+    # NO SQUARES, NO GROUPS, and this guard is the fix for a regression that came back on one type only.
+    # The A-Z branch below returns a ONE-ELEMENT list, which is truthy -- so a finished A-Z run whose slot
+    # rows were deleted (a shell or a data migration, with `total_slots` left behind) passed the template's
+    # `{% if board %}` and drew the bare grey frame above a "26/26 squares" tally. The jobs branch happened
+    # to return `[]` for the same input because its bucket loop emits nothing, which is why the test caught
+    # neither: `_run`'s default challenge type is JOBS, so it only ever exercised the branch that worked.
+    # Two docstrings claimed "both are falsy"; now they are.
+    if not squares:
+        return []
+
+    if challenge_type != CHALLENGE_TYPE_JOBS:
+        # NO `icon` HERE EITHER. The jobs branch dropped it when the shelves took named tabs, and leaving it
+        # on this branch made the function return two different dict shapes by challenge type -- which is
+        # the exact defect `slot_groups` records having already paid for once ("`done`/`total` were once
+        # omitted on the A-Z branch, which made `group['total']` a KeyError on exactly one type"). A future
+        # Python consumer reading `group['icon']` would have worked on every A-Z board and raised on every
+        # Job Coverage one; the template is only safe because Django swallows missing keys.
+        return [{'label': '', 'slug': '', 'squares': squares}]
+
+    by_discipline = {}
+    for square in squares:
+        # A square whose `Job` row was deleted has no atom and so no discipline. It lands in its own group
+        # rather than being dropped, because a square that exists must be drawable.
+        slug = (square['job'] or {}).get('disc_slug') or ''
+        by_discipline.setdefault(slug, []).append(square)
+
+    leftovers = [slug for slug in by_discipline if slug and slug not in DISCIPLINE_LABELS]
+    groups = []
+    for slug in list(DISCIPLINE_LABELS) + leftovers + ['']:
+        if slug not in by_discipline:
+            continue
+        groups.append({
+            'label': _discipline_label(slug),
+            'slug': slug,
+            # NO `icon`. The hero's shelves were led by the discipline's glyph and now carry a named tab
+            # instead, so nothing reads it -- and a dict that keeps a field after its reader goes is how
+            # `_card`'s rule gets broken from the other direction. `slot_groups` still returns one, because
+            # the detail board's shelf heads still draw it.
+            'squares': by_discipline[slug],
+        })
+    return groups
 
 
 def card_for(slot):

@@ -56,11 +56,18 @@ def test_the_rail_turned_on_when_there_was_somewhere_else_to_go():
     # Exact equality, which already excludes `my_lists` -- a second assertion saying so was
     # decoration wearing a guard's message, and no edit could make one pass while the other failed.
     # `test_lists_live.py` carries the membership check that CAN fail independently.
-    # `challenges` joined 2026-09-19: a coming-soon PAGE, not a redirect, because a hub of two
-    # while a third is weeks away reads as the whole offering. It sits LAST and wears a
-    # `Soon` tag -- the two things you can use should not sit behind the one you cannot. See
-    # `test_challenges_coming_soon.py`.
-    assert [i.slug for i in hub.items] == ['lists', 'profiles', 'challenges']
+    # `challenges` joined 2026-09-19 as a coming-soon PAGE rather than a redirect, because a hub of two
+    # while a third is weeks away reads as the whole offering. It sat last and wore a `Soon` tag.
+    #
+    # `challenges_hall_of_fame` joined 2026-09-30 when the real pages replaced that placeholder, and the
+    # `Soon` tag went with it. Two items rather than one because the finished runs are a different question
+    # from the runs in flight, and nesting the URL means the rail highlights for both without a second
+    # `HUB_ROUTE_OVERRIDES` entry. `test_challenges_live.py` pins the new state.
+    #
+    # STILL EXACT EQUALITY. Loosening this to `in` when the rail grew would let the next item join
+    # unnoticed, which is the one thing this assertion exists to prevent.
+    assert [i.slug for i in hub.items] == [
+        'lists', 'profiles', 'challenges', 'challenges_hall_of_fame']
 
 
 def test_hunters_is_chromed_as_community_everywhere_it_is_reachable():
