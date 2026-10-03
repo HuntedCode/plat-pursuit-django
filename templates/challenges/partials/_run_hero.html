@@ -57,15 +57,17 @@ anchor would be a second tab stop to the same place.
         flood.{% endcomment %}
         <div class="pp-chero__board" aria-hidden="true">
             {% for group in board %}
-            {% comment %}`--disc` ON THE SHELF, not on the mark, because three things now read it: the tab,
-            the box's border and its tint. It is the same variable `.pp-jobchip` and the detail board read,
-            so a discipline's colour means one thing site-wide.{% endcomment %}
+            {% comment %}`--disc` ON THE SHELF, not on the mark, because two things read it: the label's
+            colour and the rule down the shelf's left edge. It is the same variable `.pp-jobchip` and the
+            detail board read, so a discipline's colour means one thing site-wide.{% endcomment %}
             <div class="pp-chero__shelf"{% if group.slug %} style="--disc: var(--disc-{{ group.slug }}, var(--pp-primary));"{% endif %}>
                 {% if group.label %}
-                {% comment %}A NAMED TAB, which replaced a bare discipline icon (owner, 2026-09-30). The
+                {% comment %}A NAMED LABEL, which replaced a bare discipline icon (owner, 2026-09-30). The
                 icon identified a discipline only to somebody who already knew the set; the name says it
-                outright, and the tab plus the tinted box around the five squares is what makes a group read
-                as a group rather than as five squares that happen to be adjacent.{% endcomment %}
+                outright, and the name plus the `--disc` rule down the shelf's edge is what makes a group
+                read as a group rather than as five squares that happen to be adjacent. (It wore a folder
+                tab and a tinted box until 2026-10-03; five of those nested inside one frame is what the
+                owner called "a little rough". The class name still says `tab`.){% endcomment %}
                 <span class="pp-chero__tab">{{ group.label }}</span>
                 {% endif %}
                 <div class="pp-chero__row">

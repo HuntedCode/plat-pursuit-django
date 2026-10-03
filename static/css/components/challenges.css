@@ -1903,11 +1903,23 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     position: relative;
     border-radius: 11px;
     overflow: hidden;
-    background: var(--pp-bg-3);
-    /* RECESSED, which is the other half of the depth answer. A soft inner shadow around the edge plus a
+    /* `--pp-bg-1`, AND IT USED TO BE `--pp-bg-3`, WHICH IS LIGHTER THAN THE CARD IT SITS ON. Owner,
+       2026-10-03: "Can the card of cover arts have a more defined border? It's sort of blending in with the
+       background too." Measured, that was exact rather than impressionistic: bg-3 is rgb(47,54,63) against
+       the card's composited rgb(43,49,56) -- 1.08:1, which is no edge at all. A recess tuned with three
+       shadow layers cannot read as recessed when its surface is BRIGHTER than its surround. bg-1 is
+       rgb(24,29,35), 1.28:1, and the shadows below finally have something to describe.
+       THE FIX BELONGS HERE, NOT ON `.pp-chero__board`. A first attempt gave the board its own opaque
+       surface and border -- which, since the board is this element's only child and `border-box` makes
+       their boxes coincident at the same 11px radius, painted straight over this background AND all three
+       inset shadows (an inset shadow paints under children). It produced the right look by burying a tuned
+       effect rather than correcting it, and left this rule's own comment describing something nothing
+       rendered. The board is layout; the frame is the surface.
+       RECESSED is the other half of the depth answer. A soft inner shadow around the edge plus a
        1px specular hairline along the top makes the board read as set INTO the plate, lit from the same
        direction as the surface gradient above. Flat, it read as a picture pasted on.
        `inset` only -- nothing here casts outward, so the row's own elevation stays the one shadow. */
+    background: var(--pp-bg-1);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.06),
         inset 0 0 0 1px rgba(0, 0, 0, 0.35),
@@ -1935,8 +1947,31 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  * `aspect-ratio` on the frame: a fixed frame ratio is what forced the earlier bad choices (a letterboxed
  * mosaic, then cells so tall that `object-fit: cover` sliced the sides off every cover). */
 
+/* ── THE BOARD IS LAYOUT ONLY, AND MUST STAY THAT WAY ────────────────────────────────────────────
+ *
+ * It is `.pp-chero__frame`'s only child, with no padding on the frame, so with `border-box` their boxes are
+ * COINCIDENT at the same 11px radius. Any opaque `background` here therefore paints over the frame's
+ * surface and all three of its inset shadows (an inset shadow paints under children), and any `border`
+ * here lands in the same pixel band as `.pp-chero__glass`'s hairline.
+ *
+ * That is not hypothetical: answering "the cover art card blends into the background" by giving THIS
+ * element a surface and a border produced the right look while burying the frame's tuned three-layer
+ * recess, and left the frame's own comment describing an effect nothing rendered. The surface question
+ * belongs to the frame; see the `--pp-bg-1` note there.
+ *
+ * The discipline labels sit on that surface and only gained contrast when it darkened: worst case from
+ * 6.65 on the old `--pp-bg-3` frame to 9.20 on bg-1, against a 4.5 floor. No recipe change needed. */
 .pp-chero__board { display: flex; flex-direction: column; gap: 4px; padding: 6px; }
+/* The 1024 `gap` reaches the A-Z board only: on jobs, the 768 block's `.pp-chero--jobs .pp-chero__board`
+   (0,2,0) outranks this (0,1,0) across the media boundary, so the jobs gap stays `14px var(--shelf-gap)`
+   at every width from 768 up. Intended -- the shelf basis subtracts that same variable -- but specificity
+   winning across breakpoints is the kind of thing that reads as a bug when you find it. `padding` is
+   unaffected and does apply to both. */
 @media (min-width: 1024px) { .pp-chero__board { gap: 6px; padding: 8px; } }
+/* Stacked shelves below 768 need their own separation: with the boxes gone there is no border marking
+   where one discipline ends, so the gap and the `--disc` rule are what do it. Jobs-only -- A-Z has a single
+   shelf, so its board has no gap to set. Declared BEFORE the 768 block, which overrides it from md up. */
+.pp-chero--jobs .pp-chero__board { gap: 12px; }
 
 /* TWO SHELVES PER ROW ON JOBS FROM 768px -- ten squares across rather than five, so the board is about
  * three rows deep instead of five.
@@ -1965,8 +2000,16 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
         flex-wrap: wrap;
         justify-content: center;
         align-content: flex-start;
+        /* ONE SOURCE FOR THE COLUMN GAP, because the shelf's `flex-basis` below subtracts this exact
+           figure and the two were previously separate literals. Removing the boxes meant the shelves
+           needed real separation (6px was sized for borders doing the work), and raising the gap without
+           raising the subtraction is precisely the wrap bug documented below -- except it would have been
+           reintroduced by a change that looks purely cosmetic. A variable makes them impossible to drift. */
+        --shelf-gap: 16px;
+        gap: 14px var(--shelf-gap);
     }
-    /* Half the board, minus the gap between the pair AND 1px of slack -- and the slack is the whole
+    /* Half the board, minus `--shelf-gap` (the column gap set just above, read from the variable so the
+       two cannot drift) AND 1px of slack -- and the slack is the whole
        reason this rule works. Without it `2 * basis + gap` came to EXACTLY 100%, leaving zero free space,
        so sub-pixel rounding wrapped the second shelf onto its own line and the board fell straight back to
        one shelf per row at half width: the 500px-tall stack this breakpoint exists to replace, now also
@@ -1975,37 +2018,51 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        its 1px -- this rule was written without reading it. (Six rules and ~70 lines later, not "two rules
        below" as an earlier version said.) A text pin on the literal passed throughout, because a
        stylesheet assertion cannot see a wrap. */
-    .pp-chero--jobs .pp-chero__shelf { flex: 0 0 calc((100% - 6px) / 2 - 1px); }
+    .pp-chero--jobs .pp-chero__shelf { flex: 0 0 calc((100% - var(--shelf-gap)) / 2 - 1px); }
 }
 
-/* A shelf is one group: its tab, then the box holding its squares. A-Z has one shelf and no label, so it
-   collapses to a bare row of squares with no tab and no box -- the branch costs that board nothing. */
+/* A shelf is one group: its label, then the row of squares, with a `--disc` rule down the left edge on
+   jobs. A-Z has one shelf and no label, so it collapses to a bare row of squares with no label and no
+   rule -- the branch costs that board nothing. */
 .pp-chero__shelf { display: flex; flex-direction: column; min-width: 0; }
 .pp-chero__row { display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; }
 @media (min-width: 1024px) { .pp-chero__row { gap: 3px; } }
 
-/* ── the discipline tab and its box ──────────────────────────────────────────────────────────────
+/* ── the discipline label and its rule ───────────────────────────────────────────────────────────
  *
- * A FOLDER TAB, which replaced a bare leading icon (owner, 2026-09-30: "small wrappers around the group of
- * 5 with the color and maybe put the name of the discipline above in a little tab looking thing"). The icon
- * identified a discipline only to somebody who already knew the set of five; the name says it outright.
+ * A RULE, NOT A BOX, and the box it replaced is worth recording because the reasoning against it was
+ * already written down three rules away.
  *
- * THE TAB MERGES INTO THE BOX by `margin-bottom: -1px` plus a `z-index`, so its bottom border lands exactly
- * on the box's top border and the two read as one object. No absolute positioning: a straddling legend
- * would overlap whatever sits above it, and on a wrapped board that is another shelf.
+ * WHAT WAS HERE: a folder tab (border 38%, wash 16%) merged by `margin-bottom: -1px` into a box around the
+ * squares (border 30%, wash 7%), both tinted by `--disc`. Owner, 2026-10-02, on seeing it in a browser:
+ * "the way the containers work together is a little bit awkward, the colors don't really mesh well ... the
+ * containers look a little rough."
  *
- * The box's top-LEFT corner is square, which is what makes the tab look attached rather than floating. */
+ * WHY IT READ THAT WAY. Five shelves meant five fully-bordered, differently-hued rectangles sitting inside
+ * the run card's own panel -- a frame inside a frame, five times, with the hue stated a THIRD time by each
+ * square's job icon. The box rule itself carried the comment "a border and a tint around all 26 squares
+ * would be a frame inside a frame", which is exactly right and was never applied to doing it five times.
+ *
+ * SO THE CONTAINER IS GONE and the hue survives as a 3px rule down the shelf's left edge. One surface (the
+ * board) instead of six, five thin accents instead of five competing boxes, and a shelf still reads as a
+ * shelf when a discipline's job count makes it wrap -- which is why this is a rule rather than nothing at
+ * all. The label keeps its `--disc` colour and loses its plate.
+ *
+ * THE LABEL'S CONTRAST IMPROVED, measured rather than assumed, because moving text off a tinted plate is
+ * how a shipped recipe silently breaks. At 12px/800 this is NOT WCAG large text, so it needs 4.5:1. On the
+ * old plate the worst case was combat at 5.39; on the frame it is 6.65, and every discipline clears
+ * (exploration 8.74, finesse 9.01). Unchanged recipe, more headroom.
+ *
+ * Those are the figures for the frame as it was when the boxes came off (`--pp-bg-3`). The frame has since
+ * darkened to `--pp-bg-1`, which lifts the same worst case to 9.20. An earlier version of this note quoted
+ * 7.16 against "the board's darker `--pp-bg-2`", which was wrong twice over: the labels have never sat on
+ * bg-2, and 7.16 is the ratio against the CARD's composited surface, which is behind the frame rather than
+ * under the text. Conservative in both directions, so nothing shipped under-contrast, but a checkable
+ * number stated about the wrong surface is still a false claim. */
 .pp-chero__tab {
     align-self: flex-start;
-    position: relative;
-    z-index: 1;
-    margin-bottom: -1px;
-    padding: 2px 9px 3px;
     max-width: 100%;
-    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, var(--pp-border));
-    border-bottom-color: transparent;
-    border-radius: 7px 7px 0 0;
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 16%, var(--pp-bg-3));
+    margin-bottom: 5px;
     font-size: 0.75rem;
     font-weight: 800;
     line-height: 1.1;
@@ -2017,15 +2074,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     white-space: nowrap;
 }
 
-/* THE BOX, on the jobs board only. `.pp-chero__row` is shared with A-Z, where a border and a tint around
-   all 26 squares would be a frame inside a frame. */
-.pp-chero--jobs .pp-chero__row {
-    padding: 4px;
-    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 30%, var(--pp-border));
-    border-radius: 0 7px 7px 7px;
-    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 7%, transparent);
+/* THE RULE, on the jobs board only. `.pp-chero__shelf` is shared with A-Z, which has one unlabelled group
+   and so would wear a rule marking a grouping it does not have. `border-radius` rounds the rule's own ends,
+   which is the whole visible effect of it on a box with only one border. */
+.pp-chero--jobs .pp-chero__shelf {
+    padding-left: 8px;
+    border-left: 3px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 70%, transparent);
+    border-radius: 3px;
 }
-@media (min-width: 1024px) { .pp-chero--jobs .pp-chero__row { padding: 5px; } }
+@media (min-width: 1024px) { .pp-chero--jobs .pp-chero__shelf { padding-left: 10px; } }
 
 /* THE SHORT LAST ROW IS CENTRED ON A-Z AND LEFT-ALIGNED ON JOBS, which is not an inconsistency: the two
  * boards have opposite needs and a single rule got it wrong for one of them (the grouped rewrite dropped

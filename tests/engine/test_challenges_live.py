@@ -1383,18 +1383,36 @@ def test_the_jobs_board_pairs_its_shelves_from_the_tablet_breakpoint():
     """
     css = _board_css()
 
-    shelf = _rule('.pp-chero--jobs .pp-chero__shelf')
-    assert 'flex: 0 0 calc((100% - 6px) / 2 - 1px)' in shelf, \
+    # SCOPED TO THE 768 BREAKPOINT. The shelf carries three rules now (its tint rule and padding at base,
+    # this basis at 768, a padding bump at 1024), and `_rule` returns whichever appears FIRST in source --
+    # so a bare lookup would quietly start asserting about a different rule the next time these move.
+    shelf = _rules_at('.pp-chero--jobs .pp-chero__shelf').get(768, '')
+    assert 'flex: 0 0 calc((100% - var(--shelf-gap)) / 2 - 1px)' in shelf, \
         'the shelf basis is what makes two fit a row; %r does not' % shelf.strip()
 
-    at_rule = css.index('.pp-chero--jobs .pp-chero__board {')
-    before = css[:at_rule]
-    assert before.rfind('@media (min-width: 768px)') > before.rfind('@media (min-width: 1024px)'), \
-        'the pairing must start at the tablet breakpoint, not at desktop'
+    # AND THE GAP IT SUBTRACTS IS THE GAP THAT IS SET. These were two independent literals (a 6px column
+    # gap and a `- 6px` basis) until removing the shelf boxes needed a wider gap -- at which point raising
+    # one without the other reintroduces the wrap documented below, from an edit that looks purely cosmetic.
+    board_md = _rules_at('.pp-chero--jobs .pp-chero__board').get(768, '')
+    assert '--shelf-gap:' in board_md and 'var(--shelf-gap)' in board_md, \
+        'the column gap and the shelf basis must read one variable, not two literals: %r' % board_md.strip()
 
-    block = css[at_rule:css.index('}', at_rule)]
-    assert 'flex-wrap: wrap' in block
-    assert 'justify-content: center' in block, \
+    # READ BY BREAKPOINT, NOT BY POSITION. This used to locate the first `.pp-chero--jobs .pp-chero__board {`
+    # with `index()` and then compare which `@media` opened most recently before it -- a positional guess
+    # that broke the moment the board gained an UNCONDITIONAL rule (the stacked-shelf gap), because the
+    # first occurrence stopped being the paired one. `_rules_at` answers the question directly.
+    board_rules = _rules_at('.pp-chero--jobs .pp-chero__board')
+    assert 'flex-direction: row' in board_md, \
+        'the shelves are not paired at the tablet breakpoint: %r' % board_md.strip()
+    # NOT `board_rules.get(1024, '')`: that selector has no 1024 rule, so the check was vacuous -- it read
+    # as a pin and asserted nothing. What actually has to hold is that NO breakpoint above 768 introduces
+    # the pairing, which is the statement "it starts at tablet, not desktop" really makes.
+    later = {bp: body for bp, body in board_rules.items() if bp > 768}
+    assert not any('flex-direction: row' in body or 'flex-flow' in body for body in later.values()), \
+        'the pairing must start at the tablet breakpoint, not at desktop: %r' % later
+
+    assert 'flex-wrap: wrap' in board_md
+    assert 'justify-content: center' in board_md, \
         'five shelves in rows of two leaves an orphan; centring is what stops it reading as lopsided'
 
 
@@ -1475,12 +1493,30 @@ def test_a_discipline_with_no_label_still_gets_its_squares_drawn():
     assert 'Archaeology' in labels, 'an unmapped discipline must name itself, not vanish: %s' % labels
 
 
-def test_the_discipline_tab_and_its_box_are_tinted_from_the_shelf(client):
-    """`--disc` MOVED TO THE SHELF, because three things read it now: the tab's border and text, and the
-    box's border and tint. It used to sit on the leading icon, which was the only consumer.
+def test_the_discipline_label_and_its_rule_are_tinted_from_the_shelf(client):
+    """`--disc` LIVES ON THE SHELF, read by the label's colour and by the rule down its left edge.
 
-    Tinted off the same `--disc-*` tokens `.pp-jobchip` and the detail board read, so a discipline's colour
-    means one thing site-wide rather than three.
+    WHAT THIS REPLACED, recorded because the box it drops was itself argued against three rules away. Each
+    shelf used to wear a folder tab (border 38%, wash 16%) merged into a box around its squares (border
+    30%, wash 7%), both `--disc`-tinted. Five shelves therefore drew five fully-bordered, differently-hued
+    rectangles INSIDE the run card's own panel -- a frame inside a frame, five times, with the hue already
+    stated by each square's job icon. Owner, 2026-10-02, from the browser: "the way the containers work
+    together is a little bit awkward, the colors don't really mesh well ... the containers look a little
+    rough."
+
+    The box rule carried the comment "a border and a tint around all 26 squares would be a frame inside a
+    frame" as its reason for being jobs-only. That reasoning was right, and was never applied to doing it
+    five times over.
+
+    A RULE RATHER THAN NOTHING AT ALL, because `_board_groups` buckets by dict rather than assuming five
+    jobs per discipline: a catalogue with four or six in one discipline makes a short or wrapping shelf, and
+    the rule is what keeps that reading as one group. Tinted off the same `--disc-*` tokens `.pp-jobchip`
+    and the detail board read, so a discipline's colour means one thing site-wide.
+
+    THE LABEL'S RECIPE IS UNCHANGED AND WAS RE-MEASURED, since moving text off a tinted plate is how a
+    shipped colour recipe silently breaks. At 12px/800 it is not WCAG large text, so it needs 4.5:1: the
+    worst case went from 5.39 on the old tab plate to 6.65 on the frame, and to 9.20 once the frame
+    darkened to `--pp-bg-1`. More headroom, not less.
     """
     from trophies.models import Job
 
@@ -1503,25 +1539,103 @@ def test_the_discipline_tab_and_its_box_are_tinted_from_the_shelf(client):
     assert '--disc: var(--disc-%s' % job.discipline in shelves[0],         'the shelf must carry --disc, or the tab and box cannot be tinted'
 
     css = _board_css()
-    tab = _rule('.pp-chero__tab')
-    assert 'var(--disc' in tab, 'the tab is not tinted by discipline'
-    assert 'border-radius: 7px 7px 0 0' in tab, 'the tab has no folder shape'
-    assert 'margin-bottom: -1px' in tab, 'the tab must merge into the box rather than float above it'
+    label = _rule('.pp-chero__tab')
+    assert 'var(--disc' in label, 'the discipline label is not tinted by discipline'
 
-    box = _rule('.pp-chero--jobs .pp-chero__row')
-    assert 'var(--disc' in box, 'the box around the five squares is not tinted'
-    assert 'border-radius: 0 7px 7px 7px' in box,         'the box needs a square top-left corner, which is what makes the tab look attached'
+    # ── THE LABEL WEARS NO PLATE. Its colour was measured against the BOARD's surface, so a background
+    # behind it is both the look the owner rejected and an unmeasured contrast pairing.
+    for boxy in ('border:', 'background:'):
+        assert boxy not in label, (
+            'the discipline label grew a plate again (%s), which is the tab this replaced: %r'
+            % (boxy, label.strip()))
 
-    # THE BOX IS JOBS-ONLY. On A-Z it would be a frame inside the frame, around all 26 squares.
+    # ── THE RULE EXISTS, IS TINTED, AND IS JOBS-ONLY. Unscoped, A-Z's single unlabelled shelf would wear
+    # a rule marking a grouping it does not have.
+    # A POSITIVE assertion goes through `_every_rule`, not `_rules_at`. The latter keeps only the last rule
+    # per breakpoint, so adding any second unconditional rule for this selector would turn a true statement
+    # into a false FAILURE -- the reverse of the usual hazard, and just as misleading.
+    rules = _every_rule('.pp-chero--jobs .pp-chero__shelf')
+    assert any('border-left' in r and 'var(--disc' in r for r in rules), (
+        'the shelf lost its discipline rule, so nothing marks where one group ends: %r' % rules)
+
+    # NOT `_rule('.pp-chero__shelf')`: `.pp-chero--jobs .pp-chero__shelf {` CONTAINS that substring and
+    # comes first in source, so a positional read returned the JOBS rule and this assertion was checking
+    # the very thing it was meant to exclude. `_every_rule` matches on the stripped selector, so the
+    # jobs-scoped rules cannot satisfy it.
+    for shared in _every_rule('.pp-chero__shelf'):
+        assert 'border-left' not in shared, (
+            'the shared shelf rule gained the discipline rule, so the A-Z board would wear a grouping '
+            'mark for a grouping it does not have: %r' % shared.strip())
+
+    # ── AND NO BOX CAME BACK. This is what fails if somebody restores the five tinted rectangles, which
+    # is a change no render assertion can see.
+    # ACROSS EVERY RULE ON BOTH ELEMENTS, and by PROPERTY rather than by substring. Three ways this guard
+    # was evadable before, all found by audit rather than by reading:
+    #   - it read `_rules_at(...).get(0)`, which returns only the last rule at a breakpoint;
+    #   - it watched `.pp-chero__row`, but the tinted element is now the SHELF -- restoring the boxes there
+    #     passed everything;
+    #   - `'border:' not in` misses `border-color`, `border-width`, `border-top`, `background-color`...
+    # The shelf legitimately carries `border-left` and `border-radius` (the discipline rule), so those two
+    # are the allowed exceptions and everything else in the family is forbidden.
+    allowed = ('border-left', 'border-radius')
+    for selector in ('.pp-chero--jobs .pp-chero__row', '.pp-chero--jobs .pp-chero__shelf'):
+        for body in _every_rule(selector):
+            for decl in body.split(';'):
+                prop = decl.split(':')[0].strip()
+                if not prop or prop in allowed:
+                    continue
+                assert not (prop == 'border' or prop.startswith('border-')
+                            or prop == 'background' or prop.startswith('background-')), (
+                    'the box around each discipline is back (%s on %s): five tinted rectangles inside the '
+                    'frame that already holds them, which is what the rule replaced' % (prop, selector))
+    # THE SHARED ROW IS CLEAN TOO. A-Z renders it unscoped, so a border landing here is a frame inside the
+    # frame around all 26 squares -- the original reason the box was jobs-only.
     assert '.pp-chero__row {' in css
     plain = _rule('.pp-chero__row')
     assert 'border:' not in plain, 'the shared row rule gained a border, which the A-Z board would wear'
 
 
-def test_an_a_z_board_draws_no_tab_or_box(client):
-    """The alphabet has no sub-structure, so its single group has no label -- and the tab and box branches
-    both key off that. A frame around all 26 squares inside the frame that already holds them is the thing
-    this prevents."""
+def test_the_frame_is_darker_than_the_card_and_the_board_stays_layout():
+    """THE COVER GRID READS AS SET INTO THE CARD, AND THE FIX LIVES ON THE FRAME.
+
+    Owner, 2026-10-03: "Can the card of cover arts have a more defined border? It's sort of blending in
+    with the background too." Measured, that was exact rather than impressionistic: `.pp-chero__frame`
+    painted `--pp-bg-3`, rgb(47,54,63), against the card's composited rgb(43,49,56) -- **1.08:1**. The
+    frame already carried a tuned three-layer recess (specular top hairline, dark inset ring, soft inner
+    shadow) and a comment saying it exists so the board "read as set INTO the plate" rather than "a picture
+    pasted on". None of it could read, because the surface was BRIGHTER than its surround.
+
+    WHY THE BOARD MUST STAY LAYOUT, which is the other half and the reason this test is shaped this way.
+    The board is the frame's only child and the frame has no padding, so under `border-box` their boxes are
+    coincident at the same 11px radius. A first fix gave the BOARD an opaque background and a border: it
+    produced the right look by painting over the frame's surface and all three of its inset shadows (an
+    inset shadow paints under children), burying the tuned effect instead of correcting it and leaving the
+    frame's comment describing something nothing rendered. An audit caught it. Nothing else would have --
+    the page looked right.
+
+    So both halves are asserted: the frame is the surface, and the board owns no paint at all.
+    """
+    frame = _rules_at('.pp-chero__frame').get(0, '')
+    assert frame, 'no unconditional rule for the frame, so the assertions below would be vacuous'
+    assert 'background: var(--pp-bg-1)' in frame, (
+        'the frame is not darker than the card it sits on, so its recess has nothing to describe and the '
+        'board blends into the background again: %r' % frame.strip())
+    assert 'box-shadow:' in frame and 'inset' in frame, (
+        'the frame lost the recess that makes the covers sit IN it: %r' % frame.strip())
+
+    # ── THE BOARD PAINTS NOTHING. Every one of these would occlude the frame, and the page would still
+    # look correct, which is exactly why it needs a test rather than an eye.
+    for painted in _every_rule('.pp-chero__board'):
+        for prop in ('background', 'border', 'box-shadow'):
+            assert prop not in painted, (
+                'the board declares `%s`, which paints over the frame it is coincident with -- the frame '
+                'owns the surface, the board owns the layout: %r' % (prop, painted.strip()))
+
+
+def test_an_a_z_board_draws_no_label_or_rule(client):
+    """The alphabet has no sub-structure, so its single group has no label -- and both the label and the
+    discipline rule key off that. A grouping mark around all 26 squares, inside the frame that already
+    holds them, is the thing this prevents."""
     _az_filled_run(_hunter('azhunter'), ['A', 'B', 'C'])
 
     hero = _hero(client.get(reverse('challenges_hall_of_fame')).content.decode())
@@ -2101,7 +2215,21 @@ def _board_css():
     return _BOARD_CSS
 
 
-def _rules_at(selector):
+def _names(head, selector):
+    """Does this rule's prelude name `selector`, including inside a comma-separated group?
+
+    A prefix test (`head.startswith(selector + ' {')`) misses `.a, .sel { ... }` entirely and is fooled by
+    `.sel-wide {`. This stylesheet carries 17 grouped rules, two of them on `.pp-chero__*`, so a
+    "must appear nowhere" assertion built on prefix matching was evadable by grouping -- a reviewer
+    restoring a forbidden declaration under a grouped selector would have passed every guard.
+
+    Exact match per comma part, so `.pp-chero--jobs .pp-chero__shelf` still cannot satisfy a lookup for
+    `.pp-chero__shelf`, which several tests depend on to separate the shared rule from the jobs-only one.
+    """
+    return any(part.strip() == selector for part in head.split(','))
+
+
+def _iter_rules(selector):
     """`{breakpoint: declarations}` for every rule matching `selector`, keyed by the min-width it sits in
     (0 for an unconditional rule).
 
@@ -2130,14 +2258,22 @@ def _rules_at(selector):
 
     source = re.sub(r'/\*.*?\*/', '', _board_css(), flags=re.S)
 
-    out, current, open_bp, buf = {}, 0, None, []
+    current, open_bp, buf, depth = 0, None, [], 0
     for line in source.splitlines():
         stripped = line.strip()
 
         if open_bp is not None:
             if stripped.startswith('}'):
-                out[open_bp] = ' '.join(buf).strip()
+                yield open_bp, ' '.join(buf).strip()
                 open_bp, buf = None, []
+                # BALANCE THE BRACE THIS BRANCH CONSUMES. The matching rule's opening line incremented
+                # `depth`; its closing `}` is swallowed here, so without this the count leaks +1 per
+                # captured multi-line rule and the enclosing at-rule can never return to 0 -- which is the
+                # one thing that resets the scope. Everything after it would then be filed under the last
+                # breakpoint seen. Inert in this stylesheet today only by the accident of rule ordering,
+                # which is the same "provably fine until somebody reformats" shape as the three bugs this
+                # helper has already been bitten by.
+                depth = max(depth - 1, 0)
             else:
                 buf.append(stripped)
             continue
@@ -2151,27 +2287,61 @@ def _rules_at(selector):
             # non-min-width query gets scope -1 so it can never collide with a breakpoint.
             bp = int(media.group(1)) if media else -1
             rest = stripped[stripped.index('{') + 1:].strip() if '{' in stripped else ''
-            if rest.startswith(selector + ' {') and rest.endswith('}'):
+            if '{' in rest and _names(rest[:rest.index('{')], selector) and rest.endswith('}'):
                 # `@media ... { .sel { ... } }` all on one line.
-                out[bp] = rest[rest.index('{') + 1:rest.rindex('}')].strip().rstrip('}').strip()
+                yield bp, rest[rest.index('{') + 1:rest.rindex('}')].strip().rstrip('}').strip()
             # A SELF-CLOSING at-rule MUST NOT LEAVE THE SCOPE OPEN, and this was the last of three bugs in
             # this helper. A one-line `@media (min-width: 1024px) { .other-sel { ... } }` that does not match
             # the selector used to leave `current` set to that breakpoint -- so the next UNCONDITIONAL rule
             # in the file was filed under it, and `.get(0)` came back empty for a rule that plainly exists.
             # Balanced braces on the line mean the block closed on it.
-            current = 0 if stripped.count('{') == stripped.count('}') else bp
+            opened = stripped.count('{') - stripped.count('}')
+            current = bp if opened > 0 else 0
+            depth += max(opened, 0)
             continue
 
-        if stripped == '}':
+        # A NON-MATCHING MULTI-LINE RULE INSIDE THE AT-RULE USED TO CLOSE ITS SCOPE, which is the fourth
+        # bug in this family and the one the discipline rule exposed: `@media (min-width: 768px)` opens,
+        # then `.pp-chero--jobs .pp-chero__board { ... }` spans four lines, and ITS closing brace reset
+        # `current` to 0. Every rule after it in that block was filed under base, so asking for the shelf's
+        # basis at 768 returned '' for a rule that is plainly there. Counting depth is the only reading that
+        # survives a block this helper is not capturing -- matching on `stripped == '}'` cannot tell which
+        # block is closing.
+        depth += stripped.count('{') - stripped.count('}')
+        if depth <= 0:
+            depth = 0
             current = 0
+        if stripped.startswith('}'):
             continue
 
-        if stripped.startswith(selector + ' {'):
+        if '{' in stripped and _names(stripped[:stripped.index('{')], selector):
             if stripped.endswith('}'):
-                out[current] = stripped[stripped.index('{') + 1:stripped.rindex('}')].strip()
+                yield current, stripped[stripped.index('{') + 1:stripped.rindex('}')].strip()
             else:
                 open_bp, buf = current, []
-    return out
+
+
+def _rules_at(selector):
+    """`{breakpoint: declarations}` for every rule matching `selector`, keyed by its min-width (0 for an
+    unconditional rule).
+
+    THE LAST RULE AT A BREAKPOINT WINS, which matches the cascade but makes this the WRONG reader for any
+    "this must appear nowhere" assertion. `.pp-chero--jobs .pp-chero__row` carried two unconditional rules
+    at the time, so a mutation that gave it a border went undetected: this returned the later
+    `justify-content` rule and the assertion inspected that instead. (It has one rule again now, the box
+    having been deleted -- the hazard is the reader, not that particular selector.) Use `_every_rule` to
+    forbid something, and this only to read the value that actually applies.
+    """
+    return dict(_iter_rules(selector))
+
+
+def _every_rule(selector):
+    """Declarations of EVERY rule matching `selector`, in source order.
+
+    For assertions of the form "this property must appear nowhere on this selector", where checking only
+    the winning rule is how a mutation survives.
+    """
+    return [decls for _bp, decls in _iter_rules(selector)]
 
 
 def _rule(selector):
