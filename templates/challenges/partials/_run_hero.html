@@ -1,0 +1,300 @@
+{% comment %}One FINISHED run, on the Hall of Fame. A hero row, not a browse card.
+
+WHY A HERO. Finishing a run is 25 or 26 completed contracts, so this page holds single figures for a long
+time. A card grid is a container that says "there are many of these, scan them" -- at eight entries it reads
+as a page that failed to load, and it draws the hardest thing the feature asks for at the size of a browse
+tile. The scarcity that makes the grid wrong is exactly what makes a full-width row affordable.
+
+THE HUNTER IS THE SUBJECT, NOT THE GAMES, and the first cut had that backwards. It gave the right-hand
+column a thin byline -- a chip, a small avatar, a name, two stats -- sitting in nearly half the row, so the
+page celebrated twenty-six pieces of cover art and mentioned the person in passing. The owner called it:
+"it should celebrate the people who've earned it, not just the games." The right side is a PLAQUE now: the
+avatar at portrait scale, the name as the row's headline, the earned title as its own prestige band, and
+the finish stated as a date rather than a relative nudge.
+
+THE BOARD CARRIES ITS RUN'S OWN VOCABULARY. An A-Z square shows its letter; a Job Coverage square shows its
+job's icon tinted by discipline, and the squares are grouped into the five discipline shelves Career uses.
+That is what makes the two finishes look like different achievements instead of one template with different
+art -- and it replaces a bare mosaic that, as the owner put it, gave no context as to what each cover was
+for. `slot_render.boards_for` returns the groups; the geometry is argued in `challenges.css`.
+
+NOTHING MUTABLE BELONGS IN THE IMAGE, once there is a minted one. The hunter's name, their avatar and
+anything ranking-shaped are rendered HERE, by the page, against live rows.
+
+The precedent is `notifications.PlatinumShareImage` (January 2026), which stored generated share PNGs to S3
+exactly as chunk 7 proposes to. It was dropped by `0016_drop_platinum_share_image` in May, and NOT because
+storing images failed: `user_total_platinums` was computed at notification-CREATION time and held in the
+notification's metadata, which the PNG was then rendered from -- so two plats from one sync processed out of
+order could swap their "Platinum #N". A real user reported it. Commit 8b981dd0's fix was structural: compute
+at click time, one source of truth. (The freeze lived in the metadata, not on that model, which has no such
+field -- worth being precise about, since it is the metadata pattern and not the ImageField that must not be
+repeated.)
+
+The board is the artwork; the plaque is live.
+
+THE WHOLE ROW IS THE LINK, as on the card: a run has one destination and no secondary action, so a nested
+anchor would be a second tab stop to the same place.
+{% endcomment %}
+{% load mark_tags job_icons humanize %}
+<a class="pp-chero pp-centry pp-chero--{{ run.challenge_type }} pp-chero--band-{{ plaque.band }}"
+   style="--rk: var(--rank-{{ plaque.rank.key }}, var(--pp-primary));"
+   href="{% url 'challenge_detail' run.pk %}">
+    {% comment %}THE FRAME IS GATED ON THE BOARD, not just its contents. It rendered unconditionally with
+    only the mosaic inside gated, so a finished run with no slot rows drew a bare grey letterbox above a
+    "25/25 squares" tally. `total_slots` is denormalized, so that combination is reachable by a shell or a
+    data migration. No board, no frame: the hero degrades to its plaque, which is still a complete row.{% endcomment %}
+    {% if board %}
+    <div class="pp-chero__frame">
+        {% comment %}ONE LOOP FOR BOTH TYPES, because `boards_for` always returns groups: A-Z is a single
+        unlabelled group of 26 and Job Coverage is one group per discipline. The shelf head renders only
+        when a group has a label, so the A-Z board stays a plain grid.
+
+        `loading="lazy"` on every cover and deliberately so, rather than because "the browser's own viewport
+        rule gets it right" -- which is not what `lazy` does for an in-viewport image: it is discovered after
+        layout and fetched at low priority, so the first hero's board is deliberately deferred. Kept anyway,
+        because eager would mean 26 full-size covers requested before first paint on a mobile connection. If
+        this page's LCP ever measures badly the fix is a smaller source for board covers, not an eager
+        flood.{% endcomment %}
+        <div class="pp-chero__board" aria-hidden="true">
+            {% for group in board %}
+            {% comment %}`--disc` ON THE SHELF, not on the mark, because three things now read it: the tab,
+            the box's border and its tint. It is the same variable `.pp-jobchip` and the detail board read,
+            so a discipline's colour means one thing site-wide.{% endcomment %}
+            <div class="pp-chero__shelf"{% if group.slug %} style="--disc: var(--disc-{{ group.slug }}, var(--pp-primary));"{% endif %}>
+                {% if group.label %}
+                {% comment %}A NAMED TAB, which replaced a bare discipline icon (owner, 2026-09-30). The
+                icon identified a discipline only to somebody who already knew the set; the name says it
+                outright, and the tab plus the tinted box around the five squares is what makes a group read
+                as a group rather than as five squares that happen to be adjacent.{% endcomment %}
+                <span class="pp-chero__tab">{{ group.label }}</span>
+                {% endif %}
+                <div class="pp-chero__row">
+                    {% for square in group.squares %}
+                    {% comment %}NO INLINE `--disc` HERE. The shelf sets it (above) and `.pp-chero__key--job`
+                    is a descendant, so it inherits -- and `_board_groups` buckets BY `disc_slug`, so a
+                    square's discipline is identical to its group's by construction. Setting it again was 25
+                    redundant `style` attributes per jobs hero, and the comment on the shelf already said
+                    `--disc` lived there rather than on the mark.{% endcomment %}
+                    <span class="pp-chero__sq{% if not square.cover %} pp-chero__sq--bare{% endif %}">
+                        {% if square.cover %}
+                        {% comment %}`has_cover_art` switches the fit, per the project's image conventions
+                        and the detail square's own `--icon` branch: real art is `object-cover object-top`
+                        (so a wider PSN fallback keeps the logo at the top of the crop), while a generic PS
+                        placeholder is `object-contain` and must not be cropped to a slab of grey.{% endcomment %}
+                        <img src="{{ square.cover.display_image_url }}" alt="" loading="lazy" decoding="async"
+                             class="pp-chero__art{% if not square.cover.has_cover_art %} pp-chero__art--icon{% endif %}" />
+                        {% endif %}
+                        {% comment %}THE KEY, which is the context the board was missing. A letter for A-Z, a
+                        discipline-tinted job icon for Job Coverage -- the same split `_square_body.html`
+                        makes, and the same colour recipe as `.pp-csq__key--job`.{% endcomment %}
+                        <span class="pp-chero__key{% if square.job %} pp-chero__key--job{% endif %}">
+                            {% if square.job %}{% job_icon_use square.job.icon '' %}{% else %}{{ square.label }}{% endif %}
+                        </span>
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% comment %}A hairline inner edge over the board, so it reads as one framed object rather than as
+        loose tiles bleeding into the row.{% endcomment %}
+        <span class="pp-chero__glass" aria-hidden="true"></span>
+    </div>
+    {% endif %}
+
+    {% comment %}THE PLAQUE. Everything here is rendered from LIVE rows, which is a constraint rather than an
+    implementation detail -- see the `PlatinumShareImage` note above.{% endcomment %}
+    <div class="pp-chero__plaque">
+        {% comment %}THE AVATAR AT PORTRAIT SCALE and `aria-hidden`, because the name sits right beside it.
+        The `<a>`'s accessible name is computed from its contents, so passing the PSN name as the avatar's
+        `alt` made every row announce it twice.
+
+        `aria-hidden` on the wrapper rather than `alt=''`: `_avatar.html` renders `alt|default:'Avatar'` and
+        `''` is falsy in a Django template, so an empty string comes back out as the literal word "Avatar" --
+        and its no-avatar branch hard-codes `role="img"` with an `aria-label`, which would announce even with
+        no image. One attribute on the wrapper covers both branches.
+
+        `eager` on the FIRST hero's avatar only: it is genuinely above the fold and `_avatar.html` documents
+        the parameter for exactly this case. `first` is PASSED IN rather than read from `forloop.first` -- an
+        include does hand down the parent context, so reading it would work today and break the day this
+        partial is rendered on its own or nested in another loop.{% endcomment %}
+        <span class="pp-chero__av" aria-hidden="true">
+            {% include 'partials/_avatar.html' with url=run.profile.avatar_url eager=first %}
+        </span>
+
+        <div class="pp-chero__who">
+            <span class="pp-chero__hunter">{% name_mark name=run.profile.display_psn_username|default:run.profile.psn_username mark=run.profile.display_mark size='sm' index=index %}</span>
+            {% comment %}THEIR STANDING UNDER THE NAME, which is where the run type used to sit. The type
+            moved down to the plinth beside the date, because the board to the left already says which kind
+            of run this is twenty-six times over -- and a hunter's rank is the thing the plaque was missing.
+
+            A SUBTITLE, NOT A CHIP. The hunter is the headline; a chip up here competed with them for first
+            read, which is why the type was moved out of this slot in the first place.
+
+            TINTED 34% TOWARD WHITE, NOT THE RAW TOKEN. Measured, not chosen: of the eleven `--rank-*`
+            tokens FOUR fail AA outright on the washed crest -- newbie 2.72, recruit 3.43, luminary 3.44,
+            paragon 3.74 -- and mixing 34% toward white clears all eleven, worst case 5.00 at Newbie.
+            `challenges.css` carries the measurement; the recipe is pinned by
+            `test_the_rank_label_recipe_clears_contrast_for_every_rank`, which also forbids an `opacity` on
+            any child of this line, because one on `.pp-chero__lvl` quietly defeated it once.
+
+            EVERY FIGURE IN THIS PARAGRAPH USED TO BE WRONG. It described "72% toward white" over
+            `--pp-secondary`, quoting 4.02 / 5.41 / 7.43 -- all of them belonging to an abandoned first pass
+            that used the Pursuer Card's violet/cyan `--pc-tier` scheme, before this component moved to the
+            per-rank `--rank-*` spectrum. A reader "simplifying" on its authority would have broken exactly
+            what the test pins.{% endcomment %}
+            <span class="pp-chero__standing">
+                <span class="pp-chero__gem" aria-hidden="true"></span>
+                {% comment %}NO `Lv N` HERE ANY MORE. The disciplines ring below puts the Pursuer Level in
+                its centre, which is where that primitive has always put it, so stating it twice on one
+                plaque was both redundant and a second thing for a screen reader to read out. The rank NAME
+                is what this line is for.{% endcomment %}
+                <span class="pp-chero__rank">{{ plaque.rank.label }}</span>
+            </span>
+        </div>
+
+        {% comment %}THE TITLE EARNED, as the plaque's banner rather than a chip tucked in a corner -- it is
+        the most prestigious thing on the row. It comes from the granted `UserTitle` row, not from a
+        recomputed ordinal: `rewards.granted_titles_for` explains why. A title write is CONTAINED when it
+        fails, so a run can legitimately be finished with no title held, and a chip derived from the ordinal
+        would name one the hunter does not hold on the one page built to celebrate it.{% endcomment %}
+        {% if earned_title %}
+        <p class="pp-chero__title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
+            </svg>
+            <span>{{ earned_title }}</span>
+        </p>
+        {% endif %}
+
+    {% comment %}THE PLINTH. Everything below the seam sits on its OWN opaque `--pp-bg-1`, and that is a
+    CONTRAST REQUIREMENT rather than a layout choice.
+
+    `--pp-text-mute` is documented as "raised 0.55 -> 0.66 for WCAG AA (~4.5:1 on bg-2) site-wide", i.e. it
+    has no headroom at all, and the crest's rank wash lightens what sits under it. Measured on the washed
+    crest: mute falls to 3.40 at the mildest tinted band and 2.68 at the apex. On flat `--pp-bg-1` it is
+    5.43. (The 3.40 was measured at a 12% wash, which is the PURSUER CARD's value -- an earlier version of
+    this comment named it "violet 12%". This component settled on 10%, so the real figure is a shade kinder
+    and the conclusion is unchanged.) So the muted record -- the family tiles' screen-reader labels aside,
+    "squares", "career XP", the type and the date -- cannot live in the wash, and the fix is an opaque plate rather than a gradient stop tuned to the content's height. A
+    percentage stop would be arithmetic that happens to clear the text today and shears it the first time a
+    row grows a line, which is exactly how the shelf flex-basis bug on this same component shipped.
+
+    This is also the Frame's own vocabulary: "earn engraving lives in the plinth".{% endcomment %}
+        <div class="pp-chero__plinth">
+        {% comment %}THE LIVE DISCIPLINES RING, not a band of this surface's own.
+
+`partials/components/_disciplines_ring.html` (`.lab-dna`) is already the house treatment for "what you are
+made of by discipline": the Pursuer Level in the centre, one arc per discipline sized to its share of that
+level, `--disc`-tinted. It is live on the Career hero AND the home lobby, and its own docstring states the
+contract -- "a smaller ring is a scale, not a second implementation, which is what keeps the surfaces from
+drifting".
+
+WHAT WAS HERE BEFORE WAS THAT SECOND IMPLEMENTATION: a bespoke five-tile band, modelled on the abandoned
+Pursuer Card's, and justified by an anti-pattern about hero/compact/mini consistency while the actually-live
+component sat one directory away. The owner caught it. `plaque.plaques_for` now produces the ring's data and
+`job_render.discipline_ring` owns the arc geometry for all three hosts.
+
+IT TAKES THE LEVEL, so the standing line above no longer repeats it -- the ring's centre IS the Pursuer
+Level, which is where this primitive puts it.
+
+NO `compact`, SO THE RING RUNS AT ITS NATURAL SIZE: 116px, and 132px from 1024px up. The first cut passed
+`compact` for the 76px `.lab-dna--sm` scale, which left the plinth looking empty under a top-heavy crest
+(owner, 2026-10-02: "the ring shrunk a bit now and the top side of the plaque is a bit large"). It brings its
+own digit-aware sizing for 3-6 figure levels, its own reduced-motion handling, and a contrast story already
+settled on the Career page, and it fits comfortably -- the plinth's content is ~244px at `lg`, its narrowest.
+
+DROPPING `compact` DELETES A BUG RATHER THAN PINNING ONE. `.lab-dna--sm` is 76px, but a later
+`@media (min-width: 1024px) { .lab-dna { width: 132px } }` at EQUAL specificity overrode it while the `--sm`
+FONT rules (two-class selectors) kept winning -- so the compact ring was already 132px from 1024 up, holding
+type sized for 76, and `challenges.css` had to re-pin the width host-scoped just to get the advertised size.
+At the natural size there is no conflict left to pin: the base type rungs are the ones designed for 116/132
+and the host override is gone. The shared component still has the bug for anyone who does pass `compact` --
+the home lobby does -- which is recorded in the audit notes rather than fixed as a side effect here.
+
+ITS `data-countup` IS INERT HERE and that is fine: this page loads no `[data-countup]` initialiser, so the
+attribute is ignored and the real number renders. Not worth forking a shared partial over.{% endcomment %}
+        {% include 'partials/components/_disciplines_ring.html' with ring=plaque.ring level=plaque.level %}
+
+        <div class="pp-chero__stats">
+            <span class="pp-chero__tally">
+                <span class="pp-tally pp-tally--sm">{{ run.completed_count }}<span class="pp-chero__of">/{{ run.total_slots }}</span></span>
+                <span class="pp-chero__label">squares</span>
+            </span>
+
+            {% comment %}CAREER XP, the hunter's standing in the economy, and it rides the career-standing
+            row the rank already needed -- so it costs nothing extra.{% endcomment %}
+            <span class="pp-chero__tally">
+                {% comment %}`intcomma`, NOT `intword`. `intword` only humanises at a million and above --
+                below that it returns the integer untouched -- so a 250,000-XP hunter rendered the raw string
+                `250000`, with no separator, two lines above a `+150,000` that used `intcomma`. One panel,
+                two number formats, and the unformatted one is the common case. `intword` also widens
+                unpredictably at the top end ("1.2 million"), which wrapped the stats row for whales only and
+                made their row taller than its neighbours down the page.{% endcomment %}
+                <span class="pp-tally pp-tally--sm">{{ plaque.career_xp|intcomma }}</span>
+                <span class="pp-chero__label">career XP</span>
+            </span>
+        </div>
+
+        {% comment %}WHAT THIS RUN ITSELF PAID, and it renders only when there is something to state.
+
+        A-Z RUNS PAY NO JOB XP, by decision rather than oversight: `rewards.redeemable_slots` gates on the
+        Job Coverage type, so the 6,000-per-square bonus belongs to that side even when one platinum
+        advanced both boards. A Job Coverage run whose owner has not pressed claim yet is also zero. In both
+        cases the line is omitted rather than printed as "+0 job XP", which would read as a failed payout
+        on a page celebrating the finish.{% endcomment %}
+        {% if plaque.run_xp %}
+        <p class="pp-chero__paid">
+            <span class="pp-chero__paidnum">+{{ plaque.run_xp|intcomma }}</span>
+            <span class="pp-chero__label">job XP from this run</span>
+        </p>
+        {% endif %}
+
+        <div class="pp-chero__record">
+            {% comment %}THE DATE, not a relative nudge. "Finished 3 months ago" is right for a feed, where
+            recency is the point; on a plaque the date is the record, and `naturaltime` degrades a finish
+            that deserves to keep its day into "11 months ago". The `<time>` carries the machine-readable
+            one, which `naturaltime` never did.
+
+            NOT GATED, AND IT MUST NOT BE. An audit read `HallOfFameView.base_queryset` filtering
+            `is_complete=True` without `completed_at__isnull=False`, noted that `is_complete` is
+            denormalized, and concluded a finished run with no date could render `datetime=""` -- invalid
+            HTML, since the attribute must be a valid date string if present. A gate went in for one commit.
+
+            The state is impossible. `Challenge` carries the check constraint
+            `challenge_completed_at_matches_flag`: `is_complete=True` REQUIRES a non-null `completed_at`, and
+            `is_complete=False` requires a null one. Its own comment gives the reason this surface cares --
+            "the Hall of Fame orders on `completed_at` and a null would sort a finished run into an
+            unpredictable place". The model solved this before the page existed.
+
+            So the gate was dead code guarding a state the database refuses. The FRAME's gate -- the
+            `{% templatetag openblock %} if board {% templatetag closeblock %}` around `.pp-chero__frame` --
+            is NOT the same case: `total_slots` versus the slot rows has no constraint tying them, which is
+            exactly why that one is real and this one is not. (Named by its element rather than as "a hundred
+            lines above", which was wrong by a factor of two and is the kind of positional claim that
+            falsifies itself on the next edit.){% endcomment %}
+            {% comment %}THE TYPE, which used to be the subtitle under the hunter's name before their
+            standing took that slot. It belongs on the record line rather than being dropped: the board
+            states the type implicitly, but a reader who has collapsed or scrolled past the board still
+            needs the row to say which of the two challenges this was.{% endcomment %}
+            <span class="pp-chero__type">{{ run.get_challenge_type_display }}</span>
+            <span class="pp-chero__dot" aria-hidden="true">&middot;</span>
+            <time class="pp-chero__when" datetime="{{ run.completed_at|date:'c' }}">{{ run.completed_at|date:'j M Y' }}</time>
+            </div>
+        </div>
+
+        {% comment %}NO CORNER DIAMONDS. The plaque carried four (the Frame's brand mark, two as
+        pseudo-elements and two as spans) and the owner cut them on a browser pass: "I don't like the
+        diamonds on the corners either, they don't really look great."
+
+        It was the right structural call too, for the second time on this component. The diamonds are the
+        FRAME's mark, and the Frame's production partial is rendered by NOTHING -- not even
+        `templates/design/frame_preview.html`, which is a self-contained prototype including no partials --
+        having been superseded on the badge surfaces by the Badge Medallion, which draws no notches at all.
+        So the plaque was wearing the brand mark of an orphaned primitive, exactly as its discipline band had
+        been modelled on an orphaned component. Both came from the same failed reuse check.
+
+        The plaque's identity now rests on what is actually live: the rank-tinted material, the gold title
+        band, the plinth, and the shared disciplines ring.{% endcomment %}
+    </div>
+</a>

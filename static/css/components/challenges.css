@@ -1619,3 +1619,1133 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cwr__title { font-weight: 700; color: var(--pp-text); }
 .pp-cwr__xp { color: var(--pp-accent); font-weight: 700; }
+
+/* ============================================================
+ * THE PUBLIC RUN CARD (.pp-crun) -- one challenge run, on either public page.
+ *
+ * NOT A `.pp-gtile` AND NOT A `.pp-csq`, and both were candidates. The grouping tile is art-first with its
+ * name set large over a cover, and a run has no cover (see the partial for why it deliberately has no art at
+ * all); the square is a 109px cell whose whole job is to say which of three states it is in. This is a
+ * summary card: a few facts, stacked, at a size a reader takes in at a glance. What IS borrowed is the
+ * grouping grid's RESPONSIVE PROGRESSION and the house hover treatment, so the page sits beside Game Lists
+ * and Franchises without reading as a fourth idea.
+ *
+ * TWO COLUMNS ON MOBILE, which is the design system's own figure for browse cards and matches
+ * `.pp-gtile-grid` exactly -- unlike the square board above, which is deliberately denser because 26 keys
+ * are a set to be scanned. These are items to be read.
+ * ============================================================ */
+.pp-crun-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+@media (min-width: 640px)  { .pp-crun-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; } }
+@media (min-width: 1024px) { .pp-crun-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1536px) { .pp-crun-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+.pp-crun {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 11px 12px 12px;
+    border-radius: 13px;
+    background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 6px 20px rgba(0, 0, 0, 0.30);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+/* GLOW, NOT SCALE, on hover -- the house rule, and the same recipe `.pp-gtile` uses so two browse grids on
+   neighbouring pages respond identically. */
+@media (hover: hover) {
+    .pp-crun:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 22%, transparent),
+                    0 14px 34px -16px color-mix(in oklab, var(--pp-primary) 42%, #000);
+    }
+    .pp-crun:hover .pp-crun__hunter { color: color-mix(in oklab, var(--pp-primary) 32%, #fff); }
+}
+.pp-crun:active { transform: scale(0.985); }
+.pp-crun:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+    .pp-crun { transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+    .pp-crun:active { transform: none; }
+}
+
+.pp-crun__head { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+/* The chip shrink-proof: a two-line type chip would push the card's own rhythm out of step with its
+   neighbours in the grid. `.pp-crun__state` was dropped with the card's Finished chip -- this page only
+   shows runs in flight, so that chip could never render (see `_run_card.html`). */
+.pp-crun__type { flex: 0 0 auto; }
+
+/* THE HUNTER IS THE CARD'S SUBJECT, so it carries the weight a card title would. One line with an
+   ellipsis: PSN names run to 16 characters and a wrap would make one card taller than the rest of its row. */
+.pp-crun__hunter {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--pp-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 0.18s ease;
+}
+
+.pp-crun__tally { display: flex; align-items: baseline; gap: 5px; }
+/* `--sm` is the rung the ladder provides; no raw font-size, which is what the rungs exist to prevent. */
+.pp-crun__of { color: var(--pp-text-mute); font-weight: 700; }
+/* 12px IS THE FLOOR, not a chosen size. `test_challenge_detail_js::test_no_type_in_this_stylesheet_falls_
+   below_the_12px_floor` guards this whole stylesheet, file-wide rather than per class.
+   A THIRD BREAK, distinct from the two that guard's own docstring records (a 10.5px chip and an 11.5px page
+   hint): these labels were authored at 0.6875rem = 11px and left the guard red, unnoticed because the branch
+   was only running the browse test file. An uppercase tracked label can be added to that test as a
+   deliberate exception with its reason; it must not be done by lowering the bound. */
+.pp-crun__label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--pp-text-mute);
+}
+
+.pp-crun__bar { margin-top: 1px; }
+
+.pp-crun__foot {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--pp-text-dim);
+}
+
+/* ══ The Hall of Fame hero (.pp-chero) ═══════════════════════════════════════════════════════════
+ *
+ * ONE FINISHED RUN PER ROW, full width, where the Challenges page uses `.pp-crun` in a grid. The reason
+ * is scarcity rather than taste: finishing a run is 25 or 26 completed contracts, so this page holds
+ * single figures for a long time, and a 4-across grid both makes each finish look like a browse tile and
+ * leaves a page of eight entries reading as a failed load.
+ *
+ * PRIMARY, LIKE EVERY OTHER PAGE, and getting here took a correction. The first cut used `--pp-accent`
+ * for the hover glow and the focus ring so that this page would read as distinct from its sibling --
+ * arguing that each page should be "internally consistent" with its own header. But
+ * `docs/design/visual-identity.md` settles it: cyan is THE brand accent, "one brand accent across the kit,
+ * not three", and nothing else in the site uses a different one. A page that deviates alone reads as a
+ * mistake, not as a distinction. The two pages differ by icon, headline and layout instead.
+ *
+ * THIS IS NOT A BAN ON `--pp-accent` IN THIS FILE. It is the identity's named warm-orange EARN colour, and
+ * the reward panel above uses it correctly for XP amounts and the owed pill. A page accent is a different
+ * job, and that is the one it was doing wrong here.
+ *
+ * The title chip stays GOLD, which is a third thing again and is sanctioned: the identity puts cyan
+ * "distinct from tier colors", and a title earned is a prestige signal rather than an active-state one.
+ *
+ * THE FRAME IS NOT PINNED TO ANY RATIO -- it takes its height from the board, and the argument for that
+ * is on `.pp-chero__frame` below along with the two attempts it replaced.
+ *
+ * This comment used to say the opposite ("PINNED TO 1200/630 ... the board is sized to sit INSIDE that box
+ * at every breakpoint"), which was contradicted by the rule it describes, by the comment 120 lines below
+ * it, and by `test_the_frame_takes_its_height_from_the_board`, which ASSERTS the absence of an
+ * `aspect-ratio`. It mattered because it sits at the top of the block: a reader who trusted it would
+ * conclude the minting path can reuse 1200x630 and would walk straight back into the letterbox-or-crop
+ * pair that comment documents. The real used ratios are about 2.22:1 for A-Z and 1.86:1 for jobs at `lg`. */
+
+.pp-chero-list { display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 1024px) { .pp-chero-list { gap: 14px; } }
+
+.pp-chero {
+    position: relative;
+    display: grid;
+    /* STACKED AT 375px: side-by-side would leave the board ~170px wide and the covers unreadable, which is
+       the failure that made the card version feel flat in the first place. */
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 11px;
+    border-radius: 15px;
+    border: 1px solid var(--pp-border);
+    /* A LIT PLATE, NOT A FLAT FILL, and the two layers do different jobs.
+     *
+     * The owner asked the project's own question of a bland background -- "what would Google/Apple do?" --
+     * and `motion-patterns` principle 6 answers half of it before it is asked: "neon is a transient state,
+     * never resting chrome. Motion + glow belong to earn moments and acknowledgment states, not to surfaces
+     * at rest." A Hall of Fame row is a surface at rest, so a sheen loop or a breathing glow is out by rule.
+     * What is left is what Apple actually does for a resting surface: light and depth.
+     *
+     * LAYER 1 is the REWARD WASH, and its grammar is borrowed rather than invented: `.claim-banner--gold`
+     * in `elements.css` is labelled "#4 reward material" and runs brand cyan at one end to warm gold at the
+     * other across the card surface. A finished run is the same kind of object as a claim, so the Hall of
+     * Fame reads as the claim ceremony's cousin instead of as a browse list. At 6% rather than that
+     * banner's 12%, because this is a whole row and not a strip.
+     *
+     * IT MUST NOT REACH THE PLAQUE'S TEXT, and the first version did. `input.css` documents
+     * `--pp-text-mute` as "raised 0.55 -> 0.66 for WCAG AA (~4.5:1 on bg-2) site-wide" -- the token sits at
+     * the threshold against `--pp-bg-2` with ZERO headroom, so anything lightening laid over it fails. The
+     * wash's gold end is at 100% of a 104deg gradient, which lands squarely on the plaque column: measured
+     * 4.69 -> 4.04 for `--pp-text-mute`, and 3.03 once the (now removed) radial was on top. The type chip,
+     * the tally's `/25`, the "squares" label and the date all sit in that region.
+     * So the plaque carries its own `--pp-bg-2` plate (see `.pp-chero__plaque`), which resets the surface
+     * its text was contrast-tuned against. The wash stays on the card around it.
+     *
+     * LAYER 2 is the LIGHT SOURCE: a top-left falloff, so the plate has a lit edge and a shaded far corner
+     * rather than one uniform grey. This is the whole difference between "a card" and "a surface".
+     *
+     * `--pp-metal-gold` where the banner uses a raw `#c79a52`; same family, and this file's title chip
+     * already uses the token, so one gold per surface. */
+    background:
+        linear-gradient(104deg,
+            color-mix(in oklab, var(--pp-primary) 6%, transparent) 0%,
+            transparent 46%,
+            color-mix(in oklab, var(--pp-metal-gold) 7%, transparent) 100%),
+        linear-gradient(168deg,
+            rgba(255, 255, 255, 0.035) 0%,
+            rgba(255, 255, 255, 0) 38%),
+        var(--pp-bg-2);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 8px 26px rgba(0, 0, 0, 0.32);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+/* THE AMBIENT GLOW IS GONE, and recording why matters more than the four lines it occupied.
+ *
+ * It was a static gold radial behind the plaque, gated on a title being earned, with `.career-hero::before`
+ * cited as the precedent. Three audit findings converged on it:
+ *
+ * 1. `motion-patterns` principle 6 reads "Motion **+ glow** belong to earn moments and *acknowledgment*
+ *    states ... not to surfaces at rest." The comment here quoted that sentence and then narrowed it to
+ *    motion alone -- "a sheen loop or a breathing glow is out by rule" -- and cited the same principle as
+ *    the AUTHORITY for a resting glow. The clause it dropped from its own quotation is the one that covers
+ *    exactly this layer.
+ * 2. It did not work at base anyway. Centred `at 88% 10%` of a 365-779px stacked hero, the bright part
+ *    landed 36-78px down -- behind the frame's opaque `--pp-bg-3` -- so the title band it existed to mark
+ *    received about 2-6% of it.
+ * 3. It was the largest contributor to a WCAG regression on the plaque; see the note on the wash below.
+ *
+ * The hover glow (`:hover` below) is the earn/acknowledgment beat principle 6 does sanction, and it reads
+ * far better against a surface with no resting glows competing with it. */
+
+/* The Career hero's own companion rule: content above the wash. Without it the `::before` paints over the
+   board and the plaque. */
+.pp-chero > * { position: relative; z-index: 1; }
+/* SIDE BY SIDE FROM 768px, the artwork taking the larger share. `minmax(0, …fr)` on both tracks because a
+   `1fr` track refuses to shrink below its content's intrinsic width, which is how a long PSN name widens
+   the text column and squeezes the frame instead of ellipsising.
+   THE BOARD'S SHARE GROWS WITH THE VIEWPORT, which the first cut did not do: it held 1.15fr at every width
+   above 768px, so on a wide desktop the byline -- a chip, a name, a chip and two short stats -- sat in
+   nearly half the row doing nothing, and the covers stayed small while there was space beside them. The
+   byline's content does not get longer on a bigger screen, so the extra width all belongs to the art. */
+@media (min-width: 768px) {
+    .pp-chero { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; padding: 12px; align-items: center; }
+    /* JOBS STAYS STACKED THROUGH THE TABLET BAND. Its board is two shelves wide from 768 (see the pairing
+       rule below), and two shelves only fit sensibly when the board has the whole row: full width gives a
+       ~346px shelf and a ~65px square, where sharing the row with the plaque would give 180px and 31px.
+       A-Z has no shelves to pair and goes side by side here as before. */
+    .pp-chero--jobs { grid-template-columns: minmax(0, 1fr); }
+}
+/* ONE TRACK RATIO FOR BOTH TYPES, which is a correction (owner, 2026-09-30: "are we able to extend the box
+   containing the A-Z games to match the width of the box that holds the job games?").
+   The two diverged for a reason that only ever justified widening ONE of them: the jobs board packs ten
+   squares across where A-Z packs nine, and each shelf spends a border plus 10px of padding on its box, so at
+   A-Z's share its squares came out around 41px. Widening jobs fixed that and left the A-Z board narrower
+   than its sibling for no reason of its own -- two boards of different widths stacked down one page, which
+   reads as inconsistency rather than as two shapes. A-Z simply gets the same room and draws bigger art with
+   it (about 70px per square at `lg` against the 59px a jobs square gets).
+   The plaque is unaffected in substance: at `lg` it still has ~278px for a portrait, a name, a title band
+   and two stats, none of which gets longer on a wider screen. */
+@media (min-width: 1024px) {
+    .pp-chero { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr); gap: 18px; padding: 14px; }
+    /* AND JOBS REJOINS THE TWO-COLUMN LAYOUT HERE, undoing the tablet override above -- without this line
+       the single column would persist to every width, because a media query does not expire. */
+    .pp-chero--jobs { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr); }
+}
+@media (min-width: 1280px) { .pp-chero { grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr); } }
+
+@media (hover: hover) {
+    .pp-chero:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 42%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                    0 0 0 1px color-mix(in oklab, var(--pp-primary) 24%, transparent),
+                    0 18px 40px -18px color-mix(in oklab, var(--pp-primary) 44%, #000);
+    }
+    .pp-chero:hover .pp-chero__hunter { color: color-mix(in oklab, var(--pp-primary) 30%, #fff); }
+    /* The artwork lifts its own edge rather than the whole row scaling -- the house glow-not-scale rule,
+       applied to the one element that is a picture. */
+    .pp-chero:hover .pp-chero__glass {
+        border-color: color-mix(in oklab, var(--pp-primary) 34%, rgba(255, 255, 255, 0.10));
+    }
+}
+.pp-chero:active { transform: scale(0.992); }
+.pp-chero:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+    .pp-chero { transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+    .pp-chero:active { transform: none; }
+}
+
+/* ── the artwork hole ───────────────────────────────────────────────────────────────────────────── */
+
+/* THE FRAME TAKES ITS HEIGHT FROM THE BOARD, and this is the third attempt at it. The first pinned
+ * `aspect-ratio: 1200 / 630` (the minted share image's dimensions) and let 3:4 cells sit inside, which
+ * letterboxed the mosaic in 22-59px of bare background at every width. The second kept the pinned ratio and
+ * stretched the cells to fill it, which fixed the letterbox and broke something worse: the cells came out
+ * 1:1.575, TALLER than 3:4 art, so `object-fit: cover` scaled every cover to the cell HEIGHT and sliced
+ * ~15% off its left and right edges -- and for the wider PSN fallback art, which is 16:9, showed only the
+ * middle ~36%. On the one page whose subject is the art. `object-position: top` was inert throughout,
+ * because the vertical fit was exact.
+ *
+ * The arithmetic says you cannot have both: a 1.905:1 box cannot be tiled by 25-26 cells of ratio 3:4 (3
+ * rows of 3:4 fit only 7.6 columns; 4 rows want 10, which is 40 cells for 26 items). So the cells keep 3:4,
+ * uncropped, and the frame is as tall as they make it -- roughly 2.25:1 for a 9-wide, 3-deep board.
+ *
+ * WHAT THIS MEANS FOR THE MINTED IMAGE, stated here because the previous version of this comment made a
+ * promise the geometry could not keep. The minted Hall of Fame cover must be generated at the BOARD's ratio,
+ * not at `DIMENSIONS['landscape']`. That is not a problem for the downloadable share card, which should stay
+ * 1200x630 because that is what social embeds want: it is the same template rendered at a second
+ * `format_type`, which is exactly what that dict is for. One design, two output sizes. */
+.pp-chero__frame {
+    position: relative;
+    border-radius: 11px;
+    overflow: hidden;
+    background: var(--pp-bg-3);
+    /* RECESSED, which is the other half of the depth answer. A soft inner shadow around the edge plus a
+       1px specular hairline along the top makes the board read as set INTO the plate, lit from the same
+       direction as the surface gradient above. Flat, it read as a picture pasted on.
+       `inset` only -- nothing here casts outward, so the row's own elevation stays the one shadow. */
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.35),
+        inset 0 10px 24px -12px rgba(0, 0, 0, 0.55);
+}
+/* NO RULE FOR THE MINTED IMAGE YET, deliberately: the minting pass is a later change, and CSS for an
+   element nothing emits is the kind of half-landed pattern that later reads as already working. */
+/* ══ The board ═══════════════════════════════════════════════════════════════════════════════════
+ *
+ * TWO GEOMETRIES, ONE MARKUP, which is the whole point of `boards_for` returning groups for both types.
+ * A-Z is one unlabelled shelf of 26; Job Coverage is five labelled shelves of five. The template loops
+ * groups either way and the type class picks the arrangement.
+ *
+ * THE ARITHMETIC THAT SETTLED THIS, because two earlier versions of this file guessed and were wrong:
+ * 26 squares in 3 rows is a LANDSCAPE block, and 25 squares in 5 discipline rows is a PORTRAIT one. At a
+ * cell size around 74px an A-Z board is about 664x300 and a grouped jobs board about 400x500 -- the ratios
+ * are what matters (2.2:1 against 0.8:1) and they cannot both be a wide strip. (An earlier version of this
+ * premised "~130px at desktop", which is not a used value at any breakpoint -- the real cells are 59-112px
+ * -- and was inconsistent with the 664x300 in its own next clause.) So one of three things had to give:
+ * the grouping, the art size, or a uniform row height. The owner chose the row height (2026-09-30) -- the
+ * groupings and the art are the point, and the Hall of Fame is a stacked list where two row heights are
+ * unremarkable.
+ *
+ * SO THE CELL IS SIZED BY WIDTH and the board's height follows, per type. Nothing here pins an
+ * `aspect-ratio` on the frame: a fixed frame ratio is what forced the earlier bad choices (a letterboxed
+ * mosaic, then cells so tall that `object-fit: cover` sliced the sides off every cover). */
+
+.pp-chero__board { display: flex; flex-direction: column; gap: 4px; padding: 6px; }
+@media (min-width: 1024px) { .pp-chero__board { gap: 6px; padding: 8px; } }
+
+/* TWO SHELVES PER ROW ON JOBS FROM 768px -- ten squares across rather than five, so the board is about
+ * three rows deep instead of five.
+ *
+ * FROM 768, NOT 1024, which is a correction. Gated at 1024 the tablet band kept the five-deep stack: a
+ * jobs hero measured 629px against A-Z's 169px on the same page -- a 2.8x disparity, and WORSE than the
+ * 500-vs-300 that prompted the pairing in the first place. Crossing 1024 the jobs hero then SHRANK by
+ * 266px while the A-Z one grew. 768 is the project's named tablet target, so it is where the fix belongs.
+ *
+ * THE JOBS HERO ALSO STAYS STACKED UNTIL 1024 (see the track rules above), which is what makes the pairing
+ * work at tablet: the board gets the full row width, so a shelf is ~346px and a square ~65px. Side by side
+ * at 768 the board would be 372px, a shelf 180px and a square 31px -- the board-is-mush failure one
+ * breakpoint down.
+ *
+ * NOT BELOW 768px. At 375px the board's content box is 307px -- the hero's own border and padding come off
+ * first, which an earlier figure of "~331px" forgot -- so two shelves would leave each square about 26px,
+ * smaller than the key badge sitting on it. There the shelves stack and the hero is simply taller,
+ * which a phone scrolls.
+ *
+ * THE LINES ARE CENTRED because five shelves in rows of two leaves an orphan. Left-aligned it reads as a
+ * layout that ran out; centred it reads as the last shelf. Full rows fill their line exactly, so this
+ * only ever moves the orphan. */
+@media (min-width: 768px) {
+    .pp-chero--jobs .pp-chero__board {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-content: flex-start;
+    }
+    /* Half the board, minus the gap between the pair AND 1px of slack -- and the slack is the whole
+       reason this rule works. Without it `2 * basis + gap` came to EXACTLY 100%, leaving zero free space,
+       so sub-pixel rounding wrapped the second shelf onto its own line and the board fell straight back to
+       one shelf per row at half width: the 500px-tall stack this breakpoint exists to replace, now also
+       narrow. Reported from the browser as "a smaller version of the 5 row stack".
+       The identical trap is documented on the SQUARE basis further down this block, which already carried
+       its 1px -- this rule was written without reading it. (Six rules and ~70 lines later, not "two rules
+       below" as an earlier version said.) A text pin on the literal passed throughout, because a
+       stylesheet assertion cannot see a wrap. */
+    .pp-chero--jobs .pp-chero__shelf { flex: 0 0 calc((100% - 6px) / 2 - 1px); }
+}
+
+/* A shelf is one group: its tab, then the box holding its squares. A-Z has one shelf and no label, so it
+   collapses to a bare row of squares with no tab and no box -- the branch costs that board nothing. */
+.pp-chero__shelf { display: flex; flex-direction: column; min-width: 0; }
+.pp-chero__row { display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; }
+@media (min-width: 1024px) { .pp-chero__row { gap: 3px; } }
+
+/* ── the discipline tab and its box ──────────────────────────────────────────────────────────────
+ *
+ * A FOLDER TAB, which replaced a bare leading icon (owner, 2026-09-30: "small wrappers around the group of
+ * 5 with the color and maybe put the name of the discipline above in a little tab looking thing"). The icon
+ * identified a discipline only to somebody who already knew the set of five; the name says it outright.
+ *
+ * THE TAB MERGES INTO THE BOX by `margin-bottom: -1px` plus a `z-index`, so its bottom border lands exactly
+ * on the box's top border and the two read as one object. No absolute positioning: a straddling legend
+ * would overlap whatever sits above it, and on a wrapped board that is another shelf.
+ *
+ * The box's top-LEFT corner is square, which is what makes the tab look attached rather than floating. */
+.pp-chero__tab {
+    align-self: flex-start;
+    position: relative;
+    z-index: 1;
+    margin-bottom: -1px;
+    padding: 2px 9px 3px;
+    max-width: 100%;
+    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 38%, var(--pp-border));
+    border-bottom-color: transparent;
+    border-radius: 7px 7px 0 0;
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 16%, var(--pp-bg-3));
+    font-size: 0.75rem;
+    font-weight: 800;
+    line-height: 1.1;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, #fff);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* THE BOX, on the jobs board only. `.pp-chero__row` is shared with A-Z, where a border and a tint around
+   all 26 squares would be a frame inside a frame. */
+.pp-chero--jobs .pp-chero__row {
+    padding: 4px;
+    border: 1px solid color-mix(in oklab, var(--disc, var(--pp-primary)) 30%, var(--pp-border));
+    border-radius: 0 7px 7px 7px;
+    background: color-mix(in oklab, var(--disc, var(--pp-primary)) 7%, transparent);
+}
+@media (min-width: 1024px) { .pp-chero--jobs .pp-chero__row { padding: 5px; } }
+
+/* THE SHORT LAST ROW IS CENTRED ON A-Z AND LEFT-ALIGNED ON JOBS, which is not an inconsistency: the two
+ * boards have opposite needs and a single rule got it wrong for one of them (the grouped rewrite dropped
+ * `justify-content` entirely, which put the notch back in every A-Z mosaic's bottom-right corner).
+ *
+ * A-Z is ONE shelf of 26 in rows of nine, so the last row holds eight and there is no column to preserve --
+ * centring it is what stops the board ending in a ragged step. `justify-content` centres each LINE's items
+ * in a wrapping flex container, which is the thing a grid cannot do for a partial last row.
+ *
+ * JOBS is FIVE shelves whose squares should line up in a column, and `_board_groups` buckets by dict rather
+ * than assuming five-per-discipline -- so a catalogue with four or six jobs in one discipline makes a short
+ * or wrapping shelf. Centring that shelf would push its squares out of the column and make an uneven
+ * catalogue look like a layout bug. Left-aligned, the column holds and the short shelf reads as short. */
+.pp-chero--az .pp-chero__row { justify-content: center; }
+.pp-chero--jobs .pp-chero__row { justify-content: flex-start; }
+
+/* ── the squares, per type ───────────────────────────────────────────────────────────────────────
+ *
+ * 3:4, THE RATIO THE ART IS IN, so `object-fit: cover` has nothing to crop. The basis carries 1px of
+ * slack in both arrangements: `cols * basis + (cols - 1) * gap` otherwise comes to exactly the content
+ * width on a quotient no UA can represent, and one rounding the wrong way wraps the last square into a
+ * row the frame's `overflow: hidden` then clips. `fr` tracks were immune by construction, which the flex
+ * layout gives up; 1px buys it back. */
+.pp-chero__sq {
+    position: relative;
+    aspect-ratio: 3 / 4;
+    border-radius: 3px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* A-Z: NINE ACROSS, three rows for 26. */
+.pp-chero--az .pp-chero__sq { flex: 0 0 calc((100% - 8 * 2px - 1px) / 9); }
+@media (min-width: 1024px) { .pp-chero--az .pp-chero__sq { flex-basis: calc((100% - 8 * 3px - 1px) / 9); } }
+
+/* JOB COVERAGE: FIVE PER SHELF, and from 1024px two shelves share a row -- so ten squares across. Five of
+   five is the catalogue's shape, but the count is NOT assumed: `_board_groups` buckets by dict, so a
+   discipline with four or six jobs makes a shorter or wrapping shelf rather than breaking the column.
+   The basis is per SHELF either way (`100%` resolves against `.pp-chero__row`, which is the shelf's own
+   track), so the two-up arrangement needs no second figure here -- the shelf gets narrower and its five
+   squares follow. */
+.pp-chero--jobs .pp-chero__sq { flex: 0 0 calc((100% - 4 * 2px - 1px) / 5); }
+@media (min-width: 1024px) { .pp-chero--jobs .pp-chero__sq { flex-basis: calc((100% - 4 * 3px - 1px) / 5); } }
+
+/* A square that never got art, kept visible rather than blank. On this page every square is complete, so
+   this is the unresolvable-cover case: the contract row was deleted out from under a finished square (the
+   FK is `SET_NULL` and the snapshot keeps the square filled), or its concept has no trusted IGDB match. */
+.pp-chero__sq--bare { background: rgba(255, 255, 255, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05); }
+
+/* `object-top` per the project's image conventions: PSN fallback art is wider than 3:4, and anchoring to
+   the top keeps the game's logo inside the crop instead of slicing it off.
+   THIS ONLY WORKS BECAUSE THE CELL IS 3:4, which is worth saying before anyone changes the cell ratio
+   again: in a cell TALLER than the art, `cover` fits the height exactly and crops horizontally, so
+   `object-position: top` becomes inert and the logo it protects is sliced off the sides instead. */
+.pp-chero__art { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+/* A generic PS placeholder is not art and must not be cropped to a slab of grey. `object-position: center`
+   is required, not tidiness: it is a separate property, so overriding only the fit leaves the icon
+   contained but still pinned to the top of its cell, out of line with every covered neighbour. */
+.pp-chero__art--icon { object-fit: contain; object-position: center; padding: 2px; }
+
+/* ── the key: the context the board was missing ──────────────────────────────────────────────────
+ *
+ * A letter for A-Z, a discipline-tinted job icon for Job Coverage. The same split `_square_body.html`
+ * makes on the detail board.
+ *
+ * A FULL-WIDTH BAR ALONG THE BOTTOM, not a corner chip, and an earlier version of this comment claimed the
+ * opposite while arguing that a corner chip "at 72px would cover a quarter of the art" -- this bar covers
+ * 20-35% of a square's height across its whole width, which is more. The trade is deliberate but it is the
+ * reverse of what was written: a bar guarantees the glyph a known background at every square size, where a
+ * 20px chip on a 32px mobile square would be the thing burying the art. */
+.pp-chero__key {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 0 2px;
+    /* A SOLID FILL, NOT A GRADIENT, and this is a contrast fix rather than a style preference. The
+       gradient ran `rgba(0,0,0,0.82)` at the baseline to transparent at the top, so a glyph filling the box
+       straddled alpha 0.82 down to ~0.20 -- measuring 3.44:1 mid-glyph and 1.44:1 at the cap over a bright
+       cover, and 1.07-1.21:1 for the job icons. The top third of every letter washed out, on the one
+       element that exists to give the board its context.
+       The recipe is `.pp-csq__key`'s, which is why that chip works on the detail board: an opaque
+       `--pp-bg-0` mix with a hairline. Same colour too -- `var(--pp-text)` for a letter rather than a
+       primary mix, so the two boards' keys read as the same component. */
+    /* 12px, THE FLOOR, not a chosen size -- and NOT an exception to it. An earlier version set this to
+       0.625rem (10px) with a comment claiming the floor "does not apply" because the guard's own docstring
+       invites an uppercase micro-label as a deliberate exception, "registered there rather than argued
+       here". It was never registered, so the claim was false and the guard went red. It also did not need
+       to be: the letter being prominent is the whole point of the key, so 12px is the better size as well
+       as the compliant one. The guard is `test_challenge_detail_js::test_no_type_in_this_stylesheet_falls_
+       below_the_12px_floor`, and this is the third time this branch has tripped it. */
+    font-size: 0.75rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-bg-0) 88%, #000);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    /* No `backdrop-filter`: this paints 26 times per hero and up to 8 heroes per page, and the project's
+       motion rules single out blur over page-sized areas as the mobile GPU cost worth avoiding. */
+}
+.pp-chero__key svg { width: 11px; height: 11px; }
+@media (min-width: 1024px) {
+    .pp-chero__key { font-size: 0.875rem; padding: 2px 0 3px; }
+    .pp-chero__key svg { width: 14px; height: 14px; }
+}
+/* Job Coverage tints the key by discipline, off the `--disc` its shelf sets -- the same recipe
+   `.pp-csq__key--job` uses, so a job's colour means one thing site-wide. 55%, NOT 60%: the comment claimed
+   "the same recipe" while the value differed, which is the kind of near-miss that makes two surfaces look
+   subtly unrelated for no stated reason. */
+.pp-chero__key--job { color: color-mix(in oklab, var(--disc, var(--pp-primary)) 55%, #fff); }
+
+/* The inner hairline, so the board reads as one framed object rather than as loose tiles. Over the
+   squares, under nothing -- it has no content of its own. */
+.pp-chero__glass {
+    position: absolute;
+    inset: 0;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    pointer-events: none;
+    transition: border-color 0.18s ease;
+}
+
+/* ══ The plaque ══════════════════════════════════════════════════════════════════════════════════
+ *
+ * THE HUNTER IS THE SUBJECT, and the first cut made the right column a thin byline sitting in half the
+ * row: a chip, a 30px avatar, a 15px name and two stats, so the row celebrated the cover art and
+ * mentioned the person. This is a plaque -- the avatar at portrait scale, the name as the headline, the
+ * title as its own band.
+ *
+ * EVERYTHING HERE IS LIVE, which is a constraint rather than a detail: see `_run_hero.html` on
+ * `PlatinumShareImage`. A name, an avatar or a ranking baked into a stored PNG goes stale silently.
+ *
+ * CENTRED AT `md` AND UP, where it sits beside the board and has room to be a composed block; left-aligned
+ * at base, where it is a stacked strip under the board and centring would leave ragged short lines. */
+.pp-chero__plaque { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* A PLATE, NOT A SEAM, and the change fixes two findings at once.
+ *
+ * WHY A PLATE: `--pp-text-mute` is tuned to exactly 4.5:1 on `--pp-bg-2` with no headroom (see the wash
+ * note on `.pp-chero`), so the plaque's text has to sit on that surface and not on a lightened version of
+ * it. Repainting `--pp-bg-2` here resets the background its contrast was measured against. The card keeps
+ * the wash; the plaque is an inset plate on top of it.
+ *
+ * WHY NOT THE HAIRLINE IT REPLACES: a `border-left` was supposed to read as "one mounted object with a
+ * join". It could not. `.pp-chero` is `align-items: center`, and the plaque's height never matches the
+ * frame's -- at tablet a 210px plaque sat beside a 629px jobs board, so the "seam" was a floating tick down
+ * 33% of the row. A plate has its own four edges and needs no line to pretend with.
+ *
+ * STRETCHED, so the plate is as tall as the row rather than a floating panel -- which is also what makes
+ * its own left edge land where a join belongs. */
+@media (min-width: 768px) {
+    .pp-chero__plaque {
+        align-self: stretch;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        gap: 12px;
+        /* NO BOTTOM PADDING. The plinth is the plate's own lower zone and reaches its bottom edge, so the
+           padding that would sit under it lives on the plinth instead. */
+        padding: 14px 14px 0;
+        border-radius: 11px;
+        border: 1px solid var(--pp-border);
+        /* MATERIAL, NOT A FLAT FILL -- a faint top-edge light catch over a workbench gradient, which is
+           `.pursuer-card`'s own recipe. Two things make it safe where a flat `--pp-bg-2` was needed before:
+           the gradient runs DOWNWARD into `--pp-bg-1` (darker, so muted text gains contrast rather than
+           losing it), and every muted line has moved into the plinth, which paints its own opaque surface.
+           Measured: mute on `--pp-bg-1` is 5.43 against the 4.5 floor. */
+        background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 20%),
+            linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+}
+@media (min-width: 1024px) { .pp-chero__plaque { gap: 14px; padding: 16px 16px 0; } }
+
+/* ── THE PLAQUE IS THE PURSUER CARD, COMPACT ────────────────────────────────────────────────────────
+ *
+ * `docs/design/visual-identity.md` names the Pursuer Card a signature primitive, lists "'earned by these
+ * Pursuers' panels" among the places it appears, and locks a `Mini (comments/leaderboards)` size. This
+ * plaque is that panel at that size. What it was instead -- an avatar circle, a username and a subtitle --
+ * is the primitive's own first listed anti-pattern: "Generic 'user profile card' (avatar circle + username
+ * + bio, like every social app)". The owner read it as "boring", which is that anti-pattern from the
+ * outside.
+ *
+ * WHAT IS BORROWED AND WHAT IS NOT, corrected twice by the owner. The rank-tinted material that escalates
+ * with standing is the borrowed part, and it stands up because the hue comes from `--rank-*`, which
+ * `career.html` reads live. The two things that did NOT survive: a five-discipline family band (replaced by
+ * the live shared ring) and four Frame corner diamonds (cut outright -- the Frame is as orphaned as the
+ * Pursuer Card, rendered only by its own design preview). The
+ * COMPONENT is not mounted -- `pursuer_card_service` builds the full card from a per-profile Career hero,
+ * and eight of those on an anonymous uncached URL is the shape of the May 2026 OOM. `challenges/services/
+ * plaque.py` recomputes the same band from page-wide aggregates instead. The Pursuer Card memory records
+ * propagation as "DEFERRED, each riding its own surface's future redesign"; riding means adapting the
+ * language to the surface's budget, which is this.
+ *
+ * THE RANK HUE IS `--rank-<key>`, NOT `--pc-tier`. `pursuer-card.css` assigns `--pc-tier` in just two
+ * rules, so it carries TWO hues across four escalation rungs (an earlier version of this line said
+ * three colours); `elements.css` defines a full per-rank spectrum, and `career.html` -- the standard --
+ * already reads `var(--rank-{{ key }})` for its rank ladder. Using the ladder's own token is what keeps
+ * the plaque and the Career page agreeing about what a Paragon looks like. It arrives inline as `--rk`,
+ * following that same template's precedent, so eleven hues cost no extra rules.
+ * ================================================================================================== */
+
+/* NO CORNER DIAMONDS, and the rules are deleted rather than commented out.
+ *
+ * The plaque carried four of them -- the Frame's brand mark, `--nbg`/`--nbd`/`--nglow` driven so each rank
+ * band could turn a cut notch into a lit gem. The owner cut them on a browser pass ("they don't really look
+ * great"), and the structural reading agrees: the Frame's production partial is rendered by NOTHING -- not
+ * even its own design preview, which is a self-contained prototype that includes no partials -- having been
+ * superseded on the badge surfaces by the Badge Medallion, which draws no notches. The plaque was wearing an
+ * orphaned primitive's mark, the same mistake as the discipline band and from the same failed reuse check.
+ *
+ * WHAT THIS FREES: the plaque no longer needs `overflow: visible`, since nothing hangs off its edges. The
+ * plinth keeps its own bottom radius anyway -- it is the element that paints the corner, so owning its own
+ * shape is correct regardless of what the parent clips.
+ */
+
+/* ESCALATION, LAYERED ACROSS BORDER / WASH / MATERIAL rather than switched on. (It said "GLOW / NOTCHES"
+   until both were removed -- the glow on motion-patterns principle 6, the corner diamonds by the owner.)
+   The Frame's rule is
+   that tiers "should feel like the same family, not different products", so `matte` is not a stripped
+   plaque -- it still has the material and the plinth. (NOT "the gold title band",
+   which an earlier version listed: that band is conditional on a title actually being HELD, and a
+   finished run can legitimately hold none.) The bands are CLOSE to `pursuer-card.css`'s rungs but not
+   the same ones -- that file has a fifth step at vanquisher which this map merges, because the hue here
+   already changes at every rung.
+   THE WASH STAYS LOW AND NEARLY CONSTANT (10%) across the two tinted bands, deliberately: the rank label
+   sits in it, and a wash that deepened per band would need a different text recipe per band. Escalation is
+   carried by the border, the glow and the gems, which no text sits on. */
+@media (min-width: 768px) {
+    .pp-chero--band-lift .pp-chero__plaque {
+        border-color: color-mix(in oklab, var(--pp-text) 12%, var(--pp-border));
+    }
+    .pp-chero--band-tinted .pp-chero__plaque,
+    .pp-chero--band-radiant .pp-chero__plaque {
+        border-color: color-mix(in oklab, var(--rk) 44%, var(--pp-border));
+        background:
+            linear-gradient(180deg, color-mix(in oklab, var(--rk) 10%, transparent), transparent 24%),
+            linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 20%),
+            linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+        /* NO RANK HALO. An earlier version added `0 0 28px color-mix(--rk 14%)` here, 450 lines after this
+           same file DELETED a resting gold radial for the exact reason that applies again: motion-patterns
+           principle 6, "Motion + glow belong to earn moments and acknowledgment states ... not to surfaces
+           at rest". A browse list is at rest, and eight glowing rows is a different claim from the one
+           hero `pursuer-card.css` borrows its halo for. The escalation is carried by the border, the
+           material and the gems -- none of which is a page-level glow. */
+        box-shadow: 0 12px 34px rgba(0, 0, 0, 0.42);
+    }
+    .pp-chero--band-radiant .pp-chero__plaque {
+        border-color: color-mix(in oklab, var(--rk) 60%, var(--pp-border));
+        /* The apex keeps a deeper lift and a brighter top-edge CATCH -- an inset hairline, which is
+           material, not a halo -- and no outer glow, for the reason the tinted band states. */
+        box-shadow:
+            0 16px 44px rgba(0, 0, 0, 0.46),
+            inset 0 1px 0 color-mix(in oklab, var(--rk) 40%, transparent);
+    }
+}
+
+/* THE AVATAR AT PORTRAIT SCALE. 30px was a byline ornament; this is the second thing the eye lands on
+   after the art. The ring is the house avatar treatment (`.lb-row__av`, `.pp-phero__avatar`). */
+.pp-chero__av {
+    flex: 0 0 auto;
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+    /* THE RING TAKES THE RANK HUE, not the brand cyan it had. Cyan "still owns active / interactive"
+       (`elements.css`), and a resting portrait is neither -- while the rank is the one thing about this
+       hunter the ring could usefully encode. Falls back to primary when `--rk` is unset, which is what a
+       render with no plaque spine would be. */
+    box-shadow: 0 0 0 1px var(--pp-border), 0 0 0 4px color-mix(in oklab, var(--rk, var(--pp-primary)) 16%, transparent);
+}
+@media (min-width: 768px) { .pp-chero__av { width: 64px; height: 64px; } }
+@media (min-width: 1024px) { .pp-chero__av { width: 76px; height: 76px; } }
+
+.pp-chero__who { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 100%; }
+
+/* One line with an ellipsis: PSN names run to 16 characters and a wrap would make one row taller than its
+   neighbours for no gain. `min-width: 0` on the flex child is what lets the ellipsis happen at all.
+   Sizes are scale rungs (`text-base` -> `text-xl`), not raw values -- the rule a few blocks up says so
+   out loud ("no raw font-size, which is what the rungs exist to prevent"). */
+.pp-chero__hunter {
+    min-width: 0;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--pp-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 0.18s ease;
+}
+@media (min-width: 768px) { .pp-chero__hunter { font-size: 1.125rem; } }
+@media (min-width: 1024px) { .pp-chero__hunter { font-size: 1.25rem; } }
+
+/* THE SUPPORTER MARK MUST BE CAPPED, and this is a bug the project has shipped and fixed TWICE --
+   `gamelists.css` carries the rationale at `.gl-card__author .pp-markname` and again at
+   `.gl-spotlight__by`, and `leaderboards.css` records it as "pushed the supporter mark out of the row
+   entirely". `.pp-markname` is `inline-flex`, so on a `white-space: nowrap` line nothing bounds it and it
+   lays out at max-content; the parent's `overflow: hidden` then shears off the overhang -- and the glyph
+   sits AFTER the name, so what is sheared is exactly the supporter star, staff wrench or mod shield, on
+   precisely the long PSN IDs that made the ellipsis necessary. `max-width: 100%` is the bound. */
+.pp-chero__hunter .pp-markname,
+.pp-crun__hunter .pp-markname { max-width: 100%; }
+
+/* The run type. It was the subtitle under the name; the hunter's STANDING took that slot and the type moved
+   down to the plinth's record line beside the date. Nothing is lost by the move: the board to its left
+   states which kind of run this is twenty-six times over, whereas the rank was not on the plaque at all.
+   Still `--pp-text-mute`, which is now safe for the reason it was becoming unsafe above -- the plinth
+   paints its own opaque `--pp-bg-1` (5.43:1) instead of sitting in the crest's wash (3.40 at the mildest
+   band, 2.68 at the apex). */
+.pp-chero__type {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--pp-text-mute);
+}
+
+/* ── THE STANDING LINE: rank + Pursuer Level, directly under the name ───────────────────────────────
+ *
+ * THE TEXT RECIPE IS MEASURED, NOT PICKED. `--rank-*` spans a grey (#6b7280 Newbie) to a near-white
+ * (#e8f1ff Ascendant), and on the washed crest FOUR of the eleven raw tokens fail AA outright: newbie
+ * 2.72, luminary 3.44, recruit 3.43, paragon 3.74. Mixing 34% toward white clears all eleven with the
+ * worst case at 5.00 (Newbie), so one recipe serves the whole ladder and no band needs its own.
+ * Re-measure if the wash percentage above ever moves. */
+.pp-chero__standing {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: color-mix(in oklab, #fff 34%, var(--rk, var(--pp-primary)));
+}
+/* CENTRED AT md+ LIKE EVERY OTHER ROW, and the only one that was missed. The plaque is
+   `align-items: center; text-align: center` from 768, which centres inline text -- but this line is an
+   `inline-flex` whose box is stretched to `.pp-chero__who`'s width, so its contents packed at `flex-start`
+   and sat flush-left under a centred hunter name. With a name long enough to ellipsise, `__who` takes the
+   full column and the offset was ~49px. Its siblings (`__stats`, `__paid`, `__record`) all add this. */
+@media (min-width: 768px) { .pp-chero__standing { justify-content: center; } }
+@media (min-width: 1024px) { .pp-chero__standing { font-size: 0.8125rem; } }
+
+/* A small lit mark before the rank name: the rank's hue stated as a SHAPE rather than only as the colour of
+   some letters, which is what keeps the line from reading as merely coloured text. Full strength here (not
+   the 34% mix): it carries no glyphs, so contrast does not apply.
+   It used to be described as echoing the plaque's corner diamonds. Those are gone, so this is now just a
+   rank bullet that happens to be a rotated square -- kept because the owner's objection was to the CORNER
+   diamonds, and a 6px mark inline with text reads as a bullet rather than as the Frame's brand mark. */
+.pp-chero__gem {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    transform: rotate(45deg);
+    background: var(--rk, var(--pp-primary));
+    box-shadow: 0 0 6px color-mix(in oklab, var(--rk) 55%, transparent);
+}
+.pp-chero__rank { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* NO `.pp-chero__lvl` RULE, because there is no longer a level on this line: the disciplines ring puts the
+ * Pursuer Level in its centre, which is where that primitive has always put it, so the plaque stated it
+ * twice. The element and its rule are deleted rather than left styling nothing.
+ *
+ * ITS ONE LESSON IS WORTH KEEPING, because the recipe it defeated is still here. It carried
+ * `opacity: 0.78`, and `.pp-chero__standing`'s 34%-white mix clears all eleven ranks with Newbie worst at
+ * 5.00 -- an opacity on a CHILD multiplied that down to 4.13, on the most common plaque on the page, while
+ * the guarding test saw nothing because it only forbade `--pp-text-mute` inside the parent rule. A ratio
+ * measured on a colour says nothing about a descendant that then fades it;
+ * `test_the_rank_label_recipe_clears_contrast_for_every_rank` now checks the children for `opacity` too. */
+
+/* THE TITLE EARNED, as the plaque's band. Gold rather than the brand cyan, which is sanctioned rather
+   than a competing accent: the visual identity puts cyan "distinct from tier colors", and a title earned
+   is a prestige signal rather than an active-state one.
+   NOT "the same metal the Tally and the medallions use", which an earlier version claimed and is false in
+   both halves: `tally.css` carries no gold at all and the medallions use `--tier-gold` (#f0c64a), a
+   different value. `--pp-metal-gold` is a defined house token, and in this file its consumers are the
+   card's reward wash, this chip, and `.pp-chero__paidnum` -- NAMED rather than counted, because the count
+   has been wrong twice: once as "its only consumer" and once as two, each falsified by the same
+   changeset that wrote it. */
+.pp-chero__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    align-self: flex-start;
+    max-width: 100%;
+    margin: 0;
+    padding: 5px 14px 5px 11px;
+    border-radius: 999px;
+    /* 12px, a rung. 0.8125rem (13px) is on neither side of the scale, and the rule a few blocks up
+       claims these sizes ARE rungs -- true of `.pp-chero__hunter`, which it annotates, and false of this. */
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    color: color-mix(in oklab, var(--pp-metal-gold) 72%, #fff);
+    background: color-mix(in oklab, var(--pp-metal-gold) 13%, var(--pp-bg-3));
+    border: 1px solid color-mix(in oklab, var(--pp-metal-gold) 38%, var(--pp-border));
+    /* `position` + `overflow` + `z-index` all exist for the sheen below: the sweep is an absolutely-positioned
+       overlay, and it has to be clipped to this pill's 999px radius.
+       `z-index: 0` IS LOAD-BEARING, NOT TIDINESS. It makes this pill a stacking context, which is what keeps
+       the sweep's `z-index: -1` between THIS background and THIS text. Without it the nearest such ancestor
+       is `.pp-chero__plaque` (`.pp-chero > *` sets `z-index: 1` a few hundred lines up), and the plaque has
+       an OPAQUE plate from `md:` upward -- so the sweep would paint behind that plate and the sheen would be
+       invisible at every breakpoint except 375px. Nothing else in here is absolutely positioned. */
+    position: relative;
+    z-index: 0;
+    overflow: hidden;
+}
+
+/* ── THE EARNED MOMENT, traded for a resting glow ───────────────────────────────────────────────────
+ *
+ * This band used to carry `box-shadow: 0 0 18px -6px` gold -- a RESTING glow -- and no acknowledgment at
+ * all. That is exactly backwards from `motion-patterns` principle 6 ("Motion + glow belong to earn moments
+ * and *acknowledgment* states ... not to surfaces at rest"), and backwards on the one element this whole
+ * page exists to celebrate: the title the hunter actually won.
+ *
+ * SO IT IS A TRADE, NOT AN ADDITION. The glow is gone and a single specular sweep crosses the band as its
+ * row arrives. Net less resting chrome, plus an earned moment where the earning is.
+ *
+ * THE GEOMETRY IS `claimShine`'s, NOT A NEW ONE. `.claim-banner::after` in `elements.css` sweeps the same
+ * 115deg gradient with the same 42%/50%/58% stops; it runs `infinite` there because a claim banner is a
+ * call to action, and here the thing has already been earned, so it fires ONCE. The COLOUR is ours: that
+ * one highlights in `rgba(160, 225, 255, 0.22)`, a cyan, over the `--gold` variant's wash. A raw `rgba`
+ * rather than a token follows its rule though -- a specular sheen is light, not a brand colour.
+ *
+ * FIRED OFF `.is-revealed`, the same hook the ring's entrance uses, and with the same caveat recorded
+ * there: it fixes the scroll-APPENDED pages, where animating on insertion finishes before the row is ever
+ * visible, and does nothing for page 1's below-fold rows. It also buys no second media query and silence
+ * under reduced motion -- `staggerReveal` returns early there, so the class never arrives and no sweep runs.
+ *
+ * `backwards`, NOT `forwards`: the overlay reverts to its parked `translateX(-130%)` when the animation
+ * ends rather than persisting a transform in the animation origin. Same reasoning as the ring's centre,
+ * where a `forwards` fill would have overridden the hover rule outright. */
+/* `z-index: -1`, SO THE LIGHT CROSSES THE METAL AND NOT THE LETTERING. Measured: the band is
+   ~rgb(68,72,69) and its text ~rgb(238,212,141), a resting ~6.5:1. Painting the sweep ON TOP lifted the
+   band ~2.8x at the peak (the point of it) but took the text to ~3.5:1 -- under AA for 12px/800, and this
+   type is NOT WCAG large text (that needs 18.66px bold), so 4.5 is the threshold that applies. Figures are
+   quoted to two significant digits on purpose: two independent computations of them, both compositing the
+   alpha in gamma sRGB and mixing in OKLab, agreed on every conclusion and differed in the third digit
+   (6.45/6.47 and 3.43/3.50), which is gamut-mapping noise. The conclusions are what is load-bearing.
+   A negative z-index on a positioned child paints AFTER the host's own background and BEFORE its in-flow
+   content, so the sheen still washes the whole pill while the glyphs keep their full contrast. That
+   needs the host to form a stacking context, hence the `z-index: 0` on the rule above. Dimming the alpha
+   was the other option and the worse one: it pays for contrast with the effect itself. */
+.pp-chero__title::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(115deg, transparent 42%, rgba(255, 240, 200, 0.26) 50%, transparent 58%);
+    transform: translateX(-130%);
+}
+.pp-centry.is-revealed .pp-chero__title::after {
+    animation: ppCheroSheen 0.85s cubic-bezier(0.3, 0, 0.5, 1) 0.3s backwards;
+}
+/* Parked off the left, crosses once, parks off the right. The hold at 0%/18% is the delay's worth of
+   stillness BEFORE the light arrives -- anticipation, so the sweep reads as a highlight catching the
+   surface rather than a gradient sliding about. */
+@keyframes ppCheroSheen {
+    0%, 18%   { transform: translateX(-130%); }
+    100%      { transform: translateX(130%); }
+}
+@media (min-width: 768px) { .pp-chero__title { align-self: center; } }
+@media (min-width: 1024px) { .pp-chero__title { font-size: 0.875rem; } }
+.pp-chero__title svg { flex: 0 0 auto; width: 15px; height: 15px; }
+/* `min-width: 0` for the reason `.pp-chero__hunter` carries it: as a flex item its floor is its
+   min-content width, so a title containing one long word overflows the plate instead of ellipsising. */
+.pp-chero__title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── THE PLINTH ─────────────────────────────────────────────────────────────────────────────────────
+ *
+ * The plaque's lower zone, and an OPAQUE plate rather than a gradient stop. Three reasons, in order of how
+ * much they cost to learn:
+ *
+ * 1. CONTRAST. `--pp-text-mute` is tuned to ~4.5:1 on `--pp-bg-2` with no headroom, and everything down
+ *    here is muted: the family labels, "squares", "career XP", the type, the date. In the crest's rank wash
+ *    that falls to 3.40 at the mildest band and 2.68 at the apex. On flat `--pp-bg-1` it is 5.43. An
+ *    opaque plate makes the number independent of the rank, so no band can regress it.
+ * 2. IT CANNOT DRIFT. A `transparent NN%` gradient stop tuned to clear the content would be arithmetic
+ *    that happens to work at today's line count and shears the first time a row grows one -- which is
+ *    precisely how the shelf flex-basis bug on this same component shipped.
+ * 3. IT IS THE FRAME'S OWN VOCABULARY: "earn engraving lives in the plinth".
+ *
+ * THE PLATE EXISTS AT BASE TOO, and withholding it was a real AA failure rather than a layout preference.
+ * An earlier version of this rule gave base "a seam only", arguing there was "no wash to escape" below
+ * 768px. That is false: `.pp-chero`'s reward wash is declared in the UNPREFIXED base rule, so it paints at
+ * 375px exactly as it does at 1440px, and `--pp-text-mute` measures 4.04-4.09 against it at the gradient's
+ * two ends -- the very numbers quoted 700 lines above as the reason the plate was introduced. So the one
+ * viewport with no plate was the one where nothing protected the muted text.
+ *
+ * WHAT IS GENUINELY md+ ONLY is the BLEED -- the negative margins and the rounded bottom corners, which
+ * need padding edges to reach and a plate to be cut from. The background is not. */
+.pp-chero__plinth {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    /* BLED TO THE CARD'S PADDING EDGES AND SQUARE, so it reads as a BAND rather than a second card. The
+       plate has to exist at base for contrast (the card's wash puts `--pp-text-mute` at 4.04-4.09 there),
+       but the first version of it kept `width: 100%` and a 9px radius on all four corners -- which drew a
+       detached dark pill under loose, un-plated crest text, since the plaque itself has no plate below
+       768px. `.pp-chero`'s base padding is 11px, so -11px reaches its content edge. */
+    margin: 0 -11px;
+    width: calc(100% + 22px);
+    padding: 10px 11px 11px;
+    border-top: 1px solid var(--pp-divider);
+    background: var(--pp-bg-1);
+}
+@media (min-width: 768px) {
+    .pp-chero__plinth {
+        /* REACH THE PLAQUE'S PADDING EDGES. The width is explicit rather than left to `align-self: stretch`,
+           which DID NOTHING here: stretch requires `width: auto`, and the base rule above sets
+           `width: 100%`. With a definite cross size the negative margins cancelled against the centring --
+           outer box 265.7px centred in a 293.7px content box lands back at 0...293.7 -- so the plate sat
+           inset 14px on both sides, a strip of crest material ran down each side of it, and its rounded
+           bottom corners rounded nothing near the plaque's. Deleting the margins would have rendered
+           identically, which is how an audit found it. `calc()` states the intent and cannot cancel. */
+        width: calc(100% + 28px);
+        /* `margin-top: auto` PINS IT TO THE BOTTOM. The plaque is `justify-content: center` inside a
+           `align-items: center` grid, so its content floats when the BOARD is the taller item -- which
+           happens at 2xl, where an A-Z frame reaches ~477px against a ~452px plaque. The plinth would then
+           sit ~12px above the plaque's bottom border with a sliver of crest gradient beneath it and its
+           rounded bottom corners rounding nothing. Pinning it down makes "the plate owns the plaque's two
+           bottom corners" true at every width rather than only while the plaque happens to win. */
+        margin: auto -14px 0;
+        padding: 12px 14px 13px;
+        gap: 11px;
+        border-top: 1px solid var(--pp-border);
+        /* The plaque is 11px with a 1px border, so its inner corner is 10px. Squared top, rounded bottom:
+           the plate now really does own the plaque's two bottom corners. (It used to say this is "what
+           lets the parent keep `overflow: visible` for its four corner diamonds" -- those are gone, so
+           nothing forces the parent's overflow either way; owning its own corner shape is simply correct
+           for the element that paints it.) */
+        border-radius: 0 0 10px 10px;
+    }
+}
+@media (min-width: 1024px) {
+    .pp-chero__plinth { width: calc(100% + 32px); margin: auto -16px 0; padding: 13px 16px 14px; }
+}
+
+/* ── THE DISCIPLINES RING, hosted ──────────────────────────────────────────────────────────────────
+ *
+ * The ring itself is `.lab-dna` in `elements.css` -- the live component the Career hero and the home lobby
+ * both render. Nothing about it is restyled here; these are HOST rules only, which is the difference
+ * between scaling a shared primitive and forking it.
+ *
+ * DELETED FROM THIS FILE: `.pp-chero__fams`, `__fam`, `__famn`, `__faml`, `__famicon`, `__fambar`. That was
+ * a bespoke five-tile band reimplementing this ring, and it carried three AA failures (the tile number lost
+ * WCAG's large-text allowance at 15px), a sub-12px label that broke the type-floor guard, a five-across grid
+ * that squeezed to ~37px at `lg`, and no clip for a three-digit average. Deleted rather than deprecated. */
+
+/* NO SIZE OVERRIDE HERE, and removing it IS the fix rather than a regression.
+ *
+ * The plaque used to pass `compact` and then re-pin the width host-scoped, because `.lab-dna--sm`'s 76px is
+ * clobbered at 1024px by a later `@media { .lab-dna { width: 132px } }` at equal specificity while the
+ * `--sm` FONT rules keep winning -- a 132px ring holding type sized for 76. The owner then asked for a
+ * bigger ring anyway ("the ring shrunk a bit now ... can we increase the size"), so the plaque uses the
+ * component at its NATURAL size, where the base type rungs are the ones designed for it and there is no
+ * specificity conflict left to pin.
+ *
+ * THE SHARED BUG REMAINS for anyone who does pass `compact` -- the home lobby does -- and fixing it in
+ * `elements.css` changes that page, so it is recorded in the audit notes rather than done here. */
+
+/* NO RESTING MOTION ON A BROWSE LIST -- neither the spin nor the entrances.
+ *
+ * `.lab-dna__arcs` carries a 26s infinite rotation, right for ONE ring on a hero and wrong for eight stacked
+ * down a page: the same motion-patterns principle 6 this file already invoked to delete a resting glow
+ * ("Motion + glow belong to earn moments and acknowledgment states ... not to surfaces at rest").
+ *
+ * THE ENTRANCES GO TOO, and the reason the first version gave for keeping them was wrong. It said "the
+ * grid's reveal already staggers them" -- it does not: `labDnaIn` and `labDnaCenter` are CSS animations that
+ * start at ELEMENT INSERTION, while `staggerReveal` only staggers the row's own opacity. On page 1 that is
+ * harmless (168ms of stagger against a 700ms entrance). On InfiniteScroller pages it breaks: appended rows
+ * reveal on intersection, potentially seconds after insertion, by which time both animations have finished --
+ * so page 2 onward would reveal with the ring already settled while page 1 animated. Killing them makes
+ * every row behave identically, which is what a list wants. */
+.pp-chero__plinth .lab-dna__arcs { animation: none; }
+
+/* ── THE ENTRANCE IS DEFERRED TO THE ROW'S REVEAL, not removed ──────────────────────────────────────
+ *
+ * The ring's own `labDnaIn` / `labDnaCenter` fire at ELEMENT INSERTION, while `staggerReveal` unhides rows
+ * on INTERSECTION -- so on an InfiniteScroller page the animation had already finished before the row
+ * became visible, and page 2 appeared pre-settled while page 1 animated. The first fix removed them, which
+ * traded the inconsistency for no entrance at all; the owner noticed the stillness. Re-firing them off
+ * `.is-revealed` fixes the APPENDED pages and gives the ring its entrance back -- a row arriving is an
+ * acknowledgment, which motion-patterns principle 6 permits. Only the perpetual spin stays dead.
+ *
+ * WHAT IT DOES NOT FIX, since an earlier version of this comment claimed "every page behaves identically":
+ * `staggerReveal` reveals every card ALREADY IN THE GRID in one DOM-order batch, visible or not -- only
+ * APPENDED cards go through the IntersectionObserver. The board paginates by 8 with full-width rows, so on
+ * a phone the back half of page 1 still plays its entrance below the fold and is settled by the time it is
+ * scrolled to. That is the same unseen-animation problem, narrowed from "pages 2+" to "page 1's below-fold
+ * rows", and fixing it means changing the shared `staggerReveal`, not this file. Recorded, not fixed.
+ *
+ * `.is-revealed` IS SAFE TO GATE AN ANIMATION ON, though not a control: `staggerReveal` adds it on frame 2
+ * via rAF, and if it never arrives (no JS, a stale bundle, reduced motion returning early) the ring is
+ * simply static -- today's behaviour, not a broken one. That is the distinction behind "`.is-revealed` may
+ * HIDE a control, never SHOW one": the failure mode here is a missing flourish, not missing content. It
+ * also means reduced-motion users get no entrance for free, with no second media query.
+ *
+ * `backwards`, NOT `forwards` OR `both`, AND THIS IS LOAD-BEARING. A forwards fill keeps applying the final
+ * keyframe after the animation ends, and animation-origin values beat author declarations -- so a persisted
+ * `opacity: 1` on `.lab-dna__center` permanently overrides `.lab-dna:has(...) .lab-dna__center { opacity: 0 }`
+ * and the hover peek never appears. This is not hypothetical: `.lab-dna__center` shipped with `both`, so the
+ * Hall of Fame was the ONLY host where the peek worked, purely because these two rules kill the animation
+ * and re-fire it `backwards`. Career and the home lobby faded the peek in UNDERNEATH their still-visible
+ * Pursuer Level. The primitive now says `backwards` too, which is where the fix belongs; keeping it here as
+ * well is correct rather than redundant, because these declarations are new animations, not inherited ones.
+ * `backwards` gives the pre-delay hold without the persistence, so the hover rule wins once it is over. */
+.pp-chero__plinth .lab-dna__ring,
+.pp-chero__plinth .lab-dna__center { animation: none; }
+
+/* THE NAME, DURATION AND EASING OF BOTH ARE COPIES of the component's own declarations in `elements.css`;
+   only the ring's fill mode is meant to differ. A timing change there will silently desync this board, so
+   change the two together. Not worth a custom-property indirection for two rules, but worth knowing. */
+.pp-centry.is-revealed .pp-chero__plinth .lab-dna__ring {
+    animation: labDnaIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.pp-centry.is-revealed .pp-chero__plinth .lab-dna__center {
+    animation: labDnaCenter 0.45s 0.28s ease backwards;
+}
+
+/* Centred in the plinth, which is otherwise a column of left-aligned text at base. */
+.pp-chero__plinth .lab-dna { margin: 0 auto; }
+
+/* ── WHAT THE RUN PAID ──────────────────────────────────────────────────────────────────────────────
+ * Only ever rendered when there is an amount: A-Z runs pay no job XP by decision, and a Job Coverage run
+ * whose owner has not claimed yet is zero. Gold rather than the rank hue, because it belongs to the same
+ * prestige axis as the title band above it rather than to the hunter's standing. */
+.pp-chero__paid {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 6px;
+    margin: 0;
+    min-width: 0;
+}
+@media (min-width: 768px) { .pp-chero__paid { justify-content: center; } }
+.pp-chero__paidnum {
+    font-size: 0.875rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in oklab, var(--pp-metal-gold) 72%, #fff);
+}
+
+.pp-chero__stats {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+@media (min-width: 768px) { .pp-chero__stats { justify-content: center; } }
+
+/* The separator between the type and the date. A real element rather than a `::before` on the `<time>`,
+   so the gap collapses correctly when the record wraps on a narrow plinth -- a pseudo would keep a leading
+   middot sitting at the start of the second line. `aria-hidden`, since it is punctuation. */
+/* NO `opacity` HERE, for the reason stated 160 lines up when `.pp-chero__lvl` was deleted: "a ratio
+   measured on a colour says nothing about a descendant that then fades it". `--pp-text-mute` is 5.43:1 on
+   the plinth; at `opacity: 0.6` it measured 2.82:1. It is `aria-hidden` punctuation so WCAG arguably exempts
+   it, but the mechanism is the one this file forbids by name, and a near-invisible separator made the record
+   line read as two items with a gap rather than a separated pair. Quieter via the token, not via alpha. */
+.pp-chero__dot { color: var(--pp-text-mute); }
+
+/* The record line: which kind of run, and when it was finished. The plaque's quietest row, and the last
+   thing read. */
+.pp-chero__record {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    min-width: 0;
+}
+@media (min-width: 768px) { .pp-chero__record { justify-content: center; } }
+.pp-chero__tally { display: flex; align-items: baseline; gap: 5px; }
+.pp-chero__of { color: var(--pp-text-mute); font-weight: 700; }
+.pp-chero__label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--pp-text-mute);
+}
+/* 14px, a rung: the date is the plaque's record line, so it takes the larger of the two neighbouring
+   rungs rather than the 13px that is on neither. */
+.pp-chero__when { font-size: 0.875rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+
+/* ── the swap reveal, for BOTH entry types ──────────────────────────────────────────────────────────
+ *
+ * The hidden/revealed states only; `challenges-browse.js` and the Web Animations API drive the motion,
+ * the same split every other browse grid uses (`.pp-bgal__card`, `.pp-gcard`).
+ *
+ * THESE RULES WERE MISSING, and the comment in `browse_results.html` asserted their effect anyway -- it
+ * explained that `pp-reveal` is baked into the partial on htmx swaps so htmx's settle step cannot strip a
+ * JS-added class, which is true about the mechanism and was describing a class with nothing behind it. The
+ * entrance still worked, because `fill: 'backwards'` holds the first keyframe through the animation's
+ * delay, so the omission was invisible rather than harmless: it left the one frame between htmx's swap and
+ * the next paint uncovered.
+ *
+ * KEYED ON `.pp-centry`, the shared hook both entry partials carry beside their own class (`.pp-crun` on
+ * Challenges, `.pp-chero` in the Hall of Fame). Naming the two classes here would work, but the JS cannot
+ * afford to: `staggerReveal` appends `:not(.pp-revealing):not(.is-revealed)` to the selector it is given,
+ * and a comma-separated list binds those guards to the last term only. One hook keeps the CSS and the JS
+ * describing the same set by construction rather than by two lists staying in step.
+ *
+ * Gated on `prefers-reduced-motion`. It is NOT true that "pp-reveal is only emitted where JS will
+ * observe, so a row can never stick invisible", which is what this said: the class is baked in by the
+ * SERVER (`browse_results.html`, under `{% if request.htmx %}`) with no knowledge of whether any script
+ * loaded. If `utils.js` is missing, stale-cached or throws before `staggerReveal` is assigned, these rules
+ * would hold every row permanently at `opacity: 0` above a populated `data-result-count` -- a blank grid
+ * that reads as a server bug. `gamelists.js` names that exact hazard ("`pp-reveal` with no observer").
+ * `challenges-browse.js` now STRIPS the class when it cannot observe, which is where the safety actually
+ * lives; this block only holds the states. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-reveal .pp-centry { opacity: 0; }
+    .pp-reveal .pp-centry.is-revealed { opacity: 1; }
+}
