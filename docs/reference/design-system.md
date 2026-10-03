@@ -729,6 +729,8 @@ These conventions apply site-wide and are not affected by the redesign:
 
 Use `{{ game.display_image_url }}` — this is the single source of truth for the IGDB-first fallback chain. Pair it with `{% if game.has_cover_art %}` when the template needs to differentiate styling (real cover art gets `object-cover object-top`; the generic `title_icon_url` fallback gets `object-contain p-3`).
 
+**Three variants share that chain and differ only in the IGDB size they request** — `display_image_url` (`cover_big`), `display_image_url_small` (`cover_small_2x`, for surfaces drawing many covers at thumbnail size) and `display_image_url_large` (`cover_big_2x`, for share cards). Choose by **device** pixels, not CSS pixels: multiply the rendered CSS width by 3 before picking, because a phone is the high-DPI case and that is where a too-small source looks worst. [igdb-integration.md](../architecture/igdb-integration.md) has the sizes, the reasoning and a worked example.
+
 The chain `Game.display_image_url` implements:
 
 - **Normal path** (not `force_title_icon`): **trusted IGDB cover → `concept.concept_icon_url` (PSN MASTER, skipped for `PP_*` stubs) → `game.title_image` → `game.title_icon_url`**.

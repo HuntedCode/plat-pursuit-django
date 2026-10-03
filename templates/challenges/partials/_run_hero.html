@@ -56,10 +56,14 @@ anchor would be a second tab stop to the same place.
 
         THAT SMALLER SOURCE NOW EXISTS, which this comment used to name as the fix if LCP ever measured
         badly: `display_image_url_small` serves IGDB `cover_small_2x` (180x256) rather than `cover_big`
-        (264x374), about 53% fewer pixels. Sized against DEVICE pixels, not CSS ones -- a 57px square on a
-        3x phone needs 172 of them, which is why this is the `_2x` of small and not `cover_small` itself.
-        The model property argues it in full. The DETAIL page keeps `cover_big`: its squares are 110-140px.
-        {% endcomment %}
+        (264x374), about 53% fewer pixels. Sized against DEVICE pixels, not CSS ones -- a 60px jobs square
+        on a 3x phone needs 179 of them, which is why this is the `_2x` of small and not `cover_small`.
+
+        IT UNDER-SERVES THE A-Z BOARD AT THE TOP END, deliberately and worth knowing: A-Z is NINE squares
+        across against jobs' five, so its cells run 32px at 375 up to 112px at the container cap, and 112
+        on a 2x desktop wants 225. 180 is ~20% short there. `cover_big` would cover it and give back the
+        whole saving. The model property has the full table; the DETAIL board keeps `cover_big` because its
+        squares are larger again (~109-176px).{% endcomment %}
         <div class="pp-chero__board" aria-hidden="true">
             {% for group in board %}
             {% comment %}`--disc` ON THE SHELF, not on the mark, because two things read it: the label's

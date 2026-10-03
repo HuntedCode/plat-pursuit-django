@@ -874,24 +874,39 @@ class Game(models.Model):
         the challenge Hall of Fame board draws 25-26 of them per row.
 
         WHY THE `_2x` OF SMALL RATHER THAN `cover_small` ITSELF, which is
-        the trap this exists to document. Those squares are 57px wide at
-        375px and ~100px on a large desktop, so a 90x128 source looks
-        comfortably big -- at 1x. It is not: a phone is the HIGH-DPI case,
-        and 57 CSS px on a 3x screen needs 172 device px. `cover_small`
-        would be visibly soft on nearly every phone, i.e. worst on the
-        device class the smaller source is meant to help.
+        the trap this exists to document. A phone is the HIGH-DPI case, so
+        a 90x128 source looks comfortably big only at 1x. `cover_small`
+        would be visibly soft on nearly every phone -- worst on the device
+        class a smaller source is meant to help.
 
-        180px is chosen against the device-pixel requirement (~100-200px
-        across phone 2x/3x and desktop 1x/2x): exactly right for a 3x
-        phone, ~10% short at desktop-retina. That is the correct side to
-        err on -- it is accurate where bandwidth is scarce and slightly
-        soft where it is not.
+        THE TWO BOARDS ARE DIFFERENT SIZES, which an earlier version of
+        this docstring got wrong by measuring one and describing both.
+        A-Z is NINE squares across, Job Coverage is FIVE per shelf
+        (`challenges.css`, `.pp-chero--az` / `--jobs .pp-chero__sq`):
 
-        NOT FOR THE DETAIL PAGE. `.pp-csq-grid` renders 3-7 columns, so
-        those squares are 110-140px and want `cover_big`. A density
-        `srcset` would serve both properly, but the project has no
-        precedent for one (`landing.html`'s is webp/png format switching,
-        not resolution), so two named sizes stay the cheaper answer.
+            A-Z   32px at 375 -> 112px at the container cap
+            jobs  60px at 375 ->  99px
+
+        So the device-pixel demand spans ~97px (A-Z at 375 on a 3x phone)
+        to ~225px (A-Z at the cap on a 2x desktop).
+
+        180 IS THE DELIBERATE UNDER-SERVE, and the real figure is worth
+        stating plainly: it covers a 3x phone on the jobs board (179)
+        exactly, and is ~20% short of the A-Z board at desktop-retina.
+        The only step up is `cover_big` (264), which would cover every
+        case and surrender the whole 53% saving. A 1.25x upscale on a
+        112px cell is the price; bandwidth on phones is what it buys.
+        (An earlier version said "~10% short", which was derived from the
+        wrong maximum -- the trade is twice what it claimed.)
+
+        NOT FOR THE DETAIL PAGE. `.pp-csq-grid` renders 3-7 columns
+        (3 / 4 at 640 / 6 at 768 / 7 at 1024), so its squares run ~109px
+        at base, ~176px at the top of the 4-column band, and ~131px at
+        1024 -- consistently larger than the hero's, and wanting
+        `cover_big`. A density `srcset` would serve both properly, but
+        the project has no precedent for one (`landing.html`'s is
+        webp/png format switching, not resolution), so two named sizes
+        stay the cheaper answer.
 
         PSN fallback URLs are unchanged -- they have no size knob, so a
         concept without a trusted IGDB match still serves full-size art.

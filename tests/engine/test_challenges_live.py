@@ -484,8 +484,10 @@ def test_the_board_draws_cover_art_when_the_contract_resolves_one(client):
     # LAZY ON EVERY COVER, and deliberately so rather than because "the browser's own viewport rule is the
     # right judge" -- which is what this said, and is not what `lazy` does for an in-viewport image (it is
     # discovered after layout and fetched at low priority, so the first hero's board is deliberately
-    # deferred). `_run_hero.html` carries the real trade: eager would mean 26 full-size covers before first
-    # paint to fill cells under 82px wide.
+    # deferred). `_run_hero.html` carries the real trade: eager would mean 26 covers requested before first
+    # paint, to fill cells of 32-112px. ("full-size" was dropped when the board moved to `cover_small_2x`,
+    # and the old "under 82px" figure was a third number for the same cell -- the measured range is A-Z
+    # 32->112px and jobs 60->99px.)
     # EXACTLY THREE, not a floor. There are three squares, so `>= 3` was satisfied by any number of extra
     # lazy images anywhere in the slice -- and before `_hero` was scoped to its own `</a>`, that slice was
     # the rest of the document.
@@ -1602,16 +1604,23 @@ def test_the_hero_board_serves_a_smaller_cover_than_the_detail_board(client):
     about 53% fewer pixels, on the surface that draws the most of them.
 
     SIZED AGAINST DEVICE PIXELS, NOT CSS PIXELS, which is the whole reason this is `cover_small_2x` and not
-    `cover_small`. The squares are 57px at 375px wide and ~100px on a large desktop, so a 90x128 source
-    looks ample -- at 1x. A phone is the high-DPI case: 57 CSS px on a 3x screen needs 172 device px, so
-    `cover_small` would be visibly soft on nearly every phone, which is exactly the device class a smaller
-    source is supposed to help. An earlier version of this change reached for `cover_small` on arithmetic
-    done at 1x, and for the precedent that nav search already used it (which renders list thumbnails, not a
-    board).
+    `cover_small`. A phone is the high-DPI case, so a 90x128 source looks ample only at 1x; `cover_small`
+    would be visibly soft on nearly every phone, which is exactly the device class a smaller source is
+    supposed to help. The first attempt reached for it on arithmetic done at 1x, and on the precedent that
+    nav search already used it (which renders 30px list thumbs -- correctly sized for `cover_small`, and so
+    not a precedent for a board at all).
 
-    THE DETAIL PAGE IS ASSERTED TOO, and that is the half worth having. `.pp-csq-grid` renders 3-7 columns,
-    so its squares are 110-140px and want the bigger source. "Make the covers smaller" applied file-wide is
-    the obvious wrong fix, and nothing else would catch it -- both pages would still render covers.
+    THE TWO BOARDS ARE DIFFERENT SIZES, which the first attempt also got wrong by measuring one and
+    describing both. A-Z is NINE squares across, jobs is FIVE per shelf: A-Z runs 32px at 375 to 112px at
+    the container cap, jobs 60px to 99px. Demand therefore spans ~97 to ~225 device px, and 180 is ~20%
+    short of A-Z at desktop-retina -- a deliberate under-serve, since the only step up is `cover_big` (264)
+    and it surrenders the entire 53% saving. `challenges.css` already stated the real cell range 150 lines
+    from where the wrong one was written.
+
+    THE DETAIL PAGE IS ASSERTED TOO, and that is the half worth having. `.pp-csq-grid` renders 3-7 columns
+    and its squares are larger again (~109px at base, ~176px in the 4-column band, ~131px at 1024), so they
+    want the bigger source. "Make the covers smaller" applied file-wide is the obvious wrong fix, and
+    nothing else would catch it -- both pages would still render covers.
     """
     from trophies.models import Game
 
@@ -1637,8 +1646,13 @@ def test_the_hero_board_serves_a_smaller_cover_than_the_detail_board(client):
     from trophies.models import IGDBMatch
 
     hunter = _hunter('coverhunter')
-    _filled_run(hunter, 2)
-    IGDBMatch.objects.update(igdb_cover_image_id='cotest1')
+    run = _filled_run(hunter, 2)
+    # SCOPED TO THIS RUN'S OWN MATCHES. A bare `IGDBMatch.objects.update(...)` works today -- the test is
+    # wrapped in a rolled-back transaction and the fixture's are the only rows -- but it states something
+    # broader than it means, and a later test sharing this module's helpers would inherit the blast radius.
+    IGDBMatch.objects.filter(
+        igdb_id__in=run.slots.values_list('contract__igdb_id', flat=True)
+    ).update(igdb_cover_image_id='cotest1')
 
     hero = _hero(client.get(reverse('challenges_hall_of_fame')).content.decode())
     assert 't_cover_small_2x/cotest1' in hero, (
