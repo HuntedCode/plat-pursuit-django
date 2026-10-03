@@ -27,28 +27,30 @@ POST.
 """
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models.functions import Lower
 
-from trophies.mixins import LoginRequiredAPIMixin
+from trophies.mixins import HtmxListMixin, LoginRequiredAPIMixin
 from trophies.models import Contract
 from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.shortcuts import redirect
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
-from django.views.generic import DetailView, TemplateView
+from django.views.generic import DetailView, ListView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
 from challenges.models import (CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CHOICES, CHALLENGE_TYPE_JOBS,
-                               Challenge)
+                               CHALLENGE_TYPES, Challenge)
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
 from challenges.services import picker
 from challenges.services import slot_render
 from core.previews import previewing
 
-#: Shared by both write doors, so create-hide-create cannot outrun one door by using the other. The cap
+#: Shared by all four write doors -- start, hide, assign and clear. ("Both" was true when there were two;
+#: `test_both_write_doors_share_one_rate_limit_bucket` asserts `>= 4`.), so create-hide-create cannot outrun one door by using the other. The cap
 #: on runs is structural (one active per type) rather than numeric, but the RATE is not bounded by it:
 #: hiding frees nothing and starting resumes, yet each still writes and each still takes a row lock.
 CHALLENGE_WRITE_RATELIMIT_GROUP = 'challenges:write'
@@ -66,6 +68,36 @@ CHALLENGE_REDEEM_RATELIMIT_GROUP = 'challenges:redeem'
 #: reads their own bucket anyway -- by accident. The reads need a looser limit because the picker's
 #: search runs while somebody is typing, and a shared 30/m would cut them off mid-word.
 CHALLENGE_READ_RATELIMIT_GROUP = 'challenges:read'
+
+#: The two ANONYMOUS browse pages, one bucket each.
+#:
+#: They need a limiter for the reason `SlotPickerView` gives fifteen lines below -- `?q=` compiles to
+#: `UPPER(psn_username) LIKE '%x%'` behind a join to `Profile`, no index serves it, and it is driven by a
+#: DEBOUNCED live-search box, which is the shape that turns a search field into a scan loop. These pages are
+#: the harder case than the picker, not the easier one: the picker's limiter is `key='user'` because there is
+#: a login in front of it, and here there is none.
+#:
+#: `key='ip'` AND NOT `key='user'`, matching `BrowseListsView`: the latter buckets every anonymous caller in
+#: the world under a single key, so one crawler would lock the page for everybody.
+#:
+#: `method=('GET', 'HEAD')` AND NOT `method='GET'`, which is the shape every other limiter in this project
+#: uses and is a hole in all of them. `django_ratelimit` does not count a request whose method is outside the
+#: list -- and `django.views.View.setup` aliases `self.head = self.get` when a class defines no `head`, so a
+#: HEAD request runs the wrapped `get`, executes the full queryset, and was never metered. `curl -I` in a
+#: loop against `?q=abc` would have run the unindexed `LIKE` behind a `Profile` join, unbounded, on exactly
+#: the anonymous URL this limiter exists to protect.
+#:
+#: TWO GROUPS, ONE PER PAGE, and stated explicitly rather than left to `django_ratelimit`'s default. The
+#: default group is derived from the decorated function's module + qualname -- and a `method_decorator` on a
+#: subclass that does not define `get` wraps the INHERITED `BaseListView.get`, so both pages would resolve to
+#: the same qualname and share one bucket. Searching the Challenges page would then spend the Hall of Fame's
+#: budget. (The three picker read doors
+#: also share one bucket, but by a DIFFERENT route -- they each pass an explicit shared
+#: `CHALLENGE_READ_RATELIMIT_GROUP`, which is a deliberate choice parked for a `refactor/` branch rather than
+#: an accident of qualname derivation. An earlier version of this note called them "that exact sharing",
+#: which would have pointed a reader at a precedent that could not teach them this hazard.)
+CHALLENGES_BROWSE_RATELIMIT_GROUP = 'challenges:browse'
+HALL_OF_FAME_RATELIMIT_GROUP = 'challenges:hall-of-fame'
 
 #: The team preview door for what a FREE hunter sees during the beta: `?preview=challenges-free`.
 #:
@@ -959,3 +991,379 @@ class HideChallengeView(_ChallengeJsonView):
         except svc.ChallengeError as exc:
             return self.fail(exc)
         return JsonResponse({'hidden': True})
+
+
+# ── the two public browses ───────────────────────────────────────────────────────────────────────
+
+class _ChallengeBrowseView(HtmxListMixin, ListView):
+    """What the Challenges page and the Hall of Fame have in common.
+
+    ONE BASE FOR TWO NEAR-IDENTICAL VIEWS, and the abstraction bar is met rather than assumed: with
+    `gamelists.BrowseListsView` this is the third use of the same shape, and the two subclasses here differ
+    only in WHICH runs they read and WHICH sorts mean anything. `BrowseListsView` is not refactored to share
+    it -- a cross-app extraction for tidiness buys nothing and risks a page that is already shipped.
+
+    WHAT IT TAKES FROM THAT VIEW, deliberately, because each of these was a bug there first:
+      - sorts as DATA, read by the toolbar, the mini-bar and the queryset, so a sort cannot appear in the
+        dropdown and do nothing;
+      - a junk `?sort=` FALLS BACK rather than dropping to no ordering at all, which is how a browse grid ends
+        up in whatever order the database felt like;
+      - `_effective_query` as ONE definition with two readers: a `q` clamped in the queryset but read raw by
+        `has_filters` mis-worded the empty state and made a filter band vanish on the first two keystrokes;
+      - a `-pk` TIEBREAK on every ordering, because ties across a LIMIT/OFFSET boundary are non-deterministic
+        in Postgres and a reader paging through sees one row twice and misses another.
+
+    COVER ART IS PER-SUBCLASS, and the first cut of this docstring refused it outright -- "a decision rather
+    than an omission", on the grounds that fanning out to each run's squares meant a cover join per entry.
+    The objection was about COST and it was answered rather than overruled: `slot_render.boards_for` resolves
+    every square of every run on the page in a fixed number of queries, through the same batched
+    `covers_by_contract` the detail grid uses. Two different mechanisms keep the payload small, and they are
+    worth naming separately because an earlier version of this credited both to one: `boards_for`'s own
+    `.only(...)` is what keeps `Contract.notes` out, while `raw_response` is excluded by `cover_games_for`'s
+    `select_related` + **`defer`** -- which `gamelists/services/covers.py` chose over `.only()` deliberately,
+    since a field list omitting every `concept__igdb_match__*` column makes Django treat the relation as
+    deferred and traversed at once, and it refuses that. So the Hall of Fame draws boards and this page does not --
+    not because art is unaffordable, but because an in-flight run's honest subject is its progress.
+
+    The flatness pin in `test_challenges_live.py` is what keeps that true: it measures the page's query count
+    across a varying number of entries, so a later change that reintroduces a per-entry resolve fails rather
+    than merely getting slower.
+    """
+
+    #: Matching `BrowseListsView` and the typeahead, for the reason they give: a one- or two-character `%x%`
+    #: is a guaranteed full scan, and here it sits behind a join to `Profile` on a page that is ANONYMOUS.
+    #: Below this the term is ignored rather than refused -- a browse page is not a form.
+    MIN_QUERY = 3
+
+    model = Challenge
+    context_object_name = 'runs'
+    paginate_by = 24
+
+    #: `{value: (label, ordering)}` -- subclasses declare their own. The ordering tuples carry no `-pk`; that
+    #: is appended once in `get_queryset` so no subclass can forget it.
+    SORTS = {}
+    DEFAULT_SORT = ''
+
+    #: The url name this page submits to, used by the toolbar's `hx-get` and by the empty state's "Clear
+    #: filters". Named rather than hardcoded in each template so the two cannot point at each other.
+    BROWSE_URL_NAME = ''
+    #: `(title, hint)` for the genuinely-empty state -- not the filtered one, which the partial words itself.
+    EMPTY_COPY = ('', '')
+
+    #: The partial that draws ONE entry, and the class on the element holding them.
+    #:
+    #: DECLARED RATHER THAN SHARED, which reverses this base's first cut. It shipped saying "a run card is a
+    #: run card: the pages differ in WHICH runs they read, not in how a run looks" -- and that turned out to
+    #: be wrong about the feature. An in-flight run is a progress report, and the card shape is right for it:
+    #: many of them, scanned, each answering "how far along". A finished run is a monument, there will never
+    #: be many (25+ completed contracts is the whole difficulty), and 24 across a grid makes each finish look
+    #: small while leaving a page of eight entries looking broken. So the Hall of Fame draws heroes and this
+    #: page keeps cards, and `browse_results.html` stays ONE partial: the grid wrapper, the three empty
+    #: states and the count attributes are genuinely common, and only the entry differs.
+    ENTRY_TEMPLATE = 'challenges/partials/_run_card.html'
+    GRID_CLASS = 'pp-crun-grid'
+
+    def enrich(self, runs):
+        """Per-page extras for the entries actually being rendered. Returns extra context, or nothing.
+
+        RUNS ON PARTIAL RENDERS TOO, unlike `full_page_context`, and the two hooks exist separately for
+        exactly that reason: the grid IS the partial, so anything an ENTRY draws has to be built on a filter
+        swap and an InfiniteScroller page as well, while a breadcrumb and a headline count must not be.
+
+        It takes the PAGINATED list, so whatever it builds is bounded by `paginate_by` rather than by how
+        many runs exist. Subclasses that need nothing inherit the no-op.
+        """
+        return {}
+
+    def base_queryset(self):
+        """The runs this page is about. Subclasses only have to answer this."""
+        raise NotImplementedError
+
+    def selected_type(self):
+        """The clamped `?type=`, or '' for every type.
+
+        CLAMPED AGAINST THE MODEL'S OWN ENUM, so a hand-typed `?type=platinum` shows everything rather than
+        an empty grid that looks like a broken page.
+        """
+        raw = self.request.GET.get('type', '')
+        return raw if raw in CHALLENGE_TYPES else ''
+
+    def selected_sort(self):
+        raw = self.request.GET.get('sort', self.DEFAULT_SORT)
+        return raw if raw in self.SORTS else self.DEFAULT_SORT
+
+    def effective_query(self):
+        """The `?q=` that actually NARROWS the grid, which is not the string the reader typed.
+
+        The raw string stays in the context for the inputs to bind to: clamping THAT would delete somebody's
+        own typing out from under them mid-word.
+        """
+        query = (self.request.GET.get('q') or '').strip()[:60]
+        return '' if len(query) < self.MIN_QUERY else query
+
+    def has_filters(self):
+        return bool(self.selected_type() or self.effective_query())
+
+    def get_queryset(self):
+        queryset = self.base_queryset().select_related('profile')
+
+        run_type = self.selected_type()
+        if run_type:
+            queryset = queryset.filter(challenge_type=run_type)
+
+        query = self.effective_query()
+        if query:
+            # THE HUNTER IS THE ONLY TEXT WORTH SEARCHING, and that is a property of the feature rather than a
+            # simplification: run names are AUTO-GENERATED (every A-Z run is called the same thing), so there
+            # is no author text to match and no moderated-text channel to leak -- the whole class of problem
+            # `BrowseListsView` carries three paragraphs about does not exist here.
+            queryset = queryset.filter(profile__psn_username__icontains=query)
+
+        # `.get(...)` AND A FALLBACK, not `SORTS[...]`. `selected_sort` falls back to `DEFAULT_SORT`, which
+        # is exactly the value a subclass can forget to declare -- and the base's `SORTS = {}` /
+        # `DEFAULT_SORT = ''` pair is the combination that raised `KeyError`, so subscripting turned the
+        # failure this class's docstring promises to prevent (an ordering silently dropped) into a 500 on the
+        # unfiltered landing hit.
+        #
+        # TWO FALLBACKS, because the first repair only moved the exception. `next(iter(self.SORTS.values()))`
+        # raises `StopIteration` on an EMPTY `SORTS` -- the same 500 on the same request, with a traceback
+        # that no longer mentions sorts. So: the first declared sort when there is one, and a bare `-pk` when
+        # there is not. `-pk` is a real, stable ordering, which is the property the docstring actually
+        # promises; ties across a LIMIT/OFFSET boundary are what an absent ordering costs.
+        chosen = self.SORTS.get(self.selected_sort())
+        if chosen is None:
+            chosen = next(iter(self.SORTS.values()), (None, ()))
+        return queryset.order_by(*chosen[1], '-pk')
+
+    def full_page_context(self):
+        """Everything that exists only on a FULL render. Subclasses add their headline number here.
+
+        SEPARATED AND GATED because `get_context_data` runs for partial renders as well: an htmx filter swap
+        and an InfiniteScroller page fetch both render the grid partial, so a breadcrumb, a count and an SEO
+        string built unconditionally are paid for and discarded on every keystroke of live search.
+        """
+        return {}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['selected_type'] = self.selected_type()
+        context['selected_sort'] = self.selected_sort()
+        # THE RAW STRING, not the clamped one -- see `effective_query`.
+        context['query'] = (self.request.GET.get('q') or '').strip()[:60]
+        context['has_filters'] = self.has_filters()
+        context['sorts'] = [(value, label) for value, (label, _o) in self.SORTS.items()]
+        context['browse_url'] = reverse(self.BROWSE_URL_NAME)
+        context['empty_title'], context['empty_hint'] = self.EMPTY_COPY
+        # A-Z, JOB COVERAGE, ALL -- the most-permissive chip LAST, which is the order the Franchises browse
+        # settled on so the chips read as narrowing rather than as a menu. `''` is the all-types value, which
+        # `selected_type` already returns for anything unrecognised, so there is no second sentinel to keep in
+        # step and a hand-typed `?type=platinum` lands on All rather than on an empty grid.
+        context['types'] = list(CHALLENGE_TYPE_CHOICES) + [('', 'All')]
+        # OUTSIDE the full-page gate, which is the whole reason `enrich` is not part of
+        # `full_page_context`: an entry's own extras have to be built on a filter swap and an
+        # InfiniteScroller page too, because the grid is what those render.
+        #
+        # `context_object_name` rather than `object_list` only because it is the name the template loops --
+        # both keys hold the same already-paginated list, so this is legibility and not a correctness
+        # difference. Iterating it here does not cost a second query: the slice caches its result and the
+        # template's own loop reads that cache.
+        # `or {}` because the docstring says a subclass may return "nothing", and a bare `return` then
+        # makes `context.update(None)` raise -- a 500 on EVERY request to that page, full render and htmx
+        # partial alike. The documented contract and the call site now agree.
+        context.update(self.enrich(context[self.context_object_name]) or {})
+        if not self.is_partial_render():
+            context.update(self.full_page_context() or {})
+
+        # LAST, AFTER BOTH HOOKS. Written earlier, either hook could overwrite the view's own entry
+        # declaration -- `browse_results.html` calls it safe because it is a class attribute, and that was
+        # true of these two subclasses rather than structurally true. Now it is the latter.
+        context['entry_template'] = self.ENTRY_TEMPLATE
+        context['grid_class'] = self.GRID_CLASS
+        return context
+
+
+@method_decorator(
+    ratelimit(group=CHALLENGES_BROWSE_RATELIMIT_GROUP, key='ip', rate='60/m',
+              method=('GET', 'HEAD'), block=True),
+    name='get')
+class ChallengesBrowseView(_ChallengeBrowseView):
+    """`/community/challenges/` -- every run in progress, so a visitor can see the thing being used.
+
+    IT REPLACES THE COMING-SOON PLACEHOLDER at the same URL and the same `name`, which is why the placeholder
+    was written to hold both: nothing that links here has to change.
+
+    IN PROGRESS MEANS UNFINISHED AND NOT HIDDEN. `visible()` is the public read path -- a hidden run is off
+    its owner's profile and out of the hub, which is what hiding means -- and the finished ones have their own
+    page.
+    """
+
+    template_name = 'challenges/browse.html'
+    partial_template_name = 'challenges/partials/browse_results.html'
+    BROWSE_URL_NAME = 'challenges'
+    EMPTY_COPY = (
+        'No runs in flight',
+        'A challenge is 25 or 26 games picked one square at a time. Start one and it shows up here.',
+    )
+
+    SORTS = {
+        'recent': ('Newest', ('-created_at',)),
+        'oldest': ('Oldest', ('created_at',)),
+        'progress': ('Most progress', ('-completed_count',)),
+        'hunter': ('Hunter A-Z', (Lower('profile__psn_username'),)),
+    }
+    DEFAULT_SORT = 'progress'
+
+    def base_queryset(self):
+        return Challenge.objects.visible().filter(is_complete=False)
+
+    def full_page_context(self):
+        # THE COUNT IS UNFILTERED, deliberately: the headline says how many runs are in flight ACROSS the
+        # community, which is a fact about the site, not about the reader's current filter. `paginator.count`
+        # is what reports the filtered total, and the grid carries it.
+        return {
+            'in_flight': self.base_queryset().count(),
+            # `text`, not `label` -- the partial reads `item.text`, and a missing key renders as an empty
+            # crumb rather than raising. `Home -> Challenges` mirrors Game Lists, the sibling page in this
+            # hub: there is no Community landing page to point at (`/community/` 301s to Leaderboards).
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse('home')},
+                {'text': 'Challenges'},
+            ],
+            'seo_description': (
+                'Challenge runs in progress on Platinum Pursuit: A-Z and Job Coverage boards being filled '
+                'one game at a time by the trophy-hunting community.'
+            ),
+        }
+
+
+@method_decorator(
+    ratelimit(group=HALL_OF_FAME_RATELIMIT_GROUP, key='ip', rate='60/m',
+              method=('GET', 'HEAD'), block=True),
+    name='get')
+class HallOfFameView(_ChallengeBrowseView):
+    """`/community/challenges/hall-of-fame/` -- the finished runs.
+
+    NO "MOST PROGRESS" SORT, and its absence is the point: every run here is complete, so the option would be
+    a no-op that implies otherwise. The sorts that mean something are when it was finished and whose it is.
+
+    HEROES, NOT CARDS, which is a judgement about how many of these there will ever be. Finishing a run means
+    25 or 26 completed contracts, so this page holds single figures for a long time and probably never holds
+    hundreds. A card grid is a container that says "there are many of these, scan them": at eight entries it
+    reads as a page that failed to load, and each finish -- the hardest thing the feature asks for -- is
+    rendered the size of a browse tile. A full-width row per finish says the opposite, and the scarcity that
+    makes the grid wrong is what makes the row affordable.
+    """
+
+    template_name = 'challenges/hall_of_fame.html'
+    partial_template_name = 'challenges/partials/browse_results.html'
+    BROWSE_URL_NAME = 'challenges_hall_of_fame'
+    EMPTY_COPY = (
+        'Nobody has finished one yet',
+        'A finished run means every square completed. The first one lands here.',
+    )
+    ENTRY_TEMPLATE = 'challenges/partials/_run_hero.html'
+    GRID_CLASS = 'pp-chero-list'
+
+    #: EIGHT, NOT THE BASE'S 24, and this is a correctness bound rather than a layout preference.
+    #:
+    #: `cover_games_for`'s `[:len(ids) * 4]` cap is sized and argued for `MAX_ITEMS_RENDERED` = 200 concepts
+    #: (`gamelists/views.py`), which is the surface it was written for. A page of heroes hands it the union of
+    #: every square of every entry: at 24 entries that is up to 624 concepts, authorising ~2,500 joined `Game`
+    #: rows -- each dragging a `Concept` and an `IGDBMatch` -- on an anonymous, enumerable URL that nothing
+    #: caches, re-paid on every InfiniteScroller page. The query SHAPE stays flat, which is the whole reason
+    #: the flatness pin cannot see it: this is the bytes axis, the one the May 2026 OOM was actually about.
+    #:
+    #: Eight entries is at most 208 concepts. That OVERSHOOTS the 200-concept reference surface by 4%, and
+    #: saying "back inside the documented budget" (as this did) is arithmetically false -- 208 > 200. The
+    #: overshoot is accepted: the cap's own comment calls four-per-concept "generous rather than tight", and
+    #: 8 is the last page size that keeps the union within a rounding of the figure the cap was argued for
+    #: (9 x 26 = 234 does not). `test_the_hall_of_fame_pages_small_enough_to_stay_inside_the_cover_budget`
+    #: pins that it cannot grow.
+    #:
+    #: It is also the right number for the layout independently -- 24 full-width heroes is an ~8,000px page
+    #: -- but the layout is not what makes it necessary.
+    paginate_by = 8
+
+    SORTS = {
+        'recent': ('Newest finish', ('-completed_at',)),
+        'oldest': ('Oldest finish', ('completed_at',)),
+        'hunter': ('Hunter A-Z', (Lower('profile__psn_username'),)),
+    }
+    DEFAULT_SORT = 'recent'
+
+    def base_queryset(self):
+        # `filter(is_complete=True)` rather than the manager's `completed()`: that helper carries its own
+        # ordering, which would be replaced by the chosen sort anyway -- and an ordering that exists only to
+        # be overwritten is the kind of thing a later reader trusts.
+        return Challenge.objects.visible().filter(is_complete=True)
+
+    def enrich(self, runs):
+        """The board, the earned title and the plaque spine for each finished run, in three batches.
+
+        AT MOST ELEVEN QUERIES ON A PAGE HOLDING A JOBS RUN, ten without one, and FEWER where there is less
+        to resolve -- whatever the entry count.
+
+        STATED AS A CEILING RATHER THAN A COUNT, because `boards_for` is itself a range: its docstring lists
+        five cases, down to one or two for runs with no filled squares, so a real page runs from about six up
+        to eleven. An earlier version of this paragraph quoted "eleven" and "ten" flat while citing the very
+        docstring that establishes that range -- inheriting the exact error it was pointing at, which is the
+        third time this figure has been wrong. The contributors are the durable part:
+
+        - `boards_for` is six, or five without a jobs run (its own docstring carries the range: the slots,
+          the contracts, two for membership, one for every cover, and the job catalogue only when a jobs run
+          is present);
+        - `granted_titles_for` adds one;
+        - `plaques_for` adds four (the career standings, the job catalogue's shape, one aggregate over
+          `ProfileJobXP`, and the redeemed-slot counts).
+
+        Earlier versions said "two queries of their own plus the cover resolve", then "three", then "seven",
+        each of which quietly dropped a read. All of them take the WHOLE PAGE, which is the property that
+        matters and the one the flatness pin actually tests -- the total is documentation, the flatness is
+        the contract.
+
+        Keyed BY RUN ID rather than attached onto the model instances: the template looks its entry up by
+        `run.pk`, so nothing here mutates rows the ORM might later save. The three maps degrade DIFFERENTLY
+        and an earlier version flattened two of them into one sentence: `granted_titles_for` omits a run that
+        earned no title, while `boards_for` seeds an entry for every run it is asked about, so a run with no
+        slots gets an empty list rather than being missing. `plaques_for` is like `boards_for` -- an entry
+        for every run, because a hunter with no career standing row has a real answer rather than an absent
+        one: the CATALOGUE FLOOR, which is also what their own Career page shows, since every untouched job
+        sits at level 1. An earlier version of this said "level 0, the `newbie` rank" -- the rank part is
+        still right, but the level was the defect two audits put first. So of the three maps, only the title
+        is ever genuinely missing.
+
+        THE BOARD IS THE UN-MINTED STATE, not a placeholder to be thrown away. When a minted share image
+        exists for a run it becomes the hero's face; until then -- a run finished minutes ago, a generation
+        that failed, anything not yet backfilled -- the live board is what the hero shows. So this path is
+        permanent, and at hero width it is a real board: 25 or 26 covers at a size worth looking at, rather
+        than the mush the same thing would be at browse-card scale.
+        """
+        from challenges.services.plaque import plaques_for
+        from challenges.services.rewards import granted_titles_for
+        from challenges.services.slot_render import boards_for
+
+        # NO `list(runs)` HERE. It was added to protect two consumers from a one-shot iterable, and both
+        # ends of that have since gone: `context[context_object_name]` is always an already-paginated,
+        # re-iterable list or queryset, and `granted_titles_for` now reads its argument in a single pass.
+        # A mutation run found deleting the call broke nothing, which is the definition of dead defence --
+        # and the generator hazard is pinned where it is real, in
+        # `test_the_title_lookup_survives_a_one_shot_iterable`.
+        return {
+            'boards': boards_for(runs),
+            'earned_titles': granted_titles_for(runs),
+            'plaques': plaques_for(runs),
+        }
+
+    def full_page_context(self):
+        return {
+            'finished': self.base_queryset().count(),
+            'breadcrumb': [
+                {'text': 'Home', 'url': reverse('home')},
+                {'text': 'Challenges', 'url': reverse('challenges')},
+                {'text': 'Hall of Fame'},
+            ],
+            'seo_description': (
+                'Finished challenge runs on Platinum Pursuit: complete A-Z and Job Coverage boards, and the '
+                'hunters who filled every square.'
+            ),
+        }

@@ -26,7 +26,9 @@ from django.views.generic import RedirectView, TemplateView
 from challenges.views import (
     AssignSlotView,
     ChallengeDetailView,
+    ChallengesBrowseView,
     ClearSlotView,
+    HallOfFameView,
     HistoryPickerView,
     SearchPickerView,
     SlotPickerView,
@@ -46,7 +48,7 @@ from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, Cr
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ChallengesComingSoonView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap,
@@ -55,6 +57,7 @@ from core.sitemaps import (
     # Game Lists system. Two different things whose names are one word apart, which is the same
     # collision that made the sitemap a landmine in the first place.
     GameListSitemap,
+    ChallengeSitemap,
 )
 
 sitemaps = {
@@ -72,6 +75,10 @@ sitemaps = {
     # rebuilt `gamelists.GameList` -- it reversed `list_detail`, which resolves to the new app, so
     # enabling it unchanged would have published thousands of legacy ids against new-app routes.
     'lists': GameListSitemap,
+    # Finished challenge runs (2026-09). The two BROWSE pages ride `StaticViewSitemap`; this is the
+    # detail set behind the Hall of Fame. Finished only -- an in-flight run's page changes with every
+    # square, so its `lastmod` would be stale within days.
+    'challenges': ChallengeSitemap,
     # for the revamp, since nothing else about the system was deleted.
 }
 from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView,
@@ -415,9 +422,25 @@ urlpatterns = [
     # them deliberately -- the rebuild edits in place and has no such address.
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
     path('community/lists/create/', CreateListView.as_view(), name='list_create'),
-    # CHALLENGES, as a real page rather than a redirect while the system is rebuilt. Same URL and
-    # same name the real browse will take, so nothing that links here changes when it lands.
-    path('community/challenges/', ChallengesComingSoonView.as_view(), name='challenges'),
+    # CHALLENGES. The placeholder held this URL and this `name` so the real browse could take both
+    # without changing a single link -- which is what happened here.
+    #
+    # TWO PAGES (owner, 2026-09-30): this one lists runs IN PROGRESS, and the Hall of Fame below lists the
+    # finished ones. The Hall of Fame is NESTED under this path so the Community hub's prefix matching
+    # resolves the HUB for both.
+    #
+    # NESTING DOES NOT LIGHT THE ITEM, which an earlier version of this claimed. Prefix matching picks the
+    # hub; the active item is an exact `url_name` match against that hub's items, so the Hall of Fame
+    # highlights because it has its own `HubSubnavItem` -- not because of where its URL sits. The claim
+    # mattered because it hid a real gap: `challenge_detail`, under the same prefix, had no rail entry at
+    # all, so every run page rendered the Community strip unlit. It has one now, in
+    # `_URL_NAME_TO_SLUG_OVERRIDES`.
+    #
+    # THE HALL OF FAME MUST COME FIRST. Django resolves in order and `<int:challenge_id>` would not match
+    # `hall-of-fame`, so this is not a live trap today -- but a future `<slug:...>` detail route would
+    # swallow it, and the ordering is free insurance against that.
+    path('community/challenges/', ChallengesBrowseView.as_view(), name='challenges'),
+    path('community/challenges/hall-of-fame/', HallOfFameView.as_view(), name='challenges_hall_of_fame'),
     path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
     # The list's own write endpoints. Under the page's path rather than /api/v1/, because they are
     # this page's behaviour and share its gate -- routing them through the API app would mean a
@@ -470,7 +493,9 @@ urlpatterns = [
     # A ROOT path, like `/my-lists/`, and for the same reason: the hub is resolved by PATH PREFIX, so
     # a personal page living under `/community/` would light the Community rail instead of My Pursuit ->
     # Tools, where a login-gated page about your own runs belongs. The public browse and Hall of Fame
-    # keep `/community/challenges/` above, which is still the placeholder.
+    # hold `/community/challenges/` and `/community/challenges/hall-of-fame/` above. (This line used to
+    # call that URL "still the placeholder", which stopped being true the moment `ChallengesBrowseView` took
+    # it -- and the placeholder view itself is now deleted, not merely unrouted.)
     #
     # The two write endpoints sit under this page's path rather than /api/v1/, because they are this
     # page's behaviour and share its gate -- routing them through the API app would mean a second

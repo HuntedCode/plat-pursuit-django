@@ -108,7 +108,8 @@ def get_card_data(profile):
     hero = (career_ctx or {}).get('hero') or {}
     snap = profile_stats_service.trophy_snapshot(profile)
 
-    # The ring arcs arrive with server-precomputed stroke-dash geometry (career_service._RING_C);
+    # The ring arcs arrive with server-precomputed stroke-dash geometry (job_render.discipline_ring,
+    # moved out of the private career_service._RING_C once the ring had a third producer);
     # the card only has to attach each discipline's hex, because `var(--disc-*)` does not exist in
     # the renderer's stylesheet-free document.
     ring = [

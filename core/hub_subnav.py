@@ -292,7 +292,13 @@ COMMUNITY_HUB = HubSubnavConfig(
     items=(
         HubSubnavItem('lists', 'Game Lists', 'lists_browse', 'list'),
         HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user'),
-        # A COMING-SOON PAGE EARNS A RAIL ITEM, which is not obvious. It is here because the rail is
+        # HISTORICAL, AND SUPERSEDED BY THE BLOCK BELOW -- kept only because the reasoning about where a
+    # not-yet item belongs is worth having if this ever happens again. Challenges shipped (2026-09), so
+    # there is no `Soon` tag on this rail and no coming-soon page behind it; the paragraph's "LAST, AND
+    # TAGGED" instruction and its citation of `test_the_unfinished_item_says_so_on_the_pill` are both dead
+    # (that test died with `test_challenges_coming_soon.py`). Read it as a record, not as the rule.
+    #
+    # A COMING-SOON PAGE EARNS A RAIL ITEM, which is not obvious. It is here because the rail is
         # how somebody learns what this hub contains, and a hub of two while a third is weeks away
         # reads as the whole offering. The page it points at is real and says so plainly -- the rule
         # set when Challenges was parked was a page, never a redirect. It keeps its slug and url_name
@@ -302,8 +308,15 @@ COMMUNITY_HUB = HubSubnavConfig(
         # the one you cannot; tagged because a pill that looks like its neighbours promises a
         # destination like its neighbours, and somebody clicking it deserves to know before they do.
         # Dropping the tag is what marks the feature as shipped.
-        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag', tag='Soon',
-                      tag_aria='coming soon'),
+        # TWO ITEMS, and the `tag='Soon'` is gone (owner, 2026-09-30). Challenges lists the runs IN PROGRESS
+        # and the Hall of Fame the finished ones -- two audiences, two pages, so a visitor can reach the
+        # finished runs without first passing a page of half-filled boards.
+        #
+        # THE TAG HAD TO GO IN THE SAME CHANGE. A chip reading "Soon" outliving the thing it described tells
+        # every visitor the page is not ready, and dropping it is what marks the feature shipped -- which is
+        # exactly what `test_the_unfinished_item_says_so_on_the_pill` was written to hold until this moment.
+        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag'),
+        HubSubnavItem('challenges_hall_of_fame', 'Hall of Fame', 'challenges_hall_of_fame', 'award'),
     ),
 )
 
@@ -351,6 +364,15 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # (`job_detail` vs `jobs_browse`), so every one of them needs a line here; the item shipping without
     # one is silent, because the strip still renders.
     'job_detail': ('browse', 'jobs'),
+    # A run's own page, which is PUBLIC and now sitemap-indexed. Missed when the Challenges pages shipped,
+    # so every hero on the Hall of Fame linked to a page that rendered the Community strip with nothing
+    # lit -- exactly the `job_detail` failure described above, which is why that paragraph says every
+    # detail page needs a line here.
+    #
+    # IT POINTS AT `challenges`, NOT `challenges_hall_of_fame`. A run reached from the Hall of Fame is
+    # finished and one reached from the browse page is not, and the rail cannot know which; `challenges`
+    # is the parent of both URLs and the broader of the two answers, so it is the honest one.
+    'challenge_detail': ('community', 'challenges'),
     # The whole roadmap family is /games/<np>/-scoped (you reach every one FROM a list), so all
     # four light with the list family. The _ctg editor and BOTH public reader routes had no line
     # at all before -- the silent-unlit trap, on sitemap-indexed pages for the readers.

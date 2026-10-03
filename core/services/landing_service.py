@@ -92,7 +92,9 @@ def _badge_showcase():
 #: The literal fixture behind the cron-rendered card: a plausible mid-career hunter, every value
 #: hand-written. Rank/discipline/tier names are the product's REAL vocabulary (Warden, the five
 #: disciplines, the four trophy tiers); games and figures are invented. The ring's dash/offset are
-#: precomputed against career_service's circumference (263.89) exactly as the live service does.
+#: precomputed against job_render.RING_CIRCUMFERENCE (263.89, moved out of career_service when the ring
+#: gained a third producer) exactly as the live service does. These numbers are FROZEN, so a change to
+#: that constant has to be mirrored here by hand.
 def _fixture_card_context():
     from core.services.completion_card_service import DISCIPLINE_COLOURS, TIER_DISPLAY
     from users.services.marks import mark_style

@@ -1,0 +1,54 @@
+{% comment %}One run IN FLIGHT, on `/community/challenges/`. Not "on either public page", which is what this
+said when it was the only entry partial: the Hall of Fame draws `_run_hero.html` now, because a finished run
+is a different object from a run in progress and neither is served well by the other's shape.
+
+NO COVER ART HERE, and the reason has changed even though the answer has not. It used to be cost -- a cover
+join per entry, with the `raw_response` blob that caused the May 2026 OOM sitting behind it. That objection
+is answered: `slot_render.boards_for` resolves every square of every run on a page in a FIXED number of
+queries -- six where a Job Coverage run is present, five without it, and fewer when there is nothing to
+resolve. Its own docstring carries the range; quoting a single number here is how this comment was wrong
+twice (first "four or five", the per-run figure for `slot_cards`, then a flat "five", which is only the
+A-Z-only case). What is left is a judgement about SUBJECT. An in-flight run's honest
+subject is how far along it is, and a mosaic of the squares already done says the opposite -- it shows the
+finished part of an unfinished thing. So this card keeps the run's own vocabulary (type, hunter, Horizon,
+Tally) and the art waits for the finish.
+
+NO "FINISHED" STATE, either. `ChallengesBrowseView.base_queryset` filters `is_complete=False`, so a complete
+run can never reach this partial; the branches that drew a Finished chip and a "Finished <when>" foot were
+dead the moment the Hall of Fame took the finished runs, and dead template branches are worse than absent
+ones here -- they imply this card is still the right way to draw a finish.
+
+THE WHOLE CARD IS THE LINK. A run has one destination and no secondary action, so a nested anchor would be a
+second tab stop to the same place -- the browse-card pattern the design system settles on.
+
+`index` desyncs the supporter shimmer per card, which is why the mark takes it rather than inheriting it.
+{% endcomment %}
+{% load humanize mark_tags %}
+<a class="pp-crun pp-centry" href="{% url 'challenge_detail' run.pk %}">
+    <div class="pp-crun__head">
+        {% comment %}THE TYPE, as a chip rather than an icon alone: "A-Z" and "Job Coverage" are the two
+        things a visitor is choosing between, and a glyph would need decoding. `.bd-chip` is the house pill --
+        the same one the run's own header uses for its state.{% endcomment %}
+        <span class="bd-chip bd-chip--ghost pp-crun__type">{{ run.get_challenge_type_display }}</span>
+    </div>
+
+    {% comment %}THE HUNTER IS THE SUBJECT of this card -- the run's name is auto-generated and identical
+    across every run of a type, so the name would be the least informative thing on it. `name_mark` so a
+    supporter's mark travels here as it does on every other surface that credits somebody.{% endcomment %}
+    <p class="pp-crun__hunter">{% name_mark name=run.profile.display_psn_username|default:run.profile.psn_username mark=run.profile.display_mark size='sm' index=index %}</p>
+
+    <div class="pp-crun__tally">
+        <span class="pp-tally pp-tally--sm">{{ run.completed_count }}<span class="pp-crun__of">/{{ run.total_slots }}</span></span>
+        <span class="pp-crun__label">squares</span>
+    </div>
+
+    {% comment %}The Horizon primitive, not a hand-rolled bar. `progress` is computed in the template because
+    it is a ratio of two fields already on the row -- no query, and `widthratio` is the one arithmetic Django
+    templates do honestly (the reward card's own comment records what chained `add` filters produce).{% endcomment %}
+    <div class="pp-crun__bar">
+        {% widthratio run.completed_count run.total_slots 100 as run_progress %}
+        {% include 'components/horizon.html' with progress=run_progress height='6px' %}
+    </div>
+
+    <p class="pp-crun__foot">Started {{ run.created_at|naturaltime }}</p>
+</a>

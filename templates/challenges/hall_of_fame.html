@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% load static job_icons %}
+
+{% block title %}Hall of Fame — Challenges — Platinum Pursuit{% endblock %}
+{% block meta_description %}{{ seo_description }}{% endblock %}
+
+{% block content %}
+{% comment %}THE JOB ICON SPRITE, and leaving it out was a straight porting miss. `job_icon_use` emits
+`<use href="#jobicon-NAME"/>`, so every job KEY on a Job Coverage board rendered as an EMPTY `<svg>` -- the
+markup was right, the symbols it referenced did not exist. The A-Z letters showed because they are text,
+which is exactly why the gap looked like "the job marks were never built".
+
+NOT "every discipline mark" too, which an earlier version of this said: the shelves lost their leading icon
+when they took named tabs, so the job keys are this page's only `<use>` consumers.
+
+IN THE PAGE, NOT THE PARTIAL. htmx replaces only `#browse-results`, so the shell survives every filter swap
+and an InfiniteScroller page; emitting it inside the partial would ship the whole symbol library again on
+each one and leave duplicate ids in the document.
+
+UNCONDITIONAL, AND NOT MATCHING `challenge_detail.html`, which an earlier version of this claimed it did.
+That page gates the sprite on its run being a jobs run -- it knows its one type, so it can. This page can
+hold both types in any mix, so gating would mean threading a "any jobs run on this page" flag through the
+view for a fixed-size blob of geometry, and leaving the page one `{% templatetag openblock %} if
+{% templatetag closeblock %}` away from the silent failure that put this line here.{% endcomment %}
+{% job_icon_sprite %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% comment %}THE SAME HEADER SHAPE AS THE CHALLENGES PAGE, deliberately: two pages of the same feature
+    that differ in chrome read as two features. What changes is the ICON, the headline number and the
+    sentence -- the structure and the colour are identical so moving between them feels like one place.
+
+    PRIMARY, NOT ACCENT, and this shipped wrong. The first cut used `accent` here (and for the hero's hover
+    glow) to distinguish this page from its sibling. `docs/design/visual-identity.md` is explicit that cyan
+    is THE brand accent -- "one brand accent across the kit, not three" -- and no other page in the site
+    deviates, so an orange page header read as a bug rather than as a distinction. The two pages are
+    distinguished by the trophy icon, the headline noun and the hero layout itself, which is plenty.
+
+    Note this is NOT a ban on `--pp-accent` in this feature: it is the visual identity's named warm-orange
+    EARN colour, and the reward panel uses it correctly for XP amounts. It just is not a page accent.
+
+    THE NUMBER IS FINISHED RUNS, which is the only number this page is about.{% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Hall of Fame</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/60 mt-1">
+                        Every finished run. Still going?
+                        <a href="{% url 'challenges' %}" class="link link-hover">See what is in flight</a>.
+                    </p>
+                </div>
+
+                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
+                    {% comment %}NO `data-countup`. This page loads `browse-filters.js` and
+                    `challenges-browse.js`; neither initialises it, and `utils.js` has no global
+                    `[data-countup]` auto-init -- it reads the attribute only inside two page-specific
+                    selectors. The number renders from its text node either way, so the attribute was inert
+                    markup implying an animation that never ran.{% endcomment %}
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ finished }}</span>
+                    {% comment %}`text-xs` (12px) AT EVERY WIDTH. This was `text-[0.65rem]` = 10.4px, which
+                    the stylesheet's own type-floor guard cannot see because it only reads `font-size:` in
+                    CSS. The design system reserves sub-`text-xs` for decorative grids and chart legends; a
+                    page-header stat label is readable content, and `challenges.css` carries a three-paragraph
+                    note that this must not be done and must not be fixed by lowering the bound.{% endcomment %}
+                    <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">finished</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% include 'challenges/partials/_browse_toolbar.html' with browse_url=browse_url form_id='hof-form' %}
+
+    <div id="browse-results">
+        {% include 'challenges/partials/browse_results.html' %}
+    </div>
+
+    <div id="ch-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="ch-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+    {% comment %}THE SAME SCRIPT AS THE CHALLENGES PAGE. It binds by id (`#ch-sentinel`, `#ch-loading`,
+    `#items-grid`), which both pages emit, so one file serves both rather than two that drift.{% endcomment %}
+    <script src="{% static 'js/challenges-browse.js' %}"></script>
+{% endblock %}

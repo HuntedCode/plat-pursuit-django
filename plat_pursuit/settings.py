@@ -544,7 +544,8 @@ PSN_METADATA_CAPTURE_ENABLED = os.getenv('PSN_METADATA_CAPTURE_ENABLED', 'True')
 # Read ONLY by `challenge_service.creation_is_open_to`, so the rule has one enforcement point. In
 # particular NOT by `trophies.mixins.PremiumRequiredMixin`, which REDIRECTS to `beta_access_required`:
 # bouncing a free hunter out of a parked feature is the behaviour that was rejected when Challenges
-# was first parked, and `tests/engine/test_challenges_coming_soon.py` pins that decision.
+# was first parked, and `tests/engine/test_challenges_live.py` pins that decision
+# (inverted from `test_challenges_coming_soon.py` when the real pages shipped).
 CHALLENGES_BETA_MEMBERS_ONLY = os.getenv('CHALLENGES_BETA_MEMBERS_ONLY', 'True') == 'True'
 
 

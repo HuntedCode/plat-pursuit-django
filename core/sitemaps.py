@@ -1,5 +1,6 @@
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
+from challenges.models import Challenge
 from gamelists.models import GameList as RebuiltGameList
 from trophies.models import Game, Profile, Badge, Checklist, GameList, Roadmap
 
@@ -24,6 +25,11 @@ class StaticViewSitemap(Sitemap):
             # Game Lists browse, added when the system came off its development gate (2026-09). The
             # DETAIL pages come from `GameListSitemap`; this is the index they hang off.
             'lists_browse',
+            # The two Challenge browse pages (2026-09). Both are public read-only -- the beta gate is
+            # on CREATING a run, not on reading the hub -- and both replaced a `noindex` coming-soon
+            # placeholder at the same URL, which is the reason to advertise them explicitly: a crawler
+            # that saw the placeholder needs a reason to come back.
+            'challenges', 'challenges_hall_of_fame',
         ]
 
     def location(self, item):
@@ -356,3 +362,56 @@ class GameListSitemap(Sitemap):
         )
 
 
+class ChallengeSitemap(Sitemap):
+    """FINISHED challenge runs -- the Hall of Fame's detail pages.
+
+    FINISHED ONLY, though every non-hidden run is publicly readable. An in-flight run's page changes every
+    time a square lands, so its `lastmod` would be stale within days, and there is little stable content to
+    rank on: the board is mostly empty. A finished run is the opposite -- 25 or 26 named games, permanently --
+    which is a page worth indexing. The browse page itself is in `StaticViewSitemap` and links the live ones,
+    so nothing is unreachable to a crawler that wants them.
+
+    HIDDEN RUNS ARE EXCLUDED, and this is the trap `GameListSitemap` carries a paragraph about, arriving with
+    the opposite answer. There, `.visible()` was wrong because it is the `is_deleted=False` floor ALONE and
+    would have published every private list. Here that floor is the whole privacy model: a challenge is either
+    hidden or public, with no `is_public` third state, so `is_deleted=False` is exactly the public predicate.
+    `.completed()` carries both terms AND the Hall of Fame's own ordering, which is why nothing here
+    re-orders it. It does NOT mean the sitemap and the browse page "agree by construction", which is what an
+    earlier version of this claimed: `HallOfFameView.base_queryset` deliberately refuses `completed()` (its
+    own comment explains that the helper's ordering would only be overwritten by the chosen sort), so there
+    really are two hand-written predicates -- `visible().filter(is_complete=True)` in both places, agreeing
+    today by coincidence. Worth knowing, because a change to one is not a change to the other.
+
+    `completed_at` IS THE LASTMOD, not `updated_at`, deliberately on both counts:
+
+    - It is the honest answer. A finished run's page cannot change again -- completed squares lock forever and
+      a finished run gains none -- so the completion is its last meaningful edit. `updated_at` is `auto_now`,
+      so an XP redeem bumps it while changing nothing a crawler can see (the Claim controls are owner-only),
+      reporting a fresh `lastmod` for an identical page.
+    - It is index-backed. `Challenge.Meta` already carries `chal_completed_idx` on `-completed_at` with the
+      condition `is_deleted=False, is_complete=True` -- exactly this predicate -- so `get_latest_lastmod` is
+      an index read rather than the filtered scan plus sort this file's header blames for the May 2026
+      sitemap-index OOM. Ordering on `updated_at` would have needed a second partial index for no gain.
+    """
+
+    changefreq = 'monthly'
+    priority = 0.4
+    limit = 5000
+
+    def items(self):
+        # `.only(...)` INCLUDES the lastmod field: without `completed_at` every row would pay a deferred
+        # single-row SELECT the moment `lastmod` reads it, which is the N+1 shape `.only()` was added to stop.
+        return Challenge.objects.completed().only('id', 'completed_at')
+
+    def location(self, obj):
+        return reverse('challenge_detail', kwargs={'challenge_id': obj.id})
+
+    def lastmod(self, obj):
+        return obj.completed_at
+
+    def get_latest_lastmod(self):
+        return (
+            Challenge.objects.completed()
+            .values_list('completed_at', flat=True)
+            .first()
+        )
