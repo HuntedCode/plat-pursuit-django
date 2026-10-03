@@ -67,15 +67,18 @@ from django.utils import timezone
 from challenges.models import (
     AZ_LETTERS,
     CHALLENGE_TYPE_AZ,
+    CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_CHOICES,
     CHALLENGE_TYPE_JOBS,
     CHALLENGE_TYPES,
     COMPLETED_VIA_HATCH,
     COMPLETED_VIA_IMPORT,
     COMPLETED_VIA_LIVE,
+    CalendarDay,
     Challenge,
     ChallengeQuerySet,
     ChallengeSlot,
+    calendar_day_keys,
 )
 from challenges.services import eligibility
 from trophies.models import EarnedContract, Job, Profile
@@ -283,11 +286,23 @@ def slot_keys_for(challenge_type):
     if challenge_type == CHALLENGE_TYPE_AZ:
         return list(AZ_LETTERS)
 
-    from trophies.services.job_render import discipline_order
-    return list(
-        Job.objects.order_by(discipline_order(), 'display_order', 'name')
-        .values_list('slug', flat=True)
-    )
+    if challenge_type == CHALLENGE_TYPE_CALENDAR:
+        return calendar_day_keys()
+
+    if challenge_type == CHALLENGE_TYPE_JOBS:
+        from trophies.services.job_render import discipline_order
+        return list(
+            Job.objects.order_by(discipline_order(), 'display_order', 'name')
+            .values_list('slug', flat=True)
+        )
+
+    # EXPLICIT PER TYPE, WITH NO FALL-THROUGH, and the fall-through this replaces was a live trap. The
+    # jobs branch used to be the bare `else`, so the moment `calendar` was added to
+    # `CHALLENGE_TYPE_CHOICES` -- which is also what let it past the `CHALLENGE_TYPES` check in
+    # `start_reporting` -- a Calendar run would have been created with twenty-five JOB slots and a
+    # `total_slots` of 25. No exception, no empty list, just a silently wrong run of the wrong shape.
+    # A new type is exactly when this function must refuse rather than guess.
+    raise ChallengeError('That challenge is not available right now.')
 
 
 # ── starting, resuming and hiding ────────────────────────────────────────────────────────────────
@@ -391,9 +406,19 @@ def start_reporting(profile, challenge_type):
         profile=profile, challenge_type=challenge_type,
         name=_auto_name(profile, challenge_type), total_slots=len(keys),
     )
-    ChallengeSlot.objects.bulk_create([
-        ChallengeSlot(challenge=challenge, key=key, position=i) for i, key in enumerate(keys)
-    ])
+    if challenge_type == CHALLENGE_TYPE_CALENDAR:
+        # A Calendar run's rows are `CalendarDay`, not `ChallengeSlot`: its atom is a date rather than a
+        # contract, so the slot's contract FK, frozen snapshot, contract-uniqueness constraint and
+        # `xp_redeemed_at` would all be dead weight. `slot_keys_for` returns (month, day) pairs here,
+        # which is why `total_slots` above is still simply `len(keys)` -- one function answers "what does
+        # a run of this type require" for every type, so the count and the rows cannot disagree.
+        CalendarDay.objects.bulk_create([
+            CalendarDay(challenge=challenge, month=month, day=day) for month, day in keys
+        ])
+    else:
+        ChallengeSlot.objects.bulk_create([
+            ChallengeSlot(challenge=challenge, key=key, position=i) for i, key in enumerate(keys)
+        ])
     return challenge, CREATED
 
 

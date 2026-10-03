@@ -41,17 +41,25 @@ from django.db.models import F, Q
 
 from trophies.models import Contract, Profile
 
-#: The two types. `az` is the returning A-Z Challenge; `jobs` is the new Job Coverage Challenge,
-#: which replaces the retired Genre challenge. The Platinum Calendar does NOT return.
+#: The three types. `az` is the returning A-Z Challenge; `jobs` is the new Job Coverage Challenge,
+#: which replaces the retired Genre challenge; `calendar` is the Plat Calendar, revived 2026-10-02.
+#:
+#: THE CALENDAR'S RETURN REVERSES A SETTLED DECISION, recorded rather than quietly edited. This comment
+#: read "The Platinum Calendar does NOT return" from 2026-09-26 until the owner revived it. It is also
+#: the one type whose atom is NOT a Contract: a day is filled by a date, which is why it has its own
+#: `CalendarDay` model rather than a `ChallengeSlot`, and why several rules stated below as if they
+#: covered every type ("a slot holds a CONTRACT") describe the first two only.
 #:
 #: "A-Z Challenge", not "A-Z Platinum Challenge": platinum stopped being a requirement, so the old
 #: name would now overstate the bar. The placeholder page's public promise already used the bare form
 #: ("your past A-Z runs are safe"), so the community-facing string does not change.
 CHALLENGE_TYPE_AZ = 'az'
 CHALLENGE_TYPE_JOBS = 'jobs'
+CHALLENGE_TYPE_CALENDAR = 'calendar'
 CHALLENGE_TYPE_CHOICES = [
     (CHALLENGE_TYPE_AZ, 'A-Z Challenge'),
     (CHALLENGE_TYPE_JOBS, 'Job Coverage Challenge'),
+    (CHALLENGE_TYPE_CALENDAR, 'Plat Calendar'),
 ]
 #: Frozenset for service validation, mirroring `gamelists.models.LIST_TYPES`.
 CHALLENGE_TYPES = frozenset(value for value, _ in CHALLENGE_TYPE_CHOICES)
@@ -68,6 +76,55 @@ CHALLENGE_TYPES = frozenset(value for value, _ in CHALLENGE_TYPE_CHOICES)
 #: contract out of 2,390 (Okami, spelled with a macron). If that count grows, the fix is a
 #: denormalized sort letter fed by `IGDBService._unicode_normalize_for_matching`, NOT a new helper.
 AZ_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+#: Days per month for the Plat Calendar, as the single definition of both its day keys and how many
+#: there are. 365, NOT 366.
+#:
+#: FEBRUARY IS 28. A calendar run is keyed on (month, day) across ALL years, so 29 February belongs to
+#: no single year and would be a slot most hunters cannot fill by accident of the Gregorian calendar
+#: rather than by difficulty. The retired `CalendarChallengeDay` excluded it the same way. The
+#: difference here is what happens to a platinum earned ON 29 February: it folds into 28 February
+#: rather than being dropped, because dropping it silently loses a real platinum from a hunter's
+#: history and the alternative costs one line in the fill query.
+CALENDAR_MONTH_DAYS = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+#: The three lenses on one Calendar run, hardest last. A day is filled INDEPENDENTLY per view.
+#:
+#: THEY ARE NOT NESTED, and every consumer has to know it. `contract_service._detect_tiers` reaches the
+#: 100% tier from `progress=100` on any member concept with no platinum required anywhere, so a contract
+#: completed at that tier fills a `contracts` day and fills NO `all` day. Under 2% of live contracts have
+#: no platinum (measured in prod, 2026-10-03), so the overlap is near-total -- which is exactly what makes
+#: this dangerous to assume. Anything that treats `contracts` as a subset of `all` is wrong for a small
+#: and permanent minority of days.
+CALENDAR_VIEW_ALL = 'all'
+CALENDAR_VIEW_CLEAN = 'clean'
+CALENDAR_VIEW_CONTRACTS = 'contracts'
+CALENDAR_VIEW_CHOICES = [
+    (CALENDAR_VIEW_ALL, 'All platinums'),
+    (CALENDAR_VIEW_CLEAN, 'Shovelware free'),
+    (CALENDAR_VIEW_CONTRACTS, 'Contracts'),
+]
+CALENDAR_VIEWS = frozenset(value for value, _ in CALENDAR_VIEW_CHOICES)
+
+#: The view each `CalendarDay` boolean belongs to, so a caller can map one to the other without a
+#: hand-written `if` chain per consumer. Ordered easiest-first, which is also crest-tier order.
+CALENDAR_VIEW_FIELDS = (
+    (CALENDAR_VIEW_ALL, 'in_all'),
+    (CALENDAR_VIEW_CLEAN, 'in_clean'),
+    (CALENDAR_VIEW_CONTRACTS, 'in_contracts'),
+)
+
+
+def calendar_day_keys():
+    """The 365 `(month, day)` pairs of a Calendar run, in render order.
+
+    The counterpart of `AZ_LETTERS` for this type: one definition of both the keys and the count, so
+    `total_slots` and the created rows cannot disagree.
+    """
+    return [(month, day)
+            for month, days in enumerate(CALENDAR_MONTH_DAYS, start=1)
+            for day in range(1, days + 1)]
+
 
 NAME_MAX_LENGTH = 60
 
@@ -507,3 +564,79 @@ class ChallengeSlot(models.Model):
         contract row went away, which is precisely the case the snapshot exists to survive.
         """
         return bool(self.contract_slug)
+
+
+class CalendarDay(models.Model):
+    """One of the 365 day squares in a Plat Calendar run.
+
+    ITS OWN MODEL RATHER THAN A `ChallengeSlot`, and the reasons are structural rather than tidiness.
+    A slot's atom is a CONTRACT: it carries a `contract` FK, a frozen slug/name/igdb_id snapshot, a
+    partial unique forbidding one contract from filling two slots of a run, and `xp_redeemed_at`. A
+    calendar day's atom is a DATE. None of those four apply, a day is filled by a platinum in two of
+    the three views, and a day legitimately has SEVERAL satisfiers where a slot has exactly one. Bolting
+    a nullable second identity onto `ChallengeSlot` would have meant four always-null columns, one
+    constraint that never fires, and a `key` column meaning two different kinds of thing.
+
+    PRE-CREATED, ALL 365, mirroring `start_reporting`'s `bulk_create` of A-Z letters and job slugs. A
+    calendar always draws every day whether filled or not, so rows-for-filled-days-only would trade a
+    cheap ordered queryset for assembling the grid in Python and left-joining onto it. The row count is
+    the honest cost of that and it is bounded: one run is 365 rows, and runs are sequential per profile.
+
+    THREE INDEPENDENT BOOLEANS, NOT ONE TIER FIELD, and this is the decision most likely to be
+    "simplified" later by someone who assumes the views nest. They do not -- see `CALENDAR_VIEW_FIELDS`.
+    A day CAN be `in_contracts` without being `in_all`, so a single `best_view` column could not
+    represent it, and a constraint asserting `in_clean implies in_all` would be wrong for real data.
+    Three booleans also give the per-view day counts the ladder and the ultimates need, as three cheap
+    aggregates over the same rows.
+
+    WHAT IS STORED IS THE FILL; WHAT IS COMPUTED IS THE SATISFIERS. The booleans are snapshots, so a
+    catalogue correction the hunter never saw -- a shovelware reclassification, a `reconcile_contracts`
+    deletion -- cannot un-fill a day they already earned. The LIST of games behind a day is derived live
+    when the day modal opens, because it is a view onto trophy data that no longer needs to be frozen
+    once the day itself is.
+    """
+    challenge = models.ForeignKey(
+        'challenges.Challenge', on_delete=models.CASCADE, related_name='calendar_days')
+
+    month = models.PositiveSmallIntegerField(help_text='1-12.')
+    day = models.PositiveSmallIntegerField(help_text='1-31, within that month.')
+
+    #: One per view. See the class docstring: these are independent, not a ladder.
+    in_all = models.BooleanField(default=False)
+    in_clean = models.BooleanField(default=False)
+    in_contracts = models.BooleanField(default=False)
+
+    #: The REAL moment that first filled this day -- a platinum's `earned_date_time`, or a 100%
+    #: completion's `most_recent_trophy_date` -- in the hunter's own timezone when it was resolved.
+    #: User-facing ("first filled 3 March 2019"), and the reason a day cell can say anything at all.
+    earned_on = models.DateTimeField(null=True, blank=True)
+
+    #: When WE wrote the fill. Separate from `earned_on` because they answer different questions and
+    #: conflating them is the mistake `*_reached_at` already made elsewhere in this codebase: a
+    #: detection timestamp is not an achievement timestamp.
+    filled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['month', 'day']
+        constraints = [
+            models.UniqueConstraint(fields=['challenge', 'month', 'day'],
+                                    name='calendarday_unique_day'),
+            # The keys are generated by `calendar_day_keys()`, so these guard a hand-written row or a
+            # data migration rather than the normal path -- which is exactly when a bad key would be
+            # hardest to notice.
+            models.CheckConstraint(condition=Q(month__gte=1, month__lte=12),
+                                   name='calendarday_month_range'),
+            models.CheckConstraint(condition=Q(day__gte=1, day__lte=31),
+                                   name='calendarday_day_range'),
+        ]
+        indexes = [
+            # The per-view day counts. Partial on each boolean because the query is always "how many
+            # filled", never "how many empty", and an early run is overwhelmingly empty.
+            models.Index(fields=['challenge'], name='calday_all_idx', condition=Q(in_all=True)),
+            models.Index(fields=['challenge'], name='calday_clean_idx', condition=Q(in_clean=True)),
+            models.Index(fields=['challenge'], name='calday_contracts_idx',
+                         condition=Q(in_contracts=True)),
+        ]
+
+    def __str__(self):
+        return '%02d-%02d' % (self.month, self.day)

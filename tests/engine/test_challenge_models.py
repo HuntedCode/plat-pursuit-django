@@ -195,12 +195,18 @@ def test_a_run_needs_a_name():
 
 def test_an_unknown_type_is_refused_by_the_database_not_only_by_choices():
     """`choices` is a form and admin concern; Postgres does not enforce it. A challenge with an
-    unknown type has no slot keys that make sense, so there is no UI path back from one."""
+    unknown type has no slot keys that make sense, so there is no UI path back from one.
+
+    `genre`, NOT `calendar`: this used `'calendar'` while the plan said the Platinum Calendar would not
+    return, and when it DID return (2026-10-02) the test began asserting that a valid type is rejected.
+    It failed loudly, which is the good outcome, but the example should be one that cannot be promoted
+    later. `genre` is the retired challenge type -- gone, and the likeliest thing an old caller sends.
+    """
     profile = ProfileFactory()
 
     with _refuses('challenge_type_valid'):
-        Challenge.objects.create(profile=profile, challenge_type='calendar',
-                                 name='The one that does not return', total_slots=365)
+        Challenge.objects.create(profile=profile, challenge_type='genre',
+                                 name='The one that does not return', total_slots=26)
 
 
 # ── Slots: one contract per run ──────────────────────────────────────

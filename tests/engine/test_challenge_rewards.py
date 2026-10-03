@@ -608,14 +608,40 @@ def test_the_four_title_names_are_distinct_from_each_other():
     assert len(names) == len(set(names)) == 4
 
 
-def test_every_challenge_type_has_both_titles_declared():
+def test_every_challenge_type_declares_its_reward_shape():
     """A type with no entry grants nothing silently, which would read as "rewards are broken" rather
-    than as a missing dict key."""
+    than as a missing dict key.
+
+    NOT EVERY TYPE HAS ORDINAL TITLES, which is what this used to assume. It looped every type demanding
+    a first and a second title, and the Plat Calendar deliberately has neither -- it pays a ladder of
+    day-count markers plus one ultimate per view, because a 365-day run has no meaningful "first
+    completion / second completion" shape (finishing one needs roughly 2,150 platinums).
+
+    SO THE GUARD CHECKS A PARTITION, which is strictly stronger than the loop it replaces. Every type
+    must be declared EITHER in `TITLE_NAMES` with both ordinals OR in `TYPES_WITHOUT_ORDINAL_TITLES`.
+    Silence is the failure mode the original docstring named, and a type absent from both is now the one
+    thing this cannot miss -- where simply skipping the Calendar would have left a fourth type free to
+    grant nothing unnoticed.
+    """
     from challenges.models import CHALLENGE_TYPES
 
-    for challenge_type in CHALLENGE_TYPES:
+    ordinal_types = set(rewards.TITLE_NAMES)
+    declared_without = set(rewards.TYPES_WITHOUT_ORDINAL_TITLES)
+
+    assert ordinal_types | declared_without == set(CHALLENGE_TYPES), (
+        'these challenge types declare no reward shape at all, so they would grant nothing silently: %s'
+        % sorted(set(CHALLENGE_TYPES) - ordinal_types - declared_without))
+    assert not (ordinal_types & declared_without), (
+        'a type cannot both have ordinal titles and be declared as having none: %s'
+        % sorted(ordinal_types & declared_without))
+
+    for challenge_type in ordinal_types:
         assert rewards.title_for(challenge_type, 1), challenge_type
         assert rewards.title_for(challenge_type, 2), challenge_type
+    for challenge_type in declared_without:
+        assert rewards.title_for(challenge_type, 1) is None, (
+            '%s is declared as having no ordinal titles but `title_for` returns one' % challenge_type)
+
     assert rewards.title_for('az', 3) is None
 
 

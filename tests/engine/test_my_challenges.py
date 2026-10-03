@@ -19,7 +19,12 @@ from django.utils import timezone
 
 from pathlib import Path
 
-from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS, Challenge
+from challenges.models import (
+    CHALLENGE_TYPE_AZ,
+    CHALLENGE_TYPE_CHOICES,
+    CHALLENGE_TYPE_JOBS,
+    Challenge,
+)
 from challenges.views import MyChallengesView
 from challenges.services import challenge_service as svc
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory, UserFactory
@@ -83,23 +88,38 @@ def test_the_page_is_not_indexed(client):
 
 # ── the cards, and the verb ──────────────────────────────────────────────────────────────────────
 
-def test_both_types_get_a_card_even_with_no_runs(client):
+def test_every_type_gets_a_card_even_with_no_runs(client):
     """A list of what you own would show a newcomer nothing, and would hide Job Coverage from anybody
-    mid-A-Z."""
+    mid-A-Z.
+
+    DERIVED FROM THE CATALOGUE. This was `test_both_types_...` and checked two hardcoded labels, so when
+    a third type arrived it kept passing while saying "both" -- green, and describing a page that no
+    longer existed. Asserting every label in `CHALLENGE_TYPE_CHOICES` means a new type is covered the
+    day it is added rather than silently omitted from the only test that says cards exist.
+    """
     _hunter(client)
 
     body = client.get(reverse('my_challenges')).content.decode()
 
-    assert 'A-Z Challenge' in body
-    assert 'Job Coverage Challenge' in body
+    for _value, label in CHALLENGE_TYPE_CHOICES:
+        assert label in body, 'no card for %s' % label
 
 
 def test_an_empty_card_says_start(client):
+    """ONE CARD PER TYPE, DERIVED FROM THE CATALOGUE rather than counted.
+
+    This asserted `['Start', 'Start']`, a literal two, and so broke the day a third challenge type was
+    added -- a true failure, but for a reason that has nothing to do with what the test is about (an
+    untouched card says Start). Deriving from `CHALLENGE_TYPE_CHOICES` means a fourth type exercises
+    this test instead of breaking it, and a type that renders NO card still fails it.
+    """
     _hunter(client)
 
     cards = client.get(reverse('my_challenges')).context['cards']
 
-    assert [c['verb'] for c in cards] == ['Start', 'Start']
+    assert [c['verb'] for c in cards] == ['Start'] * len(CHALLENGE_TYPE_CHOICES)
+    assert {c['type'] for c in cards} == {value for value, _ in CHALLENGE_TYPE_CHOICES}, (
+        'every challenge type gets a card, and only challenge types do')
     assert all(c['state'] == 'empty' for c in cards)
 
 
@@ -218,23 +238,32 @@ def test_the_pages_own_query_cost_is_exact(rf):
             view.get_context_data()
         return len(captured.captured_queries)
 
-    # Two EMPTY cards: 3 reads each (active, resumable, visible-completed) + 2 for the history + ONE for the
-    # owed-XP table. That last one is asked once for the PAGE, not once per card -- the cards slice its result
-    # -- which is the property the numbers below pin: adding a third challenge type must not add a query.
-    assert cost() == 9
+    # THE PAGE COSTS 3 PER CARD PLUS 3 FIXED, so it scales with the number of TYPES -- a small constant
+    # set -- and not with anything a hunter can grow. Per card: active, resumable, visible-completed.
+    # Fixed: two for the history plus ONE for the owed-XP table, which is asked once for the PAGE rather
+    # than once per card (the cards slice its result).
+    #
+    # DERIVED FROM THE CATALOGUE, not written as a literal, and the literal is why this needed fixing: it
+    # read `== 9` for two types and the comment claimed "adding a third challenge type must not add a
+    # query". The third type added three. Only the owed-XP read has that property, and it still does --
+    # which is the part actually worth pinning, and what the per-card arithmetic below isolates.
+    n_types = len(CHALLENGE_TYPE_CHOICES)
+    assert cost() == 3 * n_types + 3
 
     svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.start(profile, CHALLENGE_TYPE_JOBS)
-    # Two ACTIVE cards: `resumable_run` is short-circuited, so one query fewer each.
-    assert cost() == 7
+    # Two cards go ACTIVE: `resumable_run` short-circuits on each, so one query fewer apiece. The
+    # remaining types stay empty and keep their three.
+    assert cost() == 3 * n_types + 3 - 2
 
     for i in range(12):
         Challenge.objects.create(
             profile=profile, challenge_type=CHALLENGE_TYPE_AZ, name=f'Old {i}', total_slots=26,
             is_complete=True, completed_at=timezone.now())
-    # AND IT DOES NOT GROW: the history is one count plus one bounded slice however many runs exist, and the
-    # owed-XP read is one `values().annotate()` however many runs owe.
-    assert cost() == 7
+    # AND IT DOES NOT GROW WITH DATA, which is the distinction that matters: the history is one count plus
+    # one bounded slice however many runs exist, and the owed-XP read is one `values().annotate()` however
+    # many runs owe. Twelve more completed runs cost nothing.
+    assert cost() == 3 * n_types + 3 - 2
 
 
 # ── the beta gate, rendered rather than redirected ───────────────────────────────────────────────
@@ -722,7 +751,7 @@ def test_an_unknown_type_is_refused_with_a_reason(client):
     """Replaces a looser twin that asserted only "no row was created", which a 500 also satisfies."""
     profile = _hunter(client)
 
-    resp = client.post(reverse('challenge_start', args=['calendar']), follow=True)
+    resp = client.post(reverse('challenge_start', args=['genre']), follow=True)
 
     assert 'not a challenge type' in resp.content.decode()
     assert not Challenge.objects.filter(profile=profile).exists()

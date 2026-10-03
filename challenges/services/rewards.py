@@ -54,7 +54,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from challenges.models import CHALLENGE_TYPE_JOBS, Challenge, ChallengeSlot
+from challenges.models import CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_JOBS, Challenge, ChallengeSlot
 from challenges.services.challenge_service import ChallengeError
 from trophies.models import Job, Title, UserTitle
 from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
@@ -85,6 +85,19 @@ TITLE_NAMES = {
     'az': {1: 'A-Z Champion', 2: 'A-Z Legend'},
     'jobs': {1: 'Job Challenge Champion', 2: 'Job Challenge Legend'},
 }
+
+#: Types whose rewards are NOT a first/second-completion ordinal title, so their absence from
+#: `TITLE_NAMES` is correct rather than an oversight.
+#:
+#: The Plat Calendar is the only one: it pays a ladder of day-count markers (50/100/200/300/365) plus one
+#: ultimate per view, because a run keyed on 365 days has no meaningful "first completion / second
+#: completion" shape -- finishing one at all needs roughly 2,150 platinums.
+#:
+#: DECLARED RATHER THAN INFERRED, and the distinction is the whole point. A type missing from BOTH this
+#: set and `TITLE_NAMES` grants nothing and reads as "rewards are broken" rather than as a missing dict
+#: key -- which is exactly what `test_every_challenge_type_declares_its_reward_shape` exists to catch. A
+#: new type has to say which it is; it cannot stay silent.
+TYPES_WITHOUT_ORDINAL_TITLES = frozenset({CHALLENGE_TYPE_CALENDAR})
 
 
 class RewardError(ChallengeError):

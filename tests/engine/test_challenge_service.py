@@ -23,6 +23,7 @@ import contextlib
 
 import pytest
 from django.db import connection
+from django.db.models import Q
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -30,6 +31,7 @@ from django.utils import timezone
 from challenges.models import (
     AZ_LETTERS,
     CHALLENGE_TYPE_AZ,
+    CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_JOBS,
     COMPLETED_VIA_HATCH,
     COMPLETED_VIA_IMPORT,
@@ -179,12 +181,56 @@ def test_the_gate_is_read_through_one_function():
 
 
 def test_an_unknown_type_is_refused_before_anything_is_written():
+    """`genre`, NOT `calendar`, and the swap is the point.
+
+    This test used to pass `'calendar'` as its unknown type, written while the plan said the Platinum
+    Calendar would not return. When it did return (owner, 2026-10-02) `calendar` became a REAL type and
+    this test began asserting that a valid type is refused -- it failed loudly, which is the good
+    outcome, but it is worth choosing an example that cannot be promoted later. `genre` is the retired
+    challenge type: gone, not coming back, and the likeliest thing an old caller would actually send.
+    """
     profile = _member()
 
     with _refuses('not a challenge type'):
-        svc.start(profile, 'calendar')
+        svc.start(profile, 'genre')
 
     assert not Challenge.objects.filter(profile=profile).exists()
+
+
+def test_a_calendar_run_gets_365_days_and_no_slots():
+    """THE CALENDAR'S ROWS ARE `CalendarDay`, NOT `ChallengeSlot`, and both halves are asserted.
+
+    A day's atom is a DATE, so a slot's contract FK, frozen snapshot, contract-uniqueness constraint and
+    `xp_redeemed_at` are all dead weight for it. The run must therefore build days and build NO slots.
+
+    WHY THE "no slots" HALF EXISTS. `slot_keys_for` used to end in a bare `else` returning the job
+    catalogue, so the moment `calendar` joined `CHALLENGE_TYPE_CHOICES` -- which is also what let it past
+    the `CHALLENGE_TYPES` check -- a Calendar run would have been created with 25 JOB slots and
+    `total_slots=25`. No exception and no empty list: just a silently wrong run. Asserting the count
+    alone would not have caught it either, since 25 is a plausible-looking number.
+
+    365, NOT 366: a run is keyed on (month, day) across all years, so 29 February belongs to no year.
+    """
+    challenge = svc.start(_member(), CHALLENGE_TYPE_CALENDAR)
+
+    days = list(challenge.calendar_days.values_list('month', 'day'))
+    assert len(days) == 365, 'a calendar run must be 365 days, not %d' % len(days)
+    assert challenge.total_slots == 365, (
+        '`total_slots` disagrees with the rows created: %d' % challenge.total_slots)
+    assert not challenge.slots.exists(), (
+        'a calendar run built ChallengeSlots -- it is the one type whose atom is not a contract')
+
+    # ORDERED, AND FEBRUARY IS 28. The keys come from `calendar_day_keys()`, so this pins the shape that
+    # function produces rather than re-deriving it.
+    assert days == sorted(days), 'the days are not in calendar order'
+    assert (2, 29) not in days, '29 February belongs to no year in a month/day calendar'
+    assert (2, 28) in days and (12, 31) in days, 'the calendar is missing its boundaries'
+    assert len([d for m, d in days if m == 2]) == 28, 'February is not 28 days'
+
+    # NOTHING IS FILLED AT CREATION. The backfill is a separate step, and a day that arrives already
+    # true would make the opening ceremony's numbers meaningless.
+    assert not challenge.calendar_days.filter(
+        Q(in_all=True) | Q(in_clean=True) | Q(in_contracts=True)).exists()
 
 
 # ── starting, resuming, hiding ───────────────────────────────────────────────────────────────────
