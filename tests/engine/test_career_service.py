@@ -126,8 +126,12 @@ def test_dna_ring_arcs_sum_to_the_whole():
 
     assert len(ring) == len(job_render.DISCIPLINE_LABELS)   # one arc per family
     # Dash segments are each family's share of the total level; together they fill the circle.
-    from trophies.services.career_service import _RING_C
-    assert abs(sum(seg['dash'] for seg in ring) - _RING_C) < 0.5
+    # MOVED TO `job_render`, from `career_service._RING_C`. The ring's arc geometry became shared the moment
+    # a third host needed it (the Hall of Fame plaque), and a private constant here forced that host to
+    # choose between importing a private name and copying the number -- which is the drift the ring partial's
+    # own docstring exists to forbid.
+    from trophies.services.job_render import RING_CIRCUMFERENCE
+    assert abs(sum(seg['dash'] for seg in ring) - RING_CIRCUMFERENCE) < 0.5
     assert abs(sum(seg['share_pct'] for seg in ring) - 100) <= 2   # 5-way rounding tolerance
     # Offsets are the running cumulative start of each arc (first starts at 0); each arc
     # begins where the previous ones ended (negative stroke-dashoffset convention).

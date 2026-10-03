@@ -59,10 +59,10 @@ def _compact(n):
     return str(int(n))
 
 
-# Circumference of the disciplines ring's arc circle (r=42 in the 120x120 viewBox). The hero
-# ring's discipline arcs are stroke-dash segments summing to this; keep in sync with the r=42
-# in career.html.
-_RING_C = 263.89
+# THE RING'S CIRCUMFERENCE AND ITS ARC ARITHMETIC NOW LIVE IN `job_render.discipline_ring`, because this
+# is no longer the only host: the Hall of Fame plaque draws the same ring from page-wide aggregates, and
+# `_disciplines_ring.html` promises the second host is "a scale, not a second implementation". A private
+# `_RING_C` here forced that host to choose between importing a private name and copying the constant.
 
 
 def _build_hero(profile, jobs):
@@ -78,18 +78,14 @@ def _build_hero(profile, jobs):
     )
     ring = []
     if jobs:
-        total = jobs.get('total_level') or 0
-        n = len(jobs['disciplines']) or 1
-        cumulative = 0.0
-        for d in jobs['disciplines']:
-            disc_total = sum(t['level'] for t in d['jobs'])
-            share = (disc_total / total) if total else (1.0 / n)
-            dash = round(share * _RING_C, 2)
-            ring.append({
-                'label': d['label'], 'slug': d['slug'], 'avg': d['avg'], 'total': disc_total,
-                'share_pct': round(share * 100), 'dash': dash, 'offset': round(-cumulative, 2),
-            })
-            cumulative += dash
+        # `total` is re-derived by the helper as the sum of these per-discipline totals, which is the same
+        # figure `jobs['total_level']` carries: that IS the sum of every tile's floored level, and the
+        # discipline buckets cover every tile. Stated because the two look like different numbers.
+        ring = job_render.discipline_ring([
+            {'label': d['label'], 'slug': d['slug'], 'avg': d['avg'],
+             'total': sum(t['level'] for t in d['jobs'])}
+            for d in jobs['disciplines']
+        ])
     pursuer_level = jobs['total_level'] if jobs else 0
     # The Pursuer rank ladder (all 11 rungs + current position), with each reached rung's date from
     # the milestone log so the hero shows the journey, not just the current label.

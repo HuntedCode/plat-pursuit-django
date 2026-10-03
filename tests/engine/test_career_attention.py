@@ -1020,20 +1020,45 @@ def _sub_rule(css, selector):
     return css.split(marker, 1)[1].split('}', 1)[0]
 
 
-def test_a_soon_label_does_not_ride_the_collapsed_bar_on_a_real_page(hunter):
+def test_a_soon_label_does_not_ride_the_collapsed_bar_on_a_real_page(hunter, monkeypatch):
     """THE FILTER IN THE CONTEXT PROCESSOR, pinned where it can fail. The sibling test above checks
     `build_rendered_items` with a synthetic hub, which leaves the processor's own
     `[i for i in items if i.tag_kind]` uncovered -- a mutation widening it to `i.tag or i.tag_kind` broke
     nothing.
 
-    THE COMMUNITY STRIP IS WHERE IT SHOWS: its Challenges item carries a real `tag='Soon'`, so a widened filter
-    puts a 'Soon' chip on that hub's collapsed bar -- which says "something of yours is waiting in here" about a
-    page that is not ready yet, and amber is the one colour on this site that means the opposite of a reward.
+    THE TAG IS INJECTED NOW, and that is a repair rather than a weakening. This test used to rely on the
+    Community rail's Challenges item carrying a real `tag='Soon'`. The Challenges rebuild shipped the real
+    pages, dropped that tag, and added a second rail item -- and in doing so removed the LAST config `tag`
+    anywhere in `hub_subnav.py`. So the premise silently emptied: with no item carrying a tag, a widened
+    filter produces nothing on any real page and `assert 'pp-subpill__tag' not in bar` could no longer
+    fail. The branch that deleted the premise owed this file an update and did not make one.
+
+    Injecting a tag onto a real rail item keeps what made this test worth having over its synthetic sibling
+    -- a real request, through the real processor, rendering the real strip -- without depending on a
+    config value that is somebody else's to change.
+
+    What it guards: a 'Soon' label riding the collapsed bar says "something of yours is waiting in here"
+    about a page that is not ready, and amber is the one colour on this site that means the opposite of a
+    reward.
     """
+    import dataclasses
+
+    from core import hub_subnav
+
+    community = next(h for h in hub_subnav.HUB_SUBNAV_CONFIG if h.key == 'community')
+    tagged = dataclasses.replace(community.items[0], tag='Soon')
+    patched = dataclasses.replace(community, items=[tagged] + list(community.items[1:]))
+    monkeypatch.setattr(
+        hub_subnav, 'HUB_SUBNAV_CONFIG',
+        [patched if h.key == 'community' else h for h in hub_subnav.HUB_SUBNAV_CONFIG])
+
     body = hunter.get('/community/hunters/').content.decode()
     if 'class="pp-sub__mbar"' not in body:
         import pytest as _pytest
         _pytest.skip('the Community hub no longer renders a collapsed strip on this URL')
     bar = _mbar(body)
 
+    # THE TAG MUST REACH THE EXPANDED STRIP, or the injection did not take and the assertion below is
+    # vacuous again -- which is exactly the failure this rewrite is for.
+    assert 'Soon' in body, 'the injected tag never rendered; this test is not exercising the filter'
     assert 'pp-subpill__tag' not in bar, "a label is not a mark; only attention marks ride the bar"

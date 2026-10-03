@@ -1,10 +1,21 @@
 {% load humanize %}{% comment %} The disciplines ring: the Pursuer Level framed by a donut whose arcs are
 each discipline's SHARE of that level.
 
-Shared by Career's hero and the Home lobby's Career CTA. The arc geometry is precomputed server-side in
-`career_service._build_hero` (`dash` / `offset` are ready-made stroke-dash segments), so this renders the
-SAME data at whatever size the host asks for -- the lobby's smaller ring is a scale, not a second
-implementation, which is what keeps the two surfaces from drifting.
+Rendered by Career's hero (base), the Home lobby's Career CTA (`compact`), and the Hall of Fame plaque
+(base -- it dropped `compact` when the owner asked for a bigger ring). `dash` /
+`offset` are ready-made stroke-dash segments, so this draws the SAME data at whatever size the host asks
+for -- a smaller ring is a scale, not a second implementation, which is what keeps the surfaces from
+drifting.
+
+THE GEOMETRY IS COMPUTED BY `job_render.discipline_ring`. It was inlined in `career_service._build_hero` --
+which this docstring named as the producer, and went on naming after the move -- and came out when a third
+producer appeared. Producers: `career_service._build_hero`, `challenges.services.plaque._ring`, and
+`core/services/profile_card_service` passing `hero.ring` through.
+
+TWO COPIES OF THE *MARKUP* GEOMETRY LIVE OUTSIDE THIS FILE, which matters before changing `r`:
+`templates/shareables/profile_card.html` draws its own inline `r="42"` circles (the Playwright document has
+no stylesheet) and `core/services/landing_service.py` carries hand-frozen dash values. Changing the radius
+is a four-place edit.
 
     ring    the `hero.ring` list ({slug, dash, offset, ...})
     level   the Pursuer Level for the centre
@@ -19,6 +30,45 @@ implementation, which is what keeps the two surfaces from drifting.
             </g>
         </g>
     </svg>
+    {% comment %}THE PEEKS: one per arc, stacked on the centre, revealed by hovering that arc.
+
+    The hooks for this were already here -- `data-disc` on every arc AND on Career's legend rows, plus
+    `transition: opacity` on both, which only makes sense for a cross-highlight. This builds it in CSS, for
+    every host at once. Career had wired the same hooks in JS; see the note below.
+
+    PURE CSS, which is what makes it affordable on a list: the Hall of Fame stacks eight rings. One arc
+    transitions at a time -- `opacity`, `stroke-width` and a `filter` drop-shadow on a single 120-unit
+    circle, the shape `motion-patterns.md` prescribes for a hover glow. (An earlier version of this said
+    "the only animated properties are `opacity` and `stroke-width`", which the same diff falsified.)
+
+    NOTE: Career HAD a JS cross-highlight for the arcs and its legend (`career.html`, `focusDisc`), which
+    this did not find before building -- one grep for `data-disc` would have. It is now deleted and this is
+    the single implementation; its legend half lives in `elements.css`'s `.lab-dna-pair` block, because a
+    legend is a SIBLING of this component, not a descendant.
+
+    `aria-hidden`, because these duplicate the arcs for sighted hover and would otherwise add ten more words
+    to an accessible name that is already long -- on the Hall of Fame the whole row is one `<a>`. The same
+    numbers are visible text in Career's legend, which is the surface built to be read rather than scanned.
+
+    `{% templatetag openvariable %} f.total {% templatetag closevariable %}` is the discipline's summed
+    level, floored -- the same figure Career's legend prints, not the average.{% endcomment %}
+    {% for f in ring %}
+    {% with pd=f.total|stringformat:"d"|length %}
+    <div class="lab-dna__peek" data-disc="{{ f.slug }}" aria-hidden="true"
+         style="--disc: var(--disc-{{ f.slug }});">
+        {% comment %}THE SAME DIGIT RUNGS THE CENTRE USES (`--d3` .. `--d6`), because a discipline's summed
+        level is open-ended -- `leveling.py` calls the curve "FLAT, CAP-LESS" -- and the first cut applied
+        them to the Pursuer Level only, so a four-figure total would have been drawn at the one-figure size
+        and spilled the hole. Same `stringformat` idiom, so the two stay in step.{% endcomment %}
+        <span class="lab-dna__level lab-dna__level--peek lab-dna__level--d{{ pd }} pp-tally">{{ f.total }}</span>
+        {% comment %}THE SHORT FORM where there is one. Only "Exploration" needs it -- eleven characters
+        against this ring's ~70px inner hole -- and `DISCIPLINE_SHORT` is sparse, so the other four render
+        their full names. `default` rather than a template `if`, because the helper already resolves the
+        fallback and a second one here would be two places to keep in step.{% endcomment %}
+        <span class="lab-dna__cap">{{ f.short|default:f.label }}</span>
+    </div>
+    {% endwith %}
+    {% endfor %}
     <div class="lab-dna__center">
         {% with digits=level|stringformat:"d"|length %}
         <span class="lab-dna__level pp-tally lab-dna__level--d{{ digits }}" data-countup="{{ level }}">{{ level|intcomma }}</span>
