@@ -122,6 +122,18 @@ OneToOne to Concept. Stores matching metadata (`match_confidence`, `match_method
 
 **`cover_url(size='cover_big')`** method: Constructs an IGDB Cloudinary image URL from `igdb_cover_image_id`. Returns `f'https://images.igdb.com/igdb/image/upload/t_{size}/{igdb_cover_image_id}.png'`, or `None` if no image ID is stored. Same pattern as `Company.logo_url()`. Available sizes include `cover_small` (90x128), `cover_big` (264x374), `720p` (1280x720), `1080p` (1920x1080).
 
+**Every cover size also has a `_2x` variant** — `cover_small_2x` (180x256), `cover_big_2x` (528x748) — and they are the ones you usually want. **There is no whitelist**: the size is interpolated straight into the URL, so an invalid token yields a silent 404 and a broken image rather than an error. Verify a new token against a real URL before shipping it.
+
+**Pick the size against DEVICE pixels, not CSS pixels.** This is the trap: a 57px-wide square looks like it wants `cover_small` (90x128), but a phone is the high-DPI case — 57 CSS px on a 3x screen needs 172 device px, so `cover_small` is visibly soft on nearly every phone, i.e. worst on the device class a smaller source is meant to help. The three `Game` properties that wrap this:
+
+| Property | IGDB size | For |
+|---|---|---|
+| `display_image_url` | `cover_big` (264x374) | The default. Squares roughly 110-140px. |
+| `display_image_url_small` | `cover_small_2x` (180x256) | Surfaces drawing MANY covers at thumbnail size — the challenge Hall of Fame board is 25-26 per row. Squares roughly 57-100px. |
+| `display_image_url_large` | `cover_big_2x` (528x748) | Share cards and other large single renders. |
+
+A density `srcset` would serve all of these properly, but the project has no precedent for one (`landing.html`'s `srcset` is webp/png format switching, not resolution), so named sizes remain the cheaper answer. PSN fallback URLs have no size knob, so a concept without a trusted match always serves full-size art whichever property is used.
+
 `status` values:
 - `auto_accepted`: Matched at >= 85% confidence and enrichment applied automatically.
 - `pending_review`: Matched at 50-84% confidence, awaiting staff approval.

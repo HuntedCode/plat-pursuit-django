@@ -867,6 +867,39 @@ class Game(models.Model):
         return self._display_image_url(igdb_size='cover_big_2x')
 
     @property
+    def display_image_url_small(self):
+        """display_image_url variant requesting IGDB's `t_cover_small_2x`
+        (180x256) instead of `t_cover_big` (264x374). Same 3:4 portrait
+        ratio. For surfaces that render MANY covers at thumbnail size --
+        the challenge Hall of Fame board draws 25-26 of them per row.
+
+        WHY THE `_2x` OF SMALL RATHER THAN `cover_small` ITSELF, which is
+        the trap this exists to document. Those squares are 57px wide at
+        375px and ~100px on a large desktop, so a 90x128 source looks
+        comfortably big -- at 1x. It is not: a phone is the HIGH-DPI case,
+        and 57 CSS px on a 3x screen needs 172 device px. `cover_small`
+        would be visibly soft on nearly every phone, i.e. worst on the
+        device class the smaller source is meant to help.
+
+        180px is chosen against the device-pixel requirement (~100-200px
+        across phone 2x/3x and desktop 1x/2x): exactly right for a 3x
+        phone, ~10% short at desktop-retina. That is the correct side to
+        err on -- it is accurate where bandwidth is scarce and slightly
+        soft where it is not.
+
+        NOT FOR THE DETAIL PAGE. `.pp-csq-grid` renders 3-7 columns, so
+        those squares are 110-140px and want `cover_big`. A density
+        `srcset` would serve both properly, but the project has no
+        precedent for one (`landing.html`'s is webp/png format switching,
+        not resolution), so two named sizes stay the cheaper answer.
+
+        PSN fallback URLs are unchanged -- they have no size knob, so a
+        concept without a trusted IGDB match still serves full-size art.
+        A partial win by construction, worth stating rather than finding.
+        """
+        return self._display_image_url(igdb_size='cover_small_2x')
+
+    @property
     def has_cover_art(self):
         """True if display_image_url returns real cover art (IGDB/PSN), not
         just the generic title_icon_url fallback. Templates use this to

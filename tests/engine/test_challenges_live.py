@@ -1595,6 +1595,58 @@ def test_the_discipline_label_and_its_rule_are_tinted_from_the_shelf(client):
     assert 'border:' not in plain, 'the shared row rule gained a border, which the A-Z board would wear'
 
 
+def test_the_hero_board_serves_a_smaller_cover_than_the_detail_board(client):
+    """25-26 COVERS PER ROW, EIGHT ROWS A PAGE, SO THE SOURCE SIZE IS A REAL COST.
+
+    `display_image_url_small` serves IGDB `cover_small_2x` (180x256) rather than `cover_big` (264x374) --
+    about 53% fewer pixels, on the surface that draws the most of them.
+
+    SIZED AGAINST DEVICE PIXELS, NOT CSS PIXELS, which is the whole reason this is `cover_small_2x` and not
+    `cover_small`. The squares are 57px at 375px wide and ~100px on a large desktop, so a 90x128 source
+    looks ample -- at 1x. A phone is the high-DPI case: 57 CSS px on a 3x screen needs 172 device px, so
+    `cover_small` would be visibly soft on nearly every phone, which is exactly the device class a smaller
+    source is supposed to help. An earlier version of this change reached for `cover_small` on arithmetic
+    done at 1x, and for the precedent that nav search already used it (which renders list thumbnails, not a
+    board).
+
+    THE DETAIL PAGE IS ASSERTED TOO, and that is the half worth having. `.pp-csq-grid` renders 3-7 columns,
+    so its squares are 110-140px and want the bigger source. "Make the covers smaller" applied file-wide is
+    the obvious wrong fix, and nothing else would catch it -- both pages would still render covers.
+    """
+    from trophies.models import Game
+
+    assert hasattr(Game, 'display_image_url_small'), 'the smaller board source is gone'
+
+    hero_tpl = open('templates/challenges/partials/_run_hero.html', encoding='utf-8').read()
+    detail_tpl = open('templates/challenges/partials/_square_body.html', encoding='utf-8').read()
+
+    # ANCHORED ON THE `<img src=`, not on the property name anywhere in the file: both templates discuss
+    # cover sizing in prose, so a bare substring check would be satisfied by the comment explaining it.
+    assert 'src="{{ square.cover.display_image_url_small }}"' in hero_tpl, (
+        'the hero board is back on the full-size cover source, 26 of them per row')
+    assert 'src="{{ card.cover.display_image_url }}"' in detail_tpl, (
+        'the detail board dropped to the small cover source, but its squares are 110-140px and will look '
+        'soft -- "make the covers smaller" is not a file-wide change')
+
+    # AND THE RENDERED PAGE AGREES. A template pin alone cannot see that the property resolves.
+    #
+    # THE COVER ID IS SET EXPLICITLY, because `IGDBMatchFactory` does not set one -- so `cover_url()`
+    # returns None, the chain falls through to PSN art, and no `t_` token reaches the HTML at all. A first
+    # version of this guarded the assertions with `if 't_cover' in hero:` and was therefore DEAD: green
+    # whatever the size token said, which is the shape of pin this file has been bitten by before.
+    from trophies.models import IGDBMatch
+
+    hunter = _hunter('coverhunter')
+    _filled_run(hunter, 2)
+    IGDBMatch.objects.update(igdb_cover_image_id='cotest1')
+
+    hero = _hero(client.get(reverse('challenges_hall_of_fame')).content.decode())
+    assert 't_cover_small_2x/cotest1' in hero, (
+        'the hero board is not rendering the small IGDB cover source -- if no `t_cover` token appears at '
+        'all, the fixture stopped producing a trusted match and this test is checking nothing')
+    assert 't_cover_big' not in hero, 'the hero board is still asking IGDB for the big cover'
+
+
 def test_the_frame_is_darker_than_the_card_and_the_board_stays_layout():
     """THE COVER GRID READS AS SET INTO THE CARD, AND THE FIX LIVES ON THE FRAME.
 

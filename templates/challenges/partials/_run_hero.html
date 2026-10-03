@@ -52,9 +52,14 @@ anchor would be a second tab stop to the same place.
         `loading="lazy"` on every cover and deliberately so, rather than because "the browser's own viewport
         rule gets it right" -- which is not what `lazy` does for an in-viewport image: it is discovered after
         layout and fetched at low priority, so the first hero's board is deliberately deferred. Kept anyway,
-        because eager would mean 26 full-size covers requested before first paint on a mobile connection. If
-        this page's LCP ever measures badly the fix is a smaller source for board covers, not an eager
-        flood.{% endcomment %}
+        because eager would mean 26 covers requested before first paint on a mobile connection.
+
+        THAT SMALLER SOURCE NOW EXISTS, which this comment used to name as the fix if LCP ever measured
+        badly: `display_image_url_small` serves IGDB `cover_small_2x` (180x256) rather than `cover_big`
+        (264x374), about 53% fewer pixels. Sized against DEVICE pixels, not CSS ones -- a 57px square on a
+        3x phone needs 172 of them, which is why this is the `_2x` of small and not `cover_small` itself.
+        The model property argues it in full. The DETAIL page keeps `cover_big`: its squares are 110-140px.
+        {% endcomment %}
         <div class="pp-chero__board" aria-hidden="true">
             {% for group in board %}
             {% comment %}`--disc` ON THE SHELF, not on the mark, because two things read it: the label's
@@ -83,7 +88,7 @@ anchor would be a second tab stop to the same place.
                         and the detail square's own `--icon` branch: real art is `object-cover object-top`
                         (so a wider PSN fallback keeps the logo at the top of the crop), while a generic PS
                         placeholder is `object-contain` and must not be cropped to a slab of grey.{% endcomment %}
-                        <img src="{{ square.cover.display_image_url }}" alt="" loading="lazy" decoding="async"
+                        <img src="{{ square.cover.display_image_url_small }}" alt="" loading="lazy" decoding="async"
                              class="pp-chero__art{% if not square.cover.has_cover_art %} pp-chero__art--icon{% endif %}" />
                         {% endif %}
                         {% comment %}THE KEY, which is the context the board was missing. A letter for A-Z, a
