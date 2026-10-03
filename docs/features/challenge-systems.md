@@ -21,7 +21,8 @@ no services and no templates with it; the few lessons worth carrying forward are
 | My Challenges (`/my-challenges/`) | **built** |
 | The run's page (`community/challenges/<id>/`) | **built** |
 | The picker: square-first, contract-first, history | **built** |
-| Public hub + Hall of Fame | **NOT built.** `community/challenges/` is still the coming-soon placeholder |
+| Public hub + Hall of Fame | **built.** `community/challenges/` (runs in flight) and `community/challenges/hall-of-fame/` (finished runs) |
+| Challenge share card + minted Hall of Fame covers | **NOT built.** Chunk 7; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
 | Rewards (titles, job-XP payout, notification) | **built.** `challenges/services/rewards.py` is the only writer |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
@@ -379,6 +380,312 @@ visible.
 
 ---
 
+## The two public pages
+
+Two surfaces, one feature, split on a single question: **is the run finished?**
+
+| | `community/challenges/` | `community/challenges/hall-of-fame/` |
+|---|---|---|
+| Holds | `visible()` + `is_complete=False` | `visible()` + `is_complete=True` |
+| Entry | `_run_card.html` in a grid | `_run_hero.html` in a stack |
+| Accent | primary | primary — the Hall of Fame shipped on `accent` and was corrected; `visual-identity.md` allows one brand accent across the kit |
+| Sorts | newest / oldest / most progress / hunter A-Z | newest finish / oldest finish / hunter A-Z |
+| Page size | 24 | **8** — see the cover budget below |
+| Rate limit | `key='ip'`, 60/m, own bucket | `key='ip'`, 60/m, own bucket |
+
+Both are `_ChallengeBrowseView` subclasses, which is the third use of the browse shape `gamelists.BrowseListsView`
+established. A subclass answers four things: `base_queryset`, `SORTS`, its page furniture (`BROWSE_URL_NAME`,
+`EMPTY_COPY`) and its entry (`ENTRY_TEMPLATE`, `GRID_CLASS`). Hidden runs appear on **neither** — hiding means
+off the owner's profile and out of the hub, and that is the one thing the public read path honours everywhere.
+
+`browse_results.html` is shared: the grid wrapper, the count attributes and the three empty states (searched
+nothing / filtered nothing / genuinely nothing) are common, and only the entry differs. **"Most progress" is
+absent from the Hall of Fame on purpose** — every run there is complete, so the option would be a no-op that
+implies otherwise.
+
+Two hooks separate work by where it is needed, because `get_context_data` runs for partial renders too (an
+htmx filter swap and an `InfiniteScroller` page both render the grid partial):
+
+- `full_page_context()` — gated behind `is_partial_render()`. Breadcrumb, headline count, SEO string.
+- `enrich(runs)` — **not** gated. Anything an ENTRY draws, built from the paginated page.
+
+### The Hall of Fame draws heroes, not cards
+
+A finished run is 25 or 26 completed contracts, so this page holds single figures for a long time. A 4-across
+grid both draws the hardest thing the feature asks for at the size of a browse tile and leaves a page of
+eight entries reading as a failed load. So each finish is a full-width row whose face is the run's own board.
+
+**The board is affordable because it is batched, not because it is small.** `slot_render.boards_for(challenges)`
+resolves every square of every run on the page through the same `covers_by_contract` the detail grid uses —
+a **fixed number of queries, regardless of entry count** — six where a Job Coverage run is on the page
+(slots, contracts, two for membership, one for every cover, and the job catalogue), five without one, and
+fewer again when there is nothing to resolve. `slot_render.boards_for`'s own docstring carries the full
+range; quoting a single number here was wrong twice, first as "four or five" (the *per-run* figure for
+`slot_cards`) and then as a flat "five" (the A-Z-only case). `slot_cards` is flat per RUN at four or five
+depending on type, so looping it over a page would be four-to-five per entry. `test_challenges_live.py` pins the shape by
+measuring one entry against four rather than asserting a number, so a later per-entry resolve fails instead of
+merely getting slower.
+
+**Query count is not the only bound, and the page size is the other one.** `cover_games_for` caps its fetch
+at four rows per concept, and that cap is sized and argued for a 200-concept surface. A page of heroes hands
+it the union of every square of every entry, so 24 entries would reach 624 concepts and authorise ~2,500
+joined `Game` rows — each dragging a `Concept` and an `IGDBMatch` — on an anonymous, uncached URL, re-paid on
+every InfiniteScroller page. **`HallOfFameView.paginate_by = 8`** keeps that union at 208 — a 4%
+overshoot of the 200-concept reference surface, accepted deliberately (the cap's own comment calls
+four-per-concept *generous rather than tight*) and stated rather than rounded away. 8 is the last page size
+that stays within a rounding of it; 9 × 26 = 234 does not.
+
+The query *shape* stays flat either way, which is precisely why the flatness pin cannot
+see it: this is the bytes axis, the one the May 2026 OOM was actually about. The page size is emitted as
+`data-page-size` and read by `challenges-browse.js`, because one JS literal cannot match two views and the
+scroller uses it to decide which page to resume from after a history restore.
+
+**Both pages are rate limited `key='ip'`, in separate buckets.** `?q=` is an `icontains` behind a join to
+`Profile` with no index serving it, driven by a debounced live-search box, with no login in front — the
+harder version of the case `SlotPickerView` is limited for. `key='user'` would bucket every anonymous caller
+under one key. The buckets are named explicitly (`challenges:browse`, `challenges:hall-of-fame`) because
+`django_ratelimit` derives its default group from the decorated function's qualname, and a `method_decorator`
+on a subclass that does not define `get` wraps the *inherited* `BaseListView.get` — so both pages would
+otherwise share one bucket.
+
+`method=('GET', 'HEAD')`, not `method='GET'`: django_ratelimit does not count a method outside the list, and
+`View.setup` aliases `self.head = self.get` when a class defines no `head` — so a HEAD request ran the
+wrapped `get`, executed the full queryset, and was never metered. `curl -I` in a loop would have run the
+unindexed `LIKE` for free. **Every other limiter in the project still has this hole**; these two are the
+first that do not, and closing the rest belongs in the parked `refactor/` branch.
+
+`test_my_challenges.py::test_both_write_doors_share_one_rate_limit_bucket` is the anti-drift guard, and it now
+knows four kinds of door. Browse is the one kind whose two doors must **not** share a bucket, so it asserts
+one call each plus `key='ip'` and the HEAD method on both. Its extraction balances parentheses rather than
+matching `ratelimit\((.*?)\)\)`, which assumed every limiter is a method decorator ending in `))` — a
+class-level one ends `name='get')`, so the old regex swallowed the entire class body.
+
+**Every square carries its own context**, which replaced a bare mosaic. `boards_for` reads the job catalogue
+once for the page (skipped entirely when no Job Coverage run is on it) and each square comes back as
+`{key, label, job, cover}` — four keys, each with a reader in `_run_hero.html`. An A-Z square draws its
+letter; a Job Coverage square draws its job's icon, tinted by discipline off the `--disc` its shelf sets.
+
+That reverses the first cut, which returned bare covers on the argument that the board "is a mosaic, not a
+labelled grid, with the named grid one click away". The owner overruled it on a browser pass (2026-09-30):
+twenty-six covers with no key is pretty and says nothing about what the run was, and the keys are also what
+make the two types look like different achievements rather than one template with different art.
+
+The exact-four-keys rule still holds, for the reason `slot_render._card` states outright — a dict that grows
+a field per guess is how unread columns get fetched for two hundred rows — and
+`test_the_board_carries_exactly_what_it_draws` pins the set.
+
+Nine per row at every breakpoint, as a **wrapping flex container** rather than a grid. Nine by three holds
+25 or 26, so no layout needs to know the run's length — but it is 27 slots for 25 or 26 items, so the last
+row is always short, and `justify-content` centres each *line's* items in a wrapping flex container where a
+grid aligns the whole track set and cannot centre a partial last row at all. The basis carries **1px of
+slack**: `9 × basis + 8 × gap` came to exactly the content width on a quotient no browser can represent, and
+a UA rounding the wrong way wraps the ninth cell into a fourth row that `overflow: hidden` then clips —
+silently losing two covers. `fr` tracks were immune by construction; 1px buys that back.
+
+### The plaque is the Pursuer Card, compact
+
+The right-hand column of each hero is a **plaque**, and it is the [Pursuer Card](../design/visual-identity.md)
+at its `Mini` size rather than a panel of its own design. `visual-identity.md` lists "earned by these
+Pursuers" panels among the places that primitive appears, so this is a surface it was already specified for.
+
+**What it replaced was the primitive's own first listed anti-pattern:** *"Generic 'user profile card' (avatar
+circle + username + bio, like every social app)."* The plaque was an avatar, a name and a run-type subtitle.
+The owner read it as "boring", which is that anti-pattern seen from outside.
+
+| Zone | Surface | Holds |
+|---|---|---|
+| **Crest** | rank-tinted material over `--pp-bg-2` → `--pp-bg-1` | avatar, hunter name, the standing line (rank + Pursuer Level), the earned title band |
+| **Plinth** | its own opaque `--pp-bg-1` plate | the shared disciplines ring, squares tally + Career XP, the job XP this run paid, the record line (type · date) |
+
+**No corner diamonds.** The plaque carried four — the Frame's brand mark — and the owner cut them on a
+browser pass (2026-10-01: *"they don't really look great"*). The structural reading agrees, and it is the
+second orphan this component borrowed from: the Frame's production partial is rendered by **nothing**, not
+even `templates/design/frame_preview.html` (a self-contained prototype that includes no partials), having
+been superseded on the badge surfaces by the [Badge Medallion](../reference/badge-medallion.md), which draws
+no notches. One failed reuse check produced
+both that and the discipline band. What carries the plaque's identity now is all live — the rank-tinted
+material, the gold title band, the plinth, and the shared ring —  and
+`test_the_plaque_wears_no_orphaned_primitives_mark` pins the removal, because the citation that produced the
+diamonds (the Frame as a "signature primitive") is still in the design constitution for the next reader.
+
+**The two zones exist for a contrast reason, not a layout one.** `--pp-text-mute` is tuned to ~4.5:1 on
+`--pp-bg-2` with no headroom, so the rank wash pushes it under AA wherever it sits in the crest. Every muted
+line therefore lives in the plinth, which paints an opaque measured surface and so is immune to whatever the
+rank does above it. `test_no_muted_text_sits_outside_the_plinth` derives the muted class list from the
+stylesheet and asserts placement, rather than pinning the background literal the previous version of that
+test pinned — which broke on a change that *improved* the thing it guarded.
+
+**The rank hue is `--rank-<key>`, not the Pursuer Card's `--pc-tier`.** `pursuer-card.css` assigns
+`--pc-tier` in two rules, so it carries two hues across four escalation rungs; `elements.css` defines a full
+per-rank spectrum and `career.html` already reads the per-rank token for its rank ladder. Using the ladder's
+own token keeps the plaque and the Career page agreeing about what a Paragon looks like. It arrives as an
+inline `--rk`, following that template's own precedent, so eleven hues cost no extra rules.
+
+**The cost of that choice, on the record.** It also makes the plaque *disagree* with the home Pursuer Card:
+the same Marshal is violet-glassed at home and olive here, the same Paragon cyan there and coral here.
+`visual-identity.md` names that as an anti-pattern — *"inconsistent treatments between hero/compact/mini that
+break the family read"* — so one of the two surfaces should eventually move. Recorded rather than left to be
+discovered; the plaque is the newer surface, but the per-rank spectrum is the one the Career page already
+uses, so the home card is arguably the one that is out of step.
+
+**Escalation is layered, and the floor is deliberately handsome.** Four bands (`matte` / `lift` / `tinted` /
+`radiant`), close to `pursuer-card.css`'s rungs but not identical — that file has a step at vanquisher which
+this map merges, because the hue here already changes at every rung. Every band keeps the material and the
+plinth, so a hunter who finished a 25-game run is never shown a stripped plaque because of an unrelated rank;
+the Frame's rule is that tiers "should feel like the same family, not different products".
+
+Two honest limits, both of which an earlier version of this paragraph glossed by listing "the four diamonds,
+the gold title band": the diamonds were **cut**, and the title band is conditional on a title actually being
+held, which a finished run can legitimately lack. Below 768px the band treatments and the plate do not apply
+at all, so a `matte` and a `radiant` plaque are identical there.
+
+#### What the spine costs, and why it is its own service
+
+`challenges/services/plaque.py` is page-batched like its two siblings: `plaques_for(challenges)` takes the
+whole page and returns `{run id: spine}`. **Its docstring carries the query count; this doc deliberately does
+not restate it**, because the equivalent figure in the section above was wrong twice and in `enrich`'s
+docstring three times. What is guaranteed is the *shape* — flat per page, pinned by
+`test_the_plaque_spine_costs_a_flat_number_of_queries`.
+
+It does **not** mount `pursuer_card_service`. That builds the full card from a per-profile Career hero
+(platinum showcase, DNA ring, rarest/recent slices); eight of those on an anonymous uncached URL is the shape
+of the May 2026 OOM. The spine feeds the **shared disciplines ring** instead, from page-wide aggregates.
+
+#### The band that became a ring, and why it is worth recording
+
+The plaque's first cut carried a **bespoke five-tile discipline band**, modelled on `pursuer-card.css`'s and
+justified by the Pursuer Card's anti-pattern about "inconsistent treatments between hero/compact/mini that
+break the family read".
+
+Two things were wrong with that, and the owner caught both:
+
+1. **The Pursuer Card is mounted on nothing in production.** `d739bf2b` (2026-06-29) mounted it as the home
+   hero; `4a730fd9` (2026-08-13, "make / the lobby") dropped it and nothing re-mounted it. Its only renderer
+   today is `/design/pursuer-card-ranks/`, behind `StaffRequiredMixin`.
+2. **That same commit put the real primitive in its place.**
+   `partials/components/_disciplines_ring.html` (`.lab-dna`) is live on the Career hero *and* the home lobby,
+   and its own docstring states the contract the band violated: *"the lobby's smaller ring is a scale, not a
+   second implementation, which is what keeps the two surfaces from drifting."*
+
+So the plaque hosts that partial -- at its NATURAL size, not `compact`; it passed `compact` at first and
+dropped it when the owner asked for a bigger ring (2026-10-02), which also retired a host-scoped width
+override. `job_render.discipline_ring` now owns the
+cumulative arc geometry for all three hosts — moved out of `career_service._RING_C`, which was private and so
+forced a third host to choose between importing a private name and copying the constant.
+
+**Switching also deleted a cluster of defects outright**, which is the usual tell that the duplicate was the
+problem: three AA failures (the tile number lost WCAG's large-text allowance at 15px), a sub-12px label that
+broke the type-floor guard, a five-across grid that squeezed to ~37px at `lg`, no clip for a three-digit
+average, and the five-full-bars lie below. The ring proportions arcs against the **sum**, so five families at
+the level floor draw five equal arcs rather than five full bars.
+
+**The reuse is pinned**, by `test_the_plaque_hosts_the_shared_ring_rather_than_its_own_band` — because nothing
+pinned it before and that is precisely how the duplicate shipped: the page rendered, the suite passed, and a
+reimplementation looked like a deliberate design.
+
+**It reads the career standings itself rather than relying on the caller's `select_related`.** Rank, level and
+Career XP live on `ProfileCareerStanding`, a reverse `OneToOne` off `Profile`, so a hint in the view would make
+them free. The extra query is bought on purpose: a caller who forgets the hint gets a silent per-entry query
+instead of a visible failure, which is the shape of every N+1 this project has had to go back and fix.
+
+#### Gotchas and Pitfalls
+
+- **"Relative to your strongest" is the trap the ring avoids.** Scaling each discipline against the
+  hunter's strongest is undefined when every discipline sits at the level-1 floor, and resolves to
+  `1.0 / 1.0 = 100%` — five *full* bars for a hunter who has never been paid a contract, claiming mastery of
+  everything on the page built to display mastery. Reachable: an A-Z run finished entirely through the history
+  importer pays no job XP. The ring proportions against the **sum** instead, so equal floors draw equal arcs,
+  and `discipline_ring` handles the all-zero case as an even split rather than five zero-length arcs.
+  **`pursuer_card_service` still carries the strongest-family version and so still carries the bug** — dormant,
+  since that component renders nowhere but a staff preview. Whoever re-mounts it should fix it on the way in.
+- **The level floor must match `pursuer_level_from`, and it has to apply to the *headline* too.** An
+  untouched job is level 1, not 0, and `contract_service` records what happens when two surfaces disagree:
+  the Career XP board and the hunter's own Career page showed different levels for the same hunter. The band
+  floors per discipline for that reason — and the first cut floored the band while defaulting the Pursuer
+  Level itself to `0`, so a hunter with no standing row read **Lv 0** here and **Lv 25** on their own Career
+  page, with the plaque contradicting itself on one row (five families averaging 1.0 across a 25-job
+  catalogue, beside a headline of zero). Two independent audits put that first. `floor_level` now goes
+  through the shared helper.
+- **The per-discipline job count is data, not five.** `DISCIPLINE_LABELS` fixes the five disciplines, but how
+  many jobs sit in each is a staff-editable catalogue and it is the denominator of both the floor and the
+  average. Hard-coding it would be right today and silently wrong after one catalogue edit.
+- **A-Z runs pay no job XP, so the "job XP from this run" line is Job Coverage only.** `redeemable_slots` gates
+  on the type, so the per-square bonus belongs to that side even when one platinum advanced both boards. An
+  unclaimed jobs run is zero, and zero omits the line rather than printing `+0`, which would read as a failed
+  payout.
+- **A missing `ProfileCareerStanding` row is a real state, and the level it implies is the floor, not zero.**
+  The row is written only by `contract_service.recompute_career_standing`, which runs on a contract claim
+  **and** on a challenge redeem — so a hunter who has claimed neither has no row (an earlier version of this
+  bullet said "once a profile has been paid a contract", which missed the second door). `plaques_for` seeds an
+  entry for every run regardless, at the **catalogue floor** (25 today, since every untouched job sits at
+  level 1 — the same figure their own Career page shows), because the template reads `plaque.level` and
+  `plaque.rank.label` directly and Django would silently blank the plaque's whole lower half for exactly the
+  hunters most likely to have finished via the importer. This bullet said "level 0 → the `newbie` rank" while
+  the Gotcha above it described that as the worst defect of the first cut; the rank is still `newbie`, since
+  25 is under recruit's floor of 35.
+- **The plinth shapes the corner it paints.** It squares its own bottom corners with an explicit radius and
+  pins itself to the bottom with `margin-top: auto`, rather than relying on the parent — which matters because
+  the plaque only wins the height contest while the board is shorter, and at 2xl an A-Z frame overtakes it.
+  This bullet used to read "the plaque must not clip, its four notches sit at `-4px`"; the notches were cut,
+  so nothing hangs off the plaque's edges and nothing forces its `overflow` either way.
+- **Nothing here may go inside a minted share image.** Rank, Pursuer Level and Career XP all change after a
+  run is finished. See [Nothing mutable may go inside the minted image](#nothing-mutable-may-go-inside-the-minted-image)
+  — this is the same rule that killed `PlatinumShareImage`, and the plaque is the live half of the row by
+  design.
+
+### Why the frame is *not* pinned to a ratio
+
+This took three attempts and the arithmetic is the reason. **A 1.905:1 box cannot be tiled by 25–26 cells of
+ratio 3:4.** Three rows of 3:4 cells fill the height at only 7.6 columns (21 cells, not enough); four rows
+want ten columns (40 cells, fourteen of them empty for an A-Z run). So a frame pinned to
+`DIMENSIONS['landscape']` forces a choice, and the first two attempts each made it badly:
+
+| Attempt | Frame | Cells | What went wrong |
+|---|---|---|---|
+| 1 | `aspect-ratio: 1200/630` | `3/4` | The mosaic floated in 22–59px of bare background at every width — a grey letterbox with a picture in it. |
+| 2 | `aspect-ratio: 1200/630` | stretched to fill | Cells came out **1:1.575**, *taller* than the art, so `object-fit: cover` matched the height and **sliced ~15% off each cover's left and right edges** — and only ~36% of a 16:9 PSN fallback survived. `object-position: top` was inert throughout, because the vertical fit was exact. |
+| 3 | height from the board | `3/4` | The cells are the ratio the art is in, so there is nothing to crop. |
+
+**`object-position: top` only works because the cell is 3:4**, and that is worth knowing before anyone
+changes the cell ratio again: in a cell taller than the art, `cover` fits the height and crops *sideways*,
+which makes top-anchoring meaningless and slices off the logo it exists to protect. `test_challenges_live.py`
+now pins the cell ratio, the absence of a frame ratio, the 1px slack and the centring — none of which had a
+test when attempts 1 and 2 shipped, which is exactly why both landed.
+
+**Consequence for the minted cover (chunk 7):** it must be generated at the *board's* ratio (~2.25:1), not at
+`DIMENSIONS['landscape']`. That costs nothing — the downloadable share card stays 1200×630 because that is
+what social embeds want, and it is the same template rendered at a second `format_type`, which is what that
+dict is for. One design, two output sizes.
+
+**The prestige chip reads the granted `UserTitle` row**, not a recomputed ordinal (`rewards.granted_titles_for`,
+one query for the page). A title write is *contained* when it fails, and `grant_completion_title` declines to
+re-point a row another system already holds under the same name — so a finished run with no title held is a
+real state. Reading the row means the chip is absent exactly when the title is, and appears the moment a
+backfill grants it. `source_type` is part of the lookup: `source_id` is a bare `PositiveIntegerField`, so a
+badge-granted row with a colliding id would otherwise be read as this run's prize.
+
+### Nothing mutable may go inside the minted image
+
+`notifications.PlatinumShareImage` stored generated share PNGs to S3 from January 2026 and was dropped by
+`notifications/migrations/0016_drop_platinum_share_image.py` in May — **not** because storing images failed.
+`user_total_platinums` was computed at notification-creation time and held in the notification's metadata,
+which the PNG rendered from, so two plats from one sync processed out of order could swap their
+"Platinum #N". A real user reported it; commit `8b981dd0`'s fix was to compute at click time, one source of
+truth.
+
+So the hunter's name, their avatar and any ranking are rendered by the **page**, around the image, from live
+rows — which is how `_run_hero.html` is already built. Safe to bake in: the covers, the snapshotted game
+names, the completion date, the type, the earned title. One caveat worth writing down rather than
+discovering: covers derive from IGDB matches and staff can re-anchor one, so the image is a snapshot of the
+minting moment rather than a permanent guarantee. That is arguably the point — it is a memento of the finish.
+
+**The live board is the permanent un-minted state**, not a placeholder: a run finished since the last
+generation pass, or one whose generation failed, wears it. And generation belongs in an idempotent management
+command on a cron, never at completion time — `rewards.on_run_completed` is built so nothing there can stall
+or raise, and Playwright is 1–3s.
+
+---
+
 ## Constraints
 
 Written in the database because a shell and a data migration write around the service. (The admin is the
@@ -489,14 +796,16 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `challenges/services/eligibility.py` | the pools, the hatch count, the importer's date |
 | `challenges/services/picker.py` | the three panels — read-only, decides nothing |
 | `challenges/services/slot_render.py` | the board: squares, discipline shelves, covers |
+| `challenges/services/plaque.py` | the Hall of Fame plaque's Pursuer Card spine: rank, Pursuer Level, Career XP, the shared disciplines ring's arcs, and the XP a run paid — page-batched, reads nothing per entry |
 | `challenges/services/rewards.py` | **every reward write**: the XP redemption, the titles, the completion hook |
-| `challenges/views.py` | two page views, three JSON read endpoints (the picker panels, all `GET`), six thin POST actions (start, assign, clear, hide, redeem, redeem-all) |
+| `challenges/views.py` | four page views (My Challenges, the run, and the two public browse pages), three JSON read endpoints (the picker panels, all `GET`), six thin POST actions (start, assign, clear, hide, redeem, redeem-all) |
 | `challenges/management/commands/process_challenges.py` | the nightly sweep |
 | `challenges/management/commands/seed_challenge_demo.py` | **dev only**: runs in every reward state, so the panel and the pip can be looked at without finishing 25 contracts |
-| `templates/challenges/` | `my_challenges.html`, `challenge_detail.html`, `partials/_square_body.html` |
+| `templates/challenges/` | `my_challenges.html`, `challenge_detail.html`, `browse.html`, `hall_of_fame.html`, `partials/_square_body.html`, `partials/_run_card.html`, `partials/_run_hero.html`, `partials/browse_results.html` |
+| `static/js/challenges-browse.js` | the two public pages' reveal + infinite scroll (filters are `browse-filters.js`) |
 | `static/js/challenge-detail.js` | the picker's three modes, the reward panel's claims, and the board's entrance |
 | `templates/challenges/partials/_rewards_panel.html` | the reward panel and its ledger of finished squares |
-| `static/css/components/challenges.css` | `.pp-csq*` (the board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), BEM throughout |
+| `static/css/components/challenges.css` | `.pp-csq*` (the board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), `.pp-crun*` (the browse card), `.pp-chero*` (the Hall of Fame hero), BEM throughout |
 
 **Related docs:** [job-board-contracts.md](../design/rebuild/job-board-contracts.md) for the Contract and
 Job model the slot atom comes from, [xp-economy.md](../design/rebuild/xp-economy.md) for the ledger the

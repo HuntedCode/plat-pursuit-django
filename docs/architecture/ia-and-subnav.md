@@ -90,10 +90,20 @@ surfaces, at two prefixes, for two different reasons:
 | My Challenges | `my_challenges`, plus `challenge_start` and the run's write doors | `/my-challenges/` | personal, login-gated, a working surface |
 | A run's own page | `challenge_detail` | `community/challenges/<id>/` | **public.** A finished run is something you show somebody |
 
-So a public page already lives under `community/challenges/` while `community/challenges/` itself is still
-the coming-soon placeholder (`ChallengesComingSoonView`, route name `challenges`). That is deliberate: the
-run page is somebody's artefact rather than a hub item, and it needs a permanent public address before the
-hub that will index it exists. The Hall of Fame will fill the index when it is built.
+`community/challenges/` is now the real browse page (runs in progress), with `community/challenges/hall-of-fame/`
+beside it for the finished ones — both rail items, both public read-only. The coming-soon placeholder that
+held this URL is **deleted** (`ChallengesComingSoonView` and its template are gone, 2026-09), which is what
+it was written for: it held the URL and the route name so the real browse could take both without a single
+link changing.
+
+The run page predates both, and the reason it was given a permanent public address first still stands: it is
+somebody's artefact rather than a hub item, so it needed an address that would not move when the hub around
+it arrived.
+
+**Its rail highlight needs a line in `_URL_NAME_TO_SLUG_OVERRIDES`,** and it shipped without one. Prefix
+matching resolves the *hub*; the active *item* is an exact `url_name` match, so `challenge_detail` lit
+nothing until it was mapped to the `challenges` item — the same silent failure this doc records for
+`job_detail`. Nesting a URL under a hub's prefix never lights an item.
 
 It has one consequence already handled: the run page's breadcrumb is the PUBLIC trail, not the owner's.
 Pointing it at *My Pursuit → My Challenges* sent anonymous readers to a login screen from a page that never
