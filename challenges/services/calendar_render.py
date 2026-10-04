@@ -144,8 +144,15 @@ def _cell(month, day, row):
     REVEALED on a cell filled in the ACTIVE lens" -- which a reader could satisfy and still print the
     wrong year, because the day being filled says nothing about which lens supplied the date. The side
     column did exactly that: "First filled -- 3 Mar 2015" from a shovelware platinum, on a board that
-    counts nothing from 2015. `calendar_fill` now stores the date from the lens the square DRAWS in, so
-    the value is honest on arrival.
+    counts nothing from 2015. `calendar_fill` now stores the date from the lens the square DRAWS in.
+
+    HONEST ON ARRIVAL, NOT HONEST FOREVER, and the first version of this paragraph said the second. The
+    date is written from the drawing lens and then FROZEN -- deliberately, because a date is the record
+    of an achievement and catalogue bookkeeping the hunter never saw must not rewrite it. So after a
+    shovelware flag an `in_clean` square can still carry a date whose platinum the board now excludes,
+    and "First filled -- 3 Mar 2015" is reachable again by that route. `CalendarDay.plat_count`'s
+    comment carries the full rule; what a renderer needs to know is that this field answers WHEN THE
+    SQUARE WAS EARNED and not "what the board currently counts".
 
     WHAT REMAINS TRUE, and it is still the reason the date needs care: a square that is `in_all` and not
     `in_clean` carries a date and draws NOTHING. `filled` is the only thing that says whether a date

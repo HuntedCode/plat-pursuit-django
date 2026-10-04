@@ -597,8 +597,13 @@ def test_a_reclassified_game_does_not_re_date_the_square_it_filled():
 def test_the_square_records_how_many_platinums_sit_on_it():
     """THE MONTH PANEL'S "BUSIEST DAY" READS THIS (owner, 2026-10-04). Stored rather than counted at
     render time: the board is one read of `CalendarDay`, and a count means a second timezone-aware
-    aggregate over the hunter's whole trophy history per rendered board -- eight of them on a Hall of
-    Fame page. The fill already groups platinums by (month, day), so the count is one more annotation."""
+    aggregate over the hunter's whole trophy history on the request path. The fill already groups
+    platinums by (month, day), so the count is one more annotation.
+
+    ONE SUCH QUERY, NOT EIGHT. This said "eight of them on a Hall of Fame page" -- it is the DETAIL
+    board that draws the figure, once per page, and `_hero_group`'s cells carry no count at all. The
+    sentence was corrected in `calendar_fill` and `models` and left standing here, which is how a
+    falsehood outlives its own fix."""
     profile = _hunter()
     for year in (2016, 2019, 2024):
         _platted(profile, _utc(year, 8, 8))
@@ -608,17 +613,60 @@ def test_the_square_records_how_many_platinums_sit_on_it():
 
     assert run.calendar_days.get(month=8, day=8).plat_count == 3
     assert run.calendar_days.get(month=8, day=9).plat_count == 1
-    # NOTHING SCATTERED ONTO THE OTHER SQUARES. Asserting `== 0` on one unfilled day pinned the FIELD
-    # DEFAULT, not the writer: no code path reaches (8, 10), so it passed whatever the write branch did
-    # -- including a writer keyed on the wrong day. Asking the month as a whole is the real question.
-    assert not (run.calendar_days.filter(month=8, plat_count__gt=0)
-                .exclude(day__in=(8, 9)).exists()), 'a count landed on a square no platinum touched'
+    # NOTHING SCATTERED ONTO ANY OTHER SQUARE, asked of the whole BOARD rather than of August. Two
+    # weaker versions came before this: `== 0` on one unfilled day pinned the field DEFAULT (no code
+    # path reaches (8, 10), so it passed whatever the writer did), and scoping the question to
+    # `month=8` let a count written to (9, 8) escape it entirely -- a transposed month/day being the
+    # obvious way for a writer to scatter.
+    assert not (run.calendar_days.filter(plat_count__gt=0)
+                .exclude(month=8, day__in=(8, 9)).exists()), (
+        'a count landed on a square no platinum touched')
+
+
+def test_a_count_on_an_unfilled_square_is_not_reported_as_a_day_just_earned():
+    """THE WRITE IS GATED ON THE ROW DRAWING OR COUNTING, and that gate was load-bearing and unpinned --
+    deleting `and (was_filled or changed)` passed the entire suite, because no test ever produced the
+    one state it discriminates.
+
+    WHY IT MATTERS: `changed` is not only "write this row". It also drives `newly_filled`, which
+    `apply_to_run` RETURNS and `process_challenges` prints, and it stamps `filled_at`. So a count
+    correction on a row that is not filled -- a hand-written row, a half-run data migration -- would be
+    reported as a day the hunter had just earned, and stamped with the moment of the correction. The
+    opening ceremony reads that return value to say "you start at 154 days".
+
+    THE STALE COUNT ITSELF IS LEFT ALONE and this test does not assert its value, deliberately: nothing
+    reads a count on a square that draws in no lens (`busiest` tests `filled` first), so zeroing it
+    would be a defensible change and should not have to fight a pin. What must not change is that the
+    row is not announced as a fill.
+    """
+    profile = _hunter()
+    _platted(profile, _utc(2020, 1, 15))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    # A square with a count and no fill. Not reachable through the writer -- that is the point.
+    run.calendar_days.filter(month=4, day=4).update(plat_count=7)
+
+    newly = calendar_fill.apply_to_run(run)
+
+    day = run.calendar_days.get(month=4, day=4)
+    assert not day.in_all and not day.in_clean, 'no platinum touched this square'
+    assert day.filled_at is None, (
+        'a count correction stamped a fill time onto a day the hunter never earned')
+    assert newly == 0, (
+        'an unfilled square was counted as a day that just filled -- the ceremony reads this number')
 
 
 def test_the_count_is_the_lens_that_draws_the_square():
-    """THE SAME RULE `earned_on` FOLLOWS, so the two always describe one population. A square showing
+    """THE SAME RULE `earned_on` FOLLOWS AT WRITE TIME: both read the lens the square draws in, so a
+    square cannot be filled with a count and a date describing different populations. A square showing
     "first filled 2021" beside a count that included platinums the board excludes would be two answers
-    to one question, which is the cross-lens defect the collapse was meant to end."""
+    to one question, which is the cross-lens defect the collapse was meant to end.
+
+    "SO THE TWO ALWAYS DESCRIBE ONE POPULATION" is what this used to say, and it is false -- the test
+    two below (`..._follows_the_aggregate_down_where_the_date_does_not`) exists to show them diverging.
+    They are written from one lens and then diverge, because the count stays live and the date freezes.
+    What this test pins is the write, not a permanent equality."""
     profile = _hunter()
     _platted(profile, _utc(2015, 9, 9), shovelware=True)
     _platted(profile, _utc(2019, 9, 9))
@@ -696,9 +744,14 @@ def test_a_square_promoted_off_shovelware_moves_its_date_forward():
     the square is promoted onto the board, and its date has to travel with it -- off the excluded
     platinum and onto the one that earned the square.
 
-    A square's own lens still only moves BACKWARDS: `filled_days` recomputes the whole history every
-    pass, so the earliest a lens knows never rises, which is what makes "take the offer" correct in both
-    directions without storing which lens wrote the value.
+    EVERY OTHER MOVE IS BACKWARDS ONLY, and the guard tests the promotion rather than inferring it from
+    the dates. An earlier version of this docstring said `filled_days` "recomputes the whole history
+    every pass, so the earliest a lens knows never rises, which is what makes 'take the offer' correct
+    in both directions" -- that premise is false, which is what
+    `test_a_reclassified_game_does_not_re_date_the_square_it_filled` above exists to show: flagging a
+    game drops its day out of the clean aggregate and the lens's own earliest DOES rise. It also
+    misdescribed the shipped code, which takes the offer downward always and upward only on a
+    promotion. Left standing, it invites exactly the simplification that reintroduces the bug.
     """
     profile = _hunter()
     _platted(profile, _utc(2015, 5, 5), shovelware=True)

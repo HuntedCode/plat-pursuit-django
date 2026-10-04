@@ -495,7 +495,10 @@ def runs_due_for_sweep():
 
     - `Profile.total_plats` covers the all-platinums and shovelware-free views, since a day in either
       needs a platinum; and
-    - the hunter's earned-contract count covers the contracts view, which can move WITHOUT a platinum,
+    - (THERE WAS A SECOND WATERMARK HERE, `calendar_contracts_seen`, because the contracts view could
+      move WITHOUT a platinum. The lens collapse deleted the column and this function's second
+      question with it, so the reconciliation is now a single-column comparison -- which is what the
+      body does. This list described two watermarks for several slices after there was one.)
       because a contract reaches its 100% tier with no platinum term.
 
     Both are compared against watermarks stored on the run. A run whose numbers have not moved is skipped
@@ -517,8 +520,11 @@ def runs_due_for_sweep():
     ("nothing is ever WRONG as a result: fills are monotone, so the cost is a day that fills late rather
     than a day that fills incorrectly"). That held while the stored state was monotone booleans and a
     frozen date. The per-day platinum count is deliberately LIVE, so a reclassification in either
-    direction -- or a staff `igdb_id` edit, or a timezone change -- leaves it simply stale on a dormant
-    hunter's run: too high after a flag, too low after an un-flag, until the staff door is run. What
+    direction -- or a hunter changing their own timezone, which re-keys every day -- leaves it simply
+    stale on a dormant hunter's run: too high after a flag, too low after an un-flag. (NOT a staff
+    `igdb_id` edit, which this listed: that moves a CONTRACT's member concepts, and the platinum
+    aggregate reads `ProfileGame.has_plat`, `Trophy.trophy_type` and `Game.shovelware_status` only. The
+    cause came across from the deleted contracts lens.) What
     stays true is the part that matters for the reward ladder: FILLS are monotone, so no day fills
     incorrectly and no run completes that should not have. A stale tally in a side column is a smaller
     thing than a wrong square, which is why the gap is still accepted -- but it is no longer nothing.
@@ -532,8 +538,16 @@ def runs_due_for_sweep():
     "NOT SCOPED TO UNFINISHED RUNS... a Calendar run completes on the FIRST genuine view to fill, and
     the hunter may still be working toward the other view's ultimate title, so its days must keep
     filling afterwards". That justification died with the second lens: a complete run is 365
-    shovelware-free days, `in_all` is a superset of `in_clean`, so there is no column left that can
-    move. Sweeping a finished run could only ever rewrite it with itself.
+    shovelware-free days and `in_all` is a superset of `in_clean`, so no FILL on a finished run can
+    move and no finished run can un-complete.
+
+    "THERE IS NO COLUMN LEFT THAT CAN MOVE" is what this used to say, and `plat_count` falsified it.
+    That column is deliberately live, so a reclassification moves it on a finished run like any other --
+    and because this function filters `is_complete=False`, the nightly sweep can never be the thing that
+    corrects it. `refresh_for_profile` carries no such filter, so a finished run is corrected the next
+    time its owner syncs; what is left stale is a finished run belonging to a hunter who has stopped
+    syncing, until `process_challenges --all-calendars`. Accepted on the same terms as the watermark gap
+    above: the figure is a tally in a side column, and no square and no completion can be wrong.
 
     NOT SCOPED TO VISIBLE RUNS, though, and that is CONSISTENCY rather than an exception.
     `pending_slots` -- the detection every other challenge type goes through -- filters only

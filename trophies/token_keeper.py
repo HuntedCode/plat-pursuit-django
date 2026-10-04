@@ -1558,11 +1558,15 @@ class TokenKeeper:
 
             # Refresh any Plat Calendar run from the trophies this sync just wrote.
             #
-            # MUST FOLLOW the two blocks above for the same reason the second follows the first: a
-            # calendar day fills from a platinum OR from a contract completion, and the contract
-            # detection above is what creates the `EarnedContract` rows the third view reads. Run
-            # earlier, a hunter watching their own sync land would see the platinum arrive and the
-            # square stay empty until the next nightly pass.
+            # RUN AFTER THE STATS REFRESH, because a calendar day fills from the hunter's PLATINUMS and
+            # the aggregate reads `ProfileGame.has_plat`. Run earlier, a hunter watching their own sync
+            # land would see the platinum arrive and the square stay empty until the next nightly pass.
+            #
+            # IT USED TO SAY "a calendar day fills from a platinum OR from a contract completion, and
+            # the contract detection above is what creates the `EarnedContract` rows the third view
+            # reads" -- that third view is gone (the owner collapsed the Calendar to one
+            # shovelware-free platinum lens, which deleted `_days_from_contracts` outright), so this no
+            # longer has to follow contract detection at all. It still follows the stats refresh.
             #
             # IT DOES NOT CONSULT THE RECONCILIATION WATERMARK, which the nightly sweep does, and the
             # asymmetry is deliberate rather than an oversight. `runs_due_for_sweep` compares

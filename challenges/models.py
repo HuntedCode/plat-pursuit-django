@@ -739,8 +739,14 @@ class CalendarDay(models.Model):
     #: `test_the_count_follows_the_aggregate_down_where_the_date_does_not` asserted the opposite. After
     #: a reclassification a square can read "first filled 2015" beside a count holding nothing from
     #: 2015. That is the designed split, not a bug: the date answers when the square was earned, the
-    #: count answers what the modal will list. They agree on every square whose lens still holds it,
-    #: which is every square until staff or a detector moves a game.
+    #: count answers what the modal will list.
+    #:
+    #: THEY AGREE UNTIL A LENS'S OWN EARLIEST RISES, which is the real boundary and NOT "every square
+    #: whose lens still holds it" as this said a slice ago -- a square with a flagged 2015 platinum and
+    #: a clean 2021 one is still held by the clean lens, and the two fields disagree on it. Anything
+    #: that removes the earliest member of a square's population reaches this: a shovelware flag, a
+    #: hunter changing their own timezone (which re-keys every day), or an `EarnedTrophy` row going away
+    #: on a resync correction. Not only staff.
     #:
     #: ON A SQUARE THAT DRAWS IN NO LENS this holds the `all` figure, so it is shovelware-INCLUSIVE and
     #: must not be shown. Every reader tests `in_clean` first -- `calendar_render._is_filled` is the one

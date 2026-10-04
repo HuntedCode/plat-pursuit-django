@@ -813,6 +813,13 @@ def test_the_crest_band_divides_whatever_row_it_is_given():
     flat = ' '.join(block.split())
     assert '.pp-cal__crest { flex: 1 1 0;' in flat
     assert 'aspect-ratio: 1' in flat
+    # THE 112px CEILING IS PINNED AS A GUARD, NOT AS A SHAPE. It no longer binds at any width (the band
+    # is bounded by `.pp-cal`'s 1100px, which puts a coin at 82.5px), and the assertion that used to
+    # cover it was dropped when this test was rewritten for shape 4 -- leaving a live declaration no
+    # test mentioned, which is how one gets deleted as dead. The stylesheet documents it as a
+    # deliberate non-binding guard, so the pin says that rather than claiming it does work.
+    assert 'max-width: 112px' in flat, (
+        'a deliberate non-binding ceiling: it mattered when the band was full-bleed over a 712px panel')
 
 
 def test_the_crest_face_scales_with_the_coin():
@@ -952,8 +959,6 @@ def test_the_coin_counter_only_appears_where_it_fits():
     block = _calendar_css()
     flat = ' '.join(block.split())
     assert '.pp-cal__sub { display: none; }' in flat
-    # 1280, NOT 1024. The gate moved when the side column did: a coin is 47px at 1024 with a board
-    # column beside the stats, which leaves ~32px of clear circle against the ~34px the plate needs.
     # `lg:`, NOT `xl:`. This gate has been at both, each time on correct arithmetic over a different
     # band width: shape 3 capped the band to the board column and left the coin at 48.2px through the
     # 1024 band (33px of chord against the ~34px the plate needs), so it moved up; shape 4 spans the

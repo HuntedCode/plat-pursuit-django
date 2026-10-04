@@ -3020,9 +3020,17 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        make it generous, and the figures quoted in three comments nearby were all computed against the
        8px floor that only applies below 571px of viewport.
        10px, which is `--cal-gap`'s `md:` value plus the 2px the coins need for their rings not to read
-       as touching. Now the coin size steps only when the container does: 48.0px at 768, 48.2px at 1024,
-       56.2px at 1280 and up. Monotone, and never under the 44px touch minimum this file defends at
-       375px -- which matters because the coins ARE the board's navigation. */
+       as touching. The coin size now steps only when the container does, and never falls under the 44px
+       touch minimum this file defends at 375px -- which matters because the coins ARE the board's
+       navigation.
+       THE SIZES ARE NOT QUOTED HERE. This block carried "48.0px at 768, 48.2px at 1024, 56.2px at 1280"
+       for a slice after shape 4 widened the band, while the block that owns the figures (`.pp-cal__crest`
+       below) carried the current ones -- so the file stated two triples and a reader met the stale one
+       first, inside the comment explaining this very fix. One owner for the numbers, and it is not here.
+       AND THE SHRINK FIGURES ABOVE describe the geometry as it was WHEN THE DEFECT WAS MEASURED: a
+       `width: 100%` band with a 280px side column in every band. They do not reproduce against the
+       shipped box, which is 12px wider and pulled back 6px. Kept because they are why this rule exists,
+       marked because the arithmetic will not redo from the current file. */
     .pp-cal__crests { overflow-x: visible; gap: 10px; }
 }
 

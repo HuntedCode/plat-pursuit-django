@@ -71,10 +71,15 @@ def _fill(run, month, day, *, on=None, plats=1):
     """
     # BOTH COLUMNS, because `in_clean` implies `in_all` and the database enforces it. A test that wants
     # a shovelware day -- in `all` and not on the board -- writes the row itself.
-    # `plat_count` DEFAULTS TO 1 RATHER THAN 0, because that is what a real fill writes: a square is
-    # filled BY a platinum, so a filled row with a zero count is a state no backfill can produce. The
-    # same reasoning that made this helper write `earned_on` after two stat rows rendered empty against
-    # a gap in the fixture rather than in the page.
+    # `plat_count` DEFAULTS TO 1 RATHER THAN 0, because that is what a real fill writes for a square it
+    # has just filled -- a square is filled BY a platinum. The same reasoning that made this helper
+    # write `earned_on`, after two stat rows rendered empty against a gap in the FIXTURE rather than in
+    # the page.
+    # IT IS NOT AN IMPOSSIBLE STATE, which this comment claimed ("a state no backfill can produce"). A
+    # filled square with a zero count is exactly what a lens going empty produces -- the square stays
+    # (fills are monotone) and the tally follows the aggregate to zero. See
+    # `test_a_square_whose_lens_empties_drops_its_count_to_zero`. 1 is the right DEFAULT for a helper
+    # that means "this day got filled", not a claim about the column's range.
     # `dt.date(2019, month, day)`, NOT `min(day, 28)`. The clamp made 29 of the 365 squares hold a
     # date that was not their own -- `(1, 31)` stored 28 January -- which is the same defect the seeder
     # carried and had removed, re-created in the fixture. It is also not harmless: filling days 29 and
