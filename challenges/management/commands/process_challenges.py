@@ -46,10 +46,14 @@ This one needs neither, because a square NAMES its own contract: "which filled, 
 a contract their owner has finished?" is one query over a table holding 26 rows for a letter run and 25
 for a jobs run. Nothing to ration, and a cursor would only create a way to miss something.
 """
+import logging
+
 from django.core.management.base import BaseCommand, CommandError
 
 from challenges.services import challenge_service as svc
 from trophies.models import Profile
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
@@ -61,10 +65,13 @@ class Command(BaseCommand):
                             help='psn_username of a single profile to sweep, instead of everyone.')
         parser.add_argument('--dry-run', action='store_true',
                             help='Report what would change; write nothing.')
+        parser.add_argument('--only', choices=['slots', 'calendar'],
+                            help='Run only one phase. Default runs both.')
 
     def handle(self, *args, **options):
         username = options.get('user')
         dry_run = options.get('dry_run', False)
+        only = options.get('only')
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN -- no changes will be written.\n'))
 
@@ -77,6 +84,12 @@ class Command(BaseCommand):
         else:
             scope = 'every hunter with a run in flight'
             candidates = svc.completable_slots()
+
+        if only == 'calendar':
+            # The slot phase is skipped wholesale, but `profile` above is still resolved, so `--user`
+            # keeps validating the hunter exists before the calendar phase runs.
+            self._sweep_calendars(username, profile if username else None, dry_run)
+            return
 
         self.stdout.write(self.style.MIGRATE_HEADING(f'Challenge square detection: {scope}'))
 
@@ -156,3 +169,71 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'{len(finished_runs)} run(s) FINISHED:'))
             for label in finished_runs:
                 self.stdout.write(f'  {label}')
+
+        if only != 'slots':
+            self._sweep_calendars(username, profile if username else None, dry_run)
+
+    # ── the Calendar phase ───────────────────────────────────────────────────────────────────────
+
+    def _sweep_calendars(self, username, profile, dry_run):
+        """Refresh Plat Calendar runs whose numbers have moved, and ALL of a named hunter's.
+
+        A SECOND PHASE OF THE SAME COMMAND RATHER THAN A SECOND COMMAND, because it is the same drift
+        net for the same feature, `nightly`'s docstring says to add a step here rather than a cron
+        entry, and `--user` / `--dry-run` already mean the right things. `--only` picks one phase when
+        you want just one.
+
+        THE TWO PHASES ASK OPPOSITE-SHAPED QUESTIONS, which is why this is not folded into the loop
+        above. A slot sweep is one site-wide query over squares whose contract may have been finished;
+        a Calendar sweep recomputes a hunter's whole platinum history, which is expensive per run. So
+        this one reconciles first (`runs_due_for_sweep` compares two stored counters against live ones)
+        and only pays for runs that could actually have gained a day.
+
+        `--user` DELIBERATELY IGNORES THAT CHECK. The reconciliation is an optimisation for the nightly
+        pass; a human asking for one hunter's calendar to be refreshed is asking for the work to be
+        done, usually BECAUSE they suspect the watermarks are wrong. Making the manual door obey the
+        optimisation would make it useless in exactly the case it exists for.
+        """
+        from challenges.models import CHALLENGE_TYPE_CALENDAR, Challenge
+        from challenges.services import calendar_fill
+
+        if profile is not None:
+            runs = Challenge.objects.filter(
+                profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False)
+            scope = f'one hunter ({profile.psn_username}), ignoring the due check'
+        else:
+            runs = calendar_fill.runs_due_for_sweep()
+            scope = 'every run whose platinum or contract count has moved'
+
+        self.stdout.write(self.style.MIGRATE_HEADING(f'\nPlat Calendar refresh: {scope}'))
+
+        runs = list(runs.select_related('profile'))
+        if not runs:
+            self.stdout.write('No calendar run needs refreshing.')
+            return
+
+        if dry_run:
+            for run in runs:
+                self.stdout.write(f'  would refresh   {run.profile.psn_username} / {run.name}')
+            self.stdout.write(self.style.SUCCESS(f'\n{len(runs)} calendar run(s) would be refreshed.'))
+            return
+
+        total_new = 0
+        for run in runs:
+            # ONE RUN'S FAILURE IS NOT THE SWEEP'S. A nightly pass over every calendar must not stop at
+            # the first hunter with odd data -- the same reason the square loop above is per-square
+            # rather than one enclosing transaction. `logger.exception` so the traceback survives.
+            try:
+                filled = calendar_fill.apply_to_run(run)
+            except Exception:
+                logger.exception('calendar refresh failed for challenge %s', run.pk)
+                self.stdout.write(self.style.ERROR(
+                    f'  FAILED          {run.profile.psn_username} / {run.name}'))
+                continue
+            total_new += filled
+            if filled:
+                self.stdout.write(f'  +{filled:<3} day(s)     {run.profile.psn_username} / {run.name}')
+
+        self.stdout.write(self.style.SUCCESS(
+            f'\n{len(runs)} calendar run(s) refreshed, {total_new} new day(s) filled.'))
+

@@ -330,6 +330,29 @@ class Challenge(models.Model):
     completed_view = models.CharField(max_length=10, choices=CALENDAR_VIEW_CHOICES, blank=True,
                                       default='')
 
+    #: WHAT THE CALENDAR SWEEP SAW LAST TIME IT LOOKED -- a reconciliation watermark, not a timestamp.
+    #: Zero for every other type.
+    #:
+    #: THE OBVIOUS SCOPE IS TOO WIDE, which is what these replace. Scoping the nightly sweep to "the
+    #: owner has synced since we last looked" catches every hunter who opened the app, and a sync earns
+    #: a platinum only occasionally -- most move bronzes, silvers and golds, none of which can fill a
+    #: calendar day. That is a full history recomputation per account per night to discover nothing.
+    #:
+    #: So the sweep asks a CHEAP question first and only then does the expensive thing. These two
+    #: counters are the whole question: `total_plats` covers the all-platinums and shovelware-free views
+    #: (a day in either needs a platinum), and the earned-contract count covers the contracts view, which
+    #: can move WITHOUT a platinum because a contract reaches its 100% tier with no platinum term. Both
+    #: are compared in one site-wide query against live values; a run whose numbers have not moved is
+    #: skipped without reading a single trophy.
+    #:
+    #: NOT `updated_at` AND NOT A SWEEP TIMESTAMP, both of which were tried. `updated_at` only moves when
+    #: the run CHANGES, so the first sync after a hunter's last new square leaves it due forever; a bare
+    #: "when did we last look" stamp fixes that and still re-sweeps everyone who synced. This is the
+    #: two-watermark lesson the contract engine already paid for, one layer further in: the question is
+    #: not "has anything happened" but "has anything happened THAT COULD MATTER HERE".
+    calendar_plats_seen = models.PositiveIntegerField(default=0)
+    calendar_contracts_seen = models.PositiveIntegerField(default=0)
+
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
