@@ -8,6 +8,7 @@ library. Each of those produces a calendar that looks plausible and is wrong.
 """
 import datetime as dt
 import zoneinfo
+from pathlib import Path
 
 import pytest
 from django.db import connection
@@ -36,6 +37,8 @@ from trophies.models import (
 )
 
 pytestmark = pytest.mark.django_db
+
+ROOT = Path(__file__).resolve().parents[2]
 
 _SEQ = {'n': 0}
 
@@ -903,3 +906,67 @@ def test_one_hunters_bad_data_does_not_stop_the_sweep(monkeypatch):
     assert good_run.calendar_days.get(month=7, day=7).in_all, (
         'one hunter failing stopped the sweep before reaching the next'
     )
+
+
+# ── the sync hook ────────────────────────────────────────────────────────────────────────────────
+
+def test_the_sync_hook_fills_a_calendar_without_consulting_the_watermark():
+    """THE HOOK READS GROUND TRUTH; THE SWEEP GETS TO BE CHEAP.
+
+    `runs_due_for_sweep` compares `Profile.total_plats` against a stored counter, and that column is
+    maintained INCREMENTALLY by a `post_save` signal on `EarnedTrophy` -- fresh on the normal path, and
+    able to lag anywhere a write slips past signals. `recalc_profile_counters`' own docstring names that
+    case (`bulk_update`, `queryset.update`, a handler raising) and exists to rebuild it nightly.
+
+    A stale counter costs the SWEEP a day of latency, which a safety net can afford. It would cost the
+    HOOK correctness: the one path a hunter actually watches would skip the fill and show them an empty
+    square after a platinum landed. So this asserts the hook fills a run the due-check would skip.
+    """
+    profile = _hunter()
+    run = _calendar_run(profile)
+
+    # A platinum lands and the counter DRIFTS, simulated with the mechanism that actually causes it:
+    # a `queryset.update`, which bypasses the `post_save` signal that maintains the column. That is one
+    # of the three cases `recalc_profile_counters`' docstring names. (Writing it any other way does not
+    # work -- the signal fires in tests too, which is how this test found its own wrong premise.)
+    from trophies.models import Profile
+
+    _platted(profile, _utc(2019, 11, 11))
+    Profile.objects.filter(pk=profile.pk).update(total_plats=0)
+    profile.refresh_from_db()
+
+    assert profile.total_plats == 0, 'fixture precondition: the counter is drifted low'
+    assert run not in calendar_fill.runs_due_for_sweep(), (
+        'precondition: the sweep would skip this run, which is the whole point')
+
+    calendar_fill.apply_to_run(run)
+
+    assert run.calendar_days.get(month=11, day=11).in_all, (
+        'the hook path failed to fill a square the sweep would have skipped')
+
+
+def test_the_sync_pipeline_refreshes_calendars_after_contract_detection():
+    """ORDERING, pinned on the source because no unit test can run the sync pipeline.
+
+    A calendar day fills from a platinum OR a contract completion, and the contract detection block is
+    what creates the `EarnedContract` rows the third view reads. Hooked earlier, a hunter watching their
+    own sync land would see the platinum arrive and the square stay empty until the nightly pass -- the
+    same failure the square detection block documents for its own position.
+    """
+    source = (ROOT / 'trophies' / 'token_keeper.py').read_text(encoding='utf-8')
+
+    contracts = source.index('check_profile_contracts')
+    squares = source.index('detect_for_profile(profile)')
+    calendar = source.index('sync_complete calendar refresh failed')
+
+    assert contracts < squares < calendar, (
+        'the calendar refresh must follow contract detection, which creates the rows its third view '
+        'reads')
+
+    # AND IT CONTAINS ITS OWN FAILURES. A nightly sweep can afford to skip a hunter; a sync cannot
+    # abort because one hunter's calendar is odd -- the squares and contracts blocks either side both
+    # wrap for the same reason.
+    tail = source[calendar - 600:calendar + 200]
+    assert 'except Exception' in tail and 'logger.exception' in tail, (
+        'the calendar hook does not contain its own failures, so one bad run could cost a hunter the '
+        'rest of their sync')

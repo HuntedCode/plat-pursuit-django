@@ -1556,6 +1556,41 @@ class TokenKeeper:
             except Exception:
                 logger.exception(f"[profile {profile_id}] sync_complete challenge detection failed")
 
+            # Refresh any Plat Calendar run from the trophies this sync just wrote.
+            #
+            # MUST FOLLOW the two blocks above for the same reason the second follows the first: a
+            # calendar day fills from a platinum OR from a contract completion, and the contract
+            # detection above is what creates the `EarnedContract` rows the third view reads. Run
+            # earlier, a hunter watching their own sync land would see the platinum arrive and the
+            # square stay empty until the next nightly pass.
+            #
+            # IT DOES NOT CONSULT THE RECONCILIATION WATERMARK, which the nightly sweep does, and the
+            # asymmetry is deliberate rather than an oversight. `runs_due_for_sweep` compares
+            # `Profile.total_plats` against a stored counter, and that column is maintained
+            # INCREMENTALLY by a `post_save` signal on `EarnedTrophy` -- so it is fresh on the normal
+            # path and can lag anywhere a write slips past signals. `recalc_profile_counters`' own
+            # docstring names that case (`bulk_update` / `queryset.update` / a handler raising) and
+            # exists to rebuild it nightly.
+            #
+            # A stale counter costs the SWEEP a day of latency, which a safety net can afford. It would
+            # cost the HOOK correctness: the one path a hunter actually watches would skip the fill and
+            # show them an empty square after a platinum landed. So the hook reads ground truth and the
+            # sweep gets to be cheap.
+            #
+            # SCOPED TO RUNS THAT EXIST. `apply_to_run` is reachable only through a `Challenge`, and a
+            # Challenge exists only because somebody pressed Start -- so a hunter who has never started
+            # a Calendar costs one indexed SELECT that returns nothing.
+            #
+            # IMPORT OUTSIDE THE GUARD, as above: a missing module is a deploy error and must be loud.
+            from challenges.models import CHALLENGE_TYPE_CALENDAR, Challenge
+            from challenges.services.calendar_fill import apply_to_run
+            try:
+                for run in Challenge.objects.filter(
+                        profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False):
+                    apply_to_run(run)
+            except Exception:
+                logger.exception(f"[profile {profile_id}] sync_complete calendar refresh failed")
+
             # Badge notifications are NOT flushed here any more. The only producer that ever filled the
             # `pending_badges:{profile_id}` queue was `notify_badge_awarded`, a post_save on the legacy
             # `UserBadge` that the 5b cutover deleted -- so this was a Redis read per sync for a queue
