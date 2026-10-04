@@ -2959,15 +2959,16 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cal__crest[data-tier="silver"] { --crest-c: #b9c6d6; --crest-glow: #dae4f0; }
 .pp-cal__crest[data-tier="gold"]   { --crest-c: #e7c25c; --crest-glow: #f4d778; }
 
-/* A TWO-ROW STACK, which it becomes for free: the rim is absolutely positioned and so takes no grid
-   track, leaving the face and the counter as the only in-flow children. `place-items: center` then
-   centres the pair as a block. `row-gap` rather than margins so the single-child case below `lg:` (the
-   counter is `display: none` there) collapses to exactly the centred face it was before. */
+/* THE FACE IS THE ONLY IN-FLOW CHILD, so `place-items: center` centres IT rather than centring a stack.
+   The first version made the counter a second grid row, which centred the PAIR -- and the owner caught
+   it on the browser pass: "adding the numbers pushed the text upwards and is no longer centered in the
+   middle of the medallion. I'd like the text centered with the numbers directly below." A coin's face
+   wants to sit on the centre of the coin; the counter hangs off it. Both the rim and the counter are
+   absolutely positioned, so neither takes a grid track. */
 .pp-cal__coin {
     position: relative;
     display: grid;
     place-items: center;
-    row-gap: 2px;
     width: 100%;
     height: 100%;
     isolation: isolate;
@@ -3062,7 +3063,21 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cal__sub { display: none; }
 @media (min-width: 1024px) {
     .pp-cal__sub {
+        /* DIRECTLY BELOW THE CENTRED FACE, measured from the coin's midpoint rather than stacked beside
+           it. The face has `line-height: 1`, so its lower edge is half its own font-size below centre;
+           3px of breathing room follows. Reading `--cal-face` is what keeps this true at every width:
+           the face is a clamp, so a hardcoded offset would only line up at whichever width it was
+           written for.
+           IT STAYS INSIDE THE RIM at both ends of the range, which is the constraint worth checking
+           rather than assuming -- the clear circle is about 80% of the coin, so at 1024 the figure sits
+           ~15px below a 28px clear radius with ~47px of width at that height (a 12px "15/31" needs ~32),
+           and at 1920 ~12px below a 44px radius with ~84px (a 15px one needs ~40). */
         display: block;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(50% + (var(--cal-face) / 2) + 3px);
+        text-align: center;
         font-size: clamp(0.75rem, 0.85vw, 0.9375rem);
         line-height: 1.1;
         opacity: 0.85;
@@ -3072,8 +3087,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* THE FACE SCALES WITH THE COIN, because a fixed 12px label on a 110px medallion reads as a mistake.
    `clamp` rather than a per-breakpoint step: the coin itself is fluid (`flex: 1 1 0`), so its label has
    to be too or the two only agree at the exact widths somebody happened to write rules for. The floor is
-   the project's 12px type minimum, which the file-wide guard enforces. */
-@media (min-width: 768px) { .pp-cal__face { font-size: clamp(0.75rem, 1.15vw, 1.125rem); } }
+   the project's 12px type minimum, which the file-wide guard enforces.
+   THROUGH A TOKEN, because the counter's offset below it is derived from this size -- so the two cannot
+   disagree about where the face's lower edge is at any width. */
+@media (min-width: 768px) { .pp-cal__crest { --cal-face: clamp(0.75rem, 1.15vw, 1.125rem); } }
+@media (min-width: 768px) { .pp-cal__face { font-size: var(--cal-face); } }
 
 /* THE ACTIVE TAB, which must be legible without colour alone: the ring is the shape cue and the face
    goes full-strength. A struck month that is also active keeps its metal. */
