@@ -2959,10 +2959,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cal__crest[data-tier="silver"] { --crest-c: #b9c6d6; --crest-glow: #dae4f0; }
 .pp-cal__crest[data-tier="gold"]   { --crest-c: #e7c25c; --crest-glow: #f4d778; }
 
+/* A TWO-ROW STACK, which it becomes for free: the rim is absolutely positioned and so takes no grid
+   track, leaving the face and the counter as the only in-flow children. `place-items: center` then
+   centres the pair as a block. `row-gap` rather than margins so the single-child case below `lg:` (the
+   counter is `display: none` there) collapses to exactly the centred face it was before. */
 .pp-cal__coin {
     position: relative;
     display: grid;
     place-items: center;
+    row-gap: 2px;
     width: 100%;
     height: 100%;
     isolation: isolate;
@@ -3042,6 +3047,28 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     line-height: 1;
     text-transform: uppercase;
 }
+/* THE COUNTER INSIDE THE COIN, FROM `lg:` ONLY, and the breakpoint is arithmetic rather than taste.
+   The rim leaves a clear diameter of about 80% of the coin, and the coin is fluid: roughly 44px at 375
+   (no room for a second line at all), 52px at 768 (41px clear -- two lines of 12px type plus leading
+   does not fit), 70px at 1024 (55px clear -- it does) and 110px at 1920. So the figure appears at the
+   first width where it can be read, which is also the width the owner was looking at when they asked
+   for it.
+   TWO LINES AT THE 12px FLOOR. The file-wide type guard refuses anything smaller, which is the right
+   answer here rather than an exception to argue for: this figure is a number a hunter reads off a coin,
+   not a decorative micro-label. The face clamps 12 -> 18px and this clamps 12 -> 15px, so the pair
+   always fits the clear circle with the face leading.
+   `.pp-cal__count` IS SHARED WITH THE MONTH HEAD, so the `:has()` reveal rules below govern both and
+   the two places cannot disagree about which lens is active. Only the WRAPPER is size-gated. */
+.pp-cal__sub { display: none; }
+@media (min-width: 1024px) {
+    .pp-cal__sub {
+        display: block;
+        font-size: clamp(0.75rem, 0.85vw, 0.9375rem);
+        line-height: 1.1;
+        opacity: 0.85;
+    }
+}
+
 /* THE FACE SCALES WITH THE COIN, because a fixed 12px label on a 110px medallion reads as a mistake.
    `clamp` rather than a per-breakpoint step: the coin itself is fluid (`flex: 1 1 0`), so its label has
    to be too or the two only agree at the exact widths somebody happened to write rules for. The floor is

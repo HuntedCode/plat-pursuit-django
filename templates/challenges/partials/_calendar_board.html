@@ -96,6 +96,29 @@ driving the tint, so a future change would have "fixed" the lens by writing to i
                             style="--seg: {{ forloop.counter0 }};" />
                 </svg>
                 <span class="pp-cal__face">{{ month.slug|upper }}</span>
+                {% comment %}THE MONTH'S PROGRESS, INSIDE THE COIN (owner, 2026-10-04: "now that the
+                medallions have more room, perhaps we put the counter inside of them?... We don't have to
+                do it for every use of the medallions but for these larger ones"). Which is why the
+                wrapper is hidden until `lg:` -- a 44px coin at mobile has no room for a second line, and
+                the stylesheet carries the arithmetic.
+
+                SAME CLASS AND SAME `:has()` RULES AS THE MONTH HEAD'S FIGURE, because it is the same
+                kind of thing: a per-lens count that follows the checked radio. Reusing `.pp-cal__count`
+                means ONE set of reveal rules governs both places, so the coin and the head cannot
+                disagree about which lens is showing.
+
+                PER-LENS, WHILE THE METAL IS NOT, and that is worth knowing rather than discovering: a
+                month completed in Contracts alone is a gold coin reading `0/28` while the All platinums
+                lens is active. Not a bug -- the metal records what was achieved and the count records
+                progress in the lens being viewed -- but it is the one state here that can look like one.
+
+                NO `aria` WORK NEEDED: the coin is already `aria-hidden`, and the `sr-only` label below
+                enumerates every lens's figure in full.{% endcomment %}
+                <span class="pp-cal__sub">
+                    {% for value, display in calendar_views %}
+                    <span class="pp-cal__count" data-view="{{ value }}">{{ month.counts|dict_get:value }}/{{ month.total }}</span>
+                    {% endfor %}
+                </span>
             </span>
             {% comment %}THE WHOLE LABEL FOR A SCREEN READER, because the visible face is an abbreviation
             and the crest's state is carried in colour. Each lens's figure is named, since a reader cannot

@@ -768,13 +768,46 @@ def test_the_hero_emits_the_class_its_own_css_rule_needs():
     assert 'pp-chero--calendar' in html
 
 
-def test_the_month_tally_reveals_a_figure_for_the_active_lens():
-    """The per-lens tally had no behavioural coverage, so renaming the attribute it is keyed on left
+def test_the_month_figure_reveals_the_active_lens_in_both_places():
+    """The per-lens figure had no behavioural coverage, so renaming the attribute it is keyed on left
     `.pp-cal__count { display: none }` with no matching reveal rule -- an empty tally on all twelve
-    months, suite green."""
-    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    assert body.count('class="pp-cal__count" data-view=') == 36, 'three lenses x twelve months'
+    months, suite green.
 
+    TWO PLACES NOW, asserted separately rather than as one total. The figure sits in the month head AND
+    inside each medallion (the owner asked for the counter in the coin once they had room), and a single
+    count of 72 would stay green if one place lost its figures and the other grew duplicates.
+    """
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+
+    coins = _section(body, 'pp-cal__crests', until='class="pp-cal__lens"')
+    assert coins.count('class="pp-cal__count" data-view=') == 36, 'three lenses x twelve coins'
+    assert coins.count('class="pp-cal__sub"') == 12
+
+    heads = body[body.index('class="pp-cal__lens"'):]
+    assert heads.count('class="pp-cal__count" data-view=') == 36, 'three lenses x twelve month heads'
+
+    # ONE SET OF REVEAL RULES governs both, which is the whole reason the coin reuses the class.
     block = _calendar_css()
     for value in (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS):
         assert '.pp-cal__count[data-view="%s"]' % value in block
+
+
+def test_the_coin_counter_only_appears_where_it_fits():
+    """A 44px coin at mobile has no room for a second line, and 52px at `md:` leaves about 41px of clear
+    circle -- two lines of 12px type plus leading does not fit. So the wrapper is gated to `lg:`, where
+    the coin is around 70px. The owner's own framing: "we don't have to do it for every use of the
+    medallions but for these larger ones"."""
+    block = _calendar_css()
+    flat = ' '.join(block.split())
+    assert '.pp-cal__sub { display: none; }' in flat
+    assert '@media (min-width: 1024px) { .pp-cal__sub { display: block;' in flat
+
+
+def test_the_coin_counter_is_not_announced_twice():
+    """The coin is already `aria-hidden`, and the `sr-only` label beside it enumerates every lens's
+    figure in full -- so the visual counter inside the coin must not add a second announcement."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    coin = body[body.index('class="pp-cal__coin"'):body.index('class="sr-only"',
+                                                              body.index('class="pp-cal__coin"'))]
+    assert 'aria-hidden="true"' in body[:body.index('class="pp-cal__coin"') + 60]
+    assert 'pp-cal__sub' in coin, 'the counter is inside the aria-hidden coin, not beside it'
