@@ -910,6 +910,82 @@ def test_one_hunters_bad_data_does_not_stop_the_sweep(monkeypatch):
 
 # ── the sync hook ────────────────────────────────────────────────────────────────────────────────
 
+def test_refreshing_a_profile_fills_every_run_it_owns_from_one_history_pass():
+    """THE HOOK'S ACTUAL BEHAVIOUR, which had no test at all.
+
+    The sync hook was five inline lines in a 400-line method, and the only thing covering them was a
+    substring search of the module source -- which an audit proved passes against a hook that is
+    commented out, emptied, or wrapped in `if False`. Nothing in the suite failed when the hook did
+    nothing. The logic is a named function now so a test can call it.
+
+    ONE HISTORY PASS FOR ALL OF A HUNTER'S RUNS, which is the other half: a hunter can own a finished
+    Calendar run and an unfinished one, the fill set depends on the hunter rather than the run, and
+    computing it per run repeats an identical ~90-query pass.
+    """
+    profile = _hunter()
+    _platted(profile, _utc(2019, 2, 14))
+    first = _calendar_run(profile)
+    # A second run, which the partial unique permits once the first is finished.
+    first.is_complete = True
+    first.completed_at = timezone.now()
+    first.completed_view = CALENDAR_VIEW_CLEAN
+    first.save(update_fields=['is_complete', 'completed_at', 'completed_view'])
+    second = _calendar_run(profile)
+
+    with CaptureQueriesContext(connection) as captured:
+        filled = calendar_fill.refresh_for_profile(profile)
+
+    assert first.calendar_days.get(month=2, day=14).in_all, 'the finished run stopped filling'
+    assert second.calendar_days.get(month=2, day=14).in_all, 'the active run was not filled'
+    assert filled == 2, 'both runs gained the square, so both count: %d' % filled
+
+    grouped = [q for q in captured.captured_queries
+               if 'earnedtrophy' in q['sql'].lower() and 'GROUP BY' in q['sql'].upper()]
+    assert len(grouped) == 1, (
+        'the history pass ran %d times for %d runs -- it depends on the hunter, not the run'
+        % (len(grouped), 2))
+
+
+def test_one_runs_failure_does_not_cost_the_others_their_refresh(monkeypatch):
+    """The nightly phase already works this way and the two paths must not disagree about it. On the
+    sync path it matters more: a raise escaping here would be caught by the hook's own guard and cost
+    the hunter every other run's refresh for that sync."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 2, 15))
+    first = _calendar_run(profile)
+    first.is_complete = True
+    first.completed_at = timezone.now()
+    first.completed_view = CALENDAR_VIEW_CLEAN
+    first.save(update_fields=['is_complete', 'completed_at', 'completed_view'])
+    second = _calendar_run(profile)
+
+    real = calendar_fill.apply_to_run
+
+    def explode(run, **kwargs):
+        if run.pk == first.pk:
+            raise RuntimeError('odd data')
+        return real(run, **kwargs)
+
+    monkeypatch.setattr(calendar_fill, 'apply_to_run', explode)
+
+    calendar_fill.refresh_for_profile(profile)
+
+    assert second.calendar_days.get(month=2, day=15).in_all, (
+        'one run raising stopped the others being refreshed')
+
+
+def test_a_hunter_with_no_calendar_run_costs_one_select():
+    """The common case by far, and the hook runs for every linked hunter on every sync."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 2, 16))
+
+    with CaptureQueriesContext(connection) as captured:
+        assert calendar_fill.refresh_for_profile(profile) == 0
+
+    assert len(captured.captured_queries) == 1, (
+        'a hunter with no Calendar run cost %d queries' % len(captured.captured_queries))
+
+
 def test_the_sync_hook_fills_a_calendar_without_consulting_the_watermark():
     """THE HOOK READS GROUND TRUTH; THE SWEEP GETS TO BE CHEAP.
 
@@ -955,13 +1031,51 @@ def test_the_sync_pipeline_refreshes_calendars_after_contract_detection():
     """
     source = (ROOT / 'trophies' / 'token_keeper.py').read_text(encoding='utf-8')
 
+    # ANCHORED ON THE CALL, not on a log string. An audit mutated this three ways -- commenting the
+    # hook out, emptying its body, wrapping it in `if False` -- and the old assertions passed against
+    # all three, because a comment and a log message are still text in the right order. `refresh_for_
+    # profile(profile)` with no leading `#` is the narrowest thing that has to be present and live.
     contracts = source.index('check_profile_contracts')
     squares = source.index('detect_for_profile(profile)')
-    calendar = source.index('sync_complete calendar refresh failed')
+    call = '\n                refresh_for_profile(profile)\n'
+    assert source.count(call) == 1, 'the calendar hook is not an executable call at the expected depth'
+    calendar = source.index(call)
 
     assert contracts < squares < calendar, (
         'the calendar refresh must follow contract detection, which creates the rows its third view '
         'reads')
+
+    # ── AND IT IS REACHABLE, which no substring can tell you. A text pin sees `refresh_for_profile(
+    # profile)` identically whether it runs or sits under `if False:` -- a mutation proved exactly that
+    # against the previous version of this test. The AST can tell: find the call, walk its ancestors,
+    # and fail if any enclosing branch is a constant-false test. It also pins WHICH function the hook
+    # lives in, so moving it somewhere that never executes fails here rather than in production.
+    import ast
+
+    tree = ast.parse(source)
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+
+    sites = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+             and n.func.id == 'refresh_for_profile']
+    assert len(sites) == 1, 'expected exactly one call to refresh_for_profile, found %d' % len(sites)
+
+    enclosing_function = None
+    node = sites[0]
+    while node in parents:
+        node = parents[node]
+        if isinstance(node, ast.If) and isinstance(node.test, ast.Constant) and not node.test.value:
+            raise AssertionError(
+                'the calendar hook sits inside a constant-false branch, so it never runs')
+        if isinstance(node, ast.FunctionDef) and enclosing_function is None:
+            enclosing_function = node.name
+
+    assert enclosing_function == '_job_sync_complete', (
+        'the calendar hook moved out of the sync-complete job and into %r, where it may never run on '
+        'a sync' % enclosing_function)
 
     # AND IT CONTAINS ITS OWN FAILURES. A nightly sweep can afford to skip a hunter; a sync cannot
     # abort because one hunter's calendar is odd -- the squares and contracts blocks either side both
@@ -970,3 +1084,108 @@ def test_the_sync_pipeline_refreshes_calendars_after_contract_detection():
     assert 'except Exception' in tail and 'logger.exception' in tail, (
         'the calendar hook does not contain its own failures, so one bad run could cost a hunter the '
         'rest of their sync')
+
+
+def test_the_nightly_invocation_sweeps_calendars_on_a_night_with_no_completable_square():
+    """THE ONE INVOCATION `nightly` MAKES, and the only one that was untested.
+
+    `nightly`'s STEPS entry is `('challenge detection', 'process_challenges', {})` -- no arguments. The
+    Calendar phase was first added as a trailing call at the end of `handle`, AFTER the slot sweep's own
+    `return`s for "nothing to complete" and "dry run". Those returns mean "this phase is done"; at the
+    top level of `handle` they meant "the command is done". So on any night where no square was
+    completable -- the ordinary night -- the Calendar was never swept, and the whole reconciliation
+    design was inert.
+
+    Nothing failed. The command printed "Nothing to complete." and exited zero, exactly as it had before
+    the Calendar existed. Every command test in the suite passed `only='calendar'`, so the default path
+    had no coverage at all, which is why a sweep that never ran looked healthy.
+
+    This test asserts the SQUARE case is empty and the Calendar still fills -- i.e. it fails against the
+    structure that shipped.
+    """
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    _platted(profile, _utc(2019, 8, 18))
+    profile.total_plats = 1
+    profile.save(update_fields=['total_plats'])
+    run = _calendar_run(profile)
+
+    assert not svc.completable_slots().exists(), (
+        'fixture precondition: no square is completable, which is the ordinary night')
+
+    out = _run_command()
+
+    assert 'Nothing to complete.' in out, 'precondition: the slot phase found nothing'
+    assert 'Plat Calendar refresh' in out, (
+        'the calendar phase never ran on the nightly path -- the slot phase returned first')
+    assert run.calendar_days.get(month=8, day=18).in_all, 'the nightly path filled nothing'
+
+
+def test_a_dry_run_still_reports_the_calendar_phase():
+    """Same bug, second door: `--dry-run` returned before the Calendar phase too, so staff previewing a
+    night saw no Calendar section and would reasonably conclude there was nothing to refresh."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 8, 19))
+    profile.total_plats = 1
+    profile.save(update_fields=['total_plats'])
+    run = _calendar_run(profile)
+
+    out = _run_command(dry_run=True)
+
+    assert 'Plat Calendar refresh' in out, 'a dry run hid the calendar phase entirely'
+    assert 'would refresh' in out
+    assert not run.calendar_days.filter(in_all=True).exists(), 'a dry run wrote fills'
+
+
+def test_a_named_hunter_with_no_completable_square_still_gets_their_calendar_swept():
+    """`--user X` hit the same return. A staff member asking for one hunter got silence and no refresh
+    whenever that hunter happened to have no completable square -- which is most of the time."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 8, 20))
+    profile.total_plats = 1
+    profile.save(update_fields=['total_plats'])
+    run = _calendar_run(profile)
+
+    out = _run_command(user=profile.psn_username)
+
+    assert 'Plat Calendar refresh' in out
+    assert run.calendar_days.get(month=8, day=20).in_all
+
+
+def test_all_calendars_refreshes_runs_the_due_check_would_skip():
+    """THE DOOR FOR THE CHANGE NO WATERMARK CAN SEE.
+
+    The reconciliation watches the hunter's platinum and earned-contract counts. A shovelware
+    reclassification moves NEITHER while genuinely changing the `clean` view -- `auto_flagged -> clean`
+    is a routine outcome of `update_shovelware`, and staff write `manually_cleared` by hand. So an
+    un-flagged game's day fills only on that hunter's next platinum, and for a dormant hunter never.
+
+    A third watermark was considered and rejected: the only cheap site-wide signal is "some game's flag
+    moved tonight", which marks every run due and defeats the reconciliation on any night the detector
+    touches anything. This is the staff door instead, and this test is what stops it rotting.
+    """
+    profile = _hunter()
+    game = _platted(profile, _utc(2019, 9, 21), shovelware=True)
+    profile.total_plats = 1
+    profile.save(update_fields=['total_plats'])
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    assert run.calendar_days.get(month=9, day=21).in_all
+    assert not run.calendar_days.get(month=9, day=21).in_clean
+
+    # Staff un-flag the game. Neither counter moves.
+    game.shovelware_status = 'manually_cleared'
+    game.save(update_fields=['shovelware_status'])
+
+    assert run not in calendar_fill.runs_due_for_sweep(), (
+        'precondition: the reconciliation cannot see a reclassification, which is why this door exists')
+    _run_command(only='calendar')
+    assert not run.calendar_days.get(month=9, day=21).in_clean, (
+        'precondition: the ordinary sweep skipped it')
+
+    _run_command(only='calendar', all_calendars=True)
+
+    assert run.calendar_days.get(month=9, day=21).in_clean, (
+        '--all-calendars did not refresh a run the due check skips')

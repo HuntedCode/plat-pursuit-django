@@ -43,6 +43,7 @@ from trophies.models import (
     SHOVELWARE_FLAGGED_STATUSES,
     EarnedContract,
     EarnedTrophy,
+    Profile,
     ProfileGame,
     Trophy,
 )
@@ -216,7 +217,7 @@ def filled_days(profile):
     }
 
 
-def apply_to_run(challenge):
+def apply_to_run(challenge, *, found=None):
     """Write this hunter's filled days onto a Calendar run, and finish it if a genuine view is full.
 
     Returns the number of days this pass NEWLY FILLED -- squares that held no view before and hold one
@@ -259,7 +260,26 @@ def apply_to_run(challenge):
     if challenge.challenge_type != CHALLENGE_TYPE_CALENDAR:
         return 0
 
-    found = filled_days(challenge.profile)
+    # THE WATERMARKS ARE READ BEFORE THE FILLS, and the order is the difference between a redundant
+    # sweep and a permanently missing day. Reading them AFTER (which is how this shipped) lets them
+    # describe state the fills do not include: a platinum landing during the ~90 queries `filled_days`
+    # takes for a whale is counted by the watermark and absent from `found`, so the next sweep sees
+    # "nothing moved" and the day is never filled. Read first, the worst case is `watermark <= reality`,
+    # which costs one extra sweep and loses nothing.
+    # READ FROM THE DATABASE, not through `challenge.profile`. That attribute is the CALLER's cached
+    # relation -- the sync hook passes a `Challenge` it fetched earlier in the phase, and a signal has
+    # bumped `total_plats` in the row since. Taking the cached value writes a watermark BELOW reality,
+    # so the run reads as due forever and every sweep recomputes it: the optimisation inverted.
+    plats_seen = (Profile.objects.filter(pk=challenge.profile_id)
+                  .values_list('total_plats', flat=True).first() or 0)
+    contracts_seen = EarnedContract.objects.filter(profile_id=challenge.profile_id).count()
+
+    # `found` IS ACCEPTED FROM THE CALLER because it depends only on the PROFILE, not the run. A hunter
+    # can hold more than one Calendar run (a finished one keeps filling for the other view's ultimate),
+    # and computing it per run recomputes an identical ~90-query history pass for each. The two callers
+    # that loop -- the sync hook and the nightly phase -- pass it in; a single-run caller omits it.
+    if found is None:
+        found = filled_days(challenge.profile)
     now = timezone.now()
     newly_filled = 0
 
@@ -314,9 +334,8 @@ def apply_to_run(challenge):
         # cheap check work. Skipping them on a no-op would leave the run due every night forever.
         # Deliberately NOT `updated_at`, which must stay still on a no-op or every Calendar run floats
         # to the top of "my challenges" each morning.
-        locked.calendar_plats_seen = locked.profile.total_plats
-        locked.calendar_contracts_seen = EarnedContract.objects.filter(
-            profile_id=locked.profile_id).count()
+        locked.calendar_plats_seen = plats_seen
+        locked.calendar_contracts_seen = contracts_seen
         locked.save(update_fields=['calendar_plats_seen', 'calendar_contracts_seen'])
         _recount_calendar(locked, wrote_rows=bool(to_update))
 
@@ -399,6 +418,20 @@ def runs_due_for_sweep():
     Both are compared against watermarks stored on the run. A run whose numbers have not moved is skipped
     without reading a single trophy.
 
+    WHAT IT CANNOT SEE, stated plainly because the cron doc briefly claimed otherwise. A SHOVELWARE
+    RECLASSIFICATION moves neither counter and genuinely changes the `clean` view: `auto_flagged ->
+    clean` is a routine outcome of `update_shovelware`, and staff write `manually_cleared` by hand.
+    So a hunter whose platinumed game is un-flagged does not become due, and that day fills only on
+    their next platinum or earned contract -- for a dormant hunter, never. Two smaller cases share the
+    shape: a staff `igdb_id` edit that moves a contract's member concepts, and a hunter changing their
+    timezone, which re-keys every day while moving no counter.
+    A third watermark was considered and rejected. The only cheap site-wide signal is "some game's flag
+    moved tonight", which marks EVERY run due and defeats the reconciliation on any night
+    `update_shovelware` touches anything; targeted invalidation means shovelware detection reaching into
+    challenges. So the escape hatch is a staff door -- `process_challenges --all-calendars` -- and the
+    gap is documented rather than papered over. Nothing is ever WRONG as a result: fills are monotone,
+    so the cost is a day that fills late rather than a day that fills incorrectly.
+
     SCOPED TO RUNS, NOT ACCOUNTS, which is the principle `completable_slots` already states: "the sweep's
     cost should scale with how many runs are in flight, not with how many accounts exist." A hunter who
     never started a Calendar challenge has no run and nothing to compute -- the backfill is reachable
@@ -426,3 +459,36 @@ def runs_due_for_sweep():
         .exclude(profile__total_plats=F('calendar_plats_seen'),
                  live_contracts=F('calendar_contracts_seen'))
     )
+
+
+def refresh_for_profile(profile):
+    """Refresh every Calendar run this hunter owns. Returns the days newly filled across them.
+
+    EXTRACTED SO IT CAN BE TESTED, which the five inline lines in `token_keeper` could not be. The only
+    coverage they had was a substring search of the module source, and an audit proved that pin passes
+    against a hook that is commented out, emptied, or wrapped in `if False` -- so no test in the suite
+    failed when the hook did nothing. A named function can be called by a test and asserted on.
+
+    THE FILL SET IS COMPUTED ONCE. It depends on the hunter's history, not on the run, and a hunter can
+    own more than one Calendar run: the one-active constraint is partial on `is_complete=False`, and a
+    finished run keeps filling so its other view can still reach an ultimate. Per run, that repeats an
+    identical history pass.
+
+    PER-RUN CONTAINMENT, matching the nightly phase. One run with odd data must not cost the others
+    their refresh, and on the sync path it must not cost the hunter the rest of their sync.
+    """
+    from challenges.models import CHALLENGE_TYPE_CALENDAR, Challenge
+
+    runs = list(Challenge.objects.filter(
+        profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False))
+    if not runs:
+        return 0
+
+    found = filled_days(profile)
+    total = 0
+    for run in runs:
+        try:
+            total += apply_to_run(run, found=found)
+        except Exception:
+            logger.exception('calendar refresh failed for challenge %s', run.pk)
+    return total

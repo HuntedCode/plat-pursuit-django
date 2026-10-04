@@ -67,29 +67,57 @@ class Command(BaseCommand):
                             help='Report what would change; write nothing.')
         parser.add_argument('--only', choices=['slots', 'calendar'],
                             help='Run only one phase. Default runs both.')
+        parser.add_argument('--all-calendars', action='store_true',
+                            help='Refresh EVERY calendar run, ignoring the reconciliation check. Use '
+                                 'after a bulk shovelware reclassification, which no watermark sees.')
 
     def handle(self, *args, **options):
+        """Two PEER phases, and that structure is the fix for a real bug rather than a tidy-up.
+
+        The Calendar phase was first added as a trailing call at the end of this method -- after the
+        slot sweep's own `return`s for "nothing to complete" and "dry run". Those returns mean "this
+        phase is finished", but at the top level of `handle` they meant "the COMMAND is finished", so on
+        any night where no square was completable -- which is the ordinary night -- `nightly` ran this
+        command and the Calendar was never swept. The whole reconciliation design was inert, gated on an
+        unrelated phase happening to find work.
+
+        Nothing failed. The command printed "Nothing to complete." and exited zero, which is exactly
+        what it printed before the Calendar existed.
+
+        So each phase is its own method now, and a `return` inside one can only end that one. The only
+        test that would have caught it is the invocation `nightly` actually makes -- no arguments, on a
+        database with no completable square -- and every command test in the suite passed
+        `--only calendar`, so the default path had no coverage at all.
+        """
         username = options.get('user')
         dry_run = options.get('dry_run', False)
         only = options.get('only')
+        all_calendars = options.get('all_calendars', False)
         if dry_run:
             self.stdout.write(self.style.WARNING('DRY RUN -- no changes will be written.\n'))
 
+        # Resolved once, for both phases, so `--user` validates the hunter exists even when the phase
+        # that would have looked them up is skipped.
+        profile = None
         if username:
             profile = Profile.objects.filter(psn_username=username).first()
             if profile is None:
                 raise CommandError(f'No profile with psn_username {username!r}.')
+
+        if only != 'calendar':
+            self._sweep_slots(username, profile, dry_run)
+        if only != 'slots':
+            self._sweep_calendars(username, profile, dry_run, force=all_calendars)
+
+    def _sweep_slots(self, username, profile, dry_run):
+        """Complete squares whose contract the owner has finished. The original phase, unchanged in
+        behaviour -- its `return`s now end the phase rather than the command."""
+        if profile is not None:
             scope = f'one hunter ({profile.psn_username})'
             candidates = svc.completable_slots().filter(challenge__profile=profile)
         else:
             scope = 'every hunter with a run in flight'
             candidates = svc.completable_slots()
-
-        if only == 'calendar':
-            # The slot phase is skipped wholesale, but `profile` above is still resolved, so `--user`
-            # keeps validating the hunter exists before the calendar phase runs.
-            self._sweep_calendars(username, profile if username else None, dry_run)
-            return
 
         self.stdout.write(self.style.MIGRATE_HEADING(f'Challenge square detection: {scope}'))
 
@@ -170,12 +198,10 @@ class Command(BaseCommand):
             for label in finished_runs:
                 self.stdout.write(f'  {label}')
 
-        if only != 'slots':
-            self._sweep_calendars(username, profile if username else None, dry_run)
 
     # ── the Calendar phase ───────────────────────────────────────────────────────────────────────
 
-    def _sweep_calendars(self, username, profile, dry_run):
+    def _sweep_calendars(self, username, profile, dry_run, *, force=False):
         """Refresh Plat Calendar runs whose numbers have moved, and ALL of a named hunter's.
 
         A SECOND PHASE OF THE SAME COMMAND RATHER THAN A SECOND COMMAND, because it is the same drift
@@ -201,6 +227,20 @@ class Command(BaseCommand):
             runs = Challenge.objects.filter(
                 profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False)
             scope = f'one hunter ({profile.psn_username}), ignoring the due check'
+        elif force:
+            # THE DOOR FOR THE CHANGE NO WATERMARK CAN SEE. The reconciliation watches the hunter's
+            # platinum and earned-contract counts, and a shovelware reclassification moves NEITHER while
+            # genuinely changing the `clean` view -- so a hunter whose game was un-flagged would wait for
+            # their next platinum before that day filled, and a dormant hunter would wait forever.
+            #
+            # A third watermark was considered and rejected: the only site-wide signal is "some game's
+            # flag moved tonight", which marks EVERY run due and defeats the reconciliation on any night
+            # `update_shovelware` touches anything. Targeted invalidation means shovelware detection
+            # reaching into challenges, which is a coupling this does not earn. So it is a staff door,
+            # used after a bulk reclassification, and the limitation is documented rather than hidden.
+            runs = Challenge.objects.filter(
+                challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False)
+            scope = 'EVERY run, ignoring the due check (--all-calendars)'
         else:
             runs = calendar_fill.runs_due_for_sweep()
             scope = 'every run whose platinum or contract count has moved'

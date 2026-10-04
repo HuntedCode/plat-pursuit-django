@@ -1582,12 +1582,13 @@ class TokenKeeper:
             # a Calendar costs one indexed SELECT that returns nothing.
             #
             # IMPORT OUTSIDE THE GUARD, as above: a missing module is a deploy error and must be loud.
-            from challenges.models import CHALLENGE_TYPE_CALENDAR, Challenge
-            from challenges.services.calendar_fill import apply_to_run
+            # ONE CALL, so the logic is somewhere a test can reach. It lived inline here, and the
+            # only thing covering it was a substring search of this file -- which an audit showed
+            # passes against a hook that is commented out, emptied, or unreachable. The loop, the
+            # shared fill set and the per-run containment all moved into `refresh_for_profile`.
+            from challenges.services.calendar_fill import refresh_for_profile
             try:
-                for run in Challenge.objects.filter(
-                        profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False):
-                    apply_to_run(run)
+                refresh_for_profile(profile)
             except Exception:
                 logger.exception(f"[profile {profile_id}] sync_complete calendar refresh failed")
 
