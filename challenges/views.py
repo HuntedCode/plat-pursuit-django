@@ -396,6 +396,10 @@ class ChallengeDetailView(DetailView):
             # one-lens collapse removed the switcher, so both are gone and nothing downstream has to be
             # told which lens is active.
             context['calendar_totals'] = calendar_render.totals_for(months)
+            # THE DAY-MARKER RAIL, off the same figure the board draws. No query: `totals_for` summed
+            # month counts already on the page, and the rail is arithmetic over that one number.
+            context['calendar_rail'] = calendar_render.marker_rail(
+                context['calendar_totals']['done'], total=challenge.total_slots)
         else:
             context['groups'] = slot_render.slot_groups(challenge)
         context['is_owner'] = viewer is not None and viewer.id == challenge.profile_id

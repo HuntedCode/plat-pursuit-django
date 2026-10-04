@@ -3471,3 +3471,135 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    kind of repeated expensive paint this project has already been bitten by on mobile, and at 7px a glow
    is indistinguishable from a bigger square anyway. */
 .pp-chero__cday--on { background: color-mix(in srgb, var(--rk) 68%, var(--pp-bg-2)); }
+
+/* ============================================================
+ * THE DAY-MARKER RAIL -- `.pp-cal-rail`
+ *
+ * A horizontal gauge with five rungs, carrying the only "what next" line on the Calendar's page. The
+ * owner picked a rail over a row of awards (2026-10-04) and the reason is in the partial: the day
+ * markers are the one part of this feature that moves from a hunter's first platinum, and a second row
+ * of medal-shaped objects would compete with the twelve crests rather than complement them.
+ *
+ * ITS OWN BLOCK, NOT A `.pp-cal__` ELEMENT, because it is a sibling surface rather than part of the
+ * board -- the same relationship `.pp-csq-board` and `.pp-csq-shelf` have. It sits in its own `.scard`
+ * above the board's.
+ *
+ * LINEAR IN DAYS. A day is the same distance everywhere, because that is the quantity being measured.
+ * The difficulty is not linear at all (`DAY_MARKERS` has the arithmetic: the 50 rung is ~54 platinums,
+ * the 300 rung ~630), so the right-hand half is harder than its spacing suggests. Noted rather than
+ * corrected: distorting the spacing would make the rail lie about days to tell the truth about effort.
+ * ============================================================ */
+/* IN THE PAGE HEADER CARD, not a card of its own, so it carries no surface and no vertical padding --
+   only the side room its end labels need. The wrapper in `challenge_detail.html` owns the spacing above
+   it, exactly as the `.pp-horizon` it replaced did. */
+.pp-cal-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    /* HALF A LABEL OF SIDE ROOM, which is what stops the end rungs clipping. Every pip and mark is
+       positioned at `left: var(--at)` and pulled back by half its own width, so the 365 mark at 100%
+       would hang half outside the track. 14px clears a three-digit label at this size. */
+    padding-inline: 14px;
+}
+
+/* THE FOOTER ROW. `.pp-cal-rail__head` lived here, carrying a headline figure on the shared `.pp-tally`
+   face, while the rail sat in a card of its own. In the page header the big tally states that count two
+   lines above, so the head and its figure went and the two quiet lines pair up underneath instead.
+   `space-between` WITH ONE CHILD left-aligns, which is what a finished run wants: the next-rung line is
+   gone and the comparison figure should not jump to the right edge on its own. */
+.pp-cal-rail__foot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+/* THE COMPARISON FIGURE, kept deliberately quiet: it answers a question a reader may not have asked, so
+   it should not compete with the count it qualifies. */
+.pp-cal-rail__aside { font-size: 0.75rem; color: var(--pp-text-mute); }
+
+/* ── the track ───────────────────────────────────────────────────────────────────────────────────── */
+
+.pp-cal-rail__track {
+    position: relative;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--pp-bg-1);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
+}
+
+/* THE SAME CYAN THE COIN GAUGES USE, because it is the same quantity measured a different way, and
+   `.pp-phero__ring-fill` makes cyan this site's progress colour. A rail and a ring that disagreed about
+   the colour of progress would be two conventions on one page. */
+.pp-cal-rail__fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--pct, 0%);
+    border-radius: inherit;
+    background: linear-gradient(90deg,
+                                color-mix(in oklab, var(--pp-primary) 70%, transparent),
+                                var(--pp-primary));
+    box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 40%, transparent);
+}
+
+/* A PIP PER RUNG, ON the track rather than under it, so the rail reads as a ladder with rungs instead of
+   a bar with numbers nearby. An unreached pip is a recess; a reached one is filled and ringed, which is
+   legible without colour -- the fill has already passed it either way. */
+.pp-cal-rail__pip {
+    position: absolute;
+    top: 50%;
+    left: var(--at);
+    width: 10px;
+    height: 10px;
+    margin: -5px 0 0 -5px;
+    border-radius: 50%;
+    background: var(--pp-bg-0);
+    box-shadow: inset 0 0 0 1.5px var(--pp-border);
+}
+.pp-cal-rail__pip--on {
+    background: var(--pp-primary);
+    box-shadow: inset 0 0 0 1.5px var(--pp-bg-0), 0 0 6px color-mix(in oklab, var(--pp-primary) 55%, transparent);
+}
+
+/* ── the labels ──────────────────────────────────────────────────────────────────────────────────── */
+
+/* A ZERO-HEIGHT POSITIONING CONTEXT, so the absolutely positioned marks still occupy a row in the
+   flex column. Without the explicit height the `<ul>` collapses and the marks overlap the track. */
+.pp-cal-rail__marks {
+    position: relative;
+    height: 1.1em;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+.pp-cal-rail__mark {
+    position: absolute;
+    left: var(--at);
+    transform: translateX(-50%);
+    color: var(--pp-text-mute);
+    white-space: nowrap;
+}
+/* REACHED IS WEIGHT AND BRIGHTNESS, not hue: these are numbers at 12px, so a measured token is what
+   keeps them legible -- the same rule the month hues follow by never touching text. */
+.pp-cal-rail__mark--on { color: var(--pp-text); font-weight: 700; }
+
+.pp-cal-rail__next { font-size: 0.8125rem; color: var(--pp-text-dim); }
+
+@media (min-width: 768px) {
+    .pp-cal-rail { gap: 12px; padding-inline: 16px; }
+    .pp-cal-rail__track { height: 10px; }
+    .pp-cal-rail__pip { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
+    .pp-cal-rail__marks { font-size: 0.8125rem; }
+}
+
+/* THE FILL DRAWS IN, which is the one flourish here and follows `.pp-phero__ring-fill`'s reasoning: a
+   DECELERATING curve rather than a spring, because an overshoot would draw the rail past the hunter's
+   real figure and settle back -- a small lie about a real number. The keyframe declares only `from`, so
+   it interpolates to the element's own computed width and `var(--pct)` stays out of the keyframe, where
+   a custom property is not reliably interpolated. */
+@keyframes ppCalRailFill { from { width: 0; } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-cal-rail__fill { animation: ppCalRailFill 0.9s cubic-bezier(0.16, 0.84, 0.34, 1) backwards; }
+}

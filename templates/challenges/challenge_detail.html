@@ -61,18 +61,38 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                     <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{% comment %}`data-countup` is the TARGET; the text is what a reader sees if the script never runs, so
                     it is the real number either way. `countUp` reads the attribute and animates the text
                     to it.{% endcomment %}<span data-cpick-tally data-countup="{{ challenge.completed_count }}">{{ challenge.completed_count }}</span><span class="text-base-content/40">/{{ challenge.total_slots }}</span></span>
-                    <span class="text-xs md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">done</span>
+                    {% comment %}THE UNIT, because "done" is a square's word and a Calendar run counts
+                    DAYS. The figure beside it is the same `completed_count` for every type; only what
+                    it counts differs, so only the noun branches.{% endcomment %}
+                    <span class="text-xs md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">{% if calendar_rail %}days{% else %}done{% endif %}</span>
                 </div>
             </div>
 
-            {% comment %}THE HOOK IS NOT OPTIONAL. `.pp-horizon` is a shared primitive and this page
-            renders TWO of them: the nav's hidden sync bar (`.pp-avsync__prog`) comes first in the document, so
-            `document.querySelector('.pp-horizon')` found THAT. Every write set the progress on a hidden
-            element in the chrome and the run's own bar never moved until a reload -- the owner's report. The
-            include cannot take an attribute, so the hook goes on the wrapper.{% endcomment %}
+            {% comment %}THE RUN'S PROGRESS, AND A CALENDAR RUN SHOWS A LADDER INSTEAD OF A BAR (owner,
+            2026-10-04: "can we put that rail in the header and replace the progress bar there?").
+
+            WHY THE SWAP IS MORE THAN A MOVE. A `.pp-horizon` says how far along a run is, which for 25
+            or 26 squares is the whole story. 365 days is not: the interesting fact is which RUNG is
+            next, and a bar cannot say that. The rail is the same measure with the ladder drawn on it,
+            so it replaces the bar rather than joining it -- and it also removes a duplicated figure,
+            because the big tally two lines up already states the count.
+
+            THE HOOK STAYS ON THE SLOT BRANCH, where it is still load-bearing. `.pp-horizon` is a shared
+            primitive and this page renders TWO of them: the nav's hidden sync bar (`.pp-avsync__prog`)
+            comes first in the document, so `document.querySelector('.pp-horizon')` found THAT. Every
+            write set the progress on a hidden element in the chrome and the run's own bar never moved
+            until a reload -- the owner's report. The include cannot take an attribute, so the hook goes
+            on the wrapper. A Calendar run has no picker writing to it, so its branch needs none.
+            {% endcomment %}
+            {% if calendar_rail %}
+            <div class="mt-3">
+                {% include 'challenges/partials/_calendar_rail.html' %}
+            </div>
+            {% else %}
             <div class="mt-3" data-cpick-horizon>
                 {% include 'components/horizon.html' with progress=progress %}
             </div>
+            {% endif %}
 
             {% comment %}THE HISTORY IMPORTER, ON THE PAGE. The owner asked for it here as well as inside the
             sheet, and the reason is the flow: a hunter who has just started an A-Z run and knows the games they have

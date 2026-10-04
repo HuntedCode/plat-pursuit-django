@@ -346,3 +346,62 @@ def totals_for(months):
         'done': sum(month['done'] for month in months),
         'all': sum(month['all_done'] for month in months),
     }
+
+
+#: The day-marker ladder: how many filled days each rung asks for.
+#:
+#: DAYS, NOT MONTHS, and the arithmetic is what settled it rather than taste. Covering a calendar day
+#: needs a platinum earned on that month and day in ANY year, so with N platinums spread across the year
+#: expected coverage is `365 * (1 - e^(-N/365))`. Inverted, 50 days is about 54 platinums, 100 about 117,
+#: 200 about 290, 300 about 630 and 365 about 2,153.
+#:
+#: WHICH IS WHY A MONTH LADDER WAS REJECTED: one full month needs roughly 1,250 platinums and all twelve
+#: about 2,150, so twelve month rungs are not twelve steps but twelve steps clustered at the ceiling --
+#: and because a run backfills a whole history on creation, the few hunters who qualify earn most of them
+#: in a single lump on day one. Days move from a hunter's very first platinum, so every one of them has a
+#: visible next rung.
+#:
+#: TREAT THOSE PLATINUM FIGURES AS A FLOOR ON DIFFICULTY, not an estimate: the model assumes platinums
+#: fall uniformly across the year, and real ones cluster on weekends, release windows and holidays, so
+#: true coverage is worse at every N.
+DAY_MARKERS = (50, 100, 200, 300, 365)
+
+
+def marker_rail(done, total=None):
+    """The day-marker ladder's state for one run: `{done, total, pct, next, to_next, markers}`.
+
+    FOR A RAIL RATHER THAN A ROW OF AWARDS (owner, 2026-10-04, picking between three shapes). The day
+    markers are the one part of this feature that moves from a hunter's very first platinum, so "here is
+    your next rung" is the thing worth surfacing -- and a second row of medal-shaped objects would
+    compete with the twelve crests rather than complement them.
+
+    LINEAR IN DAYS, which is a deliberate choice and arguably a flattering one. The rail measures days,
+    so a day is the same distance everywhere along it; the DIFFICULTY is wildly non-linear (the 50 rung
+    is ~54 platinums, the 300 rung ~630), so the right-hand half is far harder than it looks. Distorting
+    the spacing to show that would make the rail lie about the quantity it measures, which is the worse
+    of the two errors -- but it is worth knowing that the gaps understate the climb.
+
+    NO REWARD NAMES HERE, because there are none yet. The ladder's titles are a later slice, so this
+    returns the SHAPE of the ladder and its progress and nothing that implies something is claimable.
+    """
+    total = DAY_MARKERS[-1] if total is None else total
+    done = max(0, min(done, total))
+
+    markers = [{
+        'days': days,
+        'reached': done >= days,
+        # POSITION AS A PERCENTAGE OF THE RAIL, computed here rather than in the template: a style
+        # attribute wants one number, and `widthratio` floors to an integer -- which would put the 50
+        # rung at 13% instead of 13.7% and visibly misalign it against its own label.
+        'pct': round(days * 100.0 / total, 2),
+    } for days in DAY_MARKERS]
+
+    nxt = next((m['days'] for m in markers if not m['reached']), None)
+    return {
+        'done': done,
+        'total': total,
+        'pct': round(done * 100.0 / total, 2),
+        'next': nxt,
+        'to_next': None if nxt is None else nxt - done,
+        'markers': markers,
+    }

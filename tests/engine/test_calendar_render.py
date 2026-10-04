@@ -541,3 +541,65 @@ def test_a_fully_filled_board_costs_no_more_than_an_empty_one():
         calendar_render.calendar_groups(full)
 
     assert len(full_cost) == len(empty_cost) == 1
+
+
+# ── the day-marker rail ──────────────────────────────────────────────────────────────────────────────
+
+def test_the_rail_reports_the_ladder_and_where_the_hunter_stands():
+    from challenges.services.calendar_render import DAY_MARKERS, marker_rail
+
+    rail = marker_rail(297)
+    assert rail['done'] == 297
+    assert rail['total'] == 365
+    assert [m['days'] for m in rail['markers']] == list(DAY_MARKERS)
+    assert [m['reached'] for m in rail['markers']] == [True, True, True, False, False]
+    assert rail['next'] == 300
+    assert rail['to_next'] == 3
+
+
+def test_the_rail_is_linear_in_days():
+    """A DELIBERATE CHOICE, and the flattering one. The rail measures days, so a day is the same distance
+    everywhere along it -- but the DIFFICULTY is wildly non-linear (`DAY_MARKERS` carries the
+    coupon-collector arithmetic: the 50 rung is roughly 54 platinums, the 300 rung roughly 630). Spacing
+    the rungs by effort would make the rail lie about the quantity it measures, which is the worse of the
+    two errors; this pins the choice so nobody "fixes" it without reading why.
+    """
+    from challenges.services.calendar_render import marker_rail
+
+    rail = marker_rail(0)
+    for marker in rail['markers']:
+        assert marker['pct'] == round(marker['days'] * 100.0 / 365, 2)
+    # Which means the gaps are proportional to days and NOT to the climb: 50->100 is the same width as
+    # 250->300, while the second costs several hundred more platinums.
+    pcts = [m['pct'] for m in rail['markers']]
+    assert round(pcts[1] - pcts[0], 2) == round(50 * 100.0 / 365, 2)
+
+
+def test_a_finished_run_has_no_next_rung():
+    from challenges.services.calendar_render import marker_rail
+
+    rail = marker_rail(365)
+    assert all(m['reached'] for m in rail['markers'])
+    assert rail['next'] is None and rail['to_next'] is None
+    assert rail['pct'] == 100.0
+
+
+def test_the_rail_clamps_rather_than_overrunning():
+    """A run cannot be past its own total, but `filled_count` is a denormalised figure and a rail that
+    renders `width: 110%` would spill out of its track rather than failing visibly."""
+    from challenges.services.calendar_render import marker_rail
+
+    assert marker_rail(400)['pct'] == 100.0
+    assert marker_rail(400)['done'] == 365
+    assert marker_rail(-5)['pct'] == 0.0
+    assert marker_rail(-5)['done'] == 0
+
+
+def test_the_marker_positions_keep_their_fraction():
+    """COMPUTED SERVER-SIDE RATHER THAN BY `widthratio`, which floors to an integer: the 50 rung would
+    sit at 13% against a label that says 13.7% of the way along, and the pip and its number would
+    visibly disagree."""
+    from challenges.services.calendar_render import marker_rail
+
+    first = marker_rail(0)['markers'][0]
+    assert first['pct'] == 13.7, 'floored to 13 it would misalign against its own label'

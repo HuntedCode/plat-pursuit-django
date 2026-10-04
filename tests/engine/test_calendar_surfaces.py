@@ -31,7 +31,8 @@ from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CalendarDay
+from challenges.models import (CALENDAR_MONTH_DAYS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR,
+                               CalendarDay)
 from challenges.services import calendar_render
 from tests.factories import ProfileFactory, UserFactory
 
@@ -140,6 +141,19 @@ def _body(run):
     return Client().get(_url(run)).content.decode()
 
 
+
+
+def _rail_css():
+    """The rail's own block of `challenges.css`, bounded and comment-stripped.
+
+    A SEPARATE READER, because `_calendar_css` cuts at the next top-level banner -- which is exactly
+    what it was fixed to do -- and `.pp-cal-rail` is its own block beyond that line. Reusing the
+    calendar reader for a rail assertion is how a pin passes against a slice that does not contain the
+    rule it names.
+    """
+    css = open('static/css/components/challenges.css', encoding='utf-8').read()
+    block = css[css.index('THE DAY-MARKER RAIL'):]
+    return re.sub(r'/\*.*?\*/', '', block, flags=re.S)
 
 
 def _css_rule(block, selector, last=False):
@@ -1056,3 +1070,114 @@ def test_the_two_rings_do_not_touch():
     assert 'stroke-width: %s' % arc_w in block
     assert arc_inner > rim_outer, 'the rings overlap'
     assert arc_outer < 22, 'the arc clips the viewBox edge'
+
+
+# ── the rail on the page ─────────────────────────────────────────────────────────────────────────────
+
+def test_the_rail_replaces_the_progress_bar_in_the_header():
+    """IN THE HEADER CARD, NOT A CARD OF ITS OWN (owner: "can we put that rail in the header and replace
+    the progress bar there?").
+
+    IT REPLACES RATHER THAN JOINS, which is the part worth pinning. A `.pp-horizon` says how far along a
+    run is, which for 25 or 26 squares is the whole story; for 365 days the interesting fact is which
+    RUNG is next, and a bar cannot say that. Rendering both would also state the count three times --
+    the tally, the bar and the rail.
+    """
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+
+    assert 'pp-cal-rail' in body
+    assert 'pp-horizon' not in body, 'a Calendar run shows the ladder instead of the bar'
+    assert body.index('pp-cal-rail') < body.index('class="pp-cal"'), 'header before board'
+    # ONE CARD for the board; the rail rides in the page header card above it.
+    assert body.count('<section class="scard mb-3"') == 1
+
+    # AND THE SLOT TYPES KEEP THEIR BAR, which is the other half: the swap is per type, not a removal.
+    az = _body(_run(CHALLENGE_TYPE_AZ))
+    assert 'pp-horizon' in az
+    assert 'pp-cal-rail' not in az
+
+
+def test_the_header_tally_counts_days_on_a_calendar_run():
+    """"Done" is a square's word. The figure beside it is the same `completed_count` for every type, so
+    only the noun branches."""
+    assert '>days</span>' in _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert '>done</span>' in _body(_run(CHALLENGE_TYPE_AZ))
+
+
+def test_the_rail_states_its_count_once():
+    """It carried a headline figure on the shared `.pp-tally` face while it sat in a card of its own.
+    In the header the big tally two lines above states that count, so the rail draws the LADDER and the
+    number is said once."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    rail = _section(body, 'pp-cal-rail', until='class="pp-cal"')
+    assert 'pp-cal-rail__figure' not in rail
+    assert 'pp-cal-rail__unit' not in rail
+    assert 'pp-cal-rail__figure' not in _rail_css(), 'the rule went with the markup'
+
+
+def test_the_rail_shows_the_ladder_and_the_next_rung():
+    from challenges.services.calendar_render import DAY_MARKERS
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 29):
+        _fill(run, 2, day)          # 28 days
+    body = _body(run)
+
+    rail = _section(body, 'pp-cal-rail', until='class="pp-cal"')
+    for days in DAY_MARKERS:
+        assert '>%d</span>' % days in rail, 'rung %d is missing' % days
+    assert '22 to go until 50' in rail, '28 filled leaves 22 to the first rung'
+    assert rail.count('pp-cal-rail__pip--on') == 0, 'no rung reached yet'
+
+
+def test_a_reached_rung_is_marked_without_relying_on_colour():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for month in (1, 2):
+        for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
+            _fill(run, month, day)   # 59 days, past the 50 rung
+    rail = _section(_body(run), 'pp-cal-rail', until='class="pp-cal"')
+
+    assert rail.count('pp-cal-rail__pip--on') == 1
+    assert rail.count('pp-cal-rail__mark--on') == 1
+    assert '50 days: reached' in rail, 'and stated in text, not only in the pip'
+
+
+def test_the_rail_states_the_comparison_figure_only_when_it_differs():
+    """`in_all` is the same days WITHOUT the shovelware exclusion, and it is what makes the headline mean
+    something read aloud. Shown only when it actually differs: an aside repeating the number beside it
+    is noise."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+    assert 'with shovelware counted' not in _body(run), 'nothing to compare yet'
+
+    CalendarDay.objects.filter(challenge=run, month=4, day=4).update(in_all=True, in_clean=False)
+    assert '2 with shovelware counted' in _body(run)
+
+
+def test_a_finished_run_shows_no_next_rung_line():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run).update(in_all=True, in_clean=True)
+    rail = _section(_body(run), 'pp-cal-rail', until='class="pp-cal"')
+
+    assert 'to go until' not in rail, 'there is nowhere left to go'
+    from challenges.services.calendar_render import DAY_MARKERS
+    assert rail.count('pp-cal-rail__pip--on') == len(DAY_MARKERS)
+
+
+def test_the_rail_track_is_not_announced_twice():
+    """The bar is a PICTURE of numbers that are all stated in text -- the figure above it and the rung
+    list below -- so it is `aria-hidden` and a reader gets the ladder as a list instead of a bar they
+    cannot read."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    track = re.search(r'<div class="pp-cal-rail__track"[^>]*>', body).group(0)
+    assert 'aria-hidden="true"' in track
+    assert '<ul class="pp-cal-rail__marks" role="list">' in body
+
+
+def test_the_rail_uses_the_same_progress_colour_as_the_coin_gauges():
+    """ONE CONVENTION PER PAGE. The coins' arcs and this rail measure the same quantity two ways, so a
+    rail that disagreed about the colour of progress would be a second convention -- and cyan is the
+    site's, per `.pp-phero__ring-fill`."""
+    fill = _css_rule(_rail_css(), '.pp-cal-rail__fill {')
+    assert '--pp-primary' in fill
+    assert '--cal-c' not in fill, 'progress does not vary by month'

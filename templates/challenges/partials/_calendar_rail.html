@@ -1,0 +1,70 @@
+{% comment %}The day-marker rail: how many days are filled, and the next rung.
+
+A RAIL RATHER THAN A ROW OF AWARDS (owner, 2026-10-04, picking between three shapes). The day markers
+are the one part of this feature that moves from a hunter's very first platinum, so "here is your next
+rung" is the thing worth surfacing -- and a second row of medal-shaped objects would compete with the
+twelve crests rather than complement them.
+
+LINEAR IN DAYS, which is honest about the quantity and flattering about the climb. A day is the same
+distance everywhere along the rail because the rail measures days; the DIFFICULTY is not linear at all
+(the 50 rung is roughly 54 platinums, the 300 rung roughly 630), so the right-hand half is far harder
+than its spacing suggests. `DAY_MARKERS` carries the arithmetic. Distorting the spacing to show the
+difficulty would make the rail lie about the thing it measures, which is the worse of the two errors.
+
+NO REWARD NAMES, because there are none yet: the ladder's titles are a later slice. This draws the shape
+of the ladder and the hunter's place on it, and nothing that implies something is claimable.
+
+THE COMPARISON FIGURE LIVES HERE, which is the one place it has a job. `in_all` is the same days without
+the shovelware exclusion, and it is what makes the count mean something read aloud -- "297 days, of 340
+you hold platinums for" -- rather than being a bare number. It is deliberately quiet: a reader who does
+not care never has to parse it.
+
+NO HEADLINE FIGURE OF ITS OWN. This carried one, on the shared `.pp-tally` face, while it sat in a card
+of its own below the board. It lives in the page header now (owner: "can we put that rail in the header
+and replace the progress bar there?"), where the big tally two lines above already states the count -- so
+the rail draws the LADDER and the figure is said once.
+{% endcomment %}
+<div class="pp-cal-rail">
+
+    {% comment %}`aria-hidden` ON THE TRACK, because it is a picture of numbers that are all stated in
+    text elsewhere: the header card's tally above it, and the rung list below. A screen reader gets the
+    ladder as a list rather than as a bar it cannot read.{% endcomment %}
+    <div class="pp-cal-rail__track" aria-hidden="true">
+        <span class="pp-cal-rail__fill" style="--pct: {{ calendar_rail.pct }}%;"></span>
+        {% for marker in calendar_rail.markers %}
+        <span class="pp-cal-rail__pip{% if marker.reached %} pp-cal-rail__pip--on{% endif %}"
+              style="--at: {{ marker.pct }}%;"></span>
+        {% endfor %}
+    </div>
+
+    {% comment %}A REAL LIST, and the reason is the same one the day grid gives: `role="list"` survives
+    Tailwind's preflight stripping the implicit role from an unstyled list, which on WebKit is the
+    difference between five rungs announcing themselves and announcing nothing.{% endcomment %}
+    <ul class="pp-cal-rail__marks" role="list">
+        {% for marker in calendar_rail.markers %}
+        <li class="pp-cal-rail__mark{% if marker.reached %} pp-cal-rail__mark--on{% endif %}"
+            style="--at: {{ marker.pct }}%;">
+            <span aria-hidden="true">{{ marker.days }}</span>
+            <span class="sr-only">
+                {{ marker.days }} days{% if marker.reached %}: reached{% endif %}.
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+
+    {% comment %}THE FOOTER ROW: what is next on the left, the comparison figure on the right. They were
+    at opposite ends of the rail when it had a head of its own; with the head gone they pair naturally,
+    and both are quiet enough not to compete with the header above them.
+
+    THE NEXT RUNG is the whole argument for a rail over a row of awards: it is the one line on this page
+    that says what to do next. Informative rather than explanatory -- a count and a target, no
+    instruction.{% endcomment %}
+    <div class="pp-cal-rail__foot">
+        {% if calendar_rail.to_next %}
+        <p class="pp-cal-rail__next">{{ calendar_rail.to_next }} to go until {{ calendar_rail.next }}</p>
+        {% endif %}
+        {% if calendar_totals.all > calendar_rail.done %}
+        <p class="pp-cal-rail__aside">{{ calendar_totals.all }} with shovelware counted</p>
+        {% endif %}
+    </div>
+</div>
