@@ -45,11 +45,12 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
     the month outright; `VIII` is four glyphs and says it only to somebody already counting. The rim
     still carries position, which was the numeral's structural argument.
 
-    THE CREST IS A BOOLEAN NOW. It used to be a metal -- bronze, silver or gold for the hardest of three
-    lenses to complete the month -- which made it a cross-lens value on a page that switched lens, and
-    cost two separate audit findings. One lens means one state: struck or not. The owner has asked for
-    the colour axis back as a per-MONTH hue, which is a later slice and is only coherent because the
-    collapse freed it.{% endcomment %}
+    THE CREST IS A BOOLEAN, AND ITS COLOUR IS THE MONTH. The crest used to be a metal -- bronze, silver
+    or gold for the hardest of three lenses to complete the month -- which made it a cross-lens value on
+    a page that switched lens, and cost two separate audit findings. One lens means one state, struck or
+    not, which freed the colour axis for the twelve month hues the stylesheet now keys on `data-month`.
+    That is why the hues are coherent here and were rejected when the crest was planned: a month hue and
+    a lens metal on one coin were two colour systems competing for the same object.{% endcomment %}
     <div class="pp-cal__crests" role="tablist" aria-label="Month">
         {% for month in calendar_months %}
         <button type="button" role="tab"
@@ -65,7 +66,20 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
                 `aria-controls` IS LOAD-BEARING, not decoration: the script resolves the panel through it
                 rather than by matching list positions, so rendering the panels in a different order
                 could not desync the script from the accessible tree.{% endcomment %}
-                tabindex="0">
+                tabindex="0"
+                {% comment %}`data-month` IS BACK, AND NOW IT HAS A READER. Three state attributes were
+                deleted from this board for having none, and that note warned the next person off
+                re-adding one -- so this is the exception stated plainly: the stylesheet keys the twelve
+                month hues on it (`.pp-cal__crest[data-month="7"] { --cal-c: ... }`). The alternative
+                was twelve modifier classes or `:nth-child`, and an attribute carrying a number the CSS
+                reads is both tidier and self-documenting.
+
+                `--pct` IS THE COMPLETION ARC'S LENGTH, through `widthratio` -- the one piece of
+                arithmetic a Django template is allowed to do, and the same thing `_run_card.html` uses
+                for its progress bar. No new field on the group for a number that is a ratio of two
+                figures already on it.{% endcomment %}
+                data-month="{{ forloop.counter }}"
+                style="--pct: {% widthratio month.done month.total 100 %};">
             <span class="pp-cal__coin" aria-hidden="true">
                 {% comment %}THE RIM SAYS WHICH MONTH BY POSITION -- twelve segments, one lit. One circle
                 is the track, a second is dashed to a single segment and rotated into place by `--seg`,
@@ -75,9 +89,16 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
                 card's `.rp-ring__seg` normalises the same way, so a dash array is in hundredths of the
                 path and no raw circumference appears anywhere.{% endcomment %}
                 <svg class="pp-cal__rim" viewBox="0 0 44 44" fill="none" aria-hidden="true">
-                    <circle class="pp-cal__rim-track" cx="22" cy="22" r="19" pathLength="100" />
-                    <circle class="pp-cal__rim-seg" cx="22" cy="22" r="19" pathLength="100"
+                    {% comment %}TWO CONCENTRIC RINGS SAYING DIFFERENT THINGS. The inner twelve segments
+                    say WHICH month, by position; the outer arc says HOW MUCH of it is filled (owner:
+                    "give each one a ring along the outside that fills based on completion for that
+                    month... add the ring, don't remove anything"). The radii are measured for clear air
+                    between them -- the stylesheet carries the sum.{% endcomment %}
+                    <circle class="pp-cal__rim-track" cx="22" cy="22" r="16" pathLength="100" />
+                    <circle class="pp-cal__rim-seg" cx="22" cy="22" r="16" pathLength="100"
                             style="--seg: {{ forloop.counter0 }};" />
+                    <circle class="pp-cal__arc-track" cx="22" cy="22" r="20" pathLength="100" />
+                    <circle class="pp-cal__arc" cx="22" cy="22" r="20" pathLength="100" />
                 </svg>
                 <span class="pp-cal__face">{{ month.slug|upper }}</span>
                 {% comment %}THE MONTH'S PROGRESS, INSIDE THE COIN (owner, 2026-10-04: "now that the

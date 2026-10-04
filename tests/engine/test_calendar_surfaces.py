@@ -411,7 +411,9 @@ def test_the_rim_normalises_its_dash_units():
     """`pathLength="100"` is what removed the hardcoded circumference, and it is load-bearing: without it
     the dash arrays are in user units and a radius change silently breaks the twelve segments."""
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    assert body.count('pathLength="100"') == 24, 'both circles of all twelve crests'
+    # FOUR CIRCLES PER CREST now: the twelve-segment rim's track and lit segment, plus the completion
+    # arc's track and fill. Every one of them is normalised, which is what keeps the radii free to move.
+    assert body.count('pathLength="100"') == 48, 'four circles on each of twelve crests'
 
 
 def test_every_crest_names_its_month_without_relying_on_colour():
@@ -574,16 +576,30 @@ def _calendar_css():
     return re.sub(r'/\*.*?\*/', '', block, flags=re.S)
 
 
-def test_an_earned_crest_is_not_recoloured_by_being_active_or_hovered():
-    """THE RULE OUTLIVES THE METALS. The active colour is scoped away from a struck crest because
-    otherwise selecting an earned month recoloured it -- the exact bug this stylesheet records paying for
-    on `.pp-csq` ("hovering a finished square erased the one mark the page exists to show"). A struck
-    crest is the same colour as the active one today, so nothing can be erased yet; the scoping is kept
-    because per-month hues are the next slice and would make it live again."""
+def test_no_state_rule_touches_the_month_hue():
+    """COLOUR AND STATE ARE SEPARATE AXES, which is now enforceable rather than scoped around.
+
+    The earlier version scoped the active colour with `:not(--struck)` because otherwise selecting an
+    earned month recoloured it -- the exact bug this stylesheet records paying for on `.pp-csq`
+    ("hovering a finished square erased the one mark the page exists to show"). With a hue per month
+    that scoping is not enough: the honest rule is that no state declaration writes `--cal-c` at all.
+    Active and hover are a lift and an outline in the BRAND colour; the hue says which month and whether
+    it is earned.
+
+    ASSERTED AS AN ABSENCE ACROSS EVERY STATE RULE, because that is the only form that cannot be
+    satisfied by one more `:not()`.
+    """
     block = _calendar_css()
-    assert '.pp-cal__crest[aria-selected="true"]:not(.pp-cal__crest--struck)' in block
-    assert '.pp-cal__crest:not(.pp-cal__crest--struck):hover' in block
+    for line in block.splitlines():
+        if '--cal-c:' not in line:
+            continue
+        assert 'data-month' in line or '--cal-c: var(--pp-text-mute)' in line, (
+            'only a month hue or the fallback may set --cal-c, not a state: %s' % line.strip())
+
     assert 'data-tier' not in block, 'the lens metals went with the lenses'
+    # The active cue is shape plus the brand colour, never the month's.
+    assert '.pp-cal__crest[aria-selected="true"] { transform: translateY(-1px); }' in block
+    assert 'var(--pp-primary) 65%' in block
 
 
 def test_the_rim_draws_twelve_segments_rather_than_a_solid_ring():
@@ -831,3 +847,98 @@ def test_a_day_cell_clears_the_touch_minimum_at_the_narrowest_width():
     inner = 343 - 2 * 8
     cell = (inner - 6 * 3) / 7
     assert cell >= 44, 'a day cell is %.1fpx at 375px, under the 44px touch minimum' % cell
+
+
+# ── the month hues and the completion arc ────────────────────────────────────────────────────────────
+
+def test_every_month_declares_its_own_hue():
+    """TWELVE HUES, KEYED ON `data-month`, which is the one state attribute on this board with a reader
+    -- three others were deleted for having none, so this is the exception and it is pinned.
+
+    A CYCLE RATHER THAN A SPECTRUM, because that is what a calendar is: January opens cold and December
+    returns to frost so the row closes on itself. Adjacent pairs in the midsummer run are only ~17
+    degrees apart, which is why lightness steps with the hue -- two coins differ on both axes.
+    """
+    block = _calendar_css()
+    for month in range(1, 13):
+        rule = '.pp-cal__crest[data-month="%d"]' % month
+        assert rule in block, 'no hue declared for month %d' % month
+
+    hues = re.findall(r'data-month="\d+"\]\s*\{\s*--cal-c: oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)', block)
+    assert len(hues) == 12, 'every month hue must be an oklch triple: %r' % hues
+    assert len({h for _l, _c, h in hues}) == 12, 'two months share a hue angle'
+    # The cycle closes: December sits nearer January than it does to the autumn run it follows.
+    jan, dec, nov = float(hues[0][2]), float(hues[11][2]), float(hues[10][2])
+    assert abs(dec - jan) < abs(dec - nov), 'December should turn back toward January, not trail November'
+
+
+def test_the_hue_never_reaches_the_text():
+    """THE SAFETY RULE, and the reason twelve hues cannot quietly break a contrast ratio: the face and
+    the counter read measured tokens, and the hue drives only the rim, the arc, the plate and the aura.
+    This is the recorded lesson about shrinking a colour recipe and voiding a measured ratio."""
+    block = _calendar_css()
+    face = block[block.index('.pp-cal__face {'):]
+    face = face[:face.index('}')]
+    assert '--cal-c' not in face, 'the face must not take the month hue'
+
+    sub = block[block.index('.pp-cal__sub {'):]
+    sub = sub[:sub.index('}')]
+    assert '--cal-c' not in sub, 'the counter must not take the month hue'
+
+    # And the crest's own `color` is a token, not the hue.
+    crest = block[block.index('.pp-cal__crest {'):]
+    crest = crest[:crest.index('\n}')]
+    assert 'color: var(--pp-text-mute);' in crest
+    assert 'color: var(--cal-c)' not in crest
+
+
+def test_each_crest_carries_its_months_completion_as_an_arc():
+    """THE OUTER RING, added without removing anything (the owner's condition). Its length is served by
+    `widthratio` rather than a new field on the group, because it is a ratio of two figures already
+    there -- the same arithmetic `_run_card.html` does for its progress bar."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 15):      # half of February
+        _fill(run, 2, day)
+    body = _body(run)
+
+    pcts = re.findall(r'data-month="(\d+)"\s*\n?\s*style="--pct: (\d+);"', body)
+    assert len(pcts) == 12, 'every crest carries a percentage: %r' % pcts
+    by_month = {int(m): int(p) for m, p in pcts}
+    assert by_month[2] == 50, '14 of 28 days is half of February'
+    assert by_month[1] == 0, 'an untouched month is zero'
+
+    # TWO CIRCLES for the arc: a dim track so the ring reads as unfilled rather than absent, and the fill.
+    assert body.count('class="pp-cal__arc-track"') == 12
+    assert body.count('class="pp-cal__arc"') == 12
+
+
+def test_an_empty_months_arc_paints_nothing():
+    """A ZERO-LENGTH DASH WITH A ROUND CAP STILL PAINTS A DOT, which on an untouched month would read as
+    "one day done" at twelve o'clock. Butt caps make the zero case render nothing on its own, which is
+    why the arc does not take the rounder ends it would otherwise want."""
+    block = _calendar_css()
+    # ASSERTED AS AN ABSENCE across the whole block rather than inside one rule. Both rings are butt --
+    # the rim because round caps ate its gaps and painted twelve segments as a solid ring, the arc
+    # because a round cap on a zero-length dash paints a dot. One rule covers both, and slicing to find
+    # it was how this assertion first landed on a single line and passed against nothing.
+    assert 'stroke-linecap: round' not in block, 'a round cap would pip an empty month'
+    assert 'stroke-linecap: butt' in block
+    assert 'stroke-dasharray: var(--pct, 0) 100' in block
+
+
+def test_the_two_rings_do_not_touch():
+    """MEASURED, because concentric strokes that overlap read as one thick ring and the two say different
+    things -- position and progress. In a 44-unit viewBox the half-width is 22: the rim spans 14.9 to
+    17.1 and the arc 18.8 to 21.2, so 1.7 units of air between them and 0.8 inside the edge."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'class="pp-cal__rim-track" cx="22" cy="22" r="16"' in body
+    assert 'class="pp-cal__arc-track" cx="22" cy="22" r="20"' in body
+
+    block = _calendar_css()
+    rim_w, arc_w = 2.2, 2.4
+    rim_outer = 16 + rim_w / 2
+    arc_inner, arc_outer = 20 - arc_w / 2, 20 + arc_w / 2
+    assert 'stroke-width: %s' % rim_w in block
+    assert 'stroke-width: %s' % arc_w in block
+    assert arc_inner > rim_outer, 'the rings overlap'
+    assert arc_outer < 22, 'the arc clips the viewBox edge'

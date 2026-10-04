@@ -2905,6 +2905,43 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-cal__crests { overflow-x: visible; gap: clamp(8px, 1.4vw, 20px); }
 }
 
+/* ── THE TWELVE MONTH HUES ───────────────────────────────────────────────────────────────────────────
+   Owner, 2026-10-04: "give each medallion its own color that matches the month it represents".
+
+   WHY THIS IS COHERENT NOW AND WAS NOT BEFORE. A seasonal hue per month was considered when the crest
+   was planned and REJECTED, on the grounds that it would be "a third colour axis competing with the
+   tier for the same object, which is where generated crests usually turn muddy" -- the crest then
+   carried bronze/silver/gold for whichever of three lenses had completed the month. The one-lens
+   collapse made the crest a boolean and freed the axis, so the hue is now the only colour on the coin.
+
+   A CYCLE, NOT A SPECTRUM, because that is what a calendar is: cold blue in January, through spring
+   greens and high-summer gold, into autumn reds, and back toward frost in December so the row closes
+   on itself. Twelve hues inside one wheel means some adjacent pairs are only ~17 degrees apart (the
+   May-to-September run), so LIGHTNESS steps with them -- 0.86 at midsummer down to 0.66 in November --
+   and two coins differ on both axes rather than hue alone.
+
+   THE HUE NEVER TOUCHES TEXT, which is the safety rule and the reason twelve of these cannot quietly
+   break a contrast ratio. The face and the counter read measured tokens (`--pp-text-mute`, `--pp-text`);
+   the hue drives the rim, the completion arc, the plate and the aura. That is the recorded lesson from
+   shrinking a shipped colour recipe: a measured ratio must not be left to a variable somebody tunes.
+
+   SOME ANGLES OVERLAP THE DISCIPLINE PALETTE (`--disc-*` owns 0, 25, 75, 155, 285) and that is
+   accepted rather than overlooked: disciplines appear on job chips and shelf heads, months only on
+   Calendar coins, so the two never share a surface. Worth knowing before a third system wants a hue.
+   ── */
+.pp-cal__crest[data-month="1"]  { --cal-c: oklch(0.78 0.11 210); }   /* January   -- ice */
+.pp-cal__crest[data-month="2"]  { --cal-c: oklch(0.74 0.13 255); }   /* February  -- periwinkle */
+.pp-cal__crest[data-month="3"]  { --cal-c: oklch(0.80 0.14 150); }   /* March     -- first green */
+.pp-cal__crest[data-month="4"]  { --cal-c: oklch(0.84 0.15 128); }   /* April     -- spring */
+.pp-cal__crest[data-month="5"]  { --cal-c: oklch(0.86 0.16 105); }   /* May       -- lime */
+.pp-cal__crest[data-month="6"]  { --cal-c: oklch(0.88 0.15 88); }    /* June      -- high sun */
+.pp-cal__crest[data-month="7"]  { --cal-c: oklch(0.84 0.16 70); }    /* July      -- gold */
+.pp-cal__crest[data-month="8"]  { --cal-c: oklch(0.78 0.17 52); }    /* August    -- amber */
+.pp-cal__crest[data-month="9"]  { --cal-c: oklch(0.72 0.17 35); }    /* September -- russet */
+.pp-cal__crest[data-month="10"] { --cal-c: oklch(0.68 0.18 18); }    /* October   -- autumn red */
+.pp-cal__crest[data-month="11"] { --cal-c: oklch(0.66 0.15 345); }   /* November  -- berry */
+.pp-cal__crest[data-month="12"] { --cal-c: oklch(0.76 0.12 190); }   /* December  -- frost */
+
 .pp-cal__crest {
     flex: 0 0 auto;
     scroll-snap-align: center;
@@ -2922,15 +2959,20 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        wrapping a ROUND coin, so the bloom would be a square halo around a circle, and it reaches ~23px
        beyond a box sitting in a clipped scroll strip behind a mask fade. The lift and the ring are the
        activation cue instead.
-       UNEARNED IS THE RESTING STATE: an empty rim at low opacity, which is how the medallion draws its own
-       unearned badges. Twelve blank coins read as a chase rather than twelve failures, because the rim
-       still says which month each one is.
-       `--crest-glow: transparent` IS A FALLBACK, NOT THE RESTING VALUE -- no rule reads it on an
-       unstruck crest, since both consumers are gated on `--struck`. It is here because a `color-mix()`
-       against an undefined custom property invalidates the whole declaration it sits in. */
-    --crest-c: var(--pp-text-mute);
-    --crest-glow: transparent;
-    color: var(--crest-c);
+       UNEARNED IS THE RESTING STATE, and with hues it is a quieter version of the SAME colour rather
+       than a grey: a dim rim and arc in the month's own hue, so the row reads as twelve coins waiting to
+       be filled in rather than twelve blanks. That is the collectible read the medallion's own unearned
+       state goes for.
+
+       `--cal-c` IS THE MONTH'S HUE AND NEVER THE TEXT COLOUR. `color` is a measured token, so the face
+       and the counter keep their contrast whatever the hue does -- the recorded lesson about shrinking
+       a colour recipe and voiding a measured ratio. The hue drives the rim, the arc, the plate and the
+       aura, all of which are decoration.
+
+       THE FALLBACK MATTERS: a `color-mix()` against an undefined custom property invalidates the whole
+       declaration it sits in, so `--cal-c` has a default here even though every month overrides it. */
+    --cal-c: var(--pp-text-mute);
+    color: var(--pp-text-mute);
     transition: color 0.18s ease, transform 0.18s ease;
 }
 /* THE COINS GROW INTO THE ROW from `md:` up, rather than staying 52px with the leftover space spread
@@ -2951,12 +2993,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     }
 }
 
-/* A STRUCK CREST, IN ONE COLOUR FOR NOW. Three `data-tier` rules stood here carrying the medallion's
-   bronze/silver/gold, because the metal said WHICH of three lenses had completed the month. One lens
-   means one state, so the metal axis is free -- and the owner has asked for it back as a per-MONTH hue
-   ("give each medallion its own color that matches the month it represents"), which is the next slice
-   and is only coherent because the collapse freed it. Until then a struck crest wears the primary. */
-.pp-cal__crest--struck { --crest-c: var(--pp-primary); --crest-glow: var(--pp-primary); }
+/* A STRUCK CREST BRIGHTENS ITS FACE; its hue is already on the rim and the arc. The text goes to the
+   full measured token rather than to the hue, for the contrast reason above. */
+.pp-cal__crest--struck { color: var(--pp-text); }
 
 /* THE FACE IS THE ONLY IN-FLOW CHILD, so `place-items: center` centres IT rather than centring a stack.
    The first version made the counter a second grid row, which centred the PAIR -- and the owner caught
@@ -2980,25 +3019,35 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     border-radius: 50%;
     background:
         radial-gradient(circle at 50% 35%,
-            color-mix(in srgb, var(--crest-glow) 26%, transparent),
-            color-mix(in srgb, var(--crest-c) 12%, transparent) 70%,
+            color-mix(in srgb, var(--cal-c) 24%, transparent),
+            color-mix(in srgb, var(--cal-c) 10%, transparent) 70%,
             transparent 72%);
     box-shadow:
-        inset 0 1px 0 color-mix(in srgb, var(--crest-glow) 34%, transparent),
+        inset 0 1px 0 color-mix(in srgb, var(--cal-c) 30%, transparent),
         0 2px 6px rgb(0 0 0 / 0.35);
 }
 
 /* `inset: 0` ALREADY SIZES IT. A `width`/`height` pair sat here too, which on an absolutely positioned
    element with all four offsets resolved is the same instruction twice. */
 .pp-cal__rim { position: absolute; inset: 0; z-index: 0; }
-/* TWELVE SEGMENTS, ONE LIT -- the same normalised-dash mechanism `.rp-ring__seg` uses (`pathLength="100"`
-   on a `<circle>`, already shipped on the contract card), so this is house vocabulary rather than a new
-   idea. The arithmetic lives below, on the declarations it governs; an earlier version left the PRE-FIX
-   figures here (a raw circumference of 119.38 and an `8 1.95` dash) fourteen lines above the comment
-   saying no raw circumference survives -- two contradictory specifications of the same two rules. */
+/* TWO CONCENTRIC RINGS, AND THEY SAY DIFFERENT THINGS. The inner one is twelve segments with one lit:
+   WHICH month this is, by position. The outer one is an arc: HOW MUCH of that month is filled (owner,
+   2026-10-04: "give each one a ring along the outside that fills based on completion for that month").
+   Nothing was removed to make room, which was the owner's condition.
+
+   THE SAME NORMALISED-DASH MECHANISM FOR BOTH, which `.rp-ring__seg` already ships on the contract card:
+   `pathLength="100"` on a `<circle>` puts the dash array in hundredths of the path, so no raw
+   circumference appears anywhere and the radius can change without redoing arithmetic.
+
+   THE RADII ARE MEASURED FOR SEPARATION. In a 44-unit viewBox the coin's half-width is 22. The inner
+   rim sits at r=16 with a 2.2 stroke (spanning 14.9 to 17.1) and the arc at r=20 with a 2.4 stroke
+   (18.8 to 21.2): 1.7 units of clear air between them, and 0.8 inside the edge so neither clips. The
+   rim moved in from r=19 to make that gap -- the face still has a clear diameter of about 68% of the
+   coin, which at the narrowest desktop size is 41px against the ~26px the two text lines need. */
 .pp-cal__rim-track,
 .pp-cal__rim-seg {
     fill: none;
+    stroke: var(--cal-c);
     /* BUTT CAPS, AND THIS IS THE WHOLE REASON THE SEGMENTS EXIST. With `round` a cap extends each dash
        by `stroke-width / 2` at BOTH ends along the path, so at a 2.5 stroke the painted dash grew by
        2.5 against a gap of 1.95 -- adjacent dashes overlapped and the rim painted as a SOLID RING. The
@@ -3006,14 +3055,34 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        comment beside them claimed the dash array "tiles the whole rim exactly". Caught by audit and not
        by eye, because the lit segment still read against the dim track. */
     stroke-linecap: butt;
-    stroke-width: 2.5;
-    stroke: currentColor;
+    stroke-width: 2.2;
 }
 /* `pathLength="100"` ON THE CIRCLES NORMALISES THE DASH UNITS, which is how `.rp-ring__seg` already does
    this and is why no raw circumference survives here. The first version hardcoded 2*pi*19 and its
    twelfth (119.38 / 9.948) and overshot a full turn by 0.0195; normalised, a segment is exactly
    100 / 12 = 8.3333, drawn as a 6-long dash with a 2.3333 gap. */
 .pp-cal__rim-track { stroke-dasharray: 6 2.3333; opacity: 0.22; }
+
+/* THE COMPLETION ARC. A single dash from twelve o'clock, its length served by the template through
+   `widthratio` -- the one piece of arithmetic a Django template is allowed to do, and the same thing
+   `_run_card.html` uses for its progress bar.
+   BUTT CAPS, AND NOT BECAUSE OF THE SEGMENTED TRACK'S PROBLEM. There, round caps grew each dash past
+   its own gap and painted twelve segments as a solid ring. Here there is one dash, so round would have
+   been safe and slightly prettier -- except that a ZERO-LENGTH dash with a round cap still paints a
+   DOT, so an untouched month would wear a pip at twelve o'clock reading as "one day done". The
+   alternatives were a guard class or an attribute-substring selector matching the inline style's exact
+   spelling; butt caps make the zero case render nothing on its own, which beats a guard. */
+.pp-cal__arc-track,
+.pp-cal__arc {
+    fill: none;
+    stroke: var(--cal-c);
+    stroke-width: 2.4;
+    stroke-linecap: butt;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+}
+.pp-cal__arc-track { opacity: 0.14; }
+.pp-cal__arc { stroke-dasharray: var(--pct, 0) 100; }
 .pp-cal__rim-seg {
     stroke-dasharray: 6 94;
     /* A `<circle>` path starts at 3 o'clock and runs clockwise, so -90deg puts the START of segment zero
@@ -3098,13 +3167,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* ACTIVE AND EARNED ARE SEPARATE AXES, which is a rule to keep rather than a rule this slice needs. The
    earlier version scoped the active colour with `:not([data-tier])` because otherwise selecting a gold
    January recoloured it primary -- the exact bug this stylesheet records paying for on `.pp-csq`
-   ("hovering a finished square erased the one mark the page exists to show"). A struck crest is the same
-   colour as the active one today, so nothing can be erased; the moment per-month hues land, the active
-   state must go back to being shape (the ring and the lift) and never colour. */
-.pp-cal__crest[aria-selected="true"]:not(.pp-cal__crest--struck) { --crest-c: var(--pp-primary); }
+   ("hovering a finished square erased the one mark the page exists to show").
+
+   SO ACTIVE AND HOVER ARE SHAPE ONLY, which is what the earlier version of this comment said would have
+   to happen "the moment per-month hues land": a lift and an outline in the BRAND colour, and not one
+   declaration that touches `--cal-c`. The month's hue says which month and whether it is earned; the
+   outline says where you are. Two axes, no overlap, and no state can erase the other's mark. */
 .pp-cal__crest[aria-selected="true"] { transform: translateY(-1px); }
 .pp-cal__crest[aria-selected="true"] .pp-cal__coin {
-    outline: 2px solid color-mix(in srgb, var(--crest-c) 60%, transparent);
+    outline: 2px solid color-mix(in srgb, var(--pp-primary) 65%, transparent);
     outline-offset: 2px;
     border-radius: 50%;
 }
@@ -3114,9 +3185,16 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     border-radius: 50%;
 }
 @media (any-hover: hover) and (any-pointer: fine) {
-    .pp-cal__crest:not(.pp-cal__crest--struck):hover { --crest-c: var(--pp-primary); }
-    /* A struck crest answers a hover by brightening its own colour rather than changing it. */
-    .pp-cal__crest--struck:hover { --crest-c: var(--crest-glow); }
+    /* A HOVER IS A HINT, NOT A RECOLOUR: a faint ring in the brand colour, so hovering an earned
+       November cannot repaint its berry. The rings themselves brighten instead, which reads as the coin
+       waking up rather than as a different coin. */
+    .pp-cal__crest:hover .pp-cal__coin {
+        outline: 1px solid color-mix(in srgb, var(--pp-primary) 40%, transparent);
+        outline-offset: 2px;
+        border-radius: 50%;
+    }
+    .pp-cal__crest:hover .pp-cal__rim-track { opacity: 0.34; }
+    .pp-cal__crest:hover .pp-cal__arc-track { opacity: 0.22; }
 }
 
 /* -- one month ------------------------------------------------------------------------------------- */
