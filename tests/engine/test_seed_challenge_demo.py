@@ -17,8 +17,29 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from challenges.management.commands.seed_challenge_demo import DEMO_TAG, MIXED_CLAIMED, MIXED_FILLED
-from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS, Challenge
+from challenges.management.commands.seed_challenge_demo import (
+    CALENDAR_CONTRACTS_ONLY,
+    CALENDAR_PARTIAL_CLEAN,
+    CALENDAR_PARTIAL_CONTRACTS,
+    CALENDAR_PARTIAL_DAYS,
+    CALENDAR_PARTIAL_MONTH,
+    CALENDAR_STRUCK,
+    DEMO_TAG,
+    MIXED_CLAIMED,
+    MIXED_FILLED,
+)
+from challenges.models import (
+    CALENDAR_MONTH_DAYS,
+    CALENDAR_VIEW_ALL,
+    CALENDAR_VIEW_CLEAN,
+    CALENDAR_VIEW_CONTRACTS,
+    CHALLENGE_TYPE_AZ,
+    CHALLENGE_TYPE_CALENDAR,
+    CHALLENGE_TYPE_JOBS,
+    CalendarDay,
+    Challenge,
+)
+from challenges.services import calendar_render
 from challenges.services import rewards
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory, UserFactory
 from trophies.models import Contract, ContractXPGrant, Job, ProfileJobXP
@@ -160,8 +181,8 @@ def test_it_seeds_a_finished_a_z_run_for_the_hall_of_fame(catalogue):
 
 @override_settings(DEBUG=True)
 def test_the_seeded_finished_runs_are_the_ones_the_hall_of_fame_lists(client, catalogue):
-    """END TO END, because every assertion above is about rows and the point is a PAGE. Two finished runs,
-    one of each type, both listed; neither in-progress run listed."""
+    """END TO END, because every assertion above is about rows and the point is a PAGE. One finished run
+    of EACH type, all listed; no in-progress run listed."""
     profile = _hunter()
 
     _seed(profile)
@@ -175,7 +196,12 @@ def test_the_seeded_finished_runs_are_the_ones_the_hall_of_fame_lists(client, ca
         assert reverse('challenge_detail', args=[run.pk]) not in body, \
             '%s is in flight and must not be on the Hall of Fame' % run.name
 
-    assert body.count('<a class="pp-chero') == 2, 'one hero per finished run, of each type'
+    # THE CHAIN PINS TWO DIFFERENT THINGS, which is why both halves are here: that the page draws one
+    # hero per finished ROW (the agreement), and that there are three of them (the absolute count). The
+    # second IS a literal and a fourth challenge type WOULD fail it -- deliberately, because a new type
+    # that does not reach the Hall of Fame is exactly the kind of thing worth being told about. An
+    # earlier comment claimed the opposite, that this moved with the feature on its own.
+    assert body.count('<a class="pp-chero') == _demo_runs(profile).filter(is_complete=True).count() == 3
 
 
 # `test_it_says_so_when_the_catalogue_cannot_finish_the_a_z_run` was here and is DELETED, not moved. It had
@@ -375,7 +401,9 @@ def test_a_reseed_still_shows_the_title_band(client, catalogue):
 
     body = client.get(reverse('challenges_hall_of_fame')).content.decode()
 
-    assert body.count('<a class="pp-chero') == 2, 'two finished runs, one of each type'
+    # DERIVED, not a literal: one finished run per type, and the Plat Calendar made that three. Reading
+    # the row count means a fourth type moves this with the feature.
+    assert body.count('<a class="pp-chero') == _demo_runs(profile).filter(is_complete=True).count()
     assert body.count('pp-chero__title') == 2, 'a reseeded finished run is missing its title band'
     assert 'Job Challenge Champion' in body
     assert 'A-Z Champion' in body
@@ -738,12 +766,18 @@ def test_it_survives_a_catalogue_too_thin_to_fill_every_square():
 
     _seed(profile)
 
-    # TWO, not three, and honestly so: with nothing to fill the first jobs run cannot COMPLETE, so nothing
-    # frees the one-active-per-type slot and the mixed scenario is skipped with a warning rather than
-    # silently tagging the same run twice (which is what the first draft did).
-    assert _demo_runs(profile).count() == 2
-    assert _demo_runs(profile).filter(filled_count=0).exists()
+    # ONE PER CONTRACT-BACKED TYPE, not two: with nothing to fill, the first jobs run cannot COMPLETE, so
+    # nothing frees the one-active-per-type slot and the mixed scenario is skipped with a warning rather
+    # than silently tagging the same run twice (which is what the first draft did). Same for A-Z.
     assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_JOBS).count() == 1
+    assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_AZ).count() == 1
+    assert _demo_runs(profile).filter(filled_count=0).exists()
+
+    # BOTH CALENDAR RUNS SURVIVE A THIN CATALOGUE, which is a real property rather than an accident: a
+    # day is filled by a date, not by a contract, so the Calendar pair needs no catalogue at all. It is
+    # the one type whose surfaces can be looked at on a database with no contracts imported yet.
+    assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_CALENDAR).count() == 2
+    assert _demo_runs(profile).count() == 4
 
 
 @override_settings(DEBUG=True)
@@ -886,3 +920,250 @@ def test_the_listing_reports_a_stale_cached_pill(catalogue, capsys):
 
     assert 'THE CACHE DISAGREES' in out
     assert 'showing LIT and the truth is dark' in out
+
+
+
+def _seed_and_return(profile):
+    """Seed, then hand the profile back, so a test can read a run in one expression."""
+    _seed(profile)
+    return profile
+
+
+def _in_progress_calendar(profile):
+    """The unfinished Calendar run, NAMED BY ITS STATE rather than taken by index.
+
+    The A-Z tests were deliberately rewritten this way after one of them silently changed subject when
+    the run order moved; the Calendar tests were written with positional indexing anyway. The order is
+    pinned elsewhere, so a flip would be caught -- but a test that says what it means cannot be read
+    wrongly in the first place.
+    """
+    return _demo_runs(profile).get(challenge_type=CHALLENGE_TYPE_CALENDAR, is_complete=False)
+
+# ── the Plat Calendar pair, which exists because the type has no creation door ───────────────────────
+
+def _calendar_runs(profile):
+    # BY id, NOT by a `run_number` -- `Challenge` has no such field. The plan proposed one and the model
+    # never grew it, so ordering on it raised `FieldError` rather than quietly mis-sorting. Creation order
+    # is what distinguishes the finished run from the in-progress one, and id gives exactly that.
+    return list(_demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_CALENDAR).order_by('id'))
+
+
+@override_settings(DEBUG=True)
+def test_it_seeds_a_calendar_pair_despite_the_creation_gate(catalogue):
+    """THE WHOLE REASON THIS EXISTS. `calendar` is in `TYPES_NOT_YET_CREATABLE`, so there is no button
+    anywhere that deals one -- and the board, the crest switcher and the Hall of Fame year band therefore
+    had no way to be looked at at all. The seeder lifts the gate for its own two calls."""
+    profile = _hunter()
+    _seed(profile)
+
+    runs = _calendar_runs(profile)
+    assert len(runs) == 2
+    assert [r.is_complete for r in runs] == [True, False]
+
+
+@override_settings(DEBUG=True)
+def test_the_gate_is_put_back_after_the_seeder_runs():
+    """A COMMAND THAT LEAVES A GATE OPEN IS WORSE THAN ONE THAT CANNOT OPEN IT. The lift is per-call and
+    restored in a `finally`, so neither a success nor a failure can leave `start` dealing Calendar runs
+    to anybody who presses a button afterwards."""
+    from challenges.services import challenge_service as svc
+
+    before = svc.TYPES_NOT_YET_CREATABLE
+    _seed(_hunter())
+    assert svc.TYPES_NOT_YET_CREATABLE == before
+    assert CHALLENGE_TYPE_CALENDAR in svc.TYPES_NOT_YET_CREATABLE
+
+
+@override_settings(DEBUG=True)
+def test_the_finished_calendar_run_really_is_finished(catalogue):
+    """A seeder whose "finished run" is not finished wastes the browser pass it exists to serve. Only a
+    finished run reaches the Hall of Fame, so this is what puts the year band on a page at all."""
+    profile = _hunter()
+    _seed(profile)
+    finished = _calendar_runs(profile)[0]
+
+    assert finished.filled_count == finished.total_slots == 365
+    assert finished.completed_at is not None
+    # Completion keys on clean-or-contracts and the recount breaks a tie toward the rarer lens.
+    assert finished.completed_view == CALENDAR_VIEW_CONTRACTS
+
+
+@override_settings(DEBUG=True)
+def test_the_in_progress_run_shows_every_crest_state_on_one_board(catalogue):
+    """THE POINT OF A DESIGNED FILL rather than the hunter's real platinums: three metals, an unstruck
+    month and a part-filled one, all on a board you can compare in a single glance. A dev library decides
+    how much of a 365-day board fills, so a real backfill is sparse and unpredictable."""
+    profile = _hunter()
+    _seed(profile)
+    months = calendar_render.calendar_groups(_calendar_runs(profile)[1])
+
+    metals = {i + 1: m['crest'] for i, m in enumerate(months)}
+    assert metals[2] == 'gold'
+    assert metals[5] == 'silver'
+    assert metals[9] == 'bronze'
+    assert set(CALENDAR_STRUCK) == {2, 5, 9}, 'the constants and this assertion describe one thing'
+    assert metals[CALENDAR_PARTIAL_MONTH] == '', 'an unstruck crest has to sit beside the struck ones'
+
+
+@override_settings(DEBUG=True)
+def test_the_part_filled_month_shows_three_different_figures(catalogue):
+    """A month head whose lenses all read the same tells you nothing about what the switcher does.
+
+    THREE DISTINCT VALUES, which this test is named for and did not check: it asserted 18/18/0, two
+    values, while the constant's comment also promised three. Fixed in the seeder rather than in the
+    name, because a part-filled month showing three different figures is the thing worth looking at.
+    """
+    profile = _hunter()
+    month = calendar_render.calendar_groups(_in_progress_calendar(_seed_and_return(profile)))[
+        CALENDAR_PARTIAL_MONTH - 1]
+
+    counts = month['counts']
+    assert counts[CALENDAR_VIEW_ALL] == CALENDAR_PARTIAL_DAYS
+    assert counts[CALENDAR_VIEW_CLEAN] == CALENDAR_PARTIAL_CLEAN
+    assert counts[CALENDAR_VIEW_CONTRACTS] == CALENDAR_PARTIAL_CONTRACTS
+    assert len(set(counts.values())) == 3, 'the head must read three different numbers: %r' % counts
+    # NESTED THE WAY REAL DATA NESTS: every clean day is an all day, which the database enforces.
+    assert counts[CALENDAR_VIEW_CLEAN] < counts[CALENDAR_VIEW_ALL]
+    assert month['total'] == CALENDAR_MONTH_DAYS[CALENDAR_PARTIAL_MONTH - 1]
+
+
+@override_settings(DEBUG=True)
+def test_it_seeds_the_one_state_that_looks_like_a_bug(catalogue):
+    """THE NON-NESTING CASE, which is the single most important thing to be able to LOOK at: a contract
+    reaching its 100% tier with no platinum fills a Contracts day and no platinum day, so this square is
+    filled in one lens and empty in the other two. If it is not legible as empty in the All platinums
+    lens, the design is wrong -- and that cannot be judged without an example on screen."""
+    profile = _hunter()
+    _seed(profile)
+    run = _calendar_runs(profile)[1]
+
+    month, day = CALENDAR_CONTRACTS_ONLY
+    row = run.calendar_days.get(month=month, day=day)
+    assert row.in_contracts is True
+    assert row.in_all is False and row.in_clean is False
+
+
+@override_settings(DEBUG=True)
+def test_every_seeded_day_carries_the_date_a_cell_reads(catalogue):
+    """`earned_on` is what a day cell and the coming day modal show, and a null one makes a filled square
+    look like a row the backfill half-wrote."""
+    profile = _hunter()
+    _seed(profile)
+    filled = _calendar_runs(profile)[1].calendar_days.filter(in_all=True)
+
+    assert filled.exists()
+    assert not filled.filter(earned_on=None).exists()
+
+
+@override_settings(DEBUG=True)
+def test_reset_takes_the_calendar_runs_and_their_days_with_it(catalogue):
+    """365 rows per run, so a reset that misses them leaves thousands of orphans behind. `CalendarDay`
+    cascades off the run, which is what makes the tag-scoped delete sufficient -- pinned because it is a
+    property of the model rather than of this command."""
+    from challenges.models import CalendarDay
+
+    profile = _hunter()
+    _seed(profile)
+    assert CalendarDay.objects.filter(challenge__profile=profile).exists()
+
+    _seed(profile, reset=True)
+    assert len(_calendar_runs(profile)) == 2, 'reseeded, not accumulated'
+    assert CalendarDay.objects.filter(challenge__profile=profile).count() == 2 * 365
+
+
+@override_settings(DEBUG=True)
+def test_the_seeded_calendar_invents_no_platinums(catalogue):
+    """The same rule the rest of the command follows: it writes challenge rows, never a hunter's trophy
+    history, so nothing it does can leak into Career or the boards. A Calendar run is filled by handing
+    designed days to the writer, not by inventing the platinums that would have filled them."""
+    from trophies.models import EarnedTrophy, ProfileGame
+
+    profile = _hunter()
+    _seed(profile)
+    assert not EarnedTrophy.objects.filter(profile=profile).exists()
+    assert not ProfileGame.objects.filter(profile=profile, has_plat=True).exists()
+
+
+@override_settings(DEBUG=True)
+def test_every_seeded_square_carries_its_own_date(catalogue):
+    """THE MUTANT THAT SURVIVED. The first version clamped the day (`min(day, 28)`), so 29 of the 365
+    squares held a date that was not their own -- 31 March reading "28 March 2019" -- and removing the
+    clamp broke nothing, because the whole suite was blind to whether a date matched its square.
+
+    IT IS ALSO STATE A REAL BACKFILL CANNOT PRODUCE, which is the sharper objection: the real fill remaps
+    a 29 February KEY onto the 28th and never touches a date in the other eleven months. So the only
+    legal key/date disagreement in real data is the single 28 February square holding a Feb-29 date, and
+    a seeded board that disagrees on 29 squares would mislead the day modal it exists to serve.
+    """
+    profile = _hunter()
+    _seed(profile)
+
+    rows = [r for r in CalendarDay.objects.filter(challenge__profile=profile)
+            if r.earned_on is not None]
+    assert rows, 'nothing was filled, so this would pass vacuously'
+
+    wrong = [(r.month, r.day, r.earned_on) for r in rows
+             if (r.earned_on.month, r.earned_on.day) != (r.month, r.day)]
+    assert wrong == [], 'squares whose date is not their own date: %r' % wrong[:5]
+
+
+@override_settings(DEBUG=True)
+def test_a_hunters_own_calendar_run_is_never_adopted(catalogue):
+    """THE ADOPTION GUARD, ON THE ONE PATH THAT LIFTS THE CREATION GATE. `_start_fresh` refuses to take
+    over a run it did not create, because `--reset`'s scope is the demo tag and tagging somebody's real
+    run would put their progress inside it. The existing version of this test covers A-Z only, and the
+    Calendar is the single call that reaches `start_reporting` with the gate open."""
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    original = svc.TYPES_NOT_YET_CREATABLE
+    svc.TYPES_NOT_YET_CREATABLE = frozenset()
+    try:
+        mine = svc.start(profile, CHALLENGE_TYPE_CALENDAR)
+    finally:
+        svc.TYPES_NOT_YET_CREATABLE = original
+
+    _seed(profile)
+
+    mine.refresh_from_db()
+    assert DEMO_TAG not in mine.name, 'the seeder tagged a run it did not create'
+    assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_CALENDAR).count() == 0, (
+        'the active slot was taken, so neither Calendar run should have been dealt')
+
+    _seed(profile, reset=True)
+    mine.refresh_from_db()
+    assert mine.pk, 'a reset deleted the hunter\'s own run'
+
+
+@override_settings(DEBUG=True)
+def test_the_seeded_board_is_not_frozen_and_the_command_says_so(catalogue):
+    """FILLS ARE MONOTONE, so the next real backfill ADDS the hunter's days on top of the designed ones.
+    That is not a defect -- it is what keeps a hunter's earned square from being retracted by catalogue
+    bookkeeping -- but it means a browser pass can watch the board change under it, and the only
+    protection is the command saying so where somebody will read it.
+
+    PINNED ON THE DOCSTRING because that is the actual mitigation. There is no behaviour to assert: the
+    merge is correct, and the thing that was wrong was a docstring recommending one of the three doors
+    that trigger it as though it were harmless.
+    """
+    from challenges.management.commands import seed_challenge_demo as cmd
+
+    doc = cmd.__doc__
+    assert 'SEED LAST' in doc
+    for door in ('--only calendar --user', '--all-calendars', 'a sync of that profile'):
+        assert door in doc, 'the docstring must name every door that rewrites the designed board: %s' % door
+
+
+@override_settings(DEBUG=True)
+def test_the_report_does_not_invent_a_reason_for_the_missing_title_band(catalogue, capsys):
+    """A diagnostic that states a fabricated reason is worse than silence, and this one did: the Plat
+    Calendar's FIRST completion was reported as "no title (third or later completion)". The type grants
+    no ordinal titles at all, which `rewards.TYPES_WITHOUT_ORDINAL_TITLES` says outright."""
+    profile = _hunter()
+    # `call_command` DIRECTLY, because `_seed` pins `verbosity=0` and this test is about what the command
+    # PRINTS -- the one assertion in this file that needs the report on stdout.
+    call_command('seed_challenge_demo', user=profile.psn_username, verbosity=1)
+
+    out = capsys.readouterr().out
+    assert 'this type grants none yet' in out
+    assert 'third or later completion' not in out

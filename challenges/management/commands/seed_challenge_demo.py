@@ -2,11 +2,34 @@
 ledger, the pip, the Start card and BOTH public pages can be LOOKED AT without finishing fifty contracts
 by hand.
 
-FOUR RUNS, two per type, and the pairing is deliberate: one finished and one in progress of each. The
-finished pair is what puts a hero of each type on the Hall of Fame -- including the A-Z one, whose 26-square
-board and `A-Z Champion` chip had no way to be seen at all while the seeder produced a single finished Job
-Coverage run. The in-progress pair is what populates the Challenges browse page and the reward panel's
-mixed-state ledger.
+SIX RUNS, TWO PER TYPE, and the pairing is deliberate: one finished and one in progress of each. The
+finished three are what put a hero of each type on the Hall of Fame -- including the A-Z one, whose
+26-square board and `A-Z Champion` chip had no way to be seen at all while the seeder produced a single
+finished Job Coverage run, and the Plat Calendar's year band, which had no door at all because the type's
+creation is gated shut. The in-progress three populate the Challenges browse page, the reward panel's
+mixed-state ledger, and the Calendar's part-earned crest row.
+
+THE CALENDAR PAIR DOES NOT READ THE HUNTER'S PLATINUMS, deliberately: a dev library decides how much of a
+365-day board fills, so the result is sparse and unpredictable, and a sparse board cannot show what a
+struck crest looks like beside an unstruck one. `_calendar_run` explains the whole trade.
+
+BUT THE DESIGNED BOARD IS NOT FROZEN, and this is the one thing to know before looking at it. Fills are
+MONOTONE, so anything that runs the real backfill against this profile afterwards ADDS its real platinum
+and contract days on top of the designed ones -- the designed days survive, the picture changes. Three
+doors do it and NONE of them waits for the nightly reconciliation watermark:
+
+    process_challenges --only calendar --user <psn>     # `--user` ignores the due check by design
+    process_challenges --all-calendars
+    a sync of that profile                              # the `sync_complete` hook refreshes every run
+
+What changes: a bronze month can go silver, the deliberately unstruck month can strike, and the
+contracts-only square -- the single most important thing this pair exists to show -- can gain a platinum
+day and stop being the non-nesting example. `earned_on` also moves backwards onto real dates.
+So: SEED LAST, and leave those three doors alone until the browser pass is done.
+
+(The NIGHTLY sweep with no arguments is safe immediately after seeding: `apply_to_run` stamps the
+watermarks from ground truth, so the run is correctly not due until the profile's platinum or
+earned-contract count actually moves.)
 
     python manage.py seed_challenge_demo --user <psn_username> --reset   # re-runnable
     python manage.py seed_challenge_demo --user <psn_username> --list    # print what is there, write nothing
@@ -45,7 +68,7 @@ WHAT IT DOES NOT TOUCH, which is what makes `--reset` safe:
 
 So `--reset` removes FOUR things, each in its own method and each for a stated reason: the challenge XP
 grants it paid (by slot id, before the slots go), the completion `UserTitle` rows its finished runs earned
-(by `source_id`, same reason -- no FK ties them), the Challenge rows themselves (slots cascade with them),
+(by `source_id`, same reason -- no FK ties them), the Challenge rows themselves (slots AND the Calendar's 365-per-run day rows cascade with them),
 and any `--fill-letter-gaps` placeholder contracts. Then it rebuilds the job-XP cache from the remaining real
 ledger, so real levels survive.
 
@@ -59,7 +82,7 @@ placeholders existed.)
 THE RUNS ARE NAMED so they are identifiable on sight and on reset -- `DEMO_TAG` in the name, which is also
 the reset scope. A hunter's own runs are auto-named by the service and never carry it.
 """
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -67,11 +90,18 @@ from django.db import transaction
 from django.urls import reverse
 
 from challenges.models import (
+    CALENDAR_MONTH_DAYS,
+    CALENDAR_VIEW_ALL,
+    CALENDAR_VIEW_FIELDS,
+    CALENDAR_VIEW_CLEAN,
+    CALENDAR_VIEW_CONTRACTS,
     CHALLENGE_TYPE_AZ,
+    CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_JOBS,
     Challenge,
     ChallengeSlot,
 )
+from challenges.services import calendar_fill
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
 from trophies.models import Contract, ContractXPGrant, EarnedContract, Job, Profile, UserTitle
@@ -98,6 +128,17 @@ def _gap_prefix(profile):
     """The stand-in slug prefix for ONE profile. See `GAP_SLUG_PREFIX` on why this is not global."""
     return '%s%s-' % (GAP_SLUG_PREFIX, profile.pk)
 
+
+def _seeded_date(month, day):
+    """The `earned_on` a seeded square carries: its OWN date, in a fixed year.
+
+    2019 because it is a real year with no leap day, so the twelve month lengths the keys come from and
+    the dates written onto them agree exactly. A Calendar day has no year at all -- that is the premise
+    of the whole type -- so the choice only has to be stable, and a fixed year means the seeded board
+    looks the same in March as it does in November.
+    """
+    return date(2019, month, day)
+
 #: How many squares the mixed-state jobs run fills, and how many of those are pre-claimed. Small on
 #: purpose: this scenario is about a ledger holding BOTH states at once, which six rows show as well as
 #: twenty-five and reads faster on a phone.
@@ -113,6 +154,37 @@ GAP_BACKDATE_DAYS = 400
 #: How much of the alphabet the IN-PROGRESS A-Z run fills. Enough that the board is not mostly empty, few
 #: enough that the run is obviously unfinished.
 AZ_FILLED = 9
+
+#: The months the in-progress Calendar run completes, and in which lens -- chosen so that ONE board shows
+#: every crest state at once, which is the only way to compare the three metals without three runs.
+#:
+#: WHICH MONTHS IS ARBITRARY -- a hand-written map costs nothing to fill, so there is no cheapest month
+#: and an earlier comment claiming February was chosen for its 28 days was inventing a reason. What is
+#: NOT arbitrary is the spread: three struck crests at 2, 5 and 9 sit apart in the switcher, so the row
+#: does not read as a run of three followed by nine blanks.
+CALENDAR_STRUCK = {
+    2: (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS),   # gold
+    5: (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN),                            # silver
+    9: (CALENDAR_VIEW_ALL,),                                                # bronze
+}
+
+#: A month left deliberately PART-FILLED, so an unstruck crest sits beside the struck ones and the month
+#: head shows THREE DIFFERENT per-lens figures rather than three zeros or three fulls.
+#:
+#: THREE FIGURES TAKES THREE NUMBERS, which the first version missed: it filled the same days in `all`
+#: and `clean` and none in `contracts`, giving 18/18/0 -- two distinct values under a comment and a test
+#: both named for three. The clean count is now lower than the all count (shovelware is what separates
+#: them in real data) and a few contracts days sit under both.
+CALENDAR_PARTIAL_MONTH = 7
+CALENDAR_PARTIAL_DAYS = 18
+CALENDAR_PARTIAL_CLEAN = 11
+CALENDAR_PARTIAL_CONTRACTS = 4
+
+#: The day that is filled in CONTRACTS ONLY, which is the feature's one genuinely confusing state and
+#: therefore the one most worth being able to look at: `_detect_tiers` reaches the 100% tier with no
+#: platinum term, so this square is FILLED in the Contracts lens and EMPTY in the other two. Nothing else
+#: on the board demonstrates that the three lenses do not nest.
+CALENDAR_CONTRACTS_ONLY = (3, 3)
 
 
 class Command(BaseCommand):
@@ -288,6 +360,112 @@ class Command(BaseCommand):
                      fill_letter_gaps=fill_letter_gaps)
         self._az_run(profile, fill=AZ_FILLED, label='in progress, %d letters' % AZ_FILLED,
                      leave_some_unfinished=True)
+
+        # A FINISHED CALENDAR RUN AND AN IN-PROGRESS ONE, the same pairing as the other two types and for
+        # the same reason: only a finished run reaches the Hall of Fame, so without the first the year
+        # band has no way to be seen at all, and only an unfinished one shows the crest row part-earned.
+        self._calendar_run(profile, label='finished', finished=True)
+        self._calendar_run(profile, label='in progress, three months struck', finished=False)
+
+    def _calendar_run(self, profile, *, label, finished):
+        """One Plat Calendar run, filled through the REAL writer.
+
+        `apply_to_run` TAKES THE DAYS AS AN ARGUMENT, which is what makes this honest: the command hands
+        it a designed `{view: {(month, day): date}}` map and the writer does the filling, the
+        clean-implies-all repair and the recount of `filled_count` / `is_complete` / `completed_view`.
+        Nothing here writes those columns, so what the board renders is what the real backfill produces
+        -- the same reason the jobs run pays its XP through the real service rather than faking a ledger
+        row.
+
+        WHY NOT THE HUNTER'S ACTUAL PLATINUMS, which `apply_to_run(challenge)` would use. Two reasons,
+        and the second is the point of the command. A dev profile's library decides how much of the board
+        fills, so the result is unpredictable and usually sparse -- and a sparse board cannot answer the
+        questions worth asking: what a struck crest looks like next to an unstruck one, whether the three
+        metals read apart, and whether a contracts-only day is legible as empty in the All platinums
+        lens. A hunter wanting their real calendar has the real door:
+        `process_challenges --only calendar --user <psn>`.
+
+        WHAT IT WRITES IS NOT WHAT IT STAYS. Fills are monotone, so the next real backfill against this
+        profile -- `--only calendar --user`, `--all-calendars`, or simply a sync -- merges the hunter's
+        actual days ON TOP of these. The module docstring lists the three doors and what moves.
+
+        THE CREATION GATE IS LIFTED AROUND THE CALL, exactly as the tests do it. `calendar` is in
+        `TYPES_NOT_YET_CREATABLE` because My Challenges renders a Start button per choice and the type's
+        rewards are unbuilt -- but the surfaces it gates are the ones this command exists to show.
+        Lifted for this one call and restored in a `finally`, which covers every exception including
+        `KeyboardInterrupt`. (A signal landing in the instruction before the `try` is set up would
+        escape it; the process dies with the mutation, so there is nothing to restore.)
+        """
+        original = svc.TYPES_NOT_YET_CREATABLE
+        svc.TYPES_NOT_YET_CREATABLE = frozenset(
+            t for t in original if t != CHALLENGE_TYPE_CALENDAR)
+        try:
+            challenge = self._start_fresh(profile, CHALLENGE_TYPE_CALENDAR, label)
+        finally:
+            svc.TYPES_NOT_YET_CREATABLE = original
+        if challenge is None:
+            return None
+
+        filled = calendar_fill.apply_to_run(challenge, found=self._calendar_days(finished))
+        challenge.refresh_from_db()
+        self.stdout.write(
+            '  calendar "%s": %d day(s) filled, %d/%d on the %s lens%s'
+            % (challenge.name, filled, challenge.filled_count, challenge.total_slots,
+               challenge.completed_view or 'best genuine', ' -- COMPLETE' if challenge.is_complete else ''))
+        return challenge
+
+    @staticmethod
+    def _calendar_days(finished):
+        """The designed `{view: {(month, day): date}}` map `apply_to_run` fills from.
+
+        A DATE PER DAY, because `earned_on` is what a day cell and the coming day modal read, and a null
+        one would make every square look like a row the backfill half-wrote. The year is arbitrary -- a
+        Calendar day has no year, which is the whole premise -- so one is picked and stated rather than
+        left to `today`, whose month would quietly change what the seeded board looks like.
+
+        EVERY DATE IS ITS OWN SQUARE'S DATE, which the first version got wrong in a way no test saw. It
+        clamped the day (`min(day, 28)`), so 29 of the 365 squares held a date that was not their own --
+        31 March reading "28 March 2019" -- and the coming day modal is named in the paragraph above as
+        the reader that would have shown it. The clamp was also pure superstition, defended by a comment
+        that was false three times over: it claimed a leap year "would let a (2, 29) key be constructed"
+        (keys come from `CALENDAR_MONTH_DAYS`, whose February is 28, so that key is unreachable in any
+        year), that "the model refuses that date by constraint" (`calendarday_day_within_month`
+        constrains the month/day COLUMNS; nothing constrains `earned_on`, and `apply_to_run` only ever
+        updates pre-created rows so an unknown key is ignored rather than refused), and that it was
+        doing the real fill's Feb-29 fold (that is a one-day KEY remap, not a blanket date clamp across
+        twelve months).
+        """
+        days = {view: {} for view, _field in CALENDAR_VIEW_FIELDS}
+
+        if finished:
+            # EVERY DAY IN EVERY LENS, so the run completes and every crest is struck gold. Completion
+            # keys on clean-or-contracts, and `_recount_calendar` breaks the tie toward contracts.
+            for month, length in enumerate(CALENDAR_MONTH_DAYS, start=1):
+                for day in range(1, length + 1):
+                    for view in days:
+                        days[view][(month, day)] = _seeded_date(month, day)
+            return days
+
+        for month, views in CALENDAR_STRUCK.items():
+            for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
+                for view in views:
+                    days[view][(month, day)] = _seeded_date(month, day)
+
+        # THREE DISTINCT FIGURES, nested the way real data nests: every clean day is an all day
+        # (`calendarday_clean_implies_all` enforces that), and the contracts days are a separate few.
+        for day in range(1, CALENDAR_PARTIAL_DAYS + 1):
+            days[CALENDAR_VIEW_ALL][(CALENDAR_PARTIAL_MONTH, day)] = _seeded_date(
+                CALENDAR_PARTIAL_MONTH, day)
+            if day <= CALENDAR_PARTIAL_CLEAN:
+                days[CALENDAR_VIEW_CLEAN][(CALENDAR_PARTIAL_MONTH, day)] = _seeded_date(
+                    CALENDAR_PARTIAL_MONTH, day)
+        for day in range(1, CALENDAR_PARTIAL_CONTRACTS + 1):
+            days[CALENDAR_VIEW_CONTRACTS][(CALENDAR_PARTIAL_MONTH, day)] = _seeded_date(
+                CALENDAR_PARTIAL_MONTH, day)
+
+        # The non-nesting case, in the lens that has it and NOT in the other two.
+        days[CALENDAR_VIEW_CONTRACTS][CALENDAR_CONTRACTS_ONLY] = _seeded_date(*CALENDAR_CONTRACTS_ONLY)
+        return days
 
     def _start_fresh(self, profile, challenge_type, label):
         """A run this command CREATED, or None -- never one that was already there.
@@ -649,6 +827,13 @@ class Command(BaseCommand):
                     # ordinal says it earned a title and no granted row names it.
                     w('    on the HALL OF FAME -- NO title band (ordinal says %s, but no UserTitle names '
                       'this run)' % summary['title_name'])
+                elif run.challenge_type in rewards.TYPES_WITHOUT_ORDINAL_TITLES:
+                    # THE TYPE HAS NO TITLES AT ALL, which is not the same as having run out of them.
+                    # This branch used to fall through to "third or later completion" and state a
+                    # fabricated reason for the Calendar's FIRST completion -- on a page the reader is
+                    # about to inspect for a missing title band, an invented explanation is worse than
+                    # none. `rewards.TITLE_NAMES` has no entry for this type on purpose.
+                    w('    on the HALL OF FAME -- no title band (this type grants none yet)')
                 else:
                     w('    on the HALL OF FAME -- no title (third or later completion)')
             else:
@@ -656,6 +841,13 @@ class Command(BaseCommand):
         w('')
         w(self.style.MIGRATE_HEADING('And the pages'))
         w('    %s   (yours)' % reverse('my_challenges'))
+        # NO CALENDAR CARD THERE, and saying so beats letting the reader hunt for one. My Challenges
+        # builds its Start cards from `CHALLENGE_TYPE_CHOICES` minus `TYPES_NOT_YET_CREATABLE`, so the
+        # gated type has no card -- a FINISHED Calendar run still shows in the history list, but the
+        # in-progress one is reachable only by its own URL and the public browse page.
+        w(self.style.WARNING(
+            '      (no Plat Calendar card: creation is gated, so the in-progress Calendar run is '
+            'reachable only by its URL above)'))
         w('    %s   (public: runs in flight)' % reverse('challenges'))
         w('    %s   (public: finished runs)' % reverse('challenges_hall_of_fame'))
         w('')
@@ -666,7 +858,8 @@ class Command(BaseCommand):
     def _owed_clause(run):
         """", N owed (X XP)" for a jobs run that has unclaimed squares, or ''.
 
-        A-Z runs owe nothing by definition, so they get no clause rather than a zero.
+        A-Z AND PLAT CALENDAR RUNS OWE NOTHING BY DEFINITION, so they get no clause rather than a zero.
+        Only Job Coverage pays per square.
         """
         owed = rewards.redeemable_slots(run).count()
         if not owed:
