@@ -33,6 +33,7 @@ from challenges.models import (
     CHALLENGE_TYPE_AZ,
     CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_JOBS,
+    CHALLENGE_TYPES,
     COMPLETED_VIA_HATCH,
     COMPLETED_VIA_IMPORT,
     COMPLETED_VIA_LIVE,
@@ -197,7 +198,31 @@ def test_an_unknown_type_is_refused_before_anything_is_written():
     assert not Challenge.objects.filter(profile=profile).exists()
 
 
-def test_a_calendar_run_gets_365_days_and_no_slots():
+def test_the_calendar_cannot_be_started_until_its_rules_exist():
+    """THE DOOR IS SHUT WHILE THE MECHANICS ARE MISSING, and it was open for one commit.
+
+    Adding `calendar` to `CHALLENGE_TYPE_CHOICES` was enough to ship a working Start button, because My
+    Challenges builds its cards by iterating that list and renders a POST per card. Pressing it created a
+    run with no fill logic and no completion path -- which, given one-active-run-per-type and no delete,
+    the hunter could never replace, and which listed itself publicly as `0/365` while describing itself
+    with the Job Coverage copy.
+
+    THE GATE IS IN THE SERVICE, not the template, which is what this asserts. The card is hidden too, but
+    a hidden button is not a closed door: `challenge_start` is a URL.
+    """
+    profile = _member()
+
+    with _refuses('not ready yet'):
+        svc.start(profile, CHALLENGE_TYPE_CALENDAR)
+
+    assert not Challenge.objects.filter(profile=profile).exists()
+
+    # AND IT IS STILL A VALID TYPE for everything that only READS. The two questions are different: a
+    # type can be real enough to render while its rules are being built.
+    assert CHALLENGE_TYPE_CALENDAR in CHALLENGE_TYPES
+
+
+def test_a_calendar_run_gets_365_days_and_no_slots(monkeypatch):
     """THE CALENDAR'S ROWS ARE `CalendarDay`, NOT `ChallengeSlot`, and both halves are asserted.
 
     A day's atom is a DATE, so a slot's contract FK, frozen snapshot, contract-uniqueness constraint and
@@ -210,7 +235,13 @@ def test_a_calendar_run_gets_365_days_and_no_slots():
     alone would not have caught it either, since 25 is a plausible-looking number.
 
     365, NOT 366: a run is keyed on (month, day) across all years, so 29 February belongs to no year.
+
+    THE CREATION GATE IS LIFTED FOR THIS TEST, deliberately rather than by calling an internal: the
+    shape is what is being pinned, and it must keep being pinned on the day the gate is removed. Patching
+    the constant means that day needs no edit here. `test_the_calendar_cannot_be_started_until_its_rules_exist`
+    owns the gate itself.
     """
+    monkeypatch.setattr(svc, 'TYPES_NOT_YET_CREATABLE', frozenset())
     challenge = svc.start(_member(), CHALLENGE_TYPE_CALENDAR)
 
     days = list(challenge.calendar_days.values_list('month', 'day'))
@@ -223,6 +254,13 @@ def test_a_calendar_run_gets_365_days_and_no_slots():
     # ORDERED, AND FEBRUARY IS 28. The keys come from `calendar_day_keys()`, so this pins the shape that
     # function produces rather than re-deriving it.
     assert days == sorted(days), 'the days are not in calendar order'
+    # PER-MONTH LENGTHS, not just the total. A typo that OFFSETS two months (April 31, June 29) keeps
+    # 365 rows, stays sorted and keeps February at 28 -- so the count alone would pass it.
+    from challenges.models import CALENDAR_MONTH_DAYS
+    for month, expected in enumerate(CALENDAR_MONTH_DAYS, start=1):
+        got = len([d for m, d in days if m == month])
+        assert got == expected, 'month %d has %d days, expected %d' % (month, got, expected)
+    assert len(set(days)) == 365, 'a day is duplicated, so some other day is missing'
     assert (2, 29) not in days, '29 February belongs to no year in a month/day calendar'
     assert (2, 28) in days and (12, 31) in days, 'the calendar is missing its boundaries'
     assert len([d for m, d in days if m == 2]) == 28, 'February is not 28 days'
@@ -231,6 +269,8 @@ def test_a_calendar_run_gets_365_days_and_no_slots():
     # true would make the opening ceremony's numbers meaningless.
     assert not challenge.calendar_days.filter(
         Q(in_all=True) | Q(in_clean=True) | Q(in_contracts=True)).exists()
+    assert not challenge.calendar_days.exclude(earned_on=None, filled_at=None).exists(), (
+        'a day arrived with a fill timestamp but no fill')
 
 
 # ── starting, resuming, hiding ───────────────────────────────────────────────────────────────────

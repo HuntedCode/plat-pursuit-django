@@ -23,12 +23,19 @@ from challenges.models import (
     CHALLENGE_TYPE_AZ,
     CHALLENGE_TYPE_CHOICES,
     CHALLENGE_TYPE_JOBS,
+    TYPES_NOT_YET_CREATABLE,
     Challenge,
 )
 from challenges.views import MyChallengesView
 from challenges.services import challenge_service as svc
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory, UserFactory
 from trophies.models import Contract
+
+#: The types that actually get a card: a card's button is a POST to `challenge_start`, so a type that
+#: cannot be started renders none. Derived rather than listed, so neither adding a type nor making an
+#: existing one playable needs these tests edited.
+CARD_TYPES = [(value, label) for value, label in CHALLENGE_TYPE_CHOICES
+              if value not in TYPES_NOT_YET_CREATABLE]
 
 pytestmark = pytest.mark.django_db
 
@@ -101,8 +108,12 @@ def test_every_type_gets_a_card_even_with_no_runs(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
 
-    for _value, label in CHALLENGE_TYPE_CHOICES:
+    for _value, label in CARD_TYPES:
         assert label in body, 'no card for %s' % label
+    for value, label in CHALLENGE_TYPE_CHOICES:
+        if value in TYPES_NOT_YET_CREATABLE:
+            assert label not in body, (
+                '%s cannot be started yet, so its card would offer a button that only refuses' % label)
 
 
 def test_an_empty_card_says_start(client):
@@ -117,9 +128,9 @@ def test_an_empty_card_says_start(client):
 
     cards = client.get(reverse('my_challenges')).context['cards']
 
-    assert [c['verb'] for c in cards] == ['Start'] * len(CHALLENGE_TYPE_CHOICES)
-    assert {c['type'] for c in cards} == {value for value, _ in CHALLENGE_TYPE_CHOICES}, (
-        'every challenge type gets a card, and only challenge types do')
+    assert [c['verb'] for c in cards] == ['Start'] * len(CARD_TYPES)
+    assert {c['type'] for c in cards} == {value for value, _ in CARD_TYPES}, (
+        'every startable challenge type gets a card, and only startable types do')
     assert all(c['state'] == 'empty' for c in cards)
 
 
@@ -247,7 +258,7 @@ def test_the_pages_own_query_cost_is_exact(rf):
     # read `== 9` for two types and the comment claimed "adding a third challenge type must not add a
     # query". The third type added three. Only the owed-XP read has that property, and it still does --
     # which is the part actually worth pinning, and what the per-card arithmetic below isolates.
-    n_types = len(CHALLENGE_TYPE_CHOICES)
+    n_types = len(CARD_TYPES)
     assert cost() == 3 * n_types + 3
 
     svc.start(profile, CHALLENGE_TYPE_AZ)

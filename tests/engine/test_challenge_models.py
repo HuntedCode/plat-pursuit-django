@@ -48,9 +48,15 @@ from django.utils import timezone
 
 from challenges.models import (
     AZ_LETTERS,
+    CALENDAR_VIEWS,
+    CALENDAR_VIEW_CLEAN,
+    CALENDAR_VIEW_CONTRACTS,
+    CALENDAR_VIEW_FIELDS,
     CHALLENGE_TYPE_AZ,
+    CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_JOBS,
     COMPLETED_VIA_LIVE,
+    CalendarDay,
     Challenge,
     ChallengeSlot,
 )
@@ -679,3 +685,124 @@ def test_one_contract_cannot_hold_two_squares_under_two_different_snapshots():
 
     with _refuses('challengeslot_unique_contract'):
         _slot(challenge, 'champion', position=1, contract_slug='some-rpg-remastered', contract=contract)
+
+
+# ── The Plat Calendar's day rows ─────────────────────────────────────
+
+def test_a_clean_day_must_also_be_an_all_day():
+    """`clean` IS A SUBSET OF `all`, and the database says so.
+
+    The three views are not uniformly nested -- `in_contracts` can be true with `in_all` false, because
+    a contract reaches its 100% tier from `progress=100` with no platinum anywhere. But `clean` is the
+    SAME population as `all` with shovelware excluded, and a shovelware-free platinum is still a
+    platinum, so that pair nests by construction.
+
+    WHY A CONSTRAINT AND NOT A COMMENT. The violating shape is what a HALF-WRITTEN BACKFILL produces:
+    three views populated by three predicates, one of them wrong or interrupted. That is a silent wrong
+    answer on a reward ladder rather than a visible failure, and it is the one error here that no page
+    would look odd for. An earlier version of the model comment claimed this constraint would be wrong
+    for real data, reasoning from the contracts counterexample -- which does not transfer.
+    """
+    challenge = Challenge.objects.create(
+        profile=ProfileFactory(), challenge_type=CHALLENGE_TYPE_CALENDAR,
+        name='Calendar', total_slots=365)
+
+    with _refuses('calendarday_clean_implies_all'):
+        CalendarDay.objects.create(challenge=challenge, month=3, day=3,
+                                   in_all=False, in_clean=True)
+
+    # ── AND THE CASE THAT GENUINELY DOES NOT NEST IS STILL ALLOWED, which is the half a blanket
+    # "the views nest" rule would have forbidden.
+    CalendarDay.objects.create(challenge=challenge, month=3, day=4,
+                               in_all=False, in_contracts=True)
+
+
+def test_a_day_is_unique_per_run_and_its_month_and_day_are_ranged():
+    """The keys come from `calendar_day_keys()`, so these guard a hand-written row, a data migration or
+    a backfill bug -- which is exactly when a bad key is hardest to notice."""
+    challenge = Challenge.objects.create(
+        profile=ProfileFactory(), challenge_type=CHALLENGE_TYPE_CALENDAR,
+        name='Calendar', total_slots=365)
+    CalendarDay.objects.create(challenge=challenge, month=6, day=15)
+
+    with _refuses('calendarday_unique_day'):
+        CalendarDay.objects.create(challenge=challenge, month=6, day=15)
+
+    with _refuses('calendarday_month_range'):
+        CalendarDay.objects.create(challenge=challenge, month=13, day=1)
+
+    with _refuses('calendarday_day_range'):
+        CalendarDay.objects.create(challenge=challenge, month=1, day=32)
+
+
+def test_every_declared_view_names_a_field_that_exists():
+    """`CALENDAR_VIEW_FIELDS` maps a view name to a model field, and NOTHING reads it yet.
+
+    Three consumers are about to: the backfill, the sync hook and the day modal. Until one exists, a
+    typo like `in_cleann` sits undetected -- and when it is finally read it will fail somewhere far from
+    the typo. This is the same "declared rather than inferred" guard the rewards partition test is.
+    """
+    for view, field in CALENDAR_VIEW_FIELDS:
+        assert view in CALENDAR_VIEWS, '%s is not a declared view' % view
+        assert hasattr(CalendarDay, field), 'CalendarDay has no field %r (declared for %s)' % (field, view)
+
+    assert {v for v, _ in CALENDAR_VIEW_FIELDS} == set(CALENDAR_VIEWS), (
+        'a view has no field mapping, so one of its three consumers will silently read nothing')
+
+
+def test_a_finished_calendar_run_records_which_view_finished_it():
+    """ONE COLUMN FOR TWO KINDS OF FINISH, which is the owner's framing (2026-10-03): a Hall of Fame
+    entry is a SNAPSHOT of an achievement, so shovelware-free and contracts finishes live under one
+    roof, mixed on one board, ordered on one `completed_at` -- and this column is only what lets an
+    entry SAY which kind it was.
+
+    THE ALTERNATIVE WAS SIX COLUMNS (three counters, three stamps) so that every view could complete
+    independently. That is more expressive and worse: it makes `is_complete` mean nothing on its own,
+    and the Hall of Fame orders on a single `completed_at`.
+
+    ALL-PLATINUMS IS NOT A FINISH, and that is the half worth pinning. It is the view shovelware
+    inflates, so it carries the early day-marker ladder and nothing else. Storing it here would mean a
+    run could enter the Hall of Fame on the easiest lens -- the exact thing the owner's "genuine
+    achievements" line rules out.
+    """
+    challenge = Challenge.objects.create(
+        profile=ProfileFactory(), challenge_type=CHALLENGE_TYPE_CALENDAR,
+        name='Calendar', total_slots=365)
+
+    assert challenge.completed_view == '', 'an unfinished run must not claim a finishing view'
+
+    for view in (CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS):
+        challenge.completed_view = view
+        challenge.full_clean()
+
+    # ── AND THE OTHER TYPES NEVER SET IT. Their completion has no view, so a non-empty value here
+    # would make the Hall of Fame label an A-Z run with a Calendar lens.
+    az = Challenge.objects.create(
+        profile=ProfileFactory(), challenge_type=CHALLENGE_TYPE_AZ, name='A-Z', total_slots=26)
+    assert az.completed_view == ''
+
+
+def test_the_progress_number_is_not_the_all_platinums_count():
+    """A DOC-LEVEL PIN on the one thing a later reader is most likely to "fix".
+
+    `filled_count` for a Calendar run tracks the best GENUINE view (the higher of shovelware-free and
+    contracts), not all-platinums -- because either genuine view completing finishes the run, so that
+    number is distance-to-finish. All-platinums is the easiest lens and cannot finish anything, so
+    leading with it shows a card at 298/365 whose run completes on a view sitting at 164.
+
+    Nothing writes these yet (the fill lands in the next slice), so this pins the STATED rule where the
+    next implementer will read it. It fails if the reasoning is deleted rather than if the code drifts,
+    which is weaker than a behavioural test and is the honest thing to have until there is behaviour.
+    """
+    import inspect
+
+    from challenges import models as m
+
+    source = inspect.getsource(m.Challenge)
+    head = source[:source.index('filled_count = models')]
+
+    assert 'BEST GENUINE VIEW' in head, (
+        'the rule that `filled_count` tracks the best genuine view is gone from where it is read')
+    assert 'all-platinums count is deliberately NOT it' in head, (
+        'the reason all-platinums is not the headline number is gone, which is the part that gets '
+        '"simplified" back')

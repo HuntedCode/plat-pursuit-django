@@ -42,7 +42,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
 from challenges.models import (CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CHOICES, CHALLENGE_TYPE_JOBS,
-                               CHALLENGE_TYPES, Challenge)
+                               CHALLENGE_TYPES, TYPES_NOT_YET_CREATABLE, Challenge)
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
 from challenges.services import picker
@@ -164,8 +164,13 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # ONE QUERY FOR BOTH CARDS, aggregated in the database. Asked here rather than inside `_card` so
         # the page reads the owed table once however many types there are.
         owed = rewards.owed_runs(profile)
+        # NO CARD FOR A TYPE THAT CANNOT BE STARTED. The card's own button is a POST to
+        # `challenge_start`, so rendering one for a not-yet-creatable type offers an action whose only
+        # outcome is a refusal -- and before the service gate existed it was worse than that, because the
+        # action succeeded and dealt a run with no rules behind it.
         context['cards'] = [self._card(profile, key, label, owed)
-                            for key, label in CHALLENGE_TYPE_CHOICES]
+                            for key, label in CHALLENGE_TYPE_CHOICES
+                            if key not in TYPES_NOT_YET_CREATABLE]
         # `completed()` carries its own ordering (newest finish first) and is built on `visible()`, so a
         # run hidden after finishing correctly drops out of the hunter's own history too -- hiding means
         # "off my profile", and this page is the profile's.

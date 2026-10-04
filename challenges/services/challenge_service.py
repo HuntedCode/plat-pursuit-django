@@ -78,6 +78,7 @@ from challenges.models import (
     Challenge,
     ChallengeQuerySet,
     ChallengeSlot,
+    TYPES_NOT_YET_CREATABLE,
     calendar_day_keys,
 )
 from challenges.services import eligibility
@@ -147,9 +148,19 @@ def _refuse_if_beta_gated(profile):
         )
 
 
-def _check_type(challenge_type):
+def _check_type(challenge_type, *, for_creation=False):
+    """Validate a challenge type, optionally for the stricter question "can a run of this be STARTED".
+
+    THE TWO QUESTIONS ARE DIFFERENT, which is what `TYPES_NOT_YET_CREATABLE` exists for. A type can be
+    real enough to read -- its runs render, its choice is a valid browse filter, its rows have a model --
+    while its rules are still being built. `calendar` was in exactly that state the moment it joined
+    `CHALLENGE_TYPE_CHOICES`, and because My Challenges renders a Start button per choice, it was
+    creatable before anything could fill or finish it.
+    """
     if challenge_type not in CHALLENGE_TYPES:
         raise ChallengeError('That is not a challenge type.')
+    if for_creation and challenge_type in TYPES_NOT_YET_CREATABLE:
+        raise ChallengeError('That challenge is not ready yet.')
     return challenge_type
 
 
@@ -351,7 +362,7 @@ def start_reporting(profile, challenge_type):
     exists. Same reasoning `game_list_service.create_list` writes down for the same shape.
     """
     _refuse_if_unlinked(profile)
-    challenge_type = _check_type(challenge_type)
+    challenge_type = _check_type(challenge_type, for_creation=True)
 
     # The locked row is BOUND, not discarded, because the beta gate below now reads it -- and rule 2
     # says a precondition inside a lock is re-asserted on the row that came back. While the gate sat
