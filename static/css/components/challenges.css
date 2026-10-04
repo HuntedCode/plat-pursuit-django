@@ -2837,19 +2837,25 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     --cal-gap: 6px;
 }
 @media (min-width: 768px) {
-    .pp-cal {
-        gap: 18px;
-        --cal-gap: 8px;
-        /* THE CAP RIDES THE WHOLE BOARD, and putting it on the day grid alone was a real defect rather
-           than a tidiness point. The grid is a plain block `<ul>` with no auto margins, so it LEFT-aligned
-           at its cap while the month head and the crest row stayed at full panel width with
-           `justify-content: space-between` -- at 1920 that is a 712px grid hard left, a month name above
-           its left edge, a tally flung 1504px right, and twelve coins spread 80px apart. Three widths and
-           three alignments in one board. Capping here lines all four up, and the figure is the one the
-           crest row needs: twelve 52px coins plus eleven 8px gaps is 712. */
-        max-width: 712px;
-        margin-inline: auto;
-    }
+    .pp-cal { gap: 18px; --cal-gap: 8px; }
+}
+
+/* THE CREST BAND SPANS, THE BODY IS CAPPED, and the split is deliberate rather than the misalignment it
+   looks like. The first version capped the whole board at 712px to fix a real defect -- the cap was on
+   the day grid alone, so the grid left-aligned while the month head and the crest row stayed at full
+   width, giving three widths at three alignments. Capping everything lined them up and made the twelve
+   medallions small.
+   The owner's browser pass asked for the opposite emphasis (2026-10-04): "those medallions are pretty
+   cool so I'd like to show them off a bit more... we could even make them larger to allow them to span
+   across the whole screen. We can keep the tabs and dates smaller." So the band is now the showpiece and
+   takes the full row, while the switcher and the month panel share ONE capped width -- which is what
+   keeps the earlier defect fixed: the head and the grid are both inside the panel, so they cannot
+   disagree, and the lens chips sit on the same edge as the grid below them.
+   ONE TOKEN FOR THAT WIDTH, so the two blocks cannot drift apart. */
+.pp-cal { --cal-body: 712px; }
+@media (min-width: 768px) {
+    .pp-cal__lens,
+    .pp-cal__panel { max-width: var(--cal-body); margin-inline: auto; width: 100%; }
 }
 
 /* -- the crest row: the month switcher, and the run's trophy shelf --------------------------------- */
@@ -2891,7 +2897,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cal__crests::-webkit-scrollbar { display: none; }
 @media (min-width: 768px) {
-    .pp-cal__crests { overflow-x: visible; justify-content: space-between; }
+    .pp-cal__crests { overflow-x: visible; gap: clamp(8px, 1.4vw, 20px); }
 }
 
 .pp-cal__crest {
@@ -2922,7 +2928,23 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--crest-c);
     transition: color 0.18s ease, transform 0.18s ease;
 }
-@media (min-width: 768px) { .pp-cal__crest { width: 52px; height: 52px; } }
+/* THE COINS GROW INTO THE ROW from `md:` up, rather than staying 52px with the leftover space spread
+   between them. `flex: 1 1 0` with a square ratio makes twelve of them divide the width, so the band is
+   the full-bleed object the owner asked for: about 71px at 1024 and 110px at 1920.
+   CAPPED AT 112px, because past that a row of twelve coins stops reading as a switcher and starts
+   reading as the page's subject -- and the month panel below it is capped at 712px, so a band three
+   times that width would float free of the thing it controls. `justify-content: center` keeps the band
+   centred on the panel once the cap bites. */
+@media (min-width: 768px) {
+    .pp-cal__crests { justify-content: center; }
+    .pp-cal__crest {
+        flex: 1 1 0;
+        width: auto;
+        height: auto;
+        max-width: 112px;
+        aspect-ratio: 1;
+    }
+}
 
 /* THE TIER PALETTE, DUPLICATED FROM `badge-medallion.css` ON PURPOSE, and worth stating plainly so the
    next reader does not take it for a drift. The medallion's values live behind `.pp-med[data-tier]`, and
@@ -3020,7 +3042,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     line-height: 1;
     text-transform: uppercase;
 }
-@media (min-width: 768px) { .pp-cal__face { font-size: 0.8125rem; } }
+/* THE FACE SCALES WITH THE COIN, because a fixed 12px label on a 110px medallion reads as a mistake.
+   `clamp` rather than a per-breakpoint step: the coin itself is fluid (`flex: 1 1 0`), so its label has
+   to be too or the two only agree at the exact widths somebody happened to write rules for. The floor is
+   the project's 12px type minimum, which the file-wide guard enforces. */
+@media (min-width: 768px) { .pp-cal__face { font-size: clamp(0.75rem, 1.15vw, 1.125rem); } }
 
 /* THE ACTIVE TAB, which must be legible without colour alone: the ring is the shape cue and the face
    goes full-strength. A struck month that is also active keeps its metal. */
@@ -3162,7 +3188,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 @media (min-width: 768px) { .pp-cal__lenscount { display: inline; } }
 /* 12px, not 11px: this sentence is the whole explanation of why the Contracts lens can hold a day the
    others do not, which is the opposite of supplementary. */
-.pp-cal__lenshint { font-size: 0.75rem; color: var(--pp-text-dim); }
+/* `.pp-cal__lenshint` IS GONE, markup and rule together: a class with no element is what the
+   compiled-bundle guard would have let through in the other direction, and a rule with no class is dead
+   weight the next reader has to check. */
 
 /* -- motion, and the one guard this block shipped without ------------------------------------------ */
 

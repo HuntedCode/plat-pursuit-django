@@ -140,12 +140,11 @@ driving the tint, so a future change would have "fixed" the lens by writing to i
             </label>
             {% endfor %}
         </div>
-        {% comment %}WHY THREE LENSES EXIST AT ALL, in one line, because "Contracts" showing a day that
-        "All platinums" does not looks like a bug until you know why. The reason is real and designed-for:
-        a contract can be satisfied at its 100% tier with no platinum anywhere.{% endcomment %}
-        <p class="pp-cal__lenshint">
-            Contracts can be finished without a platinum, so that lens can hold a day the others do not.
-        </p>
+        {% comment %}NO EXPLANATORY LINE UNDER THE SWITCHER. One sat here saying that a contract can be
+        finished without a platinum, so the Contracts lens can hold a day the others do not -- true, and
+        cut by the owner on the browser pass: the chip names are enough, and a hunter who notices the
+        difference works it out. It was a mechanism explained at the reader rather than something they
+        needed, which is the UI-copy failure this project keeps correcting.{% endcomment %}
     </div>
 
     {% comment %}ONE PANEL PER MONTH. `hidden` on the inactive eleven rather than `display:none` in CSS,

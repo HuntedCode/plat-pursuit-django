@@ -215,7 +215,7 @@ def test_the_board_opens_on_the_servers_lens_with_no_state_attributes():
     board = re.search(r'<div class="pp-cal"[^>]*>', body).group(0)
     assert board == '<div class="pp-cal">', board
 
-    lens = _section(body, 'class="pp-cal__lens"', until='pp-cal__lenshint')
+    lens = _section(body, 'class="pp-cal__lens"', until='pp-cal__panel')
     checked = re.findall(r'<input[^>]*checked[^>]*>', lens)
     assert len(checked) == 1
     assert 'value="%s"' % CALENDAR_VIEW_CONTRACTS in checked[0]
@@ -296,7 +296,7 @@ def test_the_lens_switcher_is_the_shared_component_and_offers_every_lens():
     scripts, any checkbox added later. It passed only by luck about what follows the board.
     """
     lens = _section(_body(_run(CHALLENGE_TYPE_CALENDAR)), 'class="pp-cal__lens"',
-                    until='pp-cal__lenshint')
+                    until='pp-cal__panel')
 
     assert 'class="pp-switch"' in lens, 'the shared container, not just a chip class'
     assert 'pp-switch__chip' in lens
@@ -584,18 +584,25 @@ def test_the_calendar_hero_takes_the_whole_row_through_the_tablet_band():
 # ── the stylesheet, pinned by source text (there is no CSS test runner either) ───────────────────────
 
 def _calendar_css():
-    """The Calendar's own block of `challenges.css`, BOUNDED.
+    """The Calendar's own RULES from `challenges.css`: bounded, and with the comments stripped.
 
-    `css[css.index('PLAT CALENDAR BOARD'):]` runs to the end of the file, which works only while this
-    block happens to be last -- the next appended component would silently put every assertion below
-    into somebody else's rules. That is the same unbounded-slice mistake `_section` exists to avoid, so
-    it gets the same treatment: cut at the next top-level block banner.
+    BOUNDED, because `css[css.index('PLAT CALENDAR BOARD'):]` runs to the end of the file -- which works
+    only while this block happens to be last, and the next appended component would silently put every
+    assertion below into somebody else's rules. Same unbounded-slice mistake `_section` exists to avoid,
+    so it gets the same treatment: cut at the next top-level block banner.
+
+    STRIPPED, because this block documents its own history at length -- which rules were deleted, which
+    values were wrong -- and every assertion here is about RULES. Reading the raw text made an absence
+    assertion match the comment explaining the absence, three separate times in this file. Slicing
+    happens first because the boundaries ARE comments; stripping happens to the result.
     """
     css = open('static/css/components/challenges.css', encoding='utf-8').read()
     block = css[css.index('PLAT CALENDAR BOARD'):]
     nxt = block.find('* ============================================================ */',
                      block.index('============================================================ */') + 10)
-    return block if nxt == -1 else block[:nxt]
+    if nxt != -1:
+        block = block[:nxt]
+    return re.sub(r'/\*.*?\*/', '', block, flags=re.S)
 
 
 def test_a_struck_month_keeps_its_metal_when_selected_or_hovered():
@@ -628,11 +635,59 @@ def test_the_day_cell_is_capped_so_it_does_not_balloon_on_desktop():
     near-empty boxes each holding one 13px numeral, on the primary target."""
     block = _calendar_css()
     assert 'repeat(10, minmax(0, 1fr))' in block
-    # THE CAP RIDES THE BOARD, not the grid: on the grid alone it left-aligned while the month head and
-    # the crest row stayed at full panel width, so the board read as three widths at three alignments.
-    assert 'max-width: 712px' in block
+    # THE CAP IS ON THE PANEL, not the grid inside it. On the grid alone it left-aligned while the month
+    # head stayed at full width, so the head and the squares under it disagreed; the head and the grid
+    # are both inside the panel, so capping there is what makes them share an edge.
+    assert '.pp-cal__panel { max-width: var(--cal-body)' in ' '.join(block.split())
     assert 'margin-inline: auto' in block
-    assert block.index('max-width: 712px') < block.index('.pp-cal__crests')
+
+
+def test_the_crest_band_spans_while_the_body_it_controls_stays_capped():
+    """THE OWNER'S CALL ON THE BROWSER PASS, pinned because it reads like the misalignment it replaced.
+
+    The first version capped the whole board at one width, which fixed a real defect (a grid capped on
+    its own, left-aligned under a full-width head) and made the twelve medallions small. The owner asked
+    for the opposite emphasis: "those medallions are pretty cool so I'd like to show them off a bit
+    more... we could even make them larger to allow them to span across the whole screen. We can keep
+    the tabs and dates smaller."
+
+    So the band is full-bleed and the switcher and the month panel share ONE capped width. The part that
+    keeps the old defect fixed is that the head and the grid live inside the panel together, so they
+    cannot disagree -- and the lens chips sit on the same edge as the grid below them.
+    """
+    block = _calendar_css()
+
+    # ONE TOKEN for the body width, so the two capped blocks cannot drift apart.
+    assert '--cal-body: 712px' in block
+    assert block.count('max-width: var(--cal-body)') == 1, (
+        'both capped blocks must read the same token in one rule, or they will diverge')
+
+    # The band is NOT capped to the body: it grows its coins into the full row instead.
+    flat = ' '.join(block.split())
+    assert '.pp-cal__crest { flex: 1 1 0;' in flat
+    assert 'max-width: 112px' in flat, 'but not unbounded: twelve coins past this stop reading as a row'
+    assert 'aspect-ratio: 1' in flat
+
+
+def test_the_crest_face_scales_with_the_coin():
+    """A fixed 12px label on a 110px medallion reads as a mistake, and the coin is fluid (`flex: 1 1 0`),
+    so a per-breakpoint step would only agree with it at the widths somebody happened to write rules
+    for. The clamp floor is the project's 12px type minimum, which the file-wide guard enforces."""
+    block = _calendar_css()
+    assert 'clamp(0.75rem' in block
+
+
+def test_the_lens_switcher_carries_no_explanatory_line():
+    """CUT ON THE BROWSER PASS. A sentence under the chips explained that a contract can be finished
+    without a platinum, so the Contracts lens can hold a day the others do not -- true, and the owner's
+    answer was that a hunter works it out: "Users can figure that out on their own, it's not really a
+    huge deal." Pinned so it does not drift back in, because the explanation is genuinely tempting."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'pp-cal__lenshint' not in body
+    assert 'without a platinum' not in body
+
+    # The rule went with the markup: a dead rule is weight the next reader has to check.
+    assert 'pp-cal__lenshint' not in _calendar_css()
 
 
 def test_the_hero_band_never_shrinks_as_the_viewport_grows():
@@ -650,11 +705,8 @@ def test_the_hero_cells_are_square():
     the comment claimed squares. Auto rows let the column track set the width and the ratio the height."""
     block = _calendar_css()
     assert 'grid-template-rows: repeat(7, auto)' in block
-    # COMMENTS STRIPPED FIRST. The block explains at length why `min-height` had to go, so a raw
-    # substring search finds the prose documenting the fix and reads it as the bug -- the same reason
-    # the stylesheet readers elsewhere in this project strip comments inside the reader.
-    live = re.sub(r'/\*.*?\*/', '', block, flags=re.S)
-    assert 'min-height' not in live
+    # `_calendar_css` strips comments now, so this reads rules only.
+    assert 'min-height' not in block
 
 
 def test_the_crests_take_no_ignite_bloom():
