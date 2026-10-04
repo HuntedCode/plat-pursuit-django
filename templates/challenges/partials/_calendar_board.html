@@ -129,8 +129,13 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
     so the panels are correct before any stylesheet or script arrives and a reader never meets twelve
     months of squares at once.{% endcomment %}
     {% for month in calendar_months %}
+    {% comment %}`data-month` ON THE PANEL TOO, which is what carries the month's colour into its own
+    content (owner: "when swapping tabs I think we should incorporate the colors of that month into the
+    content of the tab"). The twelve hue declarations are keyed on `[data-month]` under `.pp-cal` rather
+    than on the crest, so one set of rules serves the coin and the panel and the two cannot drift.
+    {% endcomment %}
     <section class="pp-cal__panel" role="tabpanel" id="{{ month.dom_id }}"
-             aria-labelledby="cal-tab-{{ month.slug }}"
+             aria-labelledby="cal-tab-{{ month.slug }}" data-month="{{ forloop.counter }}"
              {% if not forloop.first %}hidden{% endif %}>
         <div class="pp-cal__head">
             <h3 class="pp-cal__month">{{ month.label }}</h3>

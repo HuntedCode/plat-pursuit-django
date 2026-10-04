@@ -2925,22 +2925,34 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    the hue drives the rim, the completion arc, the plate and the aura. That is the recorded lesson from
    shrinking a shipped colour recipe: a measured ratio must not be left to a variable somebody tunes.
 
+   WINTER IS HELD OFF THE BRAND CYAN, which is a hard constraint rather than a preference. The arc that
+   runs outside these rims is `--pp-primary` -- `oklch(0.86 0.142 206)` -- because that is what the
+   profile hero's level ring uses and progress therefore has a site-wide colour. January first sat at
+   hue 210, FOUR degrees away, so the arc vanished into its own rim; the owner read that as a bug, which
+   is the correct reading of two things that look identical. January is 255 now and February 290, both
+   comfortably clear, and December trades hue distance for CHROMA: `0.045` against the arc's `0.142`, so
+   a near-white frost rim reads apart from a saturated cyan arc without leaving the blue winter wants.
+
+   KEYED ON `[data-month]` UNDER `.pp-cal` RATHER THAN ON THE CREST, so the month PANEL inherits its own
+   month's colour too (owner: "when swapping tabs I think we should incorporate the colors of that month
+   into the content of the tab... it would make it way more cohesive"). One declaration, two readers.
+
    SOME ANGLES OVERLAP THE DISCIPLINE PALETTE (`--disc-*` owns 0, 25, 75, 155, 285) and that is
    accepted rather than overlooked: disciplines appear on job chips and shelf heads, months only on
-   Calendar coins, so the two never share a surface. Worth knowing before a third system wants a hue.
+   Calendar surfaces, so the two never share one. Worth knowing before a third system wants a hue.
    ── */
-.pp-cal__crest[data-month="1"]  { --cal-c: oklch(0.78 0.11 210); }   /* January   -- ice */
-.pp-cal__crest[data-month="2"]  { --cal-c: oklch(0.74 0.13 255); }   /* February  -- periwinkle */
-.pp-cal__crest[data-month="3"]  { --cal-c: oklch(0.80 0.14 150); }   /* March     -- first green */
-.pp-cal__crest[data-month="4"]  { --cal-c: oklch(0.84 0.15 128); }   /* April     -- spring */
-.pp-cal__crest[data-month="5"]  { --cal-c: oklch(0.86 0.16 105); }   /* May       -- lime */
-.pp-cal__crest[data-month="6"]  { --cal-c: oklch(0.88 0.15 88); }    /* June      -- high sun */
-.pp-cal__crest[data-month="7"]  { --cal-c: oklch(0.84 0.16 70); }    /* July      -- gold */
-.pp-cal__crest[data-month="8"]  { --cal-c: oklch(0.78 0.17 52); }    /* August    -- amber */
-.pp-cal__crest[data-month="9"]  { --cal-c: oklch(0.72 0.17 35); }    /* September -- russet */
-.pp-cal__crest[data-month="10"] { --cal-c: oklch(0.68 0.18 18); }    /* October   -- autumn red */
-.pp-cal__crest[data-month="11"] { --cal-c: oklch(0.66 0.15 345); }   /* November  -- berry */
-.pp-cal__crest[data-month="12"] { --cal-c: oklch(0.76 0.12 190); }   /* December  -- frost */
+.pp-cal [data-month="1"]  { --cal-c: oklch(0.74 0.13 255); }   /* January   -- deep winter blue */
+.pp-cal [data-month="2"]  { --cal-c: oklch(0.72 0.14 290); }   /* February  -- late-winter violet */
+.pp-cal [data-month="3"]  { --cal-c: oklch(0.80 0.14 150); }   /* March     -- first green */
+.pp-cal [data-month="4"]  { --cal-c: oklch(0.84 0.15 128); }   /* April     -- spring */
+.pp-cal [data-month="5"]  { --cal-c: oklch(0.86 0.16 105); }   /* May       -- lime */
+.pp-cal [data-month="6"]  { --cal-c: oklch(0.88 0.15 88); }    /* June      -- high sun */
+.pp-cal [data-month="7"]  { --cal-c: oklch(0.84 0.16 70); }    /* July      -- gold */
+.pp-cal [data-month="8"]  { --cal-c: oklch(0.78 0.17 52); }    /* August    -- amber */
+.pp-cal [data-month="9"]  { --cal-c: oklch(0.72 0.17 35); }    /* September -- russet */
+.pp-cal [data-month="10"] { --cal-c: oklch(0.68 0.18 18); }    /* October   -- autumn red */
+.pp-cal [data-month="11"] { --cal-c: oklch(0.66 0.15 345); }   /* November  -- berry */
+.pp-cal [data-month="12"] { --cal-c: oklch(0.90 0.045 235); }  /* December  -- frost, near-white */
 
 .pp-cal__crest {
     flex: 0 0 auto;
@@ -3063,50 +3075,59 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    100 / 12 = 8.3333, drawn as a 6-long dash with a 2.3333 gap. */
 .pp-cal__rim-track { stroke-dasharray: 6 2.3333; opacity: 0.22; }
 
-/* THE COMPLETION ARC, IN ONE COLOUR FOR EVERY MONTH, and NEUTRAL rather than the brand cyan.
+/* THE COMPLETION GAUGE, PORTED FROM `.pp-phero__ring` rather than invented -- the profile hero's level
+   ring, which wears the level on a plate in a notch at its bottom. The owner asked for exactly that
+   shape here ("align them to the bottom of the ring in a way that sort of overlaps and causes the ring
+   to start a bit offset -- we do this for level on the profile page"), and that file carries the
+   arithmetic, so this reuses it rather than re-deriving it.
 
-   THE PRINCIPLE IS THE OWNER'S (2026-10-04): "would it make sense for the rings around each month to
-   all be the same color so you can tell it specifically means progress". Yes, and for the same reason
-   the one-lens collapse was worth doing: one colour axis should carry one meaning. The month hue
-   already says WHICH month and WHETHER it is earned; making it also say HOW FAR is the overloading that
-   produced the `tier` and `crest` defects. One colour across all twelve also makes the arcs
-   COMPARABLE -- you can scan the row for which months are furthest along, which twelve different hues
-   at twelve different lightnesses cannot support.
+   ONE COLOUR FOR EVERY MONTH, AND IT IS THE BRAND CYAN. The owner's principle: "all be the same color
+   so you can tell it specifically means progress" -- which is the same reason the one-lens collapse was
+   worth doing, one colour axis carrying one meaning. The month hue says WHICH month and WHETHER it is
+   earned; the arc says HOW FAR. One colour across twelve also makes them COMPARABLE at a glance.
+   AND CYAN IS THE SITE'S PROGRESS COLOUR ALREADY: `.pp-phero__ring-fill` is `var(--pp-primary)`. An
+   earlier version of this block made the arc neutral on the grounds that there was no such convention
+   and that cyan collided with January -- half right. The collision was real and is fixed where it
+   belongs, in the winter hues above; the claim about the convention was simply wrong, found by grepping
+   one stylesheet instead of the set.
 
-   NOT CYAN, AND THE REASON IS STRUCTURAL RATHER THAN TASTE. `--pp-primary` is `oklch(0.86 0.142 206)`
-   and January's ice is `oklch(0.78 0.11 210)` -- FOUR degrees apart, with December's frost sixteen away.
-   A cyan arc would be indistinguishable from the rim beneath it on the two coins that open and close the
-   row, and that is not tunable: a seasonal cycle needs the blue region for winter and the brand colour
-   lives there. Cyan is also already the ACTIVE cue on this very element (the outline and the lift), so
-   it would mean both "progress" and "you are here" on one coin.
+   THE GEOMETRY, which is `.pp-phero__ring`'s with its own numbers. `pathLength="100"` makes a unit one
+   percent of the circle and 3.6 degrees. The notch is G=28 units, so the arc runs 100-G=72 and starts at
+   unit 64: the origin moves 64*3.6=230.4 degrees off the default three-o'clock start, which is
+   `rotate(-90 + 230.4) = 140.4deg`. Progress then grows from lower-left, clockwise over the top, to
+   lower-right -- a gauge, which is the fair shape for a value between two bounds.
 
-   SO: NO HUE AT ALL. A near-white arc is distinct from all twelve seasonal hues by having no hue to
-   collide with, distinct from the active cyan, and reads unambiguously as a measure. It also splits the
-   two rings cleanly by meaning: the inner rim is identity and carries the colour, the outer ring is
-   progress and does not.
+   G=28 IS COPIED, NOT MEASURED HERE, and that is worth flagging: the profile ring sizes its notch to its
+   own plate's chord plus the round cap's overhang, and warns "widen G if the plate ever gets wider; do
+   not narrow it past the cap". The plate here reads `15/31` at 12px, roughly 34px on a ~55px ring --
+   a chord ratio close enough to that ring's that the same gap holds. If the counter ever grows a digit,
+   G is the number to revisit.
 
-   A single dash from twelve o'clock, its length served by the template through `widthratio` -- the one
-   piece of arithmetic a Django template is allowed to do, and the same thing `_run_card.html` uses for
-   its progress bar.
-   BUTT CAPS, AND NOT BECAUSE OF THE SEGMENTED TRACK'S PROBLEM. There, round caps grew each dash past
-   its own gap and painted twelve segments as a solid ring. Here there is one dash, so round would have
-   been safe and slightly prettier -- except that a ZERO-LENGTH dash with a round cap still paints a
-   DOT, so an untouched month would wear a pip at twelve o'clock reading as "one day done". The
-   alternatives were a guard class or an attribute-substring selector matching the inline style's exact
-   spelling; butt caps make the zero case render nothing on its own, which beats a guard. */
+   ROUND CAPS ARE SAFE AGAIN, which they were not a moment ago. The arc used to be a bare
+   `stroke-dasharray: var(--pct) 100`, where a zero-length dash with a round cap still paints a DOT --
+   an untouched month wearing a pip that reads as "one day done". The offset mechanism below has no such
+   state: at 0 the dash is shifted entirely off the path and nothing is drawn. */
 .pp-cal__arc-track,
 .pp-cal__arc {
     fill: none;
-    stroke: var(--pp-text);
     stroke-width: 2.4;
-    stroke-linecap: butt;
-    transform: rotate(-90deg);
+    transform: rotate(140.4deg);
     transform-origin: 50% 50%;
 }
-/* THE GROOVE the arc runs in, so an empty month reads as "nothing yet" rather than as a missing ring.
-   Dimmer than it was when it carried the month hue: a neutral at the same opacity reads brighter. */
-.pp-cal__arc-track { opacity: 0.11; }
-.pp-cal__arc { stroke-dasharray: var(--pct, 0) 100; }
+/* THE GROOVE the arc runs in, so an empty month reads as "nothing yet" rather than as a missing ring --
+   and `72 28` is what cuts the notch out of it, so the gap is part of the track rather than something
+   drawn over it. */
+.pp-cal__arc-track { stroke: var(--pp-border); stroke-dasharray: 72 28; }
+.pp-cal__arc {
+    stroke: var(--pp-primary);
+    stroke-linecap: round;
+    stroke-dasharray: 72 100;
+    /* `* 1px` IS LOAD-BEARING, lifted with the rest: `.pp-phero__ring-fill` records that interpolating a
+       LENGTH against a bare number is not guaranteed, and a browser falling back to a discrete step
+       shows as the ring snapping rather than drawing. `* 0.72` scales a 0-100 percentage into the 72
+       units the arc actually spans, so 100% fills it exactly instead of overrunning into the notch. */
+    stroke-dashoffset: calc((72 - var(--pct, 0) * 0.72) * 1px);
+}
 .pp-cal__rim-seg {
     stroke-dasharray: 6 94;
     /* A `<circle>` path starts at 3 o'clock and runs clockwise, so -90deg puts the START of segment zero
@@ -3153,27 +3174,41 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    IT CARRIED THREE FIGURES, one per lens, sharing `.pp-cal__count` with the month head so one set of
    `:has()` rules governed both and the two could not disagree about which lens was active. One lens
    means one figure printed directly, and the shared class went with the rules that needed it. */
+/* THE COUNTER IS WORN IN THE NOTCH, which is `.pp-phero__lvl`'s shape and the owner's request: "moving
+   the numbers out of the center of the ring and align them to the bottom of the ring in a way that sort
+   of overlaps and causes the ring to start a bit offset".
+
+   IT SAT INSIDE THE COIN BEFORE, absolutely positioned half a face-height below centre -- which worked
+   and left the coin's middle carrying two lines of type. Out at the bottom edge it overlaps the gauge,
+   which is what makes the notch read as deliberate rather than as a missing piece of ring, and it hands
+   the centre back to the face.
+
+   NARROWER THAN THE NOTCH'S CHORD, which is the one constraint: the profile ring's note is explicit that
+   a plate wider than its gap "starts covering arc again, which is the whole problem this shape solves".
+   At 12px, `15/31` plus the padding is about 34px against roughly 42px of chord on the narrowest desktop
+   coin.
+
+   STILL `lg:` ONLY. A 44px coin has no room for a plate at its foot either, and the month head below
+   carries the same figure at every width -- so nothing is lost at mobile, which is why this was gated in
+   the first place. */
 .pp-cal__sub { display: none; }
 @media (min-width: 1024px) {
     .pp-cal__sub {
-        /* DIRECTLY BELOW THE CENTRED FACE, measured from the coin's midpoint rather than stacked beside
-           it. The face has `line-height: 1`, so its lower edge is half its own font-size below centre;
-           3px of breathing room follows. Reading `--cal-face` is what keeps this true at every width:
-           the face is a clamp, so a hardcoded offset would only line up at whichever width it was
-           written for.
-           IT STAYS INSIDE THE RIM at both ends of the range, which is the constraint worth checking
-           rather than assuming -- the clear circle is about 80% of the coin, so at 1024 the figure sits
-           ~15px below a 28px clear radius with ~47px of width at that height (a 12px "15/31" needs ~32),
-           and at 1920 ~12px below a 44px radius with ~84px (a 15px one needs ~40). */
-        display: block;
+        display: inline-flex;
         position: absolute;
-        left: 0;
-        right: 0;
-        top: calc(50% + (var(--cal-face) / 2) + 3px);
-        text-align: center;
-        font-size: clamp(0.75rem, 0.85vw, 0.9375rem);
-        line-height: 1.1;
-        opacity: 0.85;
+        left: 50%;
+        bottom: -2px;
+        transform: translateX(-50%);
+        align-items: baseline;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: var(--pp-bg-0);
+        border: 1px solid color-mix(in oklab, var(--pp-primary) 45%, transparent);
+        box-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
+        font-size: clamp(0.75rem, 0.8vw, 0.875rem);
+        line-height: 1.45;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
     }
 }
 
@@ -3181,10 +3216,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    `clamp` rather than a per-breakpoint step: the coin itself is fluid (`flex: 1 1 0`), so its label has
    to be too or the two only agree at the exact widths somebody happened to write rules for. The floor is
    the project's 12px type minimum, which the file-wide guard enforces.
-   THROUGH A TOKEN, because the counter's offset below it is derived from this size -- so the two cannot
-   disagree about where the face's lower edge is at any width. */
-@media (min-width: 768px) { .pp-cal__crest { --cal-face: clamp(0.75rem, 1.15vw, 1.125rem); } }
-@media (min-width: 768px) { .pp-cal__face { font-size: var(--cal-face); } }
+   NO TOKEN ANY MORE. A `--cal-face` custom property existed so the counter could sit a derived
+   half-face-height below centre; the counter is a plate at the coin's foot now, positioned off the coin
+   rather than off the face, so the two no longer need to agree about the face's lower edge. */
+@media (min-width: 768px) { .pp-cal__face { font-size: clamp(0.75rem, 1.15vw, 1.125rem); } }
 
 /* THE ACTIVE TAB, which must be legible without colour alone: the ring is the shape cue and the face
    goes full-strength. A struck month that is also active keeps its metal. */
@@ -3229,12 +3264,33 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    file is `minmax(0, 1fr)`. Without it a wide month can push the board past its own container. */
 .pp-cal__panel { min-width: 0; }
 
+/* THE MONTH HEAD IS A BAND, on the recipe `.pp-csq-shelf__head` already uses for a discipline: a 1px
+   tinted border, a 3px coloured left edge, and a top-down wash over the surface. That rule exists
+   because the shelf label "used to sit on the bare page background", and the same argument applies to a
+   month name -- so this is the house treatment rather than a second one.
+
+   IT CARRIES THE MONTH'S OWN COLOUR (owner: "when swapping tabs I think we should incorporate the colors
+   of that month into the content of the tab... it would make it way more cohesive"), which works because
+   the panel inherits `--cal-c` from its own `data-month`.
+
+   THE COLOUR NEVER TOUCHES THE TEXT, which is the rule the hue palette states and the reason this is a
+   BAND rather than a coloured heading. Measured: the hues run 0.66 to 0.90 lightness, and November's
+   berry at 0.66 against this card's `--pp-bg-2` is about 3.9:1 -- under the 4.5 a 16px month name needs.
+   So the edge and the wash take the hue and the words stay on tokens. */
 .pp-cal__head {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 10px;
+    padding: 8px 11px;
+    border-radius: var(--pp-radius-lg);
+    border: 1px solid color-mix(in oklab, var(--cal-c, var(--pp-primary)) 28%, transparent);
+    border-left: 3px solid var(--cal-c, var(--pp-primary));
+    background: linear-gradient(180deg,
+                                color-mix(in oklab, var(--cal-c, var(--pp-primary)) 9%, var(--pp-bg-1)),
+                                var(--pp-bg-1));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
 }
 .pp-cal__month {
     font-size: 1rem;
@@ -3293,13 +3349,22 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 @media (min-width: 768px) { .pp-cal__day { font-size: 0.8125rem; } }
 
-/* A FILLED DAY, AND THERE IS ONLY ONE KIND NOW. This rule was three selectors reading the checked radio
-   through `:has()`, because a day could be filled in one lens and empty in another and the tint had to
-   follow whichever was active. A modifier class is what the rest of this stylesheet uses for a single
-   state, so that is what a day carries. */
+/* A FILLED DAY TAKES ITS MONTH'S COLOUR, which is the other half of the owner's cohesion note: the
+   panel inherits `--cal-c` from its own `data-month`, so switching month repaints the squares as well as
+   the head and the coin.
+
+   WHITE STAYS LEGIBLE ON ALL TWELVE, which is worth the arithmetic rather than a hope. The mix is 22%
+   hue into `--pp-bg-2` (lightness 0.28), so the result lands between 0.36 and 0.41 for hues running 0.66
+   to 0.90 -- the dark term dominates, and white on 0.41 is far above the floor. That is why the HUE may
+   drive this background where it may not drive the month name beside it: here the text is white on a
+   dark mix, there it would be the hue itself on the card.
+
+   ONE KIND OF FILLED DAY NOW. This rule was three selectors reading a checked radio through `:has()`,
+   because a day could be filled in one lens and empty in another. A modifier is what the rest of this
+   stylesheet uses for a single state. */
 .pp-cal__day--on {
-    border-color: color-mix(in srgb, var(--pp-primary) 45%, var(--pp-border));
-    background: color-mix(in srgb, var(--pp-primary) 22%, var(--pp-bg-2));
+    border-color: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 45%, var(--pp-border));
+    background: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 22%, var(--pp-bg-2));
     color: #fff;
     font-weight: 600;
 }

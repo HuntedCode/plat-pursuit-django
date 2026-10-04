@@ -141,6 +141,23 @@ def _body(run):
 
 
 
+
+def _css_rule(block, selector, last=False):
+    """One rule's declarations, from its selector to its closing brace.
+
+    SLICING A STYLESHEET BY HAND IS A GUESS, which this file has paid for three times now -- once
+    landing on a single line and passing against nothing, once matching a comment that explained the
+    thing it was asserting was absent, and once matching a SHARED rule because the selector it wanted
+    also appears as the second half of `.pp-cal__arc-track, .pp-cal__arc {`. `_calendar_css` already
+    strips comments; this bounds the slice to one rule.
+
+    `last=True` IS FOR THAT THIRD CASE: when a selector appears both in a shared rule and in its own,
+    the standalone one comes later. Naming it at the call site is better than a cleverer search,
+    because the caller knows which of the two it means.
+    """
+    at = block.rindex(selector) if last else block.index(selector)
+    return block[at:block.index('}', at)]
+
 def _section(body, class_name, until):
     """The rendered markup of one block, bounded by an EXPLICIT end marker.
 
@@ -607,10 +624,11 @@ def test_the_rim_draws_twelve_segments_rather_than_a_solid_ring():
     dash by `stroke-width / 2` at BOTH ends, so a 2.5 stroke grew each dash past its own gap and the
     twelve segments painted as one ring. The lit segment still read against the dim track, which is why
     only arithmetic caught it."""
-    block = _calendar_css()
-    assert 'stroke-linecap: butt' in block
-    assert 'stroke-linecap: round' not in block
+    rim = _css_rule(_calendar_css(), '.pp-cal__rim-track,')
+    assert 'stroke-linecap: butt' in rim
+    assert 'stroke-linecap: round' not in rim, 'round caps are what ate the gaps'
     # Normalised units: twelve slots of 100/12 = 8.3333, a 6-long dash leaving a 2.3333 gap.
+    block = _calendar_css()
     assert 'stroke-dasharray: 6 2.3333' in block
     assert 'stroke-dasharray: 6 94' in block
 
@@ -791,7 +809,7 @@ def test_the_coin_counter_only_appears_where_it_fits():
     block = _calendar_css()
     flat = ' '.join(block.split())
     assert '.pp-cal__sub { display: none; }' in flat
-    assert '@media (min-width: 1024px) { .pp-cal__sub { display: block;' in flat
+    assert '@media (min-width: 1024px) { .pp-cal__sub { display: inline-flex;' in flat
 
 
 def test_the_coin_counter_is_not_announced_twice():
@@ -861,7 +879,9 @@ def test_every_month_declares_its_own_hue():
     """
     block = _calendar_css()
     for month in range(1, 13):
-        rule = '.pp-cal__crest[data-month="%d"]' % month
+        # KEYED UNDER `.pp-cal`, NOT ON THE CREST, so the month PANEL inherits its own colour from the
+        # same declaration -- one set of rules for the coin and the content it switches to.
+        rule = '.pp-cal [data-month="%d"]' % month
         assert rule in block, 'no hue declared for month %d' % month
 
     hues = re.findall(r'data-month="\d+"\]\s*\{\s*--cal-c: oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)', block)
@@ -873,23 +893,28 @@ def test_every_month_declares_its_own_hue():
 
 
 def test_the_progress_arc_is_one_colour_for_every_month():
-    """ONE COLOUR AXIS, ONE MEANING -- the owner's point (2026-10-04): "would it make sense for the rings
-    around each month to all be the same color so you can tell it specifically means progress". The month
-    hue already says which month and whether it is earned; making it also say how far is the overloading
-    that produced the `tier` and `crest` defects. One colour also makes the twelve arcs comparable.
+    """ONE COLOUR AXIS, ONE MEANING -- the owner's point: "all be the same color so you can tell it
+    specifically means progress". The month hue says WHICH month and WHETHER it is earned; the arc says
+    HOW FAR. Overloading one axis with both is what produced the `tier` and `crest` defects, and one
+    colour across twelve also makes the arcs comparable at a glance.
 
-    NEUTRAL RATHER THAN THE BRAND CYAN, for a structural reason rather than taste: `--pp-primary` is hue
-    206 and January's ice is hue 210, four degrees apart, so a cyan arc would vanish into the rim beneath
-    it on the coin that opens the row. A seasonal cycle needs the blue region for winter and the brand
-    colour lives there, so that is not tunable. Cyan is also the ACTIVE cue on this same element.
+    AND IT IS THE BRAND CYAN, because that is the site's progress colour already: `.pp-phero__ring-fill`
+    is `var(--pp-primary)`. An earlier version of this test asserted a NEUTRAL instead, on two grounds --
+    that no such convention existed, and that cyan collided with January. The second was true and is
+    fixed where it belongs, in the winter hues; the first was simply wrong, reached by grepping one
+    stylesheet rather than the set.
     """
-    block = _calendar_css()
-    arc_rule = block[block.index('.pp-cal__arc-track,'):]
-    arc_rule = arc_rule[:arc_rule.index('}')]
+    arc = _css_rule(_calendar_css(), '.pp-cal__arc {', last=True)
+    assert 'stroke: var(--pp-primary);' in arc, 'the arc is the site progress colour'
+    assert '--cal-c' not in arc, 'the arc must not vary by month'
 
-    assert 'stroke: var(--pp-text);' in arc_rule, 'the arc takes a neutral, not a hue'
-    assert '--cal-c' not in arc_rule, 'the arc must not vary by month'
-    assert '--pp-primary' not in arc_rule, 'and must not reuse the active cue'
+    # AND THE COLLISION IS GONE: no winter hue sits within 30 degrees of the arc.
+    block = _calendar_css()
+    hues = re.findall(r'--cal-c: oklch\([\d.]+ ([\d.]+) ([\d.]+)\)', block)
+    for chroma, hue in hues:
+        if abs(float(hue) - 206) < 30:
+            assert float(chroma) < 0.07, (
+                'hue %s sits near the cyan arc and is saturated enough to be confused with it' % hue)
 
 
 def test_the_two_rings_split_colour_from_progress():
@@ -942,17 +967,77 @@ def test_each_crest_carries_its_months_completion_as_an_arc():
 
 
 def test_an_empty_months_arc_paints_nothing():
-    """A ZERO-LENGTH DASH WITH A ROUND CAP STILL PAINTS A DOT, which on an untouched month would read as
-    "one day done" at twelve o'clock. Butt caps make the zero case render nothing on its own, which is
-    why the arc does not take the rounder ends it would otherwise want."""
+    """THE OFFSET MECHANISM IS WHAT MAKES ZERO SAFE, which the earlier shape could not manage.
+
+    The arc was `stroke-dasharray: var(--pct) 100`, where a zero-length dash with a round cap still
+    paints a DOT -- an untouched month wearing a pip at twelve o'clock that reads as "one day done". That
+    forced butt caps. Ported from `.pp-phero__ring-fill`, the length is a fixed `72 100` dash moved by
+    `stroke-dashoffset`, so at 0 the dash sits entirely off the 100-unit path and nothing draws at all.
+    Round caps came back with it.
+    """
+    arc = _css_rule(_calendar_css(), '.pp-cal__arc {', last=True)
+    assert 'stroke-dasharray: 72 100;' in arc
+    assert 'stroke-dashoffset: calc((72 - var(--pct, 0) * 0.72) * 1px);' in arc
+    assert 'stroke-linecap: round;' in arc, 'safe again, because zero shifts the dash off the path'
+
+
+def test_the_gauge_starts_at_the_bottom_with_a_notch_for_its_plate():
+    """THE SHAPE THE OWNER ASKED FOR, ported from the profile hero's level ring rather than invented:
+    "can we have the rings start from the bottom... align them to the bottom of the ring in a way that
+    sort of overlaps and causes the ring to start a bit offset (we do this for level on the profile
+    page)".
+
+    THE ARITHMETIC IS THAT RING'S. `pathLength="100"` makes a unit 3.6 degrees. A 28-unit notch leaves a
+    72-unit arc starting at unit 64, so the origin moves 64 x 3.6 = 230.4 degrees off the default
+    three-o'clock start: `rotate(-90 + 230.4) = 140.4deg`. Progress then runs lower-left, over the top,
+    to lower-right.
+    """
     block = _calendar_css()
-    # ASSERTED AS AN ABSENCE across the whole block rather than inside one rule. Both rings are butt --
-    # the rim because round caps ate its gaps and painted twelve segments as a solid ring, the arc
-    # because a round cap on a zero-length dash paints a dot. One rule covers both, and slicing to find
-    # it was how this assertion first landed on a single line and passed against nothing.
-    assert 'stroke-linecap: round' not in block, 'a round cap would pip an empty month'
-    assert 'stroke-linecap: butt' in block
-    assert 'stroke-dasharray: var(--pct, 0) 100' in block
+    shared = _css_rule(block, '.pp-cal__arc-track,')
+    assert 'transform: rotate(140.4deg);' in shared, 'the gauge must start from the bottom'
+
+    track = _css_rule(block, '.pp-cal__arc-track {')
+    assert 'stroke-dasharray: 72 28;' in track, 'the notch is cut out of the track itself'
+
+    # 72 + 28 = 100: the arc and its gap account for the whole circle, so no unit is drawn twice.
+    assert 72 + 28 == 100
+
+
+def test_the_counter_is_worn_in_the_notch():
+    """OUT OF THE CENTRE AND ONTO THE RIM, which is what makes the notch read as deliberate rather than
+    as a missing piece of ring -- and hands the coin's middle back to the face. `.pp-phero__lvl`'s shape:
+    a pill on the substrate, centred on the bottom edge, overlapping the arc's gap."""
+    sub = _css_rule(_calendar_css(), '.pp-cal__sub {\n        display: inline-flex;')
+    assert 'bottom: -2px;' in sub, 'it sits on the coin\'s bottom edge, overlapping the ring'
+    assert 'left: 50%;' in sub and 'translateX(-50%)' in sub, 'centred in the notch'
+    assert 'background: var(--pp-bg-0);' in sub, 'on the substrate, so the arc cannot read through it'
+    assert 'top:' not in sub, 'positioned off the coin now, not off the face'
+
+
+def test_the_month_panel_takes_its_own_months_colour():
+    """THE COHESION THE OWNER ASKED FOR: "when swapping tabs I think we should incorporate the colors of
+    that month into the content of the tab". The panel carries `data-month`, so it inherits `--cal-c`
+    from the same twelve declarations the coins read -- one source, two surfaces.
+
+    AND THE COLOUR STOPS AT THE TEXT. The head is a BAND with a hue edge and wash; the month name stays
+    on a token, because the hues run down to 0.66 lightness and November's berry on this card measures
+    about 3.9:1 -- under the 4.5 a 16px name needs. A filled day may take the hue because there the text
+    is white on a 22% mix into `--pp-bg-2`, which lands near 0.4 lightness whatever the hue.
+    """
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    panels = re.findall(r'<section class="pp-cal__panel"[^>]*data-month="(\d+)"', body)
+    assert [int(m) for m in panels] == list(range(1, 13))
+
+    block = _calendar_css()
+    head = _css_rule(block, '.pp-cal__head {')
+    assert 'border-left: 3px solid var(--cal-c' in head, 'the band carries the hue on its edge'
+
+    day = _css_rule(block, '.pp-cal__day--on {')
+    assert 'var(--cal-c' in day, 'a filled square takes its month colour'
+    assert 'color: #fff;' in day, 'on a dark mix, so the hue cannot break the text'
+
+    month_name = _css_rule(block, '.pp-cal__month {')
+    assert '--cal-c' not in month_name, 'the month name must stay on a measured token'
 
 
 def test_the_two_rings_do_not_touch():
