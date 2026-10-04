@@ -747,6 +747,25 @@ class CalendarDay(models.Model):
             # genuinely does not nest.
             models.CheckConstraint(condition=Q(in_clean=False) | Q(in_all=True),
                                    name='calendarday_clean_implies_all'),
+            # THE DAY MUST EXIST IN ITS OWN MONTH, which `calendarday_day_range` does not say: it caps
+            # the day at 31 for every month, so `(2, 29)`, `(2, 31)` and `(4, 31)` are all legal under
+            # it. That is not a theoretical gap, because of how the board is DRAWN: `calendar_render`
+            # generates its cells from `calendar_day_keys()` and looks the rows up against them, which
+            # makes it immune to a MISSING row and blind to an EXTRA one. A row on an impossible date
+            # is therefore invisible on the board forever -- while `calendar_fill._recount_calendar`
+            # aggregates with no key filter, so it still counts toward `filled_count` and can push a
+            # run to `is_complete` on a square its owner cannot see or reach. Same class as the
+            # `_board_groups` regression (a tally the board disagrees with), in the opposite direction.
+            #
+            # 28 IS ALWAYS SAFE, so February needs no clause of its own -- a leap day folds into the
+            # 28th by decision, which is why 29 February must be refused here rather than tolerated.
+            # The two month lists are the 31-day and 30-day months; anything in neither falls through
+            # to the `day <= 28` branch.
+            models.CheckConstraint(
+                condition=(Q(day__lte=28)
+                           | Q(month__in=[1, 3, 5, 7, 8, 10, 12])
+                           | (Q(month__in=[4, 6, 9, 11]) & Q(day__lte=30))),
+                name='calendarday_day_within_month'),
         ]
         # NO INDEXES BEYOND THE UNIQUE, and the three partials this replaces were a reflex rather than a
         # measurement. One per view, each `(challenge) WHERE in_<view>`, on the theory that "how many

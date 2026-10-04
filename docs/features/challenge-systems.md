@@ -17,6 +17,9 @@ no services and no templates with it; the few lessons worth carrying forward are
 |---|---|
 | Models, constraints, admin | **built** |
 | `challenge_service` / `eligibility` / `picker` / `slot_render` | **built** |
+| Plat Calendar data path (`calendar_fill`, model, sweep, sync hook, staff doors) | **built**, and unreachable: the type has no creation door yet (`TYPES_NOT_YET_CREATABLE`) |
+| Plat Calendar renderers (`calendar_render`) | **built**, no caller yet — its surfaces are the open slice |
+| Plat Calendar surfaces (board, day modal, reward ladder, month crests) | **not built** |
 | Detection (sync hook + `process_challenges` + nightly) | **built** |
 | My Challenges (`/my-challenges/`) | **built** |
 | The run's page (`community/challenges/<id>/`) | **built** |
@@ -855,7 +858,9 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `challenges/services/challenge_service.py` | **every write**, and every gate |
 | `challenges/services/eligibility.py` | the pools, the hatch count, the importer's date |
 | `challenges/services/picker.py` | the three panels — read-only, decides nothing |
-| `challenges/services/slot_render.py` | the board: squares, discipline shelves, covers |
+| `challenges/services/slot_render.py` | the A-Z and Job Coverage board: squares, discipline shelves, covers |
+| `challenges/services/calendar_fill.py` | the Plat Calendar's three view predicates, the backfill writer, the reconciling sweep scope, and the sync-path refresh |
+| `challenges/services/calendar_render.py` | the Plat Calendar board: twelve month groups with per-lens counts and a crest for the detail page, one 365-day lens for the hero. Separate from `slot_render` because a day shares no fields with a contract-backed square |
 | `challenges/services/plaque.py` | the Hall of Fame plaque's Pursuer Card spine: rank, Pursuer Level, Career XP, the shared disciplines ring's arcs, and the XP a run paid — page-batched, reads nothing per entry |
 | `challenges/services/rewards.py` | **every reward write**: the XP redemption, the titles, the completion hook |
 | `challenges/views.py` | four page views (My Challenges, the run, and the two public browse pages), three JSON read endpoints (the picker panels, all `GET`), six thin POST actions (start, assign, clear, hide, redeem, redeem-all) |
