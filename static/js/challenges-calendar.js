@@ -1,32 +1,29 @@
 /**
  * The Plat Calendar board's month switcher.
  *
- * THE LENS SWITCHER IS NOT HERE, AND THAT IS THE POINT. It used to be: the radios wrote `data-view` onto
- * the board and CSS tinted off that attribute. Which meant that with JavaScript off, clicking "Contracts"
- * visibly activated the Contracts chip -- `.pp-switch__chip:has(input:checked)` is pure CSS -- while all
- * 31 squares stayed tinted for the previous lens and the tally kept its old figure. False feedback on the
- * one dimension the board exists to express, which is worse than a control that does nothing.
- * `.pp-cal:has(input[value="..."]:checked)` moves the whole thing into CSS, so the lens works with no
- * script at all and there is no second mechanism to disagree with the first.
+ * THERE WAS A LENS SWITCHER, AND NOW THERE IS ONE LENS. A day is filled by a shovelware-free platinum
+ * (owner, 2026-10-04), so the three-way control is gone along with the `:has()` rules that drove the
+ * tint off its checked radio. Nothing about it was ever in this file by the end -- an earlier version
+ * DID write a `data-view` attribute here, and that was the defect: the chip's active state was pure CSS
+ * while the tint needed the script, so with JavaScript off pressing a lens lit its chip and left every
+ * square showing the previous one. Moving it into CSS fixed that, and the collapse then removed it.
  *
  * WHAT IS LEFT IS THE MONTH TABLIST, and that goes through `PlatPursuit.wireTablist` rather than a
  * hand-rolled copy. The first version of this file reimplemented roving tabindex, Arrow/Home/End with
  * wrap and the focus/activate split by hand -- all of which the shared helper already does, and it is
  * explicitly "markup/class-agnostic -- pass the tab elements and a select callback". Using it also buys
- * the two companions a hand-rolled version silently skipped: `igniteTab`'s bloom on the chip that became
- * active, and `slideViewIn`'s directional panel slide, which every other switcher on the site has.
+ * `slideViewIn`'s directional panel slide, which every other switcher on the site has. (Its other
+ * companion, `igniteTab`, is deliberately NOT taken -- see the note at the call.)
  *
- * STILL NO SCRIPT NEEDED FOR A CORRECT BOARD. The server marks the inactive eleven panels `hidden` and
- * checks the radio for the lens the run leads with -- so a hunter with no JavaScript gets January on the
- * right lens with the right squares tinted, and a fully working lens switcher. What they lose is reaching
- * the other eleven months, which is navigation rather than information: the crests are `<button>`s, so
+ * STILL NO SCRIPT NEEDED FOR A CORRECT BOARD. The server marks the inactive eleven panels `hidden`, so a
+ * hunter with no JavaScript gets January with the right squares filled. What they lose is reaching the
+ * other eleven months, which is navigation rather than information: the crests are `<button>`s, so
  * nothing is a broken link, and the board below them is complete and true for the month it shows.
  *
- * KNOWN GAP, recorded rather than half-built: the chosen month and lens are not in the URL, so neither
- * survives a reload or a shared link. `PlatPursuit.syncViewParam` is the helper for it, but writing a
+ * KNOWN GAP, recorded rather than half-built: the chosen month is not in the URL, so it does not
+ * survive a reload or a shared link. `PlatPursuit.syncViewParam` is the helper for it, but writing a
  * param the server does not read produces "a URL that lies about what is on screen" (its own words), so
- * honouring it means the view reading `?month=`/`?view=` too. That is a deliberate follow-up, not an
- * oversight.
+ * honouring it means the view reading `?month=` too. That is a deliberate follow-up, not an oversight.
  */
 (function () {
     'use strict';

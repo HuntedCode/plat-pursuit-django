@@ -48,9 +48,8 @@ from django.utils import timezone
 
 from challenges.models import (
     AZ_LETTERS,
-    CALENDAR_VIEWS,
+
     CALENDAR_VIEW_CLEAN,
-    CALENDAR_VIEW_CONTRACTS,
     CALENDAR_VIEW_FIELDS,
     CHALLENGE_TYPE_AZ,
     CHALLENGE_TYPE_CALENDAR,
@@ -692,16 +691,19 @@ def test_one_contract_cannot_hold_two_squares_under_two_different_snapshots():
 def test_a_clean_day_must_also_be_an_all_day():
     """`clean` IS A SUBSET OF `all`, and the database says so.
 
-    The three views are not uniformly nested -- `in_contracts` can be true with `in_all` false, because
-    a contract reaches its 100% tier from `progress=100` with no platinum anywhere. But `clean` is the
-    SAME population as `all` with shovelware excluded, and a shovelware-free platinum is still a
-    platinum, so that pair nests by construction.
+    `clean` is the SAME population as `all` with shovelware excluded, and a shovelware-free platinum is
+    still a platinum, so the pair nests by construction. `in_clean` is the board; `in_all` is the
+    comparison figure.
 
     WHY A CONSTRAINT AND NOT A COMMENT. The violating shape is what a HALF-WRITTEN BACKFILL produces:
-    three views populated by three predicates, one of them wrong or interrupted. That is a silent wrong
-    answer on a reward ladder rather than a visible failure, and it is the one error here that no page
-    would look odd for. An earlier version of the model comment claimed this constraint would be wrong
-    for real data, reasoning from the contracts counterexample -- which does not transfer.
+    two populations from one statement, one of them wrong or interrupted. That is a silent wrong answer
+    on a progress figure rather than a visible failure, and it is the one error here that no page would
+    look odd for.
+
+    THERE WAS A THIRD COLUMN, `in_contracts`, which genuinely did NOT nest -- a contract reaches its
+    100% tier from `progress=100` with no platinum anywhere -- and this docstring argued at length that
+    a blanket "the views nest" rule would therefore be wrong. The one-lens collapse removed the column,
+    so the only pair left is the nesting one.
     """
     challenge = Challenge.objects.create(
         profile=ProfileFactory(), challenge_type=CHALLENGE_TYPE_CALENDAR,
@@ -711,10 +713,10 @@ def test_a_clean_day_must_also_be_an_all_day():
         CalendarDay.objects.create(challenge=challenge, month=3, day=3,
                                    in_all=False, in_clean=True)
 
-    # ── AND THE CASE THAT GENUINELY DOES NOT NEST IS STILL ALLOWED, which is the half a blanket
-    # "the views nest" rule would have forbidden.
+    # ── AND A SHOVELWARE DAY IS STILL ALLOWED: in `all`, off the board. That is the whole content of
+    # the comparison figure, so the constraint must not forbid it.
     CalendarDay.objects.create(challenge=challenge, month=3, day=4,
-                               in_all=False, in_contracts=True)
+                               in_all=True, in_clean=False)
 
 
 def test_a_day_is_unique_per_run_and_its_month_and_day_are_ranged():
@@ -735,51 +737,32 @@ def test_a_day_is_unique_per_run_and_its_month_and_day_are_ranged():
         CalendarDay.objects.create(challenge=challenge, month=1, day=32)
 
 
-def test_every_declared_view_names_a_field_that_exists():
-    """`CALENDAR_VIEW_FIELDS` maps a view name to a model field, and NOTHING reads it yet.
-
-    Three consumers are about to: the backfill, the sync hook and the day modal. Until one exists, a
-    typo like `in_cleann` sits undetected -- and when it is finally read it will fail somewhere far from
-    the typo. This is the same "declared rather than inferred" guard the rewards partition test is.
+def test_every_declared_population_names_a_field_that_exists():
+    """`CALENDAR_VIEW_FIELDS` maps a key to a model field, and a typo like `in_cleann` would fail far
+    from where it was written. It used to cross-check against a `CALENDAR_VIEWS` frozenset of declared
+    lenses; with one lens that set was a second list of the same two names, so the mapping is now the
+    only declaration and this checks it against the model.
     """
-    for view, field in CALENDAR_VIEW_FIELDS:
-        assert view in CALENDAR_VIEWS, '%s is not a declared view' % view
-        assert hasattr(CalendarDay, field), 'CalendarDay has no field %r (declared for %s)' % (field, view)
-
-    assert {v for v, _ in CALENDAR_VIEW_FIELDS} == set(CALENDAR_VIEWS), (
-        'a view has no field mapping, so one of its three consumers will silently read nothing')
+    assert len(CALENDAR_VIEW_FIELDS) == 2, 'the board and its comparison figure'
+    for key, field in CALENDAR_VIEW_FIELDS:
+        assert hasattr(CalendarDay, field), (
+            'CalendarDay has no field %r (declared for %s)' % (field, key))
 
 
-def test_a_finished_calendar_run_records_which_view_finished_it():
-    """ONE COLUMN FOR TWO KINDS OF FINISH, which is the owner's framing (2026-10-03): a Hall of Fame
-    entry is a SNAPSHOT of an achievement, so shovelware-free and contracts finishes live under one
-    roof, mixed on one board, ordered on one `completed_at` -- and this column is only what lets an
-    entry SAY which kind it was.
+def test_a_finished_calendar_run_records_no_finishing_view():
+    """THE COLUMN IS GONE, and this test records what it was for rather than vanishing with it.
 
-    THE ALTERNATIVE WAS SIX COLUMNS (three counters, three stamps) so that every view could complete
-    independently. That is more expressive and worse: it makes `is_complete` mean nothing on its own,
-    and the Hall of Fame orders on a single `completed_at`.
+    `Challenge.completed_view` said WHICH of two genuine lenses had finished a run -- shovelware-free or
+    contracts -- so a Hall of Fame entry could label the kind of finish while both lived under one
+    `is_complete` and one `completed_at`. The alternative considered at the time was six columns, three
+    counters and three stamps, which is more expressive and worse: it makes `is_complete` meaningless on
+    its own while the board still orders on a single timestamp.
 
-    ALL-PLATINUMS IS NOT A FINISH, and that is the half worth pinning. It is the view shovelware
-    inflates, so it carries the early day-marker ladder and nothing else. Storing it here would mean a
-    run could enter the Hall of Fame on the easiest lens -- the exact thing the owner's "genuine
-    achievements" line rules out.
+    One lens makes the question disappear. A finished Calendar run is 365 shovelware-free days, which is
+    the only kind of finish there is.
     """
-    challenge = Challenge.objects.create(
-        profile=ProfileFactory(), challenge_type=CHALLENGE_TYPE_CALENDAR,
-        name='Calendar', total_slots=365)
-
-    assert challenge.completed_view == '', 'an unfinished run must not claim a finishing view'
-
-    for view in (CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS):
-        challenge.completed_view = view
-        challenge.full_clean()
-
-    # ── AND THE OTHER TYPES NEVER SET IT. Their completion has no view, so a non-empty value here
-    # would make the Hall of Fame label an A-Z run with a Calendar lens.
-    az = Challenge.objects.create(
-        profile=ProfileFactory(), challenge_type=CHALLENGE_TYPE_AZ, name='A-Z', total_slots=26)
-    assert az.completed_view == ''
+    assert not hasattr(Challenge, 'completed_view'), (
+        'a one-lens run has no finishing view to record; re-adding the column means re-adding a lens')
 
 
 def test_the_progress_number_is_not_the_all_platinums_count():

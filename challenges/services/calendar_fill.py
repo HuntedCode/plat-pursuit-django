@@ -33,15 +33,13 @@ seek. Every function below returns at most 365 rows.
 import logging
 import zoneinfo
 
-from django.db.models import (Case, Count, DateField, F, IntegerField, Min, OuterRef, Q,
-                              Subquery, Value, When)
-from django.db.models.functions import Coalesce, ExtractDay, ExtractMonth, TruncDate
+from django.db.models import Case, DateField, F, Min, Q, Value, When
+from django.db.models.functions import ExtractDay, ExtractMonth, TruncDate
 from django.utils import timezone
 
-from challenges.models import CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS
+from challenges.models import CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN
 from trophies.models import (
     SHOVELWARE_FLAGGED_STATUSES,
-    EarnedContract,
     EarnedTrophy,
     Profile,
     ProfileGame,
@@ -164,57 +162,23 @@ def _days_from_platinums(profile, tz):
     return out
 
 
-def _days_from_contracts(profile, tz, *, batch=200):
-    """`{(month, day): earliest local date}` for this hunter's CONTRACT completions.
-
-    THROUGH `eligibility.completion_dates`, NOT A SECOND DERIVATION, and this is the DRY risk this whole
-    slice was flagged for. That function already answers "when did this hunter FIRST complete this
-    contract" -- reading both tiers the contract engine reads, taking the earliest qualifying moment,
-    and doing it in five bounded queries with the small-side-first shape. Writing the same rule again
-    here would give the Calendar its own quietly different definition of "completed, and when", and the
-    two would drift the first time either tier's rule moved.
-
-    BATCHED, because that function is sized for a PICKER PAGE. Its cost is a fixed number of queries
-    however many contracts are passed, but the `IN` lists are not fixed, and a whole career is hundreds
-    of contracts rather than a page of twenty.
-    """
-    from challenges.services.eligibility import completion_dates
-
-    contract_ids = list(
-        EarnedContract.objects.filter(profile=profile).values_list('contract_id', flat=True)
-    )
-    if not contract_ids:
-        return {}
-
-    from trophies.models import Contract
-
-    out = {}
-    for start in range(0, len(contract_ids), batch):
-        chunk = list(Contract.objects.filter(id__in=contract_ids[start:start + batch]))
-        for moment in completion_dates(profile, chunk).values():
-            if moment is None:
-                continue
-            local = moment.astimezone(tz)
-            key = _fold(local.month, local.day)
-            date = local.date()
-            if key not in out or date < out[key]:
-                out[key] = date
-    return out
-
-
 def filled_days(profile):
-    """`{view: {(month, day): earliest local date}}` for all three views.
+    """`{key: {(month, day): earliest local date}}` for the two stored populations.
 
-    The single entry point. Returns at most 365 entries per view, and every date is already resolved in
-    the hunter's own timezone, so a caller never has to know about timezones again.
+    The single entry point. Returns at most 365 entries each, and every date is already resolved in the
+    hunter's own timezone, so a caller never has to know about timezones again.
+
+    ONE STATEMENT PRODUCES BOTH, which is why `in_all` survives the one-lens collapse: it is free. The
+    clean population is the all population minus shovelware, and `_days_from_platinums` reads them
+    together with a conditional aggregate so the nesting is true by construction rather than by two
+    queries agreeing.
+
+    IT USED TO RETURN A THIRD, from `_days_from_contracts`, and that was the EXPENSIVE one: it walked
+    `EarnedContract` to a contract list, chunked it, and put every chunk through
+    `eligibility.completion_dates` (five bounded queries apiece). The collapse to one lens removed the
+    whole predicate, so the fill is now exactly the single platinum statement.
     """
-    tz = _hunter_timezone(profile)
-    platinum_views = _days_from_platinums(profile, tz)
-    return {
-        CALENDAR_VIEW_ALL: platinum_views[CALENDAR_VIEW_ALL],
-        CALENDAR_VIEW_CLEAN: platinum_views[CALENDAR_VIEW_CLEAN],
-        CALENDAR_VIEW_CONTRACTS: _days_from_contracts(profile, tz),
-    }
+    return _days_from_platinums(profile, _hunter_timezone(profile))
 
 
 def apply_to_run(challenge, *, found=None):
@@ -272,10 +236,9 @@ def apply_to_run(challenge, *, found=None):
     # so the run reads as due forever and every sweep recomputes it: the optimisation inverted.
     plats_seen = (Profile.objects.filter(pk=challenge.profile_id)
                   .values_list('total_plats', flat=True).first() or 0)
-    contracts_seen = EarnedContract.objects.filter(profile_id=challenge.profile_id).count()
 
     # `found` IS ACCEPTED FROM THE CALLER because it depends only on the PROFILE, not the run. A hunter
-    # can hold more than one Calendar run (a finished one keeps filling for the other view's ultimate),
+    # can hold more than one Calendar run (runs are sequential, so the finished ones stay),
     # and computing it per run recomputes an identical ~90-query history pass for each. The two callers
     # that loop -- the sync hook and the nightly phase -- pass it in; a single-run caller omits it.
     if found is None:
@@ -328,15 +291,14 @@ def apply_to_run(challenge, *, found=None):
 
         if to_update:
             CalendarDay.objects.bulk_update(
-                to_update, ['in_all', 'in_clean', 'in_contracts', 'earned_on', 'filled_at'],
+                to_update, ['in_all', 'in_clean', 'earned_on', 'filled_at'],
                 batch_size=500)
         # THE WATERMARKS, written whether or not anything filled -- that is what makes the sweep's
         # cheap check work. Skipping them on a no-op would leave the run due every night forever.
         # Deliberately NOT `updated_at`, which must stay still on a no-op or every Calendar run floats
         # to the top of "my challenges" each morning.
         locked.calendar_plats_seen = plats_seen
-        locked.calendar_contracts_seen = contracts_seen
-        locked.save(update_fields=['calendar_plats_seen', 'calendar_contracts_seen'])
+        locked.save(update_fields=['calendar_plats_seen'])
         _recount_calendar(locked, wrote_rows=bool(to_update))
 
     return newly_filled
@@ -356,33 +318,24 @@ def _recount_calendar(challenge, *, wrote_rows=True):
 
     The caller must hold the run's row lock; `apply_to_run` does.
     """
-    from challenges.models import CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS
+    # ONE FIGURE, AND IT IS THE CLEAN COUNT. This used to aggregate two counts, take the larger as the
+    # progress number and record WHICH of them completed the run, because two different lenses could
+    # each finish it. With one lens there is nothing to compare and nothing to record: a day is a
+    # shovelware-free platinum, and the run is done when all 365 are.
+    filled = challenge.calendar_days.filter(in_clean=True).count()
 
-    counts = challenge.calendar_days.aggregate(
-        clean=Count('pk', filter=Q(in_clean=True)),
-        contracts=Count('pk', filter=Q(in_contracts=True)),
-    )
-    clean = counts['clean'] or 0
-    contracts = counts['contracts'] or 0
-    best = max(clean, contracts)
-
-    just_completed = not challenge.is_complete and best >= challenge.total_slots
-    if not wrote_rows and best == challenge.filled_count and not just_completed:
+    just_completed = not challenge.is_complete and filled >= challenge.total_slots
+    if not wrote_rows and filled == challenge.filled_count and not just_completed:
         return
 
-    challenge.filled_count = best
-    challenge.completed_count = best
+    challenge.filled_count = filled
+    challenge.completed_count = filled
     fields = ['filled_count', 'completed_count', 'updated_at']
 
     if just_completed:
         challenge.is_complete = True
         challenge.completed_at = timezone.now()
-        # CONTRACTS WINS A TIE, and a tie is reachable: an opening backfill evaluates every view in one
-        # pass, so a hunter who qualifies for both finishes both at once and "whichever came first"
-        # decides nothing. The rarer, harder achievement is the more honest snapshot to put on the board.
-        challenge.completed_view = (
-            CALENDAR_VIEW_CONTRACTS if contracts >= challenge.total_slots else CALENDAR_VIEW_CLEAN)
-        fields += ['is_complete', 'completed_at', 'completed_view']
+        fields += ['is_complete', 'completed_at']
 
     challenge.save(update_fields=fields)
 
@@ -437,12 +390,14 @@ def runs_due_for_sweep():
     never started a Calendar challenge has no run and nothing to compute -- the backfill is reachable
     only through a run, and a run exists only because somebody pressed Start.
 
-    NOT SCOPED TO UNFINISHED RUNS, which inverts the usual convention and is deliberate. The house rule
-    elsewhere is that a finished run is never written to again. A Calendar run completes on the FIRST
-    genuine view to fill, and the hunter may still be working toward the other view's ultimate title, so
-    its days must keep filling afterwards.
+    FINISHED RUNS ARE OUT OF SCOPE, which REVERSES an exception this function used to carry. It read
+    "NOT SCOPED TO UNFINISHED RUNS... a Calendar run completes on the FIRST genuine view to fill, and
+    the hunter may still be working toward the other view's ultimate title, so its days must keep
+    filling afterwards". That justification died with the second lens: a complete run is 365
+    shovelware-free days, `in_all` is a superset of `in_clean`, so there is no column left that can
+    move. Sweeping a finished run could only ever rewrite it with itself.
 
-    NOT SCOPED TO VISIBLE RUNS EITHER, and that is CONSISTENCY rather than a second exception.
+    NOT SCOPED TO VISIBLE RUNS, though, and that is CONSISTENCY rather than an exception.
     `pending_slots` -- the detection every other challenge type goes through -- filters only
     `challenge__is_complete=False, is_completed=False` and says nothing about `is_deleted`, so a hidden
     A-Z run has always kept completing its squares. Hiding in this feature means "not shown", not
@@ -454,20 +409,15 @@ def runs_due_for_sweep():
     """
     from challenges.models import CHALLENGE_TYPE_CALENDAR, Challenge
 
-    earned_contracts = (
-        EarnedContract.objects
-        .filter(profile=OuterRef('profile_id'))
-        .values('profile_id')
-        .annotate(n=Count('pk'))
-        .values('n')
-    )
-
+    # ONE COLUMN AGAINST ONE COLUMN. There was a `Subquery` annotation here counting every row of
+    # `EarnedContract` per profile, because a contracts day could move WITHOUT a platinum -- a contract
+    # reaches its 100% tier with no platinum term -- so the cheap question needed two numbers. With one
+    # lens a day needs a platinum, full stop, so `total_plats` IS the question and the annotation, the
+    # second watermark column and the `Coalesce`/`OuterRef` imports all went with it.
     return (
         Challenge.objects
-        .filter(challenge_type=CHALLENGE_TYPE_CALENDAR)
-        .annotate(live_contracts=Coalesce(Subquery(earned_contracts, output_field=IntegerField()), 0))
-        .exclude(profile__total_plats=F('calendar_plats_seen'),
-                 live_contracts=F('calendar_contracts_seen'))
+        .filter(challenge_type=CHALLENGE_TYPE_CALENDAR, is_complete=False)
+        .exclude(profile__total_plats=F('calendar_plats_seen'))
     )
 
 

@@ -35,22 +35,23 @@ visibly nothing instead of 365 cells of garbage.
 """
 import calendar
 
-from challenges.models import (CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS, CALENDAR_VIEW_FIELDS,
-                               CALENDAR_MONTH_DAYS, CalendarDay, calendar_day_keys)
+from challenges.models import CALENDAR_MONTH_DAYS, CalendarDay, calendar_day_keys
 
-#: The metal a completed month is struck in, per the view that completed it. Hardest view, best metal.
+#: WHAT `.pp-med` ACTUALLY PROVIDES, kept because an earlier comment oversold it and the overselling
+#: was load-bearing -- it claimed the crest "needs no authored artwork". That is FALSE.
+#: `badge-medallion.css` is an art-layer compositor: `.pp-med__l` are `<img>` elements fed from a
+#: badge's `art_layers`, and with none supplied the stage is empty. What IS tier-driven off `data-tier`
+#: is `--med-c` and `--med-glow`, and through them the aura and the plate. The ring lives inside
+#: `.pp-med__back` and renders only on the detail-modal flip face; the glint, the cast shadow and the
+#: holographic foil are all tier-INDEPENDENT. So reusing `.pp-med` would buy a tinted plate with an
+#: aura and a size variable, which is why the crest borrows only the palette.
 #:
-#: WHAT `.pp-med` ACTUALLY PROVIDES, stated carefully because an earlier version of this comment
-#: oversold it and the overselling was load-bearing -- it claimed the crest "needs no authored
-#: artwork". That is FALSE. `badge-medallion.css` is an art-layer compositor: `.pp-med__l` are `<img>`
-#: elements fed from a badge's `art_layers`, and with none supplied the stage is empty. What IS
-#: tier-driven off `data-tier` is `--med-c` and `--med-glow`, and through them the aura and the plate.
-#: The ring lives inside `.pp-med__back` and renders only on the detail-modal flip face; the glint,
-#: the cast shadow and the holographic foil are all tier-INDEPENDENT (the foil is gated on a per-badge
-#: `is_holographic` flag, not on this attribute). So reusing `.pp-med` buys a tinted plate with an aura
-#: and a size variable, and the twelve generated faces are still work to be designed.
-CREST_METAL = {view: metal for (view, _field), metal in
-               zip(CALENDAR_VIEW_FIELDS, ('bronze', 'silver', 'gold'))}
+#: THERE WAS A `CREST_METAL` MAP (deleted), zipping the three lenses against bronze/silver/gold so a month's
+#: crest said WHICH lens had completed it. One lens means one state -- struck or not -- so the metal
+#: axis is free, and the owner has asked for it back as a per-MONTH colour instead (2026-10-04: "give
+#: each medallion its own color that matches the month it represents"). That is the next slice, and it
+#: is only coherent because the collapse freed the axis: a month hue and a lens metal on one object
+#: were two colour systems competing for the same coin.
 
 #: Stable, ASCII, three-letter month slugs for DOM ids and CSS hooks.
 #:
@@ -93,56 +94,22 @@ MONTH_NAMES = tuple(calendar.month_name[month] for month in range(1, 13))
 #:
 #: ONE LIST FOR BOTH PATHS, so there is no second copy to keep in step. The hero does not read
 #: `earned_on`; a date column over at most 2,920 rows is not worth a divergence to avoid.
-_CELL_FIELDS = ('challenge', 'month', 'day', 'in_all', 'in_clean', 'in_contracts', 'earned_on')
+_CELL_FIELDS = ('challenge', 'month', 'day', 'in_all', 'in_clean', 'earned_on')
 
 
 def _rows_by_key(rows):
     return {(row.month, row.day): row for row in rows}
 
 
-def _view_state(row):
-    """`{view: bool}` for one row (or for an absent one), derived from `CALENDAR_VIEW_FIELDS`.
+def _is_filled(row):
+    """Is this day filled? One lens, so one boolean.
 
-    DERIVED RATHER THAN SPELLED OUT, which an earlier version of this module only half did: it built
-    this dict from the constant and then wrote the three `in_*` keys out literally, so the generality
-    was cosmetic and a fourth view would have raised `KeyError` two functions away.
+    It used to be `_view_state`, returning `{view: bool}` for three lenses so a cell could carry all of
+    them and let CSS reveal the active one. With one lens a cell carries whether it is filled, and the
+    `:has()` machinery, the duplicated per-lens figures and the lens-blind screen-reader text go with
+    the dict.
     """
-    return {view: bool(row and getattr(row, field)) for view, field in CALENDAR_VIEW_FIELDS}
-
-
-def _counts(rows):
-    """`{view: how many of `rows` are filled in it}`.
-
-    IN PYTHON AND NOT IN THE DATABASE, which is worth defending rather than assuming, because the
-    project's rule is that a per-user queryset producing aggregate output must aggregate in the
-    database. The rule exists for querysets whose row count scales with the HUNTER -- a whale has
-    250,000 `EarnedTrophy` rows. A Calendar run has exactly 365 `CalendarDay` rows whether the hunter
-    holds three platinums or thirty thousand, and the board has to materialise every one of them to
-    draw itself. So the rows are already in hand and counting them here costs nothing, where a
-    `COUNT(*) FILTER (...) GROUP BY month` would add a query for data already fetched.
-
-    A consumer that wants ONLY the counts -- a ladder row, a hub card, twelve crests with no board --
-    should not come through here at all. `calendar_fill._recount_calendar` already does that aggregate
-    properly, and that is the shape to copy.
-
-    ONE PASS RATHER THAN THREE over the same list, which is the whole of the benefit. The obvious
-    spelling -- a dict comprehension with a `sum(...)` per view -- walks `rows` once per view.
-
-    IT IS ALSO GENERATOR-SAFE, AND NOTHING RELIES ON THAT, which is worth saying plainly because the
-    first version of this note oversold it twice over. No caller passes a generator: `_hero_group`
-    needs `rows` again for `_rows_by_key`, and `calendar_groups` counts from the cells. So the
-    three-pass spelling would not have broken anything here, only been slower. And
-    `rewards.granted_titles_for` was cited as a case this app had "already paid for"; its own docstring
-    says the opposite -- "the hazard is worth naming even though it is now structurally absent". It was
-    guarded, then designed out. Claiming a hazard as history is precisely the error the comment in
-    `_cell` was corrected for, committed again one function later.
-    """
-    tally = {view: 0 for view, _field in CALENDAR_VIEW_FIELDS}
-    for row in rows:
-        for view, field in CALENDAR_VIEW_FIELDS:
-            if getattr(row, field):
-                tally[view] += 1
-    return tally
+    return bool(row and row.in_clean)
 
 
 def _cell(month, day, row):
@@ -201,10 +168,9 @@ def _cell(month, day, row):
         'key': '%d-%d' % (month, day),
         # Spelled out, because a cell shows a bare numeral and a screen reader needs the date.
         'label': '%s %d' % (MONTH_NAMES[month - 1], day),
-        # ALL THREE LENSES IN THE DOM, so switching lens costs neither a request nor a script -- the
-        # same both-states-rendered technique the contract CTA uses, with the stylesheet revealing the
-        # active one by reading the checked radio through `:has()`.
-        'views': _view_state(row),
+        # ONE BOOLEAN. This was `views`, a `{lens: bool}` dict so all three lenses could sit in the DOM
+        # and CSS could reveal the active one. One lens needs one answer.
+        'filled': _is_filled(row),
         'earned_on': row.earned_on if row else None,
         # NO `index`, AND THE REASONING INVERTED RATHER THAN SIMPLY BEING WRONG. One was stamped here
         # copying `slot_cards`, which carries a run-wide position precisely because a template counter
@@ -261,19 +227,30 @@ def calendar_groups(challenge):
         # redundant guards for an out-of-range month that `calendar_day_keys()` cannot emit.
         members = cells[start:start + days_in_month]
         start += days_in_month
-        # COUNTED FROM THE CELLS, not from the rows again, so a month head can never disagree with
-        # the squares beneath it -- both read the one `views` dict `_view_state` built.
-        month_counts = {view: sum(1 for cell in members if cell['views'][view])
-                        for view, _field in CALENDAR_VIEW_FIELDS}
+        # COUNTED FROM THE ROWS for `all` and from the CELLS for `clean`, which is not an inconsistency:
+        # `clean` is what the squares draw, so counting it off the cells is what makes a month head
+        # unable to disagree with the grid beneath it. `all` is the comparison figure and no cell shows
+        # it, so it has nowhere else to come from.
+        month_rows = [by_key[(c['month'], c['day'])] for c in members
+                      if (c['month'], c['day']) in by_key]
+        # `done` IS A SINGLE HONEST NUMBER AGAIN, which is the clearest thing the collapse bought back.
+        # This group deliberately had NO `done` key while there were three lenses: a month had three
+        # progress numbers that did not nest, so any single figure would have been one of three picked
+        # arbitrarily and every reader would silently get the wrong month some of the time. One lens
+        # means one answer, and the shape matches `slot_groups`' seven keys again.
+        #
+        # `all_done` IS THE COMPARISON FIGURE, not a second lens: the same days without the shovelware
+        # exclusion. Nothing on the board draws it; `totals_for` sums it so a page can say "297 days, of
+        # 340 you hold platinums for" rather than a bare figure.
+        done = sum(1 for cell in members if cell['filled'])
         groups.append({
             'label': MONTH_NAMES[index],
             'slug': MONTH_SLUGS[index],
             'cards': members,
             'total': days_in_month,
-            # Per-view progress, which is what a month head is FOR: the page tally cannot say how much
-            # of February is left, and February is the unit a crest is struck for.
-            'counts': month_counts,
-            'crest': _crest(month_counts, days_in_month),
+            'done': done,
+            'all_done': sum(1 for row in month_rows if row.in_all),
+            'is_struck': done == days_in_month,
             # TWELVE LITERAL SLUGS, so uniqueness is structural and `slot_render._with_dom_ids` is not
             # needed: its loop guards two groups sharing a slug-derived id, which cannot happen here.
             # A separate prefix because this is its own block, not a `.pp-csq-shelf`.
@@ -289,17 +266,9 @@ def calendar_boards_for(challenges):
     gives: a hero row is a single shape read at a glance, and twelve labelled month heads inside a
     browse card would be a second page.
 
-    ONE LENS, CHOSEN HERE, which is the part that cannot be left to the template. The three views are
-    independent, so a board tinted by "filled in any of them" would show a run further along than any
-    of its actual progress -- and the entry's tally next to it reads `filled_count`, which
-    `_recount_calendar` defines as the better of CLEAN and CONTRACTS. So the hero draws exactly that
-    lens and says which one it is, and the board and the tally cannot disagree.
-
-    DERIVED FROM THE ROWS RATHER THAN FROM `Challenge.completed_view`, which is both equivalent and
-    cheaper: whenever a view has completed, it is also the larger count, so the two agree -- and a tie
-    at 365 resolves to contracts either way. Reading the column instead would mean touching a
-    `Challenge` field, and a caller that loaded its runs with `.only(...)` would pay a deferred SELECT
-    per run, reintroducing exactly the per-row fetch `_CELL_FIELDS` exists to prevent.
+    ONE LENS, SO NOTHING TO CHOOSE. This used to pick which of three lenses the hero drew and say so,
+    because a board tinted by "filled in any of them" would have overstated a run's progress. With one
+    lens the board and the `filled_count` tally beside it read the same column by construction.
 
     A DAY CARRIES ONLY WHAT A HERO CELL CAN DRAW -- its date and whether it is filled in that lens.
     `boards_for` makes the same choice (a four-key square built inline rather than `_card`'s eight),
@@ -336,94 +305,44 @@ def calendar_boards_for(challenges):
 
 
 def _hero_group(rows):
-    """One run's hero board: `[]`, or a single group of 365 minimal day cells in one lens."""
+    """One run's hero board: `[]`, or a single group of 365 minimal day cells.
+
+    NO LENS TO PICK ANY MORE. This used to call `headline_view` to choose the better of two lenses and
+    report which one the band was drawn in, because a board tinted by "filled in any lens" would have
+    overstated the run. One lens makes the band and the `filled_count` tally read the same column.
+    """
     if not rows:
         return []
 
-    view = headline_view(_counts(rows))
-    field = dict(CALENDAR_VIEW_FIELDS)[view]
     by_key = _rows_by_key(rows)
     days = []
     for month, day in calendar_day_keys():
-        row = by_key.get((month, day))
-        days.append({'month': month, 'day': day,
-                     'filled': bool(row and getattr(row, field))})
-    # `view` SO THE BOARD IS INTERPRETABLE. Without it the same grid of tints means a different
-    # achievement from one entry to the next, which is the one thing a Hall of Fame must not do.
-    # NO `label`/`slug`, which `_board_groups`' single-group branch does carry. They are always `''`
+        days.append({'month': month, 'day': day, 'filled': _is_filled(by_key.get((month, day)))})
+    # NO `view` KEY. One was here so the band could say which lens it was drawn in -- without it the
+    # same grid of tints meant a different achievement from one entry to the next, which is the one
+    # thing a Hall of Fame must not do. With one lens every band means the same thing.
+    # NO `label`/`slug` EITHER, which `_board_groups`' single-group branch does carry. They are always `''`
     # there too, but that group is drawn by `_run_hero.html`, which tests `group.label`. This one can
     # never be, because it deliberately does not use the `squares` key that template loops. Two keys
     # that are always empty and that no template can reach are what `_card`'s rule rejects, and they
     # would have survived a trim that minimised the cells beside them for exactly that reason.
-    return [{'view': view, 'days': days}]
+    return [{'days': days}]
 
 
 def totals_for(months):
-    """`{view: days filled across the whole year}`, summed from month groups already in hand.
+    """`{'done': days filled, 'all': the same without the shovelware exclusion}` for the whole year.
 
-    PURE, AND THAT IS THE POINT: the detail page needs the year totals for its tally, for which lens
-    to open on, and later for the day-marker ladder -- and all three are sums of numbers
-    `calendar_groups` has already computed. Asking the database again would be a second query for
-    data on the page, and asking it DIFFERENTLY would be two definitions of the same figure.
+    PURE, AND THAT IS THE POINT: the page needs the year totals for its tally and, shortly, for the
+    day-marker rail -- and both are sums of numbers `calendar_groups` has already computed. Asking the
+    database again would be a second query for data already on the page, and asking it DIFFERENTLY
+    would be two definitions of one figure.
+
+    TWO NAMED KEYS, not a per-lens map. This returned `{view: total}` keyed on `CALENDAR_VIEW_FIELDS`
+    while there were three lenses and a switcher to feed; `done` is now the only figure anything draws,
+    and `all` exists so the headline can be read aloud ("297 days, of 340 you hold platinums for")
+    rather than as a bare number.
     """
-    return {view: sum(month['counts'][view] for month in months)
-            for view, _field in CALENDAR_VIEW_FIELDS}
-
-
-def headline_view(counts):
-    """Which lens a run leads with: the better of CLEAN and CONTRACTS.
-
-    ALL PLATINUMS IS NEVER IT, and that is a decision rather than an omission. It is the lens
-    shovelware inflates, it cannot finish a run, and leading with it would show an entry at 298/365
-    whose run actually completes on a view sitting at 164. It carries the early day-marker ladder and
-    nothing else.
-
-    CONTRACTS WINS A TIE, matching `_recount_calendar`'s own tie-break on completion -- the rarer,
-    harder achievement.
-    """
-    return (CALENDAR_VIEW_CONTRACTS
-            if counts[CALENDAR_VIEW_CONTRACTS] >= counts[CALENDAR_VIEW_CLEAN]
-            else CALENDAR_VIEW_CLEAN)
-
-
-def _crest(counts, total):
-    """The metal a month's crest is struck in, or `''` while no view has completed it.
-
-    THE HIGHEST VIEW ACHIEVED, NOT A CHAIN, and this is load-bearing rather than a display preference.
-    The views do not nest: a contract reaching its 100% tier with no platinum anywhere fills a
-    contracts day and no platinum day, so a month can complete in `contracts` while `all` is still
-    short. Gold without bronze. Rendering one crest per month makes that invisible; rendering all three
-    side by side would expose it and read as a bug.
-
-    IT IS THEREFORE A CROSS-LENS VALUE, WHICH ONLY THE CREST ROW MAY DRAW. This is the field `_cell`'s
-    `tier` was deleted for being, so the difference has to be stated rather than assumed, and a review
-    caught it being left unexamined here. `tier` sat on a cell INSIDE the lens-switched grid, where a
-    single best-of value is wrong in whichever lens you are not looking at: a contracts-only day would
-    have painted gold on a square that is empty in the All platinums lens.
-
-    The crest does not sit there. The twelve crests are the month SWITCHER -- lens-independent chrome
-    above the board, and the run's trophy shelf -- so "your best metal for February" is exactly the
-    right thing for one to say, and switching lens must not change your trophy shelf.
-
-    THE RULE THAT FOLLOWS: never render this inside the lens-switched board, and never in a month head
-    that lives there. Anything lens-scoped reads `counts` and compares against `total` itself, which is
-    the per-lens source and is already on the group for that purpose. A per-lens `{view: metal}` map was
-    considered and not built: nothing needs it while the crest row is lens-independent chrome, and a
-    second crest field would be the thing a template picks wrongly.
-
-    SILVER WITHOUT BRONZE IS NOT REACHABLE, which is worth knowing before someone "fixes" it: `clean`
-    implies `all` by construction and `calendarday_clean_implies_all` enforces it, so a complete clean
-    month is always a complete all month too.
-
-    `total` IS NEVER ZERO -- it is a month length from `CALENDAR_MONTH_DAYS` -- so there is no guard
-    for it. An earlier version carried one, which was a guard that could not fire in a function whose
-    own comment rejects a shared helper for having one.
-    """
-    metal = ''
-    for view, _field in CALENDAR_VIEW_FIELDS:
-        # `[view]` RATHER THAN `.get(view)`: the only caller builds `counts` from this same constant,
-        # so every key exists -- and a `.get` would quietly SKIP an unmapped fourth view where the
-        # subscript names it. Same call as dropping the `if not total` guard above.
-        if counts[view] == total:
-            metal = CREST_METAL[view]
-    return metal
+    return {
+        'done': sum(month['done'] for month in months),
+        'all': sum(month['all_done'] for month in months),
+    }

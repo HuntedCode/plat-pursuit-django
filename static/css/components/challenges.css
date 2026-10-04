@@ -2819,15 +2819,14 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  * NO WEEKDAY COLUMN, EVER. A square is a (month, day) with no year, so there is nothing to align to and
  * any weekday head would be a different lie each year. The grid is plain and numbered.
  *
- * TWO SWITCHERS, AND THEY WORK DIFFERENTLY -- which an earlier version of this header got wrong in every
- * clause, describing a `data-month`/`data-view` pair that no longer exists. That was the exact trap the
- * attributes were deleted to avoid, recreated in prose: a header that names the thing driving the tint is
- * where the next person goes to "fix" the lens.
- *   - THE LENS is pure CSS, with no script at all: `.pp-cal:has(input[value="..."]:checked)` reads the
- *     checked radio directly, so the tints and the tallies follow the chip with JavaScript off.
- *   - THE MONTH is the `hidden` attribute on the panels, rendered by the server and moved by
- *     `PlatPursuit.wireTablist`. Without JS the board shows January, which is correct but fixed.
- * Every panel and all three lenses are in the DOM already, because the rows arrive in one query.
+ * ONE SWITCHER, AND ONE LENS. A day is filled by a shovelware-free platinum (owner, 2026-10-04); there
+ * were three lenses and a `.pp-switch` to move between them, and the collapse took the switcher, the
+ * `:has()` reveal rules that drove the tint off the checked radio, the per-cell `data-all`/`data-clean`/
+ * `data-contracts` attributes, the duplicated per-lens figures and the bronze/silver/gold crest metals.
+ *
+ * WHAT IS LEFT is the MONTH switcher: the `hidden` attribute on the panels, rendered by the server and
+ * moved by `PlatPursuit.wireTablist`. Without JavaScript the board shows January -- correct, but fixed.
+ * Every panel is in the DOM already, because the rows arrive in one query.
  * ============================================================ */
 .pp-cal {
     display: flex;
@@ -2854,7 +2853,6 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    ONE TOKEN FOR THAT WIDTH, so the two blocks cannot drift apart. */
 .pp-cal { --cal-body: 712px; }
 @media (min-width: 768px) {
-    .pp-cal__lens,
     .pp-cal__panel { max-width: var(--cal-body); margin-inline: auto; width: 100%; }
 }
 
@@ -2920,9 +2918,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        UNEARNED IS THE RESTING STATE: an empty rim at low opacity, which is how the medallion draws its own
        unearned badges. Twelve blank coins read as a chase rather than twelve failures, because the rim
        still says which month each one is.
-       `--crest-glow: transparent` IS A FALLBACK, NOT THE RESTING VALUE -- no rule reads it without a
-       `data-tier`, since both consumers are gated on one and a tier means struck. It is here because a
-       `color-mix()` against an undefined custom property invalidates the whole declaration it sits in. */
+       `--crest-glow: transparent` IS A FALLBACK, NOT THE RESTING VALUE -- no rule reads it on an
+       unstruck crest, since both consumers are gated on `--struck`. It is here because a `color-mix()`
+       against an undefined custom property invalidates the whole declaration it sits in. */
     --crest-c: var(--pp-text-mute);
     --crest-glow: transparent;
     color: var(--crest-c);
@@ -2946,18 +2944,12 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     }
 }
 
-/* THE TIER PALETTE, DUPLICATED FROM `badge-medallion.css` ON PURPOSE, and worth stating plainly so the
-   next reader does not take it for a drift. The medallion's values live behind `.pp-med[data-tier]`, and
-   `.pp-med` is an art-layer COMPOSITOR: `.pp-med__art` uses `drop-shadow` to trace the artwork's
-   silhouette (nothing, with no layers) and `--sz` defaults to 160px. Wearing that class for a 44px coin
-   would mean overriding most of it to inherit four colours -- the near-fit the plan warned about
-   ("shoehorning one through it is the kind of near-fit that reads as reuse and is not").
-   So the crest borrows the PALETTE and nothing else. Two consumers is below this project's
-   abstract-at-three bar; the right fix at a third is to lift these four pairs into shared tokens, which
-   is a change to a shared stylesheet and therefore its own branch. */
-.pp-cal__crest[data-tier="bronze"] { --crest-c: #cf9160; --crest-glow: #e6ad74; }
-.pp-cal__crest[data-tier="silver"] { --crest-c: #b9c6d6; --crest-glow: #dae4f0; }
-.pp-cal__crest[data-tier="gold"]   { --crest-c: #e7c25c; --crest-glow: #f4d778; }
+/* A STRUCK CREST, IN ONE COLOUR FOR NOW. Three `data-tier` rules stood here carrying the medallion's
+   bronze/silver/gold, because the metal said WHICH of three lenses had completed the month. One lens
+   means one state, so the metal axis is free -- and the owner has asked for it back as a per-MONTH hue
+   ("give each medallion its own color that matches the month it represents"), which is the next slice
+   and is only coherent because the collapse freed it. Until then a struck crest wears the primary. */
+.pp-cal__crest--struck { --crest-c: var(--pp-primary); --crest-glow: var(--pp-primary); }
 
 /* THE FACE IS THE ONLY IN-FLOW CHILD, so `place-items: center` centres IT rather than centring a stack.
    The first version made the counter a second grid row, which centred the PAIR -- and the owner caught
@@ -3058,8 +3050,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    answer here rather than an exception to argue for: this figure is a number a hunter reads off a coin,
    not a decorative micro-label. The face clamps 12 -> 18px and this clamps 12 -> 15px, so the pair
    always fits the clear circle with the face leading.
-   `.pp-cal__count` IS SHARED WITH THE MONTH HEAD, so the `:has()` reveal rules below govern both and
-   the two places cannot disagree about which lens is active. Only the WRAPPER is size-gated. */
+   IT CARRIED THREE FIGURES, one per lens, sharing `.pp-cal__count` with the month head so one set of
+   `:has()` rules governed both and the two could not disagree about which lens was active. One lens
+   means one figure printed directly, and the shared class went with the rules that needed it. */
 .pp-cal__sub { display: none; }
 @media (min-width: 1024px) {
     .pp-cal__sub {
@@ -3095,14 +3088,13 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 
 /* THE ACTIVE TAB, which must be legible without colour alone: the ring is the shape cue and the face
    goes full-strength. A struck month that is also active keeps its metal. */
-/* A STRUCK MONTH KEEPS ITS METAL WHEN ACTIVE OR HOVERED, which the earlier rules claimed and did not do.
-   `[data-tier]`, `[aria-selected]` and `:hover` all carry the SAME specificity, so source order alone
-   decided: the primary colour was handed to a gold January the moment the page loaded, and hover took it
-   again on the way past. (An earlier version said hover "outranked both", which overstated a tie.) That is the exact bug this
-   stylesheet records paying for on `.pp-csq` ("hovering a finished square erased the one mark the page
-   exists to show"), thousands of lines further up. `:not([data-tier])` keeps the two on separate axes:
-   the metal says what you earned, the ring and the lift say where you are. */
-.pp-cal__crest[aria-selected="true"]:not([data-tier]) { --crest-c: var(--pp-primary); }
+/* ACTIVE AND EARNED ARE SEPARATE AXES, which is a rule to keep rather than a rule this slice needs. The
+   earlier version scoped the active colour with `:not([data-tier])` because otherwise selecting a gold
+   January recoloured it primary -- the exact bug this stylesheet records paying for on `.pp-csq`
+   ("hovering a finished square erased the one mark the page exists to show"). A struck crest is the same
+   colour as the active one today, so nothing can be erased; the moment per-month hues land, the active
+   state must go back to being shape (the ring and the lift) and never colour. */
+.pp-cal__crest[aria-selected="true"]:not(.pp-cal__crest--struck) { --crest-c: var(--pp-primary); }
 .pp-cal__crest[aria-selected="true"] { transform: translateY(-1px); }
 .pp-cal__crest[aria-selected="true"] .pp-cal__coin {
     outline: 2px solid color-mix(in srgb, var(--crest-c) 60%, transparent);
@@ -3115,9 +3107,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     border-radius: 50%;
 }
 @media (any-hover: hover) and (any-pointer: fine) {
-    .pp-cal__crest:not([data-tier]):hover { --crest-c: var(--pp-primary); }
-    /* A struck crest answers a hover by brightening its own metal rather than changing colour. */
-    .pp-cal__crest[data-tier]:hover { --crest-c: var(--crest-glow); }
+    .pp-cal__crest:not(.pp-cal__crest--struck):hover { --crest-c: var(--pp-primary); }
+    /* A struck crest answers a hover by brightening its own colour rather than changing it. */
+    .pp-cal__crest--struck:hover { --crest-c: var(--crest-glow); }
 }
 
 /* -- one month ------------------------------------------------------------------------------------- */
@@ -3146,10 +3138,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    number could not survive a client-side lens switch, and the three lenses do not nest so there is no
    "best" one to pick. */
 .pp-cal__tally { font-size: 0.75rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
-.pp-cal__count { display: none; }
-.pp-cal:has(input[value="all"]:checked)       .pp-cal__count[data-view="all"],
-.pp-cal:has(input[value="clean"]:checked)     .pp-cal__count[data-view="clean"],
-.pp-cal:has(input[value="contracts"]:checked) .pp-cal__count[data-view="contracts"] { display: inline; }
+/* NO `.pp-cal__count` RULES. The month head and the coin each rendered three figures -- one per lens --
+   with these selectors revealing whichever matched the checked radio. One lens means one figure, printed
+   directly, so the class and its reveal rules went together. */
 
 /* SEVEN ACROSS AT MOBILE, TEN FROM `md:`, AND CAPPED. Not a week alignment -- there is no weekday -- just
    the column count that makes a month read as a block: 31 days over seven is four full rows plus a short
@@ -3191,20 +3182,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 @media (min-width: 768px) { .pp-cal__day { font-size: 0.8125rem; } }
 
-/* THE LENS DECIDES WHICH SQUARES ARE FILLED, and this is the rule the whole three-booleans design exists
-   for: a day filled only in `contracts` is correctly EMPTY while the All platinums lens is showing. A
-   single best-of value on the cell could not say that, which is why `_cell` carries no `tier`.
-
-   `:has()` ON THE CHECKED RADIO RATHER THAN A `data-view` ATTRIBUTE, and that is a correctness fix rather
-   than a simplification. The attribute was written only by JavaScript, while the chip's own active state
-   is pure CSS (`.pp-switch__chip:has(input:checked)`) -- so with JS off, pressing "Contracts" lit the
-   Contracts chip and left every square and every tally showing the previous lens. False feedback on the
-   one dimension this board exists to express, which is worse than a control that does nothing. Reading
-   the radio directly gives one mechanism, no script, and nothing that can disagree. `:has()` is already
-   load-bearing in `switcher.css`, so support was never what stopped this. */
-.pp-cal:has(input[value="all"]:checked)       .pp-cal__day[data-all],
-.pp-cal:has(input[value="clean"]:checked)     .pp-cal__day[data-clean],
-.pp-cal:has(input[value="contracts"]:checked) .pp-cal__day[data-contracts] {
+/* A FILLED DAY, AND THERE IS ONLY ONE KIND NOW. This rule was three selectors reading the checked radio
+   through `:has()`, because a day could be filled in one lens and empty in another and the tint had to
+   follow whichever was active. A modifier class is what the rest of this stylesheet uses for a single
+   state, so that is what a day carries. */
+.pp-cal__day--on {
     border-color: color-mix(in srgb, var(--pp-primary) 45%, var(--pp-border));
     background: color-mix(in srgb, var(--pp-primary) 22%, var(--pp-bg-2));
     color: #fff;
@@ -3212,30 +3194,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cal__num { line-height: 1; }
 
-/* -- the lens switcher ----------------------------------------------------------------------------- */
-
-.pp-cal__lens { display: flex; flex-direction: column; gap: 6px; }
-.pp-cal__lens .pp-switch { width: 100%; }
-.pp-cal__lens .pp-switch__chip { flex: 1 1 0; justify-content: center; }
-/* HIDDEN AT MOBILE, because this span is what overflowed the switcher. `.pp-switch__chip` is
-   `flex: 1 1 0` with `min-width: auto`, so a chip cannot shrink below its min-content: longest word plus
-   this figure plus padding. The three chips came to roughly 398px against 343px available and the row
-   wrapped; without the figures it is about 314px and fits. The totals are not lost -- the month tally
-   carries the per-lens numbers -- so this is a duplicate at the one size where it does not fit.
-   NO `opacity`, which the first version had at 0.7. `--pp-text-mute` is documented in `input.css` as
-   already raised to clear WCAG AA (~4.5:1), so thinning it took a 12px figure a hunter READS down to
-   about 3.7:1 -- the recorded "opacity on a child defeats a measured ratio" failure exactly. */
-.pp-cal__lenscount {
-    display: none;
-    font-variant-numeric: tabular-nums;
-    margin-left: 0.35em;
-}
-@media (min-width: 768px) { .pp-cal__lenscount { display: inline; } }
-/* 12px, not 11px: this sentence is the whole explanation of why the Contracts lens can hold a day the
-   others do not, which is the opposite of supplementary. */
-/* `.pp-cal__lenshint` IS GONE, markup and rule together: a class with no element is what the
-   compiled-bundle guard would have let through in the other direction, and a rule with no class is dead
-   weight the next reader has to check. */
+/* NO LENS SWITCHER RULES. `.pp-cal__lens`, its `.pp-switch` overrides and `.pp-cal__lenscount` lived
+   here. The one-lens collapse removed the control, so its rules went with it rather than being left for
+   a reader to discover had no markup. */
 
 /* -- motion, and the one guard this block shipped without ------------------------------------------ */
 

@@ -41,9 +41,9 @@ from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
-from challenges.models import (CALENDAR_VIEW_CHOICES, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR,
-                               CHALLENGE_TYPE_CHOICES, CHALLENGE_TYPE_JOBS, CHALLENGE_TYPES,
-                               TYPES_NOT_YET_CREATABLE, Challenge)
+from challenges.models import (CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_CHOICES,
+                               CHALLENGE_TYPE_JOBS, CHALLENGE_TYPES, TYPES_NOT_YET_CREATABLE,
+                               Challenge)
 from challenges.services import calendar_render
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
@@ -385,23 +385,17 @@ class ChallengeDetailView(DetailView):
             context['groups'] = []
             months = calendar_render.calendar_groups(challenge)
             context['calendar_months'] = months
-            # THE LENS SWITCHER'S OPTIONS, from the catalogue rather than written out in the template.
+            # THE YEAR TOTALS, summed from month counts already on the page -- no second query, and one
+            # definition of the figure rather than a template re-adding it. Two figures: the days filled
+            # (shovelware-free platinums, which is what the board draws) and the same count WITHOUT the
+            # shovelware exclusion, which is what makes the first one mean something when read aloud --
+            # "297 days, of 340 you have platinums for".
             #
-            # WHICH DOES NOT MAKE A FOURTH LENS WORK, and an earlier version of this comment claimed it
-            # did ("a fourth view would appear in the switcher instead of being silently undrawable") --
-            # exactly backwards. A fourth entry in `CALENDAR_VIEW_CHOICES` would get a chip, and then:
-            # `challenges.css` enumerates the three lenses literally in both the tint and the tally
-            # rules, so selecting it would blank the tally and un-tint every square; and `CREST_METAL`
-            # zips against a three-tuple, so `_crest` raises `KeyError` for it. Reading the catalogue
-            # here is worth doing because it keeps ONE list of lenses rather than two, not because the
-            # feature generalises. A fourth lens is a change to the stylesheet and the metals as well.
-            context['calendar_views'] = CALENDAR_VIEW_CHOICES
-            # THE YEAR TOTALS, summed from month counts already on the page -- no second query, and
-            # one definition of the figure rather than a template re-adding it.
+            # THREE CONTEXT KEYS STOOD HERE. `calendar_views` fed a lens switcher, and `calendar_view`
+            # decided which lens the board opened on so the page was correct before any script ran. The
+            # one-lens collapse removed the switcher, so both are gone and nothing downstream has to be
+            # told which lens is active.
             context['calendar_totals'] = calendar_render.totals_for(months)
-            # WHICH LENS THE BOARD OPENS ON, decided here so the page is correct before any JS runs
-            # and so it matches the lens the hero would draw for the same run.
-            context['calendar_view'] = calendar_render.headline_view(context['calendar_totals'])
         else:
             context['groups'] = slot_render.slot_groups(challenge)
         context['is_owner'] = viewer is not None and viewer.id == challenge.profile_id

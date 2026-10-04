@@ -268,7 +268,7 @@ def test_a_calendar_run_gets_365_days_and_no_slots(monkeypatch):
     # NOTHING IS FILLED AT CREATION. The backfill is a separate step, and a day that arrives already
     # true would make the opening ceremony's numbers meaningless.
     assert not challenge.calendar_days.filter(
-        Q(in_all=True) | Q(in_clean=True) | Q(in_contracts=True)).exists()
+        Q(in_all=True) | Q(in_clean=True)).exists()
     assert not challenge.calendar_days.exclude(earned_on=None, filled_at=None).exists(), (
         'a day arrived with a fill timestamp but no fill')
 

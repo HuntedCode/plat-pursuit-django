@@ -22,9 +22,9 @@ doors do it and NONE of them waits for the nightly reconciliation watermark:
     process_challenges --all-calendars
     a sync of that profile                              # the `sync_complete` hook refreshes every run
 
-What changes: a bronze month can go silver, the deliberately unstruck month can strike, and the
-contracts-only square -- the single most important thing this pair exists to show -- can gain a platinum
-day and stop being the non-nesting example. `earned_on` also moves backwards onto real dates.
+What changes: the deliberately unstruck month can strike, the part-filled month fills further, and the
+shovelware-only square can gain a shovelware-free platinum and stop showing the gap between the two
+figures. `earned_on` also moves backwards onto real dates.
 So: SEED LAST, and leave those three doors alone until the browser pass is done.
 
 (The NIGHTLY sweep with no arguments is safe immediately after seeding: `apply_to_run` stamps the
@@ -92,9 +92,8 @@ from django.urls import reverse
 from challenges.models import (
     CALENDAR_MONTH_DAYS,
     CALENDAR_VIEW_ALL,
-    CALENDAR_VIEW_FIELDS,
     CALENDAR_VIEW_CLEAN,
-    CALENDAR_VIEW_CONTRACTS,
+    CALENDAR_VIEW_FIELDS,
     CHALLENGE_TYPE_AZ,
     CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_JOBS,
@@ -155,36 +154,40 @@ GAP_BACKDATE_DAYS = 400
 #: enough that the run is obviously unfinished.
 AZ_FILLED = 9
 
-#: The months the in-progress Calendar run completes, and in which lens -- chosen so that ONE board shows
-#: every crest state at once, which is the only way to compare the three metals without three runs.
+#: The months the in-progress Calendar run completes, so a struck crest can be compared against an
+#: unstruck one on a single board.
+#:
+#: IT USED TO SAY WHICH LENS COMPLETED EACH, mapping three months onto bronze, silver and gold so one
+#: board showed all three metals. The one-lens collapse made a crest a boolean, so this is a plain set
+#: of month numbers.
 #:
 #: WHICH MONTHS IS ARBITRARY -- a hand-written map costs nothing to fill, so there is no cheapest month
 #: and an earlier comment claiming February was chosen for its 28 days was inventing a reason. What is
 #: NOT arbitrary is the spread: three struck crests at 2, 5 and 9 sit apart in the switcher, so the row
 #: does not read as a run of three followed by nine blanks.
-CALENDAR_STRUCK = {
-    2: (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS),   # gold
-    5: (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN),                            # silver
-    9: (CALENDAR_VIEW_ALL,),                                                # bronze
-}
+CALENDAR_STRUCK = (2, 5, 9)
 
 #: A month left deliberately PART-FILLED, so an unstruck crest sits beside the struck ones and the month
 #: head shows THREE DIFFERENT per-lens figures rather than three zeros or three fulls.
 #:
-#: THREE FIGURES TAKES THREE NUMBERS, which the first version missed: it filled the same days in `all`
-#: and `clean` and none in `contracts`, giving 18/18/0 -- two distinct values under a comment and a test
-#: both named for three. The clean count is now lower than the all count (shovelware is what separates
-#: them in real data) and a few contracts days sit under both.
+#: TWO FIGURES, NOT THREE. This carried a third count for the contracts lens, and before that filled
+#: `all` and `clean` identically -- which gave two distinct numbers under a comment and a test both named
+#: for three. With one lens the pair that matters is the filled count and the same count WITHOUT the
+#: shovelware exclusion, so the clean figure is deliberately lower than the all figure: that difference
+#: is what the comparison line on the page exists to show.
 CALENDAR_PARTIAL_MONTH = 7
 CALENDAR_PARTIAL_DAYS = 18
 CALENDAR_PARTIAL_CLEAN = 11
-CALENDAR_PARTIAL_CONTRACTS = 4
 
-#: The day that is filled in CONTRACTS ONLY, which is the feature's one genuinely confusing state and
-#: therefore the one most worth being able to look at: `_detect_tiers` reaches the 100% tier with no
-#: platinum term, so this square is FILLED in the Contracts lens and EMPTY in the other two. Nothing else
-#: on the board demonstrates that the three lenses do not nest.
-CALENDAR_CONTRACTS_ONLY = (3, 3)
+#: A DAY FILLED BY A SHOVELWARE PLATINUM: present in the `all` count and absent from the board, which is
+#: the one place a reader can see what the comparison figure is counting.
+#:
+#: IT USED TO BE A CONTRACTS-ONLY DAY, seeded because that was the feature's one genuinely confusing
+#: state -- a contract reaching its 100% tier with no platinum filled a contracts day and no platinum
+#: day, so the square was filled in one lens and empty in two. The collapse removed the lens and with it
+#: the confusion; what is left worth looking at is the gap between "days you filled" and "days you hold
+#: a platinum for".
+CALENDAR_SHOVELWARE_ONLY = (3, 3)
 
 
 class Command(BaseCommand):
@@ -371,8 +374,8 @@ class Command(BaseCommand):
         """One Plat Calendar run, filled through the REAL writer.
 
         `apply_to_run` TAKES THE DAYS AS AN ARGUMENT, which is what makes this honest: the command hands
-        it a designed `{view: {(month, day): date}}` map and the writer does the filling, the
-        clean-implies-all repair and the recount of `filled_count` / `is_complete` / `completed_view`.
+        it a designed `{key: {(month, day): date}}` map and the writer does the filling, the
+        clean-implies-all repair and the recount of `filled_count` / `is_complete`.
         Nothing here writes those columns, so what the board renders is what the real backfill produces
         -- the same reason the jobs run pays its XP through the real service rather than faking a ledger
         row.
@@ -409,9 +412,9 @@ class Command(BaseCommand):
         filled = calendar_fill.apply_to_run(challenge, found=self._calendar_days(finished))
         challenge.refresh_from_db()
         self.stdout.write(
-            '  calendar "%s": %d day(s) filled, %d/%d on the %s lens%s'
+            '  calendar "%s": %d day(s) filled, %d/%d%s'
             % (challenge.name, filled, challenge.filled_count, challenge.total_slots,
-               challenge.completed_view or 'best genuine', ' -- COMPLETE' if challenge.is_complete else ''))
+               ' -- COMPLETE' if challenge.is_complete else ''))
         return challenge
 
     @staticmethod
@@ -438,33 +441,32 @@ class Command(BaseCommand):
         days = {view: {} for view, _field in CALENDAR_VIEW_FIELDS}
 
         if finished:
-            # EVERY DAY IN EVERY LENS, so the run completes and every crest is struck gold. Completion
-            # keys on clean-or-contracts, and `_recount_calendar` breaks the tie toward contracts.
+            # EVERY DAY, so the run completes and every crest is struck. `in_clean` is what completion
+            # reads, and `in_all` is its superset, so filling both is the only consistent full board.
             for month, length in enumerate(CALENDAR_MONTH_DAYS, start=1):
                 for day in range(1, length + 1):
                     for view in days:
                         days[view][(month, day)] = _seeded_date(month, day)
             return days
 
-        for month, views in CALENDAR_STRUCK.items():
+        for month in CALENDAR_STRUCK:
             for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
-                for view in views:
+                for view in days:
                     days[view][(month, day)] = _seeded_date(month, day)
 
-        # THREE DISTINCT FIGURES, nested the way real data nests: every clean day is an all day
-        # (`calendarday_clean_implies_all` enforces that), and the contracts days are a separate few.
+        # A PART-FILLED MONTH, nested the way real data nests: every clean day is an all day, which
+        # `calendarday_clean_implies_all` enforces. The clean figure is lower on purpose -- that gap is
+        # what the page's comparison line is about.
         for day in range(1, CALENDAR_PARTIAL_DAYS + 1):
             days[CALENDAR_VIEW_ALL][(CALENDAR_PARTIAL_MONTH, day)] = _seeded_date(
                 CALENDAR_PARTIAL_MONTH, day)
             if day <= CALENDAR_PARTIAL_CLEAN:
                 days[CALENDAR_VIEW_CLEAN][(CALENDAR_PARTIAL_MONTH, day)] = _seeded_date(
                     CALENDAR_PARTIAL_MONTH, day)
-        for day in range(1, CALENDAR_PARTIAL_CONTRACTS + 1):
-            days[CALENDAR_VIEW_CONTRACTS][(CALENDAR_PARTIAL_MONTH, day)] = _seeded_date(
-                CALENDAR_PARTIAL_MONTH, day)
 
-        # The non-nesting case, in the lens that has it and NOT in the other two.
-        days[CALENDAR_VIEW_CONTRACTS][CALENDAR_CONTRACTS_ONLY] = _seeded_date(*CALENDAR_CONTRACTS_ONLY)
+        # ONE DAY IN `all` AND NOT ON THE BOARD: a shovelware platinum. It is the only place a reader can
+        # see what the comparison figure counts that the board does not draw.
+        days[CALENDAR_VIEW_ALL][CALENDAR_SHOVELWARE_ONLY] = _seeded_date(*CALENDAR_SHOVELWARE_ONLY)
         return days
 
     def _start_fresh(self, profile, challenge_type, label):

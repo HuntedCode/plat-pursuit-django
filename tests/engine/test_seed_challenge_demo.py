@@ -18,11 +18,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from challenges.management.commands.seed_challenge_demo import (
-    CALENDAR_CONTRACTS_ONLY,
     CALENDAR_PARTIAL_CLEAN,
-    CALENDAR_PARTIAL_CONTRACTS,
     CALENDAR_PARTIAL_DAYS,
     CALENDAR_PARTIAL_MONTH,
+    CALENDAR_SHOVELWARE_ONLY,
     CALENDAR_STRUCK,
     DEMO_TAG,
     MIXED_CLAIMED,
@@ -30,9 +29,6 @@ from challenges.management.commands.seed_challenge_demo import (
 )
 from challenges.models import (
     CALENDAR_MONTH_DAYS,
-    CALENDAR_VIEW_ALL,
-    CALENDAR_VIEW_CLEAN,
-    CALENDAR_VIEW_CONTRACTS,
     CHALLENGE_TYPE_AZ,
     CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_JOBS,
@@ -984,63 +980,65 @@ def test_the_finished_calendar_run_really_is_finished(catalogue):
 
     assert finished.filled_count == finished.total_slots == 365
     assert finished.completed_at is not None
-    # Completion keys on clean-or-contracts and the recount breaks a tie toward the rarer lens.
-    assert finished.completed_view == CALENDAR_VIEW_CONTRACTS
 
 
 @override_settings(DEBUG=True)
-def test_the_in_progress_run_shows_every_crest_state_on_one_board(catalogue):
-    """THE POINT OF A DESIGNED FILL rather than the hunter's real platinums: three metals, an unstruck
-    month and a part-filled one, all on a board you can compare in a single glance. A dev library decides
-    how much of a 365-day board fills, so a real backfill is sparse and unpredictable."""
-    profile = _hunter()
-    _seed(profile)
-    months = calendar_render.calendar_groups(_calendar_runs(profile)[1])
+def test_the_in_progress_run_shows_struck_and_unstruck_crests_together(catalogue):
+    """THE POINT OF A DESIGNED FILL rather than the hunter's real platinums: a struck crest beside an
+    unstruck one, comparable at a glance. A dev library decides how much of a 365-day board fills, so a
+    real backfill is sparse and unpredictable.
 
-    metals = {i + 1: m['crest'] for i, m in enumerate(months)}
-    assert metals[2] == 'gold'
-    assert metals[5] == 'silver'
-    assert metals[9] == 'bronze'
-    assert set(CALENDAR_STRUCK) == {2, 5, 9}, 'the constants and this assertion describe one thing'
-    assert metals[CALENDAR_PARTIAL_MONTH] == '', 'an unstruck crest has to sit beside the struck ones'
-
-
-@override_settings(DEBUG=True)
-def test_the_part_filled_month_shows_three_different_figures(catalogue):
-    """A month head whose lenses all read the same tells you nothing about what the switcher does.
-
-    THREE DISTINCT VALUES, which this test is named for and did not check: it asserted 18/18/0, two
-    values, while the constant's comment also promised three. Fixed in the seeder rather than in the
-    name, because a part-filled month showing three different figures is the thing worth looking at.
+    IT USED TO CHECK THREE METALS. The crest was bronze/silver/gold for whichever of three lenses
+    completed the month, and the seeder spread one of each across the row so they could be compared. One
+    lens made the crest a boolean.
     """
     profile = _hunter()
-    month = calendar_render.calendar_groups(_in_progress_calendar(_seed_and_return(profile)))[
-        CALENDAR_PARTIAL_MONTH - 1]
+    _seed(profile)
+    months = calendar_render.calendar_groups(_in_progress_calendar(profile))
 
-    counts = month['counts']
-    assert counts[CALENDAR_VIEW_ALL] == CALENDAR_PARTIAL_DAYS
-    assert counts[CALENDAR_VIEW_CLEAN] == CALENDAR_PARTIAL_CLEAN
-    assert counts[CALENDAR_VIEW_CONTRACTS] == CALENDAR_PARTIAL_CONTRACTS
-    assert len(set(counts.values())) == 3, 'the head must read three different numbers: %r' % counts
-    # NESTED THE WAY REAL DATA NESTS: every clean day is an all day, which the database enforces.
-    assert counts[CALENDAR_VIEW_CLEAN] < counts[CALENDAR_VIEW_ALL]
+    struck = {i + 1 for i, m in enumerate(months) if m['is_struck']}
+    assert struck == set(CALENDAR_STRUCK), 'the constants and this assertion describe one thing'
+    assert months[CALENDAR_PARTIAL_MONTH - 1]['is_struck'] is False, (
+        'an unstruck crest has to sit beside the struck ones')
+
+
+@override_settings(DEBUG=True)
+def test_the_part_filled_month_shows_the_gap_the_comparison_figure_is_about(catalogue):
+    """A month whose filled count is LOWER than its platinum count, which is the only thing on the board
+    that explains what "shovelware-free" is excluding.
+
+    IT USED TO ASK FOR THREE DIFFERENT FIGURES, one per lens, and the test was named for three while
+    asserting two until that was fixed. One lens leaves a pair: what you filled, and what you would have
+    filled counting shovelware.
+    """
+    profile = _hunter()
+    _seed(profile)
+    months = calendar_render.calendar_groups(_in_progress_calendar(profile))
+    month = months[CALENDAR_PARTIAL_MONTH - 1]
+
+    assert month['done'] == CALENDAR_PARTIAL_CLEAN
+    assert month['all_done'] == CALENDAR_PARTIAL_DAYS
+    assert month['done'] < month['all_done'], 'the gap is the whole point of seeding this month'
     assert month['total'] == CALENDAR_MONTH_DAYS[CALENDAR_PARTIAL_MONTH - 1]
 
 
 @override_settings(DEBUG=True)
-def test_it_seeds_the_one_state_that_looks_like_a_bug(catalogue):
-    """THE NON-NESTING CASE, which is the single most important thing to be able to LOOK at: a contract
-    reaching its 100% tier with no platinum fills a Contracts day and no platinum day, so this square is
-    filled in one lens and empty in the other two. If it is not legible as empty in the All platinums
-    lens, the design is wrong -- and that cannot be judged without an example on screen."""
+def test_it_seeds_a_day_that_counts_but_does_not_draw(catalogue):
+    """THE ONE PLACE A READER CAN SEE WHAT THE COMPARISON FIGURE COUNTS: a shovelware platinum. It is in
+    `in_all` and not on the board, so the two numbers differ by exactly this square.
+
+    THIS SLOT USED TO HOLD THE CONTRACTS-ONLY DAY -- a contract finished at its 100% tier with no
+    platinum anywhere, which filled a contracts day and no platinum day, and was the feature's one
+    genuinely confusing state. The collapse removed the lens and the confusion with it.
+    """
     profile = _hunter()
     _seed(profile)
-    run = _calendar_runs(profile)[1]
+    run = _in_progress_calendar(profile)
 
-    month, day = CALENDAR_CONTRACTS_ONLY
+    month, day = CALENDAR_SHOVELWARE_ONLY
     row = run.calendar_days.get(month=month, day=day)
-    assert row.in_contracts is True
-    assert row.in_all is False and row.in_clean is False
+    assert row.in_all is True
+    assert row.in_clean is False, 'a shovelware platinum must not draw a square'
 
 
 @override_settings(DEBUG=True)

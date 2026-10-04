@@ -88,39 +88,47 @@ AZ_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 #: history and the alternative costs one line in the fill query.
 CALENDAR_MONTH_DAYS = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 
-#: The three lenses on one Calendar run, hardest last. A day is filled INDEPENDENTLY per view.
+#: ONE LENS: A DAY IS FILLED BY A SHOVELWARE-FREE PLATINUM. `in_clean` is the fill; `in_all` is the same
+#: population WITHOUT the shovelware exclusion, kept as a comparison figure and never as a second board.
 #:
-#: ONE PAIR NESTS AND ONE DOES NOT, and an earlier version of this said flatly "they are not nested",
-#: which was half wrong in the direction that loses a free integrity guard.
+#: THIS REPLACES THREE LENSES, and the collapse is the owner's call (2026-10-04) rather than a
+#: simplification found in the code: "perhaps we should condense down to just one view: non-shovelware
+#: plats. It makes the system much simpler, we don't have to worry about all the confusion around it
+#: all... I know contracts fuel the other challenges but those are more curated sets of games and this
+#: is more wholistic." Which is the right distinction: a Contract is a curated subset of the catalogue,
+#: and a Calendar is a hunter's whole platinum history laid against the year. Those are different kinds
+#: of object and a switcher between them was conflating them.
 #:
-#: `clean` IS `all` minus shovelware, so a clean day is always an all day -- a shovelware-free platinum
-#: is still a platinum. `calendarday_clean_implies_all` enforces it.
+#: WHAT THE COLLAPSE TOOK WITH IT, recorded because each of these was real work and somebody will wonder
+#: whether it was lost by accident:
+#:   - the `contracts` lens and `_days_from_contracts`, which was the EXPENSIVE half of the fill (it went
+#:     through `eligibility.completion_dates` in batches; the two platinum lenses come out of one
+#:     statement). Dropping it made the backfill cheaper, not merely simpler.
+#:   - `Challenge.completed_view`, which existed only to say WHICH lens finished a run.
+#:   - `Challenge.calendar_contracts_seen` and the `EarnedContract` subquery in `runs_due_for_sweep`,
+#:     which existed only because a contracts day could move without a platinum. The reconciliation is
+#:     now a single-column comparison.
+#:   - the sweep's "finished runs keep filling" exception, which was justified by a hunter still working
+#:     toward the OTHER lens's ultimate. With one lens a complete run cannot change: `in_all` is a
+#:     superset of `in_clean`, so 365 clean days means 365 all days too.
+#:   - a whole class of cross-lens defect that every audit of this feature found some version of: a
+#:     per-cell "best lens reached" value that painted a filled tint on a square empty in the active
+#:     lens, a per-month crest that said one thing while the squares under it said another, an
+#:     `earned_on` that could not be printed because it was the earliest date across any lens, and
+#:     screen-reader text that could not follow a switcher it could not see.
 #:
-#: `contracts` DOES NOT nest under either, and the reasons are structural rather than rare:
-#:   - `contract_service._detect_tiers` reaches the 100% tier from `progress=100` with no platinum term,
-#:     so a contract satisfied that way fills a contracts day and no platinum day at all; and
-#:   - a contracts day is keyed on the CONTRACT's completion moment -- the earliest qualifying date
-#:     across its member concepts, per `eligibility.completion_dates` -- which is a different instant
-#:     from any single platinum's `earned_date_time` whenever a 100% lands later than the platinum, or
-#:     whenever the contract has several member concepts.
-#: So the divergence is not confined to platinum-less contracts, and any count of those understates it.
-#: Treating `contracts` as a subset of `all` is wrong, and not only for a rare minority of days.
+#: `in_clean` IMPLIES `in_all` BY CONSTRUCTION -- a shovelware-free platinum is still a platinum -- and
+#: `calendarday_clean_implies_all` still enforces it. That constraint is the reason `in_all` is worth
+#: keeping: it makes the headline figure interpretable ("297 shovelware-free of 340 platinum days")
+#: rather than a bare number, and it costs nothing because the one fill statement computes both.
 CALENDAR_VIEW_ALL = 'all'
 CALENDAR_VIEW_CLEAN = 'clean'
-CALENDAR_VIEW_CONTRACTS = 'contracts'
-CALENDAR_VIEW_CHOICES = [
-    (CALENDAR_VIEW_ALL, 'All platinums'),
-    (CALENDAR_VIEW_CLEAN, 'Shovelware free'),
-    (CALENDAR_VIEW_CONTRACTS, 'Contracts'),
-]
-CALENDAR_VIEWS = frozenset(value for value, _ in CALENDAR_VIEW_CHOICES)
 
-#: The view each `CalendarDay` boolean belongs to, so a caller can map one to the other without a
-#: hand-written `if` chain per consumer. Ordered easiest-first, which is also crest-tier order.
+#: `{key: CalendarDay field}` for the two stored populations, narrowest first. NOT a list of lenses any
+#: more: only `clean` is drawn. `all` is here so one loop can read both figures for the comparison line.
 CALENDAR_VIEW_FIELDS = (
-    (CALENDAR_VIEW_ALL, 'in_all'),
     (CALENDAR_VIEW_CLEAN, 'in_clean'),
-    (CALENDAR_VIEW_CONTRACTS, 'in_contracts'),
+    (CALENDAR_VIEW_ALL, 'in_all'),
 )
 
 
@@ -314,22 +322,6 @@ class Challenge(models.Model):
     is_complete = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
 
-    #: WHICH VIEW FINISHED A CALENDAR RUN. Empty for every other type, and for a Calendar run still
-    #: in flight.
-    #:
-    #: ONE COLUMN RATHER THAN THREE SETS OF COUNTERS AND STAMPS, which is the owner's framing (2026-10-03):
-    #: a Hall of Fame entry is a SNAPSHOT of an achievement, so the two views that are genuine
-    #: achievements -- shovelware-free and contracts -- can live under one roof in one column, mixed on
-    #: the same board and ordered on the same `completed_at`. This is only what the entry needs to SAY
-    #: which kind of finish it was.
-    #:
-    #: ALL-PLATINUMS DOES NOT COMPLETE A RUN, deliberately. It is the easiest lens and the one shovelware
-    #: inflates, so it carries the early day-marker ladder and nothing else: a run finishes when the
-    #: CLEAN or the CONTRACTS view fills, whichever happens first. A hunter who later fills the other one
-    #: earns its ultimate title, but the run was already finished and its snapshot already taken.
-    completed_view = models.CharField(max_length=10, choices=CALENDAR_VIEW_CHOICES, blank=True,
-                                      default='')
-
     #: WHAT THE CALENDAR SWEEP SAW LAST TIME IT LOOKED -- a reconciliation watermark, not a timestamp.
     #: Zero for every other type.
     #:
@@ -338,12 +330,17 @@ class Challenge(models.Model):
     #: a platinum only occasionally -- most move bronzes, silvers and golds, none of which can fill a
     #: calendar day. That is a full history recomputation per account per night to discover nothing.
     #:
-    #: So the sweep asks a CHEAP question first and only then does the expensive thing. These two
-    #: counters are the whole question: `total_plats` covers the all-platinums and shovelware-free views
-    #: (a day in either needs a platinum), and the earned-contract count covers the contracts view, which
-    #: can move WITHOUT a platinum because a contract reaches its 100% tier with no platinum term. Both
-    #: are compared in one site-wide query against live values; a run whose numbers have not moved is
-    #: skipped without reading a single trophy.
+    #: So the sweep asks a CHEAP question first and only then does the expensive thing, and with one
+    #: lens the question is ONE NUMBER: a day needs a shovelware-free platinum, so if `total_plats` has
+    #: not moved there is nothing a full history read could discover. It is compared in one site-wide
+    #: query against the live value, and a run whose number has not moved is skipped without reading a
+    #: single trophy.
+    #:
+    #: THERE WERE TWO OF THESE, and the second is worth naming because its absence is the point. A
+    #: `calendar_contracts_seen` counter sat beside this one, because a CONTRACTS day could move without
+    #: a platinum -- a contract reaches its 100% tier with no platinum term -- so the sweep had to watch
+    #: an `EarnedContract` count as well, through a `Subquery` annotation on every row. The one-lens
+    #: collapse removed the lens, the counter, the annotation and the column together.
     #:
     #: NOT `updated_at` AND NOT A SWEEP TIMESTAMP, both of which were tried. `updated_at` only moves when
     #: the run CHANGES, so the first sync after a hunter's last new square leaves it due forever; a bare
@@ -351,7 +348,6 @@ class Challenge(models.Model):
     #: two-watermark lesson the contract engine already paid for, one layer further in: the question is
     #: not "has anything happened" but "has anything happened THAT COULD MATTER HERE".
     calendar_plats_seen = models.PositiveIntegerField(default=0)
-    calendar_contracts_seen = models.PositiveIntegerField(default=0)
 
     is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -667,22 +663,22 @@ class CalendarDay(models.Model):
     cheap ordered queryset for assembling the grid in Python and left-joining onto it. The row count is
     the honest cost of that and it is bounded: one run is 365 rows, and runs are sequential per profile.
 
-    THREE INDEPENDENT BOOLEANS, NOT ONE TIER FIELD, and this is the decision most likely to be
-    "simplified" later by someone who assumes the views nest. ONE pair of them genuinely does not:
-    `in_contracts` can be true with `in_all` false, because `contract_service._detect_tiers` reaches the
-    100% tier from `progress=100` with no platinum term, so a contracts day need not be a platinum day.
-    A single `best_view` column could not represent that.
+    TWO NESTED BOOLEANS, AND ONLY ONE OF THEM IS A BOARD. `in_clean` is the fill -- a day a
+    shovelware-free platinum landed on -- and `in_all` is the same population without that exclusion,
+    kept so the page can say "297 shovelware-free of 340 platinum days" rather than a bare figure. The
+    comparison is the only reason the second column exists, and it costs nothing because one statement
+    computes both.
 
-    `in_clean` IS A SUBSET OF `in_all`, and an earlier version of this paragraph claimed otherwise. It
-    argued that no implication constraint could hold, using the contracts counterexample above -- which
-    does not transfer: `clean` is the SAME population as `all` with shovelware excluded, and a
-    shovelware-free platinum is still a platinum. So `in_clean` implies `in_all` by construction, the
-    constraint below is a real integrity guard rather than an over-reach, and it is exactly what would
-    catch a backfill that half-populated one view. Stating "the views do not nest" as a blanket rule was
-    the error; only one of the three pairs is non-nesting.
+    `in_clean` IMPLIES `in_all` BY CONSTRUCTION: a shovelware-free platinum is still a platinum, so
+    `calendarday_clean_implies_all` below is a real integrity guard and exactly what catches a backfill
+    that half-populated one of them.
 
-    Three booleans also give the per-view day counts the ladder and the ultimates need, as one grouped
-    pass over the same rows (`COUNT(*) FILTER (...)`).
+    THERE WAS A THIRD, `in_contracts`, and this docstring argued at length for keeping all three
+    independent because that one genuinely did not nest -- `contract_service._detect_tiers` reaches the
+    100% tier with no platinum term, so a contracts day need not be a platinum day. The owner collapsed
+    the feature to one lens (2026-10-04) on the grounds that contracts are curated subsets while a
+    calendar is a whole history, which is a distinction the switcher was blurring. See the note on
+    `CALENDAR_VIEW_FIELDS` for everything that came out with it.
 
     WHAT IS STORED IS THE FILL; WHAT IS COMPUTED IS THE SATISFIERS. The booleans are snapshots, so a
     catalogue correction the hunter never saw -- a shovelware reclassification, a `reconcile_contracts`
@@ -700,10 +696,10 @@ class CalendarDay(models.Model):
     month = models.PositiveSmallIntegerField(help_text='1-12.')
     day = models.PositiveSmallIntegerField(help_text='1-31, within that month.')
 
-    #: One per view. See the class docstring: these are independent, not a ladder.
+    #: `in_clean` IS THE FILL; `in_all` is the same population without the shovelware exclusion, kept
+    #: for the comparison line. See the class docstring: nested, not a ladder.
     in_all = models.BooleanField(default=False)
     in_clean = models.BooleanField(default=False)
-    in_contracts = models.BooleanField(default=False)
 
     #: The LOCAL DATE that first filled this day, resolved in the hunter's own timezone -- from a
     #: platinum's `earned_date_time` or a 100% completion's `most_recent_trophy_date`. User-facing
@@ -743,8 +739,9 @@ class CalendarDay(models.Model):
             # `clean` is `all` minus shovelware, so a clean day is always an all day. The database says
             # so because this is the shape a half-written backfill produces -- three views populated by
             # three predicates, one of them wrong or interrupted -- and that is a silent wrong answer
-            # on a reward ladder rather than a visible failure. NOT extended to `in_contracts`, which
-            # genuinely does not nest.
+            # on a reward ladder rather than a visible failure. (It used to carry a note that it was
+            # deliberately NOT extended to a third `in_contracts` column, which genuinely did not nest;
+            # that column went with the one-lens collapse.)
             models.CheckConstraint(condition=Q(in_clean=False) | Q(in_all=True),
                                    name='calendarday_clean_implies_all'),
             # THE DAY MUST EXIST IN ITS OWN MONTH, which `calendarday_day_range` does not say: it caps

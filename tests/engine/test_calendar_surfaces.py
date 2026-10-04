@@ -31,8 +31,7 @@ from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from challenges.models import (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS,
-                               CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CalendarDay)
+from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CalendarDay
 from challenges.services import calendar_render
 from tests.factories import ProfileFactory, UserFactory
 
@@ -64,11 +63,11 @@ def _url(challenge):
     return reverse('challenge_detail', args=[challenge.id])
 
 
-def _fill(run, month, day, *, views=(CALENDAR_VIEW_ALL,)):
+def _fill(run, month, day):
+    """Fill one day. BOTH columns, because `in_clean` implies `in_all` and the database enforces it; a
+    test wanting a shovelware day -- in `all` and off the board -- writes the row itself."""
     written = CalendarDay.objects.filter(challenge=run, month=month, day=day).update(
-        in_all=CALENDAR_VIEW_ALL in views,
-        in_clean=CALENDAR_VIEW_CLEAN in views,
-        in_contracts=CALENDAR_VIEW_CONTRACTS in views)
+        in_all=True, in_clean=True)
     assert written == 1, 'no row at (%d, %d) -- the fill was a silent no-op' % (month, day)
 
 
@@ -93,31 +92,29 @@ def test_a_slot_run_gets_no_calendar_context_at_all():
     assert 'calendar_months' not in context
 
 
-def test_the_year_totals_are_the_sum_of_the_month_counts():
+def test_the_year_totals_are_the_sum_of_the_months():
+    """TWO FIGURES: the days filled, and the same count without the shovelware exclusion. The second is
+    what lets the first be read aloud -- "297 days, of 340 you hold platinums for" -- rather than as a
+    bare number, and nothing on the board draws it."""
     run = _run(CHALLENGE_TYPE_CALENDAR)
-    _fill(run, 1, 1, views=(CALENDAR_VIEW_ALL,))
-    _fill(run, 6, 6, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
-    _fill(run, 9, 9, views=(CALENDAR_VIEW_CONTRACTS,))
+    _fill(run, 1, 1)
+    _fill(run, 6, 6)
+    CalendarDay.objects.filter(challenge=run, month=9, day=9).update(in_all=True, in_clean=False)
 
     context = Client().get(_url(run)).context
-    assert context['calendar_totals'] == {CALENDAR_VIEW_ALL: 2, CALENDAR_VIEW_CLEAN: 1,
-                                          CALENDAR_VIEW_CONTRACTS: 1}
+    assert context['calendar_totals'] == {'done': 2, 'all': 3}
     # Summed from the groups already on the page rather than asked of the database again.
     assert context['calendar_totals'] == calendar_render.totals_for(context['calendar_months'])
 
 
-def test_the_board_opens_on_the_lens_the_run_leads_with():
-    """ALL PLATINUMS IS NEVER IT, even when it is far ahead: it is the lens shovelware inflates and the
-    one that cannot finish a run, so opening on it would show a board near completion whose run
-    completes on a much lower number."""
-    run = _run(CHALLENGE_TYPE_CALENDAR)
-    for day in range(1, 11):
-        _fill(run, 1, day, views=(CALENDAR_VIEW_ALL,))
-    for day in range(1, 4):
-        _fill(run, 2, day, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
-
-    context = Client().get(_url(run)).context
-    assert context['calendar_view'] == CALENDAR_VIEW_CLEAN
+def test_the_page_offers_no_lens_to_choose():
+    """THREE CONTEXT KEYS STOOD HERE. `calendar_views` fed the switcher's options and `calendar_view`
+    decided which lens the board opened on, so the page was correct before any script ran. One lens
+    means nothing downstream has to be told which is active."""
+    context = Client().get(_url(_run(CHALLENGE_TYPE_CALENDAR))).context
+    assert 'calendar_views' not in context
+    assert 'calendar_view' not in context
+    assert context['calendar_months'], 'the board itself is still there'
 
 
 def test_the_detail_page_stays_flat_however_many_days_are_filled():
@@ -203,22 +200,24 @@ def test_only_the_first_month_is_showing_before_any_script_runs():
     assert all('hidden' in panel for panel in panels[1:])
 
 
-def test_the_board_opens_on_the_servers_lens_with_no_state_attributes():
-    """THE LENS IS THE CHECKED RADIO, and nothing else. The board used to carry `data-view`/`data-month`
-    for the stylesheet to read, which meant the lens only worked with JavaScript; the tint rules read the
-    checked radio through `:has()` now, so those attributes had no reader left and were deleted. Pinned
-    because a future change would otherwise "fix" the lens by writing to a dead attribute."""
-    run = _run(CHALLENGE_TYPE_CALENDAR)
-    _fill(run, 3, 3, views=(CALENDAR_VIEW_CONTRACTS,))
-    body = _body(run)
-
-    board = re.search(r'<div class="pp-cal"[^>]*>', body).group(0)
+def test_the_board_carries_no_state_attributes():
+    """The board used to carry `data-view`/`data-month` for the stylesheet to read, which meant the lens
+    only worked with JavaScript. The tint read the checked radio through `:has()` instead, and then the
+    collapse removed the lens entirely -- so there is nothing left for an attribute to say."""
+    board = re.search(r'<div class="pp-cal"[^>]*>',
+                      _body(_run(CHALLENGE_TYPE_CALENDAR))).group(0)
     assert board == '<div class="pp-cal">', board
 
-    lens = _section(body, 'class="pp-cal__lens"', until='pp-cal__panel')
-    checked = re.findall(r'<input[^>]*checked[^>]*>', lens)
-    assert len(checked) == 1
-    assert 'value="%s"' % CALENDAR_VIEW_CONTRACTS in checked[0]
+
+def test_the_page_renders_no_lens_switcher():
+    """CUT WITH THE LENSES (owner, 2026-10-04). A `.pp-switch` with three radios sat between the crests
+    and the board. Pinned because the control is the obvious thing to re-add when somebody wants the
+    contracts view back, and the point is that the DATA for it is gone too."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'cal-view' not in body
+    assert 'pp-cal__lens' not in body
+    assert 'Shovelware free' not in body, 'the lens names were the chip labels'
+    assert 'pp-cal__crests' in body, 'the MONTH switcher is still there'
 
 
 def test_the_crest_row_is_a_real_tablist():
@@ -233,83 +232,52 @@ def test_the_crest_row_is_a_real_tablist():
 
 def test_every_crest_is_reachable_before_the_script_narrows_the_row():
     """A ROVING TABINDEX IS ONLY SAFE ONCE SOMETHING IS ROVING. The server used to render it directly
-    (`0` on the first crest, `-1` on the rest), which with JavaScript off meant Tab skipped eleven crests
-    and no arrow key moved between them -- a keyboard-only visitor losing eleven twelfths of the board
-    with no way to reach it. `wireTablist.syncTabindex()` runs at wire time, so the rover arrives in the
-    same tick as the arrows that make it navigable."""
-    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    crests = re.findall(r'<button type="button" role="tab"[^>]*>', body)
-
+    (`0` on the first crest, `-1` on the rest), which with JavaScript off meant Tab skipped eleven
+    crests and no arrow key moved between them -- a keyboard-only visitor losing eleven twelfths of the
+    board with no way to reach it. `wireTablist.syncTabindex()` runs at wire time, so the rover arrives
+    in the same tick as the arrows that make it navigable."""
+    crests = re.findall(r'<button type="button" role="tab"[^>]*>',
+                        _body(_run(CHALLENGE_TYPE_CALENDAR)))
     assert len(crests) == 12
     assert all('tabindex="0"' in c for c in crests)
     assert sum(1 for c in crests if 'aria-selected="true"' in c) == 1
 
 
-def test_every_day_names_itself_for_a_reader():
-    """A cell shows a bare numeral, so the spelled-out date and the per-lens state are all the accessible
-    tree has. Nothing pinned the 365 labels the template argues about at length."""
+def test_a_filled_day_carries_a_modifier_and_an_empty_one_does_not():
+    """A CLASS, NOT ATTRIBUTES. A filled day used to carry up to three of
+    `data-all`/`data-clean`/`data-contracts` so `:has()` could decide which painted."""
     run = _run(CHALLENGE_TYPE_CALENDAR)
-    _fill(run, 3, 3, views=(CALENDAR_VIEW_CONTRACTS,))
+    _fill(run, 1, 2)
+    days = re.findall(r'<div class="(pp-cal__day[^"]*)"', _body(run))
+
+    assert len(days) == 365
+    assert days[0] == 'pp-cal__day', 'January 1 is unfilled'
+    assert days[1] == 'pp-cal__day pp-cal__day--on'
+    assert 'data-all' not in _body(run) and 'data-clean' not in _body(run)
+
+
+def test_a_shovelware_platinum_draws_no_square():
+    """THE ONE LENS, stated on the rendered page: a platinum on a flagged game counts toward the
+    comparison figure and draws nothing."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month=1, day=2).update(in_all=True, in_clean=False)
     body = _body(run)
 
-    # COUNTED ON THE CELL, not on `sr-only` inside an unbounded slice: the day cell carries exactly one
-    # label, and the slice to end-of-document also caught a chrome element outside the board.
-    assert body.count('class="pp-cal__day"') == 365
-    march = _section(body, 'id="cal-month-mar"', until='</section>')
-    assert 'March 3.' in march
-    assert 'Contracts: filled.' in march
-
-
-def test_a_filled_day_carries_only_the_lenses_that_hold_it():
-    """The per-lens attributes ARE the tint, which is what lets a contracts-only day read as empty while
-    the All platinums lens is showing. A single best-of value could not say that."""
-    run = _run(CHALLENGE_TYPE_CALENDAR)
-    _fill(run, 1, 1, views=(CALENDAR_VIEW_CONTRACTS,))
-    _fill(run, 1, 2, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
-    body = _body(run)
-
-    days = re.findall(r'<div class="pp-cal__day"([^>]*)>', body)
-    assert 'data-contracts' in days[0] and 'data-all' not in days[0]
-    assert 'data-all' in days[1] and 'data-clean' in days[1]
-    assert 'data-contracts' not in days[1]
-    assert 'data-' not in days[2], 'an unfilled day carries no lens attribute'
+    days = re.findall(r'<div class="(pp-cal__day[^"]*)"', body)
+    assert days[1] == 'pp-cal__day', 'a shovelware platinum must not tint a square'
+    assert Client().get(_url(run)).context['calendar_totals'] == {'done': 0, 'all': 1}
 
 
 def test_a_completed_month_is_struck_and_an_incomplete_one_is_not():
     run = _run(CHALLENGE_TYPE_CALENDAR)
-    CalendarDay.objects.filter(challenge=run, month=2).update(in_all=True)
-    _fill(run, 3, 3, views=(CALENDAR_VIEW_ALL,))
-    body = _body(run)
+    CalendarDay.objects.filter(challenge=run, month=2).update(in_all=True, in_clean=True)
+    _fill(run, 3, 3)
 
-    crests = re.findall(r'<button type="button" role="tab"[^>]*>', body)
-    assert 'pp-cal__crest--struck' in crests[1] and 'data-tier="bronze"' in crests[1]
+    crests = re.findall(r'<button type="button" role="tab"[^>]*>', _body(run))
+    assert 'pp-cal__crest--struck' in crests[1]
     assert 'pp-cal__crest--struck' not in crests[2], 'one filled day is not a month'
-    assert 'data-tier' not in crests[2]
-
-
-def test_the_lens_switcher_is_the_shared_component_and_offers_every_lens():
-    """THE HOUSE PRIMITIVE, not a third treatment of a segmented control. `.pp-switch` is the project's
-    tab-group standard and this feature's own browse toolbar already uses it.
-
-    SCOPED TO THE SWITCHER. This used to slice from `pp-cal__lens` to the END OF THE DOCUMENT, so
-    `count('checked') == 1` was counting the word anywhere in the rest of the page -- the footer, the
-    scripts, any checkbox added later. It passed only by luck about what follows the board.
-    """
-    lens = _section(_body(_run(CHALLENGE_TYPE_CALENDAR)), 'class="pp-cal__lens"',
-                    until='pp-cal__panel')
-
-    assert 'class="pp-switch"' in lens, 'the shared container, not just a chip class'
-    assert 'pp-switch__chip' in lens
-    for value in (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS):
-        assert 'value="%s"' % value in lens
-    assert lens.count('name="cal-view"') == 3
-    assert lens.count('checked') == 1
-    # RADIOS, NOT CHECKBOXES, which is structural rather than pedantic: checkboxes let several lenses be
-    # checked at once, and then several `:has()` branches match together -- all three tallies visible and
-    # every day tinted for the UNION of the lenses. The counts above hold either way, so this is what
-    # actually pins a single-choice control.
-    assert lens.count('type="radio"') == 3
-    assert 'type="checkbox"' not in lens
+    # NO METAL. The crest was bronze/silver/gold for whichever lens completed the month.
+    assert 'data-tier' not in crests[1]
 
 
 def test_the_calendar_script_loads_only_on_a_calendar_run():
@@ -450,7 +418,7 @@ def test_every_crest_names_its_month_without_relying_on_colour():
     """The face is a three-letter abbreviation and the state is carried in metal, so the full month name
     and the per-lens figures have to be in the accessible tree. Colour is never the only cue."""
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    crests = _section(body, 'pp-cal__crests', until='class="pp-cal__lens"')
+    crests = _section(body, 'pp-cal__crests', until='class="pp-cal__panel"')
     for name in ('January', 'February', 'December'):
         assert name in crests
     assert crests.count('class="sr-only"') == 12
@@ -504,18 +472,19 @@ def test_the_calendar_block_guards_reduced_motion():
     assert 'prefers-reduced-motion: reduce' in block
 
 
-def test_the_lens_is_switched_by_css_and_not_by_script():
-    """THE DEFECT THIS PINS. The tints used to read a `data-view` attribute only JavaScript ever wrote,
-    while the chip's active state was pure CSS -- so with JS off, pressing a lens lit its chip and left
-    every square showing the previous one. False feedback, which is worse than a dead control."""
+def test_no_lens_machinery_survives_in_the_stylesheet_or_the_script():
+    """THE COLLAPSE, PINNED. The tint read the checked radio through `:has()` and the figures were
+    revealed per lens; both are gone, and so is every `data-view` the script once wrote. Pinned together
+    because re-adding any one of them without the others is how a half-collapsed lens comes back."""
     block = _calendar_css()
-
-    assert '.pp-cal:has(input[value="contracts"]:checked)' in block
-    assert '.pp-cal[data-view' not in block
+    assert ':has(input' not in block
+    assert '.pp-cal__count' not in block
+    assert '.pp-cal__lens' not in block
+    assert '[data-view' not in block
 
     code = _script_code()
     assert 'dataset.view' not in code
-    assert 'data-view' not in code
+    assert 'cal-view' not in code
 
 
 # ── the hero, which had no behavioural coverage at all ───────────────────────────────────────────────
@@ -544,8 +513,8 @@ def test_the_hero_draws_a_cell_for_every_day_and_tints_the_filled_ones():
     """THE HOLE: nothing rendered a hero with a Calendar run, so mutations that emitted no filled class
     at all, or looped a key that does not exist, both survived -- every day blank and no test noticing."""
     run = _run(CHALLENGE_TYPE_CALENDAR)
-    _fill(run, 3, 3, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
-    _fill(run, 5, 5, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
+    _fill(run, 3, 3)
+    _fill(run, 5, 5)
     html = _hero_html(run)
 
     # COUNTED ON THE ATTRIBUTE OPENING, not on the bare class: a filled cell carries both the base class
@@ -562,14 +531,14 @@ def test_the_hero_draws_no_slot_shelf_for_a_calendar_run():
     assert 'pp-chero__sq' not in html
 
 
-def test_the_hero_tints_only_the_lens_it_leads_with():
-    """All-platinums days must not light up a board drawn in the shovelware-free lens."""
+def test_the_hero_tints_only_what_the_board_does():
+    """The band and the board read the same column, so a shovelware platinum tints neither."""
     run = _run(CHALLENGE_TYPE_CALENDAR)
-    for day in range(1, 8):
-        _fill(run, 1, day, views=(CALENDAR_VIEW_ALL,))
     for day in range(1, 3):
-        _fill(run, 2, day, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
+        _fill(run, 2, day)
+    CalendarDay.objects.filter(challenge=run, month=3).update(in_all=True, in_clean=False)
 
+    assert _hero_html(run).count('pp-cal__cday--on') == 0, 'sanity: the hero uses its own class'
     assert _hero_html(run).count('pp-chero__cday--on') == 2
 
 
@@ -605,16 +574,16 @@ def _calendar_css():
     return re.sub(r'/\*.*?\*/', '', block, flags=re.S)
 
 
-def test_a_struck_month_keeps_its_metal_when_selected_or_hovered():
-    """THE FIX WITH NO TEST, which a mutation pass found could be reverted in full while the suite stayed
-    green -- on a bug this stylesheet records having already shipped once on `.pp-csq` ("hovering a
-    finished square erased the one mark the page exists to show"). `[data-tier]`, `[aria-selected]` and
-    `:hover` all carry the same specificity, so without the `:not()` scoping source order hands the
-    primary colour to a gold January the moment the page loads."""
+def test_an_earned_crest_is_not_recoloured_by_being_active_or_hovered():
+    """THE RULE OUTLIVES THE METALS. The active colour is scoped away from a struck crest because
+    otherwise selecting an earned month recoloured it -- the exact bug this stylesheet records paying for
+    on `.pp-csq` ("hovering a finished square erased the one mark the page exists to show"). A struck
+    crest is the same colour as the active one today, so nothing can be erased yet; the scoping is kept
+    because per-month hues are the next slice and would make it live again."""
     block = _calendar_css()
-    assert '.pp-cal__crest[aria-selected="true"]:not([data-tier]) { --crest-c: var(--pp-primary); }' in block
-    assert '.pp-cal__crest:not([data-tier]):hover { --crest-c: var(--pp-primary); }' in block
-    assert '.pp-cal__crest[data-tier]:hover { --crest-c: var(--crest-glow); }' in block
+    assert '.pp-cal__crest[aria-selected="true"]:not(.pp-cal__crest--struck)' in block
+    assert '.pp-cal__crest:not(.pp-cal__crest--struck):hover' in block
+    assert 'data-tier' not in block, 'the lens metals went with the lenses'
 
 
 def test_the_rim_draws_twelve_segments_rather_than_a_solid_ring():
@@ -768,28 +737,34 @@ def test_the_hero_emits_the_class_its_own_css_rule_needs():
     assert 'pp-chero--calendar' in html
 
 
-def test_the_month_figure_reveals_the_active_lens_in_both_places():
-    """The per-lens figure had no behavioural coverage, so renaming the attribute it is keyed on left
-    `.pp-cal__count { display: none }` with no matching reveal rule -- an empty tally on all twelve
-    months, suite green.
+def test_the_month_figure_appears_in_both_places_it_belongs():
+    """TWO PLACES, ASSERTED SEPARATELY rather than as one total: the month head and inside each
+    medallion. A single combined count would stay green if one place lost its figures while the other
+    grew duplicates.
 
-    TWO PLACES NOW, asserted separately rather than as one total. The figure sits in the month head AND
-    inside each medallion (the owner asked for the counter in the coin once they had room), and a single
-    count of 72 would stay green if one place lost its figures and the other grew duplicates.
+    ONE FIGURE EACH NOW. Both places rendered three -- one per lens -- sharing `.pp-cal__count` so a
+    single set of `:has()` rules governed them and they could not disagree about which lens was active.
+    The collapse left one figure printed directly, so the shared class and its rules went too.
     """
-    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 4):
+        _fill(run, 2, day)
+    body = _body(run)
 
-    coins = _section(body, 'pp-cal__crests', until='class="pp-cal__lens"')
-    assert coins.count('class="pp-cal__count" data-view=') == 36, 'three lenses x twelve coins'
-    assert coins.count('class="pp-cal__sub"') == 12
+    coins = _section(body, 'pp-cal__crests', until='class="pp-cal__panel"')
+    assert coins.count('class="pp-cal__sub"') == 12, 'one figure per coin'
+    assert '<span class="pp-cal__sub">3/28</span>' in coins, (
+        "February's coin reads its own progress")
 
-    heads = body[body.index('class="pp-cal__lens"'):]
-    assert heads.count('class="pp-cal__count" data-view=') == 36, 'three lenses x twelve month heads'
+    heads = re.findall(r'<p class="pp-cal__tally">([^<]*)</p>', body)
+    assert len(heads) == 12, 'one figure per month head'
+    assert heads[1].strip() == '3 / 28'
 
-    # ONE SET OF REVEAL RULES governs both, which is the whole reason the coin reuses the class.
-    block = _calendar_css()
-    for value in (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS):
-        assert '.pp-cal__count[data-view="%s"]' % value in block
+    # THE SHARED CLASS AND ITS RULES ARE BOTH GONE, pinned together: a `.pp-cal__count` in the markup
+    # with no reveal rule behind it rendered an empty figure on all twelve months, which is the defect
+    # this test was written for in the first place.
+    assert 'pp-cal__count' not in body
+    assert 'pp-cal__count' not in _calendar_css()
 
 
 def test_the_coin_counter_only_appears_where_it_fits():

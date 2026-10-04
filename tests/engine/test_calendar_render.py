@@ -14,9 +14,12 @@ other two challenge types have already hit, or been written to avoid:
     is explicit that it "has not happened", and an earlier version of this file asserted it as a scar
     the project had paid for, which is the thing that comment had already been corrected twice for.
 
-Plus the failure specific to this type, which is the one that actually bit during review: the three
-views do NOT nest, so any single cross-lens value is wrong in some lens. That is why a cell carries
-three booleans and no `tier`.
+ONE LENS, SINCE 2026-10-04. A day is filled by a shovelware-free platinum. There were three lenses and
+a switcher, and the failure specific to this type was that they did not nest -- so any single cross-lens
+value was wrong in whichever lens you were not looking at, which cost an audit finding twice (a per-cell
+`tier`, then a per-month crest metal). Those values and the switcher are gone; what survives is a
+comparison figure, `all_done`, which is the same days without the shovelware exclusion and which nothing
+draws.
 """
 import datetime as dt
 
@@ -25,14 +28,7 @@ from django.db import connection, transaction
 from django.db.utils import IntegrityError
 from django.test.utils import CaptureQueriesContext
 
-from challenges.models import (
-    CALENDAR_MONTH_DAYS,
-    CALENDAR_VIEW_ALL,
-    CALENDAR_VIEW_CLEAN,
-    CALENDAR_VIEW_CONTRACTS,
-    CALENDAR_VIEW_FIELDS,
-    CalendarDay,
-)
+from challenges.models import CALENDAR_MONTH_DAYS, CalendarDay
 from challenges.services import calendar_render
 from tests.factories import ProfileFactory, UserFactory
 
@@ -63,28 +59,27 @@ def _calendar_run(profile=None):
         svc.TYPES_NOT_YET_CREATABLE = original
 
 
-def _fill(run, month, day, *, views=(CALENDAR_VIEW_ALL,), on=None):
-    """Mark one day filled in `views`, writing the row directly.
+def _fill(run, month, day, *, on=None):
+    """Mark one day filled, writing the row directly.
 
     DIRECT ROW WRITES ON PURPOSE. What fills a day is `calendar_fill`'s job and has its own file; this
     one asks what the renderer does with rows already in whatever state.
 
     THE ROWCOUNT IS ASSERTED, which is not pedantry: `.update()` on a mistyped month or day is a silent
-    no-op, and several tests below assert that a crest is ABSENT -- so a typo would make them pass for
-    the wrong reason. The database also enforces `in_clean` implying `in_all`, so callers meaning clean
-    pass both.
+    no-op, and several tests below assert that a month is NOT struck -- so a typo would make them pass
+    for the wrong reason.
     """
-    fields = {'in_all': CALENDAR_VIEW_ALL in views,
-              'in_clean': CALENDAR_VIEW_CLEAN in views,
-              'in_contracts': CALENDAR_VIEW_CONTRACTS in views,
+    # BOTH COLUMNS, because `in_clean` implies `in_all` and the database enforces it. A test that wants
+    # a shovelware day -- in `all` and not on the board -- writes the row itself.
+    fields = {'in_all': True, 'in_clean': True,
               'earned_on': on or dt.date(2019, month, min(day, 28))}
     written = CalendarDay.objects.filter(challenge=run, month=month, day=day).update(**fields)
     assert written == 1, 'no row at (%d, %d) -- the fill was a silent no-op' % (month, day)
 
 
-def _fill_month(run, month, *, views=(CALENDAR_VIEW_ALL,)):
+def _fill_month(run, month):
     for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
-        _fill(run, month, day, views=views)
+        _fill(run, month, day)
 
 
 def _month(groups, month):
@@ -202,39 +197,22 @@ def test_a_cell_carries_no_run_wide_position():
 
 # ── the three lenses on one cell ─────────────────────────────────────────────────────────────────────
 
-def test_a_cell_carries_every_lens_so_switching_costs_no_request():
-    """The board renders once and the switcher reads `data-view`, the same both-states-in-the-DOM
-    technique the contract CTA uses. If a cell carried only the selected lens, every change would be a
-    round trip."""
+def test_a_filled_cell_says_so_with_one_boolean():
+    """ONE LENS, ONE ANSWER. A cell used to carry `views`, a `{lens: bool}` dict, so all three lenses
+    could sit in the DOM and CSS could reveal the active one. The dict went with the switcher."""
     run = _calendar_run()
-    _fill(run, 3, 3, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
+    _fill(run, 3, 3)
 
     card = _month(calendar_render.calendar_groups(run), 3)['cards'][2]
-    assert card['views'] == {CALENDAR_VIEW_ALL: True, CALENDAR_VIEW_CLEAN: True,
-                             CALENDAR_VIEW_CONTRACTS: False}
+    assert card['filled'] is True
+    assert 'views' not in card
+    assert 'tier' not in card, (
+        'a cross-lens "best lens reached" value was deleted before the collapse and must not return')
 
 
-def test_a_cell_offers_no_single_cross_lens_value():
-    """DELIBERATELY ABSENT, and pinned so it cannot drift back in.
-
-    A `tier` key used to carry the hardest view a day reached. On a board that renders all three lenses
-    at once that value is wrong in two of them: a contracts-only day would have read `tier='contracts'`
-    and any CSS tinting `[data-tier]` would paint it gold while the viewer is in the All platinums
-    lens, where the day is empty. The tint has to come from the per-lens boolean.
-    """
-    run = _calendar_run()
-    _fill(run, 4, 4, views=(CALENDAR_VIEW_CONTRACTS,))
-    card = _month(calendar_render.calendar_groups(run), 4)['cards'][3]
-
-    assert 'tier' not in card
-    assert card['views'][CALENDAR_VIEW_CONTRACTS] is True
-    assert card['views'][CALENDAR_VIEW_ALL] is False, (
-        'the designed-for non-nesting case: a 100% tier with no platinum anywhere')
-
-
-def test_an_unfilled_cell_is_false_in_every_lens_and_has_no_date():
+def test_an_unfilled_cell_is_false_and_has_no_date():
     card = _month(calendar_render.calendar_groups(_calendar_run()), 7)['cards'][0]
-    assert set(card['views'].values()) == {False}
+    assert card['filled'] is False
     assert card['earned_on'] is None
 
 
@@ -245,112 +223,104 @@ def test_a_filled_cell_carries_the_date_it_was_earned():
     assert card['earned_on'] == dt.date(2019, 3, 3)
 
 
-def test_every_lens_in_the_catalogue_reaches_a_cell():
-    """The cell's lens dict is DERIVED from `CALENDAR_VIEW_FIELDS` rather than spelled out, so a fourth
-    view would appear here instead of raising a `KeyError` two functions away."""
-    card = _month(calendar_render.calendar_groups(_calendar_run()), 1)['cards'][0]
-    assert set(card['views']) == {view for view, _field in CALENDAR_VIEW_FIELDS}
+def test_a_shovelware_platinum_fills_no_square():
+    """THE ONE LENS IS SHOVELWARE-FREE, which is the whole content of the collapse: a platinum on a
+    flagged game counts toward the comparison figure and draws nothing."""
+    profile = _hunter()
+    run = _calendar_run(profile)
+    CalendarDay.objects.filter(challenge=run, month=5, day=5).update(
+        in_all=True, in_clean=False, earned_on=dt.date(2019, 5, 5))
+
+    groups = calendar_render.calendar_groups(run)
+    card = _month(groups, 5)['cards'][4]
+    assert card['filled'] is False, 'a shovelware platinum must not draw a square'
+    assert _month(groups, 5)['done'] == 0
+    assert _month(groups, 5)['all_done'] == 1, 'but it is counted in the comparison figure'
 
 
-# ── per-month counts and the crest ───────────────────────────────────────────────────────────────────
+def test_a_month_reports_one_progress_number_and_its_comparison():
+    """`done` IS A SINGLE HONEST NUMBER AGAIN. This group deliberately had NO `done` key while there
+    were three lenses -- a month had three progress figures that did not nest, so any single one would
+    have been picked arbitrarily and every reader would silently get the wrong month some of the time.
+    One lens means one answer, and the shape matches `slot_groups`' again.
 
-def test_a_month_keeps_one_count_per_lens_rather_than_collapsing_them():
+    `all_done` IS THE COMPARISON, not a second lens: the same days without the shovelware exclusion.
+    """
     run = _calendar_run()
-    _fill(run, 1, 1, views=(CALENDAR_VIEW_ALL,))
-    _fill(run, 1, 2, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
-    _fill(run, 1, 3, views=(CALENDAR_VIEW_CONTRACTS,))
+    _fill(run, 1, 1)
+    _fill(run, 1, 2)
+    CalendarDay.objects.filter(challenge=run, month=1, day=3).update(in_all=True, in_clean=False)
 
     january = _month(calendar_render.calendar_groups(run), 1)
-    assert january['counts'] == {CALENDAR_VIEW_ALL: 2, CALENDAR_VIEW_CLEAN: 1,
-                                 CALENDAR_VIEW_CONTRACTS: 1}
+    assert january['done'] == 2
+    assert january['all_done'] == 3
+    assert january['total'] == 31
+    assert 'counts' not in january, 'the per-lens map went with the switcher'
 
 
 def test_a_month_head_agrees_with_the_squares_beneath_it():
-    """The head is counted from the CELLS, not from the rows a second time, so the two cannot drift."""
+    """The head counts off the CELLS, not the rows again, so the two cannot drift."""
     run = _calendar_run()
     for day in (4, 9, 17):
-        _fill(run, 6, day, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
+        _fill(run, 6, day)
 
     june = _month(calendar_render.calendar_groups(run), 6)
-    for view, _field in CALENDAR_VIEW_FIELDS:
-        assert june['counts'][view] == sum(1 for card in june['cards'] if card['views'][view])
+    assert june['done'] == sum(1 for card in june['cards'] if card['filled']) == 3
 
 
-def test_a_month_offers_no_single_done_number():
-    """DELIBERATELY ABSENT. `slot_groups` includes `done` on both branches so a Python consumer cannot
-    `KeyError` on one challenge type. Here there are THREE progress numbers and they do not nest, so
-    any single `done` would be one of three arbitrarily and every reader would silently get the wrong
-    month some of the time. Omitting the key makes a wrong reader fail loudly instead."""
-    january = _month(calendar_render.calendar_groups(_calendar_run()), 1)
-    assert 'done' not in january
-    assert 'counts' in january and 'total' in january
-
-
-def test_an_incomplete_month_is_struck_in_no_metal():
+def test_an_incomplete_month_is_not_struck():
     run = _calendar_run()
     _fill(run, 1, 1)
     january = _month(calendar_render.calendar_groups(run), 1)
-    # Asserted alongside a non-zero count, so this cannot pass against a renderer that simply never
-    # fills anything -- which is what makes the bare `crest == ''` assertion hollow on its own.
-    assert january['counts'][CALENDAR_VIEW_ALL] == 1
-    assert january['crest'] == ''
+    # Asserted beside a non-zero count, so it cannot pass against a renderer that fills nothing.
+    assert january['done'] == 1
+    assert january['is_struck'] is False
 
 
-def test_one_missing_day_does_not_complete_a_month():
+def test_a_month_is_struck_when_every_one_of_its_days_is_filled():
+    """A BOOLEAN, NOT A METAL. The crest used to be bronze/silver/gold for the hardest of three lenses
+    to complete the month, which made it a cross-lens value on a lens-switched page and cost two audit
+    findings. One lens means one state."""
+    run = _calendar_run()
+    # February, because 28 days is the cheapest complete month to write.
+    for day in range(1, 29):
+        _fill(run, 2, day)
+
+    february = _month(calendar_render.calendar_groups(run), 2)
+    assert february['is_struck'] is True
+    assert february['done'] == february['total'] == 28
+
+
+def test_one_missing_day_does_not_strike_a_month():
     run = _calendar_run()
     for day in range(1, 28):
         _fill(run, 2, day)
     february = _month(calendar_render.calendar_groups(run), 2)
-    assert february['counts'][CALENDAR_VIEW_ALL] == 27
-    assert february['crest'] == ''
+    assert february['done'] == 27
+    assert february['is_struck'] is False
 
 
-def test_a_month_crest_shows_the_highest_lens_that_completed_it():
+def test_a_month_full_of_shovelware_platinums_is_not_struck():
+    """The comparison figure can be complete while the board is empty, and the crest follows the BOARD.
+    This is the clearest statement of what the one lens means."""
     run = _calendar_run()
-    # February, because 28 rows is the cheapest complete month to write.
-    _fill_month(run, 2, views=(CALENDAR_VIEW_ALL,))
-    assert _month(calendar_render.calendar_groups(run), 2)['crest'] == 'bronze'
-
-    _fill_month(run, 2, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
-    assert _month(calendar_render.calendar_groups(run), 2)['crest'] == 'silver'
-
-    _fill_month(run, 2, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_CONTRACTS))
-    assert _month(calendar_render.calendar_groups(run), 2)['crest'] == 'gold'
-
-
-def test_a_month_can_be_gold_without_ever_being_bronze():
-    """The consequence of the lenses not nesting, and the reason only ONE crest renders per month.
-
-    A hunter can complete February in contracts while all-platinums is still short -- gold with no
-    bronze. Showing the highest achieved makes that invisible; showing all three side by side would
-    expose it and read as a bug.
-    """
-    run = _calendar_run()
-    _fill_month(run, 2, views=(CALENDAR_VIEW_CONTRACTS,))
+    CalendarDay.objects.filter(challenge=run, month=2).update(in_all=True, in_clean=False)
 
     february = _month(calendar_render.calendar_groups(run), 2)
-    assert february['counts'][CALENDAR_VIEW_ALL] == 0
-    assert february['crest'] == 'gold'
+    assert february['all_done'] == 28
+    assert february['done'] == 0
+    assert february['is_struck'] is False
 
 
-def test_a_complete_all_and_contracts_month_still_shows_the_rarer_metal():
-    """Gold with bronze earned and silver skipped -- the middle lens short, the hardest one complete."""
+def test_the_year_totals_are_the_sum_of_the_months():
     run = _calendar_run()
-    _fill_month(run, 2, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CONTRACTS))
+    _fill(run, 1, 1)
+    _fill(run, 6, 6)
+    CalendarDay.objects.filter(challenge=run, month=9, day=9).update(in_all=True, in_clean=False)
 
-    february = _month(calendar_render.calendar_groups(run), 2)
-    assert february['counts'] == {CALENDAR_VIEW_ALL: 28, CALENDAR_VIEW_CLEAN: 0,
-                                  CALENDAR_VIEW_CONTRACTS: 28}
-    assert february['crest'] == 'gold'
+    totals = calendar_render.totals_for(calendar_render.calendar_groups(run))
+    assert totals == {'done': 2, 'all': 3}
 
-
-def test_every_lens_has_a_metal_to_be_struck_in():
-    """A view added to the catalogue without a metal would raise `KeyError` inside `_crest` only once
-    somebody completed a month in it -- which is the slowest possible way to find out."""
-    assert set(calendar_render.CREST_METAL) == {view for view, _field in CALENDAR_VIEW_FIELDS}
-
-
-# ── absent and impossible rows ───────────────────────────────────────────────────────────────────────
 
 def test_a_run_with_no_day_rows_draws_no_board_at_all():
     """`_board_groups`' real scar, in a renderer that generates its cells from the KEYS and so would
@@ -373,14 +343,14 @@ def test_a_run_missing_one_day_row_still_draws_that_square():
     assert sum(len(g['cards']) for g in groups) == 365
     orphan = _month(groups, 3)['cards'][2]
     assert (orphan['month'], orphan['day']) == (3, 3)
-    assert set(orphan['views'].values()) == {False}
+    assert orphan['filled'] is False
     assert orphan['earned_on'] is None
 
 
 def test_the_hero_also_draws_a_missing_day_as_empty():
     """The absent-row path through the OTHER entry point, which had no coverage of its own."""
     run = _calendar_run()
-    _fill(run, 5, 5, views=(CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_ALL))
+    _fill(run, 5, 5)
     run.calendar_days.filter(month=5, day=6).delete()
 
     days = calendar_render.calendar_boards_for([run])[run.pk][0]['days']
@@ -430,7 +400,9 @@ def test_the_hero_board_is_one_unlabelled_group_of_every_day():
     # NO always-empty `label`/`slug`. `_board_groups`' single-group branch carries them because
     # `_run_hero.html` tests `group.label`; this group is never drawn by that template, so two keys
     # that are permanently `''` and unreachable are what `_card`'s rule rejects.
-    assert set(groups[0]) == {'view', 'days'}
+    # ONE KEY. A `view` sat beside `days` naming which of three lenses the band was drawn in, so a
+    # reader could tell two entries apart. One lens means every band means the same thing.
+    assert set(groups[0]) == {'days'}
 
 
 def test_the_hero_does_not_reuse_the_key_the_other_heroes_loop():
@@ -453,44 +425,19 @@ def test_a_hero_day_carries_only_what_a_hero_cell_can_draw():
     assert set(day) == {'month', 'day', 'filled'}
 
 
-def test_the_hero_leads_with_the_better_of_the_two_genuine_lenses():
-    """ALL PLATINUMS IS NEVER THE HERO'S LENS. It is the lens shovelware inflates and it cannot finish
-    a run, so leading with it would show an entry far along whose run completes on a much lower
-    number -- and the tally beside the board reads `filled_count`, which is the better of clean and
-    contracts."""
+def test_the_hero_draws_the_same_lens_the_board_does():
+    """NOTHING TO CHOOSE ANY MORE. The hero used to pick the better of two lenses and report which one
+    it had drawn, because a band tinted by "filled in any lens" would have overstated the run. One lens
+    means the band and the `filled_count` tally beside it read the same column by construction."""
     run = _calendar_run()
-    for day in range(1, 11):
-        _fill(run, 1, day, views=(CALENDAR_VIEW_ALL,))
     for day in range(1, 4):
-        _fill(run, 2, day, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
+        _fill(run, 2, day)
+    CalendarDay.objects.filter(challenge=run, month=3).update(in_all=True, in_clean=False)
 
     group = calendar_render.calendar_boards_for([run])[run.pk][0]
-    assert group['view'] == CALENDAR_VIEW_CLEAN
+    assert 'view' not in group, 'the band no longer has a lens to name'
     assert sum(1 for d in group['days'] if d['filled']) == 3, (
-        'the ten all-platinums-only days must not be tinted in the clean lens')
-
-
-def test_the_hero_switches_lens_once_contracts_pulls_ahead():
-    run = _calendar_run()
-    for day in range(1, 4):
-        _fill(run, 2, day, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
-    for day in range(1, 6):
-        _fill(run, 3, day, views=(CALENDAR_VIEW_CONTRACTS,))
-
-    group = calendar_render.calendar_boards_for([run])[run.pk][0]
-    assert group['view'] == CALENDAR_VIEW_CONTRACTS
-    assert sum(1 for d in group['days'] if d['filled']) == 5
-
-
-def test_the_rarer_lens_wins_a_tie_as_it_does_on_completion():
-    run = _calendar_run()
-    for day in range(1, 4):
-        _fill(run, 2, day, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
-    for day in range(1, 4):
-        _fill(run, 3, day, views=(CALENDAR_VIEW_CONTRACTS,))
-
-    group = calendar_render.calendar_boards_for([run])[run.pk][0]
-    assert group['view'] == CALENDAR_VIEW_CONTRACTS
+        'a month of shovelware platinums must not tint the band')
 
 
 def test_the_hero_days_run_in_calendar_order():
@@ -524,7 +471,7 @@ def test_the_hero_keeps_each_runs_days_to_that_run():
     one = _calendar_run()
     two = _calendar_run()
     # March 3 is index 61: January's 31 days, February's 28, then the 3rd.
-    _fill(one, 3, 3, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
+    _fill(one, 3, 3)
 
     boards = calendar_render.calendar_boards_for([one, two])
     assert boards[one.pk][0]['days'][61]['filled'] is True
@@ -535,7 +482,7 @@ def test_the_hero_keeps_each_runs_days_to_that_run():
 
 def test_the_detail_board_costs_one_query():
     run = _calendar_run()
-    _fill_month(run, 2, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
+    _fill_month(run, 2)
 
     with CaptureQueriesContext(connection) as captured:
         calendar_render.calendar_groups(run)
@@ -586,7 +533,7 @@ def test_a_fully_filled_board_costs_no_more_than_an_empty_one():
     empty = _calendar_run()
     full = _calendar_run()
     for month in range(1, 13):
-        _fill_month(full, month, views=(CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN))
+        _fill_month(full, month)
 
     with CaptureQueriesContext(connection) as empty_cost:
         calendar_render.calendar_groups(empty)
