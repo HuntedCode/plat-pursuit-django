@@ -786,3 +786,48 @@ def test_the_coin_counter_is_not_announced_twice():
                                                               body.index('class="pp-cal__coin"'))]
     assert 'aria-hidden="true"' in body[:body.index('class="pp-cal__coin"') + 60]
     assert 'pp-cal__sub' in coin, 'the counter is inside the aria-hidden coin, not beside it'
+
+
+# ── the board's surface, which it shipped without ────────────────────────────────────────────────────
+
+def test_the_board_sits_on_a_surface():
+    """CONTENT NEVER SITS ON THE RAW PAGE BACKGROUND -- a project rule this board broke, caught by the
+    owner on a browser pass: "the contents of the page are up against the raw background. This is not
+    really used anywhere else on the site."
+
+    `.scard` IS THE PRIMITIVE, not a hand-rolled surface: the reward panel on this same page uses it,
+    and `challenges.css` records `.pp-csq-shelf__head` being banded for the identical reason ("the shelf
+    label used to sit on the bare page background... broke the rule that content belongs on a surface").
+
+    THE SLOT BOARD IS DELIBERATELY NOT CARDED, which is why this is asserted rather than assumed: "free
+    content" means PAGE-FILLING grids, and 26 pieces of cover art at 100-176px are the page's subject.
+    A numbered grid with a text head and a row of coins is a stats-shaped section, which still gets a
+    card.
+    """
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    at = body.index('class="pp-cal"')
+    before = body[:at]
+
+    assert '<section class="scard mb-3"' in before, 'the Calendar board must be on a `.scard`'
+    # `mb-3` for the reason the reward panel carries it: `.pp-gbrowse` sets no `gap` and `.scard` no
+    # `margin-bottom`, so without it the card's bottom edge meets the next block.
+    assert 'pp-csq-board' not in body, 'and the slot board is a different page'
+
+
+def test_a_day_cell_clears_the_touch_minimum_at_the_narrowest_width():
+    """MEASURED, BECAUSE THE CARD CHANGED IT. A day cell becomes a BUTTON when the day modal lands, so
+    44px is a floor rather than a preference -- and moving the board onto a `.scard` took the content
+    box at 375px from 343px to 327px, which put a 6px gap's cell at 41.6px.
+
+    The arithmetic is pinned rather than the appearance: seven columns and the gap are what decide it,
+    so a change to either has to come back here and redo the sum.
+    """
+    block = _calendar_css()
+    flat = ' '.join(block.split())
+    assert '--cal-gap: 3px;' in flat, 'the base gap is what buys the 44px'
+    assert 'grid-template-columns: repeat(7, minmax(0, 1fr));' in flat
+
+    # 375px viewport - 32px page gutter = 343px, less the card's 8px padding either side.
+    inner = 343 - 2 * 8
+    cell = (inner - 6 * 3) / 7
+    assert cell >= 44, 'a day cell is %.1fpx at 375px, under the 44px touch minimum' % cell

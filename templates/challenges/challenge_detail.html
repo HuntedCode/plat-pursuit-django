@@ -268,9 +268,25 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
 
     `calendar_months` IS THE TEST, mirroring `{% templatetag openblock %} if groups {% templatetag closeblock %}`
     above: the view sets it only on the Calendar branch, and `calendar_groups` returns `[]` for a run
-    whose day rows are gone -- so an empty board draws nothing rather than a frame.{% endcomment %}
+    whose day rows are gone -- so an empty board draws nothing rather than a frame.
+
+    ON A `.scard`, WHICH THE SLOT BOARD ABOVE IS NOT, and the difference is the rule rather than an
+    inconsistency. The owner caught this on a browser pass: "the contents of the page are up against
+    the raw background. This is not really used anywhere else on the site." Correct, and it is a
+    project rule -- content belongs on a surface -- that this board broke while the stylesheet beside
+    it records `.pp-csq-shelf__head` being banded for exactly the same reason ("the shelf label used to
+    sit on the bare page background... broke the rule that content belongs on a surface").
+
+    THE SLOT BOARD IS THE EXCEPTION, NOT THE NORM. "Free content" means PAGE-FILLING grids: 26 pieces
+    of cover art at 100-176px fill the row and read as the page's subject, so a card around them would
+    be a frame around a frame. A month panel is a numbered grid, a text head and a row of coins -- a
+    stats-shaped section, which still gets a card. `mb-3` for the same reason the reward panel above
+    carries it: `.pp-gbrowse` sets no `gap` and `.scard` no `margin-bottom`.{% endcomment %}
     {% if calendar_months %}
-    {% include 'challenges/partials/_calendar_board.html' %}
+    <section class="scard mb-3" aria-labelledby="cal-board-head">
+        <h2 class="sr-only" id="cal-board-head">Your calendar</h2>
+        {% include 'challenges/partials/_calendar_board.html' %}
+    </section>
     {% endif %}
 
     {% comment %}TWO INDEPENDENT NOTES, not an if/else. They were nested, and the inner condition was

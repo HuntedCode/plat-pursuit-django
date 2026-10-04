@@ -2832,8 +2832,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     display: flex;
     flex-direction: column;
     gap: 14px;
-    /* The one gap, shared by the crest strip and the day grid so the two read as one object. */
-    --cal-gap: 6px;
+    /* THE ONE GAP, shared by the crest strip and the day grid so the two read as one object.
+       3px AT MOBILE, AND IT IS MEASURED. The board sits on a `.scard` now (the owner's browser pass:
+       "the contents of the page are up against the raw background"), and that card's 8px horizontal
+       padding takes the content box at 375px from 343px to 327px. Seven columns at the old 6px gap put
+       the cell at 41.6px -- under the 44px touch minimum, which matters because a day cell BECOMES a
+       button when the day modal lands. At 3px it is 44.1px.
+       The alternative was six columns, which gives a roomier 49.5px but leaves a trailing row of one
+       day in a 31-day month; seven keeps the familiar block and clears the minimum exactly. */
+    --cal-gap: 3px;
 }
 @media (min-width: 768px) {
     .pp-cal { gap: 18px; --cal-gap: 8px; }
@@ -3149,7 +3156,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    seventh of the row: 44px at 375 (right), but 98px at 768, 135px at 1024 and 208px at 1920 -- a panel
    of enormous near-empty boxes each holding one 13px numeral, on the project's primary target. The
    sibling slot grid escalates 3 -> 4 -> 6 -> 7 for exactly this reason. Ten columns inside a 712px cap
-   holds the cell near 64px from 768 upward, and the grid centres in whatever is left over. */
+   holds the cell between 60 and 63px from 768 upward, and the board centres in whatever is left over.
+   (It was "near 64px" before the board moved onto a `.scard`; the card's 18px padding takes about 3px
+   off the cell, which is worth correcting rather than leaving as a figure nobody can reproduce.) */
 .pp-cal__grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
