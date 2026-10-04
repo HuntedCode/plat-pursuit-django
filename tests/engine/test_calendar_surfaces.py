@@ -872,6 +872,35 @@ def test_every_month_declares_its_own_hue():
     assert abs(dec - jan) < abs(dec - nov), 'December should turn back toward January, not trail November'
 
 
+def test_the_progress_arc_is_one_colour_for_every_month():
+    """ONE COLOUR AXIS, ONE MEANING -- the owner's point (2026-10-04): "would it make sense for the rings
+    around each month to all be the same color so you can tell it specifically means progress". The month
+    hue already says which month and whether it is earned; making it also say how far is the overloading
+    that produced the `tier` and `crest` defects. One colour also makes the twelve arcs comparable.
+
+    NEUTRAL RATHER THAN THE BRAND CYAN, for a structural reason rather than taste: `--pp-primary` is hue
+    206 and January's ice is hue 210, four degrees apart, so a cyan arc would vanish into the rim beneath
+    it on the coin that opens the row. A seasonal cycle needs the blue region for winter and the brand
+    colour lives there, so that is not tunable. Cyan is also the ACTIVE cue on this same element.
+    """
+    block = _calendar_css()
+    arc_rule = block[block.index('.pp-cal__arc-track,'):]
+    arc_rule = arc_rule[:arc_rule.index('}')]
+
+    assert 'stroke: var(--pp-text);' in arc_rule, 'the arc takes a neutral, not a hue'
+    assert '--cal-c' not in arc_rule, 'the arc must not vary by month'
+    assert '--pp-primary' not in arc_rule, 'and must not reuse the active cue'
+
+
+def test_the_two_rings_split_colour_from_progress():
+    """THE INNER RIM CARRIES THE HUE AND THE OUTER ARC DOES NOT, which is what makes two concentric
+    rings legible instead of busy: identity on one, measure on the other."""
+    block = _calendar_css()
+    rim_rule = block[block.index('.pp-cal__rim-track,'):]
+    rim_rule = rim_rule[:rim_rule.index('}')]
+    assert 'stroke: var(--cal-c);' in rim_rule, 'the rim is the month identity'
+
+
 def test_the_hue_never_reaches_the_text():
     """THE SAFETY RULE, and the reason twelve hues cannot quietly break a contrast ratio: the face and
     the counter read measured tokens, and the hue drives only the rim, the arc, the plate and the aura.

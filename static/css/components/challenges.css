@@ -3063,9 +3063,31 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    100 / 12 = 8.3333, drawn as a 6-long dash with a 2.3333 gap. */
 .pp-cal__rim-track { stroke-dasharray: 6 2.3333; opacity: 0.22; }
 
-/* THE COMPLETION ARC. A single dash from twelve o'clock, its length served by the template through
-   `widthratio` -- the one piece of arithmetic a Django template is allowed to do, and the same thing
-   `_run_card.html` uses for its progress bar.
+/* THE COMPLETION ARC, IN ONE COLOUR FOR EVERY MONTH, and NEUTRAL rather than the brand cyan.
+
+   THE PRINCIPLE IS THE OWNER'S (2026-10-04): "would it make sense for the rings around each month to
+   all be the same color so you can tell it specifically means progress". Yes, and for the same reason
+   the one-lens collapse was worth doing: one colour axis should carry one meaning. The month hue
+   already says WHICH month and WHETHER it is earned; making it also say HOW FAR is the overloading that
+   produced the `tier` and `crest` defects. One colour across all twelve also makes the arcs
+   COMPARABLE -- you can scan the row for which months are furthest along, which twelve different hues
+   at twelve different lightnesses cannot support.
+
+   NOT CYAN, AND THE REASON IS STRUCTURAL RATHER THAN TASTE. `--pp-primary` is `oklch(0.86 0.142 206)`
+   and January's ice is `oklch(0.78 0.11 210)` -- FOUR degrees apart, with December's frost sixteen away.
+   A cyan arc would be indistinguishable from the rim beneath it on the two coins that open and close the
+   row, and that is not tunable: a seasonal cycle needs the blue region for winter and the brand colour
+   lives there. Cyan is also already the ACTIVE cue on this very element (the outline and the lift), so
+   it would mean both "progress" and "you are here" on one coin.
+
+   SO: NO HUE AT ALL. A near-white arc is distinct from all twelve seasonal hues by having no hue to
+   collide with, distinct from the active cyan, and reads unambiguously as a measure. It also splits the
+   two rings cleanly by meaning: the inner rim is identity and carries the colour, the outer ring is
+   progress and does not.
+
+   A single dash from twelve o'clock, its length served by the template through `widthratio` -- the one
+   piece of arithmetic a Django template is allowed to do, and the same thing `_run_card.html` uses for
+   its progress bar.
    BUTT CAPS, AND NOT BECAUSE OF THE SEGMENTED TRACK'S PROBLEM. There, round caps grew each dash past
    its own gap and painted twelve segments as a solid ring. Here there is one dash, so round would have
    been safe and slightly prettier -- except that a ZERO-LENGTH dash with a round cap still paints a
@@ -3075,13 +3097,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cal__arc-track,
 .pp-cal__arc {
     fill: none;
-    stroke: var(--cal-c);
+    stroke: var(--pp-text);
     stroke-width: 2.4;
     stroke-linecap: butt;
     transform: rotate(-90deg);
     transform-origin: 50% 50%;
 }
-.pp-cal__arc-track { opacity: 0.14; }
+/* THE GROOVE the arc runs in, so an empty month reads as "nothing yet" rather than as a missing ring.
+   Dimmer than it was when it carried the month hue: a neutral at the same opacity reads brighter. */
+.pp-cal__arc-track { opacity: 0.11; }
 .pp-cal__arc { stroke-dasharray: var(--pct, 0) 100; }
 .pp-cal__rim-seg {
     stroke-dasharray: 6 94;
@@ -3194,7 +3218,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
         border-radius: 50%;
     }
     .pp-cal__crest:hover .pp-cal__rim-track { opacity: 0.34; }
-    .pp-cal__crest:hover .pp-cal__arc-track { opacity: 0.22; }
+    .pp-cal__crest:hover .pp-cal__arc-track { opacity: 0.2; }
 }
 
 /* -- one month ------------------------------------------------------------------------------------- */
