@@ -65,6 +65,25 @@ anchor would be a second tab stop to the same place.
         whole saving. The model property has the full table; the DETAIL board keeps `cover_big` because its
         squares are larger again (~109-176px).{% endcomment %}
         <div class="pp-chero__board" aria-hidden="true">
+            {% comment %}THE CALENDAR'S BOARD IS A YEAR, not a mosaic, so it gets its own branch rather
+            than a wider version of the shelves below.
+
+            `board.0.days` IS THE DISCRIMINATOR, and it is deliberate rather than a trick.
+            `calendar_boards_for` returns its cells under `days` precisely so it cannot be drawn by the
+            `group.squares` loop below -- a day has no `cover` and its label would print "January 1"
+            inside a 32px cell -- so the key that keeps the two apart is also the honest test for which
+            one arrived. No new context value, and nothing to keep in step with `challenge_type`.
+
+            SEVEN ROWS FLOWING BY COLUMN, which is the dense year view this shape is known for. The rows
+            are NOT weekdays: a square is a (month, day) with no year, so there is nothing to align to.
+            Seven is simply what makes 365 cells read as a block at hero width.{% endcomment %}
+            {% if board.0.days %}
+            <div class="pp-chero__cal">
+                {% for day in board.0.days %}
+                <span class="pp-chero__cday{% if day.filled %} pp-chero__cday--on{% endif %}"></span>
+                {% endfor %}
+            </div>
+            {% else %}
             {% for group in board %}
             {% comment %}`--disc` ON THE SHELF, not on the mark, because two things read it: the label's
             colour and the rule down the shelf's left edge. It is the same variable `.pp-jobchip` and the
@@ -106,6 +125,7 @@ anchor would be a second tab stop to the same place.
                 </div>
             </div>
             {% endfor %}
+            {% endif %}
         </div>
         {% comment %}A hairline inner edge over the board, so it reads as one framed object rather than as
         loose tiles bleeding into the row.{% endcomment %}

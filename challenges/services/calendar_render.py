@@ -145,7 +145,7 @@ def _counts(rows):
     return tally
 
 
-def _cell(month, day, row, index):
+def _cell(month, day, row):
     """One day square on the DETAIL board.
 
     `row` IS ALLOWED TO BE `None`, and that is what makes the board unable to draw FEWER squares than
@@ -180,8 +180,9 @@ def _cell(month, day, row, index):
       - a day first filled in `contracts` in 2017 and in `all` in 2019 reports 2017 in both lenses.
 
     So the date may only be REVEALED on a cell that is filled in the ACTIVE lens -- which the same
-    `data-view` CSS that tints the cell already decides, so it costs nothing to get right and is
-    invisible to get wrong. This is the one field in the dict that `views` cannot make honest, which is
+    `:has()` rule that tints the cell already decides, so it costs nothing to get right and is invisible
+    to get wrong. (The board does not print it at all yet: it belongs in the day modal, where the lens is
+    not ambiguous.) This is the one field in the dict that `views` cannot make honest, which is
     why it is called out rather than left for the template author to discover.
 
     NO `tier` KEY, and its removal is a correctness fix rather than a trim. It used to carry the
@@ -200,15 +201,19 @@ def _cell(month, day, row, index):
         'key': '%d-%d' % (month, day),
         # Spelled out, because a cell shows a bare numeral and a screen reader needs the date.
         'label': '%s %d' % (MONTH_NAMES[month - 1], day),
-        # ALL THREE LENSES IN THE DOM, so switching lens costs no request -- the same both-states-
-        # rendered technique the contract CTA uses, with CSS revealing the active one off `data-view`.
+        # ALL THREE LENSES IN THE DOM, so switching lens costs neither a request nor a script -- the
+        # same both-states-rendered technique the contract CTA uses, with the stylesheet revealing the
+        # active one by reading the checked radio through `:has()`.
         'views': _view_state(row),
         'earned_on': row.earned_on if row else None,
-        # POSITION IN THE WHOLE RUN, stamped here for the reason `slot_cards` stamps it rather than
-        # letting the template read `forloop.counter0`: the cells are GROUPED into months, so a
-        # template counter restarts every month and any stagger keyed on it silently dies. That one IS
-        # recorded history -- it broke the lazy-image threshold on the jobs board.
-        'index': index,
+        # NO `index`, AND THE REASONING INVERTED RATHER THAN SIMPLY BEING WRONG. One was stamped here
+        # copying `slot_cards`, which carries a run-wide position precisely because a template counter
+        # restarting per shelf broke its cascade. That argument does not transfer: the slot board is ONE
+        # grid drawn once, while a Calendar is twelve panels of which one is visible, each re-entering
+        # every time it is switched to -- so the entrance counter MUST restart per month, which is what
+        # `forloop.counter0` already is. The run-wide version was worse than redundant: with the 12-step
+        # cap on the delay, every cell in February through December shared one maximum delay, so eleven
+        # months had no cascade and a switched-to panel arrived blank before popping all at once.
     }
 
 
@@ -243,8 +248,8 @@ def calendar_groups(challenge):
         return []
 
     by_key = _rows_by_key(rows)
-    cells = [_cell(month, day, by_key.get((month, day)), index)
-             for index, (month, day) in enumerate(calendar_day_keys())]
+    cells = [_cell(month, day, by_key.get((month, day)))
+             for month, day in calendar_day_keys()]
 
     groups = []
     start = 0
@@ -335,7 +340,7 @@ def _hero_group(rows):
     if not rows:
         return []
 
-    view = _headline_view(_counts(rows))
+    view = headline_view(_counts(rows))
     field = dict(CALENDAR_VIEW_FIELDS)[view]
     by_key = _rows_by_key(rows)
     days = []
@@ -353,7 +358,19 @@ def _hero_group(rows):
     return [{'view': view, 'days': days}]
 
 
-def _headline_view(counts):
+def totals_for(months):
+    """`{view: days filled across the whole year}`, summed from month groups already in hand.
+
+    PURE, AND THAT IS THE POINT: the detail page needs the year totals for its tally, for which lens
+    to open on, and later for the day-marker ladder -- and all three are sums of numbers
+    `calendar_groups` has already computed. Asking the database again would be a second query for
+    data on the page, and asking it DIFFERENTLY would be two definitions of the same figure.
+    """
+    return {view: sum(month['counts'][view] for month in months)
+            for view, _field in CALENDAR_VIEW_FIELDS}
+
+
+def headline_view(counts):
     """Which lens a run leads with: the better of CLEAN and CONTRACTS.
 
     ALL PLATINUMS IS NEVER IT, and that is a decision rather than an omission. It is the lens

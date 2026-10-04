@@ -179,18 +179,25 @@ def test_month_dom_ids_are_unique_so_every_head_can_name_its_own_section():
     assert ids[0] == 'cal-month-jan' and ids[-1] == 'cal-month-dec'
 
 
-def test_the_index_counts_across_the_whole_run_not_within_each_month():
-    """REAL HISTORY, from `slot_cards`: grouping restarts a template's `forloop.counter0` at every
-    group, so anything keyed on it -- a stagger, a lazy threshold -- silently breaks. Stamping the
-    position server-side is what makes the number mean "position in the run"."""
-    groups = calendar_render.calendar_groups(_calendar_run())
-    assert groups[0]['cards'][0]['index'] == 0
-    # February 1 is the 32nd day of the year, so index 31 after January's 31 days.
-    assert _month(groups, 2)['cards'][0]['index'] == 31
-    assert groups[-1]['cards'][-1]['index'] == 364
+def test_a_cell_carries_no_run_wide_position():
+    """THE INVERSION OF `slot_cards`' RULE, pinned because it looks like that rule being broken.
 
-    every = [card['index'] for g in groups for card in g['cards']]
-    assert every == list(range(365))
+    A slot card carries a run-wide `index` because its squares are ONE grid, where a template counter
+    restarting per shelf broke the cascade across it. A Calendar is twelve panels of which one is ever
+    visible, each re-entering whenever it is switched to -- so its entrance counter must restart per
+    month, and `forloop.counter0` in the panel loop already is that.
+
+    A run-wide index here was worse than redundant. The delay is capped at twelve steps, so every cell in
+    February through December shared one maximum delay: eleven months had no cascade at all, and because
+    un-hiding an element restarts its animations, a month switch slid in a completely blank panel and
+    then popped all 31 squares at once.
+    """
+    card = _month(calendar_render.calendar_groups(_calendar_run()), 2)['cards'][0]
+    assert 'index' not in card
+
+    board = open('templates/challenges/partials/_calendar_board.html', encoding='utf-8').read()
+    assert '--rev: {{ forloop.counter0 }}' in board, (
+        'the cascade counter has to restart per month, which only the panel loop knows')
 
 
 # ── the three lenses on one cell ─────────────────────────────────────────────────────────────────────

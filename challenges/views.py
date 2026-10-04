@@ -41,8 +41,10 @@ from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
-from challenges.models import (CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CHOICES, CHALLENGE_TYPE_JOBS,
-                               CHALLENGE_TYPES, TYPES_NOT_YET_CREATABLE, Challenge)
+from challenges.models import (CALENDAR_VIEW_CHOICES, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR,
+                               CHALLENGE_TYPE_CHOICES, CHALLENGE_TYPE_JOBS, CHALLENGE_TYPES,
+                               TYPES_NOT_YET_CREATABLE, Challenge)
+from challenges.services import calendar_render
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
 from challenges.services import picker
@@ -368,7 +370,40 @@ class ChallengeDetailView(DetailView):
         # GROUPS, not a flat list. A-Z comes back as one unlabelled group so its page is unchanged;
         # Job Coverage comes back as five, one per discipline, which is the structure the flat grid
         # was hiding by laying five groups of five out seven across.
-        context['groups'] = slot_render.slot_groups(challenge)
+        #
+        # THE DISPATCH IS HERE AND NOT INSIDE A RENDERER, which is the whole reason there are two.
+        # A Calendar day shares no field with a contract-backed square -- no cover, no job, no XP, and
+        # three per-lens booleans a slot has no concept of -- so a single function returning both under
+        # one `groups` variable would hand the template two dict shapes, the defect `boards_for`
+        # records paying for. The markup differs regardless, so the branch belongs where the template
+        # choice is made.
+        #
+        # `groups` IS LEFT EMPTY RATHER THAN ABSENT on the Calendar branch, so the slot board's own
+        # `{% if groups %}` is the one test for "is there a board of that kind", and a missing-key
+        # typo cannot silently draw an empty frame.
+        if challenge.challenge_type == CHALLENGE_TYPE_CALENDAR:
+            context['groups'] = []
+            months = calendar_render.calendar_groups(challenge)
+            context['calendar_months'] = months
+            # THE LENS SWITCHER'S OPTIONS, from the catalogue rather than written out in the template.
+            #
+            # WHICH DOES NOT MAKE A FOURTH LENS WORK, and an earlier version of this comment claimed it
+            # did ("a fourth view would appear in the switcher instead of being silently undrawable") --
+            # exactly backwards. A fourth entry in `CALENDAR_VIEW_CHOICES` would get a chip, and then:
+            # `challenges.css` enumerates the three lenses literally in both the tint and the tally
+            # rules, so selecting it would blank the tally and un-tint every square; and `CREST_METAL`
+            # zips against a three-tuple, so `_crest` raises `KeyError` for it. Reading the catalogue
+            # here is worth doing because it keeps ONE list of lenses rather than two, not because the
+            # feature generalises. A fourth lens is a change to the stylesheet and the metals as well.
+            context['calendar_views'] = CALENDAR_VIEW_CHOICES
+            # THE YEAR TOTALS, summed from month counts already on the page -- no second query, and
+            # one definition of the figure rather than a template re-adding it.
+            context['calendar_totals'] = calendar_render.totals_for(months)
+            # WHICH LENS THE BOARD OPENS ON, decided here so the page is correct before any JS runs
+            # and so it matches the lens the hero would draw for the same run.
+            context['calendar_view'] = calendar_render.headline_view(context['calendar_totals'])
+        else:
+            context['groups'] = slot_render.slot_groups(challenge)
         context['is_owner'] = viewer is not None and viewer.id == challenge.profile_id
         # WHETHER THE OWNER MAY CHANGE THIS RUN. Two conditions beyond ownership, and a run fails either:
         # a FINISHED run has nothing left to change (completed squares lock, and every square is
@@ -1313,8 +1348,15 @@ class HallOfFameView(_ChallengeBrowseView):
     def enrich(self, runs):
         """The board, the earned title and the plaque spine for each finished run, in three batches.
 
-        AT MOST ELEVEN QUERIES ON A PAGE HOLDING A JOBS RUN, ten without one, and FEWER where there is less
-        to resolve -- whatever the entry count.
+        AT MOST TWELVE QUERIES ON A PAGE HOLDING BOTH A JOBS RUN AND A CALENDAR RUN; eleven without a
+        jobs run, eleven without a calendar run, ten with neither.
+
+        THE HEADLINE IS THE PART THAT KEEPS GOING STALE, which is worth saying where the number is rather
+        than only in the history below: the edit that added the Calendar bullet left this line reading
+        "eleven", so the paragraph counting its own four past omissions committed a fifth in the same
+        change. The bullets are the arithmetic; this line is a summary of them and has to be re-added.
+
+        FEWER WHERE THERE IS LESS TO RESOLVE -- whatever the entry count.
 
         STATED AS A CEILING RATHER THAN A COUNT, because `boards_for` is itself a range: its docstring lists
         five cases, down to one or two for runs with no filled squares, so a real page runs from about six up
@@ -1327,10 +1369,15 @@ class HallOfFameView(_ChallengeBrowseView):
           is present);
         - `granted_titles_for` adds one;
         - `plaques_for` adds four (the career standings, the job catalogue's shape, one aggregate over
-          `ProfileJobXP`, and the redeemed-slot counts).
+          `ProfileJobXP`, and the redeemed-slot counts);
+        - `calendar_boards_for` adds ONE when a Plat Calendar run is on the page, and nothing at all when
+          none is -- a day has no art, so there is nothing conditional inside it to range over.
 
         Earlier versions said "two queries of their own plus the cover resolve", then "three", then "seven",
-        each of which quietly dropped a read. All of them take the WHOLE PAGE, which is the property that
+        each of which quietly dropped a read; the Calendar's own read was missed in the same way until an
+        audit caught it, which is four times this paragraph has been wrong by omission.
+        `test_a_page_with_no_calendar_run_pays_nothing_for_the_calendar_renderer` pins the `+1`, so the
+        figure is at least checkable now rather than only written down. All of them take the WHOLE PAGE, which is the property that
         matters and the one the flatness pin actually tests -- the total is documentation, the flatness is
         the contract.
 
@@ -1351,18 +1398,47 @@ class HallOfFameView(_ChallengeBrowseView):
         permanent, and at hero width it is a real board: 25 or 26 covers at a size worth looking at, rather
         than the mush the same thing would be at browse-card scale.
         """
+        from challenges.services.calendar_render import calendar_boards_for
         from challenges.services.plaque import plaques_for
         from challenges.services.rewards import granted_titles_for
         from challenges.services.slot_render import boards_for
 
-        # NO `list(runs)` HERE. It was added to protect two consumers from a one-shot iterable, and both
-        # ends of that have since gone: `context[context_object_name]` is always an already-paginated,
-        # re-iterable list or queryset, and `granted_titles_for` now reads its argument in a single pass.
-        # A mutation run found deleting the call broke nothing, which is the definition of dead defence --
-        # and the generator hazard is pinned where it is real, in
+        # THE HISTORY OF `list(runs)`, kept because it left and came back and both were right at the
+        # time. It was added to protect two consumers from a one-shot iterable, then deleted as dead
+        # defence once `granted_titles_for` read its argument in a single pass and this function read it
+        # exactly once -- a mutation run confirmed deleting it broke nothing. Adding the Calendar
+        # partition below took this function back to three reads, so it is needed again, and the comment
+        # at the call explains why. The generator hazard itself is still pinned where it is real, in
         # `test_the_title_lookup_survives_a_one_shot_iterable`.
+        # EACH RENDERER IS FED ONLY ITS OWN TYPE, and the split is what keeps the page honest in both
+        # directions. Handing a Calendar run to `boards_for` returns `[]` (it has no `ChallengeSlot`
+        # rows), so its hero would silently draw no board at all; handing an A-Z run to
+        # `calendar_boards_for` returns `[]` for the mirror reason. Partitioning first means a mixed
+        # page gets a real board for every entry, and neither renderer is asked a question about a
+        # type it does not know.
+        #
+        # IT ALSO KEEPS THE EMPTY CASE FREE. Both functions return `{}` without issuing a query when
+        # handed nothing, so a Hall of Fame page with no Calendar run on it pays nothing for the second
+        # renderer -- the same "only if needed" discipline `boards_for` already applies to the job
+        # catalogue. The two key sets are disjoint by construction, so the merge cannot lose an entry.
+        # `list(runs)` IS BACK, AND THE NOTE ABOVE IS WHY IT LEFT -- both are correct, at different
+        # times. It was deleted as dead defence when this function read its argument exactly once; the
+        # partition below made that three reads (the partition, then the titles, then the plaques), so
+        # the hazard the note calls SILENT is live again. A generator drained by the partition leaves
+        # `granted_titles_for` and `plaques_for` with nothing, and every hero on the page loses its
+        # board, its title and its plaque with no error raised. Neither the live caller (a cached
+        # paginated queryset) nor the tests (lists) would show it.
+        #
+        # ONE PASS TO PARTITION, rather than two comprehensions, so the only multiple read is this
+        # explicit materialisation rather than something a reader has to notice.
+        runs = list(runs)
+        calendar_runs, slot_runs = [], []
+        for run in runs:
+            target = (calendar_runs if run.challenge_type == CHALLENGE_TYPE_CALENDAR
+                      else slot_runs)
+            target.append(run)
         return {
-            'boards': boards_for(runs),
+            'boards': {**boards_for(slot_runs), **calendar_boards_for(calendar_runs)},
             'earned_titles': granted_titles_for(runs),
             'plaques': plaques_for(runs),
         }

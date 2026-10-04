@@ -1,0 +1,229 @@
+{% comment %}The Plat Calendar's detail board: a crest row that doubles as the month switcher, one month
+panel at a time, and a lens switcher underneath.
+
+WHY A SWITCHER AND NOT A WALL OF TWELVE MONTHS (owner, 2026-10-04, choosing between three mockups).
+A whole year at 375px is tiny: the Hall of Fame hero draws exactly that and its cells land under 5px,
+which is a density read rather than something you can point at. One month at a time gives a 44px cell --
+the touch minimum -- and it gives the twelve crests a job beyond decoration: they ARE the tabs. The
+year-at-a-glance read is not lost, it lives on the hero where it belongs.
+
+A DAY HAS NO WEEKDAY, which is why this grid has no `S M T W T F S` head and must never grow one. A square
+is a (month, day) pair with NO year -- "3 March" means every 3 March in the hunter's history -- so any
+weekday alignment would be a different lie every year. `calendar_render`'s module docstring states it at
+the source. The grid is a plain numbered one.
+
+ALL TWELVE PANELS AND ALL THREE LENSES ARE IN THE DOM. The rows are already fetched (one query for the
+whole board), so rendering everything and revealing with CSS makes both switchers instant and request-free
+-- the same both-states-rendered technique the contract CTA uses, and the reason `_cell` carries three
+booleans rather than the selected one.
+
+THE CREST ROW IS LENS-INDEPENDENT, which is a correctness rule rather than a layout choice. `month.crest`
+is the best metal across all three lenses, so it may only ever be drawn OUTSIDE the lens-switched grid.
+`_crest`'s docstring carries the full argument: a `tier` field on a cell was deleted for being exactly
+this, because inside the grid a best-of value paints gold on a square that is empty in the lens you are
+looking at. Anything lens-scoped reads `month.counts` instead.
+
+NO COVER ART ANYWHERE (owner): "I don't think we do cover art for the calendar. Instead, we can let the
+user click on a day and it'll pop-up a modal that shows them games that satisfy that day." The modal is a
+separate slice; until it lands a day is not interactive, so it is a `<div>` and not a button.
+{% endcomment %}
+{% load custom_filters %}
+{% comment %}NO STATE ATTRIBUTES ON THE BOARD, which is a deletion rather than an omission. It carried
+`data-view`, `data-month` and `data-challenge-id`, and an audit found that by the end nothing read any of
+them: the lens is decided by `:has()` on the checked radio and the showing month by `hidden` on the
+panels, both of which the server renders correctly on its own. An attribute kept past its last reader is
+what `_card`'s rule rejects, and here it was worse than dead weight -- `data-view` looked like the thing
+driving the tint, so a future change would have "fixed" the lens by writing to it.{% endcomment %}
+<div class="pp-cal">
+
+    {% comment %}THE CREST ROW. Twelve tabs, and the run's trophy shelf.
+
+    A SCROLLING SNAP STRIP AT MOBILE, twelve across from `md:`. Twelve tabs inside 375px is 22px each --
+    half the 44px touch minimum, and far too small for a face to say anything -- so the strip keeps each
+    crest at a real size and lets the row scroll instead.
+    SCROLLING IS THE EXCEPTION, NOT A HOUSE RULE, and an earlier version of this comment claimed it was
+    ("the project's usual answer to omit or scroll"). CLAUDE.md's mobile criterion says to OMIT rather
+    than scroll, and the nearest precedent, `.nc__filter`, opens "IT WRAPS. It must not scroll". What
+    makes this different is that the twelve are the board's NAVIGATION: omitting any puts a month out of
+    reach, and wrapping to two rows of six stacks a second row of chrome over a board already behind a
+    switcher.
+
+    THE FACE IS THE MONTH'S ABBREVIATION, NOT A ROMAN NUMERAL, and this departs from the plan on purpose
+    so it can be argued rather than discovered. The plan specified "a 12-segment rim with one segment lit
+    for the month, and a Roman numeral struck on the face", which was settled before the layout was --
+    and the layout turned these coins into the SWITCHER. A switcher's first job is identification, and
+    there is room for exactly three glyphs: the face is 12px (the project's type floor, which an earlier
+    version of this ducked at 9px by leaning on a "calendar grids" allowance meant for supplementary
+    text). `AUG` is three glyphs at that size and says the month outright; `VIII` is four and says it
+    only to somebody already counting. The rim still carries position, which was the numeral's
+    structural argument. Easy to revert if the owner prefers the coin to the control -- but a Roman
+    numeral wants a bigger coin than a switcher row can spare.{% endcomment %}
+    <div class="pp-cal__crests" role="tablist" aria-label="Month">
+        {% for month in calendar_months %}
+        <button type="button" role="tab"
+                class="pp-cal__crest{% if month.crest %} pp-cal__crest--struck{% endif %}"
+                id="cal-tab-{{ month.slug }}" aria-controls="{{ month.dom_id }}"
+                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                {% comment %}EVERY CREST IS TAB-REACHABLE AS RENDERED, and `wireTablist` narrows it to
+                one on boot -- its `syncTabindex()` runs at wire time, so the roving behaviour arrives in
+                the same tick as the arrow keys that make it navigable.
+
+                THE SERVER USED TO RENDER THE ROVER ITSELF (`0` on the first crest, `-1` on the rest),
+                which was strictly worse with JavaScript off: Tab skipped eleven crests and no arrow key
+                moved between them, so a keyboard-only visitor lost eleven twelfths of the board with no
+                way to reach it. A roving tabindex is only safe once something is doing the roving.
+                {% endcomment %}
+                tabindex="0"
+                {% comment %}`aria-controls` IS LOAD-BEARING, not decoration: the script resolves the
+                panel through it rather than by matching list positions. A `data-cal-month` index sat here
+                and was read by nothing, while the pairing was positional -- so rendering the panels in a
+                different order (opening on the current month, say) would have desynced the script from
+                the accessible tree silently.{% endcomment %}
+                {% if month.crest %}data-tier="{{ month.crest }}"{% endif %}>
+            <span class="pp-cal__coin" aria-hidden="true">
+                {% comment %}THE RIM SAYS WHICH MONTH BY POSITION -- twelve segments, one lit. One
+                circle is the track, a second is dashed to a single segment and rotated into place by
+                `--seg`, and the arithmetic lives in CSS so the template passes an index rather than a
+                stroke offset.
+                `pathLength="100"` IS WHAT MAKES THAT HONEST, and it is the house pattern: the contract
+                card's `.rp-ring__seg` normalises the same way, so a dash array is in hundredths of the
+                path and no raw circumference appears anywhere. (An earlier comment also cited `.lab-dna`
+                for a shared "dash-array mechanism"; that ring positions with `stroke-dashoffset`, which
+                is a different technique for a different job.){% endcomment %}
+                <svg class="pp-cal__rim" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+                    <circle class="pp-cal__rim-track" cx="22" cy="22" r="19" pathLength="100" />
+                    <circle class="pp-cal__rim-seg" cx="22" cy="22" r="19" pathLength="100"
+                            style="--seg: {{ forloop.counter0 }};" />
+                </svg>
+                <span class="pp-cal__face">{{ month.slug|upper }}</span>
+            </span>
+            {% comment %}THE WHOLE LABEL FOR A SCREEN READER, because the visible face is an abbreviation
+            and the crest's state is carried in colour. Each lens's figure is named, since a reader cannot
+            see which lens is active and the crest itself is lens-independent.{% endcomment %}
+            <span class="sr-only">
+                {{ month.label }}{% if month.crest %}, complete{% endif %}.
+                {% for value, display in calendar_views %}{{ display }}:
+                {{ month.counts|dict_get:value }} of {{ month.total }}.{% endfor %}
+            </span>
+        </button>
+        {% endfor %}
+    </div>
+
+    {% comment %}THE LENS SWITCHER, which is the shared `.pp-switch` and not a third treatment of a
+    segmented control -- the project's tab-group standard, already used by this feature's own browse
+    toolbar. The radios are `sr-only` and CSS styles `:checked`, so the active chip is correct with no
+    script.
+
+    ABOVE THE BOARD IT CONTROLS, which it was not at first. It sat below, so a screen-reader user met the
+    control only after thirty-one day cells each carrying their own sentence -- and the design system puts
+    chrome before free content for the same reason visually. The month switcher was already above; one
+    switcher over the board and one under it was arbitrary rather than a layout.
+
+    AND SO IS THE BOARD, which was not true at first and is the reason nothing here is wired to JS any
+    more. The radios used to write a `data-view` attribute that the tint rules read -- so with JavaScript
+    off, pressing "Contracts" lit the Contracts chip while every square and every tally went on showing
+    the previous lens. False feedback on the one dimension this board exists to express, which is worse
+    than a control that does nothing. The stylesheet reads the checked radio directly now, so the lens
+    needs no script at all and there is no second mechanism to fall out of step with the first.
+
+    NO `form`, deliberately: these are not filters and nothing is submitted. A `name` still groups them
+    so arrow keys move between them as one control, and makes a reader's selection announce itself --
+    which is how somebody not using the tint perceives the switch.{% endcomment %}
+    <div class="pp-cal__lens">
+        <div class="pp-switch" role="group" aria-label="Which platinums count">
+            {% for value, display in calendar_views %}
+            <label class="pp-switch__chip">
+                <input type="radio" name="cal-view" value="{{ value }}" class="sr-only"
+                       {% if value == calendar_view %}checked{% endif %} />
+                {{ display }}
+                <span class="pp-cal__lenscount">{{ calendar_totals|dict_get:value }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        {% comment %}WHY THREE LENSES EXIST AT ALL, in one line, because "Contracts" showing a day that
+        "All platinums" does not looks like a bug until you know why. The reason is real and designed-for:
+        a contract can be satisfied at its 100% tier with no platinum anywhere.{% endcomment %}
+        <p class="pp-cal__lenshint">
+            Contracts can be finished without a platinum, so that lens can hold a day the others do not.
+        </p>
+    </div>
+
+    {% comment %}ONE PANEL PER MONTH. `hidden` on the inactive eleven rather than `display:none` in CSS,
+    so the panels are correct before any stylesheet or script arrives and a reader never meets twelve
+    months of squares at once.{% endcomment %}
+    {% for month in calendar_months %}
+    <section class="pp-cal__panel" role="tabpanel" id="{{ month.dom_id }}"
+             aria-labelledby="cal-tab-{{ month.slug }}"
+             {% if not forloop.first %}hidden{% endif %}>
+        <div class="pp-cal__head">
+            <h3 class="pp-cal__month">{{ month.label }}</h3>
+            {% comment %}ONE FIGURE PER LENS, all rendered, CSS revealing the active one by reading the
+            checked radio through `:has()`. A single server-picked number could not stay true through a
+            lens switch, and the three lenses do not nest so there is no "best" one to show.{% endcomment %}
+            <p class="pp-cal__tally">
+                {% for value, display in calendar_views %}
+                <span class="pp-cal__count" data-view="{{ value }}">
+                    {{ month.counts|dict_get:value }} / {{ month.total }}
+                </span>
+                {% endfor %}
+            </p>
+        </div>
+
+        {% comment %}A REAL LIST, for the reason the slot board's grid gives at length: sibling divs each
+        ending in screen-reader text read as one run-on sentence, and `role="list"` is not
+        belt-and-braces because Tailwind's preflight strips the implicit role from an unstyled list on
+        WebKit -- the dominant pairing for a 375px base layout.{% endcomment %}
+        <ul class="pp-cal__grid" role="list">
+            {% for card in month.cards %}
+            {% comment %}THE PER-LENS ATTRIBUTES ARE THE TINT. Three booleans become up to three data
+            attributes, and `.pp-cal:has(input[value=...]:checked)` decides which one paints -- so a day
+            filled only in contracts is correctly EMPTY while the All platinums lens is showing.
+
+            `earned_on` IS ALSO CROSS-LENS and is deliberately NOT printed here. `calendar_fill` stores
+            the earliest date across every lens that holds the square, so printing it unconditionally
+            would date a square that is empty in the lens being viewed. It belongs in the day modal,
+            where the lens is not ambiguous, and the module docstring states the rule.{% endcomment %}
+            {% comment %}A BARE `<li>`, with no class of its own. It carried `pp-cal__cell`, whose
+            only rule was a `display: block` that a grid item does not need -- and a class with no rule
+            renders with no styling, which is what `test_every_class_reaches_the_compiled_bundle` exists
+            to catch. The grid item is the `<li>`; the thing you look at is the `<div>` inside it, which
+            is the same split the slot board makes.{% endcomment %}
+            <li>
+                <div class="pp-cal__day"
+                     {% if card.views.all %}data-all{% endif %}
+                     {% if card.views.clean %}data-clean{% endif %}
+                     {% if card.views.contracts %}data-contracts{% endif %}
+                     {% comment %}`forloop.counter0`, SO THE CASCADE RESTARTS EVERY MONTH, and this is
+                     the opposite of what the slot board needs -- deliberately. `slot_cards` stamps a
+                     RUN-WIDE index precisely because its squares are one grid where a per-shelf counter
+                     broke the cascade. Here there are twelve panels and only one is visible, each
+                     re-entering whenever it is switched to, so the counter has to restart: with the
+                     run-wide index every cell in February through December sat above the 12-step cap and
+                     shared one maximum delay, so eleven months had no cascade at all AND -- because
+                     un-hiding an element restarts its animations -- a month switch slid in a completely
+                     blank panel before popping all 31 squares at once.{% endcomment %}
+                     style="--rev: {{ forloop.counter0 }};">
+                    <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
+                    {% comment %}EVERY LENS THAT HOLDS THIS DAY, not just the active one, and this is a
+                    known limitation rather than an oversight. The lens is switched in CSS, so filtering
+                    this text per lens would need a script rewriting 365 strings on every switch -- worse
+                    than the gap it closes. The consequence: a day held only by Contracts announces
+                    "Contracts: filled" while looking empty in the All platinums lens. The accessible
+                    tree therefore states the FULL truth about a day rather than the lens-filtered one,
+                    which is complete but not equivalent to what an eye sees. A reader still perceives
+                    the switch itself, because the lens control is a real radio group that announces its
+                    selection.{% endcomment %}
+                    <span class="sr-only">
+                        {{ card.label }}.
+                        {% for value, display in calendar_views %}
+                        {% if card.views|dict_get:value %}{{ display }}: filled.{% endif %}
+                        {% endfor %}
+                    </span>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endfor %}
+
+</div>

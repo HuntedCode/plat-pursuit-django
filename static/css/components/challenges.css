@@ -2806,3 +2806,458 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-reveal .pp-centry { opacity: 0; }
     .pp-reveal .pp-centry.is-revealed { opacity: 1; }
 }
+
+/* ============================================================
+ * PLAT CALENDAR BOARD -- `.pp-cal`
+ *
+ * A DIFFERENT DESIGN FROM `.pp-csq`, NOT A BIGGER ONE. A slot board is 25-26 covers; this is 365 day
+ * cells with no art at all, so none of the cover-tiling arithmetic above transfers. The owner chose the
+ * month-switcher layout (2026-10-04) over a twelve-month wall and a year-at-a-glance contribution graph:
+ * at 375px a whole year is ~10px squares, unreadable and untappable, and the year read already exists on
+ * the Hall of Fame hero.
+ *
+ * NO WEEKDAY COLUMN, EVER. A square is a (month, day) with no year, so there is nothing to align to and
+ * any weekday head would be a different lie each year. The grid is plain and numbered.
+ *
+ * TWO SWITCHERS, AND THEY WORK DIFFERENTLY -- which an earlier version of this header got wrong in every
+ * clause, describing a `data-month`/`data-view` pair that no longer exists. That was the exact trap the
+ * attributes were deleted to avoid, recreated in prose: a header that names the thing driving the tint is
+ * where the next person goes to "fix" the lens.
+ *   - THE LENS is pure CSS, with no script at all: `.pp-cal:has(input[value="..."]:checked)` reads the
+ *     checked radio directly, so the tints and the tallies follow the chip with JavaScript off.
+ *   - THE MONTH is the `hidden` attribute on the panels, rendered by the server and moved by
+ *     `PlatPursuit.wireTablist`. Without JS the board shows January, which is correct but fixed.
+ * Every panel and all three lenses are in the DOM already, because the rows arrive in one query.
+ * ============================================================ */
+.pp-cal {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    /* The one gap, shared by the crest strip and the day grid so the two read as one object. */
+    --cal-gap: 6px;
+}
+@media (min-width: 768px) {
+    .pp-cal {
+        gap: 18px;
+        --cal-gap: 8px;
+        /* THE CAP RIDES THE WHOLE BOARD, and putting it on the day grid alone was a real defect rather
+           than a tidiness point. The grid is a plain block `<ul>` with no auto margins, so it LEFT-aligned
+           at its cap while the month head and the crest row stayed at full panel width with
+           `justify-content: space-between` -- at 1920 that is a 712px grid hard left, a month name above
+           its left edge, a tally flung 1504px right, and twelve coins spread 80px apart. Three widths and
+           three alignments in one board. Capping here lines all four up, and the figure is the one the
+           crest row needs: twelve 52px coins plus eleven 8px gaps is 712. */
+        max-width: 712px;
+        margin-inline: auto;
+    }
+}
+
+/* -- the crest row: the month switcher, and the run's trophy shelf --------------------------------- */
+
+/* A SCROLLING SNAP STRIP AT MOBILE. Twelve tabs inside 375px is 22px each -- half the 44px touch minimum
+   and too small for a face to say anything -- so the row scrolls rather than the crests shrinking. Twelve
+   across from `md:`, where they fit at a real size.
+   SCROLLING IS THE EXCEPTION HERE, NOT THE HOUSE RULE, and an earlier version of this comment claimed the
+   opposite ("the project's usual answer to omit or scroll"). There is no such convention: CLAUDE.md's
+   mobile criterion says to OMIT expendable blocks rather than scroll, and the nearest precedent -- the
+   `.nc__filter` row this block cites two paragraphs down for the overflow hazard -- opens "IT WRAPS. It
+   must not scroll". The difference that justifies scrolling is that these twelve are the board's
+   NAVIGATION: omitting any of them removes a month from reach, and wrapping them into two rows of six
+   puts a second row of chrome above a board that is already behind a switcher. */
+.pp-cal__crests {
+    display: flex;
+    gap: var(--cal-gap);
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    /* ROOM FOR THE RINGS, measured rather than guessed. `overflow-x: auto` computes BOTH axes to scroll
+       (the hazard `.nc__filter` documents at length), so this box clips. The widest thing inside is the
+       `:focus-visible` ring at `outline-offset: 3px` plus a 2px outline, 5px beyond the coin, and the
+       active coin also lifts 1px; the struck shadow reaches about 8px below. The first budget was
+       4px/2px/6px and clipped all three.
+       AND THIS BUDGET IS WHY THERE IS NO IGNITE BLOOM on the crests -- see the note at
+       `.pp-cal__crest`. A `box-shadow: 0 0 20px 3px` reaches ~23px past the box, which no padding on a
+       scroll container is going to host. */
+    padding: 7px 6px 10px;
+    scrollbar-width: none;
+    /* AN EDGE FADE, because roughly five of twelve months sit off-screen at 375px with the scrollbar
+       hidden -- so without it nothing says the row scrolls, and the only control that could reveal them
+       is itself off-screen. Masked rather than overlaid with a gradient so it works over any surface. */
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+}
+@media (min-width: 768px) {
+    /* No overflow at `md:`, so no fade -- leaving it on would dim January and December permanently. */
+    .pp-cal__crests { -webkit-mask-image: none; mask-image: none; }
+}
+.pp-cal__crests::-webkit-scrollbar { display: none; }
+@media (min-width: 768px) {
+    .pp-cal__crests { overflow-x: visible; justify-content: space-between; }
+}
+
+.pp-cal__crest {
+    flex: 0 0 auto;
+    scroll-snap-align: center;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    /* NO `.pp-tab-ignite` BLOOM, which is the one companion of `wireTablist` this switcher does not take.
+       `ppTabIgnite` animates a `box-shadow: 0 0 20px 3px` on the element it is given, and every other
+       consumer is a `.pp-switch__chip` with a 5px radius -- here the element is a square 44px `<button>`
+       wrapping a ROUND coin, so the bloom would be a square halo around a circle, and it reaches ~23px
+       beyond a box sitting in a clipped scroll strip behind a mask fade. The lift and the ring are the
+       activation cue instead.
+       UNEARNED IS THE RESTING STATE: an empty rim at low opacity, which is how the medallion draws its own
+       unearned badges. Twelve blank coins read as a chase rather than twelve failures, because the rim
+       still says which month each one is.
+       `--crest-glow: transparent` IS A FALLBACK, NOT THE RESTING VALUE -- no rule reads it without a
+       `data-tier`, since both consumers are gated on one and a tier means struck. It is here because a
+       `color-mix()` against an undefined custom property invalidates the whole declaration it sits in. */
+    --crest-c: var(--pp-text-mute);
+    --crest-glow: transparent;
+    color: var(--crest-c);
+    transition: color 0.18s ease, transform 0.18s ease;
+}
+@media (min-width: 768px) { .pp-cal__crest { width: 52px; height: 52px; } }
+
+/* THE TIER PALETTE, DUPLICATED FROM `badge-medallion.css` ON PURPOSE, and worth stating plainly so the
+   next reader does not take it for a drift. The medallion's values live behind `.pp-med[data-tier]`, and
+   `.pp-med` is an art-layer COMPOSITOR: `.pp-med__art` uses `drop-shadow` to trace the artwork's
+   silhouette (nothing, with no layers) and `--sz` defaults to 160px. Wearing that class for a 44px coin
+   would mean overriding most of it to inherit four colours -- the near-fit the plan warned about
+   ("shoehorning one through it is the kind of near-fit that reads as reuse and is not").
+   So the crest borrows the PALETTE and nothing else. Two consumers is below this project's
+   abstract-at-three bar; the right fix at a third is to lift these four pairs into shared tokens, which
+   is a change to a shared stylesheet and therefore its own branch. */
+.pp-cal__crest[data-tier="bronze"] { --crest-c: #cf9160; --crest-glow: #e6ad74; }
+.pp-cal__crest[data-tier="silver"] { --crest-c: #b9c6d6; --crest-glow: #dae4f0; }
+.pp-cal__crest[data-tier="gold"]   { --crest-c: #e7c25c; --crest-glow: #f4d778; }
+
+.pp-cal__coin {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    isolation: isolate;
+}
+
+/* THE STRUCK COIN gets a plate and an aura; an unearned one stays a bare rim. Background and box-shadow
+   rather than `filter`, because a filter transition on a repeated element is the mobile GPU jank this
+   project has already paid for. */
+.pp-cal__crest--struck .pp-cal__coin {
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 50% 35%,
+            color-mix(in srgb, var(--crest-glow) 26%, transparent),
+            color-mix(in srgb, var(--crest-c) 12%, transparent) 70%,
+            transparent 72%);
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--crest-glow) 34%, transparent),
+        0 2px 6px rgb(0 0 0 / 0.35);
+}
+
+/* `inset: 0` ALREADY SIZES IT. A `width`/`height` pair sat here too, which on an absolutely positioned
+   element with all four offsets resolved is the same instruction twice. */
+.pp-cal__rim { position: absolute; inset: 0; z-index: 0; }
+/* TWELVE SEGMENTS, ONE LIT -- the same normalised-dash mechanism `.rp-ring__seg` uses (`pathLength="100"`
+   on a `<circle>`, already shipped on the contract card), so this is house vocabulary rather than a new
+   idea. The arithmetic lives below, on the declarations it governs; an earlier version left the PRE-FIX
+   figures here (a raw circumference of 119.38 and an `8 1.95` dash) fourteen lines above the comment
+   saying no raw circumference survives -- two contradictory specifications of the same two rules. */
+.pp-cal__rim-track,
+.pp-cal__rim-seg {
+    fill: none;
+    /* BUTT CAPS, AND THIS IS THE WHOLE REASON THE SEGMENTS EXIST. With `round` a cap extends each dash
+       by `stroke-width / 2` at BOTH ends along the path, so at a 2.5 stroke the painted dash grew by
+       2.5 against a gap of 1.95 -- adjacent dashes overlapped and the rim painted as a SOLID RING. The
+       twelve segments the crest's whole "which month" mechanism rests on were invisible, while the
+       comment beside them claimed the dash array "tiles the whole rim exactly". Caught by audit and not
+       by eye, because the lit segment still read against the dim track. */
+    stroke-linecap: butt;
+    stroke-width: 2.5;
+    stroke: currentColor;
+}
+/* `pathLength="100"` ON THE CIRCLES NORMALISES THE DASH UNITS, which is how `.rp-ring__seg` already does
+   this and is why no raw circumference survives here. The first version hardcoded 2*pi*19 and its
+   twelfth (119.38 / 9.948) and overshot a full turn by 0.0195; normalised, a segment is exactly
+   100 / 12 = 8.3333, drawn as a 6-long dash with a 2.3333 gap. */
+.pp-cal__rim-track { stroke-dasharray: 6 2.3333; opacity: 0.22; }
+.pp-cal__rim-seg {
+    stroke-dasharray: 6 94;
+    /* A `<circle>` path starts at 3 o'clock and runs clockwise, so -90deg puts the START of segment zero
+       at 12 o'clock and each month steps 30deg from there. Stated as the start rather than "lands at the
+       top", which the earlier comment claimed: a segment spans its slot, so January's mark sits in the
+       slot beginning at twelve rather than centred on it. */
+    transform: rotate(calc(-90deg + var(--seg) * 30deg));
+    transform-origin: 50% 50%;
+    /* NO `transform-box` DECLARATION. One was added here reading "EXPLICIT, as `.lab-dna__arcs` sets it",
+       and both halves were wrong: `view-box` is the property's INITIAL value, so the declaration did
+       nothing, and `.lab-dna__arcs` sets `fill-box`, a different value for a different job. The rotation
+       is safe without it because the circle is concentric with the viewBox, which makes `view-box` and
+       `fill-box` agree for this element -- worth knowing if the rim ever stops being centred. */
+}
+.pp-cal__crest--struck .pp-cal__rim-seg { stroke-width: 3; }
+
+.pp-cal__face {
+    position: relative;
+    z-index: 1;
+    /* 12px, THE FLOOR, not the 9px this shipped at first. `test_no_type_in_this_stylesheet_falls_below
+       _the_12px_floor` is a file-wide guard that says outright a genuine exception should be ADDED to it
+       with its reason rather than the bound lowered -- and this face has no such case to make: the
+       template argues it is the switcher's identification, which is the one job that cannot be done by
+       supplementary micro-type. Three uppercase glyphs at 12px/700 with this tracking are about 26px
+       wide, inside a rim whose clear diameter is ~35px, so it fits with room either side. It also
+       settles the design system's 12px readable-content floor, which the face was leaning on a
+       "calendar grids" allowance to duck. */
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+@media (min-width: 768px) { .pp-cal__face { font-size: 0.8125rem; } }
+
+/* THE ACTIVE TAB, which must be legible without colour alone: the ring is the shape cue and the face
+   goes full-strength. A struck month that is also active keeps its metal. */
+/* A STRUCK MONTH KEEPS ITS METAL WHEN ACTIVE OR HOVERED, which the earlier rules claimed and did not do.
+   `[data-tier]`, `[aria-selected]` and `:hover` all carry the SAME specificity, so source order alone
+   decided: the primary colour was handed to a gold January the moment the page loaded, and hover took it
+   again on the way past. (An earlier version said hover "outranked both", which overstated a tie.) That is the exact bug this
+   stylesheet records paying for on `.pp-csq` ("hovering a finished square erased the one mark the page
+   exists to show"), thousands of lines further up. `:not([data-tier])` keeps the two on separate axes:
+   the metal says what you earned, the ring and the lift say where you are. */
+.pp-cal__crest[aria-selected="true"]:not([data-tier]) { --crest-c: var(--pp-primary); }
+.pp-cal__crest[aria-selected="true"] { transform: translateY(-1px); }
+.pp-cal__crest[aria-selected="true"] .pp-cal__coin {
+    outline: 2px solid color-mix(in srgb, var(--crest-c) 60%, transparent);
+    outline-offset: 2px;
+    border-radius: 50%;
+}
+.pp-cal__crest:focus-visible .pp-cal__coin {
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 3px;
+    border-radius: 50%;
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+    .pp-cal__crest:not([data-tier]):hover { --crest-c: var(--pp-primary); }
+    /* A struck crest answers a hover by brightening its own metal rather than changing colour. */
+    .pp-cal__crest[data-tier]:hover { --crest-c: var(--crest-glow); }
+}
+
+/* -- one month ------------------------------------------------------------------------------------- */
+
+/* MIN-WIDTH ZERO, which is a real need rather than a rule invented to satisfy the class guard. The
+   panel is a flex item (`.pp-cal` is a flex column) whose child is a grid, and a flex item's
+   `min-width: auto` refuses to shrink below its content -- the same reason every grid track in this
+   file is `minmax(0, 1fr)`. Without it a wide month can push the board past its own container. */
+.pp-cal__panel { min-width: 0; }
+
+.pp-cal__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.pp-cal__month {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+@media (min-width: 768px) { .pp-cal__month { font-size: 1.125rem; } }
+
+/* ONE FIGURE PER LENS, all three in the DOM, CSS revealing the active one. A server-picked single
+   number could not survive a client-side lens switch, and the three lenses do not nest so there is no
+   "best" one to pick. */
+.pp-cal__tally { font-size: 0.75rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
+.pp-cal__count { display: none; }
+.pp-cal:has(input[value="all"]:checked)       .pp-cal__count[data-view="all"],
+.pp-cal:has(input[value="clean"]:checked)     .pp-cal__count[data-view="clean"],
+.pp-cal:has(input[value="contracts"]:checked) .pp-cal__count[data-view="contracts"] { display: inline; }
+
+/* SEVEN ACROSS AT MOBILE, TEN FROM `md:`, AND CAPPED. Not a week alignment -- there is no weekday -- just
+   the column count that makes a month read as a block: 31 days over seven is four full rows plus a short
+   one, over ten it is three plus one.
+   THE CAP FIXES A REAL DEFECT. With seven columns at every width the cells were `aspect-ratio: 1` of a
+   seventh of the row: 44px at 375 (right), but 98px at 768, 135px at 1024 and 208px at 1920 -- a panel
+   of enormous near-empty boxes each holding one 13px numeral, on the project's primary target. The
+   sibling slot grid escalates 3 -> 4 -> 6 -> 7 for exactly this reason. Ten columns inside a 712px cap
+   holds the cell near 64px from 768 upward, and the grid centres in whatever is left over. */
+.pp-cal__grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: var(--cal-gap);
+    /* NO `margin`/`padding`/`list-style` RESET. Tailwind's preflight already ships
+       `ol, ul, menu { list-style: none; margin: 0; padding: 0 }` -- which is the same declaration
+       `challenge_detail.html` quotes to explain why `role="list"` is needed on these grids at all, so
+       restating it here was three lines asserting something the page had already done.
+       NO `max-width` EITHER: the cap moved up to `.pp-cal` so the head, the crest row and the switcher
+       share it. See the note there. */
+}
+@media (min-width: 768px) {
+    .pp-cal__grid { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+}
+
+.pp-cal__day {
+    position: relative;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    border-radius: var(--pp-radius-sm);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+    color: var(--pp-text-mute);
+    /* 12px AT THE FLOOR. This was 11px, which the file-wide type guard refuses -- and a 44px cell has
+       room for it, so there was nothing being bought by the half-step down. */
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+@media (min-width: 768px) { .pp-cal__day { font-size: 0.8125rem; } }
+
+/* THE LENS DECIDES WHICH SQUARES ARE FILLED, and this is the rule the whole three-booleans design exists
+   for: a day filled only in `contracts` is correctly EMPTY while the All platinums lens is showing. A
+   single best-of value on the cell could not say that, which is why `_cell` carries no `tier`.
+
+   `:has()` ON THE CHECKED RADIO RATHER THAN A `data-view` ATTRIBUTE, and that is a correctness fix rather
+   than a simplification. The attribute was written only by JavaScript, while the chip's own active state
+   is pure CSS (`.pp-switch__chip:has(input:checked)`) -- so with JS off, pressing "Contracts" lit the
+   Contracts chip and left every square and every tally showing the previous lens. False feedback on the
+   one dimension this board exists to express, which is worse than a control that does nothing. Reading
+   the radio directly gives one mechanism, no script, and nothing that can disagree. `:has()` is already
+   load-bearing in `switcher.css`, so support was never what stopped this. */
+.pp-cal:has(input[value="all"]:checked)       .pp-cal__day[data-all],
+.pp-cal:has(input[value="clean"]:checked)     .pp-cal__day[data-clean],
+.pp-cal:has(input[value="contracts"]:checked) .pp-cal__day[data-contracts] {
+    border-color: color-mix(in srgb, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in srgb, var(--pp-primary) 22%, var(--pp-bg-2));
+    color: #fff;
+    font-weight: 600;
+}
+.pp-cal__num { line-height: 1; }
+
+/* -- the lens switcher ----------------------------------------------------------------------------- */
+
+.pp-cal__lens { display: flex; flex-direction: column; gap: 6px; }
+.pp-cal__lens .pp-switch { width: 100%; }
+.pp-cal__lens .pp-switch__chip { flex: 1 1 0; justify-content: center; }
+/* HIDDEN AT MOBILE, because this span is what overflowed the switcher. `.pp-switch__chip` is
+   `flex: 1 1 0` with `min-width: auto`, so a chip cannot shrink below its min-content: longest word plus
+   this figure plus padding. The three chips came to roughly 398px against 343px available and the row
+   wrapped; without the figures it is about 314px and fits. The totals are not lost -- the month tally
+   carries the per-lens numbers -- so this is a duplicate at the one size where it does not fit.
+   NO `opacity`, which the first version had at 0.7. `--pp-text-mute` is documented in `input.css` as
+   already raised to clear WCAG AA (~4.5:1), so thinning it took a 12px figure a hunter READS down to
+   about 3.7:1 -- the recorded "opacity on a child defeats a measured ratio" failure exactly. */
+.pp-cal__lenscount {
+    display: none;
+    font-variant-numeric: tabular-nums;
+    margin-left: 0.35em;
+}
+@media (min-width: 768px) { .pp-cal__lenscount { display: inline; } }
+/* 12px, not 11px: this sentence is the whole explanation of why the Contracts lens can hold a day the
+   others do not, which is the opposite of supplementary. */
+.pp-cal__lenshint { font-size: 0.75rem; color: var(--pp-text-dim); }
+
+/* -- motion, and the one guard this block shipped without ------------------------------------------ */
+
+/* THE DAY CASCADE, PORTED PROPERLY. `--rev` is the house name for this on this very page: the slot board
+   stamps it per square and reads it in the rule above to drive `ppRevealIn`. The Calendar's first version
+   stamped `--i` instead and wrote no rule at all, so it carried 365 dead inline styles and snapped in dead
+   beside a board that cascades -- the recorded "reusing a pattern = port ALL of it" failure, where the
+   markup half shipped and the CSS half did not.
+
+   `--rev` IS PER MONTH HERE, NOT PER RUN, and that inverts the slot board's rule for a reason worth
+   stating because it looks like the bug `slot_cards` warns about. There, the squares are ONE grid drawn
+   once, so a template counter restarting per shelf broke a cascade that should run across the whole
+   board. Here there are TWELVE panels and only one is ever visible, each re-entering every time it is
+   switched to -- so the counter must restart, and a run-wide index is actively wrong: with the cap below,
+   every cell in February through December shared an index above 12 and therefore the SAME maximum delay.
+   Eleven months had no cascade at all, and because un-hiding an element restarts its animations, a month
+   switch slid in a panel that was completely blank and then popped all 31 squares at once.
+
+   CAPPED AT 12 STEPS, the same recipe as `.pp-csq` down to the easing: the first dozen cells lead and the
+   remainder settle together, which at seven columns is the first two rows arriving first. An uncapped
+   cascade over 31 cells at 35ms would still be running two thirds of a second after the switch. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-cal__day {
+        animation: ppRevealIn 0.42s var(--pp-ease) backwards;
+        animation-delay: calc(min(var(--rev, 0), 12) * 0.035s);
+    }
+}
+
+/* AND THE GUARD ITSELF. `switcher.css` was corrected for this exact omission ("this file had no
+   `prefers-reduced-motion` block at all"), and this block repeated it: the crest lifts on every month
+   switch and about 31 day cells cross-fade on every lens switch. Transitions are cut rather than the
+   states changed, so nothing about what the board SAYS depends on motion being allowed. */
+@media (prefers-reduced-motion: reduce) {
+    .pp-cal__crest,
+    .pp-cal__day { transition: none; }
+    .pp-cal__crest[aria-selected="true"] { transform: none; }
+}
+
+/* -- the Hall of Fame hero's Calendar board -------------------------------------------------------- */
+
+/* A WHOLE YEAR AT HERO WIDTH, in one lens. `calendar_render` picks that lens server-side (the better of
+   shovelware-free and contracts) so the board and the `filled_count` tally beside it cannot disagree --
+   all-platinums is never it, being the lens shovelware inflates and the one that cannot finish a run.
+   `.pp-chero__cal` replaces the discipline shelves entirely rather than sitting inside one, because a
+   year has no sub-structure to shelve.
+
+   SEVEN ROWS FLOWING BY COLUMN gives 53 columns for 365 cells, which is the dense year read. The rows
+   are NOT weekdays -- a square is a (month, day) with no year, so there is nothing to align to. Seven is
+   simply what tiles 365 into a block that fits a row. */
+/* AUTO ROWS, NOT `1fr`, AND NO `min-height` -- which is what makes the cells square. The first version
+   had `grid-template-rows: repeat(7, 1fr)` plus a `min-height`, so the row tracks were DEFINITE in both
+   axes and the `aspect-ratio: 1` on the cell was simply ignored: every day rendered as a 1:2 rectangle
+   at every width, while the comment claimed squares. With auto rows the column track sets the width and
+   the ratio sets the height, so the band is exactly seven cells tall and the cells are square. */
+.pp-chero__cal {
+    display: grid;
+    grid-template-rows: repeat(7, auto);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    /* 1px AT MOBILE, and this is the honest reading of the space. 53 columns inside a 307px board (the
+       figure this stylesheet already computes for the hero at 375px, border and padding taken off first)
+       is a 4.8px cell, and at a 2px gap the gutter was more than a third of the cell -- mush rather than
+       a year. A 1px gap buys back ~1px per cell, which at this size is a fifth more square. The comment
+       that used to sit here claimed "around 7-10px"; the real range across breakpoints is roughly
+       4.8px at 375, 11.2px from 768, and 13px at the widest. */
+    gap: 1px;
+    width: 100%;
+}
+@media (min-width: 768px) { .pp-chero__cal { gap: 2px; } }
+@media (min-width: 1024px) { .pp-chero__cal { gap: 3px; } }
+
+/* THE CALENDAR TAKES THE WHOLE ROW FROM `md:` UPWARD, and the UPWARD part is the correction. Sharing the
+   row with the plaque at 768 left the board about 361px for 53 columns -- a 4.85px cell, no better than
+   mobile -- and full width takes it to 11.2px, a bit over double.
+   THE FIRST VERSION CAPPED THIS AT 1023 AND SO RE-CREATED THE EXACT DISCONTINUITY the `--jobs` comment
+   above exists to prevent ("Crossing 1024 the jobs hero then SHRANK by 266px while the A-Z one grew"):
+   the band went 11.2px at 768, then back to 9.4px at 1024 when the generic two-column rule resumed. A
+   53-column board wants the widest row it can get at EVERY size, and unlike jobs it has no second shape
+   to reach for, so there is no upper bound. Source order is what makes this win over the 1024 rule --
+   media queries do not add specificity, and this block is at the end of the file. */
+@media (min-width: 768px) {
+    .pp-chero--calendar { grid-template-columns: minmax(0, 1fr); }
+}
+
+.pp-chero__cday {
+    display: block;
+    aspect-ratio: 1;
+    border-radius: 1px;
+    /* THE EMPTY DAY IS A RECESS, not a border: at this size a 1px border on a 4px cell is most of the
+       cell, so 365 outlined boxes read as a grid of lines rather than as a year with gaps in it. */
+    background: color-mix(in srgb, var(--pp-bg-0) 70%, transparent);
+}
+@media (min-width: 1024px) { .pp-chero__cday { border-radius: 2px; } }
+
+/* A FILLED DAY IS FLAT COLOUR, with no glow and no shadow. 365 elements each carrying a shadow is the
+   kind of repeated expensive paint this project has already been bitten by on mobile, and at 7px a glow
+   is indistinguishable from a bigger square anyway. */
+.pp-chero__cday--on { background: color-mix(in srgb, var(--rk) 68%, var(--pp-bg-2)); }

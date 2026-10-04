@@ -164,6 +164,11 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     dominant screen-reader pairing for a page whose base layout is 375px, the bare `<ul>` announced
     nothing at all and the sentence above would have been false. The explicit role is what makes it
     true.{% endcomment %}
+    {% comment %}GATED, because there are two kinds of board now and only one of them is this one. The
+    view sets `groups` to `[]` for a Plat Calendar run, and without this test the wrapper rendered an
+    empty frame -- which is the `_board_groups` regression ("drew the bare grey frame above a '26/26
+    squares' tally") arriving from the other direction. A Calendar board follows below.{% endcomment %}
+    {% if groups %}
     <div class="pp-csq-board" data-challenge-id="{{ challenge.id }}">
         {% for group in groups %}
         {% comment %}ONE SHELF PER DISCIPLINE on a jobs run, and a single plain grid for A-Z.
@@ -254,6 +259,19 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
         {% if group.label %}</section>{% else %}</div>{% endif %}
         {% endfor %}
     </div>
+    {% endif %}
+
+    {% comment %}THE CALENDAR'S BOARD, a different design rather than a bigger one: 365 day cells in
+    twelve month panels behind a crest switcher, with no cover art anywhere. Its own partial because a
+    day shares no field with a contract-backed square -- no cover, no job, no XP -- and the two dict
+    shapes are deliberately kept apart (`calendar_render`'s module docstring argues it).
+
+    `calendar_months` IS THE TEST, mirroring `{% templatetag openblock %} if groups {% templatetag closeblock %}`
+    above: the view sets it only on the Calendar branch, and `calendar_groups` returns `[]` for a run
+    whose day rows are gone -- so an empty board draws nothing rather than a frame.{% endcomment %}
+    {% if calendar_months %}
+    {% include 'challenges/partials/_calendar_board.html' %}
+    {% endif %}
 
     {% comment %}TWO INDEPENDENT NOTES, not an if/else. They were nested, and the inner condition was
     always true: inside `{% templatetag openblock %} if is_owner and not can_edit {% templatetag closeblock %}`
@@ -401,4 +419,10 @@ NO CSS TAG: `claim-ceremony.css` is imported by `input.css`, so its rules are al
 bundle every page loads.{% endcomment %}
 {% if is_owner and rewards.per_square %}<script src="{% static 'js/claim-ceremony.js' %}"></script>{% endif %}
 <script src="{% static 'js/challenge-detail.js' %}"></script>
+{% comment %}THE CALENDAR'S SWITCHERS, on the Calendar branch only -- it is the only branch that renders a
+`.pp-cal`, and the script returns immediately without one. Gated rather than folded into
+`challenge-detail.js` because that file is the picker and the reward panel, which a Calendar run has
+neither of. The board itself needs no script: the server renders `data-month` and `data-view`, so a
+hunter with JavaScript off gets January on the run's own lens with the right squares tinted.{% endcomment %}
+{% if calendar_months %}<script src="{% static 'js/challenges-calendar.js' %}"></script>{% endif %}
 {% endblock %}

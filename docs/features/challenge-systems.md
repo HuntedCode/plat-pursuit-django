@@ -18,8 +18,10 @@ no services and no templates with it; the few lessons worth carrying forward are
 | Models, constraints, admin | **built** |
 | `challenge_service` / `eligibility` / `picker` / `slot_render` | **built** |
 | Plat Calendar data path (`calendar_fill`, model, sweep, sync hook, staff doors) | **built**, and unreachable: the type has no creation door yet (`TYPES_NOT_YET_CREATABLE`) |
-| Plat Calendar renderers (`calendar_render`) | **built**, no caller yet — its surfaces are the open slice |
-| Plat Calendar surfaces (board, day modal, reward ladder, month crests) | **not built** |
+| Plat Calendar renderers (`calendar_render`) | **built** |
+| Plat Calendar board (detail + Hall of Fame hero) | **built.** Month-switcher layout: twelve crests double as the month tabs, one month panel at a time, a `.pp-switch` lens switcher. No cover art anywhere |
+| Plat Calendar day modal (which games satisfy a day) | **not built** — the day cell is inert until it lands, so it is a `<div>` rather than a button that does nothing |
+| Plat Calendar reward ladder + richer crest artwork | **not built.** The crest itself renders |
 | Detection (sync hook + `process_challenges` + nightly) | **built** |
 | My Challenges (`/my-challenges/`) | **built** |
 | The run's page (`community/challenges/<id>/`) | **built** |
@@ -29,7 +31,9 @@ no services and no templates with it; the few lessons worth carrying forward are
 | Rewards (titles, job-XP payout, notification) | **built** for A-Z and Job Coverage. `challenges/services/rewards.py` is the only writer |
 | **Plat Calendar** — type, `CalendarDay`, the three view predicates, the backfill writer, the reconciling sweep, the refresh command | **built** |
 | **Plat Calendar** — creation | **gated shut.** `TYPES_NOT_YET_CREATABLE` keeps the Start button off until the rest lands |
-| **Plat Calendar** — sync hook, rewards (the 50/100/200/300/365 day ladder + one ultimate per view), month crests, the day modal, the board | **NOT built** |
+| **Plat Calendar** — the sync-path refresh | **built.** `calendar_fill.refresh_for_profile`, called after contract detection |
+| **Plat Calendar** — the board | **built.** Detail: twelve crests as the month switcher, one month panel at a time, a `.pp-switch` lens switcher, no cover art. Hero: the whole year as a dense band in one lens |
+| **Plat Calendar** — the day modal, rewards (the 50/100/200/300/365 day ladder + one ultimate per view), richer crest ARTWORK | **NOT built.** The crest ships struck in its metal with a working face: the month's abbreviation over a twelve-segment rim with one segment lit |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
 
@@ -530,8 +534,9 @@ labelled grid, with the named grid one click away". The owner overruled it on a 
 twenty-six covers with no key is pretty and says nothing about what the run was, and the keys are also what
 make the types look like different achievements rather than one template with different art. (The Plat
 Calendar's board is a different problem again: 365 day cells carry no cover art at all, because eight rows
-of them is ~2,920 images and at ~20px a cell the art is unreadable. Clicking a day opens a modal listing
-the games that satisfy it.)
+of them is ~2,920 images, and at the 5-13px a hero cell actually lands on the art would be invisible
+rather than merely unreadable. Clicking a day WILL open a modal listing the games that satisfy it --
+not built yet, so the cell is a `<div>` rather than a button that does nothing.)
 
 The exact-four-keys rule still holds, for the reason `slot_render._card` states outright — a dict that grows
 a field per guess is how unread columns get fetched for two hundred rows — and
@@ -861,6 +866,8 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `challenges/services/slot_render.py` | the A-Z and Job Coverage board: squares, discipline shelves, covers |
 | `challenges/services/calendar_fill.py` | the Plat Calendar's three view predicates, the backfill writer, the reconciling sweep scope, and the sync-path refresh |
 | `challenges/services/calendar_render.py` | the Plat Calendar board: twelve month groups with per-lens counts and a crest for the detail page, one 365-day lens for the hero. Separate from `slot_render` because a day shares no fields with a contract-backed square |
+| `templates/challenges/partials/_calendar_board.html` | the Calendar's detail board: the crest/month switcher, twelve month panels, the lens switcher |
+| `static/js/challenges-calendar.js` | the Calendar's month tablist only, through `PlatPursuit.wireTablist`. The LENS needs no script: `.pp-cal:has(input:checked)` reads the radio directly, so it works with JavaScript off |
 | `challenges/services/plaque.py` | the Hall of Fame plaque's Pursuer Card spine: rank, Pursuer Level, Career XP, the shared disciplines ring's arcs, and the XP a run paid — page-batched, reads nothing per entry |
 | `challenges/services/rewards.py` | **every reward write**: the XP redemption, the titles, the completion hook |
 | `challenges/views.py` | four page views (My Challenges, the run, and the two public browse pages), three JSON read endpoints (the picker panels, all `GET`), six thin POST actions (start, assign, clear, hide, redeem, redeem-all) |
@@ -870,7 +877,7 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `static/js/challenges-browse.js` | the two public pages' reveal + infinite scroll (filters are `browse-filters.js`) |
 | `static/js/challenge-detail.js` | the picker's three modes, the reward panel's claims, and the board's entrance |
 | `templates/challenges/partials/_rewards_panel.html` | the reward panel and its ledger of finished squares |
-| `static/css/components/challenges.css` | `.pp-csq*` (the board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), `.pp-crun*` (the browse card), `.pp-chero*` (the Hall of Fame hero), BEM throughout |
+| `static/css/components/challenges.css` | `.pp-csq*` (the slot board), `.pp-cal*` (the Calendar board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), `.pp-crun*` (the browse card), `.pp-chero*` (the Hall of Fame hero, incl. `.pp-chero__cal` for the Calendar's year band), BEM throughout |
 
 **Related docs:** [job-board-contracts.md](../design/rebuild/job-board-contracts.md) for the Contract and
 Job model the slot atom comes from, [xp-economy.md](../design/rebuild/xp-economy.md) for the ledger the
