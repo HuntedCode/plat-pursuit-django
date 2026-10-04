@@ -34,6 +34,7 @@ so a hero cell carries nothing it cannot draw at its size. The hero's group key 
 visibly nothing instead of 365 cells of garbage.
 """
 import calendar
+from fractions import Fraction
 
 from challenges.models import CALENDAR_MONTH_DAYS, CalendarDay, calendar_day_keys
 
@@ -93,8 +94,9 @@ MONTH_NAMES = tuple(calendar.month_name[month] for month in range(1, 13))
 #: than by review, which is why that test measures instead of asserting a shape.
 #:
 #: ONE LIST FOR BOTH PATHS, so there is no second copy to keep in step. The hero does not read
-#: `earned_on`; a date column over at most 2,920 rows is not worth a divergence to avoid.
-_CELL_FIELDS = ('challenge', 'month', 'day', 'in_all', 'in_clean', 'earned_on')
+#: `earned_on` or `plat_count`; two small columns over at most 2,920 rows are not worth a divergence to
+#: avoid. (This named only the date until the count arrived.)
+_CELL_FIELDS = ('challenge', 'month', 'day', 'in_all', 'in_clean', 'earned_on', 'plat_count')
 
 
 def _rows_by_key(rows):
@@ -136,21 +138,20 @@ def _cell(month, day, row):
     template's `{% if board %}` and drew the bare grey frame above a '26/26 squares' tally" -- so every
     entry point below returns `[]` for no rows at all.
 
-    `earned_on` IS CROSS-LENS, AND THAT IS A RENDERING CONSTRAINT, not a detail. `calendar_fill` stores
-    "the earliest date across every view holding this square -- whichever lens noticed", and the model
-    keeps ONE date, so a per-lens date is not representable without a schema change. Two consequences a
-    template must respect:
+    `earned_on` IS LENS-CORRECT AT SOURCE, and this paragraph used to say the opposite. While three
+    lenses rendered at once the column held `min(date across every lens holding the square)` and no
+    per-lens date was representable, so the constraint recorded here was that a date "may only be
+    REVEALED on a cell filled in the ACTIVE lens" -- which a reader could satisfy and still print the
+    wrong year, because the day being filled says nothing about which lens supplied the date. The side
+    column did exactly that: "First filled -- 3 Mar 2015" from a shovelware platinum, on a board that
+    counts nothing from 2015. `calendar_fill` now stores the date from the lens the square DRAWS in, so
+    the value is honest on arrival.
 
-      - a day filled only in `contracts` carries a date while `views['all']` is False, so showing the
-        date unconditionally prints "first filled 3 March 2019" on a square that is EMPTY in the lens
-        being viewed;
-      - a day first filled in `contracts` in 2017 and in `all` in 2019 reports 2017 in both lenses.
-
-    So the date may only be REVEALED on a cell that is filled in the ACTIVE lens -- which the same
-    `:has()` rule that tints the cell already decides, so it costs nothing to get right and is invisible
-    to get wrong. (The board does not print it at all yet: it belongs in the day modal, where the lens is
-    not ambiguous.) This is the one field in the dict that `views` cannot make honest, which is
-    why it is called out rather than left for the template author to discover.
+    WHAT REMAINS TRUE, and it is still the reason the date needs care: a square that is `in_all` and not
+    `in_clean` carries a date and draws NOTHING. `filled` is the only thing that says whether a date
+    belongs to the board, so a caller reading dates must test it -- which is what
+    `calendar_groups`' `first`/`last` do, and what `_is_filled` exists to make one decision rather
+    than twelve.
 
     NO `tier` KEY, and its removal is a correctness fix rather than a trim. It used to carry the
     HARDEST view a day had reached, which is a single cross-lens value on a board that renders all
@@ -172,6 +173,14 @@ def _cell(month, day, row):
         # and CSS could reveal the active one. One lens needs one answer.
         'filled': _is_filled(row),
         'earned_on': row.earned_on if row else None,
+        # HOW MANY PLATINUMS SIT ON THIS SQUARE, for the month's "busiest day" and, when the day modal
+        # lands, for the hover summary that reads it straight off the cell rather than fetching.
+        #
+        # ONLY MEANINGFUL ON A FILLED CELL. A square that draws in no lens carries the `all` count, so
+        # it is shovelware-INCLUSIVE -- show it and a hover would report a figure the board excludes
+        # while the modal derived clean satisfiers and listed fewer. `busiest` tests `filled` first and
+        # the hover must do the same; the trap is the key being readable without that test.
+        'plats': row.plat_count if row else 0,
         # NO `index`, AND THE REASONING INVERTED RATHER THAN SIMPLY BEING WRONG. One was stamped here
         # copying `slot_cards`, which carries a run-wide position precisely because a template counter
         # restarting per shelf broke its cascade. That argument does not transfer: the slot board is ONE
@@ -186,13 +195,21 @@ def _cell(month, day, row):
 def calendar_groups(challenge):
     """The run's days grouped by month -- what the detail board draws.
 
-    `[{label, slug, cards, total, counts, crest, dom_id}]`, twelve of them, January first.
+    `[{label, slug, cards, total, done, all_done, is_struck, open, shovelware, first, last, busiest,
+    rank, dom_id}]`, twelve of them, January first. Written out because this block has been wrong twice: it
+    advertised `counts` and `crest` long after both were removed, and it carried a paragraph headed
+    "NO `done` KEY" while `done` sat in the returned dict two screens below.
 
-    NO `done` KEY, which is a deliberate departure from the seven-key shape `slot_groups` returns.
-    A month has THREE progress numbers, one per view, and they do not nest -- `contracts` can be ahead
-    of `all`. `slot_groups` includes `done` on both branches so a Python consumer cannot `KeyError` on
-    one challenge type; here the equivalent care is to omit the key rather than pick one of three
-    arbitrarily and have every reader silently get the wrong month some of the time.
+    `done` IS THE ONE THE BOARD DRAWS and `all_done` is the comparison figure -- the same pair the
+    header's rail shows. `done` was genuinely absent once, because a month had THREE progress numbers
+    that did not nest and picking one would have been arbitrary; the one-lens collapse made that
+    paragraph false rather than merely stale, so it is gone.
+
+    `open`, `shovelware`, `first`, `last`, `busiest` and `rank` feed the side column and are arithmetic
+    over cells already in hand -- they add no query. `busiest` is `{day, plats}` or `None`.
+    `open` stays honest on an empty month (31, not 0) and the
+    TEMPLATE decides not to draw it there; a figure that lies to spare a conditional is the worse
+    trade. `rank` is dense and ranks on COMPLETION, not on raw days -- see the stamping loop.
 
     THE CONSEQUENCE IS A WIRING REQUIREMENT, not just a shape note, and it has to be said here because
     the existing detail template would not complain. `challenge_detail.html` renders a shelf head for
@@ -237,25 +254,86 @@ def calendar_groups(challenge):
         # This group deliberately had NO `done` key while there were three lenses: a month had three
         # progress numbers that did not nest, so any single figure would have been one of three picked
         # arbitrarily and every reader would silently get the wrong month some of the time. One lens
-        # means one answer, and the shape matches `slot_groups`' seven keys again.
+        # means one answer. (This once added "and the shape matches `slot_groups`' seven keys again" --
+        # it does not; the side column grew this dict well past that. The docstring lists the keys, and
+        # stating a NUMBER here was wrong twice in two slices, so it no longer states one.)
         #
         # `all_done` IS THE COMPARISON FIGURE, not a second lens: the same days without the shovelware
         # exclusion. Nothing on the board draws it; `totals_for` sums it so a page can say "297 days, of
         # 340 you hold platinums for" rather than a bare figure.
         done = sum(1 for cell in members if cell['filled'])
+        all_done = sum(1 for row in month_rows if row.in_all)
+        # THE DATES OF THE FILLED DAYS ONLY, which is a distinction that matters: `earned_on` is written
+        # for any population holding a square, so a SHOVELWARE day has a date and is not on the board.
+        # Reading dates without the `filled` test would date the month from a square it does not draw.
+        dates = sorted(c['earned_on'] for c in members if c['filled'] and c['earned_on'])
+
+        # ── THE BUSIEST SQUARE (owner, 2026-10-04: "could we maybe add a 'busiest day' to the stats?").
+        # FILLED SQUARES ONLY, for the same reason the dates test it: a shovelware-only day carries a
+        # count and draws nothing, so advertising it would put a figure on the board for a population
+        # the board excludes.
+        #
+        # TWO OR MORE, OR NOTHING. Every filled square has at least one platinum on it, so a "busiest
+        # day" of 1 is just "a day you filled" wearing a superlative -- it would render on every month
+        # with a single square and mean nothing. The row is absent until a day actually stacks.
+        #
+        # STRICT `>` OVER DAYS IN ORDER, so a tie keeps the EARLIEST day without needing a sort. `cards`
+        # is built ascending, which is the property this relies on.
+        busiest = None
+        for cell in members:
+            if not cell['filled'] or cell['plats'] < 2:
+                continue
+            if busiest is None or cell['plats'] > busiest['plats']:
+                busiest = {'day': cell['day'], 'plats': cell['plats']}
         groups.append({
             'label': MONTH_NAMES[index],
             'slug': MONTH_SLUGS[index],
             'cards': members,
             'total': days_in_month,
             'done': done,
-            'all_done': sum(1 for row in month_rows if row.in_all),
+            'all_done': all_done,
             'is_struck': done == days_in_month,
+            # ── THE SIDE COLUMN'S FIGURES, all of them arithmetic over cells already in hand (owner,
+            # 2026-10-04: "could we potentially float something to the right side that helps the user in
+            # some way? Some cool monthly stats or something?"). The board is ONE query and these do not
+            # add to it, which is the constraint that shaped the list: the genuinely interesting stat --
+            # how many games landed on a given day -- needs the hunter's trophy rows and belongs to the
+            # day-detail slice, not here.
+            'open': days_in_month - done,
+            # DAYS THAT COUNT BUT DO NOT DRAW: in `in_all`, excluded from the board. This is the one
+            # place a reader can see what "shovelware-free" is actually excluding, per month.
+            'shovelware': all_done - done,
+            'first': dates[0] if dates else None,
+            'last': dates[-1] if dates else None,
+            'busiest': busiest,
             # TWELVE LITERAL SLUGS, so uniqueness is structural and `slot_render._with_dom_ids` is not
             # needed: its loop guards two groups sharing a slug-derived id, which cannot happen here.
             # A separate prefix because this is its own block, not a `.pp-csq-shelf`.
             'dom_id': 'cal-month-%s' % MONTH_SLUGS[index],
         })
+
+    # ── RANK AMONG THE TWELVE, stamped after the loop because it is the one figure a month cannot know
+    # on its own. Dense ranking ("1224"), so two months at the same completion are both 3rd and the next
+    # is 4th -- a competition ranking would skip to 5th and read as a gap the hunter cannot explain.
+    #
+    # ON COMPLETION, NOT ON RAW DAYS, because the template prints this as "2nd BEST" and the months are
+    # not the same length. Ranked on `done` alone a COMPLETE February (28 of 28) placed behind an
+    # incomplete January (29 of 31), and no 28-day month could ever be first against a long month with
+    # 29 filled -- a hunter who had just finished a month would read "2nd best" as a bug, and be right.
+    #
+    # `Fraction`, NOT A FLOAT, and not for performance over twelve values. Ties are the whole reason
+    # dense ranking is here, and ties across DIFFERENT denominators are where binary floats stop being
+    # exact: 14/28 and 15/30 are the same number and must share a place. An exact ratio makes that a
+    # property of the arithmetic rather than of how the two happened to round.
+    #
+    # A MONTH WITH NOTHING FILLED HAS NO RANK, rather than sharing last place with the other empties.
+    # On a fresh run that would hand all twelve "1st", which is worse than saying nothing.
+    for group in groups:
+        group['rank'] = None
+    scores = sorted({Fraction(g['done'], g['total']) for g in groups if g['done']}, reverse=True)
+    for group in groups:
+        if group['done']:
+            group['rank'] = scores.index(Fraction(group['done'], group['total'])) + 1
     return groups
 
 

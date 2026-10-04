@@ -189,6 +189,18 @@ CALENDAR_PARTIAL_CLEAN = 11
 #: a platinum for".
 CALENDAR_SHOVELWARE_ONLY = (3, 3)
 
+#: SQUARES SEEDED WITH MORE THAN ONE PLATINUM, so the month panel's "busiest day" row has something to
+#: name. The row is suppressed below two, so without this it would never render on a seeded board --
+#: and a figure nobody can see on the dev board is a figure nobody reviews. One clear winner in a
+#: struck month, a tie in another (the panel must name the EARLIER day), and one in the part-filled
+#: month so the row is not only a property of finished months.
+CALENDAR_BUSY = {
+    (2, 14): 4,
+    (5, 3): 3,
+    (5, 21): 3,
+    (7, 9): 2,
+}
+
 
 class Command(BaseCommand):
     help = "Seed a dev profile with Challenge runs in every reward state (--user <psn>)."
@@ -419,7 +431,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _calendar_days(finished):
-        """The designed `{view: {(month, day): date}}` map `apply_to_run` fills from.
+        """The designed `{view: {(month, day): DayFill(date, plats)}}` map `apply_to_run` fills from.
 
         A DATE PER DAY, because `earned_on` is what a day cell and the coming day modal read, and a null
         one would make every square look like a row the backfill half-wrote. The year is arbitrary -- a
@@ -437,7 +449,16 @@ class Command(BaseCommand):
         updates pre-created rows so an unknown key is ignored rather than refused), and that it was
         doing the real fill's Feb-29 fold (that is a one-day KEY remap, not a blanket date clamp across
         twelve months).
+
+        A COUNT PER DAY, AND A FEW DAYS DESIGNED TO STACK. The month panel's "busiest day" row is
+        suppressed unless some square holds two or more platinums -- every filled square holds at least
+        one, so a busiest day of 1 would render on every month and mean nothing. Seeded at 1 everywhere
+        the figure is not the point, so the row appears on exactly the months chosen for it rather than
+        on all twelve or on none.
         """
+        def fill(month, day, plats=1):
+            return calendar_fill.DayFill(_seeded_date(month, day), plats)
+
         days = {view: {} for view, _field in CALENDAR_VIEW_FIELDS}
 
         if finished:
@@ -446,27 +467,32 @@ class Command(BaseCommand):
             for month, length in enumerate(CALENDAR_MONTH_DAYS, start=1):
                 for day in range(1, length + 1):
                     for view in days:
-                        days[view][(month, day)] = _seeded_date(month, day)
+                        days[view][(month, day)] = fill(month, day, CALENDAR_BUSY.get((month, day), 1))
             return days
 
         for month in CALENDAR_STRUCK:
             for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
                 for view in days:
-                    days[view][(month, day)] = _seeded_date(month, day)
+                    days[view][(month, day)] = fill(month, day, CALENDAR_BUSY.get((month, day), 1))
 
         # A PART-FILLED MONTH, nested the way real data nests: every clean day is an all day, which
         # `calendarday_clean_implies_all` enforces. The clean figure is lower on purpose -- that gap is
         # what the page's comparison line is about.
         for day in range(1, CALENDAR_PARTIAL_DAYS + 1):
-            days[CALENDAR_VIEW_ALL][(CALENDAR_PARTIAL_MONTH, day)] = _seeded_date(
-                CALENDAR_PARTIAL_MONTH, day)
+            days[CALENDAR_VIEW_ALL][(CALENDAR_PARTIAL_MONTH, day)] = fill(
+                CALENDAR_PARTIAL_MONTH, day,
+                CALENDAR_BUSY.get((CALENDAR_PARTIAL_MONTH, day), 1))
             if day <= CALENDAR_PARTIAL_CLEAN:
-                days[CALENDAR_VIEW_CLEAN][(CALENDAR_PARTIAL_MONTH, day)] = _seeded_date(
-                    CALENDAR_PARTIAL_MONTH, day)
+                days[CALENDAR_VIEW_CLEAN][(CALENDAR_PARTIAL_MONTH, day)] = fill(
+                    CALENDAR_PARTIAL_MONTH, day,
+                    CALENDAR_BUSY.get((CALENDAR_PARTIAL_MONTH, day), 1))
 
         # ONE DAY IN `all` AND NOT ON THE BOARD: a shovelware platinum. It is the only place a reader can
         # see what the comparison figure counts that the board does not draw.
-        days[CALENDAR_VIEW_ALL][CALENDAR_SHOVELWARE_ONLY] = _seeded_date(*CALENDAR_SHOVELWARE_ONLY)
+        # A COUNT ON A SQUARE THAT DRAWS NOTHING, which is the point of seeding it: the panel's
+        # "busiest day" must ignore a shovelware-only day however many platinums it holds, and a seeded
+        # 1 could not tell a reviewer whether the exclusion works.
+        days[CALENDAR_VIEW_ALL][CALENDAR_SHOVELWARE_ONLY] = fill(*CALENDAR_SHOVELWARE_ONLY, plats=6)
         return days
 
     def _start_fresh(self, profile, challenge_type, label):

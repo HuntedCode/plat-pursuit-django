@@ -2832,35 +2832,145 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     display: flex;
     flex-direction: column;
     gap: 14px;
-    /* THE ONE GAP, shared by the crest strip and the day grid so the two read as one object.
+    /* THE GAP, shared by the crest strip and the day grid at MOBILE so the two read as one object.
+       NOT SHARED ABOVE `md:`, and the comment claimed otherwise for two slices: the crest row takes its
+       own gap from `md:` up, because twelve coins and ten day cells cannot divide the same width on the
+       same gap. The day grid keeps this token at every size.
        3px AT MOBILE, AND IT IS MEASURED. The board sits on a `.scard` now (the owner's browser pass:
        "the contents of the page are up against the raw background"), and that card's 8px horizontal
-       padding takes the content box at 375px from 343px to 327px. Seven columns at the old 6px gap put
-       the cell at 41.6px -- under the 44px touch minimum, which matters because a day cell BECOMES a
-       button when the day modal lands. At 3px it is 44.1px.
-       The alternative was six columns, which gives a roomier 49.5px but leaves a trailing row of one
-       day in a 31-day month; seven keeps the familiar block and clears the minimum exactly. */
+       padding plus its 1px border take the content box at 375px from 343px to 325px. Seven columns at
+       the old 6px gap put the cell at 41.3px -- under the 44px touch minimum, which matters because a
+       day cell BECOMES a button when the day modal lands. At 3px it is 43.9px.
+       43.9, NOT THE 44.1 THIS CLAIMED: the card's border was left out of the content box, so the figure
+       lands a rounding hair UNDER the guideline rather than clearing it. Stated rather than engineered
+       away -- 0.1px is not worth a column count, and six columns, the only alternative that gains real
+       room (49.2px), leaves a trailing row of one day in a 31-day month. Worth knowing before anyone
+       adds padding here: there is no slack left at 375px. */
     --cal-gap: 3px;
 }
 @media (min-width: 768px) {
     .pp-cal { gap: 18px; --cal-gap: 8px; }
 }
 
-/* THE CREST BAND SPANS, THE BODY IS CAPPED, and the split is deliberate rather than the misalignment it
-   looks like. The first version capped the whole board at 712px to fix a real defect -- the cap was on
-   the day grid alone, so the grid left-aligned while the month head and the crest row stayed at full
-   width, giving three widths at three alignments. Capping everything lined them up and made the twelve
-   medallions small.
-   The owner's browser pass asked for the opposite emphasis (2026-10-04): "those medallions are pretty
-   cool so I'd like to show them off a bit more... we could even make them larger to allow them to span
-   across the whole screen. We can keep the tabs and dates smaller." So the band is now the showpiece and
-   takes the full row, while the switcher and the month panel share ONE capped width -- which is what
-   keeps the earlier defect fixed: the head and the grid are both inside the panel, so they cannot
-   disagree, and the lens chips sit on the same edge as the grid below them.
-   ONE TOKEN FOR THAT WIDTH, so the two blocks cannot drift apart. */
-.pp-cal { --cal-body: 712px; }
+/* THE WIDTH STORY, which has been through three shapes and this is the third -- recorded so the next
+   change is made against the reasoning rather than against the result.
+   1. Everything capped at one width. Fixed a real defect (the cap had been on the day grid alone, so it
+      left-aligned under a full-width month head) and made the twelve medallions small.
+   2. The crest band full-bleed, the panel capped. The owner asked to show the medallions off: "we could
+      even make them larger to allow them to span across the whole screen."
+   3. BOTH MATCHED, WITH A SIDE COLUMN (owner, 2026-10-04): "if we reduce the size of the medallions
+      again to match the length of the days, could we potentially float something to the right side...
+      Just feels like the page is a bit empty and we have room to fill." Which was the right read: a
+      712px grid centred in a 954px card leaves a column of nothing. (954, not the 956 this said twice:
+      992 of container less the card's 36px of padding AND its 2px of border.)
+   4. THE BAND OVER THE WHOLE PANEL (owner, same pass): "I still think the medallions should cover the
+      area of the calendar + the stats on the side." Which resolves shape 3's real problem rather than
+      reversing it. Shape 3 capped the band to the BOARD COLUMN, so the band and the day grid agreed
+      and the side column stuck out past both; the head then had to be pulled in to match, and the
+      panel still read as a narrow board with something bolted to its right. Spanning the band across
+      both columns makes it the lid of one object: the coins define the panel's width, and the grid and
+      the figures divide what is under them.
+      THE DIFFERENCE FROM SHAPE 2, which also had a wide band: shape 2's band was full-bleed over a
+      712px panel centred in the card, so it was wider than ANYTHING below it. Here the panel fills the
+      card, so "the whole panel" is a real edge that the head, the grid and the stats all reach.
+
+   TWO TOKENS DRIVE IT, so the crest row and the day grid cannot disagree about where the board ends.
+   The panel is `1fr var(--cal-stats)` with `var(--cal-gutter)` between; the crest row is capped to the
+   same arithmetic. One change to either token moves both.
+
+   THE CAP IS ON `.pp-cal`, not on its parts, which is what keeps shape 1's defect fixed.
+
+   AND THE SIDE COLUMN IS NARROWER IN THE FIRST DESKTOP BAND. `.container` steps at 1024 and again at
+   1280, so a column of one fixed width takes the same pixels out of a 954px card and a 1210px one.
+   IT IS THE DAY CELL THIS PROTECTS, NOT THE COIN -- shape 4 took the coins off this arithmetic
+   entirely, since the band now spans the panel and the stats column no longer comes out of its width.
+   The cell does still come out of it: at 280px throughout, the grid track at 1024 is 650px and the cell
+   is 57.8px, DOWN from the 62.6px it has at 768 -- the cell shrinking as the window widens, which is
+   the same defect the crest gap had and is no better on the squares. At 230px the track is 700px and
+   the cell is 62.8px, so the progression is 62.6 -> 62.8 -> 72.4 and only ever grows. 230px still
+   carries five rows of figures at a readable measure.
+   TWO EARLIER VERSIONS OF THIS PARAGRAPH ARGUED THE COIN, and both used figures from a state the same
+   slice had already changed (40px against 44px, measured with the `clamp(8px, 1.4vw, 20px)` gap this
+   file no longer has; then 44.0px against 48.2px, measured with the band capped to the board column).
+   The value survived all three arguments, which is worth noticing: 230px is right, and the first two
+   reasons given for it were not. */
+.pp-cal { --cal-body: 712px; --cal-stats: 230px; --cal-gutter: 24px; }
+@media (min-width: 1280px) {
+    /* The container's step from 954 to 1210 is what pays for the wider column. */
+    .pp-cal { --cal-stats: 280px; }
+}
 @media (min-width: 768px) {
+    /* THE TABLET BAND KEEPS ONE COLUMN: a stats column plus a board leaves neither enough room at
+       700px of card.
+       `--cal-body` IS A CEILING THAT DOES NOT CURRENTLY BIND, and saying so is the point. `.container`
+       is pinned at 768 through this whole band, so the card's content box is 698px at every width in
+       it -- under the 712px cap, at 375px and at 1023px alike. The cap is kept because it is the only
+       thing standing between this panel and an unbounded width if the container or the card's padding
+       ever changes, but it is NOT what lines the two bands up: both are `width: 100%` of the same
+       parent, and the 6px inset below is what makes their painted edges agree. An earlier version of
+       this comment credited the token with the alignment, which sent a reader looking for arithmetic
+       that nothing computes. */
     .pp-cal__panel { max-width: var(--cal-body); margin-inline: auto; width: 100%; }
+
+    /* THE BAND PAINTS FLUSH WITH THE PANEL, which takes a negative margin because the row's padding is
+       load-bearing. `.pp-cal__crests` carries `padding: 7px 6px 10px` -- a measured budget for the
+       focus ring and the struck shadow -- and `box-sizing` is `border-box` app-wide, so a plain
+       `width: 100%` paints the coins inside [6, W-6] while everything below them starts at 0. Six
+       pixels at each edge is about a fourteenth of a coin and reads as a mistake.
+       SO THE BOX IS 12px WIDER AND PULLED BACK 6px: painted edges land exactly on [0, W].
+       THE DAY GRID USED TO TAKE THE SAME 6px INSET INSTEAD, which was the right answer while the band
+       was capped to the board column (shape 3): the two boxes were the same width, so insetting the
+       grid matched them without a negative margin fighting the `margin-inline: auto` above. Shape 4
+       makes the band wider than the grid on purpose, so there is nothing left to match -- and the grid
+       gets its 12px back, which is most of a 62px cell's growth from 768 to 1024.
+       THE OVERHANG IS SAFE: `.scard` sets no `overflow`, its padding is 18px at this breakpoint, and
+       the focus ring reaches 5px past the coin -- 11px into 18px of room. */
+    .pp-cal__crests {
+        max-width: calc(var(--cal-body) + 12px);
+        width: calc(100% + 12px);
+        margin-inline: -6px;
+    }
+}
+@media (min-width: 1024px) {
+    /* 1100px IS WHERE THE BOARD STOPS GROWING, and it is now chosen for the GRID rather than the coin.
+       Twelve coins divide the whole panel from shape 4 on, so the cap sets both: at 1100px the coin is
+       82.5px -- `(1100 - 11 x 10 gap) / 12` -- and the day cell is 72.4px. Past this the cells keep
+       growing into boxes holding one 13px numeral, which is the defect the ten-column change fixed in
+       the first place.
+       THE CREST ROW'S OWN 12px OF PADDING IS CANCELLED HERE, not ignored: the row is 12px wider than
+       the panel and pulled back 6px (see `md:`), so its CONTENT box is the panel's width exactly and
+       the coins divide that. Leaving the padding out of this arithmetic while the row was capped is how
+       three comments in this file came to quote coin sizes that were never right. */
+    .pp-cal {
+        max-width: 1100px;
+        margin-inline: auto;
+    }
+    /* NO CAP AT ALL. Shape 3 capped this to `100% - stats - gutter` so the coins sat exactly over the
+       day cells; shape 4 spans the panel instead, so the only thing bounding the band is `.pp-cal`'s
+       own 1100px. The `md:` ceiling has to be lifted explicitly or it would bind here -- 712px of
+       band inside a 954px panel is shape 3's defect with the numbers changed. */
+    .pp-cal__crests { max-width: none; }
+    /* THE HEAD STOPS WHERE THE DAYS STOP, and the side column runs the full height beside it.
+       IT SPANNED BOTH COLUMNS FIRST, on the reasoning that the month name titles the whole panel rather
+       than just its grid. That is true of the name and false of the BAND it is printed on: the head is a
+       bordered, tinted plate, so spanning gave the panel THREE right edges -- the crest row and the day
+       grid at the board column, the head 254px past them at the card's edge. The owner caught it on the
+       browser pass: "now the medallions don't cover the same space as the month". A capped crest row
+       lining up with the days is worth nothing if the band above them does not.
+       SO `stats` SPANS THE ROWS INSTEAD. The coins, the head and the days now share one edge, which is
+       the alignment this whole two-column slice exists for, and the figures read as a column of the
+       panel from the top down rather than as a block hanging off its lower right. */
+    .pp-cal__panel {
+        max-width: none;
+        display: grid;
+        grid-template-columns: 1fr var(--cal-stats);
+        grid-template-areas: "head stats" "grid stats";
+        column-gap: var(--cal-gutter);
+        align-items: start;
+    }
+    .pp-cal__head { grid-area: head; }
+    .pp-cal__grid { grid-area: grid; }
+    .pp-cal__stats { grid-area: stats; }
 }
 
 /* -- the crest row: the month switcher, and the run's trophy shelf --------------------------------- */
@@ -2902,7 +3012,18 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cal__crests::-webkit-scrollbar { display: none; }
 @media (min-width: 768px) {
-    .pp-cal__crests { overflow-x: visible; gap: clamp(8px, 1.4vw, 20px); }
+    /* A FIXED GAP, NOT `clamp(8px, 1.4vw, 20px)`, and the difference was a defect rather than a tuning
+       choice. `.container` is a STEP function (768/1024/1280/1536) so the row's width holds still
+       across each band while a `vw` gap keeps growing -- which made twelve coins shrink monotonically
+       as the window widened, 47px at 768 down to 37px at 1279, with a step DOWN at the `lg:` breakpoint
+       where the stats column arrived. The band was at its smallest exactly where this slice set out to
+       make it generous, and the figures quoted in three comments nearby were all computed against the
+       8px floor that only applies below 571px of viewport.
+       10px, which is `--cal-gap`'s `md:` value plus the 2px the coins need for their rings not to read
+       as touching. Now the coin size steps only when the container does: 48.0px at 768, 48.2px at 1024,
+       56.2px at 1280 and up. Monotone, and never under the 44px touch minimum this file defends at
+       375px -- which matters because the coins ARE the board's navigation. */
+    .pp-cal__crests { overflow-x: visible; gap: 10px; }
 }
 
 /* ── THE TWELVE MONTH HUES ───────────────────────────────────────────────────────────────────────────
@@ -2987,15 +3108,20 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-mute);
     transition: color 0.18s ease, transform 0.18s ease;
 }
-/* THE COINS GROW INTO THE ROW from `md:` up, rather than staying 52px with the leftover space spread
-   between them. `flex: 1 1 0` with a square ratio makes twelve of them divide the width, so the band is
-   the full-bleed object the owner asked for: about 71px at 1024 and 110px at 1920.
-   CAPPED AT 112px, because past that a row of twelve coins stops reading as a switcher and starts
-   reading as the page's subject -- and the month panel below it is capped at 712px, so a band three
-   times that width would float free of the thing it controls. `justify-content: center` keeps the band
-   centred on the panel once the cap bites. */
+/* THE COINS DIVIDE THE BOARD COLUMN from `md:` up, rather than being a fixed size with the leftover
+   space spread between them. `flex: 1 1 0` on a square ratio means twelve of them fill whatever the row
+   is given -- so capping the row to the board's width (above) is what sizes them, and the coins and the
+   day cells under them agree without either knowing the other's number.
+   THE REAL SIZES: 49.0px from 768, 70.3px from 1024, 82.5px from 1280. Monotone, by design -- see the
+   fixed gap, which exists because the first version shrank as the window grew.
+   THEY JUMPED AT SHAPE 4 (from 48.0 / 48.2 / 56.2) because the band stopped paying for the side column:
+   the owner asked for the coins to "cover the area of the calendar + the stats on the side", so the
+   twelve of them now divide the whole panel rather than the board column. Earlier drafts of this comment
+   quoted three figures that were wrong for a different reason -- they divided the border box rather than
+   the content box, and used `--cal-gap` rather than the crest row's own gap.
+   THE 112px CEILING NEVER BINDS NOW and is kept as a guard rather than a shape: it mattered when the
+   band was full-bleed and twelve coins could have run to 110px, floating free of a 712px panel. */
 @media (min-width: 768px) {
-    .pp-cal__crests { justify-content: center; }
     .pp-cal__crest {
         flex: 1 1 0;
         width: auto;
@@ -3161,12 +3287,17 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     line-height: 1;
     text-transform: uppercase;
 }
-/* THE COUNTER INSIDE THE COIN, FROM `lg:` ONLY, and the breakpoint is arithmetic rather than taste.
-   The rim leaves a clear diameter of about 80% of the coin, and the coin is fluid: roughly 44px at 375
-   (no room for a second line at all), 52px at 768 (41px clear -- two lines of 12px type plus leading
-   does not fit), 70px at 1024 (55px clear -- it does) and 110px at 1920. So the figure appears at the
-   first width where it can be read, which is also the width the owner was looking at when they asked
-   for it.
+/* THE COUNTER INSIDE THE COIN, FROM `lg:`, and the breakpoint is arithmetic rather than taste.
+   The rim leaves a clear diameter of about 68% of the coin (r=16 against a 1.1 stroke in a 44-unit
+   viewBox), and the coin is fluid: 44px at 375 with no room for a second line at all, then 49.0px from
+   768, 70.3px from 1024 and 82.5px from 1280. Two lines of 12px type plus leading want about 34px of
+   clear chord, and 0.68 of those coins is 30 / 33.3 / 47.8 / 56.1px -- so the figure appears at 1024,
+   the first width where it can be read. 768 misses it by 0.7px, which is close enough to be worth
+   stating: if the card's padding ever shrinks, this gate can come down a breakpoint.
+   THIS GATE HAS NOW BEEN AT `lg:`, `xl:` AND BACK, each time on correct arithmetic over a different
+   band width -- the figure follows the coin, and the coin has been through four width shapes. Every
+   number in this paragraph was wrong for two slices (80% clear, 52px at 768, 70px at 1024, 110px at
+   1920) because they divided the border box rather than the content box.
    TWO LINES AT THE 12px FLOOR. The file-wide type guard refuses anything smaller, which is the right
    answer here rather than an exception to argue for: this figure is a number a hunter reads off a coin,
    not a decorative micro-label. The face clamps 12 -> 18px and this clamps 12 -> 15px, so the pair
@@ -3188,9 +3319,12 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    At 12px, `15/31` plus the padding is about 34px against roughly 42px of chord on the narrowest desktop
    coin.
 
-   STILL `lg:` ONLY. A 44px coin has no room for a plate at its foot either, and the month head below
-   carries the same figure at every width -- so nothing is lost at mobile, which is why this was gated in
-   the first place. */
+   GATED TO `lg:`, WHERE IT STARTED. It moved to `xl:` for one slice because shape 3 capped the band to
+   the board column and left the coin at 48.2px through the 1024 band -- about 33px of clear circle
+   against the ~34px this plate needs, just short. Shape 4 spans the band across the panel, so the same
+   band gives 70.3px and 47.8px of chord, and the plate fits with room to spare. At 768 the coin is
+   49.0px and the chord 33.3px, still just short, so the gate stays above the tablet band. Below it the
+   month head carries the same figure, so nothing is lost. */
 .pp-cal__sub { display: none; }
 @media (min-width: 1024px) {
     .pp-cal__sub {
@@ -3299,9 +3433,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 @media (min-width: 768px) { .pp-cal__month { font-size: 1.125rem; } }
 
-/* ONE FIGURE PER LENS, all three in the DOM, CSS revealing the active one. A server-picked single
-   number could not survive a client-side lens switch, and the three lenses do not nest so there is no
-   "best" one to pick. */
+/* ONE FIGURE, PRINTED DIRECTLY. This carried one per lens with all three in the DOM and CSS revealing
+   the active one, because a server-picked number could not survive a client-side switch and the three
+   lenses did not nest. The collapse to one lens left that comment standing directly above the note that
+   explains the removal for `.pp-cal__count`, i.e. two adjacent comments disagreeing. */
 .pp-cal__tally { font-size: 0.75rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
 /* NO `.pp-cal__count` RULES. The month head and the coin each rendered three figures -- one per lens --
    with these selectors revealing whichever matched the checked radio. One lens means one figure, printed
@@ -3313,10 +3448,17 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    THE CAP FIXES A REAL DEFECT. With seven columns at every width the cells were `aspect-ratio: 1` of a
    seventh of the row: 44px at 375 (right), but 98px at 768, 135px at 1024 and 208px at 1920 -- a panel
    of enormous near-empty boxes each holding one 13px numeral, on the project's primary target. The
-   sibling slot grid escalates 3 -> 4 -> 6 -> 7 for exactly this reason. Ten columns inside a 712px cap
-   holds the cell between 60 and 63px from 768 upward, and the board centres in whatever is left over.
-   (It was "near 64px" before the board moved onto a `.scard`; the card's 18px padding takes about 3px
-   off the cell, which is worth correcting rather than leaving as a figure nobody can reproduce.) */
+   sibling slot grid escalates 3 -> 4 -> 6 -> 7 for exactly this reason.
+   WHAT THE CELL ACTUALLY MEASURES, recomputed after the board gained a side column and again after the
+   crest band stopped sharing the grid's 6px inset: 62.6px at 768, 62.8px at 1024 and 72.4px from 1280.
+   The grid is a named `grid-area` track inside the panel from `lg:` up, sized `cap - gutter - stats`,
+   so at the 1100px cap it gets 796px -- and 72.4px is past the 63px ceiling the original argument set
+   for itself.
+   KEPT ANYWAY, because the argument was about SEVEN columns at 208px, not about a 71px cell: ten
+   columns still read as a month block, and the 8px the cell gains at 1280 comes with 8px on the coin
+   above it. Said plainly because this paragraph claimed "a 712px cap", "between 60 and 63px from 768
+   upward" and "the board centres in whatever is left over" for a slice after all three stopped being
+   true -- the cap is 1100px on `.pp-cal`, and nothing centres inside a grid track. */
 .pp-cal__grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -3329,6 +3471,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        share it. See the note there. */
 }
 @media (min-width: 768px) {
+    /* TEN COLUMNS FILLING WHATEVER THE BOARD COLUMN IS, which is why there is no cap here any more: the
+       grid used to carry one and left-aligned under a full-width head. `.pp-cal` holds the only cap. */
     .pp-cal__grid { grid-template-columns: repeat(10, minmax(0, 1fr)); }
 }
 
@@ -3369,6 +3513,74 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     font-weight: 600;
 }
 .pp-cal__num { line-height: 1; }
+
+/* ── the month's figures, beside its grid ────────────────────────────────────────────────────────────
+   Owner, 2026-10-04: "could we potentially float something to the right side that helps the user in some
+   way? Some cool monthly stats or something? Just feels like the page is a bit empty and we have room to
+   fill." Which was a fair read of a 712px grid centred in a 956px card.
+
+   A SURFACE, because this is a stats section and content does not sit on the card's background bare --
+   the same rule that put the whole board on a `.scard` and the month head on a band. Recessed rather
+   than raised (`--pp-bg-1` on a `--pp-bg-2` card), so it reads as a panel let into the card rather than
+   as a second card stacked on it.
+
+   UNDER THE GRID BELOW `lg:`, where there is no room for a column. It is the last thing in the panel, so
+   the single-column order is head, grid, figures -- which is also the reading order.
+   ── */
+.pp-cal__stats {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: var(--pp-radius-lg);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+}
+@media (min-width: 1024px) { .pp-cal__stats { margin-top: 0; } }
+
+.pp-cal__stats-head {
+    /* 12px, NOT the 11px `.scard__label` uses. These labels are copying that recipe deliberately, so
+       the 1px gap is a real divergence -- and it is the right way round: this stylesheet carries a
+       file-wide guard refusing type under 12px, whose own note says a genuine exception should be ADDED
+       to it with a reason rather than the bound lowered. An uppercase tracked label at 12px against 11px
+       is a difference nobody will see; a guard with a hole in it is one somebody will walk through. */
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+    margin-bottom: 10px;
+}
+
+/* NO `display` AT ALL, AND THAT IS A SEMANTIC CONSTRAINT RATHER THAN A LAYOUT PREFERENCE. The `<dl>`
+   keeps its UA `display: block`; the rule below declares only a margin reset, so there is no `block`
+   here to grep for. This was
+   `display: grid` with two columns below `lg:`, on the reasoning that five short rows in a full-width
+   block read as a tall thin list. A grid or flex `<dl>` drops its `DescriptionList` /
+   `DescriptionListTerm` / `DescriptionListDetail` mapping in Chromium and WebKit, so the column
+   announced as one run -- "Still open 26 days Among your months 1st best First filled 3 Mar 2019" --
+   with no pairing between a label and its figure. That is the same role-stripping that makes
+   `role="list"` mandatory on every `<ul>` in these templates, and a `<dl>` has no attribute to answer
+   it with: the only fix is not to take the role off.
+   THE COST IS A TALLER BLOCK BELOW `lg:` and nothing at all in the side column, which is single-column
+   anyway. Five rows of a 12px label over a 13px figure, 9px apart, is about 235px of a page that
+   scrolls. The two-column version also left an orphan in the right-hand column on any odd row count,
+   so this is cheaper than it looks. */
+.pp-cal__statlist { margin: 0; }
+.pp-cal__stat + .pp-cal__stat { margin-top: 9px; }
+
+/* THE LABEL ABOVE THE FIGURE, on `.scard`'s recipe: a small uppercase label and a `.pp-tally` face for
+   the number, so these read like every other stat cell on the site rather than as a one-off. */
+.pp-cal__stat dt {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+.pp-cal__stat dd { margin: 2px 0 0; font-size: 0.8125rem; color: var(--pp-text); }
+.pp-cal__stat .pp-tally { font-size: 1.125rem; margin-right: 0.15em; }
+
+.pp-cal__statempty { font-size: 0.8125rem; color: var(--pp-text-dim); }
+
 
 /* NO LENS SWITCHER RULES. `.pp-cal__lens`, its `.pp-switch` overrides and `.pp-cal__lenscount` lived
    here. The one-lens collapse removed the control, so its rules went with it rather than being left for

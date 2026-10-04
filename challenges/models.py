@@ -719,6 +719,38 @@ class CalendarDay(models.Model):
     #: ("became claimable"), not when the hunter earned it.
     earned_on = models.DateField(null=True, blank=True)
 
+    #: HOW MANY PLATINUMS THE HUNTER HOLDS ON THIS SQUARE, counted in the lens the square draws in --
+    #: `clean` for a square on the board, `all` for one that only counts. Stored rather than counted at
+    #: render time because the board is ONE query over this table and a count would mean a second,
+    #: timezone-aware, whale-sized aggregate on the request path. The fill already groups the hunter's
+    #: platinums by (month, day) to find each square's earliest date, so this rides a statement that is
+    #: already running. (One such query per DETAIL page. This said "eight of them on a Hall of Fame
+    #: page", which is the one page that does not draw the figure -- `_hero_group`'s cells carry no
+    #: count.)
+    #:
+    #: LIVE, NOT FROZEN, AND IT CAN DISAGREE WITH `earned_on`. A date is the record of an achievement,
+    #: so it survives a game being reclassified as shovelware; a count is a tally, and the day modal
+    #: will derive the same tally from trophy rows when a hunter opens a day. A glance figure that
+    #: contradicts the list the hunter just opened is worse than one that contradicts history they
+    #: cannot see, so this follows the aggregate downwards -- to zero if the lens empties.
+    #:
+    #: SO THE TWO FIELDS CAN DESCRIBE DIFFERENT POPULATIONS, and an earlier version of this comment
+    #: claimed they "always describe one population" while the slice's own
+    #: `test_the_count_follows_the_aggregate_down_where_the_date_does_not` asserted the opposite. After
+    #: a reclassification a square can read "first filled 2015" beside a count holding nothing from
+    #: 2015. That is the designed split, not a bug: the date answers when the square was earned, the
+    #: count answers what the modal will list. They agree on every square whose lens still holds it,
+    #: which is every square until staff or a detector moves a game.
+    #:
+    #: ON A SQUARE THAT DRAWS IN NO LENS this holds the `all` figure, so it is shovelware-INCLUSIVE and
+    #: must not be shown. Every reader tests `in_clean` first -- `calendar_render._is_filled` is the one
+    #: place that decision lives.
+    #:
+    #: THE LEAP-DAY FOLD ADDS RATHER THAN PICKS. 29 February folds onto 28 February, so a hunter who
+    #: platted on both holds two platinums on that one square. Dates take a `min` on that collision;
+    #: counts sum, which is the one place the two fields' fold logic must differ.
+    plat_count = models.PositiveSmallIntegerField(default=0)
+
     #: When WE wrote the fill. Separate from `earned_on` because they answer different questions and
     #: conflating them is the mistake `*_reached_at` already made elsewhere in this codebase: a
     #: detection timestamp is not an achievement timestamp.

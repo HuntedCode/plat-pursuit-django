@@ -1,4 +1,4 @@
-{% comment %}The Plat Calendar's detail board: a crest row that doubles as the month switcher, and one
+{% load humanize %}{% comment %}The Plat Calendar's detail board: a crest row that doubles as the month switcher, and one
 month panel at a time.
 
 ONE LENS: A DAY IS FILLED BY A SHOVELWARE-FREE PLATINUM (owner, 2026-10-04). There were three, with a
@@ -177,6 +177,108 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
             </li>
             {% endfor %}
         </ul>
+
+        {% comment %}THE MONTH'S FIGURES, in a column beside its grid (owner, 2026-10-04: "could we
+        potentially float something to the right side that helps the user in some way? Some cool monthly
+        stats or something? Just feels like the page is a bit empty and we have room to fill").
+
+        INSIDE THE PANEL RATHER THAN IN A COLUMN OF ITS OWN, which is the decision that makes this cheap:
+        the stats are per MONTH and only one month is ever visible, so living in the panel means they
+        switch with it for free. A sibling column would need the script to toggle twelve more blocks in
+        step with the twelve panels, which is a second ordering to keep aligned -- the exact class of
+        thing `aria-controls` was introduced here to avoid.
+
+        EVERY FIGURE IS ARITHMETIC OVER CELLS ALREADY IN HAND, so the board is still one query. The
+        genuinely interesting stat -- which games landed on a given day -- needs the hunter's trophy rows
+        and belongs to the day-detail slice.
+
+        EACH ROW IS CONDITIONAL, because a stat that reads "0" or "none" is worse than an absent one: on
+        a fresh run this column would otherwise be a stack of zeroes. A finished month shows no "open"
+        row, a month with no shovelware shows no exclusion row, and a month whose squares hold one
+        platinum each shows no "busiest day" -- every filled square would qualify.
+        NO COUNT OF ROWS IN THIS PARAGRAPH, deliberately: it said "six zeroes" when there were five, was
+        corrected to five, and the next slice added a sixth.
+
+        AN EMPTY MONTH SHOWS ITS EMPTINESS AND AT MOST ONE FIGURE, and the earlier wording claimed
+        "only its emptiness", which was false twice over. `open` is
+        `total - done`, so an untouched January is 31 open -- and the column drew "STILL OPEN / 31 days"
+        directly above "No days filled in January yet.", which on a fresh run is twelve panels each
+        stating the length of its own month under a line saying nothing is in it. That is the column of
+        zeroes these conditionals exist to prevent, wearing a different number. `month.done` gates it:
+        "still open" answers "how much is left", and nothing is left of a month not yet started.
+
+        THE EXCLUSION ROW IS THE DELIBERATE EXCEPTION, and it is NOT gated on `month.done`. A hunter
+        whose only March platinums are on flagged games sees "EXCLUDED / 3 shovelware" above "No days
+        filled in March yet." -- which is the same figure-above-a-blank-month shape that "still open" was
+        gated to remove, and is kept because it ANSWERS the blank rather than restating it. "31 open" on
+        an untouched month tells a hunter the length of March; "3 excluded" tells them why March is
+        empty, which is the one question the panel otherwise leaves hanging.
+
+        A `<dl>` OF `<div>`-WRAPPED PAIRS, and the wrapper is required rather than tidy: `<dl>` permits
+        only `dt`, `dd` and `div`, so a per-pair `div` is the one way to group them. Note the stylesheet
+        must leave this list `display: block` -- a grid or flex `<dl>` loses its term/definition mapping
+        in Chromium and WebKit, which is the same role-stripping hazard `role="list"` answers on the day
+        grid, with no attribute available to answer it here.{% endcomment %}
+        <div class="pp-cal__stats">
+            <h4 class="pp-cal__stats-head">{{ month.label }} at a glance</h4>
+            <dl class="pp-cal__statlist">
+                {% if month.done and month.open %}
+                <div class="pp-cal__stat">
+                    <dt>Still open</dt>
+                    <dd><span class="pp-tally">{{ month.open }}</span> day{{ month.open|pluralize }}</dd>
+                </div>
+                {% endif %}
+                {% if month.rank %}
+                <div class="pp-cal__stat">
+                    <dt>Among your months</dt>
+                    <dd>{{ month.rank }}{% if month.rank == 1 %}st{% elif month.rank == 2 %}nd{% elif month.rank == 3 %}rd{% else %}th{% endif %} best</dd>
+                </div>
+                {% endif %}
+                {% if month.busiest %}
+                <div class="pp-cal__stat">
+                    {% comment %}THE BUSIEST SQUARE. The month is the panel's own title, so the day
+                    number alone is unambiguous here and "4 on the 12th" fits a 230px column where
+                    "4 platinums on 12 July" would wrap. `|ordinal` is `humanize`'s, not a local
+                    chain.{% endcomment %}
+                    <dt>Busiest day</dt>
+                    {% comment %}THE NOUN IS `sr-only`, NOT ABSENT. Every sibling row names what its
+                    number counts ("29 days", "3 shovelware"); this one read "4 on the 12th" with the
+                    word "platinums" nowhere in it, which is thin on screen and meaningless aloud. The
+                    230px column is the argument against a VISIBLE noun, not against one that costs no
+                    width.{% endcomment %}
+                    <dd><span class="pp-tally">{{ month.busiest.plats }}</span><span class="sr-only"> platinums</span> on the {{ month.busiest.day|ordinal }}</dd>
+                </div>
+                {% endif %}
+                {% if month.first %}
+                <div class="pp-cal__stat">
+                    {% comment %}THE OLDEST AND NEWEST SQUARES IN THIS MONTH, which is the nostalgic half
+                    of what a calendar is for -- a hunter looking at March wants to know when they first
+                    filled one of its days. `|date` so the format follows the project's locale rather
+                    than being spelled out here.{% endcomment %}
+                    <dt>First filled</dt>
+                    <dd>{{ month.first|date:"j M Y" }}</dd>
+                </div>
+                {% endif %}
+                {% if month.last and month.last != month.first %}
+                <div class="pp-cal__stat">
+                    <dt>Most recent</dt>
+                    <dd>{{ month.last|date:"j M Y" }}</dd>
+                </div>
+                {% endif %}
+                {% if month.shovelware %}
+                <div class="pp-cal__stat">
+                    <dt>Excluded</dt>
+                    <dd><span class="pp-tally">{{ month.shovelware }}</span> shovelware</dd>
+                </div>
+                {% endif %}
+            </dl>
+            {% if not month.done %}
+            {% comment %}THE ONE CASE WITH NOTHING TO LIST. Every row above is conditional, so an
+            untouched month would leave an empty column -- and an empty panel beside a full grid reads as
+            a render fault rather than as a fact about the month.{% endcomment %}
+            <p class="pp-cal__statempty">No days filled in {{ month.label }} yet.</p>
+            {% endif %}
+        </div>
     </section>
     {% endfor %}
 </div>

@@ -81,7 +81,8 @@ def test_a_platinum_fills_its_day_and_records_when():
     days = calendar_fill.filled_days(profile)
 
     assert (3, 3) in days[CALENDAR_VIEW_ALL]
-    assert days[CALENDAR_VIEW_ALL][(3, 3)] == dt.date(2019, 3, 3)
+    assert days[CALENDAR_VIEW_ALL][(3, 3)].date == dt.date(2019, 3, 3)
+    assert days[CALENDAR_VIEW_ALL][(3, 3)].plats == 1
 
 
 def test_a_day_records_the_FIRST_time_it_was_filled():
@@ -93,7 +94,7 @@ def test_a_day_records_the_FIRST_time_it_was_filled():
 
     days = calendar_fill.filled_days(profile)
 
-    assert days[CALENDAR_VIEW_ALL][(3, 3)] == dt.date(2019, 3, 3)
+    assert days[CALENDAR_VIEW_ALL][(3, 3)].date == dt.date(2019, 3, 3)
 
 
 def test_the_hunters_timezone_decides_which_day_a_platinum_landed_on():
@@ -124,9 +125,9 @@ def test_the_hunters_timezone_decides_which_day_a_platinum_landed_on():
     # `TruncDate`; drop the timezone from only the second and Tokyo gets a square labelled 3 March
     # holding "2 March 2021". That is precisely the contradiction `earned_on` was made a DateField to
     # rule out, and a mutation found it surviving because this test only checked the key.
-    assert tokyo_days[(3, 3)] == dt.date(2021, 3, 3), (
+    assert tokyo_days[(3, 3)].date == dt.date(2021, 3, 3), (
         'the stored date was resolved in a different timezone from the day key')
-    assert london_days[(3, 2)] == dt.date(2021, 3, 2)
+    assert london_days[(3, 2)].date == dt.date(2021, 3, 2)
 
 
 def test_a_leap_day_platinum_folds_into_the_28th_rather_than_vanishing():
@@ -150,7 +151,9 @@ def test_a_folded_leap_day_cannot_overwrite_an_earlier_28th():
 
     days = calendar_fill.filled_days(profile)
 
-    assert days[CALENDAR_VIEW_ALL][(2, 28)] == dt.date(2015, 2, 28)
+    assert days[CALENDAR_VIEW_ALL][(2, 28)].date == dt.date(2015, 2, 28)
+    assert days[CALENDAR_VIEW_ALL][(2, 28)].plats == 2, (
+        'the fold MINS the dates and SUMS the counts -- both platinums land on the one square')
 
 
 # ── the shovelware-free view ─────────────────────────────────────────────────────────────────────
@@ -517,9 +520,13 @@ def test_a_later_sync_discovering_an_older_platinum_corrects_the_date():
         'the square kept the later date after an earlier platinum was discovered')
 
 
-def test_earned_on_never_moves_forward():
-    """The correction above only ever runs BACKWARDS. A square was earned when it was first earned, and
-    a newer platinum on the same day does not re-date it."""
+def test_earned_on_never_moves_forward_within_one_lens():
+    """The correction above only ever runs BACKWARDS within a lens. A square was earned when it was
+    first earned, and a newer platinum on the same day does not re-date it.
+
+    SCOPED, because the rule gained one explicit exception: a square PROMOTED from `all`-only to `clean`
+    moves its date forward onto the platinum that earned the square. Both platinums here are clean, so
+    this is the within-lens case, which is still absolute."""
     profile = _hunter()
     _platted(profile, _utc(2015, 4, 4))
     run = _calendar_run(profile)
@@ -529,6 +536,186 @@ def test_earned_on_never_moves_forward():
     calendar_fill.apply_to_run(run)
 
     assert run.calendar_days.get(month=4, day=4).earned_on == dt.date(2015, 4, 4)
+
+
+def test_a_squares_date_comes_from_the_lens_that_draws_it():
+    """THE DATE MUST NOT DESCRIBE A POPULATION THE BOARD EXCLUDES. This stored the earliest date across
+    every lens holding a square -- right while three lenses rendered at once and each could reveal its
+    own, and wrong the moment the collapse left ONE lens on the board with `in_all` kept as a counter.
+
+    A hunter with a shovelware platinum on 2015-03-03 and a clean one on 2021-03-03 held
+    `in_clean=True, earned_on=2015-03-03`, so the month's side column printed "First filled -- 3 Mar
+    2015" on a board that counts nothing from 2015. A real date, on a real square, from a game the
+    board's own rule throws out.
+    """
+    profile = _hunter()
+    _platted(profile, _utc(2015, 3, 3), shovelware=True)
+    _platted(profile, _utc(2021, 3, 3))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    day = run.calendar_days.get(month=3, day=3)
+    assert day.in_clean and day.in_all
+    assert day.earned_on == dt.date(2021, 3, 3), (
+        'the shovelware date won -- the square prints a year the board excludes')
+
+
+def test_a_reclassified_game_does_not_re_date_the_square_it_filled():
+    """A LENS'S OWN EARLIEST CAN RISE, which the first version of the lens fix assumed it could not. It
+    took the offered date whenever it DIFFERED from the stored one, on the reasoning that a higher offer
+    could only mean the stored value came from the other lens -- "`filled_days` reads the whole history
+    every pass, so a lens's own earliest never rises".
+
+    `update_shovelware` falsifies that on a routine nightly pass: flagging a previously-clean game drops
+    its day out of the clean aggregate, so the clean lens's earliest for 3 March moves from 2015 to
+    2021 with no promotion anywhere, and the square silently re-dated. That is the same cause the
+    `offered is None` branch refuses to act on, so the two branches were applying opposite policies to
+    one trigger.
+
+    A DATE IS THE ONLY RECORD OF THE ACHIEVEMENT once a square is filled, and catalogue bookkeeping the
+    hunter never saw must not rewrite it -- the same rule that makes fills monotone.
+    """
+    profile = _hunter()
+    old = _platted(profile, _utc(2015, 7, 7))
+    _platted(profile, _utc(2021, 7, 7))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    assert run.calendar_days.get(month=7, day=7).earned_on == dt.date(2015, 7, 7)
+
+    # A nightly shovelware pass flags the older game. Nothing the hunter did.
+    old.shovelware_status = 'auto_flagged'
+    old.save(update_fields=['shovelware_status'])
+    calendar_fill.apply_to_run(run)
+
+    day = run.calendar_days.get(month=7, day=7)
+    assert day.in_clean, 'fills are monotone -- the square stays on the board'
+    assert day.earned_on == dt.date(2015, 7, 7), (
+        'the square re-dated itself because the clean aggregate lost its earliest day')
+
+
+def test_the_square_records_how_many_platinums_sit_on_it():
+    """THE MONTH PANEL'S "BUSIEST DAY" READS THIS (owner, 2026-10-04). Stored rather than counted at
+    render time: the board is one read of `CalendarDay`, and a count means a second timezone-aware
+    aggregate over the hunter's whole trophy history per rendered board -- eight of them on a Hall of
+    Fame page. The fill already groups platinums by (month, day), so the count is one more annotation."""
+    profile = _hunter()
+    for year in (2016, 2019, 2024):
+        _platted(profile, _utc(year, 8, 8))
+    _platted(profile, _utc(2020, 8, 9))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    assert run.calendar_days.get(month=8, day=8).plat_count == 3
+    assert run.calendar_days.get(month=8, day=9).plat_count == 1
+    # NOTHING SCATTERED ONTO THE OTHER SQUARES. Asserting `== 0` on one unfilled day pinned the FIELD
+    # DEFAULT, not the writer: no code path reaches (8, 10), so it passed whatever the write branch did
+    # -- including a writer keyed on the wrong day. Asking the month as a whole is the real question.
+    assert not (run.calendar_days.filter(month=8, plat_count__gt=0)
+                .exclude(day__in=(8, 9)).exists()), 'a count landed on a square no platinum touched'
+
+
+def test_the_count_is_the_lens_that_draws_the_square():
+    """THE SAME RULE `earned_on` FOLLOWS, so the two always describe one population. A square showing
+    "first filled 2021" beside a count that included platinums the board excludes would be two answers
+    to one question, which is the cross-lens defect the collapse was meant to end."""
+    profile = _hunter()
+    _platted(profile, _utc(2015, 9, 9), shovelware=True)
+    _platted(profile, _utc(2019, 9, 9))
+    _platted(profile, _utc(2021, 9, 9))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    day = run.calendar_days.get(month=9, day=9)
+    assert day.in_clean
+    assert day.plat_count == 2, 'the shovelware platinum was counted on a board that excludes it'
+    assert day.earned_on == dt.date(2019, 9, 9), 'and the date agrees with the same two'
+
+
+def test_the_count_follows_the_aggregate_down_where_the_date_does_not():
+    """THE ONE PLACE THE TWO FIELDS DISAGREE ON PURPOSE, pinned because it looks like an inconsistency.
+
+    A date is the record of an ACHIEVEMENT, so it survives a game being reclassified as shovelware --
+    catalogue bookkeeping the hunter never saw must not rewrite when they earned a square. A count is a
+    TALLY, and the day modal will derive the same tally live from trophy rows when a hunter opens a day.
+    A stored count drifting above the modal's list would contradict the thing the hunter just opened,
+    which is worse than contradicting history they cannot check.
+    """
+    profile = _hunter()
+    old = _platted(profile, _utc(2015, 10, 10))
+    _platted(profile, _utc(2021, 10, 10))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    assert run.calendar_days.get(month=10, day=10).plat_count == 2
+
+    old.shovelware_status = 'auto_flagged'
+    old.save(update_fields=['shovelware_status'])
+    calendar_fill.apply_to_run(run)
+
+    day = run.calendar_days.get(month=10, day=10)
+    assert day.plat_count == 1, 'the count must track the population the board draws'
+    assert day.earned_on == dt.date(2015, 10, 10), 'while the achievement date is frozen'
+
+
+def test_a_square_whose_lens_empties_drops_its_count_to_zero():
+    """THE CASE THE FIRST VERSION OF THE LIVE COUNT MISSED, and it is the one where a stale tally is most
+    visible. The write only happened when the aggregate OFFERED a value, so a square whose lens went
+    entirely empty kept its last count: flag every one of a hunter's platinums on a day and the square
+    still draws -- fills are monotone, deliberately -- while the panel goes on printing "busiest day: 3"
+    and the day modal, deriving its satisfiers live, lists nothing.
+
+    THE SQUARE STAYS FILLED. That is not in question and must not change: an earned square is never
+    retracted for catalogue bookkeeping. It is the TALLY that has to tell the truth, which is the whole
+    reason this field is live rather than frozen.
+    """
+    profile = _hunter()
+    games = [_platted(profile, _utc(year, 11, 11)) for year in (2017, 2019, 2022)]
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    assert run.calendar_days.get(month=11, day=11).plat_count == 3
+
+    for game in games:
+        game.shovelware_status = 'auto_flagged'
+        game.save(update_fields=['shovelware_status'])
+    calendar_fill.apply_to_run(run)
+
+    day = run.calendar_days.get(month=11, day=11)
+    assert day.in_clean, 'the square is still the hunter\'s -- fills are monotone'
+    assert day.plat_count == 0, (
+        'the panel would print a busiest day the day modal cannot list a single game for')
+    assert day.earned_on == dt.date(2017, 11, 11), 'while the achievement date is still frozen'
+
+
+def test_a_square_promoted_off_shovelware_moves_its_date_forward():
+    """THE ONE CASE WHERE `earned_on` RISES, and it is the whole reason the backwards-only rule had to
+    gain an exception rather than the lens fix being bolted on in the renderer. A square held only by a
+    shovelware platinum carries that platinum's date, correctly: it is the only date the square has, and
+    it never prints because the square does not draw. When a clean platinum later lands on the same day
+    the square is promoted onto the board, and its date has to travel with it -- off the excluded
+    platinum and onto the one that earned the square.
+
+    A square's own lens still only moves BACKWARDS: `filled_days` recomputes the whole history every
+    pass, so the earliest a lens knows never rises, which is what makes "take the offer" correct in both
+    directions without storing which lens wrote the value.
+    """
+    profile = _hunter()
+    _platted(profile, _utc(2015, 5, 5), shovelware=True)
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    off_board = run.calendar_days.get(month=5, day=5)
+    assert off_board.in_all and not off_board.in_clean
+    assert off_board.earned_on == dt.date(2015, 5, 5), 'the only date the square has'
+
+    _platted(profile, _utc(2021, 5, 5))
+    calendar_fill.apply_to_run(run)
+
+    promoted = run.calendar_days.get(month=5, day=5)
+    assert promoted.in_clean
+    assert promoted.earned_on == dt.date(2021, 5, 5), (
+        'promoted onto the board still dated from the platinum the board excludes')
 
 
 def test_a_no_op_pass_writes_nothing():
@@ -569,9 +756,11 @@ def test_a_clean_day_without_an_all_day_is_repaired_rather_than_raising(monkeypa
     profile = _hunter()
     run = _calendar_run(profile)
 
+    # `DayFill`, NOT A BARE DATE, because the fake has to be a value the real aggregate could return.
+    # A fabricated shape that the writer merely tolerates tests the fake, not the writer.
     monkeypatch.setattr(calendar_fill, 'filled_days', lambda _p: {
         CALENDAR_VIEW_ALL: {},
-        CALENDAR_VIEW_CLEAN: {(6, 6): dt.date(2019, 6, 6)},
+        CALENDAR_VIEW_CLEAN: {(6, 6): calendar_fill.DayFill(dt.date(2019, 6, 6), 1)},
     })
 
     calendar_fill.apply_to_run(run)

@@ -23,6 +23,7 @@ attribute":
 The board itself carries NO state attributes, which one of the tests below asserts outright. The script is
 pinned by SOURCE TEXT, because this project has no JS test runner.
 """
+import datetime as dt
 import re
 
 import pytest
@@ -64,11 +65,22 @@ def _url(challenge):
     return reverse('challenge_detail', args=[challenge.id])
 
 
-def _fill(run, month, day):
+def _fill(run, month, day, *, on=None, plats=1):
     """Fill one day. BOTH columns, because `in_clean` implies `in_all` and the database enforces it; a
-    test wanting a shovelware day -- in `all` and off the board -- writes the row itself."""
+    test wanting a shovelware day -- in `all` and off the board -- writes the row itself.
+
+    `earned_on` AND `plat_count` ARE SET, and neither was at first. The real fill always writes a date
+    and a count alongside the booleans, so a helper that left them at null and zero produced rows no
+    backfill could make -- and the month's side column reads both, so its rows silently rendered empty
+    and the tests asserting them failed against a gap in the FIXTURE rather than in the page. The count
+    defaults to 1 for the same reason: a square is filled BY a platinum.
+    """
+    # `dt.date(2019, month, day)`, NOT `min(day, 28)` -- see the twin helper in
+    # `test_calendar_render.py`. The clamp stored a date whose day-of-month was not the square's, and
+    # collapsed days 29/30 of a month onto one date so `first == last` and "Most recent" vanished.
     written = CalendarDay.objects.filter(challenge=run, month=month, day=day).update(
-        in_all=True, in_clean=True)
+        in_all=True, in_clean=True, plat_count=plats,
+        earned_on=on or dt.date(2019, month, day))
     assert written == 1, 'no row at (%d, %d) -- the fill was a silent no-op' % (month, day)
 
 
@@ -154,6 +166,25 @@ def _rail_css():
     css = open('static/css/components/challenges.css', encoding='utf-8').read()
     block = css[css.index('THE DAY-MARKER RAIL'):]
     return re.sub(r'/\*.*?\*/', '', block, flags=re.S)
+
+
+def _css_rules(block, selector):
+    """Every rule for `selector`, comment-stripped and whitespace-flattened.
+
+    `_css_rule` TAKES THE FIRST OR THE LAST, which is the wrong handle whenever a selector appears more
+    than twice -- `.pp-cal__crests` has five rules and `.pp-cal__stats` three, and in both cases the one
+    worth asserting on is in the middle. Position also moves for reasons that change no computed value:
+    the width-story block sits above the base rule in the stylesheet, so "last" is the `md:` gap rather
+    than the cap. Callers filter these on a declaration they actually care about.
+
+    PASS IT A COMMENT-STRIPPED BLOCK. This does not strip -- `_calendar_css()` and `_rail_css()` already
+    do, and every caller goes through one of them -- so handing it raw stylesheet text would let a match
+    run through commentary. It also requires exactly one space before the brace, which is this file's
+    house style throughout; `.pp-cal__crests{` would return `[]`, and both callers assert a length so an
+    empty result fails loudly rather than passing vacuously.
+    """
+    return [m.group(0) for m in
+            re.finditer(re.escape(selector) + r' \{[^}]*\}', ' '.join(block.split()))]
 
 
 def _css_rule(block, selector, last=False):
@@ -647,6 +678,68 @@ def test_the_rim_draws_twelve_segments_rather_than_a_solid_ring():
     assert 'stroke-dasharray: 6 94' in block
 
 
+def test_the_crest_gap_is_fixed_so_the_coins_do_not_shrink_as_the_window_grows():
+    """`clamp(8px, 1.4vw, 20px)` against a STEP-FUNCTION container: `.container` holds its width across
+    each band while a `vw` gap keeps growing, so twelve coins shrank monotonically from 47px at 768 to
+    37px at 1279 -- with a step DOWN at `lg:`, where the stats column arrived and took 304px out of a
+    card that does not widen until 1280. The band was at its smallest exactly where this slice meant to
+    make it generous, and no test could catch it because none computes a width."""
+    flat = ' '.join(_calendar_css().split())
+    assert '.pp-cal__crests { overflow-x: visible; gap: 10px; }' in flat
+    assert '1.4vw' not in flat, 'a viewport-relative gap cannot divide a step-function width'
+
+
+def test_the_coin_band_paints_flush_with_the_panel():
+    """`box-sizing: border-box` IS APP-WIDE, so a crest row at `width: 100%` paints its coins inside
+    [6, W-6] -- the row carries `padding: 7px 6px 10px`, a measured budget for the focus ring and the
+    struck shadow, so the padding cannot simply go. Six pixels at each edge reads as a mistake against
+    a head and a grid that both start at 0.
+
+    SO THE BOX IS 12px WIDER AND PULLED BACK 6px. The two declarations are a PAIR: either one alone
+    moves the band off the panel's edge, in opposite directions, which is why they are asserted
+    together rather than one standing in for the other.
+
+    SHAPE 3 INSET THE DAY GRID BY 6px INSTEAD, matching the band because the two were then the same
+    width. Shape 4 makes the band wider on purpose -- the owner asked for the coins to "cover the area
+    of the calendar + the stats on the side" -- so there is nothing to match and the grid gets its 12px
+    back. The old inset must not survive: it would silently narrow every day cell for no reason.
+    """
+    flat = ' '.join(_calendar_css().split())
+    assert 'padding: 7px 6px 10px' in flat, 'the row inset the negative margin cancels'
+    assert 'width: calc(100% + 12px);' in flat and 'margin-inline: -6px;' in flat
+    assert 'padding-inline: 6px' not in flat, (
+        "shape 3's grid inset has no job once the band is wider than the grid")
+
+
+def test_the_side_column_narrows_in_the_first_desktop_band():
+    """`.container` steps at 1024 and again at 1280, so one fixed column width takes the same pixels out
+    of a 954px card and a 1210px one.
+
+    IT IS THE DAY CELL THIS PROTECTS, NOT THE COIN. Shape 4 took the coins off this arithmetic entirely
+    -- the band spans the panel, so the side column no longer comes out of its width -- but the grid
+    track still loses it. At 280px throughout, the track at 1024 is 650px and the cell 57.8px, DOWN from
+    62.6px at 768: the cell shrinking as the window widens, which is the defect the crest gap had and is
+    no better on the squares. At 230px the cell goes 62.6 -> 62.8 -> 72.4 and only grows.
+
+    THE VALUE HAS NOW SURVIVED THREE DIFFERENT ARGUMENTS, two of which were wrong (both quoted coin
+    sizes measured in a state the same slice had already changed). Worth knowing before trusting the
+    reason attached to a number here."""
+    flat = ' '.join(_calendar_css().split())
+    assert '--cal-stats: 230px' in flat, 'the first desktop band gets the narrower column'
+    assert '@media (min-width: 1280px) { .pp-cal { --cal-stats: 280px; } }' in flat
+
+
+def test_the_statlist_keeps_its_description_list_roles():
+    """A GRID OR FLEX `<dl>` DROPS ITS TERM/DEFINITION MAPPING in Chromium and WebKit, so the column
+    announces as one run with no pairing between a label and its figure. It is the same role-stripping
+    that makes `role="list"` mandatory on every `<ul>` in these templates -- and a `<dl>` has no
+    attribute to answer it with, so the only fix is not to take the role off. The app-wide guard only
+    scans `<ul>`, which is why this needs its own pin."""
+    statlist = _css_rule(_calendar_css(), '.pp-cal__statlist {')
+    assert 'display: grid' not in statlist and 'display: flex' not in statlist
+    assert 'grid-template-columns' not in statlist
+
+
 def test_the_day_cell_is_capped_so_it_does_not_balloon_on_desktop():
     """Seven columns at every width made the cell 135px at 1024 and 208px at 1920 -- a panel of enormous
     near-empty boxes each holding one 13px numeral, on the primary target."""
@@ -655,22 +748,59 @@ def test_the_day_cell_is_capped_so_it_does_not_balloon_on_desktop():
     # THE CAP IS ON THE PANEL, not the grid inside it. On the grid alone it left-aligned while the month
     # head stayed at full width, so the head and the squares under it disagreed; the head and the grid
     # are both inside the panel, so capping there is what makes them share an edge.
-    assert '.pp-cal__panel { max-width: var(--cal-body)' in ' '.join(block.split())
-    assert 'margin-inline: auto' in block
+    # THE CAP IS ON `.pp-cal` NOW, not on the panel: a side column arrived at `lg:` and the panel has
+    # to fill the row so its two columns can divide it. The crest row is capped to the board column's
+    # width by the same two tokens, which is what keeps the coins lined up with the days.
+    flat = ' '.join(block.split())
+    assert '.pp-cal { max-width: 1100px; margin-inline: auto; }' in flat
+    # SCOPED TO THE CREST ROW. Unscoped, this assertion passed if the declaration moved onto any
+    # selector at all -- so the one line that is supposed to guarantee the coins sit over the days
+    # could not tell WHICH box was being capped. (The `margin-inline: auto` assertion that stood here
+    # was worse: the string is in both the `md:` and the `lg:` rule, so it could not fail.)
+    #
+    # FOUND BY WHAT IT DECLARES, not by position. `.pp-cal__crests` has five rules and the one that
+    # bounds it is not the last: the width-story block sits ABOVE the base rule in the file, so `last=`
+    # lands on the `md:` gap instead. Position is the wrong handle on a selector this file reuses --
+    # the same lesson `.pp-cal__stats` taught two tests below.
+    #
+    # THE BAND'S OWN BOUND IS THE `md:` CEILING NOW. Shape 4 removed its desktop cap, so what is left to
+    # assert here is that exactly one rule bounds it and that the bound is the shared body token plus
+    # the 12px the negative margin cancels -- not a second number that could drift from `--cal-body`.
+    crests = [r for r in _css_rules(block, '.pp-cal__crests') if 'max-width: calc(' in r]
+    assert len(crests) == 1, 'exactly one rule puts a computed ceiling on the crest row'
+    assert 'max-width: calc(var(--cal-body) + 12px);' in crests[0]
 
 
-def test_the_crest_band_spans_while_the_body_it_controls_stays_capped():
-    """THE OWNER'S CALL ON THE BROWSER PASS, pinned because it reads like the misalignment it replaced.
+def test_the_crest_band_carries_no_cap_of_its_own_at_desktop():
+    """SHAPE 4 (owner, 2026-10-04): "I still think the medallions should cover the area of the calendar
+    + the stats on the side." So the band is bounded only by `.pp-cal`'s own 1100px, and shape 3's
+    `calc(100% - stats - gutter)` cap is gone.
 
-    The first version capped the whole board at one width, which fixed a real defect (a grid capped on
-    its own, left-aligned under a full-width head) and made the twelve medallions small. The owner asked
-    for the opposite emphasis: "those medallions are pretty cool so I'd like to show them off a bit
-    more... we could even make them larger to allow them to span across the whole screen. We can keep
-    the tabs and dates smaller."
+    THE `md:` CEILING HAS TO BE LIFTED EXPLICITLY, which is the part that would fail silently: the
+    tablet rule caps the row at `--cal-body + 12px`, and a cap set in a lower band keeps applying in a
+    higher one. Left standing, a 712px band would sit inside a 954px panel -- shape 3's misalignment
+    with different numbers, and nothing else in the suite would notice.
+    """
+    flat = ' '.join(_calendar_css().split())
+    assert 'max-width: calc(100% - var(--cal-stats) - var(--cal-gutter));' not in flat, (
+        "shape 3 capped the band to the board column; shape 4 spans the panel")
+    assert '.pp-cal__crests { max-width: none; }' in flat
 
-    So the band is full-bleed and the switcher and the month panel share ONE capped width. The part that
-    keeps the old defect fixed is that the head and the grid live inside the panel together, so they
-    cannot disagree -- and the lens chips sit on the same edge as the grid below them.
+
+def test_the_crest_band_divides_whatever_row_it_is_given():
+    """THE OWNER'S THIRD SHAPE for this width, and the test is rewritten rather than retired because the
+    first two are still worth not going back to.
+
+    1. Everything capped at one width. Fixed a real defect (a grid capped on its own, left-aligning
+       under a full-width head) and made the twelve medallions small.
+    2. The band full-bleed, the panel capped -- "we could even make them larger to allow them to span
+       across the whole screen."
+    3. BOTH MATCHED, WITH A SIDE COLUMN: "if we reduce the size of the medallions again to match the
+       length of the days, could we potentially float something to the right side".
+
+    This test described shape 2 for a slice after the CSS moved to shape 3, and still passed, because
+    every string it asserted survived the change. A suite that documents two shapes as current is worse
+    than one that documents neither.
     """
     block = _calendar_css()
 
@@ -679,10 +809,9 @@ def test_the_crest_band_spans_while_the_body_it_controls_stays_capped():
     assert block.count('max-width: var(--cal-body)') == 1, (
         'both capped blocks must read the same token in one rule, or they will diverge')
 
-    # The band is NOT capped to the body: it grows its coins into the full row instead.
+    # The coins divide whatever row they are given, so capping the row is what sizes them.
     flat = ' '.join(block.split())
     assert '.pp-cal__crest { flex: 1 1 0;' in flat
-    assert 'max-width: 112px' in flat, 'but not unbounded: twelve coins past this stop reading as a row'
     assert 'aspect-ratio: 1' in flat
 
 
@@ -823,6 +952,12 @@ def test_the_coin_counter_only_appears_where_it_fits():
     block = _calendar_css()
     flat = ' '.join(block.split())
     assert '.pp-cal__sub { display: none; }' in flat
+    # 1280, NOT 1024. The gate moved when the side column did: a coin is 47px at 1024 with a board
+    # column beside the stats, which leaves ~32px of clear circle against the ~34px the plate needs.
+    # `lg:`, NOT `xl:`. This gate has been at both, each time on correct arithmetic over a different
+    # band width: shape 3 capped the band to the board column and left the coin at 48.2px through the
+    # 1024 band (33px of chord against the ~34px the plate needs), so it moved up; shape 4 spans the
+    # panel and the same band gives 70.3px and 47.8px of chord, so it comes back down.
     assert '@media (min-width: 1024px) { .pp-cal__sub { display: inline-flex;' in flat
 
 
@@ -1043,7 +1178,9 @@ def test_the_month_panel_takes_its_own_months_colour():
     assert [int(m) for m in panels] == list(range(1, 13))
 
     block = _calendar_css()
-    head = _css_rule(block, '.pp-cal__head {')
+    # `last=True`: `.pp-cal__head` has two rules now -- the `lg:` grid-area placement comes first in
+    # the file and the band is the one carrying the colour.
+    head = _css_rule(block, '.pp-cal__head {', last=True)
     assert 'border-left: 3px solid var(--cal-c' in head, 'the band carries the hue on its edge'
 
     day = _css_rule(block, '.pp-cal__day--on {')
@@ -1181,3 +1318,170 @@ def test_the_rail_uses_the_same_progress_colour_as_the_coin_gauges():
     fill = _css_rule(_rail_css(), '.pp-cal-rail__fill {')
     assert '--pp-primary' in fill
     assert '--cal-c' not in fill, 'progress does not vary by month'
+
+
+# ── the month's side column ──────────────────────────────────────────────────────────────────────────
+
+def test_the_stats_column_lives_inside_its_own_month_panel():
+    """INSIDE THE PANEL, NOT A SIBLING COLUMN, which is the decision that makes this cheap: the figures
+    are per MONTH and one month is visible, so living in the panel means they switch with it for free.
+    A sibling column would need the script toggling twelve more blocks in step with the twelve panels --
+    a second ordering to keep aligned, which is the class of thing `aria-controls` was introduced here to
+    avoid."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert body.count('class="pp-cal__stats"') == 12, 'one per month, inside its panel'
+
+    march = _section(body, 'id="cal-month-mar"', until='</section>')
+    assert 'pp-cal__stats' in march
+    assert 'March at a glance' in march
+
+
+def test_an_untouched_month_says_so_rather_than_listing_zeroes():
+    """EVERY ROW IS CONDITIONAL, because a stat reading "0" is worse than an absent one -- on a fresh run
+    the column would otherwise be a stack of zeroes. Which leaves one case needing its own line: a month
+    with nothing at all, where an empty column beside a full grid reads as a render fault.
+
+    NO ROW COUNT IN THIS DOCSTRING. It said "five zeroes" while there were six, four lines from a
+    template comment that had just removed the same number for having been wrong twice. A count of
+    conditional rows is a fact that changes every time the column gains one, stated in prose nothing
+    checks."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    january = _section(body, 'id="cal-month-jan"', until='</section>')
+
+    assert 'No days filled in January yet.' in january
+    assert 'Among your months' not in january, 'an unranked month claims no rank'
+    assert 'First filled' not in january
+    # THE ROW THIS TEST WAS NAMED FOR AND DID NOT CHECK. `open` is `total - done`, so an untouched
+    # January is 31 open and drew "STILL OPEN / 31 days" directly above "No days filled yet" -- the
+    # column of zeroes in a different costume, twelve panels deep on a fresh run.
+    assert 'Still open' not in january, 'nothing is open in a month that has not started'
+
+
+def test_a_month_held_only_by_shovelware_says_what_it_is_excluding():
+    """THE ONE FIGURE THAT STILL RENDERS BESIDE AN EMPTY MONTH, and it is deliberate where "still open"
+    was not. A hunter whose only March platinums are on flagged games has `done=0` and a real exclusion
+    count, and that row ANSWERS the blank month rather than restating it -- "31 open" tells them the
+    length of March, "3 excluded" tells them why March is empty.
+
+    The empty-month test above uses a fresh run where `shovelware` is 0, so nothing covered this."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in (4, 5, 6):
+        CalendarDay.objects.filter(challenge=run, month=3, day=day).update(
+            in_all=True, in_clean=False, earned_on=dt.date(2018, 3, day))
+    march = _section(_body(run), 'id="cal-month-mar"', until='</section>')
+
+    assert 'No days filled in March yet.' in march
+    assert 'Excluded' in march and 'pp-tally">3</span>' in march
+    assert 'Still open' not in march, 'the open row stays gated on a month with nothing filled'
+
+
+def test_a_filled_month_lists_its_figures():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 6):
+        _fill(run, 3, day)
+    CalendarDay.objects.filter(challenge=run, month=3, day=9).update(in_all=True, in_clean=False)
+    march = _section(_body(run), 'id="cal-month-mar"', until='</section>')
+
+    # `pp-tally">26</span>`, NOT `>26</span>`: the section this reads includes the whole 31-cell grid,
+    # whose March 26 cell renders `<span class="pp-cal__num" aria-hidden="true">26</span>`. The loose
+    # form matched the day numeral, so breaking `open` outright left the assertion passing.
+    assert 'Still open' in march and 'pp-tally">26</span>' in march
+    assert 'Among your months' in march and '1st best' in march
+    assert 'First filled' in march
+    assert 'Excluded' in march and 'shovelware' in march
+    assert 'No days filled' not in march
+
+
+def test_a_month_with_a_stacked_day_names_it():
+    """THE OWNER'S ASK (2026-10-04): "could we maybe add a 'busiest day' to the stats?" The month is the
+    panel's own title, so the day number alone is unambiguous and "4 on the 12th" fits a 230px column
+    where "4 platinums on 12 July" would wrap."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 7, 12, plats=4)
+    _fill(run, 7, 20)
+    july = _section(_body(run), 'id="cal-month-jul"', until='</section>')
+
+    assert 'Busiest day' in july
+    # `pp-tally">4</span>`, NOT `>4</span>`: this section holds the whole 31-cell grid, so the loose
+    # form matches the numeral in the 4 July cell. The same trap this file hit on the "still open" row.
+    assert 'pp-tally">4</span>' in july
+    assert 'on the 12th' in july, "humanize's `ordinal`, not a local suffix chain"
+
+
+def test_a_month_of_single_platinum_days_names_no_busiest_day():
+    """EVERY FILLED SQUARE HOLDS AT LEAST ONE, so the row would render on every month with a single
+    filled day and say nothing. Suppressed below two."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in (3, 4, 5):
+        _fill(run, 8, day)
+    august = _section(_body(run), 'id="cal-month-aug"', until='</section>')
+
+    assert 'Busiest day' not in august
+    assert 'First filled' in august, 'the rest of the column still renders'
+
+
+def test_a_finished_month_shows_no_open_row():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    # `earned_on` TOO, which this left null. The real fill always writes a date beside the booleans, so
+    # the month had `first is None` and the test quietly exercised the one row shape `_fill`'s docstring
+    # says no backfill can produce.
+    CalendarDay.objects.filter(challenge=run, month=2).update(
+        in_all=True, in_clean=True, earned_on=dt.date(2019, 2, 14))
+    february = _section(_body(run), 'id="cal-month-feb"', until='</section>')
+
+    assert 'Still open' not in february, 'nothing is open'
+    assert 'Among your months' in february
+
+
+def test_one_dated_day_is_not_reported_twice():
+    """"Most recent" is suppressed when it is the same square as "First filled", because a month with one
+    filled day would otherwise state the same date under two labels."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 6, 6)
+    june = _section(_body(run), 'id="cal-month-jun"', until='</section>')
+
+    assert 'First filled' in june
+    assert 'Most recent' not in june
+
+
+def test_the_board_and_its_figures_share_one_width_story():
+    """THE OWNER'S FOURTH SHAPE for this page (2026-10-04): "I still think the medallions should cover
+    the area of the calendar + the stats on the side." So the band is the lid of the whole panel, and
+    the two columns under it divide what the coins span.
+
+    WHAT CHANGED FROM SHAPE 3, which this test used to describe: the crest row read the same two tokens
+    as the panel, capping itself to the board column so each coin sat over the day cells. The owner
+    wanted the band wider than that, so the tokens now govern the SPLIT below the band and nothing
+    about the band itself. Both halves are asserted here because a panel whose columns stop reading one
+    pair of tokens is how the head, the grid and the figures start disagreeing about where they end.
+    """
+    flat = ' '.join(_calendar_css().split())
+    assert '--cal-stats: 280px' in flat and '--cal-gutter: 24px' in flat
+    assert 'grid-template-columns: 1fr var(--cal-stats);' in flat
+    # `head stats`, NOT `head head`. The head spanned both columns at first, which put its tinted band
+    # 254px past the day grid -- three right edges in a panel built around shared ones. The side column
+    # spans the rows instead, so the head stops where the days stop.
+    assert 'grid-template-areas: "head stats" "grid stats";' in flat
+    assert '"head head"' not in flat, 'a spanning head overhangs the board column it titles'
+    # THE GUTTER IS READ ONCE, by the panel. Shape 3 had the crest row reading it too; a second reader
+    # is what let the band and the columns drift apart as the shapes changed.
+    assert flat.count('var(--cal-gutter)') == 1, (
+        'the token is declared once and consumed once -- by the panel\'s column gap')
+
+
+def test_the_stats_column_sits_on_a_surface():
+    """CONTENT DOES NOT SIT BARE, which is the rule that put the whole board on a `.scard` and the month
+    head on a band. Recessed rather than raised -- `--pp-bg-1` on a `--pp-bg-2` card -- so it reads as a
+    panel let into the card rather than a second card stacked on it."""
+    # THE RULE THAT CARRIES A BACKGROUND, found rather than named, because THREE rules share this
+    # selector -- the `lg:` grid-area placement, the surface, and the `lg:` margin reset -- so neither
+    # the first nor the last is the one meant and `_css_rule`'s `last` flag cannot express "the middle
+    # one". Naming it by its first declaration worked and pinned the test to declaration ORDER: moving
+    # `padding` above `margin-top` broke it without changing a single computed value.
+    # VIA `_css_rules`, which was introduced in this same slice for precisely this problem and then
+    # not used here -- two hand-rolled copies of one regex, which is how they drift.
+    rules = [r for r in _css_rules(_calendar_css(), '.pp-cal__stats') if 'background' in r]
+    assert len(rules) == 1, 'exactly one `.pp-cal__stats` rule paints a surface'
+    stats = rules[0]
+    assert 'background: var(--pp-bg-1);' in stats
+    assert 'border: 1px solid var(--pp-border);' in stats

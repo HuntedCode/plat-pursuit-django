@@ -1,39 +1,51 @@
-"""Which calendar days a hunter has filled, and the one place the three views are defined.
+"""Which calendar days a hunter has filled, and the one place the two views are defined.
 
-THREE CONSUMERS ARE COMING -- the opening backfill, the sync hook and the day modal -- and the thing that
-goes wrong when a rule like this has no home is that each of them derives it slightly differently. The
-day modal listing games that "satisfy" a day has to agree, exactly, with the predicate that filled it, or
-a hunter opens a filled day to an empty list. So the predicates live here and nothing re-derives them.
+THREE CONSUMERS, TWO OF THEM ALREADY WIRED -- the nightly sweep, the sync hook (`token_keeper`'s
+`stats_badges` phase) and the day modal, which is the one still to come. The thing that goes wrong when
+a rule like this has no home is that each of them derives it slightly differently: the day modal listing
+games that "satisfy" a day has to agree, exactly, with the predicate that filled it, or a hunter opens a
+filled day to an empty list. So the predicates live here and nothing re-derives them.
+(This said "the opening backfill" rather than the sweep. `challenge_service.start` does no backfill at
+all -- it `bulk_create`s the 365 empty rows and the first pass fills them.)
 
-THE THREE VIEWS, and the one that is not what it looks like:
+THE TWO VIEWS:
 
-- `all`       every platinum the hunter has earned, by its local date.
-- `clean`     the same, minus platinums on shovelware games.
-- `contracts` the hunter's CONTRACT completions, keyed on the contract's own earliest qualifying
-              moment -- which is NOT the same instant as any one platinum's. A contract reaches its
-              100% tier from `progress=100` with no platinum anywhere, and a contract with several
-              member concepts completes on the earliest of them.
+- `all`    every platinum the hunter has earned, by its local date.
+- `clean`  the same, minus platinums on shovelware games. THE ONLY ONE THE BOARD DRAWS.
 
-So `clean` nests inside `all` (a shovelware-free platinum is still a platinum, and
-`calendarday_clean_implies_all` enforces it) while `contracts` nests inside neither.
+`clean` NESTS INSIDE `all` -- a shovelware-free platinum is still a platinum -- and
+`calendarday_clean_implies_all` enforces it in the database. That nesting is the reason `all` is worth
+keeping at all now that nothing draws it: it makes the headline interpretable ("297 shovelware-free of
+340 platinum days") instead of a bare number, and one statement computes both.
+
+THERE WAS A THIRD, and this docstring went on defining it as current for several slices after it was
+deleted -- "THE THREE VIEWS, and the one that is not what it looks like". `contracts` keyed a day on a
+CONTRACT's earliest qualifying moment, which is not any one platinum's instant: a contract reaches its
+100% tier from `progress=100` with no platinum anywhere, so it nested inside NEITHER platinum view and
+a day could be filled in the hardest view and empty in the easiest. The owner collapsed the lenses to
+one (2026-10-04: "perhaps we should condense down to just one view: non-shovelware plats... contracts
+are more curated sets of games and this is more wholistic"), which deleted `_days_from_contracts` --
+the expensive half of this module, five bounded queries per chunk of `EarnedContract` -- along with a
+watermark column, a sweep exception and a whole class of cross-lens defect.
 
 `hide_hiddens` IS IGNORED, deliberately, and the precedent is in the repo rather than in my judgement.
 `Profile.total_trophies_raw` exists because ranking on a filter-respecting figure "makes the board
 unreproducible by anyone but its owner" -- and the Hall of Fame is a board that Calendar runs land on.
 If a hunter's display preference decided which days filled, two hunters with identical libraries would
-get different runs and a finish would mean something different per row. It would also make the EASIEST
-view stricter than the hardest, since the contract engine cannot see `user_hidden` at all.
+get different runs and a finish would mean something different per row.
 
 WHALE SAFETY IS THE SHAPE OF EVERY QUERY HERE, not a note on them. These hunters run to 250,000+ earned
 trophies, so the rule from `contract_service._detect_tiers` applies in full: never start from
 `EarnedTrophy.filter(profile=...)` and join outward to test a property, because the planner then walks
 every one of those rows. Resolve the catalogue-bounded side first and turn the aggregate into an index
-seek. Every function below returns at most 365 rows.
+seek. Every DAY function below returns at most 365 rows -- `runs_due_for_sweep` is the exception and
+returns a site-wide `Challenge` queryset, which is the point of it.
 """
 import logging
 import zoneinfo
+from collections import namedtuple
 
-from django.db.models import Case, DateField, F, Min, Q, Value, When
+from django.db.models import Case, Count, DateField, F, Min, Q, Value, When
 from django.db.models.functions import ExtractDay, ExtractMonth, TruncDate
 from django.utils import timezone
 
@@ -78,6 +90,13 @@ def _hunter_timezone(profile):
         return zoneinfo.ZoneInfo('UTC')
 
 
+#: WHAT THE AGGREGATE KNOWS ABOUT ONE SQUARE IN ONE LENS. This was a bare date, and the second field
+#: arrived with the month panel's "busiest day" figure. A named pair rather than two parallel dicts
+#: keyed the same way: the fold below has to combine BOTH fields on a collision (min the date, sum the
+#: counts), and two dicts drifting apart at that one point is the defect that shape invites.
+DayFill = namedtuple('DayFill', ('date', 'plats'))
+
+
 def _fold(month, day):
     """`(2, 29)` -> `(2, 28)`; everything else unchanged."""
     return LEAP_DAY_FOLDS_TO if (month, day) == LEAP_DAY else (month, day)
@@ -110,7 +129,7 @@ def _platinum_trophies(profile, *, clean_only=False):
 
 
 def _days_from_platinums(profile, tz):
-    """`{'all': {(month, day): date}, 'clean': {...}}` -- BOTH platinum views, from ONE statement.
+    """`{'all': {(month, day): DayFill}, 'clean': {...}}` -- BOTH platinum views, from ONE statement.
 
     ONE QUERY FOR BOTH, AND THAT IS A CORRECTNESS FIX RATHER THAN A SAVING. Computing them separately
     meant two sequences of reads outside any transaction, and Postgres is READ COMMITTED, so each
@@ -128,6 +147,15 @@ def _days_from_platinums(profile, tz):
 
     `Min` rather than any: a square's date is the FIRST time it was filled. A hunter who platted on
     3 March in 2019 and again in 2024 earned that square in 2019.
+
+    AND A COUNT ALONGSIDE IT, for the month panel's "busiest day" (owner, 2026-10-04). Two more
+    aggregates on a statement that is already grouping by (month, day), which is the whole reason the
+    figure is affordable: the board is one read of `CalendarDay` and could not count trophies without a
+    second whale-sized query on the request path.
+    ONE SUCH QUERY, NOT EIGHT. An earlier version of this note said "eight of them on a Hall of Fame
+    page" -- it is the DETAIL board that draws the figure, once per page, and `_hero_group`'s cells
+    carry no count at all. The denormalization is still worth having; the page it was justified against
+    does not render the thing.
     """
     clean_date = Case(
         When(trophy_id__in=_platinum_trophies(profile, clean_only=True),
@@ -145,25 +173,44 @@ def _days_from_platinums(profile, tz):
                   d=ExtractDay('earned_date_time', tzinfo=tz))
         .values('m', 'd')
         .annotate(first=Min(TruncDate('earned_date_time', tzinfo=tz)),
-                  clean_first=Min(clean_date))
-        .values_list('m', 'd', 'first', 'clean_first')
+                  clean_first=Min(clean_date),
+                  plats=Count('id'),
+                  # `Count` OF THE CONDITIONAL EXPRESSION: `clean_date` is NULL on a shovelware row and
+                  # `Count` ignores NULLs, so counting it counts exactly the clean platinums.
+                  #
+                  # IT IS NOT CHEAPER THAN `filter=Q(...)`, AND THIS COMMENT SAID IT WAS. Django performs
+                  # no common-subexpression elimination across annotations, so re-using the `clean_date`
+                  # OBJECT buys nothing in SQL: the compiled statement inlines the `trophy_id__in`
+                  # subquery twice either way -- once under `MIN(CASE ...)`, once under `COUNT(CASE ...)`
+                  # -- and a `Min(filter=)` / `Count(filter=)` pair compiles to the same number. Verified
+                  # by compiling both forms, because the claim is the kind a reader builds on: anyone
+                  # adding a THIRD conditional clean figure here should know it adds a third full
+                  # subquery over the hunter's platted library, not that it is free.
+                  clean_plats=Count(clean_date))
+        .values_list('m', 'd', 'first', 'clean_first', 'plats', 'clean_plats')
     )
 
     out = {CALENDAR_VIEW_ALL: {}, CALENDAR_VIEW_CLEAN: {}}
-    for month, day, first, clean_first in rows:
+    for month, day, first, clean_first, plats, clean_plats in rows:
         key = _fold(month, day)
-        # The fold collides a real 28 February with a folded 29 February, so the earlier date owns the
-        # square. A true `min`, so it does not depend on which row Postgres returns first.
-        for view, value in ((CALENDAR_VIEW_ALL, first), (CALENDAR_VIEW_CLEAN, clean_first)):
-            if value is None:
+        for view, date, count in ((CALENDAR_VIEW_ALL, first, plats),
+                                  (CALENDAR_VIEW_CLEAN, clean_first, clean_plats)):
+            if date is None:
                 continue
-            if key not in out[view] or value < out[view][key]:
-                out[view][key] = value
+            held = out[view].get(key)
+            # THE FOLD COLLIDES a real 28 February with a folded 29 February, and the two fields combine
+            # DIFFERENTLY on that collision -- the only place in this module where they do.
+            # The EARLIER DATE owns the square: a true `min`, so it does not depend on which row
+            # Postgres returns first. The COUNTS ADD: a hunter who platted on both days holds two
+            # platinums on the one square they share, and picking either row's count would lose one.
+            out[view][key] = DayFill(
+                date if held is None or date < held.date else held.date,
+                count + (held.plats if held else 0))
     return out
 
 
 def filled_days(profile):
-    """`{key: {(month, day): earliest local date}}` for the two stored populations.
+    """`{key: {(month, day): DayFill(date, plats)}}` for the two stored populations.
 
     The single entry point. Returns at most 365 entries each, and every date is already resolved in the
     hunter's own timezone, so a caller never has to know about timezones again.
@@ -214,12 +261,46 @@ def apply_to_run(challenge, *, found=None):
     backfill, or a re-queued `sync_trophies` reaching games it had not seen. Skipping unchanged rows
     would leave that square permanently claiming the later date while the day modal, which derives its
     satisfier list live, lists the older game. That is the same "a square labelled X holding Y"
-    contradiction the `DateField` was chosen to rule out, reached from the other direction. It only ever
-    moves BACKWARDS.
+    contradiction the `DateField` was chosen to rule out, reached from the other direction.
+
+    AND IT COMES FROM THE LENS THE BOARD DRAWS, which is a correctness fix and not a refinement. This
+    stored `min(date across every view holding the square)` -- "whichever lens noticed" -- which was the
+    right shape when three lenses rendered at once and each could reveal its own. One lens survived the
+    collapse and `in_all` stayed on as a COUNTER, so that minimum became a cross-lens value on a
+    single-lens board: a hunter with a shovelware platinum on 2015-03-03 and a clean one on 2021-03-03
+    held `in_clean=True, earned_on=2015-03-03`, and the month's side column printed "First filled --
+    3 Mar 2015" on a board that counts nothing from 2015. The date now reads `clean` for a square that
+    draws and `all` for one that does not, so the figure can never describe a population the board
+    excludes.
+
+    WHICH MEANS IT NO LONGER ONLY MOVES BACKWARDS, and the exception is narrow and explicit: a square
+    PROMOTED from `all`-only to `clean` this pass moves its date FORWARD, off the excluded platinum and
+    onto the one that earned it. Nothing else may.
+
+    THE EXCEPTION IS A PROMOTION TEST, NOT A COMPARISON, and the first version got this wrong in a way
+    worth recording. It took the offered date whenever it DIFFERED from the stored one, reasoning that a
+    higher offer could only mean the stored value came from the other lens, "because `filled_days` reads
+    the whole history every pass, so a lens's own earliest never rises". The premise is false. The clean
+    aggregate is filtered on `SHOVELWARE_FLAGGED_STATUSES`, and `update_shovelware` flags
+    previously-clean games on a routine nightly pass -- so a hunter with clean platinums on 3 March in
+    2015 and 2021 whose 2015 game gets flagged sees the clean lens's earliest RISE to 2021, and the
+    square would have silently re-dated. That is the same cause the `offered is None` branch below
+    refuses to act on, and it would have had the two branches applying opposite policies to it. A
+    timezone change and a removed `EarnedTrophy` row reach it the same way.
+
+    SO THE STORED DATE SURVIVES CATALOGUE BOOKKEEPING, which is the rule the whole module already
+    follows: fills are monotone for the same reason, and a square's date is the only record of the
+    achievement once it is filled.
+
+    ROWS WRITTEN BEFORE THIS FIX ONLY SELF-HEAL ON A PASS, and `runs_due_for_sweep` returns a run only
+    when its counters moved -- so a dormant hunter's cross-lens date persists until `process_challenges
+    --all-calendars` is run by hand. No backfill ships with it: the feature is unreleased, so the only
+    rows that can hold the old value are development and seeded ones.
     """
     from django.db import transaction
 
-    from challenges.models import CALENDAR_VIEW_FIELDS, CHALLENGE_TYPE_CALENDAR, CalendarDay, Challenge
+    from challenges.models import (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_FIELDS,
+                                   CHALLENGE_TYPE_CALENDAR, CalendarDay, Challenge)
 
     if challenge.challenge_type != CHALLENGE_TYPE_CALENDAR:
         return 0
@@ -257,6 +338,9 @@ def apply_to_run(challenge, *, found=None):
         to_update = []
         for row in rows:
             was_filled = any(getattr(row, field) for _v, field in CALENDAR_VIEW_FIELDS)
+            # THE LENS THIS SQUARE DREW IN BEFORE THIS PASS, read before the loop below can change it,
+            # because a PROMOTION onto the board is the one event allowed to move `earned_on` forward.
+            was_clean = row.in_clean
             changed = False
             for view, field in CALENDAR_VIEW_FIELDS:
                 if (row.month, row.day) in found[view] and not getattr(row, field):
@@ -271,14 +355,60 @@ def apply_to_run(challenge, *, found=None):
                 row.in_all = True
                 changed = True
 
-            # The earliest date across every view holding this square -- "whichever lens noticed" -- and
-            # evaluated even when no view flipped, per the docstring.
-            dates = [found[view][(row.month, row.day)]
-                     for view, _f in CALENDAR_VIEW_FIELDS
-                     if (row.month, row.day) in found[view]]
-            earliest = min((d for d in dates if d is not None), default=None)
-            if earliest is not None and (row.earned_on is None or earliest < row.earned_on):
-                row.earned_on = earliest
+            # THE DATE FROM THE LENS THIS SQUARE DRAWS IN, per the docstring: `clean` when the square
+            # is on the board, `all` when it only counts. Evaluated even when no view flipped.
+            #
+            # THE `in_clean` READ IS AFTER THE FLIP LOOP ABOVE, deliberately: a square promoted this
+            # pass must take its clean date in the same pass, not on the next one.
+            lens = CALENDAR_VIEW_CLEAN if row.in_clean else CALENDAR_VIEW_ALL
+            offered = found[lens].get((row.month, row.day))
+            promoted = row.in_clean and not was_clean
+            if offered is None:
+                # THE LENS NO LONGER CLAIMS A SQUARE IT ONCE DID -- fills are monotone, so a game
+                # reclassified as shovelware leaves `in_clean` standing while the clean aggregate drops
+                # the day. Keep the stored date: it is the only record of the achievement, and the
+                # alternative is blanking a date because of catalogue bookkeeping the hunter never saw.
+                pass
+            elif row.earned_on is None:
+                row.earned_on = offered.date
+                changed = True
+            elif promoted or offered.date < row.earned_on:
+                # DOWNWARD ALWAYS, FORWARD ONLY ON A PROMOTION, and the promotion is tested rather than
+                # inferred from the dates. A lower offer is a deeper backfill and is always taken. A
+                # HIGHER one is taken only when this pass moved the square onto the board, because that
+                # is the single case where the stored value describes the wrong population.
+                #
+                # THE INFERENCE THIS REPLACED WAS WRONG: "a higher offer can only mean the other lens
+                # wrote it" assumes a lens's own earliest never rises, and it does. `update_shovelware`
+                # flags a previously-clean game on a nightly pass, which drops the earliest day out of
+                # the clean aggregate -- so `!=` re-dated a square for catalogue bookkeeping the hunter
+                # never saw, which is exactly what the `offered is None` branch above exists to refuse.
+                row.earned_on = offered.date
+                changed = True
+
+            # THE COUNT FOLLOWS THE AGGREGATE ALL THE WAY TO ZERO, which is where the first version
+            # stopped short and left a real defect. It only wrote when `offered` was non-None, so a
+            # square whose lens went EMPTY kept its last count: flag every one of a hunter's four
+            # platinums on 3 March and the square still draws (fills are monotone, deliberately) while
+            # the panel goes on printing "busiest day -- 4 on the 3rd" and the day modal, deriving its
+            # satisfiers live, lists nothing. That is precisely the contradiction this field is live to
+            # avoid, and the comment claimed the branch was skipped because "there is no aggregate to
+            # follow" -- there is, and its value is 0.
+            #
+            # A DATE IS AN ACHIEVEMENT, A COUNT IS A TALLY, and that is the whole reason the two fields
+            # part company here. The date survives the same reclassification (see the branch above):
+            # catalogue bookkeeping the hunter never saw must not rewrite WHEN they earned a square. So
+            # a reclassified square can read "first filled 2015" beside a count that holds nothing from
+            # 2015, and that is deliberate rather than an oversight -- the date answers history, the
+            # count answers what the modal will show.
+            #
+            # GATED ON THE ROW DRAWING OR COUNTING. `changed` also drives `newly_filled` and
+            # `filled_at`, so letting a count correction set it on an UNFILLED row -- a hand-written
+            # row, a half-run data migration -- would report a day the hunter never earned as newly
+            # filled and stamp it. An unfilled square keeps whatever it has; nothing reads it.
+            live = offered.plats if offered is not None else 0
+            if row.plat_count != live and (was_filled or changed):
+                row.plat_count = live
                 changed = True
 
             if not changed:
@@ -291,7 +421,7 @@ def apply_to_run(challenge, *, found=None):
 
         if to_update:
             CalendarDay.objects.bulk_update(
-                to_update, ['in_all', 'in_clean', 'earned_on', 'filled_at'],
+                to_update, ['in_all', 'in_clean', 'earned_on', 'plat_count', 'filled_at'],
                 batch_size=500)
         # THE WATERMARKS, written whether or not anything filled -- that is what makes the sweep's
         # cheap check work. Skipping them on a no-op would leave the run due every night forever.
@@ -382,8 +512,16 @@ def runs_due_for_sweep():
     moved tonight", which marks EVERY run due and defeats the reconciliation on any night
     `update_shovelware` touches anything; targeted invalidation means shovelware detection reaching into
     challenges. So the escape hatch is a staff door -- `process_challenges --all-calendars` -- and the
-    gap is documented rather than papered over. Nothing is ever WRONG as a result: fills are monotone,
-    so the cost is a day that fills late rather than a day that fills incorrectly.
+    gap is documented rather than papered over.
+    AND `plat_count` NARROWED THAT GUARANTEE, which this paragraph used to state unconditionally
+    ("nothing is ever WRONG as a result: fills are monotone, so the cost is a day that fills late rather
+    than a day that fills incorrectly"). That held while the stored state was monotone booleans and a
+    frozen date. The per-day platinum count is deliberately LIVE, so a reclassification in either
+    direction -- or a staff `igdb_id` edit, or a timezone change -- leaves it simply stale on a dormant
+    hunter's run: too high after a flag, too low after an un-flag, until the staff door is run. What
+    stays true is the part that matters for the reward ladder: FILLS are monotone, so no day fills
+    incorrectly and no run completes that should not have. A stale tally in a side column is a smaller
+    thing than a wrong square, which is why the gap is still accepted -- but it is no longer nothing.
 
     SCOPED TO RUNS, NOT ACCOUNTS, which is the principle `completable_slots` already states: "the sweep's
     cost should scale with how many runs are in flight, not with how many accounts exist." A hunter who

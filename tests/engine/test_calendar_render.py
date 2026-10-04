@@ -59,7 +59,7 @@ def _calendar_run(profile=None):
         svc.TYPES_NOT_YET_CREATABLE = original
 
 
-def _fill(run, month, day, *, on=None):
+def _fill(run, month, day, *, on=None, plats=1):
     """Mark one day filled, writing the row directly.
 
     DIRECT ROW WRITES ON PURPOSE. What fills a day is `calendar_fill`'s job and has its own file; this
@@ -71,8 +71,17 @@ def _fill(run, month, day, *, on=None):
     """
     # BOTH COLUMNS, because `in_clean` implies `in_all` and the database enforces it. A test that wants
     # a shovelware day -- in `all` and not on the board -- writes the row itself.
-    fields = {'in_all': True, 'in_clean': True,
-              'earned_on': on or dt.date(2019, month, min(day, 28))}
+    # `plat_count` DEFAULTS TO 1 RATHER THAN 0, because that is what a real fill writes: a square is
+    # filled BY a platinum, so a filled row with a zero count is a state no backfill can produce. The
+    # same reasoning that made this helper write `earned_on` after two stat rows rendered empty against
+    # a gap in the fixture rather than in the page.
+    # `dt.date(2019, month, day)`, NOT `min(day, 28)`. The clamp made 29 of the 365 squares hold a
+    # date that was not their own -- `(1, 31)` stored 28 January -- which is the same defect the seeder
+    # carried and had removed, re-created in the fixture. It is also not harmless: filling days 29 and
+    # 30 of one month gave both the same date, so `first == last` and the "Most recent" row silently
+    # dropped. Every `CalendarDay` key is a real date (February stops at 28), so no clamp is needed.
+    fields = {'in_all': True, 'in_clean': True, 'plat_count': plats,
+              'earned_on': on or dt.date(2019, month, day)}
     written = CalendarDay.objects.filter(challenge=run, month=month, day=day).update(**fields)
     assert written == 1, 'no row at (%d, %d) -- the fill was a silent no-op' % (month, day)
 
@@ -603,3 +612,125 @@ def test_the_marker_positions_keep_their_fraction():
 
     first = marker_rail(0)['markers'][0]
     assert first['pct'] == 13.7, 'floored to 13 it would misalign against its own label'
+
+
+# ── the month's side-column figures ──────────────────────────────────────────────────────────────────
+
+def test_a_month_reports_the_figures_its_side_column_draws():
+    run = _calendar_run()
+    _fill(run, 3, 3, on=dt.date(2019, 3, 3))
+    _fill(run, 3, 20, on=dt.date(2021, 3, 20))
+    CalendarDay.objects.filter(challenge=run, month=3, day=9).update(in_all=True, in_clean=False)
+
+    march = _month(calendar_render.calendar_groups(run), 3)
+    assert march['done'] == 2
+    assert march['open'] == 29
+    assert march['shovelware'] == 1, 'in `all`, off the board'
+    assert march['first'] == dt.date(2019, 3, 3)
+    assert march['last'] == dt.date(2021, 3, 20)
+
+
+def test_a_month_reports_its_busiest_square():
+    run = _calendar_run()
+    _fill(run, 4, 4, on=dt.date(2019, 4, 4), plats=2)
+    _fill(run, 4, 18, on=dt.date(2020, 4, 18), plats=5)
+    _fill(run, 4, 25, on=dt.date(2021, 4, 25))
+
+    april = _month(calendar_render.calendar_groups(run), 4)
+    assert april['busiest'] == {'day': 18, 'plats': 5}
+
+
+def test_a_month_whose_squares_hold_one_platinum_each_has_no_busiest_day():
+    """EVERY FILLED SQUARE HOLDS AT LEAST ONE, so a "busiest day" of 1 is "a day you filled" wearing a
+    superlative -- it would render on every month with a single square and tell a hunter nothing. The
+    row is absent until a day actually stacks."""
+    run = _calendar_run()
+    for day in (6, 7, 8):
+        _fill(run, 6, day)
+
+    assert _month(calendar_render.calendar_groups(run), 6)['busiest'] is None
+
+
+def test_the_busiest_square_breaks_a_tie_on_the_earliest_day():
+    """DETERMINISTIC WITHOUT A SORT: `cards` is built in ascending day order and the comparison is a
+    strict `>`, so the first day to reach the maximum keeps it. Worth pinning because a `>=` would make
+    the figure depend on iteration order, and the panel would silently change which day it named."""
+    run = _calendar_run()
+    _fill(run, 11, 2, plats=3)
+    _fill(run, 11, 20, plats=3)
+
+    assert _month(calendar_render.calendar_groups(run), 11)['busiest'] == {'day': 2, 'plats': 3}
+
+
+def test_the_busiest_square_ignores_a_shovelware_only_day():
+    """THE SAME TEST THE DATES APPLY. A shovelware-only day carries a count and draws nothing, so
+    naming it would put a figure on the board for a population the board excludes -- and it would beat
+    every real square, since nothing stops a flagged day holding the most platinums."""
+    run = _calendar_run()
+    CalendarDay.objects.filter(challenge=run, month=12, day=1).update(
+        in_all=True, in_clean=False, earned_on=dt.date(2017, 12, 1), plat_count=9)
+    _fill(run, 12, 15, plats=2)
+
+    assert _month(calendar_render.calendar_groups(run), 12)['busiest'] == {'day': 15, 'plats': 2}
+
+
+def test_the_months_dates_come_from_filled_days_only():
+    """A DISTINCTION THAT MATTERS: `earned_on` is written for any population holding a square, so a
+    SHOVELWARE day carries a date and draws nothing. Reading dates without the `filled` test would date
+    a month from a square it does not show -- and on a month whose only dated row is shovelware, that is
+    a "first filled" for a day that is empty."""
+    run = _calendar_run()
+    CalendarDay.objects.filter(challenge=run, month=5, day=5).update(
+        in_all=True, in_clean=False, earned_on=dt.date(2017, 5, 5))
+    _fill(run, 5, 20, on=dt.date(2020, 5, 20))
+
+    may = _month(calendar_render.calendar_groups(run), 5)
+    assert may['first'] == dt.date(2020, 5, 20), 'the 2017 shovelware date must not win'
+    assert may['last'] == dt.date(2020, 5, 20)
+
+
+def test_an_untouched_month_has_no_dates_and_no_rank():
+    """A MONTH WITH NOTHING FILLED HAS NO RANK rather than sharing last place, because on a fresh run
+    ranking the empties would hand all twelve "1st" -- worse than saying nothing."""
+    month = _month(calendar_render.calendar_groups(_calendar_run()), 8)
+    assert month['done'] == 0
+    assert month['first'] is None and month['last'] is None
+    assert month['rank'] is None
+    assert month['open'] == 31
+
+
+def test_the_months_rank_on_completion_not_on_raw_days():
+    """RANKED ON RAW DAYS, A COMPLETE FEBRUARY PLACED BEHIND AN INCOMPLETE JANUARY -- 28 of 28 against
+    29 of 31 -- and no 28-day month could ever be first against a long month with 29 filled. The
+    template prints this as "2nd best", so a hunter who had just finished a month read a correct figure
+    as a bug."""
+    run = _calendar_run()
+    for day in range(1, 29):
+        _fill(run, 2, day)          # 28 of 28 -- complete
+    for day in range(1, 30):
+        _fill(run, 1, day)          # 29 of 31 -- more days, less of the month
+
+    months = calendar_render.calendar_groups(run)
+    ranks = {m['label']: m['rank'] for m in months if m['rank']}
+    assert ranks == {'February': 1, 'January': 2}
+
+
+def test_the_months_rank_is_dense_across_unequal_month_lengths():
+    """DENSE RANKING ("1224"), so two months at the same completion share a place and the next is the one
+    after; a competition ranking would skip a number and read as a gap the hunter cannot explain.
+
+    THE TIE IS ACROSS DIFFERENT DENOMINATORS on purpose -- 14/28 and 15/30 are the same number, and
+    that is exactly where binary floats stop being exact. `Fraction` makes the tie a property of the
+    arithmetic rather than of how the two happened to round."""
+    run = _calendar_run()
+    for day in range(1, 15):
+        _fill(run, 2, day)          # 14 of 28
+    for day in range(1, 16):
+        _fill(run, 6, day)          # 15 of 30 -- the same half, a different denominator
+    for day in range(1, 6):
+        _fill(run, 1, day)          # 5 of 31
+    _fill(run, 4, 1)                # 1 of 30
+
+    months = calendar_render.calendar_groups(run)
+    ranks = {m['label']: m['rank'] for m in months if m['rank']}
+    assert ranks == {'February': 1, 'June': 1, 'January': 2, 'April': 3}
