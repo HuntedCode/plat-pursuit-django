@@ -1159,10 +1159,18 @@ class _ChallengeBrowseView(HtmxListMixin, ListView):
         context['sorts'] = [(value, label) for value, (label, _o) in self.SORTS.items()]
         context['browse_url'] = reverse(self.BROWSE_URL_NAME)
         context['empty_title'], context['empty_hint'] = self.EMPTY_COPY
-        # A-Z, JOB COVERAGE, ALL -- the most-permissive chip LAST, which is the order the Franchises browse
+        # EVERY TYPE, THEN ALL -- the most-permissive chip LAST, which is the order the Franchises browse
         # settled on so the chips read as narrowing rather than as a menu. `''` is the all-types value, which
         # `selected_type` already returns for anything unrecognised, so there is no second sentinel to keep in
         # step and a hand-typed `?type=platinum` lands on All rather than on an empty grid.
+        #
+        # IT USED TO NAME THE CHIPS ("A-Z, JOB COVERAGE, ALL") and went stale the moment `calendar` joined
+        # `CHALLENGE_TYPE_CHOICES`. Deriving the list from the choices was always the point, so a comment
+        # enumerating them was a second copy of the catalogue that nothing kept in step.
+        #
+        # A NOT-YET-CREATABLE TYPE IS STILL OFFERED HERE, and that is deliberate rather than an oversight:
+        # `_check_type` draws the line between "real enough to read" and "startable", and this is the
+        # reading side. My Challenges filters `TYPES_NOT_YET_CREATABLE` out because its cards POST a start.
         context['types'] = list(CHALLENGE_TYPE_CHOICES) + [('', 'All')]
         # OUTSIDE the full-page gate, which is the whole reason `enrich` is not part of
         # `full_page_context`: an entry's own extras have to be built on a filter swap and an
