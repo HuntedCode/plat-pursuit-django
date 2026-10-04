@@ -22,8 +22,11 @@ no services and no templates with it; the few lessons worth carrying forward are
 | The run's page (`community/challenges/<id>/`) | **built** |
 | The picker: square-first, contract-first, history | **built** |
 | Public hub + Hall of Fame | **built.** `community/challenges/` (runs in flight) and `community/challenges/hall-of-fame/` (finished runs) |
-| Challenge share card + minted Hall of Fame covers | **NOT built.** Chunk 7; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
-| Rewards (titles, job-XP payout, notification) | **built.** `challenges/services/rewards.py` is the only writer |
+| Challenge share card | **NOT built.** Moved after the Calendar so all three types are designed together. **Minting it as a Hall of Fame cover was CUT** — the live board is the permanent state; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
+| Rewards (titles, job-XP payout, notification) | **built** for A-Z and Job Coverage. `challenges/services/rewards.py` is the only writer |
+| **Plat Calendar** — type, `CalendarDay`, the three view predicates, the backfill writer, the reconciling sweep, the refresh command | **built** |
+| **Plat Calendar** — creation | **gated shut.** `TYPES_NOT_YET_CREATABLE` keeps the Start button off until the rest lands |
+| **Plat Calendar** — sync hook, rewards (the 50/100/200/300/365 day ladder + one ultimate per view), month crests, the day modal, the board | **NOT built** |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
 
@@ -33,16 +36,70 @@ commit, and the run's own page — from one reader, so the two cannot quote diff
 
 ---
 
-## The two types
+## The three types
 
-Calendar and Genre challenges do **not** return.
+Genre challenges do **not** return. The **Plat Calendar does** — revived 2026-10-02, reversing a decision
+settled on 2026-09-26. That reversal is recorded rather than edited away, in the plan and in
+`challenges/models.py`, because the original reasoning is still worth reading.
 
-| | A-Z Challenge | Job Coverage Challenge |
+| | A-Z Challenge | Job Coverage Challenge | Plat Calendar |
+|---|---|---|---|
+| Squares | 26, one per letter `A`-`Z` | one per `Job` in the catalogue, read live at creation | 365, one per calendar day |
+| A square's key | the letter | the job's slug | `(month, day)`, across every year |
+| Its rows | `ChallengeSlot` | `ChallengeSlot` | **`CalendarDay`** |
+| The atom | a Contract | a Contract | **a date** |
+| What fills it | a Contract whose `name` starts with that letter | a Contract carrying that job | the hunter's own history — nothing is picked |
+| Win condition | every letter | every job, Freelancer included | every day, in a *genuine* view (below) |
+
+**The Calendar is the one type whose atom is not a Contract**, which is why several rules stated elsewhere
+in this doc as if they were universal describe the first two only. It also picks nothing: its squares are
+filled from the hunter's trophy history rather than chosen, so it has no picker, no eligibility query, no
+scarcity hatch and no importer.
+
+### The Calendar's three views
+
+One run, three independent lenses. A day is filled per view, and the views do **not** uniformly nest.
+
+| View | A day is filled by | Nests inside `all`? |
 |---|---|---|
-| Squares | 26, one per letter `A`-`Z` | one per `Job` in the catalogue, read live at creation |
-| A square's key | the letter | the job's slug |
-| What fits | a Contract whose `name` starts with that letter | a Contract carrying that job |
-| Win condition | every letter | every job, Freelancer included |
+| `all` | any platinum earned on that calendar day | — |
+| `clean` | the same, minus platinums on shovelware games | **yes**, enforced by `calendarday_clean_implies_all` |
+| `contracts` | a Contract completion, keyed on its earliest qualifying moment | **no** |
+
+`clean` nests because a shovelware-free platinum is still a platinum. `contracts` does not, for two
+structural reasons: a contract reaches its 100% tier from `progress=100` with **no platinum term**, and a
+contracts day is keyed on the *contract's* completion moment — the earliest qualifying date across its
+member concepts — which differs from any one platinum's whenever a 100% lands later or a contract covers
+several concepts.
+
+**Completion keys on the genuine views only.** A run finishes when `clean` **or** `contracts` fills,
+whichever comes first, and `Challenge.completed_view` records which. `all` never finishes a run: it is the
+lens shovelware inflates, so it carries the early day-marker ladder and nothing else. A hunter can
+therefore hold "filled all 365 days" and still have an unfinished run — which looks like a bug in a
+screenshot and is the design.
+
+**The progress number is the best genuine view**, the higher of `clean` and `contracts`, because either
+completing ends the run. Leading with `all` would show a card at 298/365 on a run that completes at 164.
+
+### Calendar rules worth knowing before you touch it
+
+- **29 February folds into 28 February.** A run is keyed on `(month, day)` across every year, so there is
+  no leap-day square — but the platinum is real, and the retired system dropped it.
+- **The hunter's own timezone decides which day a platinum landed on.** Not the server's and not the
+  viewer's: the run page is public, so an instant would render as a different day to a reader far enough
+  east. `CalendarDay.earned_on` stores the resolved local **date** for that reason.
+- **`hide_hiddens` is ignored.** The Hall of Fame is a board, and `Profile.total_trophies_raw` exists
+  because ranking on a filter-respecting figure makes a board unreproducible by anyone but its owner.
+- **Fills are monotone.** A day that is true is never set false. The predicates can stop matching for
+  reasons that are not the hunter's doing — a reclassification, a `reconcile_contracts` deletion, a staff
+  `igdb_id` edit — and none may retract an earned square.
+- **The sweep reconciles before it refreshes.** `calendar_fill.runs_due_for_sweep()` compares two stored
+  counters (the hunter's platinum count and their earned-contract count) against live values in one
+  site-wide query. A run whose numbers have not moved is skipped without reading a trophy, because
+  recomputing a whole history is the expensive thing and most syncs cannot fill a day.
+- **Refresh one hunter by hand** with `process_challenges --user <psn_username> --only calendar`. It
+  deliberately ignores the reconciliation check — you reach for it when you suspect the watermarks are
+  wrong.
 
 **Starting a run is members-only during the beta.** `CHALLENGES_BETA_MEMBERS_ONLY` (env var, defaults
 to **on**) is checked inside `start_reporting` after the profile lock, so it refuses the write rather than
@@ -102,7 +159,7 @@ applied, permanently, and a hunter reading their own finished run is entitled to
 
 | | History importer (`import`) | Scarcity hatch (`hatch`) |
 |---|---|---|
-| Types | **A-Z only** | **both** |
+| Types | **A-Z only** | **A-Z and Job Coverage.** Both are meaningless for the Plat Calendar, which picks nothing: its days are filled from the hunter's own history, so there is no pool to run thin and nothing to import into |
 | When | first run only — never completed one of that type | whenever the square's eligible pool is ≤ `HATCH_THRESHOLD` (3) |
 | Test | the completion happened **strictly after** `CustomUser.date_joined` | none; it is about our supply, not their timing |
 | Why it exists | a hunter has been here a while and finished contracts covering half the alphabet before ever starting a run | our curation gap for a thin job or letter |
@@ -468,7 +525,10 @@ letter; a Job Coverage square draws its job's icon, tinted by discipline off the
 That reverses the first cut, which returned bare covers on the argument that the board "is a mosaic, not a
 labelled grid, with the named grid one click away". The owner overruled it on a browser pass (2026-09-30):
 twenty-six covers with no key is pretty and says nothing about what the run was, and the keys are also what
-make the two types look like different achievements rather than one template with different art.
+make the types look like different achievements rather than one template with different art. (The Plat
+Calendar's board is a different problem again: 365 day cells carry no cover art at all, because eight rows
+of them is ~2,920 images and at ~20px a cell the art is unreadable. Clicking a day opens a modal listing
+the games that satisfy it.)
 
 The exact-four-keys rule still holds, for the reason `slot_render._card` states outright — a dict that grows
 a field per guess is how unread columns get fetched for two hundred rows — and
