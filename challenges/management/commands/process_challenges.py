@@ -225,7 +225,7 @@ class Command(BaseCommand):
 
         if profile is not None:
             runs = Challenge.objects.filter(
-                profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False)
+                profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR)
             scope = f'one hunter ({profile.psn_username}), ignoring the due check'
         elif force:
             # THE DOOR FOR THE CHANGE NO WATERMARK CAN SEE. The reconciliation watches the hunter's
@@ -238,8 +238,7 @@ class Command(BaseCommand):
             # `update_shovelware` touches anything. Targeted invalidation means shovelware detection
             # reaching into challenges, which is a coupling this does not earn. So it is a staff door,
             # used after a bulk reclassification, and the limitation is documented rather than hidden.
-            runs = Challenge.objects.filter(
-                challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False)
+            runs = Challenge.objects.filter(challenge_type=CHALLENGE_TYPE_CALENDAR)
             scope = 'EVERY run, ignoring the due check (--all-calendars)'
         else:
             runs = calendar_fill.runs_due_for_sweep()

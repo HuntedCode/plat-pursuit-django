@@ -441,6 +441,16 @@ def runs_due_for_sweep():
     elsewhere is that a finished run is never written to again. A Calendar run completes on the FIRST
     genuine view to fill, and the hunter may still be working toward the other view's ultimate title, so
     its days must keep filling afterwards.
+
+    NOT SCOPED TO VISIBLE RUNS EITHER, and that is CONSISTENCY rather than a second exception.
+    `pending_slots` -- the detection every other challenge type goes through -- filters only
+    `challenge__is_complete=False, is_completed=False` and says nothing about `is_deleted`, so a hidden
+    A-Z run has always kept completing its squares. Hiding in this feature means "not shown", not
+    "frozen": `hide` is explicit that it destroys nothing and that `start` brings the run back.
+    An earlier version of this filtered `is_deleted=False` and so froze any hidden Calendar run. That
+    was invisible for the other two types, because a hidden UNFINISHED run resumes on Start and a hidden
+    FINISHED one has nothing left to fill -- but a finished Calendar run does: the view it did not
+    complete on is still reachable, and freezing it silently removed the only path to that ultimate.
     """
     from challenges.models import CHALLENGE_TYPE_CALENDAR, Challenge
 
@@ -454,7 +464,7 @@ def runs_due_for_sweep():
 
     return (
         Challenge.objects
-        .filter(challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False)
+        .filter(challenge_type=CHALLENGE_TYPE_CALENDAR)
         .annotate(live_contracts=Coalesce(Subquery(earned_contracts, output_field=IntegerField()), 0))
         .exclude(profile__total_plats=F('calendar_plats_seen'),
                  live_contracts=F('calendar_contracts_seen'))
@@ -479,8 +489,10 @@ def refresh_for_profile(profile):
     """
     from challenges.models import CHALLENGE_TYPE_CALENDAR, Challenge
 
+    # NO `is_deleted` FILTER, matching `pending_slots`: hiding is a display choice in this feature and
+    # not a data freeze, so a hidden run keeps filling exactly as a hidden A-Z run keeps completing.
     runs = list(Challenge.objects.filter(
-        profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR, is_deleted=False))
+        profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR))
     if not runs:
         return 0
 

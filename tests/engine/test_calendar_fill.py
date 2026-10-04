@@ -1189,3 +1189,64 @@ def test_all_calendars_refreshes_runs_the_due_check_would_skip():
 
     assert run.calendar_days.get(month=9, day=21).in_clean, (
         '--all-calendars did not refresh a run the due check skips')
+
+
+def test_a_hidden_run_keeps_filling_exactly_as_a_hidden_a_z_run_does():
+    """CONSISTENCY WITH THE OTHER TYPES, which is what settled this rather than preference.
+
+    `pending_slots` -- the detection every other challenge type goes through -- filters only
+    `challenge__is_complete=False, is_completed=False` and says nothing about `is_deleted`. So a hidden
+    A-Z run has always kept completing its squares. Hiding in this feature means "not shown", not
+    "frozen": `hide`'s own docstring is explicit that nothing is destroyed and `start` brings the run
+    back.
+
+    THE CALENDAR WAS THE ODD ONE OUT, and the damage was invisible for the other two types: a hidden
+    UNFINISHED run resumes on Start, and a hidden FINISHED one has nothing left to fill. A finished
+    CALENDAR run does have something left -- the view it did not complete on -- and freezing it removed
+    the only path to that view's ultimate title, permanently, because `start` resumes hidden unfinished
+    runs only.
+    """
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    run = _calendar_run(profile)
+    run.is_complete = True
+    run.completed_at = timezone.now()
+    run.completed_view = CALENDAR_VIEW_CLEAN
+    run.save(update_fields=['is_complete', 'completed_at', 'completed_view'])
+
+    svc.hide(run, profile)
+    run.refresh_from_db()
+    assert run.is_deleted, 'precondition: a finished run is still hideable, as it always has been'
+
+    # The hunter keeps playing. Their hidden run must keep filling toward the other view's ultimate.
+    _platted(profile, _utc(2019, 10, 31))
+    profile.total_plats = 1
+    profile.save(update_fields=['total_plats'])
+
+    assert run in calendar_fill.runs_due_for_sweep(), 'a hidden run stopped being swept'
+    assert calendar_fill.refresh_for_profile(profile) == 1, 'the hook skipped a hidden run'
+    assert run.calendar_days.get(month=10, day=31).in_all, (
+        'a hidden run stopped filling, which removes the only path to its other view\'s ultimate')
+
+
+def test_hiding_a_finished_run_still_takes_it_off_the_public_board():
+    """THE CAPABILITY THAT WAS NEARLY TRADED AWAY. Excluding finished runs from hiding would have fixed
+    the freeze above by removing a hunter's only way to take a finished run off the Hall of Fame --
+    which uses `visible()` -- and out of their own history. This pins that the fix did not cost it."""
+    from challenges.models import Challenge
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    run = _calendar_run(profile)
+    run.is_complete = True
+    run.completed_at = timezone.now()
+    run.completed_view = CALENDAR_VIEW_CLEAN
+    run.save(update_fields=['is_complete', 'completed_at', 'completed_view'])
+
+    assert Challenge.objects.visible().filter(pk=run.pk).exists()
+
+    svc.hide(run, profile)
+
+    assert not Challenge.objects.visible().filter(pk=run.pk).exists(), (
+        'a finished run could no longer be taken off the public board')
