@@ -1,7 +1,7 @@
 """`/community/challenges/<id>/day/<month>/<day>/` -- one Calendar square, opened.
 
-A FRAGMENT ENDPOINT, following `JobContractsResultsView`: it answers with the rendered partial and the
-board injects it. So these tests read markup rather than JSON, and the gating assertions are about
+A FRAGMENT ENDPOINT, following `JobContractsView.contracts_results`: it answers with the rendered
+partial and the caller injects it. So these tests read markup rather than JSON, and the gating assertions are about
 STATUS CODES, which is where this endpoint's risk actually lives -- it is the first per-user-data read
 this app serves to an anonymous caller.
 """
@@ -13,7 +13,7 @@ from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR
+from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CalendarDay
 from challenges.services import calendar_fill
 from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
 from django.utils import timezone
@@ -120,11 +120,19 @@ def test_a_hidden_run_answers_nobody_but_its_owner():
 
 
 def test_a_run_of_another_type_has_no_squares_to_open():
-    """THE TYPE IS PART OF THE GATE, not an assumption. An A-Z run has `ChallengeSlot` rows and no
-    `CalendarDay` rows, so without the `challenge_type` filter this would fall through to the square
-    lookup and 404 anyway -- by accident, and only while that stays true. Asked explicitly."""
+    """THE TYPE GATE, ISOLATED. The obvious spelling of this test -- make an A-Z run, expect a 404 -- is
+    VACUOUS and its first version said so without noticing: an A-Z run has no `CalendarDay` rows, so the
+    square lookup 404s whether or not `challenge_type=CHALLENGE_TYPE_CALENDAR` is in the queryset.
+    Deleting the gate left it green.
+
+    SO THE A-Z RUN IS GIVEN A SQUARE. Writing the row directly puts the run in a state the service
+    cannot produce, which is the point: it removes the accidental 404 so the only thing left that can
+    refuse the request is the type filter."""
     run = _run(challenge_type=CHALLENGE_TYPE_AZ)
-    assert Client().get(_url(run, 3, 3)).status_code == 404
+    CalendarDay.objects.create(challenge=run, month=3, day=3)
+
+    assert Client().get(_url(run, 3, 3)).status_code == 404, (
+        'the type gate is gone: an A-Z run answered for a calendar square')
 
 
 @pytest.mark.parametrize('month,day', [(2, 29), (4, 31), (13, 1), (6, 0)])
@@ -171,7 +179,10 @@ def test_the_squares_tally_counts_the_rows_it_rendered():
 
     assert square.plat_count == 3, 'the stored column agrees on a fresh fill'
     assert 'pp-tally">3</span>' in body
-    assert body.count('pp-cday__row') == 3, 'and the list under it is the same length'
+    # COUNTED ON `__year`, ONE PER ROW. `pp-cday__row` is a SUBSTRING of `pp-cday__row--out`, so a
+    # flagged row counts twice -- the arithmetic happens to work on a clean-only fixture and would be
+    # silently wrong on the first test that mixes lenses.
+    assert body.count('pp-cday__year') == 3, 'and the list under it is the same length'
 
 
 def test_a_stale_stored_count_cannot_reach_the_fragment():
@@ -200,7 +211,7 @@ def test_a_stale_stored_count_cannot_reach_the_fragment():
 
     assert 'pp-tally">1</span>' in body, 'the header must count the rows it rendered'
     assert 'pp-tally">9</span>' not in body, 'the stale stored count leaked into the fragment'
-    assert body.count('pp-cday__row') == 1
+    assert body.count('pp-cday__year') == 1
 
 
 def test_a_shovelware_platinum_is_listed_and_marked():
@@ -297,9 +308,14 @@ def test_opening_a_square_does_not_fetch_the_igdb_blob():
     with CaptureQueriesContext(connection) as ctx:
         Client().get(_url(run, 6, 6))
 
-    igdb = [q['sql'] for q in ctx.captured_queries if 'igdb' in q['sql'].lower()]
-    assert igdb, 'the cover chain is not joined at all -- the flatness test above would be vacuous'
-    assert not any('raw_response' in sql for sql in igdb)
+    # MATCHED ON THE TABLE, NOT ON "igdb". `Concept` carries columns called `igdb_genres` and
+    # `igdb_themes`, which the `__concept` join puts in the SELECT -- so the substring was satisfied with
+    # the `igdb_match` join DELETED, and the guard whose whole job is proving this test is not vacuous
+    # was itself vacuous. The service-level twin was corrected and this one, on the PUBLIC path, was not.
+    igdb = [q['sql'] for q in ctx.captured_queries if 'trophies_igdbmatch' in q['sql'].lower()]
+    assert igdb, 'the IGDB match is not joined at all -- the flatness test above would be vacuous'
+    for blob in ('raw_response', 'igdb_summary', 'igdb_storyline', 'igdb_screenshot_image_ids'):
+        assert not any(blob in sql for sql in igdb), '%s is selected on a public request path' % blob
 
 
 def test_the_response_is_not_publicly_cacheable():

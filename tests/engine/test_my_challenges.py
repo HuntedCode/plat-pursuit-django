@@ -661,8 +661,13 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     # a bucket with each other, which is why it is partitioned as two lists rather than one -- see below.
     browse = [c for c in calls if 'group=CHALLENGES_BROWSE_RATELIMIT_GROUP' in c]
     hall = [c for c in calls if 'group=HALL_OF_FAME_RATELIMIT_GROUP' in c]
+    # A FIFTH KIND, 2026-10-04: the Calendar day square. It is anonymous like the browse pages but it is
+    # not a browse page -- it runs a whale-scale trophy aggregate against the RUN OWNER's library on
+    # behalf of whoever opened their public board, so draining it must not shut the pages that merely
+    # list runs. Its own group for that reason, and the census is what noticed it had arrived.
+    day = [c for c in calls if 'group=CALENDAR_DAY_RATELIMIT_GROUP' in c]
 
-    assert len(writes) + len(reads) + len(redeems) + len(browse) + len(hall) == len(calls), \
+    assert len(writes) + len(reads) + len(redeems) + len(browse) + len(hall) + len(day) == len(calls), \
         f'a door is on an unknown bucket: {calls}'
 
     assert len(writes) >= 4, 'start, hide, assign and clear must all be rate limited'
@@ -673,6 +678,14 @@ def test_both_write_doors_share_one_rate_limit_bucket():
 
     assert len(redeems) == 2, 'both redeem doors must be rate limited'
     assert len(set(redeems)) == 1, f'the redeem doors do not share one bucket: {set(redeems)}'
+
+    # ONE DOOR, AND ANONYMOUS, so it takes the browse pages' treatment rather than the picker's:
+    # `key='ip'` because `AnonymousUser.pk` is `None` and `key='user'` would bucket the whole internet
+    # together, and `method=('GET', 'HEAD')` because `View.setup` aliases `head` to the WRAPPED `get`,
+    # so a `curl -I` loop runs the full query unmetered under `method='GET'`.
+    assert len(day) == 1, 'the day square must be rate limited'
+    assert "key='ip'" in day[0], 'an anonymous door keyed on the user buckets every caller as one'
+    assert "method=('GET', 'HEAD')" in day[0], 'a HEAD loop would run the query unmetered'
 
     # AND NO TWO KINDS MAY SHARE -- asserted on the group VALUES, which is what `django_ratelimit` keys a
     # bucket on. An earlier version compared the three decorators' SOURCE TEXT, which differs by the name of

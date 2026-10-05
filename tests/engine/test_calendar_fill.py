@@ -1049,6 +1049,113 @@ def test_the_leap_day_as_an_INPUT_resolves_to_the_square_that_holds_it():
     assert [r['on'] for r in asked_the_leap_day] == [r['on'] for r in asked_the_square]
 
 
+def test_a_new_years_platinum_in_an_eastern_zone_is_not_lost():
+    """THE DEFECT THAT FIRED EVERY YEAR WITH NO BAD DATA AT ALL, and the reason the window span is now
+    taken from the hunter's rows instead of a constant.
+
+    The years came from `range(TROPHY_EPOCH_YEAR, timezone.now().year + 1)` -- and `timezone.now()` is
+    UTC while the key is the OWNER's local day. For any UTC+X hunter the first hours of local 1 January
+    are still the previous year in UTC, so no window covered them: fourteen hours for a
+    `Pacific/Kiritimati` hunter, nine for Tokyo, one for Paris. The square filled (the fill has no such
+    bound) and the modal said "No platinums on this date".
+    """
+    profile = _hunter('Pacific/Kiritimati')
+    # 05:00 local on New Year's Day is 15:00 on 31 December in UTC, i.e. the PREVIOUS UTC year.
+    _platted(profile, dt.datetime(2026, 12, 31, 15, 0, tzinfo=dt.timezone.utc))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    square = run.calendar_days.get(month=1, day=1)
+    assert square.in_clean, 'the fill keyed it to 1 January in the owner\'s zone'
+    assert len(calendar_fill.platinums_on_day(profile, 1, 1)) == 1, (
+        'the square draws and the modal is empty -- the window span missed the local new year')
+
+
+@pytest.mark.parametrize('year', [2004, 2030])
+def test_a_platinum_outside_the_plausible_years_is_still_listed(year):
+    """NOTHING CLAMPS `earned_date_time` ON THE WAY IN, which the epoch constant's comment assumed.
+    `psn_api_service` copies the PSN payload verbatim and the stamp comes off a console clock, and the
+    admin form takes any value staff type. So a 2004 or a 2030 date is reachable -- and the fill has no
+    floor or ceiling, so it filled the square and counted the platinum while the modal could not see it.
+    A future stamp stayed invisible for years.
+
+    THE SPAN COMES FROM THE ROWS NOW, so whatever filled a square is inside it by construction.
+    """
+    profile = _hunter()
+    _platted(profile, _utc(year, 4, 4))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    assert run.calendar_days.get(month=4, day=4).in_clean
+    assert len(calendar_fill.platinums_on_day(profile, 4, 4)) == 1, (
+        'the fill counted a %d platinum the modal cannot list' % year)
+
+
+def test_the_list_agrees_with_the_square_across_two_decades():
+    """THE AGREEMENT TEST THE OTHERS COULD NOT MAKE, because they all used a two- or three-year span. Two
+    fixtures in this suite build platinums from 2000 and 2004 onward, and under the hardcoded epoch
+    four and eight of their rows respectively were dropped from the modal while counting on the board --
+    both tests compared only query counts, so both were green.
+    """
+    profile = _hunter()
+    years = list(range(2004, 2027))
+    for year in years:
+        _platted(profile, _utc(year, 4, 4))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    square = run.calendar_days.get(month=4, day=4)
+    rows = calendar_fill.platinums_on_day(profile, 4, 4)
+
+    assert square.plat_count == len(years)
+    assert len(rows) == len(years), (
+        'the modal lists %d of %d -- the span is clipping the hunter\'s history'
+        % (len(rows), len(years)))
+
+
+def test_a_key_with_no_valid_date_refuses_rather_than_matching_everything():
+    """`Q()` IS FALSY AND `.filter(Q())` IS A NO-OP, which makes the empty case the most expensive one
+    rather than the cheapest: a key that yields no window at all would have dropped the indexable
+    narrowing entirely and gone back to a post-fetch `EXTRACT` over the hunter's whole slice -- a
+    correct, empty answer at the cost this whole change exists to remove.
+
+    Reachable only by calling the service directly, since the view 404s on the square lookup first. But
+    `platinums_on_day` is the module's documented entry point and the failure is invisible: right
+    answer, catastrophic plan.
+    """
+    from django.db.models import Q
+
+    profile = _hunter()
+    _platted(profile, _utc(2019, 6, 6))
+    span = calendar_fill._earned_span(profile)
+
+    impossible = calendar_fill._day_windows([(2, 30)], dt.timezone.utc, span)
+    assert bool(impossible), 'an empty `Q` here is a filter that matches EVERYTHING'
+    assert 'pk__in' in str(impossible), 'it must be a false predicate, not a no-op'
+
+    nothing_earned = calendar_fill._day_windows([(1, 1)], dt.timezone.utc, (None, None))
+    assert bool(nothing_earned), 'a hunter with no trophies must not widen the query'
+
+
+def test_the_span_is_one_indexed_statement_and_not_a_scan():
+    """THE WINDOW SPAN COSTS A QUERY, and it is worth knowing which one. `_earned_span` asks min and max
+    over `(profile, earned, earned_date_time) WHERE earned` -- the partial index's leading prefix, so
+    Postgres takes both ends of a range scan rather than reading rows. It deliberately does NOT carry
+    the `trophy_id__in` platinum subquery: the platinum span sits inside the all-trophy span, so it is
+    still a superset for the windows, and leaving the subquery out is what keeps it an index read."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 6, 6))
+
+    with CaptureQueriesContext(connection) as ctx:
+        calendar_fill._earned_span(profile)
+
+    assert len(ctx.captured_queries) == 1
+    sql = ctx.captured_queries[0]['sql']
+    assert 'MIN' in sql.upper() and 'MAX' in sql.upper()
+    assert 'trophy_type' not in sql, (
+        'the span is carrying the platinum subquery, which is what makes it a scan')
+
+
 def test_the_square_narrows_by_an_indexable_range_before_the_month_day_test():
     """THE ONE THING THAT KEEPS THIS OFF A FULL HISTORY SCAN, and it is invisible to a query COUNT --
     the cost is inside one statement, so every flatness test in this file passes either way.
@@ -1074,9 +1181,12 @@ def test_the_square_narrows_by_an_indexable_range_before_the_month_day_test():
     sql = [q['sql'] for q in ctx.captured_queries if 'earned_date_time' in q['sql']]
     assert sql, 'no statement touched `earned_date_time`'
     windows = len(re.findall(r'earned_date_time"? >=', sql[-1]))
-    assert windows >= 15, (
-        'only %d range predicate(s): the indexable window is gone and this is a history scan again'
-        % windows)
+    # EXACTLY FOUR, FOR THIS FIXTURE. The span is the hunter's own data -- one platinum in 2019 -- so
+    # the years are 2018-2020, giving three windows for (2, 28) and one more for (2, 29) in the single
+    # leap year among them. An earlier threshold of `>= 15` was slack enough to survive losing a third
+    # of the windows, and it was written against the hardcoded 2008 epoch that the span replaced.
+    assert windows == 4, (
+        'expected 4 range predicates for a 2019-only span, got %d -- the window math moved' % windows)
     assert 'EXTRACT' in sql[-1].upper(), (
         'the exact month/day test is gone -- the windows are a superset and cannot decide on their own')
 

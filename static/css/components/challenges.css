@@ -3522,6 +3522,108 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cal__num { line-height: 1; }
 
+
+/* ── one square, opened: the day fragment ─────────────────────────────────────────────────────────────
+   `templates/challenges/partials/_calendar_day.html`, fetched when a square is clicked and dropped into
+   the board's sheet. The sheet owns the dialog chrome, so this styles CONTENTS only.
+
+   NO SURFACE OF ITS OWN. It lands inside a sheet that already has one, and a card inside a card is the
+   stacking this project's "content does not sit bare" rule is usually invoked against -- the rule asks
+   for a surface under content, not for one per nesting level. The ROWS get the surface instead, which
+   is what makes a list of games read as a list rather than as text.
+
+   SMALL ART, WHICH IS THE WHOLE REASON A DAY IS A MODAL. The board carries no cover art at all: 365
+   cells at ~20px is unreadable, and a Hall of Fame page would be thousands of images. A day holds a
+   handful, lazily, only once somebody asks -- so 38px is deliberate restraint rather than a limitation.
+   ── */
+.pp-cday { display: flex; flex-direction: column; gap: 12px; }
+
+.pp-cday__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--pp-border);
+}
+.pp-cday__date {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--pp-text);
+    line-height: 1.2;
+}
+@media (min-width: 768px) { .pp-cday__date { font-size: 1.25rem; } }
+.pp-cday__tally { font-size: 0.8125rem; color: var(--pp-text-dim); white-space: nowrap; }
+
+.pp-cday__list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
+
+/* THE YEAR LEADS, because a square has no year of its own -- "3 March" means every 3 March in the
+   hunter's history, so the year is the one thing a row carries that the heading cannot. Fixed column so
+   the years line up as a column of figures rather than drifting with each title's length. */
+.pp-cday__row {
+    display: grid;
+    grid-template-columns: 2.75rem 38px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: var(--pp-radius-md);
+    border: 1px solid var(--pp-border);
+    background: var(--pp-bg-1);
+}
+.pp-cday__year {
+    font-size: 0.875rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-primary);
+    line-height: 1;
+}
+.pp-cday__art {
+    display: block;
+    width: 38px;
+    aspect-ratio: 3 / 4;
+    border-radius: var(--pp-radius-sm);
+    overflow: hidden;
+    background: var(--pp-bg-2);
+}
+.pp-cday__name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* ONE LINE WITH AN ELLIPSIS. A 1fr column at 375px is about 150px and game titles run long, so the
+   alternative to truncating is a row whose height depends on its title. `min-width: 0` on the parent is
+   what lets a grid track actually shrink -- without it the track takes the text's min-content width and
+   the ellipsis never engages. */
+.pp-cday__title {
+    font-size: 0.8125rem;
+    color: var(--pp-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* 12px, NOT SMALLER: the file-wide type guard refuses anything under it, which is the right answer here
+   rather than an exception to argue for -- this label is the only thing explaining why a real platinum
+   does not count toward the square. */
+.pp-cday__flag {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+}
+
+/* A FLAGGED ROW IS MARKED BY ITS BORDER AND ITS LABEL, NOT BY OPACITY. Dimming the row would take the
+   title's contrast down with it -- an opacity on a container defeats a measured ratio, and the label
+   that explains the exclusion is the one thing in the row that must stay readable. */
+.pp-cday__row--out { border-style: dashed; background: var(--pp-bg-0); }
+
+/* ONLY RENDERED WHERE IT DIFFERS from the square's own date, which is 28 February and nowhere else:
+   29 February folds onto that square, so its rows are the only ones whose day is not the heading's. On
+   every other square this would print the panel title once per row. */
+.pp-cday__on {
+    font-size: 12px;
+    color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+}
+
+.pp-cday__empty { font-size: 0.8125rem; color: var(--pp-text-dim); margin: 0; }
+
 /* ── the month's figures, beside its grid ────────────────────────────────────────────────────────────
    Owner, 2026-10-04: "could we potentially float something to the right side that helps the user in some
    way? Some cool monthly stats or something? Just feels like the page is a bit empty and we have room to

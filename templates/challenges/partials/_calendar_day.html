@@ -1,16 +1,17 @@
-{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
+{% load humanize %}{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
 
-A FRAGMENT, fetched on click and injected into the board's sheet. It renders no dialog chrome of its own
--- the sheet owns that -- so this file is only the contents, and it has to be safe to drop into a
-container twice if a reader clicks two squares quickly.
+A FRAGMENT, fetched on click. The sheet owns the dialog chrome, so this file is contents only, and the
+host REPLACES what it holds rather than appending -- which is what makes the fixed `id` below safe. An
+earlier version of this comment claimed the fragment was "safe to drop into a container twice", which it
+is not: two copies would give two elements with one id, and `aria-labelledby` resolves to the first, so
+the dialog would announce the square the reader had just left.
 
 THE YEAR IS THE ORGANISING ELEMENT (owner, 2026-10-04: a day shows "platinums earned and the date,
 mainly by year"). A square has no year by design -- "3 March" means every 3 March in the hunter's
-history -- so the year is the one thing a row needs that the heading cannot supply. It leads each row for
-that reason rather than trailing it as a detail.
+history -- so the year is the one thing a row needs that the heading cannot supply.
 
-COVER ART, SMALL. The BOARD deliberately carries none: 365 cells at ~20px is unreadable art and, across a
-Hall of Fame page, thousands of images. A day holds a handful, lazily, only once somebody asks for it --
+COVER ART, SMALL. The BOARD deliberately carries none: 365 cells at ~20px is unreadable art and, across
+a Hall of Fame page, thousands of images. A day holds a handful, lazily, only once somebody asks for it,
 which is the whole argument for a modal rather than a richer square.
 
 THIRD PERSON, because a run page is public. A reader is usually looking at somebody else's calendar, so
@@ -20,11 +21,16 @@ nothing here says "you".
 
     <div class="pp-cday__head">
         <h2 class="pp-cday__date" id="cal-day-title">{{ day_label }}</h2>
-        {% if square.in_clean %}
-        {% comment %}`counting`, NOT `square.plat_count`: the figure counts the rows BELOW it rather than
-        reading the board's stored column, so this response can never contradict itself. The view's
-        comment carries the reasoning -- the stored count can go stale without the sweep noticing.
-        {% endcomment %}
+        {% if counting %}
+        {% comment %}GATED ON THE FIGURE, NOT ON `square.in_clean`, and that is a correctness fix. The
+        gate used to be the stored boolean while the number was computed live, so the two came from
+        different eras: fills are monotone, so a square whose only game was reclassified overnight keeps
+        `in_clean` and drops to zero counting platinums -- and the header read "0 platinums" directly
+        above a rendered row. Gating on `counting` cannot produce that.
+
+        IT COUNTS THE PLATINUMS THAT COUNT, which is not the same as the rows below it: a mixed square
+        lists a flagged platinum too, labelled. The board's square counts the clean ones, so this figure
+        is the square's, and the list says plainly which row is not in it.{% endcomment %}
         <p class="pp-cday__tally">
             <span class="pp-tally">{{ counting }}</span>
             platinum{{ counting|pluralize }}
@@ -42,15 +48,20 @@ nothing here says "you".
             <span class="pp-cday__year">{{ plat.on|date:"Y" }}</span>
             <span class="pp-cday__art">
                 {% comment %}`display_image_url` IS THE WHOLE CHAIN and must never be re-spelled inline:
-                trusted IGDB cover, then the concept's PSN icon, then the game's own art. `object-top`
-                because PSN fallback art is wider than 3:4 and crops -- anchoring to the top keeps the
-                logo that sits there. `loading="lazy"` since a busy day can hold a dozen.{% endcomment %}
+                trusted IGDB cover, then the concept's PSN icon, then the game's own art.
+
+                THE FIT BRANCHES ON `has_cover_art`, per the design system: real cover art gets
+                `object-cover object-top` -- `object-top` because PSN fallback art is wider than 3:4 and
+                anchoring to the top keeps the logo that sits there -- while the generic PSN title icon
+                is a square app icon that `object-cover` would crop to a portrait box. It gets
+                `object-contain` and room instead. `has_cover_art` reads only fields this queryset
+                already selects, so the branch costs nothing.{% endcomment %}
                 <img src="{{ plat.game.display_image_url }}" alt=""
                      loading="lazy" decoding="async"
-                     class="w-full h-full object-cover object-top">
+                     class="w-full h-full {% if plat.game.has_cover_art %}object-cover object-top{% else %}object-contain p-1{% endif %}">
             </span>
             <span class="pp-cday__name">
-                {{ plat.game.title_name }}
+                <span class="pp-cday__title">{{ plat.game.title_name }}</span>
                 {% if not plat.clean %}
                 {% comment %}THE ONE PLACE A HUNTER CAN LEARN WHY A SQUARE THEY REMEMBER EARNING IS OPEN.
                 The board draws the shovelware-free lens, so this platinum is real and does not count --
@@ -58,20 +69,22 @@ nothing here says "you".
                 looking like a mistake.{% endcomment %}
                 <span class="pp-cday__flag">not counted &middot; shovelware</span>
                 {% endif %}
+                {% if plat.on.day != square.day %}
+                {% comment %}ONLY WHERE THE ROW'S DAY IS NOT THE HEADING'S, which is 28 February and
+                nowhere else: 29 February folds onto that square, so those are the only rows whose date
+                differs from the panel title. Printed unconditionally it restated the heading once per
+                row on all 365 squares, and omitted it would hide the one distinction that matters on
+                the one square where the fold is visible.{% endcomment %}
+                <span class="pp-cday__on">{{ plat.on|date:"j F" }}</span>
+                {% endif %}
             </span>
-            {% comment %}A GAME CAN APPEAR TWICE, and it is not a render fault: a `Game` carrying two
-            `trophy_type='platinum'` rows is a catalogue data fault, and both the stored count and this
-            list report it the same way -- so the layers agree and the page looks wrong. Deduping HERE
-            would make the list disagree with the tally above it, so if this ever shows up the fix
-            belongs in the catalogue, not in the template.{% endcomment %}
-            <span class="pp-cday__on">{{ plat.on|date:"j M" }}</span>
         </li>
         {% endfor %}
     </ul>
     {% else %}
-    {% comment %}REACHABLE, even though the board makes only `in_all` squares clickable: a game can be
-    reclassified between the fill and the click, and fills are monotone so the square keeps drawing. The
-    line says what is true rather than pretending the square is empty.{% endcomment %}
+    {% comment %}REACHABLE even on a square that draws: fills are monotone, so a game reclassified as
+    shovelware after the fill leaves the square standing with nothing live behind it. The line says what
+    is true rather than pretending the square is empty.{% endcomment %}
     <p class="pp-cday__empty">No platinums on this date.</p>
     {% endif %}
 </div>

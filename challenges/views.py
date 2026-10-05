@@ -100,9 +100,13 @@ CHALLENGE_READ_RATELIMIT_GROUP = 'challenges:read'
 #: `CHALLENGE_READ_RATELIMIT_GROUP`, which is a deliberate choice parked for a `refactor/` branch rather than
 #: an accident of qualname derivation. An earlier version of this note called them "that exact sharing",
 #: which would have pointed a reader at a precedent that could not teach them this hazard.)
-#: THE DAY SQUARE'S OWN BUCKET. It is the first per-USER-DATA read this app serves to an ANONYMOUS
-#: caller: the browse pages above are catalogue-shaped, the picker doors sit behind a login, and this one
-#: runs a trophy query against the RUN OWNER's library on behalf of whoever opened their public board.
+#: THE DAY SQUARE'S OWN BUCKET. It is the first anonymous endpoint that runs a WHALE-SCALE TROPHY QUERY
+#: against a third party's library -- which is the narrow claim, and worth getting right because the
+#: reason for the bucket rests on it. (This said "the first per-USER-DATA read this app serves to an
+#: anonymous caller", which is plainly false: `ChallengeDetailView` is public and renders the owner's
+#: 365 squares with no limiter at all, and `/hunters/<psn_username>/` is a public per-hunter trophy
+#: page.) The browse pages above are catalogue-shaped and the picker doors sit behind a login; this one
+#: is a per-hunter aggregate served to whoever opened somebody else's board.
 #: So it gets the anonymous treatment (`key='ip'`, `method=('GET', 'HEAD')`, an explicit group -- see the
 #: three notes above, which apply here unchanged) and a budget of its own rather than sharing the browse
 #: pages'. 60/m is well above a reader opening squares and well below a loop walking all 365.
@@ -1245,10 +1249,15 @@ class _ChallengeBrowseView(HtmxListMixin, ListView):
 class CalendarDayView(View):
     """One square of a Plat Calendar: the platinums its owner earned on that calendar date.
 
-    A FRAGMENT, NOT JSON, following `JobContractsResultsView`: the response is the rendered partial and
-    the client injects it. Nothing here needs client-side templating, and the cover chain is a template
-    concern already solved by `display_image_url` -- handing JSON to the page would mean re-deriving it
-    in JavaScript, which is how the two drift.
+    A FRAGMENT, NOT JSON, following `JobContractsView.contracts_results` in `career_views` (which an
+    earlier version of this docstring cited as "JobContractsResultsView", a name that exists nowhere --
+    it conflated `JobContractsView` with `ContractsResultsView`). The response is the rendered partial
+    and the caller injects it. Nothing here needs client-side templating, and the cover chain is a
+    template concern already solved by `display_image_url` -- handing JSON to the page would mean
+    re-deriving it in JavaScript, which is how the two drift.
+
+    NOTE THIS IMPROVES ON ITS PRECEDENT in one place: `career_views` still carries `method='GET'` on its
+    limiter, which leaves a HEAD loop unmetered. See the group constant above.
 
     PUBLIC, GATED BY `readable_by`, which is the owner's call (2026-10-04: public "if the challenge is
     not hidden"). That predicate already means exactly "every visible run plus your own hidden ones" and
@@ -1260,13 +1269,21 @@ class CalendarDayView(View):
 
     `Http404` IS SAFE ON THIS ONE, unlike the write doors. `_ChallengeActionView` returns `None` instead
     of raising because this project installs a GET-only `handler404` and an `Http404` out of a POST comes
-    back as a 405 -- this is a GET, so the handler applies. The client checks `response.ok` before it
-    injects anything, so the 404 page's body never reaches the sheet.
+    back as a 405 -- this is a GET, so the handler applies and answers with the 404 page.
 
-    THE SQUARE IS FETCHED, NOT JUST VALIDATED, and that is worth one small indexed read. It confirms the
-    day belongs to THIS run rather than trusting two path integers, and it carries `in_clean` and
-    `plat_count` -- so the fragment's header is the board's own figure rather than a second count of the
-    same thing computed a different way.
+    WHICH MAKES ONE DEMAND ON THE CALLER THAT DOES NOT EXIST YET: whatever fetches this must check
+    `response.ok` before injecting, or a 404 page lands inside the sheet. Stated as a requirement rather
+    than as a fact -- an earlier version of this docstring asserted "the client checks `response.ok`"
+    while there was no client at all.
+
+    THE SQUARE IS FETCHED, NOT JUST VALIDATED, and that is worth one small indexed read: it confirms the
+    day belongs to THIS run rather than trusting two path integers, and the fragment needs its `day` to
+    decide which rows carry a date of their own (only 28 February has any, through the fold).
+
+    ITS `plat_count` IS NOT WHAT THE HEADER PRINTS, and this docstring said the opposite for a commit --
+    "the fragment's header is the board's own figure" -- while the comment in `get` spent nine lines
+    arguing that printing the stored column is wrong, and a test pinned the live count. The stored
+    column can go stale with nothing to correct it; see `get`.
     """
 
     def get(self, request, challenge_id, month, day):
@@ -1276,7 +1293,13 @@ class CalendarDayView(View):
         challenge = (Challenge.objects
                      .readable_by(viewer)
                      .filter(pk=challenge_id, challenge_type=CHALLENGE_TYPE_CALENDAR)
-                     .select_related('profile')
+                     # `profile__user`, NOT just `profile`: `platinums_on_day` resolves the day in the
+                     # OWNER's timezone and `_hunter_timezone` reads `profile.user.user_timezone`, which
+                     # is a forward `OneToOneField` -- so selecting only the profile paid an extra
+                     # round-trip for the `CustomUser` row on every request. Invisible to the flatness
+                     # tests, which compare two fixtures against each other and so cannot see a
+                     # constant extra query.
+                     .select_related('profile__user')
                      .first())
         if challenge is None:
             raise Http404('no readable Calendar run with that id')

@@ -48,7 +48,7 @@ import logging
 import zoneinfo
 from collections import namedtuple
 
-from django.db.models import Case, Count, DateField, F, Min, Q, Value, When
+from django.db.models import Case, Count, DateField, F, Max, Min, Q, Value, When
 from django.db.models.functions import ExtractDay, ExtractMonth, TruncDate
 from django.utils import timezone
 
@@ -105,39 +105,79 @@ def _fold(month, day):
     return LEAP_DAY_FOLDS_TO if (month, day) == LEAP_DAY else (month, day)
 
 
-#: PSN TROPHIES BEGAN IN JULY 2008, so no `earned_date_time` can predate it and the windows below have
-#: somewhere to start. A constant rather than a `Min()` lookup because the alternative is a second query
-#: on a request path to learn something that cannot change, and being a decade too generous costs a few
-#: unused index range scans.
-TROPHY_EPOCH_YEAR = 2008
+def _earned_span(profile):
+    """`(first, last)` instants this hunter earned ANY trophy, or `(None, None)`.
+
+    ONE INDEXED STATEMENT. `earnedtrophy_timeline_idx` is `(profile, earned, earned_date_time)
+    WHERE earned`, so `profile = X AND earned` is the index's leading prefix and Postgres takes the
+    min and the max as two ends of a range scan rather than reading rows.
+
+    EVERY TROPHY, NOT JUST PLATINUMS, and deliberately: the platinum span is inside this one, so it is
+    still a superset for `_day_windows`' purposes, and asking it without the `trophy_id__in` subquery is
+    what keeps it an index read instead of a scan.
+    """
+    bounds = (EarnedTrophy.objects
+              .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+              .aggregate(first=Min('earned_date_time'), last=Max('earned_date_time')))
+    return bounds['first'], bounds['last']
 
 
-def _day_windows(keys, tz):
-    """A `Q` of `earned_date_time` ranges covering each key's local day in every year PSN has existed.
+def _day_windows(keys, tz, span):
+    """A `Q` of `earned_date_time` ranges covering each key's local day across `span`'s years.
 
     THE WHOLE POINT IS THAT THIS IS INDEXABLE. `earnedtrophy_timeline_idx` is
     `(profile, earned, earned_date_time) WHERE earned`, so a range on `earned_date_time` is a scan of
     that index; an `EXTRACT(... AT TIME ZONE ...)` on the same column is not, and cannot be made so.
 
-    A SUPERSET, NOT A SUBSTITUTE. The caller still applies the exact month/day test afterwards, so these
-    windows only have to CONTAIN the day. Each one is the local day plus a day either side, which
-    absorbs every UTC offset and any DST transition at midnight without reasoning about either -- an
-    over-wide window costs a few rows to filter, an under-wide one silently loses a platinum.
+    A SUPERSET, NOT A SUBSTITUTE. The caller still applies the exact month/day test afterwards, so a
+    window only has to CONTAIN its day. Each is the local day plus a day either side -- and the reason
+    that is correct is NOT that 24 hours absorbs a 14-hour offset, which is how an earlier version of
+    this comment put it. It is that both bounds are computed IN THE KEY'S OWN ZONE and `timedelta`
+    arithmetic on an aware datetime is wall-clock, so each window is literally "local days d-1 .. d+1"
+    and tracks offset changes for free. Verified against all 598 zones in the tz database for every
+    (month, day) from 2008 to 2026: no violations, with the tightest margin at `Pacific/Apia`'s 2011
+    date-line skip, which deleted 30 December outright.
+
+    THE YEARS COME FROM THE HUNTER'S OWN DATA, which is the fix for a silent defect rather than a tidy-
+    up. This used to run `range(TROPHY_EPOCH_YEAR, timezone.now().year + 1)` with a hardcoded 2008 and
+    the UTC year, and both ends leaked:
+
+      - `timezone.now().year` is the UTC year while the key is a LOCAL day, so for any UTC+X hunter the
+        first hours of local 1 January fall outside every window. That fired every year with no bad data
+        at all -- fourteen hours for a `Pacific/Kiritimati` hunter -- and the square filled while the
+        modal said "No platinums on this date".
+      - nothing clamps `earned_date_time` on the way in. Sync copies the PSN payload verbatim and the
+        admin form takes any value, so a pre-2008 stamp (a shifted console clock) or a future one filled
+        the square, counted into `plat_count`, and was invisible here. A future stamp stayed invisible
+        for years. `_days_from_platinums` has no floor or ceiling, which is what made the asymmetry a
+        disagreement rather than a shared blind spot.
+
+    A span taken from the rows themselves cannot have either, because whatever filled the square is by
+    definition inside it. `± 1 year` is ordinary belt and braces around the local/UTC boundary.
+
+    AN EMPTY RESULT MATCHES NOTHING, AND THAT MATTERS MORE THAN IT LOOKS. `Q()` is falsy and
+    `.filter(Q())` is a NO-OP, so returning one would silently restore the full-history scan this
+    function exists to prevent -- a correct, empty answer at catastrophic cost. `Q(pk__in=[])` is a
+    false predicate instead.
 
     A LEAP DAY ONLY EXISTS IN A LEAP YEAR, which is what the `ValueError` is: `(2, 29)` is a real key
-    here (it folds onto the 28th and the caller passes both), and three years in four have no such date
-    to build a window around.
+    here (it folds onto the 28th and the caller passes both), and three years in four have no such date.
     """
-    span = Q()
-    for year in range(TROPHY_EPOCH_YEAR, timezone.now().year + 1):
-        for month, day in keys:
-            try:
-                local = dt.datetime(year, month, day, tzinfo=tz)
-            except ValueError:
-                continue
-            span |= Q(earned_date_time__gte=local - dt.timedelta(days=1),
-                      earned_date_time__lt=local + dt.timedelta(days=2))
-    return span
+    first, last = span
+    windows = Q()
+    built = False
+    if first is not None and last is not None:
+        # THE SPAN'S YEARS IN THE KEY'S ZONE, not in UTC -- see above.
+        for year in range(first.astimezone(tz).year - 1, last.astimezone(tz).year + 2):
+            for month, day in keys:
+                try:
+                    local = dt.datetime(year, month, day, tzinfo=tz)
+                except ValueError:
+                    continue
+                windows |= Q(earned_date_time__gte=local - dt.timedelta(days=1),
+                             earned_date_time__lt=local + dt.timedelta(days=2))
+                built = True
+    return windows if built else Q(pk__in=[])
 
 
 def _platinum_trophies(profile, *, clean_only=False):
@@ -270,8 +310,10 @@ def platinums_on_day(profile, month, day):
     """Every platinum this hunter earned on one calendar square, newest first.
 
     `[{'game', 'on', 'clean'}]` -- the `Game` (for its name and its cover), the resolved local DATE, and
-    whether it counts on the board. At most a few dozen rows: this is one (month, day) out of 365, not a
-    history scan, and nothing here is unbounded by the hunter's platinums on one date.
+    whether it counts on the board. A handful of rows for most hunters and several hundred on a stacked
+    28 February for a serial platter, since the fold gives that square two days and twenty years of
+    history compound onto it. (This said "at most a few dozen" while the module docstring said "several
+    hundred" -- one return value, two numbers, in one commit.)
 
     THE PREDICATE IS `_platinum_trophies`, NOT A SECOND SPELLING OF IT, which is the whole reason this
     function is in this module. The module docstring states the failure it avoids: a day modal that
@@ -289,8 +331,12 @@ def platinums_on_day(profile, month, day):
     two. That is exactly the "glance figure contradicts the list the hunter just opened" failure the
     count is live to prevent, reached from the query side instead.
 
-    ORDERED NEWEST FIRST, on the instant rather than the resolved date, so two platinums on the same
-    local day keep the order they were earned in rather than an arbitrary one.
+    ORDERED NEWEST FIRST ON THE INSTANT, not on the resolved date, so a square's rows read newest to
+    oldest even where several share a local day. `-id` breaks a tie DETERMINISTICALLY and nothing more:
+    PSN stamps to the second and back-to-back stack platinums collide, and without a second key those
+    rows come back in whatever order the plan emits, which changes between renders. It is not "the order
+    they were earned in", which an earlier version of this claimed -- `id` is `EarnedTrophy` insertion
+    order from sync and has no relationship to earn order.
     """
     tz = _hunter_timezone(profile)
 
@@ -333,7 +379,7 @@ def platinums_on_day(profile, month, day):
         # midnight without this function having to reason about either. Getting the window slightly
         # wrong can only cost a few extra rows to filter; getting it slightly SHORT would silently drop
         # a platinum, so it is not a place to be clever.
-        .filter(_day_windows(keys, tz))
+        .filter(_day_windows(keys, tz, _earned_span(profile)))
         .annotate(m=ExtractMonth('earned_date_time', tzinfo=tz),
                   d=ExtractDay('earned_date_time', tzinfo=tz),
                   on=TruncDate('earned_date_time', tzinfo=tz))
@@ -346,10 +392,13 @@ def platinums_on_day(profile, month, day):
         .select_related('trophy__game__concept__igdb_match')
         # THE HEAVY COLUMNS, and `raw_response` is only the famous one. It is the ~30 KB IGDB blob that
         # triggered the May 2026 web-server OOM, and this project requires it deferred beside every
-        # `igdb_match` join -- but the same join hydrates about nine more JSON columns that no cover and
-        # no name ever reads, several of them multi-KB. Deferred rather than whitelisted with `.only()`
-        # because the failure modes are not symmetric: a column missed here is merely not deferred,
-        # while a column missed by `.only()` is a query per row on a public path.
+        # `igdb_match` join. The join chain hydrates seventeen more columns that no cover and no name
+        # ever reads -- fifteen `JSONField`s plus `igdb_summary` and `igdb_storyline`, which are
+        # `TextField`s -- spread across `IGDBMatch`, `Concept` AND `Game`, not all on the match as an
+        # earlier version of this said. Several are multi-KB each.
+        # DEFERRED RATHER THAN WHITELISTED WITH `.only()`, because the failure modes are not symmetric:
+        # a column missed here is merely not deferred, while a column missed by `.only()` is a query per
+        # row on a public path.
         .defer('trophy__game__concept__igdb_match__raw_response',
                'trophy__game__concept__igdb_match__igdb_summary',
                'trophy__game__concept__igdb_match__igdb_storyline',
@@ -368,9 +417,10 @@ def platinums_on_day(profile, month, day):
                'trophy__game__concept__igdb_themes',
                'trophy__game__defined_trophies',
                'trophy__game__metadata')
-        # `-id` AS THE TIEBREAK. PSN stamps to the second and back-to-back stack platinums collide, so
-        # the instant alone leaves those rows in whatever order the plan happens to emit -- which is the
-        # arbitrary order the docstring above disclaims.
+        # `-id` AS THE TIEBREAK, for determinism only. PSN stamps to the second and back-to-back stack
+        # platinums collide, so the instant alone leaves those rows in whatever order the plan emits --
+        # which changes between renders. `id` is sync insertion order and says nothing about which
+        # platinum came first, so this makes the order STABLE rather than meaningful.
         .order_by('-earned_date_time', '-id')
     )
 
