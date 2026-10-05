@@ -3240,7 +3240,31 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    this and is why no raw circumference survives here. The first version hardcoded 2*pi*19 and its
    twelfth (119.38 / 9.948) and overshot a full turn by 0.0195; normalised, a segment is exactly
    100 / 12 = 8.3333, drawn as a 6-long dash with a 2.3333 gap. */
-.pp-cal__rim-track { stroke-dasharray: 6 2.3333; opacity: 0.22; }
+/* THE RIM SHARES THE GAUGE'S NOTCH, which is the fix for a real occlusion rather than a tidy-up. The
+   outer arc is `dasharray: 72 100` rotated 140.4deg so that a 28-unit notch opens at the bottom for the
+   counter plate; the rim never got that treatment and tiled twelve 30-degree slots around the FULL
+   circle, so the plate covered whichever months sat at the bottom. Measured, that was May (120-150 from
+   twelve o'clock), June (150-180), July (180-210) and August (210-240) -- four of twelve, and the owner
+   noticed June.
+
+   TWELVE SLOTS OF 6 UNITS IN THE SAME 72, at the same 140.4deg origin: January at the lower left,
+   sweeping clockwise over the top to December at the lower right. That is also the direction the gauge
+   fills, so the two rings now read as one object rather than two clocks with different starts.
+
+   THE TRACK TILES THE WHOLE PATH AND THAT IS FINE. A repeating dash pattern cannot be told to stop at
+   unit 72, and it does not need to be: 100/6 is 16.67 periods, so the twelve full slots land exactly on
+   the visible arc and the ragged remainder (units 96-100, rendering at 216-230.4 degrees) falls INSIDE
+   the notch, behind an opaque plate. The seam is hidden by the same thing that caused the problem.
+
+   4.6 / 1.4 RATHER THAN 6 / 2.3333. The slot is smaller now (6 units against 8.3333), so the old gap
+   would have been a third of it; this keeps the dash-to-gap ratio close to what the full-circle version
+   read as. */
+.pp-cal__rim-track {
+    stroke-dasharray: 4.6 1.4;
+    transform: rotate(140.4deg);
+    transform-origin: 50% 50%;
+    opacity: 0.22;
+}
 
 /* THE COMPLETION GAUGE, PORTED FROM `.pp-phero__ring` rather than invented -- the profile hero's level
    ring, which wears the level on a plate in a notch at its bottom. The owner asked for exactly that
@@ -3296,12 +3320,12 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     stroke-dashoffset: calc((72 - var(--pct, 0) * 0.72) * 1px);
 }
 .pp-cal__rim-seg {
-    stroke-dasharray: 6 94;
-    /* A `<circle>` path starts at 3 o'clock and runs clockwise, so -90deg puts the START of segment zero
-       at 12 o'clock and each month steps 30deg from there. Stated as the start rather than "lands at the
-       top", which the earlier comment claimed: a segment spans its slot, so January's mark sits in the
-       slot beginning at twelve rather than centred on it. */
-    transform: rotate(calc(-90deg + var(--seg) * 30deg));
+    stroke-dasharray: 4.6 95.4;
+    /* ONE SLOT OF THE TRACK ABOVE, so the two must stay in step: same 140.4deg origin, same 6-unit
+       period, same 4.6 dash. A month steps 6 units = 21.6deg, not the 30deg of the full-circle version.
+       Stated as the slot's START rather than where the mark "lands": a segment spans its slot, so
+       January's mark sits in the slot beginning at the lower left rather than centred on it. */
+    transform: rotate(calc(140.4deg + var(--seg) * 21.6deg));
     transform-origin: 50% 50%;
     /* NO `transform-box` DECLARATION. One was added here reading "EXPLICIT, as `.lab-dna__arcs` sets it",
        and both halves were wrong: `view-box` is the property's INITIAL value, so the declaration did

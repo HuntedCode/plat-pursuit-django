@@ -1110,10 +1110,30 @@ def test_the_rim_draws_twelve_segments_rather_than_a_solid_ring():
     rim = _css_rule(_calendar_css(), '.pp-cal__rim-track,')
     assert 'stroke-linecap: butt' in rim
     assert 'stroke-linecap: round' not in rim, 'round caps are what ate the gaps'
-    # Normalised units: twelve slots of 100/12 = 8.3333, a 6-long dash leaving a 2.3333 gap.
+    # NORMALISED UNITS, AND THE TWELVE NOW LIVE IN THE GAUGE'S ARC. `pathLength="100"` makes a unit one
+    # percent of the circle; the gauge runs 72 of them and leaves a 28-unit notch at the bottom for the
+    # counter plate. The rim used to tile all 100 -- twelve slots of 8.3333 -- which put FOUR months
+    # (May through August) underneath that plate. Twelve slots of 6 inside the same 72 instead, at the
+    # same 140.4deg origin, so nothing is occluded and both rings sweep the same way.
     block = _calendar_css()
-    assert 'stroke-dasharray: 6 2.3333' in block
-    assert 'stroke-dasharray: 6 94' in block
+    assert 'stroke-dasharray: 4.6 1.4' in block, 'the rim track is not tiled to the gauge span'
+    assert 'stroke-dasharray: 4.6 95.4' in block, 'the lit segment does not match the track slot'
+
+    # THE TWO RINGS MUST SHARE AN ORIGIN or the lit segment sits off its own track slot. Asserted on the
+    # rotation rather than on the look, because a half-slot drift is invisible at 70px and arithmetic is
+    # the only thing that catches it -- which is how the round-cap bug above was found.
+    # FOUND BY WHAT THEY DECLARE. `.pp-cal__rim-seg` appears twice -- once in the shared stroke/cap rule
+    # with `.pp-cal__rim-track`, once on its own -- and the first is not the one meant. Position is the
+    # wrong handle on a selector this file reuses, which is the lesson `.pp-cal__stats` taught.
+    seg = [r for r in _css_rules(block, '.pp-cal__rim-seg') if 'rotate(' in r]
+    assert len(seg) == 1 and 'rotate(calc(140.4deg + var(--seg) * 21.6deg))' in seg[0]
+    track = [r for r in _css_rules(block, '.pp-cal__rim-track') if 'rotate(' in r]
+    assert len(track) == 1 and 'rotate(140.4deg)' in track[0]
+    # 21.6deg IS 6 UNITS, and twelve of them is the gauge's whole 72-unit span -- restated in UNITS
+    # rather than degrees because `12 * 21.6` is 259.20000000000002 in binary floating point, which is
+    # the same trap `Fraction` is used for in the month ranking.
+    assert round(21.6 / 3.6) == 6
+    assert round(12 * (21.6 / 3.6)) == 72, 'the twelve slots no longer fill the gauge span'
 
 
 def test_the_crest_gap_is_fixed_so_the_coins_do_not_shrink_as_the_window_grows():
