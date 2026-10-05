@@ -24,6 +24,7 @@ from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
 from challenges.views import (
+    CalendarDayView,
     AssignSlotView,
     ChallengeDetailView,
     ChallengesBrowseView,
@@ -536,6 +537,12 @@ urlpatterns = [
     # personal page above is the hunter's own working surface; this is the artefact.
     path('community/challenges/<int:challenge_id>/', ChallengeDetailView.as_view(),
          name='challenge_detail'),
+    # ONE SQUARE OF A PLAT CALENDAR, fetched by the board when a day is opened. Under the PUBLIC detail
+    # prefix rather than `my-challenges/`, because it is a read of a public artefact gated by
+    # `readable_by` -- every endpoint under the personal prefix is a write scoped to your own runs, and
+    # putting a public read there would have been the first exception to that.
+    path('community/challenges/<int:challenge_id>/day/<int:month>/<int:day>/',
+         CalendarDayView.as_view(), name='challenge_calendar_day'),
     path('my-challenges/<int:challenge_id>/hide/', HideChallengeView.as_view(),
          name='challenge_hide'),
     # THE REWARD DOORS, under `/my-challenges/` with every other write even though the surface they serve

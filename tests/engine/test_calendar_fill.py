@@ -824,6 +824,263 @@ def test_a_clean_day_without_an_all_day_is_repaired_rather_than_raising(monkeypa
         'a clean-without-all pair was written through instead of repaired, which the database forbids')
 
 
+# ── one square's platinums (the day modal's query) ───────────────────────────────────────────────
+
+def test_a_square_lists_the_platinums_that_satisfy_it_newest_first():
+    """WHAT THE DAY MODAL OPENS ONTO. Owner, 2026-10-04: a day shows "platinums earned and the date
+    (mainly by year)"."""
+    profile = _hunter()
+    _platted(profile, _utc(2017, 3, 3))
+    _platted(profile, _utc(2022, 3, 3))
+    _platted(profile, _utc(2020, 3, 4))
+
+    rows = calendar_fill.platinums_on_day(profile, 3, 3)
+
+    assert [r['on'] for r in rows] == [dt.date(2022, 3, 3), dt.date(2017, 3, 3)], (
+        'newest first, and 4 March must not appear on the 3 March square')
+    assert all(r['clean'] for r in rows)
+
+
+def test_a_square_with_nothing_on_it_lists_nothing():
+    profile = _hunter()
+    _platted(profile, _utc(2020, 6, 6))
+
+    assert calendar_fill.platinums_on_day(profile, 6, 7) == []
+
+
+def test_the_list_marks_a_shovelware_platinum_rather_than_hiding_it():
+    """THE ONLY EXPLANATION AN OPEN SQUARE HAS. A day in `all` and not `clean` draws nothing, and these
+    rows are the reason -- "you platinumed this here, but it is on a flagged game". Dropping them would
+    make the one square with an answer open onto the same emptiness as a square with none."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 9, 9), shovelware=True)
+    _platted(profile, _utc(2021, 9, 9))
+
+    rows = calendar_fill.platinums_on_day(profile, 9, 9)
+
+    assert len(rows) == 2, 'the flagged platinum is listed, not filtered out'
+    assert [r['clean'] for r in rows] == [True, False], 'newest first, and the flag is marked'
+
+
+def test_the_square_that_holds_the_leap_day_lists_both_of_its_days():
+    """THE FOLD APPLIES TO THE QUERY TOO, and leaving it out would have been a silent undercount that
+    contradicted the board's own figure. 29 February fills the 28 February square, and `plat_count`
+    SUMS the two -- so a modal asking only for (2, 28) would list two platinums under a square reading
+    three, which is precisely the "glance figure contradicts the list the hunter just opened" failure
+    the live count exists to prevent, reached from the query side."""
+    profile = _hunter()
+    _platted(profile, _utc(2015, 2, 28))
+    _platted(profile, _utc(2016, 2, 29))
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    rows = calendar_fill.platinums_on_day(profile, 2, 28)
+
+    assert len(rows) == 2, 'the leap-day platinum belongs to the square it folded onto'
+    assert run.calendar_days.get(month=2, day=28).plat_count == len(rows), (
+        'the stored count and the modal list must agree -- that is what the live count is for')
+
+
+def test_no_other_square_absorbs_the_leap_day():
+    """THE FOLD IS ONE SQUARE'S EXCEPTION, not a general clamp. 1 March must not inherit 29 February."""
+    profile = _hunter()
+    _platted(profile, _utc(2016, 2, 29))
+
+    assert calendar_fill.platinums_on_day(profile, 3, 1) == []
+    assert len(calendar_fill.platinums_on_day(profile, 2, 28)) == 1
+
+
+def test_the_square_resolves_in_the_OWNERS_timezone_not_the_readers():
+    """THE TRAP THE PUBLIC PAGE SETS. A run page is readable by anybody and the middleware activates the
+    VIEWER's timezone, so resolving these dates from the request would hand a Tokyo reader a different
+    list than a London one -- for somebody else's calendar. The square was keyed in the owner's zone,
+    so the list has to be as well, or a filled square opens onto nothing for half the internet.
+    """
+    tokyo = _hunter('Asia/Tokyo')
+    # 23:40 UTC on 2 March is already 3 March in Tokyo.
+    _platted(tokyo, _utc(2021, 3, 2, hour=23, minute=40))
+
+    assert len(calendar_fill.platinums_on_day(tokyo, 3, 3)) == 1, (
+        "the owner's own square came back empty")
+    assert calendar_fill.platinums_on_day(tokyo, 3, 2) == []
+
+    # And the resolved date matches the key rather than the instant's UTC date.
+    assert calendar_fill.platinums_on_day(tokyo, 3, 3)[0]['on'] == dt.date(2021, 3, 3)
+
+
+def test_the_list_agrees_with_the_square_it_belongs_to():
+    """THE FAILURE `calendar_fill`'s MODULE DOCSTRING NAMES: "a hunter opens a filled day to an empty
+    list". One predicate fills the square and answers the modal, so this asks both and compares --
+    across a clean day, a shovelware-only day and an empty one in a single run.
+
+    THE COUNT COMPARISON IS PER LENS, which the first version of this test got wrong and which is worth
+    the extra branch rather than the shorter assertion. `plat_count` holds the count from the lens the
+    square DRAWS in, so on a shovelware-only square it is the `all` figure -- shovelware-INCLUSIVE, and
+    1 where the counting list is empty. Comparing it against the clean list unconditionally asserts an
+    invariant the field never promised, and `CalendarDay.plat_count`'s own comment says so.
+    """
+    profile = _hunter()
+    _platted(profile, _utc(2018, 4, 4))
+    _platted(profile, _utc(2019, 4, 4))
+    _platted(profile, _utc(2020, 5, 5), shovelware=True)
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    for month, day in ((4, 4), (5, 5), (7, 7)):
+        square = run.calendar_days.get(month=month, day=day)
+        rows = calendar_fill.platinums_on_day(profile, month, day)
+        clean_rows = [r for r in rows if r['clean']]
+
+        assert bool(clean_rows) == square.in_clean, (
+            'square (%d, %d) draws=%s but the modal would list %d counting platinum(s)'
+            % (month, day, square.in_clean, len(clean_rows)))
+        assert bool(rows) == square.in_all, (
+            'square (%d, %d) counts=%s but the modal would list %d platinum(s) of any kind'
+            % (month, day, square.in_all, len(rows)))
+        # The lens the square draws in owns the count: clean if it is on the board, all if it only counts.
+        expected = clean_rows if square.in_clean else rows
+        assert len(expected) == square.plat_count
+
+
+def test_one_squares_query_does_not_grow_with_the_hunters_library():
+    """FLAT, AND MEASURED RATHER THAN ASSERTED. This runs on the request path of a PUBLIC page, so an
+    N+1 here is reachable by anyone. The cover chain is the live hazard: `display_image_url` reads the
+    IGDB match first on every render, so the joins have to be in the queryset rather than per row."""
+    small = _hunter()
+    _platted(small, _utc(2019, 8, 8))
+
+    big = _hunter()
+    for year in range(2000, 2016):
+        _platted(big, _utc(year, 8, 8))
+    for day in range(1, 20):
+        _platted(big, _utc(2018, 8, min(day, 28)))
+
+    with CaptureQueriesContext(connection) as small_q:
+        for row in calendar_fill.platinums_on_day(small, 8, 8):
+            row['game'].display_image_url
+    with CaptureQueriesContext(connection) as big_q:
+        for row in calendar_fill.platinums_on_day(big, 8, 8):
+            row['game'].display_image_url
+
+    assert len(big_q) == len(small_q), (
+        'the day query grows with the library: %d vs %d' % (len(big_q), len(small_q)))
+
+
+def test_one_squares_query_does_not_fetch_the_igdb_blob():
+    """THE `raw_response` GUARD, which this project requires beside every `igdb_match` join: it is the
+    ~30 KB API blob no cover template reads and the trigger for the May 2026 web-server OOM when
+    concurrent renders piled the join payload up. A public endpoint is the worst place to drop it."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 10, 10))
+
+    with CaptureQueriesContext(connection) as ctx:
+        calendar_fill.platinums_on_day(profile, 10, 10)
+
+    # MATCHED ON THE TABLE, NOT ON "igdb". `Concept` carries columns called `igdb_genres` and
+    # `igdb_themes`, which `select_related('...__concept')` puts in the SELECT -- so the substring
+    # 'igdb' was satisfied with the `igdb_match` join DELETED, and this guard, whose whole job is to
+    # prove the test is not vacuous, was itself vacuous.
+    joined = [q['sql'] for q in ctx.captured_queries if 'trophies_igdbmatch' in q['sql'].lower()]
+    assert joined, 'the IGDB match is not being joined at all -- this test would prove nothing'
+    assert not any('raw_response' in sql for sql in joined), (
+        'the IGDB blob is being selected on a public request path')
+    # AND THE OTHER BLOBS THAT RIDE THE SAME JOIN. `raw_response` is the famous one, not the only one:
+    # the match and the concept together carry about nine JSON columns no cover and no name reads.
+    for blob in ('igdb_summary', 'igdb_storyline', 'igdb_screenshot_image_ids'):
+        assert not any(blob in sql for sql in joined), '%s is still being selected' % blob
+
+
+def test_the_square_asks_the_same_platinum_predicate_as_the_fill():
+    """THE DOCSTRING'S HEADLINE CLAIM, which nothing pinned: "THE PREDICATE IS `_platinum_trophies`, NOT
+    A SECOND SPELLING OF IT". Every other test in this block builds fixtures through `_platted`, which
+    always writes `has_plat=True` -- so swapping the subquery for a bare `trophy__trophy_type='platinum'`
+    passed all of them while dropping the `has_plat` gate and diverging from the fill.
+
+    `has_plat=False` WITH AN EARNED PLATINUM ROW is the state a partial sync leaves, and it is the one
+    input that separates the two spellings.
+    """
+    profile = _hunter()
+    game = _platted(profile, _utc(2019, 6, 6))
+    ProfileGame.objects.filter(profile=profile, game=game).update(has_plat=False)
+
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    assert calendar_fill.platinums_on_day(profile, 6, 6) == [], (
+        'the modal counted a platinum the fill does not, so a square can draw empty or vice versa')
+    assert not run.calendar_days.get(month=6, day=6).in_all, 'and the fill agrees'
+
+
+def test_a_manually_cleared_game_counts_on_the_square_as_it_does_in_the_fill():
+    """THE SECOND HALF OF THE SAME CLAIM: "same shovelware statuses". `SHOVELWARE_FLAGGED_STATUSES` is
+    the BROAD rule and `manually_cleared` is NOT in it -- a human looked at that game and approved it.
+    Spelling the test as `status == 'clean'` would diverge from `_platinum_trophies(clean_only=True)` on
+    exactly those games, and no fixture in this block used the status, so the mutation passed.
+
+    `models.py` states outright that this rule and the trophy tracker's stricter one must not be folded
+    together, which is why this is pinned rather than left to read as an implementation detail.
+    """
+    profile = _hunter()
+    game = _platted(profile, _utc(2020, 7, 7))
+    game.shovelware_status = 'manually_cleared'
+    game.save(update_fields=['shovelware_status'])
+
+    run = _calendar_run(profile)
+    calendar_fill.apply_to_run(run)
+
+    rows = calendar_fill.platinums_on_day(profile, 7, 7)
+    assert [r['clean'] for r in rows] == [True], 'a human-approved game must still count'
+    assert run.calendar_days.get(month=7, day=7).in_clean, 'and the fill agrees'
+
+
+def test_the_leap_day_as_an_INPUT_resolves_to_the_square_that_holds_it():
+    """`_fold` NORMALISES THE INPUT, which the first version only claimed to do. It hardcoded the pair
+    and inverted the mapping by hand, so `platinums_on_day(profile, 2, 29)` answered as if (2, 29) were
+    a square of its own -- returning only the leap-day platinums. There is no such square:
+    `calendarday_day_within_month` forbids it and `calendar_day_keys()` never generates it."""
+    profile = _hunter()
+    _platted(profile, _utc(2015, 2, 28))
+    _platted(profile, _utc(2016, 2, 29))
+
+    asked_the_leap_day = calendar_fill.platinums_on_day(profile, 2, 29)
+    asked_the_square = calendar_fill.platinums_on_day(profile, 2, 28)
+
+    assert len(asked_the_leap_day) == 2, 'the leap day is not a square of its own'
+    assert [r['on'] for r in asked_the_leap_day] == [r['on'] for r in asked_the_square]
+
+
+def test_the_square_narrows_by_an_indexable_range_before_the_month_day_test():
+    """THE ONE THING THAT KEEPS THIS OFF A FULL HISTORY SCAN, and it is invisible to a query COUNT --
+    the cost is inside one statement, so every flatness test in this file passes either way.
+
+    `EXTRACT(... AT TIME ZONE ...)` cannot use an index and no index could ever serve it: the timezone
+    is a per-hunter value, so the expression is not a fixed function of the row. Without a range
+    predicate, `earnedtrophy_timeline_idx` narrows to `profile = X` and the one selective term -- a day
+    in 365 -- becomes a post-fetch filter over a whale's entire 250,000-row slice, per open, on a page
+    any anonymous visitor can click 365 times.
+
+    SO THIS READS THE COMPILED SQL. A `>=`/`<` pair on `earned_date_time` is what the partial index's
+    leading columns can serve; the `EXTRACT` must survive alongside it, because the windows are a
+    deliberate superset and the exact test is what decides.
+    """
+    import re
+
+    profile = _hunter()
+    _platted(profile, _utc(2019, 2, 28))
+
+    with CaptureQueriesContext(connection) as ctx:
+        calendar_fill.platinums_on_day(profile, 2, 28)
+
+    sql = [q['sql'] for q in ctx.captured_queries if 'earned_date_time' in q['sql']]
+    assert sql, 'no statement touched `earned_date_time`'
+    windows = len(re.findall(r'earned_date_time"? >=', sql[-1]))
+    assert windows >= 15, (
+        'only %d range predicate(s): the indexable window is gone and this is a history scan again'
+        % windows)
+    assert 'EXTRACT' in sql[-1].upper(), (
+        'the exact month/day test is gone -- the windows are a superset and cannot decide on their own')
+
+
 # ── the reconciliation check ─────────────────────────────────────────────────────────────────────
 
 def test_a_run_whose_numbers_have_not_moved_is_not_due():

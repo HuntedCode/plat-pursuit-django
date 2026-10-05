@@ -38,9 +38,12 @@ WHALE SAFETY IS THE SHAPE OF EVERY QUERY HERE, not a note on them. These hunters
 trophies, so the rule from `contract_service._detect_tiers` applies in full: never start from
 `EarnedTrophy.filter(profile=...)` and join outward to test a property, because the planner then walks
 every one of those rows. Resolve the catalogue-bounded side first and turn the aggregate into an index
-seek. Every DAY function below returns at most 365 rows -- `runs_due_for_sweep` is the exception and
-returns a site-wide `Challenge` queryset, which is the point of it.
+seek. Every function below that answers "which days" returns at most 365 rows. Two do something else
+and say so: `runs_due_for_sweep` returns a site-wide `Challenge` queryset, and `platinums_on_day`
+returns one square's PLATINUMS -- a few for most hunters, several hundred on a stacked 28 February for
+a serial platter, since the fold gives that square two days and twenty years compound onto it.
 """
+import datetime as dt
 import logging
 import zoneinfo
 from collections import namedtuple
@@ -100,6 +103,41 @@ DayFill = namedtuple('DayFill', ('date', 'plats'))
 def _fold(month, day):
     """`(2, 29)` -> `(2, 28)`; everything else unchanged."""
     return LEAP_DAY_FOLDS_TO if (month, day) == LEAP_DAY else (month, day)
+
+
+#: PSN TROPHIES BEGAN IN JULY 2008, so no `earned_date_time` can predate it and the windows below have
+#: somewhere to start. A constant rather than a `Min()` lookup because the alternative is a second query
+#: on a request path to learn something that cannot change, and being a decade too generous costs a few
+#: unused index range scans.
+TROPHY_EPOCH_YEAR = 2008
+
+
+def _day_windows(keys, tz):
+    """A `Q` of `earned_date_time` ranges covering each key's local day in every year PSN has existed.
+
+    THE WHOLE POINT IS THAT THIS IS INDEXABLE. `earnedtrophy_timeline_idx` is
+    `(profile, earned, earned_date_time) WHERE earned`, so a range on `earned_date_time` is a scan of
+    that index; an `EXTRACT(... AT TIME ZONE ...)` on the same column is not, and cannot be made so.
+
+    A SUPERSET, NOT A SUBSTITUTE. The caller still applies the exact month/day test afterwards, so these
+    windows only have to CONTAIN the day. Each one is the local day plus a day either side, which
+    absorbs every UTC offset and any DST transition at midnight without reasoning about either -- an
+    over-wide window costs a few rows to filter, an under-wide one silently loses a platinum.
+
+    A LEAP DAY ONLY EXISTS IN A LEAP YEAR, which is what the `ValueError` is: `(2, 29)` is a real key
+    here (it folds onto the 28th and the caller passes both), and three years in four have no such date
+    to build a window around.
+    """
+    span = Q()
+    for year in range(TROPHY_EPOCH_YEAR, timezone.now().year + 1):
+        for month, day in keys:
+            try:
+                local = dt.datetime(year, month, day, tzinfo=tz)
+            except ValueError:
+                continue
+            span |= Q(earned_date_time__gte=local - dt.timedelta(days=1),
+                      earned_date_time__lt=local + dt.timedelta(days=2))
+    return span
 
 
 def _platinum_trophies(profile, *, clean_only=False):
@@ -226,6 +264,131 @@ def filled_days(profile):
     whole predicate, so the fill is now exactly the single platinum statement.
     """
     return _days_from_platinums(profile, _hunter_timezone(profile))
+
+
+def platinums_on_day(profile, month, day):
+    """Every platinum this hunter earned on one calendar square, newest first.
+
+    `[{'game', 'on', 'clean'}]` -- the `Game` (for its name and its cover), the resolved local DATE, and
+    whether it counts on the board. At most a few dozen rows: this is one (month, day) out of 365, not a
+    history scan, and nothing here is unbounded by the hunter's platinums on one date.
+
+    THE PREDICATE IS `_platinum_trophies`, NOT A SECOND SPELLING OF IT, which is the whole reason this
+    function is in this module. The module docstring states the failure it avoids: a day modal that
+    derived "satisfies" slightly differently from the writer would open a FILLED square onto an empty
+    list. Same subquery, same `has_plat` + `trophy_type` reading, same shovelware statuses.
+
+    AND THE SAME TIMEZONE, which is the trap the public page sets. `middleware` activates the VIEWER's
+    timezone and a run page is readable by anybody, so resolving dates from the request would list a
+    Tokyo reader a different set than a London one -- for somebody else's calendar. `_hunter_timezone`
+    takes the owner's, exactly as the fill does, so the modal and the square agree about which day it is.
+
+    THE LEAP-DAY FOLD IS APPLIED HERE TOO, and leaving it out would have been a silent undercount. A
+    platinum earned on 29 February fills the 28 February square (`_fold`), and `plat_count` SUMS the two
+    -- so a 28 February square can read "3 platinums" while a modal that asked only for (2, 28) listed
+    two. That is exactly the "glance figure contradicts the list the hunter just opened" failure the
+    count is live to prevent, reached from the query side instead.
+
+    ORDERED NEWEST FIRST, on the instant rather than the resolved date, so two platinums on the same
+    local day keep the order they were earned in rather than an arbitrary one.
+    """
+    tz = _hunter_timezone(profile)
+
+    # THE INPUT IS NORMALISED THROUGH `_fold`, which the first version claimed to do in a comment and
+    # did not -- it hardcoded the pair and inverted the mapping by hand, putting the one fact this
+    # module exists to keep in one place into two. `_fold` also means (2, 29) ARRIVING here resolves to
+    # the square that actually holds it rather than being answered as a square of its own, which no
+    # `CalendarDay` row can be (`calendarday_day_within_month` forbids it).
+    month, day = _fold(month, day)
+    keys = [(month, day)]
+    if (month, day) == LEAP_DAY_FOLDS_TO:
+        keys.append(LEAP_DAY)
+
+    exact = Q()
+    for key_month, key_day in keys:
+        exact |= Q(m=key_month, d=key_day)
+
+    rows = (
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True,
+                trophy_id__in=_platinum_trophies(profile),
+                earned_date_time__isnull=False)
+        # AN INDEXABLE WINDOW IN FRONT OF THE EXACT TEST, and this is the difference between a modal
+        # that costs an index range scan and one that walks the hunter's whole history.
+        #
+        # `EXTRACT(... AT TIME ZONE ...)` CANNOT USE ANY INDEX, and no index could ever serve it: the
+        # timezone is a per-hunter value, so the expression is not a fixed function of the row. The only
+        # selective predicate here (one day in 365) was therefore a post-fetch filter, which left
+        # `earnedtrophy_timeline_idx` narrowing to `profile = X` and nothing more -- a bitmap heap scan
+        # of a whale's entire 250,000-row slice, pulled through shared buffers, PER OPEN, on a page any
+        # anonymous visitor can click 365 times. That is the shape this module's own docstring forbids
+        # ("never start from `EarnedTrophy.filter(profile=...)` and join outward to test a property"),
+        # and `_days_from_platinums` gets away with it only because it runs once per sweep.
+        #
+        # SO THE WINDOWS GO FIRST: `(profile, earned, earned_date_time)` is exactly the partial index's
+        # leading columns, so each year's window is a range scan and the planner ORs them.
+        #
+        # A SUPERSET, DELIBERATELY WIDE, and the exact test still decides. A window is the local day
+        # plus a day either side, which covers every UTC offset (±14h) and any DST transition at
+        # midnight without this function having to reason about either. Getting the window slightly
+        # wrong can only cost a few extra rows to filter; getting it slightly SHORT would silently drop
+        # a platinum, so it is not a place to be clever.
+        .filter(_day_windows(keys, tz))
+        .annotate(m=ExtractMonth('earned_date_time', tzinfo=tz),
+                  d=ExtractDay('earned_date_time', tzinfo=tz),
+                  on=TruncDate('earned_date_time', tzinfo=tz))
+        .filter(exact)
+        # THE COVER CHAIN'S JOIN. `display_image_url` reads the IGDB match FIRST on every render, so
+        # without this a day with a dozen platinums walks four relations per row -- `trophy`, `game`,
+        # `concept`, `igdb_match` -- which is around fifty queries, not a dozen as this once said.
+        # ONE PATH, not three: the longest implies its prefixes, and listing all three read as three
+        # joins being asked for.
+        .select_related('trophy__game__concept__igdb_match')
+        # THE HEAVY COLUMNS, and `raw_response` is only the famous one. It is the ~30 KB IGDB blob that
+        # triggered the May 2026 web-server OOM, and this project requires it deferred beside every
+        # `igdb_match` join -- but the same join hydrates about nine more JSON columns that no cover and
+        # no name ever reads, several of them multi-KB. Deferred rather than whitelisted with `.only()`
+        # because the failure modes are not symmetric: a column missed here is merely not deferred,
+        # while a column missed by `.only()` is a query per row on a public path.
+        .defer('trophy__game__concept__igdb_match__raw_response',
+               'trophy__game__concept__igdb_match__igdb_summary',
+               'trophy__game__concept__igdb_match__igdb_storyline',
+               'trophy__game__concept__igdb_match__igdb_ps_release_dates',
+               'trophy__game__concept__igdb_match__similar_game_igdb_ids',
+               'trophy__game__concept__igdb_match__external_urls',
+               'trophy__game__concept__igdb_match__igdb_screenshot_image_ids',
+               'trophy__game__concept__igdb_match__igdb_artwork_image_ids',
+               'trophy__game__concept__igdb_match__igdb_video_youtube_ids',
+               'trophy__game__concept__igdb_match__franchise_names',
+               'trophy__game__concept__media',
+               'trophy__game__concept__descriptions',
+               'trophy__game__concept__genres',
+               'trophy__game__concept__subgenres',
+               'trophy__game__concept__igdb_genres',
+               'trophy__game__concept__igdb_themes',
+               'trophy__game__defined_trophies',
+               'trophy__game__metadata')
+        # `-id` AS THE TIEBREAK. PSN stamps to the second and back-to-back stack platinums collide, so
+        # the instant alone leaves those rows in whatever order the plan happens to emit -- which is the
+        # arbitrary order the docstring above disclaims.
+        .order_by('-earned_date_time', '-id')
+    )
+
+    # BOUNDED BY ONE DATE, so iterating is not the per-user aggregation the project rule forbids: the
+    # row count is "platinums on 3 March", not "platinums". There is nothing to aggregate here either --
+    # the modal wants the rows themselves.
+    out = []
+    for row in rows:
+        game = row.trophy.game
+        out.append({
+            'game': game,
+            'on': row.on,
+            # WHAT THE BOARD WOULD COUNT. The square draws on the shovelware-free lens, so a flagged
+            # game appears in this list and says so rather than being hidden: on a square that is `all`
+            # and not `clean`, these rows ARE the explanation for why the square is still open.
+            'clean': game.shovelware_status not in SHOVELWARE_FLAGGED_STATUSES,
+        })
+    return out
 
 
 def apply_to_run(challenge, *, found=None):

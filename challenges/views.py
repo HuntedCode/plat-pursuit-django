@@ -34,7 +34,9 @@ from trophies.models import Contract
 from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
 from django.http import JsonResponse
 from django.template.loader import render_to_string
-from django.shortcuts import redirect
+from django.http import Http404
+from django.shortcuts import redirect, render
+from django.utils.cache import patch_cache_control
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -98,6 +100,14 @@ CHALLENGE_READ_RATELIMIT_GROUP = 'challenges:read'
 #: `CHALLENGE_READ_RATELIMIT_GROUP`, which is a deliberate choice parked for a `refactor/` branch rather than
 #: an accident of qualname derivation. An earlier version of this note called them "that exact sharing",
 #: which would have pointed a reader at a precedent that could not teach them this hazard.)
+#: THE DAY SQUARE'S OWN BUCKET. It is the first per-USER-DATA read this app serves to an ANONYMOUS
+#: caller: the browse pages above are catalogue-shaped, the picker doors sit behind a login, and this one
+#: runs a trophy query against the RUN OWNER's library on behalf of whoever opened their public board.
+#: So it gets the anonymous treatment (`key='ip'`, `method=('GET', 'HEAD')`, an explicit group -- see the
+#: three notes above, which apply here unchanged) and a budget of its own rather than sharing the browse
+#: pages'. 60/m is well above a reader opening squares and well below a loop walking all 365.
+CALENDAR_DAY_RATELIMIT_GROUP = 'challenges:calendar-day'
+
 CHALLENGES_BROWSE_RATELIMIT_GROUP = 'challenges:browse'
 HALL_OF_FAME_RATELIMIT_GROUP = 'challenges:hall-of-fame'
 
@@ -1226,6 +1236,84 @@ class _ChallengeBrowseView(HtmxListMixin, ListView):
         context['entry_template'] = self.ENTRY_TEMPLATE
         context['grid_class'] = self.GRID_CLASS
         return context
+
+
+@method_decorator(
+    ratelimit(group=CALENDAR_DAY_RATELIMIT_GROUP, key='ip', rate='60/m',
+              method=('GET', 'HEAD'), block=True),
+    name='get')
+class CalendarDayView(View):
+    """One square of a Plat Calendar: the platinums its owner earned on that calendar date.
+
+    A FRAGMENT, NOT JSON, following `JobContractsResultsView`: the response is the rendered partial and
+    the client injects it. Nothing here needs client-side templating, and the cover chain is a template
+    concern already solved by `display_image_url` -- handing JSON to the page would mean re-deriving it
+    in JavaScript, which is how the two drift.
+
+    PUBLIC, GATED BY `readable_by`, which is the owner's call (2026-10-04: public "if the challenge is
+    not hidden"). That predicate already means exactly "every visible run plus your own hidden ones" and
+    the detail page delegates to it SO THAT visibility has one definition -- its docstring spells out the
+    cost of a second one: the day visibility gains another condition, `visible()` gets it, the anonymous
+    path inherits it and the signed-in path does not, and "a run that should have gone dark would then
+    be served to every signed-in visitor and nobody else, which is the hardest kind of leak to notice."
+    So this asks the same queryset rather than spelling `is_deleted` here.
+
+    `Http404` IS SAFE ON THIS ONE, unlike the write doors. `_ChallengeActionView` returns `None` instead
+    of raising because this project installs a GET-only `handler404` and an `Http404` out of a POST comes
+    back as a 405 -- this is a GET, so the handler applies. The client checks `response.ok` before it
+    injects anything, so the 404 page's body never reaches the sheet.
+
+    THE SQUARE IS FETCHED, NOT JUST VALIDATED, and that is worth one small indexed read. It confirms the
+    day belongs to THIS run rather than trusting two path integers, and it carries `in_clean` and
+    `plat_count` -- so the fragment's header is the board's own figure rather than a second count of the
+    same thing computed a different way.
+    """
+
+    def get(self, request, challenge_id, month, day):
+        from challenges.services import calendar_fill
+
+        viewer = getattr(request.user, 'profile', None)
+        challenge = (Challenge.objects
+                     .readable_by(viewer)
+                     .filter(pk=challenge_id, challenge_type=CHALLENGE_TYPE_CALENDAR)
+                     .select_related('profile')
+                     .first())
+        if challenge is None:
+            raise Http404('no readable Calendar run with that id')
+
+        square = challenge.calendar_days.filter(month=month, day=day).first()
+        if square is None:
+            # AN UNREACHABLE KEY RATHER THAN A BAD REQUEST: (2, 29) and (4, 31) are not squares, and the
+            # path converter already refused anything non-numeric. The rows are generated from
+            # `CALENDAR_MONTH_DAYS`, so asking the run is the same question as validating the range and
+            # cannot disagree with it.
+            raise Http404('that run has no such square')
+
+        rows = calendar_fill.platinums_on_day(challenge.profile, month, day)
+        resp = render(request, 'challenges/partials/_calendar_day.html', {
+            'challenge': challenge,
+            'square': square,
+            'plats': rows,
+            # THE HEADER COUNTS WHAT THIS RESPONSE RENDERED, not `square.plat_count`. The first version
+            # printed the stored column on the reasoning that two figures derived two ways is how they
+            # disagree -- which is true, and backwards here. `plat_count` is written by `apply_to_run`
+            # and `runs_due_for_sweep` only makes a run due when `total_plats` moves, so a hunter who
+            # changes their own timezone (re-keying every day) or a game that gets reclassified leaves
+            # the column stale with nothing to correct it until their next platinum. Printing it above a
+            # LIVE list imports that staleness into the one place that has the truth, and the
+            # contradiction lands inside a single response. The board can still disagree with the modal;
+            # that gap is documented on `runs_due_for_sweep`. The modal cannot disagree with itself.
+            'counting': sum(1 for row in rows if row['clean']),
+            # THE LABEL IS BUILT HERE, from the square rather than from the path, so a fragment can never
+            # caption itself with a date it did not render.
+            'day_label': '%s %d' % (calendar_render.MONTH_NAMES[square.month - 1], square.day),
+        })
+        # `private`, AND THE REASON IS THE HIDDEN RUN. The body itself is the same for every reader --
+        # it is the owner's library, not the viewer's -- so this would otherwise be publicly cacheable.
+        # But a hidden run answers 404 to everyone except its owner, so the RESPONSE does vary by viewer,
+        # and a shared cache that learned the owner's 200 would serve it to the world.
+        patch_cache_control(resp, private=True, max_age=0)
+        return resp
 
 
 @method_decorator(

@@ -1,0 +1,77 @@
+{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
+
+A FRAGMENT, fetched on click and injected into the board's sheet. It renders no dialog chrome of its own
+-- the sheet owns that -- so this file is only the contents, and it has to be safe to drop into a
+container twice if a reader clicks two squares quickly.
+
+THE YEAR IS THE ORGANISING ELEMENT (owner, 2026-10-04: a day shows "platinums earned and the date,
+mainly by year"). A square has no year by design -- "3 March" means every 3 March in the hunter's
+history -- so the year is the one thing a row needs that the heading cannot supply. It leads each row for
+that reason rather than trailing it as a detail.
+
+COVER ART, SMALL. The BOARD deliberately carries none: 365 cells at ~20px is unreadable art and, across a
+Hall of Fame page, thousands of images. A day holds a handful, lazily, only once somebody asks for it --
+which is the whole argument for a modal rather than a richer square.
+
+THIRD PERSON, because a run page is public. A reader is usually looking at somebody else's calendar, so
+nothing here says "you".
+{% endcomment %}
+<div class="pp-cday">
+
+    <div class="pp-cday__head">
+        <h2 class="pp-cday__date" id="cal-day-title">{{ day_label }}</h2>
+        {% if square.in_clean %}
+        {% comment %}`counting`, NOT `square.plat_count`: the figure counts the rows BELOW it rather than
+        reading the board's stored column, so this response can never contradict itself. The view's
+        comment carries the reasoning -- the stored count can go stale without the sweep noticing.
+        {% endcomment %}
+        <p class="pp-cday__tally">
+            <span class="pp-tally">{{ counting }}</span>
+            platinum{{ counting|pluralize }}
+        </p>
+        {% endif %}
+    </div>
+
+    {% if plats %}
+    {% comment %}A REAL LIST, and the reason is the one the day grid and the marker rail both give:
+    `role="list"` survives Tailwind's preflight stripping the implicit role from an unstyled list, which
+    on WebKit is the difference between a list announcing its length and announcing nothing.{% endcomment %}
+    <ul class="pp-cday__list" role="list">
+        {% for plat in plats %}
+        <li class="pp-cday__row{% if not plat.clean %} pp-cday__row--out{% endif %}">
+            <span class="pp-cday__year">{{ plat.on|date:"Y" }}</span>
+            <span class="pp-cday__art">
+                {% comment %}`display_image_url` IS THE WHOLE CHAIN and must never be re-spelled inline:
+                trusted IGDB cover, then the concept's PSN icon, then the game's own art. `object-top`
+                because PSN fallback art is wider than 3:4 and crops -- anchoring to the top keeps the
+                logo that sits there. `loading="lazy"` since a busy day can hold a dozen.{% endcomment %}
+                <img src="{{ plat.game.display_image_url }}" alt=""
+                     loading="lazy" decoding="async"
+                     class="w-full h-full object-cover object-top">
+            </span>
+            <span class="pp-cday__name">
+                {{ plat.game.title_name }}
+                {% if not plat.clean %}
+                {% comment %}THE ONE PLACE A HUNTER CAN LEARN WHY A SQUARE THEY REMEMBER EARNING IS OPEN.
+                The board draws the shovelware-free lens, so this platinum is real and does not count --
+                stated plainly on the row rather than by omitting it, which would leave the square
+                looking like a mistake.{% endcomment %}
+                <span class="pp-cday__flag">not counted &middot; shovelware</span>
+                {% endif %}
+            </span>
+            {% comment %}A GAME CAN APPEAR TWICE, and it is not a render fault: a `Game` carrying two
+            `trophy_type='platinum'` rows is a catalogue data fault, and both the stored count and this
+            list report it the same way -- so the layers agree and the page looks wrong. Deduping HERE
+            would make the list disagree with the tally above it, so if this ever shows up the fix
+            belongs in the catalogue, not in the template.{% endcomment %}
+            <span class="pp-cday__on">{{ plat.on|date:"j M" }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    {% comment %}REACHABLE, even though the board makes only `in_all` squares clickable: a game can be
+    reclassified between the fill and the click, and fills are monotone so the square keeps drawing. The
+    line says what is true rather than pretending the square is empty.{% endcomment %}
+    <p class="pp-cday__empty">No platinums on this date.</p>
+    {% endif %}
+</div>
