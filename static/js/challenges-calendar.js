@@ -161,7 +161,11 @@
             if (session) { var s = session; session = null; s.close(); }
         }
 
-        function open(html) {
+        // THE MONTH TRAVELS TO THE SHELL, because the hue cannot travel the other way. `--cal-c` is set
+        // by `data-month` on the fragment root, which sits INSIDE the dialog -- and custom properties
+        // inherit downward only, so the dialog wrapping it can never read the fragment's hue. Copying
+        // the attribute up is what lets the dialog itself wear the month's colour.
+        function open(html, month) {
             var modal = shell();
             if (!modal) { return; }
             var body = modal.querySelector('[data-day-body]');
@@ -176,6 +180,7 @@
 
             // RE-ATTACHED IF `takeover` TOOK IT. `document.body` is where `fixed_overlays` renders
             // anyway, so this puts it back outside `#page-recede` exactly as the template did.
+            if (month) { modal.setAttribute('data-month', month); }
             if (!modal.parentNode) { document.body.appendChild(modal); }
             body.innerHTML = html;          // REPLACE, never append: the fragment's id must stay unique
             modal.hidden = false;
@@ -233,7 +238,7 @@
                 .then(function (r) { return r.ok ? r.text() : null; })
                 .then(function (html) {
                     if (mine !== token || html === null) { return; }
-                    open(html);
+                    open(html, cell.getAttribute('data-month'));
                 })
                 .catch(function () { /* offline or aborted: leave the board alone */ });
         });

@@ -185,6 +185,7 @@ and not a button", and the commit that made them buttons left it standing twenty
                 <button type="button"
                         class="pp-cal__day pp-cal__day--open{% if card.filled %} pp-cal__day--on{% endif %}"
                         style="--rev: {{ forloop.counter0 }};"
+                        data-month="{{ card.month }}"
                         data-day-url="{% url 'challenge_calendar_day' challenge.id card.month card.day %}">
                     <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
                     {% comment %}NO "Open." IN THE NAME. The button role already announces that it is a

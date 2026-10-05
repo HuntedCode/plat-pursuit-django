@@ -3070,36 +3070,51 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    accepted rather than overlooked: disciplines appear on job chips and shelf heads, months only on
    Calendar surfaces, so the two never share one. Worth knowing before a third system wants a hue.
 
-   TWO SELECTORS, ONE TABLE. The day sheet renders in `fixed_overlays` -- outside `.pp-cal`, because
+   THREE SELECTORS, ONE TABLE. The day sheet renders in `fixed_overlays` -- outside `.pp-cal`, because
    `takeover` scales `#page-recede` and a fixed overlay inside a transformed ancestor resolves against
-   THAT ancestor -- so it cannot inherit `--cal-c` by descent the way a month panel does. It is listed
-   beside the board on each rule rather than given a copy of the table, because twelve hues maintained
-   in two places is twelve chances for a month to disagree with itself across a click.
+   THAT ancestor -- so it cannot inherit `--cal-c` by descent the way a month panel does. The third
+   selector is the dialog SHELL, and it exists because custom properties inherit DOWNWARD only: the
+   fragment root carries the month, and the dialog wrapping it could never read the hue from a child.
+   The script copies `data-month` up when it opens.
+   LISTED TOGETHER RATHER THAN COPIED, because twelve hues maintained in two places is twelve chances
+   for a month to disagree with itself across a click.
    ── */
 .pp-cal [data-month="1"],
-.pp-cday[data-month="1"]  { --cal-c: oklch(0.74 0.13 255); }   /* January   -- deep winter blue */
+.pp-cday[data-month="1"],
+.pp-detail-modal[data-month="1"]  { --cal-c: oklch(0.74 0.13 255); }   /* January   -- deep winter blue */
 .pp-cal [data-month="2"],
-.pp-cday[data-month="2"]  { --cal-c: oklch(0.72 0.14 290); }   /* February  -- late-winter violet */
+.pp-cday[data-month="2"],
+.pp-detail-modal[data-month="2"]  { --cal-c: oklch(0.72 0.14 290); }   /* February  -- late-winter violet */
 .pp-cal [data-month="3"],
-.pp-cday[data-month="3"]  { --cal-c: oklch(0.80 0.14 150); }   /* March     -- first green */
+.pp-cday[data-month="3"],
+.pp-detail-modal[data-month="3"]  { --cal-c: oklch(0.80 0.14 150); }   /* March     -- first green */
 .pp-cal [data-month="4"],
-.pp-cday[data-month="4"]  { --cal-c: oklch(0.84 0.15 128); }   /* April     -- spring */
+.pp-cday[data-month="4"],
+.pp-detail-modal[data-month="4"]  { --cal-c: oklch(0.84 0.15 128); }   /* April     -- spring */
 .pp-cal [data-month="5"],
-.pp-cday[data-month="5"]  { --cal-c: oklch(0.86 0.16 105); }   /* May       -- lime */
+.pp-cday[data-month="5"],
+.pp-detail-modal[data-month="5"]  { --cal-c: oklch(0.86 0.16 105); }   /* May       -- lime */
 .pp-cal [data-month="6"],
-.pp-cday[data-month="6"]  { --cal-c: oklch(0.88 0.15 88); }    /* June      -- high sun */
+.pp-cday[data-month="6"],
+.pp-detail-modal[data-month="6"]  { --cal-c: oklch(0.88 0.15 88); }    /* June      -- high sun */
 .pp-cal [data-month="7"],
-.pp-cday[data-month="7"]  { --cal-c: oklch(0.84 0.16 70); }    /* July      -- gold */
+.pp-cday[data-month="7"],
+.pp-detail-modal[data-month="7"]  { --cal-c: oklch(0.84 0.16 70); }    /* July      -- gold */
 .pp-cal [data-month="8"],
-.pp-cday[data-month="8"]  { --cal-c: oklch(0.78 0.17 52); }    /* August    -- amber */
+.pp-cday[data-month="8"],
+.pp-detail-modal[data-month="8"]  { --cal-c: oklch(0.78 0.17 52); }    /* August    -- amber */
 .pp-cal [data-month="9"],
-.pp-cday[data-month="9"]  { --cal-c: oklch(0.72 0.17 35); }    /* September -- russet */
+.pp-cday[data-month="9"],
+.pp-detail-modal[data-month="9"]  { --cal-c: oklch(0.72 0.17 35); }    /* September -- russet */
 .pp-cal [data-month="10"],
-.pp-cday[data-month="10"] { --cal-c: oklch(0.68 0.18 18); }    /* October   -- autumn red */
+.pp-cday[data-month="10"],
+.pp-detail-modal[data-month="10"] { --cal-c: oklch(0.68 0.18 18); }    /* October   -- autumn red */
 .pp-cal [data-month="11"],
-.pp-cday[data-month="11"] { --cal-c: oklch(0.66 0.15 345); }   /* November  -- berry */
+.pp-cday[data-month="11"],
+.pp-detail-modal[data-month="11"] { --cal-c: oklch(0.66 0.15 345); }   /* November  -- berry */
 .pp-cal [data-month="12"],
-.pp-cday[data-month="12"] { --cal-c: oklch(0.90 0.045 235); }  /* December  -- frost, near-white */
+.pp-cday[data-month="12"],
+.pp-detail-modal[data-month="12"] { --cal-c: oklch(0.90 0.045 235); }  /* December  -- frost, near-white */
 
 .pp-cal__crest {
     flex: 0 0 auto;
@@ -3632,6 +3647,41 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    stacking the "content does not sit bare" rule is usually invoked against. The CARDS carry the
    surfaces, which is what makes a shelf read as a shelf.
    ── */
+/* THE DIALOG WEARS THE MONTH (owner: "maybe a gradient using the month colors"). The sheet was
+   `--pp-bg-1` flat while the board behind it is twelve hues, so opening a square went from colour to
+   grey -- the opposite of the cohesion the whole slice is for.
+   THREE LAYERS, AND THE ORDER MATTERS: a bloom from behind the masthead where the eye lands first, a
+   short top wash so the colour reads as light falling INTO the dialog rather than a panel painted on
+   it, then the substrate. `.scard`'s accent recipe is the same idea at lower strength (7% at 90deg); a
+   focal surface can carry more than a stat cell, and the bloom is placed rather than uniform so it
+   never flattens into a tint.
+   THE EDGE IS THE MONTH TOO: a hairline top inset and a tinted border, which is what makes the dialog
+   read as belonging to the square that opened it. */
+#cal-day-modal .pp-detail-modal__dialog {
+    background:
+        radial-gradient(135% 95% at 4% -12%,
+                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 24%, transparent) 0%,
+                        transparent 58%),
+        linear-gradient(180deg,
+                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 8%, transparent) 0%,
+                        transparent 38%),
+        var(--pp-bg-1);
+    border-color: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 30%, var(--pp-border));
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--cal-c, var(--pp-primary)) 50%, transparent),
+        0 30px 90px rgb(0 0 0 / 0.55);
+}
+
+/* THE CLOSE BUTTON JOINS THE HEADER ROW. The shared primitive parks it at `top: 12px; right: 16px`,
+   which suits a dialog whose content starts at the padding edge -- here the masthead's cap height
+   starts at 28px, so the glyph floated ABOVE the header and the header's rule ran underneath it, which
+   is what the owner saw. Centred on the masthead instead: the date's line box is 24px tall from the
+   28px padding, so its middle is ~40px down and a 28px glyph wants its top at ~26px.
+   SCOPED TO THIS MODAL. Every other `.pp-detail-modal` puts its own content at the padding edge, so
+   moving the primitive would misalign all of them to fix one. */
+#cal-day-modal .pp-detail-modal__close { top: 26px; right: 20px; }
+@media (min-width: 768px) { #cal-day-modal .pp-detail-modal__close { top: 28px; } }
+
 .pp-cday { display: flex; flex-direction: column; gap: 16px; }
 
 /* THE DATE IS THE MASTHEAD, in the month's hue and the largest thing in the dialog. It was 1.0625rem of
@@ -3643,6 +3693,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     gap: 12px;
     flex-wrap: wrap;
     padding-bottom: 12px;
+    /* ROOM FOR THE CLOSE GLYPH, which is absolutely positioned in the dialog and therefore invisible to
+       this row's layout. Without it the tally ran under the X on a narrow dialog. The rule below still
+       spans the full width, so the header reads as one band. */
+    padding-right: 34px;
     border-bottom: 1px solid color-mix(in srgb, var(--cal-c, var(--pp-primary)) 28%, var(--pp-border));
 }
 .pp-cday__date {

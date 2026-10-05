@@ -563,6 +563,28 @@ def test_the_day_sheets_body_listener_binds_once():
         'the delegate is bound before the `first` guard, so a history restore binds it again')
 
 
+def test_the_months_colour_reaches_the_dialog_shell():
+    """CUSTOM PROPERTIES INHERIT DOWNWARD ONLY, which is the whole reason this needs wiring at all.
+    `--cal-c` is set by `data-month` on the fragment root, and the fragment sits INSIDE the dialog -- so
+    the dialog that wraps it can never read the hue from its own child. The square carries its month,
+    the script copies it onto the shell, and the hue table lists the shell as a third selector.
+
+    IT FAILS SILENTLY IF ANY LINK BREAKS: the dialog simply renders grey, which is exactly the state the
+    owner asked to be rid of ("maybe a gradient using the month colors"), and nothing else would notice.
+    """
+    board = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'data-month="1"' in board, 'a day square must carry its own month for the script to copy'
+
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+    assert "modal.setAttribute('data-month'" in sheet, 'the month never reaches the shell'
+
+    css = _calendar_css()
+    assert '.pp-detail-modal[data-month="1"]' in css, 'the hue table does not reach the shell'
+    dialog = _css_rule(css, '#cal-day-modal .pp-detail-modal__dialog {')
+    assert 'var(--cal-c' in dialog, 'the dialog is not wearing the month at all'
+
+
 def test_the_day_sheet_obeys_takeovers_three_contract_rules():
     """REUSING A PRIMITIVE MEANS READING ITS CONTRACT, and the first version of this slice reused the
     name. Three blockers shipped, each documented elsewhere in this repo, and each contradicted by a
