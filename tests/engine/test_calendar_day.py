@@ -1,9 +1,13 @@
 """`/community/challenges/<id>/day/<month>/<day>/` -- one Calendar square, opened.
 
-A FRAGMENT ENDPOINT, following `JobContractsView.contracts_results`: it answers with the rendered
-partial and the caller injects it. So these tests read markup rather than JSON, and the gating assertions are about
-STATUS CODES, which is where this endpoint's risk actually lives -- it is the first per-user-data read
-this app serves to an anonymous caller.
+A FRAGMENT ENDPOINT, following `ContractsResultsView` in `career_views`: it answers with the rendered
+partial and the caller injects it. So these tests read markup rather than JSON, and the gating
+assertions are about STATUS CODES, which is where this endpoint's risk lives -- it is an ANONYMOUS read
+of a per-hunter trophy aggregate against somebody else's library.
+
+NOT "the first" ANYTHING. Two earlier versions of this line claimed a superlative and both were false:
+`ChallengeDetailView` is public, renders the owner's 365 squares and carries no limiter at all, and
+`ProfileDayView` is a public unauthenticated per-hunter trophy view. The risk is real without ranking.
 """
 import datetime as dt
 
@@ -15,7 +19,8 @@ from django.urls import reverse
 
 from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CalendarDay
 from challenges.services import calendar_fill
-from tests.factories import ConceptFactory, GameFactory, ProfileFactory, UserFactory
+from tests.factories import (ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory,
+                            UserFactory)
 from django.utils import timezone
 
 from trophies.models import EarnedTrophy, ProfileGame, Trophy
@@ -44,10 +49,21 @@ def _run(profile=None, challenge_type=CHALLENGE_TYPE_CALENDAR):
         svc.TYPES_NOT_YET_CREATABLE = original
 
 
-def _platted(profile, when, *, shovelware=False, name=None):
+def _platted(profile, when, *, shovelware=False, name=None, cover=False):
     _SEQ['n'] += 1
+    # `cover=True` GIVES THE CONCEPT A TRUSTED IGDB MATCH, which is the only branch of the cover chain
+    # that has a SIZE. PSN fallback URLs are fixed strings with no size knob -- the property's own
+    # docstring says so -- so a fixture that merely set `concept_icon_url` would make `has_cover_art`
+    # true while still exercising the fallback, and could never show `cover_small_2x`.
+    #
+    # A FACTORY GAME HAS NONE OF THE CHAIN'S SOURCES, so the DEFAULT here is the no-art branch. Worth
+    # knowing: a test that forgets `cover=True` is silently asserting against the fallback.
+    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
+    if cover:
+        IGDBMatchFactory(concept=concept, status='auto_accepted',
+                         igdb_cover_image_id='co%04d' % _SEQ['n'])
     game = GameFactory(
-        concept=ConceptFactory(anchor_migration_completed_at=timezone.now()),
+        concept=concept,
         title_name=name or ('Game %d' % _SEQ['n']),
         shovelware_status='auto_flagged' if shovelware else 'clean',
     )
@@ -77,8 +93,10 @@ def _fill(run):
 
 def test_an_anonymous_reader_may_open_a_square_on_a_visible_run():
     """PUBLIC, which is the owner's call (2026-10-04): the board is public "if the challenge is not
-    hidden", so a square is too. This is the first per-user-data read this app serves with no login in
-    front of it, which is why the limiter below exists."""
+    hidden", so a square is too -- an anonymous reader runs a trophy aggregate over somebody else's
+    library, which is why the limiter below exists. (This claimed to be "the first per-user-data read
+    this app serves with no login in front of it", which is false twice over; see the module
+    docstring.)"""
     profile = _hunter()
     _platted(profile, _utc(2019, 3, 3))
     run = _fill(_run(profile))
@@ -295,6 +313,106 @@ def test_opening_a_square_costs_the_same_however_many_platinums_it_holds():
     assert len(big.captured_queries) == len(small.captured_queries), (
         'the square grows with its own contents: %d vs %d'
         % (len(big.captured_queries), len(small.captured_queries)))
+
+
+def test_the_owners_timezone_costs_no_extra_query():
+    """`select_related('profile__user')`, PINNED. `_hunter_timezone` reads
+    `profile.user.user_timezone`, a forward one-to-one, so selecting only the profile paid a separate
+    round-trip for the `CustomUser` row on every request.
+
+    THE FLATNESS TESTS CANNOT SEE THIS. They compare two fixtures against each other, so a CONSTANT
+    extra query is invisible to them -- the previous commit called that out as the reason the defect
+    survived and then shipped the fix with no test that could see it either. This asks the specific
+    question instead of an absolute statement count, which would be hostage to whichever context
+    processors happen to run.
+    """
+    profile = _hunter()
+    _platted(profile, _utc(2019, 7, 1))
+    run = _fill(_run(profile))
+
+    with CaptureQueriesContext(connection) as ctx:
+        assert Client().get(_url(run, 7, 1)).status_code == 200
+
+    user_only = [q['sql'] for q in ctx.captured_queries
+                 if 'users_customuser' in q['sql'] and 'challenges_challenge' not in q['sql']]
+    assert not user_only, (
+        'the user row is being fetched on its own: %s' % (user_only[:1],))
+
+    spans = [q['sql'] for q in ctx.captured_queries if 'MIN(' in q['sql'].upper()]
+    assert len(spans) == 1, 'the window span must be exactly one statement, got %d' % len(spans)
+
+
+def test_a_square_whose_platinums_all_stopped_counting_shows_no_tally():
+    """THE CASE THE `counting` GATE EXISTS FOR, and it shipped unpinned. Fills are monotone, so a square
+    whose only game is reclassified overnight keeps `in_clean` -- and the old gate, which read that
+    boolean while the figure was computed live, printed "0 platinums" directly above a rendered row.
+
+    SILENCE IS THE RIGHT ANSWER. The rows still render, labelled, because they are the explanation for
+    why the square has stopped counting."""
+    profile = _hunter()
+    game = _platted(profile, _utc(2019, 9, 20), name='Reclassified Game')
+    run = _fill(_run(profile))
+    assert run.calendar_days.get(month=9, day=20).in_clean
+
+    game.shovelware_status = 'auto_flagged'
+    game.save(update_fields=['shovelware_status'])
+
+    body = Client().get(_url(run, 9, 20)).content.decode()
+
+    assert 'Reclassified Game' in body, 'the row is the explanation and must still render'
+    assert 'pp-cday__tally' not in body, '"0 platinums" over a rendered row'
+    assert 'pp-tally">0</span>' not in body
+
+
+def test_only_the_folded_square_dates_its_rows():
+    """THE PER-ROW DATE RENDERS ONLY WHERE IT DIFFERS FROM THE HEADING, which is 28 February and nowhere
+    else. Unconditional it restated the panel title once per row on all 365 squares; absent it would
+    hide the one distinction that matters on the one square the fold is visible on.
+
+    `test_the_square_that_holds_the_leap_day_shows_both_of_its_days` asserts the two game names and the
+    tally, and would pass with this block deleted -- its name claims coverage it does not have."""
+    profile = _hunter()
+    _platted(profile, _utc(2016, 2, 29), name='Leap Game')
+    _platted(profile, _utc(2015, 2, 28), name='Normal Game')
+    _platted(profile, _utc(2019, 5, 5), name='May Game')
+    run = _fill(_run(profile))
+
+    feb = Client().get(_url(run, 2, 28)).content.decode()
+    assert 'pp-cday__on' in feb, 'the folded square must distinguish 29 February from 28'
+    assert '29 February' in feb
+
+    may = Client().get(_url(run, 5, 5)).content.decode()
+    assert 'pp-cday__on' not in may, 'an ordinary square restated its own heading on every row'
+
+
+def test_the_cover_fits_itself_to_what_kind_of_art_it_got():
+    """PER THE DESIGN SYSTEM: real cover art gets `object-cover object-top`, while the generic PSN title
+    icon is a square app icon that `object-cover` would crop to a portrait box, so it gets
+    `object-contain`. Both branches shipped unpinned, and the factory default is the no-art branch --
+    so a test that did not build a cover would only ever see one of them."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 10, 2), cover=True)
+    with_art = Client().get(_url(_fill(_run(profile)), 10, 2)).content.decode()
+
+    bare = _hunter()
+    _platted(bare, _utc(2019, 10, 3))
+    without = Client().get(_url(_fill(_run(bare)), 10, 3)).content.decode()
+
+    assert 'object-cover object-top' in with_art and 'object-contain' not in with_art
+    assert 'object-contain' in without and 'object-cover' not in without
+
+
+def test_the_cover_is_fetched_at_a_thumbnail_size():
+    """THE BOX IS 38px AND `display_image_url` SERVES 264x374. Constraining the rendered size and leaving
+    the fetch at full resolution half-fixes the defect this fragment was written to avoid, and a stacked
+    28 February square can hold several hundred rows. `_run_hero.html` uses the small variant for its
+    32-112px cells for the same reason."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 10, 9), cover=True)
+    body = Client().get(_url(_fill(_run(profile)), 10, 9)).content.decode()
+
+    assert 'cover_small_2x' in body, 'the full-size IGDB variant is being fetched for a 38px box'
+    assert 't_cover_big' not in body
 
 
 def test_opening_a_square_does_not_fetch_the_igdb_blob():

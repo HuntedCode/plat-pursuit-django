@@ -1,10 +1,13 @@
-{% load humanize %}{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
+{% comment %}One Calendar square, opened: the platinums its owner earned on that date.
 
-A FRAGMENT, fetched on click. The sheet owns the dialog chrome, so this file is contents only, and the
-host REPLACES what it holds rather than appending -- which is what makes the fixed `id` below safe. An
-earlier version of this comment claimed the fragment was "safe to drop into a container twice", which it
-is not: two copies would give two elements with one id, and `aria-labelledby` resolves to the first, so
-the dialog would announce the square the reader had just left.
+A FRAGMENT, fetched on click. The sheet owns the dialog chrome, so this file is contents only.
+
+ONE DEMAND ON A HOST THAT DOES NOT EXIST YET: it must REPLACE what it holds rather than append. Two
+copies would give two elements carrying `id="cal-day-title"`, and `aria-labelledby` resolves to the
+first, so the dialog would announce the square the reader had just left. Stated as a requirement rather
+than as a fact -- an earlier version claimed the fragment was "safe to drop into a container twice"
+(it is not), and the correction then asserted "the host REPLACES what it holds" as though the host
+existed.
 
 THE YEAR IS THE ORGANISING ELEMENT (owner, 2026-10-04: a day shows "platinums earned and the date,
 mainly by year"). A square has no year by design -- "3 March" means every 3 March in the hunter's
@@ -29,8 +32,12 @@ nothing here says "you".
         above a rendered row. Gating on `counting` cannot produce that.
 
         IT COUNTS THE PLATINUMS THAT COUNT, which is not the same as the rows below it: a mixed square
-        lists a flagged platinum too, labelled. The board's square counts the clean ones, so this figure
-        is the square's, and the list says plainly which row is not in it.{% endcomment %}
+        lists a flagged platinum too, labelled. That matches what the BOARD draws, which is the
+        shovelware-free lens, and the list says plainly which row is not in it.
+        NOT "the square's figure", which an earlier version said: `CalendarDay.plat_count` is the clean
+        count only on a square that draws, and the shovelware-inclusive one otherwise. Nothing
+        contradictory reaches a reader -- the tally is hidden in exactly that case -- but the two are not
+        the same quantity.{% endcomment %}
         <p class="pp-cday__tally">
             <span class="pp-tally">{{ counting }}</span>
             platinum{{ counting|pluralize }}
@@ -47,19 +54,31 @@ nothing here says "you".
         <li class="pp-cday__row{% if not plat.clean %} pp-cday__row--out{% endif %}">
             <span class="pp-cday__year">{{ plat.on|date:"Y" }}</span>
             <span class="pp-cday__art">
-                {% comment %}`display_image_url` IS THE WHOLE CHAIN and must never be re-spelled inline:
-                trusted IGDB cover, then the concept's PSN icon, then the game's own art.
+                {% comment %}`display_image_url_small` -- THE SAME CHAIN AT A THUMBNAIL SOURCE, which is
+                what `_run_hero.html` uses for its 32-112px cells and what this box wants. The box is
+                38px; `display_image_url` serves IGDB `cover_big` at 264x374, so constraining the
+                rendered size and leaving the FETCH at full resolution would have half-fixed the defect
+                this file's header names ("COVER ART, SMALL") -- and a stacked 28 February square can
+                hold several hundred rows. Still the documented chain, never re-spelled inline: trusted
+                IGDB cover, then the concept's PSN icon, then the game's own art.
 
                 THE FIT BRANCHES ON `has_cover_art`, per the design system: real cover art gets
                 `object-cover object-top` -- `object-top` because PSN fallback art is wider than 3:4 and
                 anchoring to the top keeps the logo that sits there -- while the generic PSN title icon
                 is a square app icon that `object-cover` would crop to a portrait box. It gets
-                `object-contain` and room instead. `has_cover_art` reads only fields this queryset
-                already selects, so the branch costs nothing.{% endcomment %}
-                <img src="{{ plat.game.display_image_url }}" alt=""
+                `object-contain` instead, with `p-1` rather than the design system's `p-3`: on a 38px box
+                p-3 would leave fourteen pixels of image. `has_cover_art` reads only fields this
+                queryset already selects, so the branch costs nothing.{% endcomment %}
+                <img src="{{ plat.game.display_image_url_small }}" alt=""
                      loading="lazy" decoding="async"
                      class="w-full h-full {% if plat.game.has_cover_art %}object-cover object-top{% else %}object-contain p-1{% endif %}">
             </span>
+            {% comment %}A GAME CAN APPEAR TWICE, and it is not a render fault: a `Game` carrying two
+            `trophy_type='platinum'` rows is a catalogue data fault, and the stored count and this list
+            report it the same way -- so the layers agree and the page looks wrong. Deduping here would
+            make the list disagree with the tally above it, so if this ever shows up the fix belongs in
+            the catalogue. (This note was lost once already, when the date moved into this
+            block.){% endcomment %}
             <span class="pp-cday__name">
                 <span class="pp-cday__title">{{ plat.game.title_name }}</span>
                 {% if not plat.clean %}

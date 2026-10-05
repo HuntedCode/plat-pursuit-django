@@ -1093,9 +1093,10 @@ def test_a_platinum_outside_the_plausible_years_is_still_listed(year):
 
 def test_the_list_agrees_with_the_square_across_two_decades():
     """THE AGREEMENT TEST THE OTHERS COULD NOT MAKE, because they all used a two- or three-year span. Two
-    fixtures in this suite build platinums from 2000 and 2004 onward, and under the hardcoded epoch
-    four and eight of their rows respectively were dropped from the modal while counting on the board --
-    both tests compared only query counts, so both were green.
+    flatness fixtures build platinums from 2000 -- eight rows below the 2008 epoch -- and from 2004,
+    which is four, and under the hardcoded epoch every one of those was dropped from the modal while
+    counting on the board. Both tests compared only query counts, so both were green. (An earlier
+    version paired the years with the counts "respectively" and had them the wrong way round.)
     """
     profile = _hunter()
     years = list(range(2004, 2027))
@@ -1111,6 +1112,37 @@ def test_the_list_agrees_with_the_square_across_two_decades():
     assert len(rows) == len(years), (
         'the modal lists %d of %d -- the span is clipping the hunter\'s history'
         % (len(rows), len(years)))
+
+
+def test_one_bad_stamp_cannot_widen_the_window_set_without_limit():
+    """THE COST BUG THE SPAN FIX INTRODUCED while removing a correctness one. The old year range was
+    wrong at both ends but BOUNDED at about nineteen years; deriving it from data that nothing clamps
+    made the loop's length depend on the worst stamp in the hunter's library.
+
+    Measured before the bound: a single 1970 stamp -- a console with a dead clock battery, the commonest
+    bogus date -- took 21 windows to 59, and a staff typo of 9999 produced 7,993 windows and about
+    16,000 bind parameters in ONE statement, repeatable 365 times by any anonymous visitor, in a module
+    whose first page says whale safety is the shape of every query in it.
+
+    PAST `MAX_WINDOW_YEARS` IT FALLS BACK TO A SINGLE RANGE over the whole span: still a superset, so
+    still correct, and bounded at one predicate. Less selective, which is the right trade for a library
+    whose own data says a trophy was earned in 1970.
+    """
+    utc = dt.timezone.utc
+    normal = calendar_fill._day_windows(
+        [(4, 4)], utc, (dt.datetime(2008, 1, 1, tzinfo=utc), dt.datetime(2026, 1, 1, tzinfo=utc)))
+    assert 15 < len(normal.children) <= calendar_fill.MAX_WINDOW_YEARS * 2, (
+        'an ordinary history should still get a window per year, got %d' % len(normal.children))
+
+    for span in ((dt.datetime(1970, 1, 1, tzinfo=utc), dt.datetime(2026, 1, 1, tzinfo=utc)),
+                 (dt.datetime(2008, 1, 1, tzinfo=utc), dt.datetime(9999, 1, 1, tzinfo=utc))):
+        wide = calendar_fill._day_windows([(4, 4)], utc, span)
+        assert len(wide.children) == 2, (
+            'a %d-%d span built %d predicates -- the fallback is not engaging'
+            % (span[0].year, span[1].year, len(wide.children)))
+        # STILL A SUPERSET: the exact month/day test decides, so the fallback only has to contain it.
+        assert dict(wide.children)['earned_date_time__gte'] < span[0]
+        assert dict(wide.children)['earned_date_time__lt'] > span[1]
 
 
 def test_a_key_with_no_valid_date_refuses_rather_than_matching_everything():
@@ -1137,12 +1169,20 @@ def test_a_key_with_no_valid_date_refuses_rather_than_matching_everything():
     assert bool(nothing_earned), 'a hunter with no trophies must not widen the query'
 
 
-def test_the_span_is_one_indexed_statement_and_not_a_scan():
-    """THE WINDOW SPAN COSTS A QUERY, and it is worth knowing which one. `_earned_span` asks min and max
-    over `(profile, earned, earned_date_time) WHERE earned` -- the partial index's leading prefix, so
-    Postgres takes both ends of a range scan rather than reading rows. It deliberately does NOT carry
-    the `trophy_id__in` platinum subquery: the platinum span sits inside the all-trophy span, so it is
-    still a superset for the windows, and leaving the subquery out is what keeps it an index read."""
+def test_the_span_is_one_statement_over_one_table():
+    """THE TWO STRUCTURAL CONDITIONS FOR THE SPAN TO BE CHEAP, which is what a test can actually hold.
+
+    ONE STATEMENT, AND ONE TABLE: Postgres rewrites `MIN`/`MAX` into index probes only when every
+    aggregate in the statement is a min or a max AND the query references a single table
+    (`preprocess_minmax_aggregates` bails otherwise). Carrying the `trophy_id__in` platinum subquery
+    here would forfeit the rewrite outright, which is why `_earned_span` spans ALL earned trophies and
+    leans on the platinum rows being a subset of them.
+
+    THE PLAN ITSELF IS NOT ASSERTED, and the name no longer claims it. This was called
+    `..._is_one_indexed_statement_and_not_a_scan`, which was false in the only environment that runs it:
+    the rewrite is cost-based, so on a near-empty test database the planner prefers a plain aggregate
+    over the whole index. The probe form was measured on a real server; the reasoning lives on
+    `_earned_span`."""
     profile = _hunter()
     _platted(profile, _utc(2019, 6, 6))
 
@@ -1151,9 +1191,11 @@ def test_the_span_is_one_indexed_statement_and_not_a_scan():
 
     assert len(ctx.captured_queries) == 1
     sql = ctx.captured_queries[0]['sql']
-    assert 'MIN' in sql.upper() and 'MAX' in sql.upper()
-    assert 'trophy_type' not in sql, (
-        'the span is carrying the platinum subquery, which is what makes it a scan')
+    # SPELLED WITH THE COLUMN, because `'MIN' in sql.upper()` is satisfied by the substring in "ADMIN".
+    assert 'MIN("trophies_earnedtrophy"' in sql and 'MAX("trophies_earnedtrophy"' in sql
+    assert 'COUNT(' not in sql.upper(), 'any non-min/max aggregate forfeits the index rewrite'
+    assert 'trophies_trophy' not in sql and 'trophies_profilegame' not in sql, (
+        'a second table in the statement forfeits the index rewrite')
 
 
 def test_the_square_narrows_by_an_indexable_range_before_the_month_day_test():

@@ -108,18 +108,31 @@ def _fold(month, day):
 def _earned_span(profile):
     """`(first, last)` instants this hunter earned ANY trophy, or `(None, None)`.
 
-    ONE INDEXED STATEMENT. `earnedtrophy_timeline_idx` is `(profile, earned, earned_date_time)
-    WHERE earned`, so `profile = X AND earned` is the index's leading prefix and Postgres takes the
-    min and the max as two ends of a range scan rather than reading rows.
+    ONE STATEMENT, AND AT SCALE AN INDEX PROBE AT EACH END. `earnedtrophy_timeline_idx` is
+    `(profile, earned, earned_date_time) WHERE earned`, and its partial predicate makes `earned` a
+    constant for sort purposes -- so `MIN`/`MAX` over it plan as two `Limit 1` index-only scans, one
+    forward and one backward. Measured on PG 15: a statement whose aggregates are ALL min/max gets that
+    rewrite, and adding any other aggregate kills it.
+    COST-BASED, SO NOT A GUARANTEE. On a small table the planner prefers a plain aggregate over the
+    whole index, which is what a test database shows -- the pin on this function deliberately asserts
+    the two things that are structural (one statement, no second table) rather than a plan shape it
+    cannot reproduce.
 
-    EVERY TROPHY, NOT JUST PLATINUMS, and deliberately: the platinum span is inside this one, so it is
-    still a superset for `_day_windows`' purposes, and asking it without the `trophy_id__in` subquery is
-    what keeps it an index read instead of a scan.
+    EVERY TROPHY, NOT JUST PLATINUMS, and deliberately: the platinum rows are a subset of these, so
+    `min` and `max` here bracket the platinum span and the windows stay a superset. Leaving the
+    `trophy_id__in` subquery out is also what makes the rewrite possible at all -- Postgres refuses the
+    min/max optimisation for any query referencing more than one table.
     """
     bounds = (EarnedTrophy.objects
               .filter(profile=profile, earned=True, earned_date_time__isnull=False)
               .aggregate(first=Min('earned_date_time'), last=Max('earned_date_time')))
     return bounds['first'], bounds['last']
+
+
+#: THE MOST YEARS WORTH BUILDING A WINDOW EACH FOR. PSN trophies began in 2008, so a real history is
+#: under twenty years and thirty is generous headroom. Past it the span is not a history, it is a bad
+#: stamp -- see `_day_windows`, which falls back to one wide range rather than one window per year.
+MAX_WINDOW_YEARS = 30
 
 
 def _day_windows(keys, tz, span):
@@ -152,8 +165,30 @@ def _day_windows(keys, tz, span):
         for years. `_days_from_platinums` has no floor or ceiling, which is what made the asymmetry a
         disagreement rather than a shared blind spot.
 
-    A span taken from the rows themselves cannot have either, because whatever filled the square is by
-    definition inside it. `± 1 year` is ordinary belt and braces around the local/UTC boundary.
+    A span taken from the rows themselves cannot have either: `astimezone(tz).year` is monotone in the
+    instant, so any row between `first` and `last` has its year in the range and therefore has a window.
+    `± 1` is slack that is provably unnecessary and kept only as cheap insurance against a future change
+    to how the bounds are derived. (It is NOT "belt and braces around the local/UTC boundary", which an
+    earlier version of this said -- the fix dissolved that boundary by deriving the years in the key's
+    own zone, so there is nothing left there to brace.)
+
+    ACROSS TWO STATEMENTS, THOUGH, AND THAT IS A REAL IF NARROW WINDOW. The span is one query and the
+    rows are another, with no transaction, and Postgres is READ COMMITTED -- so a platinum committed
+    BETWEEN them that falls outside the span's years is omitted, which is this feature's signature
+    failure reached from the other side. `_days_from_platinums` takes one statement for both platinum
+    views specifically to avoid this shape. It is accepted here rather than fixed because this path only
+    DISPLAYS: the next open recomputes the span and the row reappears, where the fill's version would
+    have written a wrong square. Said plainly because the sentence above used to claim "by definition
+    inside it", which is true within one snapshot and not across two.
+
+    AND THE YEAR COUNT IS BOUNDED, which the first version of the span fix forgot. Deriving years from
+    the data traded a correctness bug for a cost one: nothing clamps `earned_date_time` on the way in
+    (see below), so a single 1970 stamp from a console with a dead clock battery turned 21 windows into
+    59, and a staff typo of 9999 produced 7,993 windows and about 16,000 bind parameters in ONE
+    statement -- repeatable 365 times by any anonymous visitor, on a module whose first page says whale
+    safety is the shape of every query here. Past `MAX_WINDOW_YEARS` this falls back to a SINGLE range
+    over the whole span: still a superset, so still correct, and bounded at one predicate. It is less
+    selective, which is the right trade for a hunter whose data says they earned a trophy in 1970.
 
     AN EMPTY RESULT MATCHES NOTHING, AND THAT MATTERS MORE THAN IT LOOKS. `Q()` is falsy and
     `.filter(Q())` is a NO-OP, so returning one would silently restore the full-history scan this
@@ -164,19 +199,30 @@ def _day_windows(keys, tz, span):
     here (it folds onto the 28th and the caller passes both), and three years in four have no such date.
     """
     first, last = span
+    if first is None or last is None:
+        return Q(pk__in=[])
+
+    # THE SPAN'S YEARS IN THE KEY'S ZONE, not in UTC -- see above.
+    first_year = first.astimezone(tz).year - 1
+    last_year = last.astimezone(tz).year + 1
+
+    if last_year - first_year + 1 > MAX_WINDOW_YEARS:
+        # ONE RANGE FOR AN IMPLAUSIBLE SPAN. A day either side of each end, for the same reason the
+        # per-year windows take one: the bounds are local and the column is an instant.
+        return Q(earned_date_time__gte=first - dt.timedelta(days=1),
+                 earned_date_time__lt=last + dt.timedelta(days=2))
+
     windows = Q()
     built = False
-    if first is not None and last is not None:
-        # THE SPAN'S YEARS IN THE KEY'S ZONE, not in UTC -- see above.
-        for year in range(first.astimezone(tz).year - 1, last.astimezone(tz).year + 2):
-            for month, day in keys:
-                try:
-                    local = dt.datetime(year, month, day, tzinfo=tz)
-                except ValueError:
-                    continue
-                windows |= Q(earned_date_time__gte=local - dt.timedelta(days=1),
-                             earned_date_time__lt=local + dt.timedelta(days=2))
-                built = True
+    for year in range(first_year, last_year + 1):
+        for month, day in keys:
+            try:
+                local = dt.datetime(year, month, day, tzinfo=tz)
+            except ValueError:
+                continue
+            windows |= Q(earned_date_time__gte=local - dt.timedelta(days=1),
+                         earned_date_time__lt=local + dt.timedelta(days=2))
+            built = True
     return windows if built else Q(pk__in=[])
 
 

@@ -639,7 +639,7 @@ def test_both_write_doors_share_one_rate_limit_bucket():
         calls.append(' '.join(src[at + len('ratelimit('):i - 1].split()))
         at = src.find('ratelimit(', i)
 
-    # PARTITIONED BY GROUP, because not every door in this file is a write any more. THREE kinds now, and
+    # PARTITIONED BY GROUP, because not every door in this file is a write any more. SIX kinds now, and
     # each exists because sharing with another would break something concrete:
     #
     # - WRITES (start, hide, assign, clear) share one bucket so create-hide-create cannot outrun one door
@@ -692,11 +692,16 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     # the constant and therefore could never fail: setting
     # `CHALLENGE_REDEEM_RATELIMIT_GROUP = 'challenges:write'` would have collided the buckets for real and
     # sailed through. The assertion did exactly what it said and nothing the comment above it claimed.
+    # SIX, NOT FIVE. The day square was added to the INVENTORY above and not to this INVARIANT, which
+    # is the same half-fix this comment already records being caught once: setting
+    # `CALENDAR_DAY_RATELIMIT_GROUP = 'challenges:browse'` collided the square's bucket with the browse
+    # page for real and the whole census stayed green.
     assert len({views.CHALLENGE_WRITE_RATELIMIT_GROUP,
                 views.CHALLENGE_READ_RATELIMIT_GROUP,
                 views.CHALLENGE_REDEEM_RATELIMIT_GROUP,
                 views.CHALLENGES_BROWSE_RATELIMIT_GROUP,
-                views.HALL_OF_FAME_RATELIMIT_GROUP}) == 5, 'two kinds share a bucket value'
+                views.HALL_OF_FAME_RATELIMIT_GROUP,
+                views.CALENDAR_DAY_RATELIMIT_GROUP}) == 6, 'two kinds share a bucket value'
 
     # ── THE BROWSE PAGES, where the rule INVERTS ──────────────────────────────────────────────────
     #

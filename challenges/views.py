@@ -100,13 +100,15 @@ CHALLENGE_READ_RATELIMIT_GROUP = 'challenges:read'
 #: `CHALLENGE_READ_RATELIMIT_GROUP`, which is a deliberate choice parked for a `refactor/` branch rather than
 #: an accident of qualname derivation. An earlier version of this note called them "that exact sharing",
 #: which would have pointed a reader at a precedent that could not teach them this hazard.)
-#: THE DAY SQUARE'S OWN BUCKET. It is the first anonymous endpoint that runs a WHALE-SCALE TROPHY QUERY
-#: against a third party's library -- which is the narrow claim, and worth getting right because the
-#: reason for the bucket rests on it. (This said "the first per-USER-DATA read this app serves to an
-#: anonymous caller", which is plainly false: `ChallengeDetailView` is public and renders the owner's
-#: 365 squares with no limiter at all, and `/hunters/<psn_username>/` is a public per-hunter trophy
-#: page.) The browse pages above are catalogue-shaped and the picker doors sit behind a login; this one
-#: is a per-hunter aggregate served to whoever opened somebody else's board.
+#: THE DAY SQUARE'S OWN BUCKET, because it is an ANONYMOUS endpoint running a per-hunter trophy
+#: aggregate against a third party's library, and draining it must not shut the pages that merely list
+#: runs. That is the whole reason; it is not a superlative, and two attempts to make it one were both
+#: false. "The first per-user-data read served to an anonymous caller" ignores `ChallengeDetailView`,
+#: which is public and carries no limiter at all, and `/hunters/<psn_username>/`. "The first anonymous
+#: endpoint running a whale-scale trophy query against a third party's library" ignores `ProfileDayView`
+#: in `trophies/views/profile_views.py`, which is public, unauthenticated and asks
+#: `activity_service.day_sessions` over the same index. Both are worth knowing about; neither makes this
+#: endpoint first at anything.
 #: So it gets the anonymous treatment (`key='ip'`, `method=('GET', 'HEAD')`, an explicit group -- see the
 #: three notes above, which apply here unchanged) and a budget of its own rather than sharing the browse
 #: pages'. 60/m is well above a reader opening squares and well below a loop walking all 365.
@@ -1249,10 +1251,13 @@ class _ChallengeBrowseView(HtmxListMixin, ListView):
 class CalendarDayView(View):
     """One square of a Plat Calendar: the platinums its owner earned on that calendar date.
 
-    A FRAGMENT, NOT JSON, following `JobContractsView.contracts_results` in `career_views` (which an
-    earlier version of this docstring cited as "JobContractsResultsView", a name that exists nowhere --
-    it conflated `JobContractsView` with `ContractsResultsView`). The response is the rendered partial
-    and the caller injects it. Nothing here needs client-side templating, and the cover chain is a
+    A FRAGMENT, NOT JSON, following `ContractsResultsView` in `trophies/views/career_views.py` -- the
+    class behind the `contracts_results` route, which renders a partial and patches the cache headers
+    exactly as this does. (Cited twice before as `JobContractsResultsView` and then as
+    `JobContractsView.contracts_results`. Neither exists: the first invented a class, the second
+    attached a URL NAME to the wrong class as though it were a method. Two wrong names for one
+    precedent is a sign the citation was never looked up.) The response is the rendered partial and the
+    caller injects it. Nothing here needs client-side templating, and the cover chain is a
     template concern already solved by `display_image_url` -- handing JSON to the page would mean
     re-deriving it in JavaScript, which is how the two drift.
 
