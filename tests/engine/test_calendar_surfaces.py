@@ -637,6 +637,47 @@ def test_the_months_colour_reaches_the_dialog_shell():
     assert 'var(--cal-c' in dialog, 'the dialog is not wearing the month at all'
 
 
+def test_only_a_stacked_day_wears_its_count():
+    """OWNER, 2026-10-05, choosing the badge over a toggle. MOST FILLED DAYS HOLD EXACTLY ONE PLATINUM,
+    so a count on every one would print "1" across the board -- the same information as "filled", just
+    louder. The signal is the minority that stack, which is the threshold the side column's "busiest
+    day" already uses.
+
+    `x4` RATHER THAN `4`, because a bare numeral in the corner of a cell whose content is already a
+    numeral reads as part of the date."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 5, 2)                 # one platinum -- no badge
+    _fill(run, 5, 9, plats=4)        # four -- badged
+    may = _section(_body(run), 'id="cal-month-may"', until='</section>')
+
+    assert may.count('pp-cal__stack') == 1, 'exactly the stacked day carries a count'
+    assert '&times;4' in may or '×4' in may
+    assert '&times;1' not in may, 'a day holding one platinum must not announce it'
+
+
+def test_a_shovelware_only_day_is_never_badged():
+    """`card.filled`, NOT `card.counts`. A square that is `in_all` and not `in_clean` carries the
+    SHOVELWARE-INCLUSIVE count -- `CalendarDay.plat_count`'s own comment says so -- so badging it would
+    advertise a figure this board excludes, on a square the board deliberately draws empty."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month=5, day=4).update(
+        in_all=True, in_clean=False, earned_on=dt.date(2019, 5, 4), plat_count=6)
+    may = _section(_body(run), 'id="cal-month-may"', until='</section>')
+
+    assert 'pp-cal__stack' not in may
+    assert '&times;6' not in may
+
+
+def test_the_count_is_spoken_as_well_as_drawn():
+    """THE NUMERAL IS `aria-hidden`, so the `sr-only` label is the only thing a screen reader gets -- a
+    count that existed only in the corner of a tile would not exist at all for them."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 5, 9, plats=4)
+    may = _section(_body(run), 'id="cal-month-may"', until='</section>')
+
+    assert 'May 9: filled, 4 platinums.' in may
+
+
 def test_the_side_column_can_preview_a_day_without_fetching():
     """OWNER, 2026-10-05: "I'd like the card on the right to show information on a filled in day when
     hovered". Every figure it shows is carried on the square, which is why the per-day count is stored at
@@ -905,6 +946,9 @@ def test_no_lens_machinery_survives_in_the_stylesheet_or_the_script():
     because re-adding any one of them without the others is how a half-collapsed lens comes back."""
     block = _calendar_css()
     assert ':has(input' not in block
+    # `.pp-cal__count`, THE RETIRED NAME -- not `.pp-cal__stack`, which is the live per-day count
+    # badge added later. A blanket rename once swept this assertion onto the new class, where it
+    # guarded the absence of something that is supposed to be there.
     assert '.pp-cal__count' not in block
     assert '.pp-cal__lens' not in block
     assert '[data-view' not in block
@@ -1298,6 +1342,9 @@ def test_the_month_figure_appears_in_both_places_it_belongs():
     ONE FIGURE EACH NOW. Both places rendered three -- one per lens -- sharing `.pp-cal__count` so a
     single set of `:has()` rules governed them and they could not disagree about which lens was active.
     The collapse left one figure printed directly, so the shared class and its rules went too.
+
+    NOT TO BE CONFUSED WITH `.pp-cal__stack`, which is live: the per-day count badge on a stacked square.
+    The retired name was deliberately NOT reused for it, so that this guard keeps meaning what it says.
     """
     run = _run(CHALLENGE_TYPE_CALENDAR)
     for day in range(1, 4):

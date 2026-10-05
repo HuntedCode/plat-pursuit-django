@@ -3343,7 +3343,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    answer here rather than an exception to argue for: this figure is a number a hunter reads off a coin,
    not a decorative micro-label. The face clamps 12 -> 18px and this clamps 12 -> 15px, so the pair
    always fits the clear circle with the face leading.
-   IT CARRIED THREE FIGURES, one per lens, sharing `.pp-cal__count` with the month head so one set of
+   IT CARRIED THREE FIGURES, one per lens, sharing `.pp-cal__stack` with the month head so one set of
    `:has()` rules governed both and the two could not disagree about which lens was active. One lens
    means one figure printed directly, and the shared class went with the rules that needed it. */
 /* THE COUNTER IS WORN IN THE NOTCH, which is `.pp-phero__lvl`'s shape and the owner's request: "moving
@@ -3499,9 +3499,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* ONE FIGURE, PRINTED DIRECTLY. This carried one per lens with all three in the DOM and CSS revealing
    the active one, because a server-picked number could not survive a client-side switch and the three
    lenses did not nest. The collapse to one lens left that comment standing directly above the note that
-   explains the removal for `.pp-cal__count`, i.e. two adjacent comments disagreeing. */
+   explains the removal for `.pp-cal__stack`, i.e. two adjacent comments disagreeing. */
 .pp-cal__tally { font-size: 0.75rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
-/* NO `.pp-cal__count` RULES. The month head and the coin each rendered three figures -- one per lens --
+/* NO `.pp-cal__stack` RULES. The month head and the coin each rendered three figures -- one per lens --
    with these selectors revealing whichever matched the checked radio. One lens means one figure, printed
    directly, so the class and its reveal rules went together. */
 
@@ -3641,6 +3641,39 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cal__day--today {
     box-shadow: 0 0 0 1px var(--cal-c, var(--pp-primary)),
                 0 0 10px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 40%, transparent);
+}
+
+/* `__stack`, NOT `__count`, AND THE SUITE CAUGHT THE COLLISION. `.pp-cal__count` is a RETIRED name:
+   the month head and the coin each rendered three figures under it, one per lens, and
+   `test_no_lens_machinery_survives_in_the_stylesheet_or_the_script` guards its absence. Reusing a
+   retired name for a new meaning is how a future reader concludes the lens machinery came back --
+   and this file already records paying for a class-name collision once.
+
+   THE COUNT ON A STACKED DAY. Only squares holding two or more carry one, so most of the board is
+   unchanged and the stacked days are what the eye finds -- which is the thing the side column's hover
+   peek could not do, since it showed one day at a time and made a reader hunt for the interesting ones.
+
+   `x4`, NOT `4`. A bare numeral in the corner of a cell whose content is already a numeral reads as part
+   of the date; the multiplication sign cannot be mistaken for one.
+
+   TOP-RIGHT, CLEAR OF THE CENTRED DATE. At the mobile cell's 43.9px the date sits centred around 22px
+   and spans roughly 15-29px across; this sits at 27-42px and 2-14px down, so the two never meet. Two
+   digits still fit: `x12` is about 21px at this size.
+
+   12px IS THE FLOOR and this sits on it. The badge is secondary to the date, and the ONLY way to say so
+   without going under the floor is colour -- not size, and not `opacity`, which would drag a measured
+   ratio down with it. `--pp-text-dim` on the filled square's tinted fill holds about 6:1. */
+.pp-cal__stack {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-text-dim);
+    pointer-events: none;
 }
 
 /* A FILLED DAY TAKES ITS MONTH'S COLOUR, which is the other half of the owner's cohesion note: the

@@ -116,7 +116,7 @@ and not a button", and the commit that made them buttons left it standing twenty
                 the stylesheet carries the arithmetic.
 
                 ONE FIGURE NOW, not three. This carried a per-lens count that followed the checked radio,
-                sharing `.pp-cal__count` with the month head so one set of `:has()` rules governed both.
+                sharing `.pp-cal__stack` with the month head so one set of `:has()` rules governed both.
                 With one lens it is simply how much of the month is filled, and the class goes with the
                 rules that needed it.
 
@@ -208,9 +208,27 @@ and not a button", and the commit that made them buttons left it standing twenty
                     control, and the word was a promise this square cannot keep without a script: with JS
                     off a reader heard "Open., button" on three hundred squares and nothing happened on
                     any of them. The inert branch says only the date, and so does this one.{% endcomment %}
-                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}.{% if card.is_today %} Today.{% endif %}</span>
+                    {% if card.filled and card.plats > 1 %}
+                    {% comment %}ONLY WHERE A DAY STACKS. Most filled days hold exactly one platinum, so a
+                    count on every one of them would print "1" across the board -- the same information as
+                    "filled", just louder. The same threshold the side column's "busiest day" uses, and
+                    for the same reason.
+
+                    `card.filled`, NOT `card.counts`. A square that is `in_all` and not `in_clean` carries
+                    the SHOVELWARE-INCLUSIVE count (the field's own comment says so), so badging it would
+                    advertise a figure this board excludes on a square it deliberately draws empty.
+
+                    `x` RATHER THAN A BARE NUMERAL, because a second number in the corner of a cell whose
+                    content is already a number reads as part of the date. "x4" cannot.{% endcomment %}
+                    <span class="pp-cal__stack" aria-hidden="true">&times;{{ card.plats }}</span>
+                    {% endif %}
+                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% if card.plats > 1 %}, {{ card.plats }} platinums{% endif %}{% endif %}.{% if card.is_today %} Today.{% endif %}</span>
                 </button>
                 {% else %}
+                {% comment %}NO COUNT BADGE ON THIS BRANCH, and not by omission: a filled square is
+                always an openable one. `in_clean` implies `in_all` -- the database enforces it with
+                `calendarday_clean_implies_all` -- so a cell that draws always took the button branch
+                above, and a badge here could never render.{% endcomment %}
                 <div class="pp-cal__day{% if card.filled %} pp-cal__day--on{% endif %}{% if card.is_today %} pp-cal__day--today{% endif %}"
                      style="--rev: {{ forloop.counter0 }};">
                     <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
