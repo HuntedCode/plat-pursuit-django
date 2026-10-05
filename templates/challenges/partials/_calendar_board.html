@@ -192,6 +192,16 @@ and not a button", and the commit that made them buttons left it standing twenty
                         class="pp-cal__day pp-cal__day--open{% if card.filled %} pp-cal__day--on{% endif %}{% if card.is_today %} pp-cal__day--today{% endif %}"
                         style="--rev: {{ forloop.counter0 }};"
                         data-month="{{ card.month }}"
+                        {% comment %}WHAT THE SIDE COLUMN SHOWS ON HOVER, carried on the square rather
+                        than fetched: every figure is already known at render time, and a hover that
+                        asked the server would put a request behind every mouse movement across a
+                        365-cell grid. Only openable squares carry it, which is the same predicate the
+                        click uses -- a square that previews what it will not open is worse than one
+                        that does neither.{% endcomment %}
+                        data-peek-label="{{ card.label }}"
+                        data-peek-plats="{{ card.plats }}"
+                        data-peek-on="{{ card.earned_on|date:'j M Y' }}"
+                        data-peek-clean="{% if card.filled %}1{% else %}0{% endif %}"
                         data-day-url="{% url 'challenge_calendar_day' challenge.id card.month card.day %}">
                     <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
                     {% comment %}NO "Open." IN THE NAME. The button role already announces that it is a
@@ -252,7 +262,22 @@ and not a button", and the commit that made them buttons left it standing twenty
         must leave this list `display: block` -- a grid or flex `<dl>` loses its term/definition mapping
         in Chromium and WebKit, which is the same role-stripping hazard `role="list"` answers on the day
         grid, with no attribute available to answer it here.{% endcomment %}
+        {% comment %}TWO FACES IN ONE BOX, stacked in a grid cell rather than swapped in flow. The
+        month's figures and the day peek occupy the same grid area, so the column's height is the taller
+        of the two and NOTHING MOVES when a pointer crosses the grid -- a column that resized on hover
+        would shift the board under the cursor, which is the worst possible response to a hover.
+        {% endcomment %}
         <div class="pp-cal__stats">
+            <div class="pp-cal__peek" data-cal-peek aria-hidden="true" hidden>
+                <h4 class="pp-cal__stats-head" data-peek-head></h4>
+                <p class="pp-cal__peek-figure">
+                    <span class="pp-tally" data-peek-count></span>
+                    <span class="pp-cal__peek-unit" data-peek-unit></span>
+                </p>
+                <p class="pp-cal__peek-note" data-peek-note></p>
+                <p class="pp-cal__peek-hint">Open for the games</p>
+            </div>
+            <div class="pp-cal__facts" data-cal-facts>
             <h4 class="pp-cal__stats-head">{{ month.label }} at a glance</h4>
             <dl class="pp-cal__statlist">
                 {% if month.done and month.open %}
@@ -311,6 +336,7 @@ and not a button", and the commit that made them buttons left it standing twenty
             a render fault rather than as a fact about the month.{% endcomment %}
             <p class="pp-cal__statempty">No days filled in {{ month.label }} yet.</p>
             {% endif %}
+            </div>
         </div>
     </section>
     {% endfor %}

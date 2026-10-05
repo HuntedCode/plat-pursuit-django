@@ -244,6 +244,91 @@
         });
     }
 
-    if (PP.onPageReady) { PP.onPageReady(function (first) { boot(); wireDaySheet(first); }); }
-    else { document.addEventListener('DOMContentLoaded', function () { boot(); wireDaySheet(true); }); }
+    // ── the side column's day peek ───────────────────────────────────────────────────────────────────
+    //
+    // Hovering (or focusing) a square that opens shows that day's figures where the month's normally
+    // sit. NO FETCH: every figure is already on the square, which is why the per-day count is stored at
+    // all -- a hover that asked the server would put a request behind every mouse movement across a
+    // 365-cell grid.
+    //
+    // SILENT TO SCREEN READERS. The peek is `aria-hidden` and nothing announces it: a live region
+    // firing on every square a pointer crosses would be hostile, and the modal is the accessible path
+    // to the same information. Focus mirrors hover anyway, because a keyboard reader has no hover and a
+    // phone has none at all -- so the peek has to be reachable without a pointer even though it is not
+    // the route a screen reader is meant to take.
+    function wireDayPeek(first) {
+        if (!first) { return; }
+
+        var shown = null;      // the panel whose peek is currently up
+
+        function faces(cell) {
+            var panel = cell.closest('.pp-cal__panel');
+            if (!panel) { return null; }
+            var peek = panel.querySelector('[data-cal-peek]');
+            var facts = panel.querySelector('[data-cal-facts]');
+            return (peek && facts) ? { panel: panel, peek: peek, facts: facts } : null;
+        }
+
+        function clear() {
+            if (!shown) { return; }
+            shown.peek.hidden = true;
+            shown.facts.hidden = false;
+            shown = null;
+        }
+
+        function show(cell) {
+            var f = faces(cell);
+            if (!f) { return; }
+            // A SQUARE IN ANOTHER MONTH CANNOT LEAVE THE LAST PEEK UP. Switching months while a peek is
+            // open would otherwise strand it on a panel the reader can no longer see.
+            if (shown && shown.panel !== f.panel) { clear(); }
+
+            var plats = parseInt(cell.getAttribute('data-peek-plats'), 10) || 0;
+            var clean = cell.getAttribute('data-peek-clean') === '1';
+            f.peek.querySelector('[data-peek-head]').textContent = cell.getAttribute('data-peek-label');
+            f.peek.querySelector('[data-peek-count]').textContent = String(plats);
+            f.peek.querySelector('[data-peek-unit]').textContent =
+                (plats === 1 ? 'platinum' : 'platinums') + (clean ? '' : ', not counted');
+            var on = cell.getAttribute('data-peek-on');
+            f.peek.querySelector('[data-peek-note]').textContent = on ? ('first on ' + on) : '';
+
+            f.facts.hidden = true;
+            f.peek.hidden = false;
+            shown = f;
+        }
+
+        // DELEGATED AND CAPTURING, because `mouseenter`/`mouseleave` do not bubble. `mouseover` and
+        // `mouseout` do, so one listener on the board serves all 365 squares rather than 730 listeners
+        // -- and they fire on the way in and out of a cell's children too, which is why both handlers
+        // resolve the square with `closest` and compare.
+        document.body.addEventListener('mouseover', function (e) {
+            if (!e.target.closest) { return; }
+            var cell = e.target.closest('[data-peek-label]');
+            if (cell) { show(cell); }
+        });
+        document.body.addEventListener('mouseout', function (e) {
+            if (!e.target.closest) { return; }
+            var cell = e.target.closest('[data-peek-label]');
+            // LEAVING INTO A CHILD IS NOT LEAVING. `relatedTarget` is where the pointer went; if it is
+            // still inside the same square, the peek stays.
+            if (!cell) { return; }
+            var to = e.relatedTarget;
+            if (to && to.closest && to.closest('[data-peek-label]') === cell) { return; }
+            clear();
+        });
+
+        // FOCUS MIRRORS HOVER. `focusin`/`focusout` bubble where `focus`/`blur` do not.
+        document.body.addEventListener('focusin', function (e) {
+            if (!e.target.closest) { return; }
+            var cell = e.target.closest('[data-peek-label]');
+            if (cell) { show(cell); } else { clear(); }
+        });
+        document.body.addEventListener('focusout', function (e) {
+            if (!e.target.closest) { return; }
+            if (e.target.closest('[data-peek-label]')) { clear(); }
+        });
+    }
+
+    if (PP.onPageReady) { PP.onPageReady(function (first) { boot(); wireDaySheet(first); wireDayPeek(first); }); }
+    else { document.addEventListener('DOMContentLoaded', function () { boot(); wireDaySheet(true); wireDayPeek(true); }); }
 }());

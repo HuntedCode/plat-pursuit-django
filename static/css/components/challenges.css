@@ -3407,11 +3407,33 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    to happen "the moment per-month hues land": a lift and an outline in the BRAND colour, and not one
    declaration that touches `--cal-c`. The month's hue says which month and whether it is earned; the
    outline says where you are. Two axes, no overlap, and no state can erase the other's mark. */
-.pp-cal__crest[aria-selected="true"] { transform: translateY(-1px); }
+/* THE SELECTED MONTH, in FOUR reinforcing cues rather than two weak ones. It was a 1px lift and a
+   65%-alpha ring, which among twelve near-identical coins was genuinely hard to read (owner,
+   2026-10-05: "it's hard to tell which month is selected").
+
+   STILL THE BRAND COLOUR, NOT THE MONTH'S, and the first attempt at this fix got that wrong. Colour and
+   state are separate axes here -- the hue says WHICH month and whether it is earned, state is shape
+   plus `--pp-primary` -- and this stylesheet already paid for mixing them on `.pp-csq`, where "hovering
+   a finished square erased the one mark the page exists to show".
+   IT IS ALSO THE MORE VISIBLE ANSWER. A ring in `--cal-c` sits on a coin that is already `--cal-c`, so
+   tinting it would have LOWERED the contrast the ring exists to create. Cyan reads against all twelve
+   hues precisely because it belongs to none of them.
+
+   LIFT, SCALE, A FULL-STRENGTH RING, GLOW -- and the scale is safe here in a way it is NOT on the day
+   grid. `transform` does not reflow, so neighbours do not move; the day squares glow instead of growing
+   because a 10-column grid's optical rhythm visibly flinches when one cell changes size, and a row of
+   twelve tabs has no such rhythm to break. 1.06 because the mobile gap is 3px: at 44px that is 1.3px of
+   growth each side, which stays clear of the next coin.
+
+   NO BAR UNDER THE ACTIVE COIN, which is the obvious tab affordance and is taken. `.pp-cal__sub` -- the
+   counter plate -- is positioned at `bottom: -2px` INSIDE the coin from `lg:` up, so an underline at the
+   crest's bottom edge would sit on top of it. */
+.pp-cal__crest[aria-selected="true"] { transform: translateY(-3px) scale(1.06); }
 .pp-cal__crest[aria-selected="true"] .pp-cal__coin {
-    outline: 2px solid color-mix(in srgb, var(--pp-primary) 65%, transparent);
-    outline-offset: 2px;
+    outline: 2px solid var(--pp-primary);
+    outline-offset: 3px;
     border-radius: 50%;
+    box-shadow: 0 0 16px color-mix(in srgb, var(--pp-primary) 55%, transparent);
 }
 .pp-cal__crest:focus-visible .pp-cal__coin {
     outline: 2px solid var(--pp-primary);
@@ -3695,6 +3717,40 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    moving the primitive would misalign all of them to fix one. */
 #cal-day-modal .pp-detail-modal__close { top: 26px; right: 20px; }
 @media (min-width: 768px) { #cal-day-modal .pp-detail-modal__close { top: 28px; } }
+
+/* ── the side column's day peek ───────────────────────────────────────────────────────────────────────
+   Hovering a square that opens shows that day where the month's figures normally sit.
+
+   STACKED, NOT SWAPPED. Both faces sit in the SAME grid cell, so the column's height is the taller of
+   the two and nothing moves when a pointer crosses the grid. A column that resized on hover would shift
+   the board under the cursor, which is the worst thing a hover can do -- and on a 365-cell grid the
+   cursor crosses a lot of squares.
+   `[hidden]` STILL HAS TO BE HONOURED, which a bare `display: grid` on the parent would override: a
+   grid item is `display: block` whatever its own rule said. Hence the explicit rule. */
+.pp-cal__stats { display: grid; }
+.pp-cal__stats > .pp-cal__peek,
+.pp-cal__stats > .pp-cal__facts { grid-area: 1 / 1; min-width: 0; }
+.pp-cal__stats > [hidden] { display: none; }
+
+.pp-cal__peek-figure { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 0; }
+.pp-cal__peek-figure .pp-tally { font-size: 1.5rem; color: var(--cal-c, var(--pp-text)); }
+.pp-cal__peek-unit { font-size: 0.8125rem; color: var(--pp-text-dim); }
+.pp-cal__peek-note {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--pp-text-mute);
+    font-variant-numeric: tabular-nums;
+}
+/* THE ONE LINE THAT SAYS WHAT A CLICK DOES, because a peek that shows a count and nothing else leaves a
+   reader guessing whether the square is interactive at all. 12px is the file's floor and this sits on
+   it. */
+.pp-cal__peek-hint {
+    margin: 10px 0 0;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 75%, var(--pp-text-mute));
+}
 
 .pp-cday { display: flex; flex-direction: column; gap: 16px; }
 
@@ -3987,6 +4043,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 @media (prefers-reduced-motion: reduce) {
     .pp-cal__crest,
     .pp-cal__day { transition: none; }
+    /* THE LIFT AND THE SCALE BOTH GO, but the RING AND GLOW STAY: they are the cue, not the motion, and
+       a reader who has turned motion down still has to be able to tell which month is open. */
     .pp-cal__crest[aria-selected="true"] { transform: none; }
 }
 

@@ -637,6 +637,57 @@ def test_the_months_colour_reaches_the_dialog_shell():
     assert 'var(--cal-c' in dialog, 'the dialog is not wearing the month at all'
 
 
+def test_the_side_column_can_preview_a_day_without_fetching():
+    """OWNER, 2026-10-05: "I'd like the card on the right to show information on a filled in day when
+    hovered". Every figure it shows is carried on the square, which is why the per-day count is stored at
+    all -- a hover that asked the server would put a request behind every mouse movement across a
+    365-cell grid.
+
+    THE SAME PREDICATE AS THE CLICK. A square previews exactly when it opens, because an element that
+    previews something a click will not open is worse than one that does neither."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3, plats=4)
+    body = _body(run)
+
+    openable = re.findall(r'data-day-url=', body)
+    previewable = re.findall(r'data-peek-label=', body)
+    assert len(previewable) == len(openable) == 1, 'preview and open must be the same squares'
+    assert 'data-peek-plats="4"' in body, 'the count rides the square, not a request'
+
+    sheet = _script_code()
+    peek = sheet[sheet.index('function wireDayPeek'):]
+    assert 'fetch(' not in peek, 'the peek must not ask the server'
+    # Focus mirrors hover: a keyboard reader has none, and a phone has none at all.
+    assert 'focusin' in peek and 'mouseover' in peek
+
+
+def test_the_peek_and_the_month_facts_occupy_one_box():
+    """NOTHING MOVES WHEN A POINTER CROSSES THE GRID. Both faces sit in the same grid area, so the
+    column's height is the taller of the two -- a side column that resized on hover would shift the board
+    under the cursor, which on a 365-cell grid the cursor crosses constantly.
+
+    `[hidden]` NEEDS ITS OWN RULE once the parent is a grid: a grid item is `display: block` whatever its
+    own rule said, so the attribute stops hiding anything without it."""
+    css = _calendar_css()
+    flat = ' '.join(css.split())
+    assert '.pp-cal__stats > .pp-cal__peek, .pp-cal__stats > .pp-cal__facts { grid-area: 1 / 1;' in flat
+    assert '.pp-cal__stats > [hidden] { display: none; }' in flat
+
+
+def test_the_peek_is_silent_to_screen_readers():
+    """A LIVE REGION FIRING ON EVERY SQUARE A POINTER CROSSES WOULD BE HOSTILE, and the modal is the
+    accessible path to the same information. The peek is a sighted-pointer convenience layered on top,
+    so it is `aria-hidden` and announces nothing."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    peek = re.search(r'<div class="pp-cal__peek"[^>]*>', body).group(0)
+    assert 'aria-hidden="true"' in peek, 'an aria-hidden subtree cannot announce, which is the guarantee'
+
+    # SCOPED TO A PANEL, not the page: the nav's search box carries its own `aria-live` region and has
+    # nothing to do with the board. A page-wide absence assertion was wrong, not merely broad.
+    january = _section(body, 'id="cal-month-jan"', until='</section>')
+    assert 'aria-live' not in january, 'the board must not announce a hover'
+
+
 def test_the_day_sheet_obeys_takeovers_three_contract_rules():
     """REUSING A PRIMITIVE MEANS READING ITS CONTRACT, and the first version of this slice reused the
     name. Three blockers shipped, each documented elsewhere in this repo, and each contradicted by a
@@ -971,9 +1022,15 @@ def test_no_state_rule_touches_the_month_hue():
             'only a month hue or the fallback may set --cal-c, not a state: %s' % line.strip())
 
     assert 'data-tier' not in block, 'the lens metals went with the lenses'
-    # The active cue is shape plus the brand colour, never the month's.
-    assert '.pp-cal__crest[aria-selected="true"] { transform: translateY(-1px); }' in block
-    assert 'var(--pp-primary) 65%' in block
+    # The active cue is shape plus the brand colour, never the month's. Strengthened 2026-10-05 (the
+    # owner could not tell which month was selected) -- a lift, a scale, a full-strength ring and a glow
+    # instead of a 1px lift and a 65%-alpha ring. The FIRST attempt at that tinted the ring `--cal-c`,
+    # which this test caught: it would have put the ring in the same colour as the coin it surrounds,
+    # lowering the contrast it exists to create.
+    assert '.pp-cal__crest[aria-selected="true"] { transform: translateY(-3px) scale(1.06); }' in block
+    active = _css_rule(block, '.pp-cal__crest[aria-selected="true"] .pp-cal__coin {')
+    assert 'var(--cal-c' not in active, 'the active ring took the month hue'
+    assert 'outline: 2px solid var(--pp-primary);' in active
 
 
 def test_the_rim_draws_twelve_segments_rather_than_a_solid_ring():
