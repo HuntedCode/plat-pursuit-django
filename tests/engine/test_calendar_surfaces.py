@@ -326,6 +326,25 @@ def test_a_filled_day_carries_a_modifier_and_an_empty_one_does_not():
     assert 'data-all' not in body and 'data-clean' not in body
 
 
+def test_an_openable_square_still_fills_its_cell():
+    """THE DEFECT A BROWSER FOUND IN TEN SECONDS AND SIX AUDIT ROUNDS DID NOT, because nothing in a test
+    suite renders CSS.
+
+    A `<button>` with `width: auto` SHRINK-FITS to its content, where the `<div>` it replaced filled its
+    parent -- and `.pp-cal__day` pairs that with `aspect-ratio: 1`, so each openable square collapsed to
+    the width of its numeral and then squared THAT. A struck month is all buttons, so a finished February
+    rendered as 28 tiny chips floating in a full-width grid.
+
+    THE `<li>` IS THE GRID ITEM, not the cell, which is why the track's width never reached it.
+
+    A SOURCE-TEXT PIN, AND A WEAK ONE BY NATURE: it cannot see layout. It exists so the declaration is
+    not tidied away as redundant by someone reading `aspect-ratio` and assuming the cell is square on its
+    own account."""
+    rule = _css_rule(_calendar_css(), '.pp-cal__day--open {')
+    assert 'width: 100%' in rule, (
+        'an openable square shrinks to its numeral and the whole month turns to confetti')
+
+
 def test_only_a_square_holding_a_platinum_is_a_control():
     """THE OWNER'S PREDICATE (2026-10-04): "the clickable squares should be the completed days", and then,
     on what an incomplete day would show, the useful answer was the one square that HAS an answer. So the

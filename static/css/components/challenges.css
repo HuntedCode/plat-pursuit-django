@@ -3528,6 +3528,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     appearance: none;
     -webkit-appearance: none;
     cursor: pointer;
+    /* `width: 100%` IS THE ONE THAT MAKES IT A SQUARE, and its absence is what a browser caught in ten
+       seconds that six audit rounds did not: nothing in a test suite renders CSS.
+       A `<button>` with `width: auto` SHRINK-FITS to its content, where the `<div>` this replaced filled
+       its parent -- and `.pp-cal__day` pairs that width with `aspect-ratio: 1`, so each openable square
+       collapsed to the width of its numeral and then squared THAT. On a struck month every square is a
+       button, so a finished February rendered as 28 tiny chips floating in a full-width grid.
+       THE `<li>` IS THE GRID ITEM, not the cell, which is why the track's width never reached it: the
+       `li` fills its column and the button inside it was free to shrink. */
+    width: 100%;
 }
 
 /* THE HOVER IS A GLOW, NOT A SCALE, per the design system: a square that grows on hover shifts the whole
