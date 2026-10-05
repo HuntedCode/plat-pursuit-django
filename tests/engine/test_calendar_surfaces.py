@@ -702,6 +702,31 @@ def test_the_side_column_can_preview_a_day_without_fetching():
     assert 'focusin' in peek and 'mouseover' in peek
 
 
+def test_the_peek_settles_rather_than_flickering_across_the_grid():
+    """OWNER, 2026-10-05: "sliding the mouse over multiple days doesn't look great due to the peek
+    altering back and forth quickly between days and the monthly status."
+
+    THE RESTORE WAS IMMEDIATE, so every cell boundary played day -> month -> next day. The grid gap is
+    3px, so a drag across a row fired that three-state sequence once per square, and the month's figures
+    -- the longest of the three -- flashed in every gap.
+
+    DEFER THE RESTORE, NOT THE SHOW. Deferring the show would make the preview feel laggy, which is the
+    opposite of what a hover is for. A pending restore is cancelled the moment another square takes
+    over, so day-to-day is a direct swap and the month only returns on a genuine leave.
+
+    A MONTH SWITCH IS NOT A FLICKER and still tears down at once: it is a different panel, not a gap."""
+    sheet = _script_code()
+    peek = sheet[sheet.index('function wireDayPeek'):]
+
+    assert 'function settle()' in peek and 'function hold()' in peek
+    assert 'setTimeout(restore' in peek, 'the restore must be deferred'
+    # Every leave path settles; none of them restores outright.
+    assert peek.count('settle();') == 3, 'a leave path still restores immediately'
+    # And arriving cancels a pending restore before swapping.
+    show = peek[peek.index('function show('):peek.index('function faces(')]         if peek.index('function faces(') > peek.index('function show(')         else peek[peek.index('function show('):]
+    assert 'hold();' in show, 'arriving at a square does not cancel the pending restore'
+
+
 def test_the_peek_and_the_month_facts_occupy_one_box():
     """NOTHING MOVES WHEN A POINTER CROSSES THE GRID. Both faces sit in the same grid area, so the
     column's height is the taller of the two -- a side column that resized on hover would shift the board

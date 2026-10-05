@@ -260,6 +260,12 @@
         if (!first) { return; }
 
         var shown = null;      // the panel whose peek is currently up
+        var settling = null;   // a restore waiting to happen, or null
+
+        // HOW LONG THE MONTH'S FIGURES WAIT BEFORE COMING BACK. Long enough to cross a 3px gap at any
+        // plausible pointer speed, short enough that leaving the grid feels immediate. It is a settle,
+        // not a delay: nothing is waiting to APPEAR, only to return.
+        var SETTLE_MS = 160;
 
         function faces(cell) {
             var panel = cell.closest('.pp-cal__panel');
@@ -269,19 +275,35 @@
             return (peek && facts) ? { panel: panel, peek: peek, facts: facts } : null;
         }
 
-        function clear() {
+        function restore() {
+            settling = null;
             if (!shown) { return; }
             shown.peek.hidden = true;
             shown.facts.hidden = false;
             shown = null;
         }
 
+        // THE DEFERRED RESTORE, which is the whole fix for the flicker. Leaving a square schedules the
+        // month's figures to come back; arriving at another square cancels that before it runs, so a
+        // drag across a row is a sequence of day-to-day swaps rather than day, month, day, month.
+        function settle() {
+            if (settling !== null) { return; }
+            settling = window.setTimeout(restore, SETTLE_MS);
+        }
+
+        function hold() {
+            if (settling === null) { return; }
+            window.clearTimeout(settling);
+            settling = null;
+        }
+
         function show(cell) {
+            hold();
             var f = faces(cell);
             if (!f) { return; }
             // A SQUARE IN ANOTHER MONTH CANNOT LEAVE THE LAST PEEK UP. Switching months while a peek is
             // open would otherwise strand it on a panel the reader can no longer see.
-            if (shown && shown.panel !== f.panel) { clear(); }
+            if (shown && shown.panel !== f.panel) { restore(); }
 
             var plats = parseInt(cell.getAttribute('data-peek-plats'), 10) || 0;
             var clean = cell.getAttribute('data-peek-clean') === '1';
@@ -314,18 +336,18 @@
             if (!cell) { return; }
             var to = e.relatedTarget;
             if (to && to.closest && to.closest('[data-peek-label]') === cell) { return; }
-            clear();
+            settle();
         });
 
         // FOCUS MIRRORS HOVER. `focusin`/`focusout` bubble where `focus`/`blur` do not.
         document.body.addEventListener('focusin', function (e) {
             if (!e.target.closest) { return; }
             var cell = e.target.closest('[data-peek-label]');
-            if (cell) { show(cell); } else { clear(); }
+            if (cell) { show(cell); } else { settle(); }
         });
         document.body.addEventListener('focusout', function (e) {
             if (!e.target.closest) { return; }
-            if (e.target.closest('[data-peek-label]')) { clear(); }
+            if (e.target.closest('[data-peek-label]')) { settle(); }
         });
     }
 
