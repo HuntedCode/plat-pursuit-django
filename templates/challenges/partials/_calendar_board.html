@@ -24,7 +24,9 @@ rendering everything and revealing with `hidden` makes the switch instant and re
 
 NO COVER ART ANYWHERE (owner): "I don't think we do cover art for the calendar. Instead, we can let the
 user click on a day and it'll pop-up a modal that shows them games that satisfy that day." The modal is a
-separate slice; until it lands a day is not interactive, so it is a `<div>` and not a button.
+A day holding a platinum IS interactive now (the modal landed): those squares are `<button>`s and the
+rest stay `<div>`s. This sentence used to end "until it lands a day is not interactive, so it is a `<div>`
+and not a button", and the commit that made them buttons left it standing twenty-six lines above itself.
 {% endcomment %}
 <div class="pp-cal">
 
@@ -185,7 +187,11 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
                         style="--rev: {{ forloop.counter0 }};"
                         data-day-url="{% url 'challenge_calendar_day' challenge.id card.month card.day %}">
                     <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
-                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}. Open.</span>
+                    {% comment %}NO "Open." IN THE NAME. The button role already announces that it is a
+                    control, and the word was a promise this square cannot keep without a script: with JS
+                    off a reader heard "Open., button" on three hundred squares and nothing happened on
+                    any of them. The inert branch says only the date, and so does this one.{% endcomment %}
+                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}.</span>
                 </button>
                 {% else %}
                 <div class="pp-cal__day{% if card.filled %} pp-cal__day--on{% endif %}"
@@ -301,25 +307,4 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
         </div>
     </section>
     {% endfor %}
-</div>
-
-{% comment %}THE DAY SHEET, one per board and not one per square: 365 shells would be 365 dialogs in the
-accessibility tree. The body is REPLACED on each open, which is the requirement `_calendar_day.html`
-states -- two copies would put two `id="cal-day-title"` in the document and `aria-labelledby` resolves to
-the first, so the dialog would announce the square the reader had just left.
-
-`.pp-detail-modal` IS THE HOUSE SHELL, already used by badge detail, game detail and the landing. Its
-scrim, dialog, close button and entrance animation all come with it; nothing here is new chrome.
-
-`aria-labelledby` POINTS INTO THE FETCHED FRAGMENT, which is why the fragment carries that id at all. It
-is empty until the first open, so the dialog also keeps an `aria-label` as the fallback a screen reader
-gets if a fetch fails and the body stays empty.{% endcomment %}
-<div class="pp-detail-modal" id="cal-day-modal" hidden>
-    <div class="pp-detail-modal__scrim" data-day-close></div>
-    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true"
-         aria-label="Day detail" aria-labelledby="cal-day-title" tabindex="-1">
-        <button type="button" class="pp-detail-modal__close" data-day-close
-                aria-label="Close day detail">&times;</button>
-        <div class="pp-detail-modal__body" data-day-body></div>
-    </div>
 </div>

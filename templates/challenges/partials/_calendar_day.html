@@ -23,7 +23,15 @@ nothing here says "you".
 <div class="pp-cday">
 
     <div class="pp-cday__head">
-        <h2 class="pp-cday__date" id="cal-day-title">{{ day_label }}</h2>
+        {% comment %}`tabindex="-1"` IS WHAT ARMS THE FOCUS TRAP, which is not obvious and was missed.
+        `takeover`'s `focusSel` is a plain `querySelector().focus()`, and an `<h2>` is not focusable, so
+        `.focus()` was a silent no-op: focus stayed on the day square BEHIND the scrim, and the Tab trap
+        -- which only acts when the active element is the dialog's first or last focusable -- matched
+        neither and did nothing. A keyboard reader tabbed through the rest of the board behind an opaque
+        scrim with the page scroll-locked.
+        THE HEADING RATHER THAN THE CLOSE BUTTON, so a screen reader announces the date the reader just
+        asked for instead of "Close day detail".{% endcomment %}
+        <h2 class="pp-cday__date" id="cal-day-title" tabindex="-1">{{ day_label }}</h2>
         {% if counting %}
         {% comment %}GATED ON THE FIGURE, NOT ON `square.in_clean`, and that is a correctness fix. The
         gate used to be the stored boolean while the number was computed live, so the two came from

@@ -3497,7 +3497,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        room for it, so there was nothing being bought by the half-step down. */
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
-    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    /* `box-shadow` IS IN THE LIST, and was not: the openable square's hover glow snapped on and off
+       while its border eased over 180ms, so the two visibly desynchronised on mouse-out. A comment
+       below asserted they were both already here. */
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease,
+                box-shadow 0.18s ease;
 }
 @media (min-width: 768px) { .pp-cal__day { font-size: 0.8125rem; } }
 
@@ -3506,20 +3510,23 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    `card.counts` (`in_all`) is the predicate -- so the other three hundred stay plain `div`s with no
    role, no tab stop and no cursor. An affordance that does nothing is worse than none.
 
-   THE RESET IS NOT COSMETIC TIDYING. A `<button>` arrives with the UA's font, padding, border and
-   `background: buttonface`, and `.pp-cal__day` above was written for a `div`, so without these three
-   lines an openable square renders in the platform's button font at the platform's size -- which is also
-   how a 44px cell stops being 44px. `font: inherit` is what carries `--cal-gap`'s measured arithmetic
-   through.
+   TWO DECLARATIONS, AND THIS FILE ALREADY SAID WHICH TWO. `.pp-csq` records it at the top of the file:
+   preflight sets `font: inherit`, `padding: 0`, `border: 0` and a transparent background on every
+   button, so all of those are already done -- while `appearance: none` IS required (preflight sets
+   `appearance: button`) and `cursor: pointer` IS required, because Tailwind v4 dropped preflight's
+   `button { cursor: pointer }`.
 
-   `text-align` AND `appearance` TOO, because the cell is `display: grid` with `place-items: center` and
-   Safari still applies its own centring and chrome on top of a grid button. */
+   AND `font: inherit` WAS ACTIVELY HARMFUL HERE, which is the part worth remembering. This rule is
+   LATER in the file than `.pp-cal__day` at the same specificity, and the `font` shorthand resets
+   `font-size` -- so every openable square rendered its numeral at the 16px ROOT instead of the cell's
+   measured 12px, and lost `font-variant-numeric: tabular-nums` with it. The file-wide type-floor guard
+   could not see it, because it reads `font-size:` declarations and a `font:` shorthand that clobbers a
+   compliant one is outside its grammar. The earlier version of this comment defended the shorthand as
+   what "carries `--cal-gap`'s measured arithmetic through"; it destroyed the type that arithmetic was
+   sized to hold, and the cell box never depended on it at all (`aspect-ratio: 1` in a `1fr` track). */
 .pp-cal__day--open {
     appearance: none;
     -webkit-appearance: none;
-    font: inherit;
-    text-align: center;
-    padding: 0;
     cursor: pointer;
 }
 
@@ -3536,13 +3543,26 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     }
 }
 
-/* THE FOCUS RING IS THE SAME OBJECT AS THE HOVER, offset so it reads outside the cell rather than
-   shaving its border. The grid's gap is 3px at mobile, so a 2px ring at 1px offset is the most that fits
-   without two adjacent rings touching -- which is why this is measured rather than copied from a roomier
-   surface. */
+/* THE FOCUS RING IS DRAWN INSIDE THE CELL AT MOBILE, and outside it from `md:`.
+   THE ARITHMETIC, done properly this time. `outline-offset: 1px` with `outline-width: 2px` puts the
+   outline's outer edge 3px past the border box -- and the mobile grid's gap is exactly 3px, so a single
+   ring consumed the whole gap and landed flush on the NEIGHBOUR's border. For two outside rings to clear
+   each other you would need `offset + width <= 1.4px`, which no 2px outline can satisfy at any offset;
+   the widest that fits outside is 1px at offset 0, which is under the 2px perimeter WCAG 2.4.13 asks of
+   a focus indicator.
+   SO IT GOES INSIDE: `outline-offset: -2px` draws the ring within the cell's own 44px, where it bleeds
+   onto nothing and stays 2px thick. From `md:` the gap is 8px and there is room for the nicer outside
+   ring.
+   (The previous comment claimed 2px at 1px offset was "the most that fits without two adjacent rings
+   touching". It was false three ways: the ring touched the neighbour cell rather than another ring, two
+   rings overlapped by 1px, and only one element can be `:focus-visible` at a time so two rings are not
+   a reachable state. What IS reachable is this ring against a neighbour's hover glow.) */
 .pp-cal__day--open:focus-visible {
     outline: 2px solid var(--cal-c, var(--pp-primary));
-    outline-offset: 1px;
+    outline-offset: -2px;
+}
+@media (min-width: 768px) {
+    .pp-cal__day--open:focus-visible { outline-offset: 1px; }
 }
 
 /* A FILLED DAY TAKES ITS MONTH'S COLOUR, which is the other half of the owner's cohesion note: the

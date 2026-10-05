@@ -25,6 +25,7 @@ pinned by SOURCE TEXT, because this project has no JS test runner.
 """
 import datetime as dt
 import re
+from pathlib import Path
 
 import pytest
 from django.db import connection
@@ -36,6 +37,9 @@ from challenges.models import (CALENDAR_MONTH_DAYS, CHALLENGE_TYPE_AZ, CHALLENGE
                                CalendarDay)
 from challenges.services import calendar_render
 from tests.factories import ProfileFactory, UserFactory
+
+#: The repo root, for the pins that read a template as text.
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
 pytestmark = pytest.mark.django_db
 
@@ -366,7 +370,10 @@ def test_both_day_cell_branches_carry_the_same_state():
     # And its spelled-out date. `_cell`'s label is "<Month> <day>", so "June 1" rather than "1 June" --
     # worth stating, because the fragment's own dates read "j F" and the two orders sit a screen apart.
     # The openable square adds "Open." and is otherwise identical to the inert one.
-    assert 'June 1: filled. Open.' in june, 'the control must say what it does'
+    assert 'June 1: filled.' in june, 'the control still names its own date'
+    assert 'Open.' not in june, (
+        'the name promised an action the square cannot perform without a script -- the button role\n'
+        '        already says it is a control')
     assert 'June 2.' in june, 'an inert square still names itself'
 
 
@@ -383,6 +390,11 @@ def test_the_day_sheet_is_one_shell_for_the_whole_board():
     # THE FALLBACK LABEL MATTERS because `aria-labelledby` points into a body that is empty until the
     # first open, and a failed fetch leaves it empty.
     assert 'aria-label="Day detail"' in body and 'aria-labelledby="cal-day-title"' in body
+
+    # AND NOT ON A RUN THAT HAS NO SQUARES. The shell moved into the page's `fixed_overlays` block, which
+    # renders for every challenge type -- so the `{% if calendar_months %}` gate is the only thing
+    # keeping a stray dialog out of the accessibility tree on every A-Z and Job Coverage page.
+    assert 'cal-day-modal' not in _body(_run(CHALLENGE_TYPE_AZ))
 
 
 def test_a_shovelware_platinum_draws_no_square():
@@ -487,9 +499,14 @@ def test_the_day_sheet_uses_the_shared_primitives_rather_than_a_fourth_hand_roll
 
     assert 'PP.takeover(' in js, 'the a11y half must come from the shared primitive'
     assert 'PP.dismissableSheet(' in js, 'and the touch drag from the other one'
-    # The hand-rolled shapes the two older call sites carry.
-    assert 'keydown' not in js, 'a hand-rolled Tab trap is back'
-    assert 'activeElement' not in js, 'a hand-rolled focus restore is back'
+    # SCOPED TO THE SHEET, not the whole file. These stand in for "do not hand-roll the modal a11y",
+    # and file-wide they asserted something far stronger and far less durable: that this file contains
+    # no keyboard handling of ANY kind. A 365-cell grid is a textbook candidate for arrow-key roving
+    # (the WAI-ARIA grid pattern), which needs a `keydown` here and has nothing to do with a focus
+    # trap -- and would have failed as "a hand-rolled Tab trap is back".
+    sheet = js[js.index('function wireDaySheet'):]
+    assert 'keydown' not in sheet, 'a hand-rolled Tab trap is back'
+    assert 'activeElement' not in sheet, 'a hand-rolled focus restore is back'
 
 
 def test_the_day_fetch_checks_the_response_before_injecting_it():
@@ -507,25 +524,93 @@ def test_the_day_sheet_replaces_its_body_and_empties_it_on_close():
     js = _script_code()
     assert "body.innerHTML = html" in js, 'it must replace, not append'
     assert "body.innerHTML = ''" in js, 'and empty on close'
-    assert 'insertAdjacentHTML' not in js and 'appendChild(' not in js
+    # SCOPED TO THE BODY WRITE. The blanket `'appendChild(' not in js` was predicted to misfire and
+    # did, on the very next change: the shell is now `appendChild`ed to `document.body`, which is how
+    # it gets out of `#page-recede` and back after `takeover` removes it. What must not happen is the
+    # FRAGMENT being appended into the body, so that is what this asks.
+    assert 'insertAdjacentHTML' not in js
+    assert 'body.appendChild(html' not in js and 'body.append(' not in js
 
 
 def test_the_day_sheets_body_listener_binds_once():
     """`onPageReady`'s CONTRACT. Element wiring re-runs on an HTMX history restore and `document.body`
     survives it, so an unguarded delegate binds twice and every click fetches twice."""
-    js = _script_code()
-    at = js.index('wireDaySheet')
-    assert 'if (first) {' in js[at:], 'the body listener is not guarded by `first`'
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+    # READ AS AN EARLY RETURN, not as a substring. The first version asserted `'if (first) {'` appeared
+    # somewhere after `wireDaySheet`, which it would for any unrelated use of the flag while the
+    # delegate sat outside the block.
+    assert sheet.index('if (!first) { return; }') < sheet.index("addEventListener('click'"), (
+        'the delegate is bound before the `first` guard, so a history restore binds it again')
 
 
-def test_a_second_day_click_wins_over_a_slower_first():
-    """SQUARES ARE SMALL AND ADJACENT, so two clicks in quick succession is ordinary rather than
-    pathological -- and without a guard the slower response can land after the faster one and the sheet
-    shows the wrong day. Guarded on the url rather than a boolean, so it survives a repeat click on the
-    same square."""
-    js = _script_code()
-    assert 'pending = url' in js
-    assert 'if (pending !== url) { return; }' in js
+def test_the_day_sheet_obeys_takeovers_three_contract_rules():
+    """REUSING A PRIMITIVE MEANS READING ITS CONTRACT, and the first version of this slice reused the
+    name. Three blockers shipped, each documented elsewhere in this repo, and each contradicted by a
+    comment in the commit that broke it.
+
+    IT REMOVES ITS ROOT on close, so the root must be re-attached per open -- `monthly-recap.js` appends
+    its container to `document.body` on every open for exactly this reason. Passing a server-rendered
+    element and letting it be deleted meant the sheet worked ONCE, then wrote into a detached node: a
+    scrim over a blank page, scroll locked, Tab dead, Escape the only way out.
+
+    IT SCALES `#page-recede`, and a `position: fixed` overlay inside a transformed ancestor resolves
+    against that ancestor rather than the viewport -- so the shell must sit outside it.
+
+    ITS `focusSel` IS A PLAIN `querySelector().focus()`, so the target has to be focusable or focus never
+    enters the dialog and the Tab trap never arms.
+    """
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+
+    assert 'document.body.appendChild' in sheet, (
+        'the root is never re-attached, so the sheet dies on its first close')
+    assert 'exitMs: 0' in sheet, (
+        'the default 240ms teardown leaves a window where the old close empties the new sheet')
+
+    frag = (ROOT_DIR / 'templates' / 'challenges' / 'partials' / '_calendar_day.html').read_text(
+        encoding='utf-8')
+    assert 'id="cal-day-title" tabindex="-1"' in frag, (
+        'the focus target cannot hold focus, so the Tab trap never arms')
+
+
+def test_a_repeat_click_on_one_square_cannot_open_the_sheet_twice():
+    """THE GUARD THAT WAS ITS OWN DEFECT. `pending = url` could not tell two clicks on the SAME square
+    apart -- the case the slice was written for, since squares are 44px and adjacent -- so both responses
+    passed `pending !== url` and `open()` ran twice. The second `takeover` overwrote the handle and
+    orphaned the first: its capture-phase keydown listener leaked for the life of the page, and because
+    it had captured `overflow: hidden` as the value to restore, closing left the page unscrollable.
+
+    A PER-REQUEST TOKEN, so a repeat click supersedes its own earlier one, plus a `close()` at the top of
+    `open()` so a double-open is impossible rather than merely unlikely."""
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+
+    assert 'token += 1' in sheet and 'mine !== token' in sheet
+    assert 'pending' not in sheet, 'the url-identity guard is back'
+    at = sheet.index('function open(')
+    assert 'close();' in sheet[at:sheet.index('PP.takeover(', at)], (
+        'a live sheet is not torn down before a new one opens')
+
+
+def test_the_day_delegate_resolves_its_nodes_at_event_time():
+    """THE OTHER HALF OF `onPageReady`'s CONTRACT. `if (first)` stops the double-bind; it does not stop a
+    once-bound delegate holding element references from the FIRST wiring. An `htmx:historyRestore`
+    replaces the page content, so those nodes are gone and the sheet went silently dead after a Back --
+    a 200 in the network tab and nothing on screen.
+
+    THE BOOT-TIME LOOKUP IS LEGITIMATE and deliberately not asserted against: it exists only to MOVE the
+    shell out of `#page-recede`. What matters is that the click path re-resolves."""
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+    delegate = sheet[sheet.index("addEventListener('click'"):]
+
+    assert 'document.getElementById' not in delegate, (
+        'the delegate holds boot-time nodes instead of going through `shell()`')
+    assert 'function shell()' in sheet
+    opener = sheet[sheet.index('function open('):sheet.index("addEventListener('click'")]
+    assert "modal.querySelector('[data-day-body]')" in opener
+    assert "modal.querySelector('.pp-detail-modal__dialog')" in opener
 
 
 def test_the_script_leaves_immediately_when_there_is_no_board():
@@ -540,13 +625,26 @@ def test_the_month_tabs_go_through_the_shared_tablist_helper():
     """THE REUSE MISS THIS PINS. The first version hand-rolled roving tabindex, Arrow/Home/End with wrap
     and the focus-versus-activate split -- all of which `PlatPursuit.wireTablist` already does, and it is
     explicitly "markup/class-agnostic: pass the tab elements and a select callback". Going through it also
-    buys the two companions a hand-rolled copy silently skipped."""
-    js = _script()
-    assert 'PP.wireTablist(tabs, {' in js
-    assert 'ignite: true' in js, 'the activated crest blooms, as every other switcher does'
-    assert 'PP.slideViewIn(' in js, 'the month panel slides in directionally'
-    # The hand-rolled keyboard handling must not come back alongside the helper.
-    assert 'ArrowRight' not in js and 'keydown' not in js
+    buys the two companions a hand-rolled copy silently skipped.
+
+    READ THROUGH `_script_code()`, WHICH STRIPS COMMENTS, and this test did not -- which made it wrong in
+    both directions at once. `assert 'ignite: true' in js` was satisfied ONLY by the comment that says
+    the crests take NO ignite (a square 44px button wrapping a round coin would get a square halo), so
+    the assertion asserted the opposite of the code and passed. And `'keydown' not in js` fails the
+    moment any comment in the file uses the word -- which is exactly how it broke when the day sheet
+    added a note about `takeover`'s capture-phase listener. This file's own `_script_code` docstring
+    records the same trap happening twice before the reader existed.
+    """
+    code = _script_code()
+    assert 'PP.wireTablist(tabs, {' in code
+    assert 'ignite' not in code, (
+        'the crests deliberately take NO ignite bloom -- see the comment on `.pp-cal__crest`')
+    assert 'PP.slideViewIn(' in code, 'the month panel slides in directionally'
+    # The hand-rolled keyboard handling must not come back alongside the helper. Scoped to the TABLIST
+    # wiring: the day sheet is in this file too, and a future arrow-key roving grid would legitimately
+    # add a `keydown` that has nothing to do with this switcher.
+    tablist = code[:code.index('function wireDaySheet')]
+    assert 'ArrowRight' not in tablist and 'keydown' not in tablist
 
 
 def test_the_roving_tabindex_is_resynced_after_the_selection_moves():

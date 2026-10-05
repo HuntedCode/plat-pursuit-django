@@ -462,3 +462,44 @@ neither of. The board itself needs no script: the server renders `data-month` an
 hunter with JavaScript off gets January on the run's own lens with the right squares tinted.{% endcomment %}
 {% if calendar_months %}<script src="{% static 'js/challenges-calendar.js' %}"></script>{% endif %}
 {% endblock %}
+
+{% block fixed_overlays %}
+{{ block.super }}
+{% if calendar_months %}
+{% comment %}THE DAY SHEET, one per board and not one per square: 365 shells would be 365 dialogs in the
+accessibility tree. The body is REPLACED on each open, which is the requirement `_calendar_day.html`
+states -- two copies would put two `id="cal-day-title"` in the document and `aria-labelledby` resolves to
+the first, so the dialog would announce the square the reader had just left.
+
+IN `fixed_overlays`, OUTSIDE `#page-recede`, AND THAT IS LOAD-BEARING. `takeover` scales
+`#page-recede`, and a `position: fixed` overlay inside a transformed ancestor resolves against THAT
+ancestor rather than the viewport -- so a sheet left in the page content laid out over the whole document
+and drew thousands of pixels from wherever the reader was looking. Every other `.pp-detail-modal` on a
+receding surface lives in this block for exactly this reason, and `badge_detail.html` spells it out.
+(It briefly lived in the board partial and was moved to `<body>` by the script, which worked and was
+half the pattern. This is the whole one.)
+
+`.pp-detail-modal` IS THE HOUSE SHELL, already used by badge detail, game detail and the landing. Its
+scrim, dialog, close button and entrance animation all come with it; nothing here is new chrome.
+
+`aria-labelledby` POINTS INTO THE FETCHED FRAGMENT, which is why the fragment carries that id at all.
+The dialog keeps an `aria-label` too, and the accname spec is clear about which wins: `aria-labelledby`
+is only consulted when it holds at least one VALID idref, so before the body is filled the name falls
+through to `aria-label`, and afterwards the heading wins.
+
+THE SCENARIO THIS USED TO CITE WAS UNREACHABLE: "the fallback a screen reader gets if a fetch fails and
+the body stays empty". A failed fetch never opens the sheet at all -- the script returns before `open()`
+-- so the dialog stays `hidden` and has no name to fall back to. The attribute is insurance for the
+window before the first open, which is the only state where the shell is in the document and empty.
+{% endcomment %}
+<div class="pp-detail-modal" id="cal-day-modal" hidden>
+    <div class="pp-detail-modal__scrim" data-day-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true"
+         aria-label="Day detail" aria-labelledby="cal-day-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-day-close
+                aria-label="Close day detail">&times;</button>
+        <div class="pp-detail-modal__body" data-day-body></div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
