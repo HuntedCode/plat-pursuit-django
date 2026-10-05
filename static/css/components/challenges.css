@@ -3607,6 +3607,20 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-cal__day--open:focus-visible { outline-offset: 1px; }
 }
 
+/* TODAY, AND IT HAS TO READ ON A FILLED SQUARE AND AN EMPTY ONE. A background or a border change would
+   fight `--on`, which already owns both -- so the marker is an OUTSET ring, drawn outside the cell where
+   nothing else is painted. Same object as the focus ring and deliberately so: a reader who has seen one
+   recognises the other, and they never coexist (`:focus-visible` wins by being later).
+   `box-shadow` RATHER THAN `outline`, because an outline would be overwritten by the focus ring instead
+   of layering under it, and because the shadow sits in the 3px mobile gap without consuming it -- a 1px
+   spread reaches half as far as the 2px outline the focus state uses.
+   A DOT, NOT A PULSE. Pulsing one cell in a 365-cell grid is the kind of motion this project's rules
+   call out: it draws the eye permanently to something that is only mildly informative. */
+.pp-cal__day--today {
+    box-shadow: 0 0 0 1px var(--cal-c, var(--pp-primary)),
+                0 0 10px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 40%, transparent);
+}
+
 /* A FILLED DAY TAKES ITS MONTH'S COLOUR, which is the other half of the owner's cohesion note: the
    panel inherits `--cal-c` from its own `data-month`, so switching month repaints the squares as well as
    the head and the coin.
@@ -3740,6 +3754,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+    /* `position: relative` FOR THE LINK'S FOCUS RING, which would otherwise be clipped by the shelf's
+       overflow on a wrapped row. */
+    position: relative;
     /* THE ENTRANCE, on the board's own cascade token. `--rev` is the card's index, so the shelf fills
        left to right instead of appearing at once -- the same `staggerReveal`-shaped beat the day grid
        uses, and the reason a sheet that opens feels like it arrived rather than blinked. */
@@ -3755,6 +3772,43 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    is an empty shelf. */
 @media (prefers-reduced-motion: reduce) {
     .pp-cday__card { animation: none; }
+}
+
+/* THE WHOLE CARD IS THE LINK (owner: "is it worth making the game covers clickable to take you to the
+   game page?"). One anchor wrapping the cover, the year and the title rather than three -- a stacked day
+   would otherwise be two tab stops per platinum, and a reader tabbing a twenty-card shelf would pass
+   forty controls to reach the close button.
+
+   THE LIFT IS THE AFFORDANCE, and it is on the CARD rather than the cover alone: a cover that rises out
+   of its own caption reads as broken. `translateY` only -- no scale -- because the shelf is a grid of
+   fixed tracks and a scaling card visibly nudges its neighbours' optical rhythm, which is the same
+   reason the day squares glow instead of growing.
+   `@media (hover: hover)` SO A TAP DOES NOT STICK IT: without the guard, touching a card on a phone
+   leaves it lifted until something else is touched, which reads as a selection that is not one. */
+.pp-cday__link {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.18s ease;
+}
+@media (hover: hover) {
+    .pp-cday__link:hover { transform: translateY(-3px); }
+    .pp-cday__link:hover .pp-cday__art {
+        border-color: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 70%, var(--pp-border));
+        box-shadow: 0 10px 26px rgb(0 0 0 / 0.46),
+                    0 0 0 1px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 45%, transparent);
+    }
+    .pp-cday__link:hover .pp-cday__title { color: var(--cal-c, var(--pp-text)); }
+}
+/* THE RING GOES ROUND THE WHOLE CARD, not the cover, because the card is what the anchor is. Offset
+   outward: the shelf's 14px gap has room, unlike the day grid's 3px. */
+.pp-cday__link:focus-visible {
+    outline: 2px solid var(--cal-c, var(--pp-primary));
+    outline-offset: 4px;
+    border-radius: var(--pp-radius-md);
 }
 
 /* THE COVER IS THE OBJECT: a framed 3:4 plate with the month's edge on it. `aspect-ratio` plus a fixed

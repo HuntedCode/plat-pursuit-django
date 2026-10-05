@@ -63,8 +63,13 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
         `trophy_type='platinum'` rows is a catalogue data fault, and the stored count and this shelf
         report it the same way -- so the layers agree and the page looks wrong. Deduping here would make
         the shelf disagree with the tally above it, so the fix belongs in the catalogue.{% endcomment %}
+        {% comment %}ONE LINK PER CARD, not one per element. The cover, the year and the title are the
+        game, so they share a single anchor -- a day with twenty platinums would otherwise be forty tab
+        stops. The exclusion label and the folded date sit OUTSIDE it, so the link's accessible name is
+        the game and its year rather than a sentence ending "not counted shovelware".{% endcomment %}
         <li class="pp-cday__card{% if not plat.clean %} pp-cday__card--out{% endif %}"
             style="--rev: {{ forloop.counter0 }};">
+            <a class="pp-cday__link" href="{{ plat.game.concept.game_page_url }}">
             <span class="pp-cday__art">
                 {% comment %}`display_image_url_small` -- THE SAME CHAIN AT A THUMBNAIL SOURCE, which is
                 what `_run_hero.html` uses for its cells. `cover_small_2x` is 180x256, so it still has
@@ -76,7 +81,12 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
                 `object-cover object-top` -- `object-top` because PSN fallback art is wider than 3:4 and
                 anchoring to the top keeps the logo that sits there -- while the generic PSN title icon
                 is a square app icon that `object-cover` would crop to a portrait box. `has_cover_art`
-                reads only fields this queryset already selects, so the branch costs nothing.{% endcomment %}
+                reads only fields this queryset already selects, so the branch costs nothing.
+
+                AND SO DOES THE LINK AROUND IT. `Concept.game_page_url` reads `igdb_match.status`,
+                `igdb_id` and `concept_id` -- none deferred here -- and its own docstring names the
+                precondition this queryset already meets: select_related('igdb_match') with
+                `raw_response` deferred, or it walks the FK per row.{% endcomment %}
                 <img src="{{ plat.game.display_image_url_small }}" alt=""
                      loading="lazy" decoding="async"
                      class="w-full h-full {% if plat.game.has_cover_art %}object-cover object-top{% else %}object-contain p-2{% endif %}">
@@ -96,6 +106,7 @@ THIRD PERSON, because a run page is public. A reader is usually looking at someb
             cannot.{% endcomment %}
             <span class="pp-cday__year">{{ plat.on|date:"Y" }}</span>
             <span class="pp-cday__title">{{ plat.game.title_name }}</span>
+            </a>
 
             {% if not plat.clean %}
             {% comment %}THE WORD "shovelware" STAYS, even though "not counted" is shorter and fits the card

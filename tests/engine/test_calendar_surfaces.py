@@ -246,24 +246,76 @@ def test_a_slot_page_does_not_render_a_calendar_board():
 
 def test_the_board_draws_every_day_of_the_year():
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    # COUNTED ON THE DAY'S OPENING TAG. The `<li>` wrapper used to carry a class and this counted that
-    # instead; the class went when it turned out to have no rule behind it. `class="pp-cal__day"` is an
-    # exact attribute match, so it cannot silently match nothing the way a class-plus-attributes pattern
-    # can -- the day's own per-lens attributes come after it.
-    assert body.count('class="pp-cal__day"') == 365
+    # COUNTED ON THE CLASS, NOT ON AN EXACT ATTRIBUTE. It was `class="pp-cal__day"` verbatim, which was
+    # chosen because it "cannot silently match nothing" -- and then silently matched 364 the moment a
+    # square started carrying a modifier (today's). The pattern anchors on the class and allows whatever
+    # follows, which is the same lesson `<div class="(pp-cal__day...)"` taught when the openable squares
+    # became buttons.
+    assert len(re.findall(r'class="pp-cal__day[ "]', body)) == 365
     assert body.count('pp-cal__crest"') + body.count('pp-cal__crest ') == 12
 
 
-def test_only_the_first_month_is_showing_before_any_script_runs():
+def test_only_the_current_month_is_showing_before_any_script_runs():
     """`hidden` ON THE INACTIVE ELEVEN rather than a stylesheet rule, so the rendered HTML is a correct
     board on its own and a reader never meets twelve months of squares at once -- even with CSS off, and
-    before `wireTablist` has wired anything."""
-    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    before `wireTablist` has wired anything.
+
+    AND THE ONE SHOWING IS THE CURRENT MONTH (owner, 2026-10-05), not January. The board opened on
+    `forloop.first` whatever the date, so a hunter arriving in October had to find October before the
+    page told them anything about now.
+
+    COMPUTED THROUGH `today_key`, NOT WITH A SECOND `timezone.now()`. A test that spells the clock
+    itself passes on the wrong square for anyone whose timezone differs from the runner's, and would be
+    a second definition of exactly the thing this feature keeps in one place."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    body = _body(run)
     panels = re.findall(r'<section class="pp-cal__panel"[^>]*>', body)
+    open_index = calendar_render.today_key(run.profile)[0] - 1
 
     assert len(panels) == 12
-    assert 'hidden' not in panels[0]
-    assert all('hidden' in panel for panel in panels[1:])
+    assert 'hidden' not in panels[open_index], 'the current month must be the one showing'
+    assert sum(1 for p in panels if 'hidden' not in p) == 1, 'exactly one month shows'
+    assert all('hidden' in p for i, p in enumerate(panels) if i != open_index)
+
+    # The tab and the panel must agree: the switcher finds the live tab by `aria-selected`.
+    tabs = re.findall(r'<button type="button" role="tab"[^>]*>', body)
+    assert sum(1 for t in tabs if 'aria-selected="true"' in t) == 1
+    assert 'aria-selected="true"' in tabs[open_index]
+
+
+def test_todays_square_is_marked_on_the_grid():
+    """"We should somehow identify on the grid the current day" (owner, 2026-10-05).
+
+    THE OWNER'S CLOCK, NOT THE READER'S, which is the decision worth pinning rather than the ring: a run
+    page is public, and every other date on the surface is resolved in the owner's zone, so taking the
+    reader's would leave "today" as the one date on the board keyed differently from the squares around
+    it.
+
+    AND IT IS SPOKEN, not only drawn. The numeral is `aria-hidden`, so the `sr-only` label is the only
+    thing a screen reader gets -- a marker that exists only in colour would not exist at all for them."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    body = _body(run)
+    month, day = calendar_render.today_key(run.profile)
+
+    assert body.count('pp-cal__day--today') == 1, 'exactly one square is today'
+    assert ' Today.</span>' in body, 'the marker must be spoken, not only painted'
+
+    # It is on the right square: the label and the modifier belong to the same cell.
+    cell = re.search(r'<[^>]*pp-cal__day--today[^>]*>.*?</(?:button|div)>', body, re.S).group(0)
+    assert '%s %d' % (calendar_render.MONTH_NAMES[month - 1], day) in cell
+
+
+def test_the_today_marker_survives_a_leap_day():
+    """THERE IS NO (2, 29) SQUARE -- `calendarday_day_within_month` forbids the row -- so an unfolded
+    marker would simply vanish for a day every four years, which is the kind of absence nobody reports
+    and nobody can reproduce. `today_key` folds through the same `_fold` the fill uses."""
+    from challenges.services import calendar_fill
+
+    assert calendar_fill._fold(2, 29) == (2, 28)
+    # And the renderer goes through it rather than spelling the fold again.
+    src = (ROOT_DIR / 'challenges' / 'services' / 'calendar_render.py').read_text(encoding='utf-8')
+    assert 'from challenges.services.calendar_fill import _fold' in src
+    assert 'LEAP_DAY' not in src, 'the fold is re-spelled here instead of imported'
 
 
 def test_the_board_carries_no_state_attributes():

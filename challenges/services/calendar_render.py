@@ -36,7 +36,13 @@ visibly nothing instead of 365 cells of garbage.
 import calendar
 from fractions import Fraction
 
+from django.utils import timezone
+
 from challenges.models import CALENDAR_MONTH_DAYS, CalendarDay, calendar_day_keys
+# IMPORTED, NOT RE-SPELLED. `_fold` is the one place that knows 29 February belongs to the 28th,
+# and `_hunter_timezone` is the one place that knows whose clock a Calendar runs on. A second
+# spelling of either is how the marker comes to sit on a different square than the fill did.
+from challenges.services.calendar_fill import _fold, _hunter_timezone
 
 #: WHAT `.pp-med` ACTUALLY PROVIDES, kept because an earlier comment oversold it and the overselling
 #: was load-bearing -- it claimed the crest "needs no authored artwork". That is FALSE.
@@ -114,7 +120,7 @@ def _is_filled(row):
     return bool(row and row.in_clean)
 
 
-def _cell(month, day, row):
+def _cell(month, day, row, today=None):
     """One day square on the DETAIL board.
 
     `row` IS ALLOWED TO BE `None`, and that is what makes the board unable to draw FEWER squares than
@@ -190,6 +196,9 @@ def _cell(month, day, row):
         # the affordance never has to be two predicates kept in step.
         'counts': bool(row and row.in_all),
         'earned_on': row.earned_on if row else None,
+        # TODAY, IN THE OWNER'S ZONE. A (month, day) comparison rather than a date, because a square has
+        # no year -- "3 March" is every 3 March -- so there is nothing to compare a full date against.
+        'is_today': today is not None and (month, day) == today,
         # HOW MANY PLATINUMS SIT ON THIS SQUARE, for the month's "busiest day" and, when the day modal
         # lands, for the hover summary that reads it straight off the cell rather than fetching.
         #
@@ -207,6 +216,22 @@ def _cell(month, day, row):
         # cap on the delay, every cell in February through December shared one maximum delay, so eleven
         # months had no cascade and a switched-to panel arrived blank before popping all at once.
     }
+
+
+def today_key(profile):
+    """`(month, day)` for the hunter's own today, folded onto a square that exists.
+
+    THE OWNER'S CLOCK, NOT THE READER'S. A run page is public, so these differ -- and every other date on
+    the surface is resolved in the owner's zone, so taking the reader's would leave "today" as the one
+    date on the board keyed differently from the squares around it. A visitor in Tokyo would see the
+    marker on a square that is not today for the hunter whose calendar it is.
+
+    FOLDED, so 29 February marks the 28th. There is no (2, 29) square -- `calendarday_day_within_month`
+    forbids the row -- so without the fold the marker would simply vanish for a day every four years,
+    which is the kind of absence nobody reports and nobody can reproduce.
+    """
+    now = timezone.now().astimezone(_hunter_timezone(profile))
+    return _fold(now.month, now.day)
 
 
 def calendar_groups(challenge):
@@ -248,7 +273,8 @@ def calendar_groups(challenge):
         return []
 
     by_key = _rows_by_key(rows)
-    cells = [_cell(month, day, by_key.get((month, day)))
+    today = today_key(challenge.profile)
+    cells = [_cell(month, day, by_key.get((month, day)), today)
              for month, day in calendar_day_keys()]
 
     groups = []
@@ -327,6 +353,12 @@ def calendar_groups(challenge):
             # needed: its loop guards two groups sharing a slug-derived id, which cannot happen here.
             # A separate prefix because this is its own block, not a `.pp-csq-shelf`.
             'dom_id': 'cal-month-%s' % MONTH_SLUGS[index],
+            # THE MONTH THE BOARD OPENS ON. It was always January, because the template picked
+            # `forloop.first` -- so a hunter arriving in October had to find October before the board
+            # told them anything about now. The flag lives here rather than in the template so the
+            # tab's `aria-selected` and the panel's `hidden` read ONE decision: rendered separately they
+            # would eventually disagree, and the switcher's `isActive` reads `aria-selected`.
+            'is_open': index + 1 == today[0],
         })
 
     # ── RANK AMONG THE TWELVE, stamped after the loop because it is the one figure a month cannot know

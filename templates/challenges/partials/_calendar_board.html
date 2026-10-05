@@ -58,7 +58,13 @@ and not a button", and the commit that made them buttons left it standing twenty
         <button type="button" role="tab"
                 class="pp-cal__crest{% if month.is_struck %} pp-cal__crest--struck{% endif %}"
                 id="cal-tab-{{ month.slug }}" aria-controls="{{ month.dom_id }}"
-                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                {% comment %}`month.is_open` RATHER THAN `forloop.first`. The board opened on January
+                whatever the date, so a hunter arriving in October had to find October before the page
+                told them anything about now (owner, 2026-10-05). The flag is computed once in
+                `calendar_groups` and read in BOTH places -- here and on the panel below -- because two
+                independent expressions eventually disagree, and the switcher's `isActive` reads this
+                attribute to find the live tab.{% endcomment %}
+                aria-selected="{% if month.is_open %}true{% else %}false{% endif %}"
                 {% comment %}EVERY CREST IS TAB-REACHABLE AS RENDERED, and `wireTablist` narrows it to
                 one on boot -- its `syncTabindex()` runs at wire time, so the roving behaviour arrives in
                 the same tick as the arrow keys that make it navigable. The server used to render the
@@ -138,7 +144,7 @@ and not a button", and the commit that made them buttons left it standing twenty
     {% endcomment %}
     <section class="pp-cal__panel" role="tabpanel" id="{{ month.dom_id }}"
              aria-labelledby="cal-tab-{{ month.slug }}" data-month="{{ forloop.counter }}"
-             {% if not forloop.first %}hidden{% endif %}>
+             {% if not month.is_open %}hidden{% endif %}>
         <div class="pp-cal__head">
             <h3 class="pp-cal__month">{{ month.label }}</h3>
             <p class="pp-cal__tally">{{ month.done }} / {{ month.total }}</p>
@@ -183,7 +189,7 @@ and not a button", and the commit that made them buttons left it standing twenty
             <li>
                 {% if card.counts %}
                 <button type="button"
-                        class="pp-cal__day pp-cal__day--open{% if card.filled %} pp-cal__day--on{% endif %}"
+                        class="pp-cal__day pp-cal__day--open{% if card.filled %} pp-cal__day--on{% endif %}{% if card.is_today %} pp-cal__day--today{% endif %}"
                         style="--rev: {{ forloop.counter0 }};"
                         data-month="{{ card.month }}"
                         data-day-url="{% url 'challenge_calendar_day' challenge.id card.month card.day %}">
@@ -192,13 +198,13 @@ and not a button", and the commit that made them buttons left it standing twenty
                     control, and the word was a promise this square cannot keep without a script: with JS
                     off a reader heard "Open., button" on three hundred squares and nothing happened on
                     any of them. The inert branch says only the date, and so does this one.{% endcomment %}
-                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}.</span>
+                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}.{% if card.is_today %} Today.{% endif %}</span>
                 </button>
                 {% else %}
-                <div class="pp-cal__day{% if card.filled %} pp-cal__day--on{% endif %}"
+                <div class="pp-cal__day{% if card.filled %} pp-cal__day--on{% endif %}{% if card.is_today %} pp-cal__day--today{% endif %}"
                      style="--rev: {{ forloop.counter0 }};">
                     <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
-                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}.</span>
+                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}.{% if card.is_today %} Today.{% endif %}</span>
                 </div>
                 {% endif %}
             </li>
