@@ -2997,7 +2997,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        4px/2px/6px and clipped all three.
        AND THIS BUDGET IS WHY THERE IS NO IGNITE BLOOM on the crests -- see the note at
        `.pp-cal__crest`. A `box-shadow: 0 0 20px 3px` reaches ~23px past the box, which no padding on a
-       scroll container is going to host. */
+       scroll container is going to host. It is also why the ACTIVE coin's glow is attached at `md:` and
+       not here: the row sets `overflow-x: visible` from 768, and a 16px blur wants ~19px of the 7 this
+       box has. The same argument, applied a second time, to a rule that had not heard it. */
     padding: 7px 6px 10px;
     scrollbar-width: none;
     /* AN EDGE FADE, because roughly five of twelve months sit off-screen at 375px with the scrollbar
@@ -3243,24 +3245,30 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* THE RIM SHARES THE GAUGE'S NOTCH, which is the fix for a real occlusion rather than a tidy-up. The
    outer arc is `dasharray: 72 100` rotated 140.4deg so that a 28-unit notch opens at the bottom for the
    counter plate; the rim never got that treatment and tiled twelve 30-degree slots around the FULL
-   circle, so the plate covered whichever months sat at the bottom. Measured, that was May (120-150 from
-   twelve o'clock), June (150-180), July (180-210) and August (210-240) -- four of twelve, and the owner
-   noticed June.
+   circle, so the plate covered whichever months sat at the bottom. FOUR MONTHS, TWO OF THEM ENTIRELY:
+   measured on the dashes actually drawn rather than on their 30-degree slots, June (150.0-171.6 from
+   twelve o'clock) and July (180.0-201.6) sat fully inside the 129.6-230.4 notch, August (210.0-231.6)
+   was 94% inside and May (120.0-141.6) 55%. The owner noticed June.
 
    TWELVE SLOTS OF 6 UNITS IN THE SAME 72, at the same 140.4deg origin: January at the lower left,
    sweeping clockwise over the top to December at the lower right. That is also the direction the gauge
    fills, so the two rings now read as one object rather than two clocks with different starts.
 
-   THE TRACK TILES THE WHOLE PATH AND THAT IS FINE. A repeating dash pattern cannot be told to stop at
-   unit 72, and it does not need to be: 100/6 is 16.67 periods, so the twelve full slots land exactly on
-   the visible arc and the ragged remainder (units 96-100, rendering at 216-230.4 degrees) falls INSIDE
-   the notch, behind an opaque plate. The seam is hidden by the same thing that caused the problem.
+   AN EXPLICIT DASH LIST, BECAUSE A REPEATING ONE CANNOT STOP AT UNIT 72. The first version of this fix
+   used `4.6 1.4` and argued the leftovers were "hidden behind an opaque plate" -- which was false, and
+   false in the worst direction: `.pp-cal__sub` is `display: none` until 1024px, so on every phone and
+   tablet there is nothing in the notch at all. A repeating 6-unit period over a 100-unit path gives
+   16.67 slots, so that version painted FIVE stray dashes across the bottom where the outer gauge has a
+   clean gap, plus a seam where the truncated last dash abuts the first -- a lower-left run of 30.96
+   degrees against every other slot's 16.56. The rim it replaced tiled 100/8.3333 = exactly twelve and
+   had neither. The "fix" made the mobile rim worse than the bug it was fixing.
 
-   4.6 / 1.4 RATHER THAN 6 / 2.3333. The slot is smaller now (6 units against 8.3333), so the old gap
-   would have been a third of it; this keeps the dash-to-gap ratio close to what the full-circle version
-   read as. */
+   SO THE PATTERN IS WRITTEN OUT: eleven `4.6 1.4` pairs and a final `4.6 29.4`, summing to exactly 100.
+   Twelve dashes at units 0, 6, ... 66, then one gap spanning the whole notch. No seam, no strays, and
+   no dependence on anything being painted on top -- correct at 375px and at 1920px alike. */
 .pp-cal__rim-track {
-    stroke-dasharray: 4.6 1.4;
+    stroke-dasharray: 4.6 1.4 4.6 1.4 4.6 1.4 4.6 1.4 4.6 1.4 4.6 1.4
+                      4.6 1.4 4.6 1.4 4.6 1.4 4.6 1.4 4.6 1.4 4.6 29.4;
     transform: rotate(140.4deg);
     transform-origin: 50% 50%;
     opacity: 0.22;
@@ -3367,7 +3375,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    answer here rather than an exception to argue for: this figure is a number a hunter reads off a coin,
    not a decorative micro-label. The face clamps 12 -> 18px and this clamps 12 -> 15px, so the pair
    always fits the clear circle with the face leading.
-   IT CARRIED THREE FIGURES, one per lens, sharing `.pp-cal__stack` with the month head so one set of
+   IT CARRIED THREE FIGURES, one per lens, sharing `.pp-cal__count` with the month head so one set of
    `:has()` rules governed both and the two could not disagree about which lens was active. One lens
    means one figure printed directly, and the shared class went with the rules that needed it. */
 /* THE COUNTER IS WORN IN THE NOTCH, which is `.pp-phero__lvl`'s shape and the owner's request: "moving
@@ -3443,21 +3451,40 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    tinting it would have LOWERED the contrast the ring exists to create. Cyan reads against all twelve
    hues precisely because it belongs to none of them.
 
-   LIFT, SCALE, A FULL-STRENGTH RING, GLOW -- and the scale is safe here in a way it is NOT on the day
-   grid. `transform` does not reflow, so neighbours do not move; the day squares glow instead of growing
-   because a 10-column grid's optical rhythm visibly flinches when one cell changes size, and a row of
-   twelve tabs has no such rhythm to break. 1.06 because the mobile gap is 3px: at 44px that is 1.3px of
-   growth each side, which stays clear of the next coin.
+   LIFT, RING, AND -- FROM `md:` UP -- SCALE AND GLOW. The scale is safe on this row in a way it is NOT
+   on the day grid: `transform` does not reflow, so neighbours do not move, and the day squares glow
+   instead of growing because a 10-column grid's optical rhythm visibly flinches when one cell changes
+   size while a row of twelve tabs has no such rhythm to break.
+
+   THE FULL TREATMENT DOES NOT FIT AT MOBILE, THOUGH, and the first version shipped it there anyway on
+   the strength of one figure: "1.06 because the mobile gap is 3px: at 44px that is 1.3px of growth each
+   side, which stays clear of the next coin". The growth was right and it was not what reached furthest.
+   An outline is drawn OUTSIDE the box and then scaled with it, so `offset: 3px` + `2px` reaches
+   (3+2) x 1.06 = 5.3px past the grown edge, 6.6px past the original -- more than TWICE the 3px gap, so
+   the cyan ring crossed onto the next coin. And the 16px glow needs about 19px of room in a box whose
+   own comment two rules up explains why it only has 7: `overflow-x: auto` computes BOTH axes to scroll,
+   so the row clips, which is the same budget that already ruled out the ignite bloom for reaching 23px.
+   The glow was simply shaved off at mobile.
+
+   SO THE BASE STATE IS LIFT + A TIGHT RING, 3px of total reach against a 3px gap, inside the 7px the row
+   has. FROM 768 THE ROW SETS `overflow-x: visible` AND A 10px GAP, so there is nothing left to clip and
+   nothing to collide with: the scale and the glow are attached there, where they were always affordable.
 
    NO BAR UNDER THE ACTIVE COIN, which is the obvious tab affordance and is taken. `.pp-cal__sub` -- the
    counter plate -- is positioned at `bottom: -2px` INSIDE the coin from `lg:` up, so an underline at the
    crest's bottom edge would sit on top of it. */
-.pp-cal__crest[aria-selected="true"] { transform: translateY(-3px) scale(1.06); }
+.pp-cal__crest[aria-selected="true"] { transform: translateY(-3px); }
 .pp-cal__crest[aria-selected="true"] .pp-cal__coin {
     outline: 2px solid var(--pp-primary);
-    outline-offset: 3px;
+    outline-offset: 1px;
     border-radius: 50%;
-    box-shadow: 0 0 16px color-mix(in srgb, var(--pp-primary) 55%, transparent);
+}
+@media (min-width: 768px) {
+    .pp-cal__crest[aria-selected="true"] { transform: translateY(-3px) scale(1.06); }
+    .pp-cal__crest[aria-selected="true"] .pp-cal__coin {
+        outline-offset: 3px;
+        box-shadow: 0 0 16px color-mix(in srgb, var(--pp-primary) 55%, transparent);
+    }
 }
 .pp-cal__crest:focus-visible .pp-cal__coin {
     outline: 2px solid var(--pp-primary);
@@ -3523,9 +3550,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* ONE FIGURE, PRINTED DIRECTLY. This carried one per lens with all three in the DOM and CSS revealing
    the active one, because a server-picked number could not survive a client-side switch and the three
    lenses did not nest. The collapse to one lens left that comment standing directly above the note that
-   explains the removal for `.pp-cal__stack`, i.e. two adjacent comments disagreeing. */
+   explains the removal for `.pp-cal__count`, i.e. two adjacent comments disagreeing. */
 .pp-cal__tally { font-size: 0.75rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; }
-/* NO `.pp-cal__stack` RULES. The month head and the coin each rendered three figures -- one per lens --
+/* NO `.pp-cal__count` RULES. The month head and the coin each rendered three figures -- one per lens --
    with these selectors revealing whichever matched the checked radio. One lens means one figure, printed
    directly, so the class and its reveal rules went together. */
 
@@ -3627,7 +3654,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 @media (hover: hover) {
     .pp-cal__day--open:hover {
         border-color: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 70%, var(--pp-border));
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 35%, transparent);
+        /* `var(--day-ring)` FIRST, so today's mark survives being hovered -- see `.pp-cal__day--today`. */
+        box-shadow: var(--day-ring),
+                    0 0 0 1px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 35%, transparent);
     }
 }
 
@@ -3661,10 +3690,21 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    of layering under it, and because the shadow sits in the 3px mobile gap without consuming it -- a 1px
    spread reaches half as far as the 2px outline the focus state uses.
    A DOT, NOT A PULSE. Pulsing one cell in a 365-cell grid is the kind of motion this project's rules
-   call out: it draws the eye permanently to something that is only mildly informative. */
+   call out: it draws the eye permanently to something that is only mildly informative.
+
+   CARRIED ON A CUSTOM PROPERTY SO HOVER CAN COMPOSE WITH IT. `box-shadow` does not accumulate across
+   rules -- a later or more specific rule REPLACES the whole value -- and `.pp-cal__day--open:hover` is
+   (0,2,0) against this rule's (0,1,0). So hovering today's square erased the one mark on the board that
+   says it is today, which is exactly the defect this file records paying for on `.pp-csq`: "hovering a
+   finished square erased the one mark the page exists to show". The hover rule now composes
+   `var(--day-ring)` into its own shadow, so the two layer instead of fighting.
+   THE DEFAULT IS A TRANSPARENT SHADOW rather than `none`, because `box-shadow: none, <glow>` is invalid
+   -- a keyword cannot be one item of a list. */
+.pp-cal__day { --day-ring: 0 0 0 0 transparent; }
 .pp-cal__day--today {
-    box-shadow: 0 0 0 1px var(--cal-c, var(--pp-primary)),
+    --day-ring: 0 0 0 1px var(--cal-c, var(--pp-primary)),
                 0 0 10px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 40%, transparent);
+    box-shadow: var(--day-ring);
 }
 
 /* `__stack`, NOT `__count`, AND THE SUITE CAUGHT THE COLLISION. `.pp-cal__count` is a RETIRED name:
@@ -3680,23 +3720,35 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    `x4`, NOT `4`. A bare numeral in the corner of a cell whose content is already a numeral reads as part
    of the date; the multiplication sign cannot be mistaken for one.
 
-   TOP-RIGHT, CLEAR OF THE CENTRED DATE. At the mobile cell's 43.9px the date sits centred around 22px
-   and spans roughly 15-29px across; this sits at 27-42px and 2-14px down, so the two never meet. Two
-   digits still fit: `x12` is about 21px at this size.
+   TOP-RIGHT, CLEAR OF THE CENTRED DATE -- VERTICALLY, which is the part that matters. On a 43.9px cell
+   the badge occupies roughly 4-16px down and the centred numeral 16-28px, so they do not meet. They DO
+   overlap horizontally (the badge spans about 24-38px, a two-digit date about 15-29px); an earlier
+   version of this comment gave 27-42px and claimed "the two never meet", which was both arithmetically
+   off and the wrong axis. Two digits still fit: `x12` is about 21px at this size.
 
-   12px IS THE FLOOR and this sits on it. The badge is secondary to the date, and the ONLY way to say so
-   without going under the floor is colour -- not size, and not `opacity`, which would drag a measured
-   ratio down with it. `--pp-text-dim` on the filled square's tinted fill holds about 6:1. */
+   12px IS THE FLOOR and this sits on it, so the badge cannot be made secondary by SIZE. It was made
+   secondary by COLOUR instead -- `--pp-text-dim` -- on the reasoning that colour was the only lever
+   left. MEASURED, THAT COLOUR FAILS: against `color-mix(cal-c 22%, bg-2)` it holds 3.21:1 (December) to
+   4.37:1 (October), under the 4.5 a 12px label needs, and the comment claimed "about 6:1" for a figure
+   no month reaches. The lever it rejected -- `opacity` -- would have cost exactly the same ratio, which
+   is the point: there was no safe way to dim it.
+   SO IT IS NOT DIMMED. `--pp-text` holds 7.30-9.95 across the twelve, and the badge is distinguished by
+   POSITION and by the `x` instead. A corner glyph does not need to be quieter than the date to read as
+   subordinate to it.
+
+   INSET PAST THE MOBILE FOCUS RING. At `md:` and up the ring is outside the cell, but at mobile it is
+   `outline-offset: -2px` -- drawn 2-4px INSIDE the border box, and an outline paints after all content,
+   so a badge at `top: 2px` had a hue line struck through it. 4px/5px clears the band. */
 .pp-cal__stack {
     position: absolute;
-    top: 2px;
-    right: 3px;
+    top: 4px;
+    right: 5px;
     font-size: 12px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
-    color: var(--pp-text-dim);
+    color: var(--pp-text);
     pointer-events: none;
 }
 
@@ -3752,11 +3804,16 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    read as belonging to the square that opened it. */
 #cal-day-modal .pp-detail-modal__dialog {
     background:
+        /* 16% AND 5%, DOWN FROM 24% AND 8%. The bloom was chosen by eye and then text was laid over it:
+           measured, `--pp-text-mute` on the strongest part held 2.97:1 and `--pp-text-dim` 3.72:1,
+           against the 4.5 small text needs. Lowering the wash is half the fix and raising those two
+           colours is the other half -- the wash is what makes the dialog wear its month, so it is worth
+           keeping as strong as the text over it allows. */
         radial-gradient(135% 95% at 4% -12%,
-                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 24%, transparent) 0%,
+                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 16%, transparent) 0%,
                         transparent 58%),
         linear-gradient(180deg,
-                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 8%, transparent) 0%,
+                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 5%, transparent) 0%,
                         transparent 38%),
         var(--pp-bg-1);
     border-color: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 30%, var(--pp-border));
@@ -3778,16 +3835,23 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* ── the side column's day peek ───────────────────────────────────────────────────────────────────────
    Hovering a square that opens shows that day where the month's figures normally sit.
 
-   STACKED, NOT SWAPPED. Both faces sit in the SAME grid cell, so the column's height is the taller of
-   the two and nothing moves when a pointer crosses the grid. A column that resized on hover would shift
-   the board under the cursor, which is the worst thing a hover can do -- and on a 365-cell grid the
-   cursor crosses a lot of squares.
-   `[hidden]` STILL HAS TO BE HONOURED, which a bare `display: grid` on the parent would override: a
-   grid item is `display: block` whatever its own rule said. Hence the explicit rule. */
+   STACKED, AND NOW ACTUALLY STACKED. The goal is that the column's height is the taller of the two
+   faces so NOTHING MOVES when a pointer crosses the grid -- a side column that resized on hover would
+   shift the board under the cursor, and on a 365-cell grid the cursor crosses a lot of squares.
+   THE FIRST VERSION DID NOT ACHIEVE IT. It toggled the `hidden` ATTRIBUTE, and a `display: none` child
+   generates no box at all: it is not a grid item, contributes nothing to the container's size, and the
+   grid-area stacking was therefore inert. Exactly one face was ever in layout, so the panel -- which
+   carries a border, a background and an inset highlight -- visibly shrank and grew on every hover, and
+   below `lg:` the page's scroll height moved with it. The claim was in the CSS, the template AND the
+   test docstring.
+   `visibility` INSTEAD, so both faces stay in flow and the box is sized by the facts (the taller). The
+   companion claim that a bare `display: grid` would override `[hidden]` was also wrong -- blockification
+   applies to in-flow children, and `display: none` generates no box to blockify -- but the rule is
+   needed now for the opposite reason: it has to BEAT the UA's `[hidden] { display: none }`. */
 .pp-cal__stats { display: grid; }
 .pp-cal__stats > .pp-cal__peek,
 .pp-cal__stats > .pp-cal__facts { grid-area: 1 / 1; min-width: 0; }
-.pp-cal__stats > [hidden] { display: none; }
+.pp-cal__stats > [hidden] { display: block; visibility: hidden; }
 
 .pp-cal__peek-figure { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 0; }
 .pp-cal__peek-figure .pp-tally { font-size: 1.5rem; color: var(--cal-c, var(--pp-text)); }
@@ -3843,8 +3907,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 @media (min-width: 768px) { .pp-cday__date { font-size: 1.625rem; } }
 .pp-cday__tally { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
-.pp-cday__tally .pp-tally { font-size: 1.125rem; color: var(--cal-c, var(--pp-text)); }
+.pp-cday__tally .pp-tally { font-size: 1.125rem; color: var(--pp-text); }
 .pp-cday__unit { font-size: 0.8125rem; color: var(--pp-text-dim); }
+/* NEUTRAL, NOT THE MONTH'S HUE. This figure was `--cal-c` at 18px bold, which is NOT large text by
+   WCAG's reckoning (14pt bold is 18.66px) and measured 4.19:1 at the bloom above. The masthead beside
+   it keeps the hue because at 22px/800 it IS large text, where the floor is 3.0. */
 
 /* THE SHELF WRAPS RATHER THAN SCROLLING SIDEWAYS. The dialog is `max-height: 88vh; overflow: auto`, so
    wrapping gets vertical scrolling for free -- and a horizontal strip is awkward with a trackpad and
@@ -3867,14 +3934,17 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     flex-direction: column;
     gap: 6px;
     min-width: 0;
-    /* `position: relative` FOR THE LINK'S FOCUS RING, which would otherwise be clipped by the shelf's
-       overflow on a wrapped row. */
-    position: relative;
     /* THE ENTRANCE, on the board's own cascade token. `--rev` is the card's index, so the shelf fills
-       left to right instead of appearing at once -- the same `staggerReveal`-shaped beat the day grid
-       uses, and the reason a sheet that opens feels like it arrived rather than blinked. */
+       left to right instead of appearing at once.
+       CAPPED AT TWELVE STEPS, which the day grid already does and this did not -- the comment claimed it
+       was "the same staggerReveal-shaped beat the day grid uses" while omitting the cap that beat is
+       built on. `platinums_on_day` documents "several hundred" rows on a stacked 28 February, and at an
+       uncapped 40ms the last card of three hundred would begin 12 SECONDS after the sheet opened, every
+       card before it at `opacity: 0` because the fill is `backwards`. The day grid's own comment says it
+       outright: "An uncapped cascade over 31 cells at 35ms would still be running two thirds of a second
+       after the switch." Twelve steps is 480ms whatever the day holds. */
     animation: ppCdayIn 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-    animation-delay: calc(var(--rev, 0) * 40ms);
+    animation-delay: calc(min(var(--rev, 0), 12) * 40ms);
 }
 @keyframes ppCdayIn {
     from { opacity: 0; transform: translateY(10px) scale(0.97); }
@@ -3914,7 +3984,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
         box-shadow: 0 10px 26px rgb(0 0 0 / 0.46),
                     0 0 0 1px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 45%, transparent);
     }
-    .pp-cday__link:hover .pp-cday__title { color: var(--cal-c, var(--pp-text)); }
+    /* NO HUE ON THE TITLE. It is 13px, so the hue would take it under the contrast floor on the darker
+       months -- the cover's border and glow already carry the hover. */
 }
 /* THE RING GOES ROUND THE WHOLE CARD, not the cover, because the card is what the anchor is. Offset
    outward: the shelf's 14px gap has room, unlike the day grid's 3px. */
@@ -3965,7 +4036,13 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     font-weight: 800;
     letter-spacing: 0.1em;
     font-variant-numeric: tabular-nums;
-    color: var(--cal-c, var(--pp-text-dim));
+    /* NEUTRAL FOR THE SAME REASON AS THE TALLY. 12px of `--cal-c` over this dialog's own bloom measured
+       4.19:1 at the old wash and is still short of 4.5 at the new one for the darker hues -- and this
+       file's hue table states the invariant outright: "THE HUE NEVER TOUCHES TEXT ... the reason twelve
+       of these cannot quietly break a contrast ratio". Six declarations in this range broke it; the two
+       that survive are large text (the masthead) and a hue mixed toward a neutral (the peek hint),
+       both measured. */
+    color: var(--pp-text-dim);
     text-shadow: 0 1px 0 oklch(1 0 0 / 0.06);
 }
 
@@ -3988,7 +4065,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     font-size: 12px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--pp-text-mute);
+    /* `--pp-text-dim`, NOT `--pp-text-mute`. The flag is the only place a hunter learns why a square
+       they remember earning is open, and over the dialog's month wash mute measured 2.97-4.00:1. Dim
+       holds 4.73-5.70 at the reduced bloom. */
+    color: var(--pp-text-dim);
 }
 .pp-cday__on { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
 

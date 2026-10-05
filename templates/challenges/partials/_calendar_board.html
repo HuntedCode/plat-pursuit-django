@@ -119,7 +119,7 @@ and not a button", and the commit that made them buttons left it standing twenty
                 the stylesheet carries the arithmetic.
 
                 ONE FIGURE NOW, not three. This carried a per-lens count that followed the checked radio,
-                sharing `.pp-cal__stack` with the month head so one set of `:has()` rules governed both.
+                sharing `.pp-cal__count` with the month head so one set of `:has()` rules governed both.
                 With one lens it is simply how much of the month is filled, and the class goes with the
                 rules that needed it.
 
@@ -287,11 +287,22 @@ and not a button", and the commit that made them buttons left it standing twenty
         month's figures and the day peek occupy the same grid area, so the column's height is the taller
         of the two and NOTHING MOVES when a pointer crosses the grid -- a column that resized on hover
         would shift the board under the cursor, which is the worst possible response to a hover.
+        THAT SENTENCE ONLY BECAME TRUE IN THE FIX FOR IT. The faces were swapped with the `hidden`
+        ATTRIBUTE, which is `display: none` -- and an element with no box is not a grid item, contributes
+        nothing to the container's size, and leaves the grid-area stacking above it inert. Exactly one
+        face was ever in layout, so this bordered, tinted panel visibly shrank and grew on every hover
+        and below `lg:` took the page's scroll height with it. The stylesheet hides them with
+        `visibility` now, so both stay in flow and the box is sized by the taller.
         {% endcomment %}
         <div class="pp-cal__stats">
             <div class="pp-cal__peek" data-cal-peek aria-hidden="true" hidden>
                 <h4 class="pp-cal__stats-head" data-peek-head></h4>
-                <p class="pp-cal__peek-figure">
+                {% comment %}THE FIGURE LINE IS HIDEABLE, because a square this board draws EMPTY has no
+                figure this board recognises. An `in_all`-only square carries the shovelware-inclusive
+                count, so printing it read "6 platinums, not counted" -- a number and its own retraction
+                on one line, on a square the grid deliberately leaves open. The state goes in the note
+                instead and the number does not appear at all.{% endcomment %}
+                <p class="pp-cal__peek-figure" data-peek-figure>
                     <span class="pp-tally" data-peek-count></span>
                     <span class="pp-cal__peek-unit" data-peek-unit></span>
                 </p>

@@ -307,12 +307,35 @@
 
             var plats = parseInt(cell.getAttribute('data-peek-plats'), 10) || 0;
             var clean = cell.getAttribute('data-peek-clean') === '1';
-            f.peek.querySelector('[data-peek-head]').textContent = cell.getAttribute('data-peek-label');
-            f.peek.querySelector('[data-peek-count]').textContent = String(plats);
-            f.peek.querySelector('[data-peek-unit]').textContent =
-                (plats === 1 ? 'platinum' : 'platinums') + (clean ? '' : ', not counted');
             var on = cell.getAttribute('data-peek-on');
-            f.peek.querySelector('[data-peek-note]').textContent = on ? ('first on ' + on) : '';
+
+            // A NUMBER ONLY WHERE THIS BOARD HAS ONE. An openable square is not necessarily a FILLED
+            // square -- `in_clean` implies `in_all` but not the reverse -- and an `in_all`-only square's
+            // stored count is shovelware-inclusive, which this board excludes. The first version printed
+            // it anyway with ", not counted" appended, so a hovered 3 March read "6 platinums, not
+            // counted": a figure and its retraction on one line, attached to a square drawn empty. The
+            // `plats < 1` arm is the same judgement on a second cause -- `plat_count` is only written
+            // when a row is filled or changes, so a long-standing `in_all` row can still hold 0, and
+            // "0 platinums" is not a preview of anything.
+            // TWO QUESTIONS, NOT ONE, and the first version of this fix folded them. The FIGURE needs
+            // both ("does this board recognise a count here" AND "is there one to print"); the NOTE needs
+            // only the first. Folded, a FILLED square whose stored count is stale at 0 got the shovelware
+            // denial printed on it -- and `plat_count` is only written when a row is filled or changes, so
+            // a stale 0 on a drawn square is a state the data model permits.
+            var counted = clean && plats > 0;
+            f.peek.querySelector('[data-peek-head]').textContent = cell.getAttribute('data-peek-label');
+            f.peek.querySelector('[data-peek-figure]').hidden = !counted;
+            if (counted) {
+                f.peek.querySelector('[data-peek-count]').textContent = String(plats);
+                f.peek.querySelector('[data-peek-unit]').textContent =
+                    plats === 1 ? 'platinum' : 'platinums';
+            }
+            // AND THE DENIAL IS EXACT. `in_all` without `in_clean` means every platinum on that day is on
+            // a flagged game -- so the note can say what is true of the day rather than describe the board
+            // to the reader, which is the house rule about copy that talks about itself.
+            f.peek.querySelector('[data-peek-note]').textContent = clean
+                ? (on ? 'first on ' + on : '')
+                : 'Shovelware only, so this square stays open.';
 
             f.facts.hidden = true;
             f.peek.hidden = false;
@@ -339,16 +362,16 @@
             settle();
         });
 
-        // FOCUS MIRRORS HOVER. `focusin`/`focusout` bubble where `focus`/`blur` do not.
-        document.body.addEventListener('focusin', function (e) {
-            if (!e.target.closest) { return; }
-            var cell = e.target.closest('[data-peek-label]');
-            if (cell) { show(cell); } else { settle(); }
-        });
-        document.body.addEventListener('focusout', function (e) {
-            if (!e.target.closest) { return; }
-            if (e.target.closest('[data-peek-label]')) { settle(); }
-        });
+        // THE PEEK IS POINTER-ONLY, AND THAT IS THE FIX RATHER THAN THE SHORTCUT. It mirrored focus at
+        // first, on the reasoning that a keyboard reader has no hover -- but the peek is
+        // `aria-hidden="true"`, so focus-driven swapping announced NOTHING while removing the month's
+        // figures from the accessibility tree, and a month has 28-31 consecutive day stops. Tabbing into
+        // the grid emptied the one region that said how far the month had got, for the whole traversal,
+        // in exchange for nothing a reader could hear.
+        // THE KEYBOARD PATH IS THE MODAL, which Enter opens and which is a real dialog with real content.
+        // A sighted keyboard user loses a preview; a screen-reader user keeps the figures. If the preview
+        // is wanted on focus later it needs the peek to be announced rather than hidden, which is a
+        // different design and not a listener.
     }
 
     if (PP.onPageReady) { PP.onPageReady(function (first) { boot(); wireDaySheet(first); wireDayPeek(first); }); }

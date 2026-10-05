@@ -100,9 +100,8 @@ from challenges.models import (
     Challenge,
     ChallengeSlot,
 )
-from django.utils import timezone
-
 from challenges.services import calendar_fill
+from challenges.services import calendar_render
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
 from trophies.models import Contract, ContractXPGrant, EarnedContract, Job, Profile, UserTitle
@@ -202,20 +201,42 @@ CALENDAR_SHOVELWARE_ONLY = (3, 3)
 #: (owner, 2026-10-05), so a fixed seed leaves whoever runs this looking at an empty panel, with the
 #: struck months and every stacked day a click away and no sign they exist.
 #:
-#: THE ONE THING HERE THAT FOLLOWS THE CLOCK, and deliberately narrow: it decides WHICH month gets this
-#: pattern, never what a day's date says. `_seeded_date` still pins the year, for the reason it records
-#: -- a date derived from `today` would quietly change what the board looks like from month to month.
+#: WHICH MONTH IS PASSED IN, NOT READ FROM A CLOCK. The caller resolves it with `today_key`, the same
+#: function the board opens on, so the two cannot disagree -- the first version read
+#: `timezone.localtime().month`, the SERVER's month, which differs from the board's for up to a day at
+#: each month boundary and made the test for this pattern depend on the day it ran. The month is the only
+#: thing that varies: `_seeded_date` still pins the year, for the reason it records -- a date derived from
+#: `today` would quietly change what the board looks like from month to month.
 #:
 #: A SPREAD, NOT A BLOCK, so the month reads like a real history rather than a filled prefix: a little
 #: over a third of the days, with three stacks among them so the count badge is visible on arrival.
 CURRENT_MONTH_FILLED = (2, 5, 6, 9, 13, 16, 17, 20, 24, 27, 28)
 CURRENT_MONTH_STACKS = {5: 3, 16: 2, 27: 4}
 
+#: AT LEAST ONE IN EVERY MONTH THAT CAN BE THE OPENING ONE, which is all twelve. The first version
+#: seeded four days across three months and the badge was reviewable whenever the board opened on one of
+#: them -- but a STRUCK month takes its counts from here too, and September (struck) had no entry, so for
+#: the whole of September a seeded board opened on 30 filled squares and not one count badge. The test
+#: for "the opening month shows a stack" would have failed every day of that month and passed on either
+#: side of it, which is the worst shape a time-dependent test can have.
+#: SO EVERY MONTH HAS ONE. The four original entries are the designed ones (a clear winner in February,
+#: a deliberate TIE in May so the panel must name the earlier day, one in the part-filled July); the rest
+#: exist so no month is the unlucky one. The part-filled and current-month patterns bring their own.
 CALENDAR_BUSY = {
+    (1, 11): 2,
     (2, 14): 4,
+    (3, 6): 3,
+    (4, 22): 2,
     (5, 3): 3,
     (5, 21): 3,
+    (6, 17): 2,
     (7, 9): 2,
+    (8, 8): 3,
+    (9, 12): 2,
+    (9, 25): 3,
+    (10, 19): 2,
+    (11, 4): 3,
+    (12, 23): 2,
 }
 
 
@@ -438,7 +459,13 @@ class Command(BaseCommand):
         if challenge is None:
             return None
 
-        filled = calendar_fill.apply_to_run(challenge, found=self._calendar_days(finished))
+        # THE BOARD'S OWN CLOCK, not the server's. `today_key` folds `timezone.now()` into the OWNER's
+        # zone, which is the month the board will actually open on; `timezone.localtime()` is the server's
+        # (UTC in production), so the two disagreed for up to a day at either end of a month and the
+        # seeded pattern could land on the month next to the one being looked at.
+        filled = calendar_fill.apply_to_run(
+            challenge,
+            found=self._calendar_days(finished, calendar_render.today_key(profile)[0]))
         challenge.refresh_from_db()
         self.stdout.write(
             '  calendar "%s": %d day(s) filled, %d/%d%s'
@@ -447,7 +474,7 @@ class Command(BaseCommand):
         return challenge
 
     @staticmethod
-    def _calendar_days(finished):
+    def _calendar_days(finished, now_month):
         """The designed `{view: {(month, day): DayFill(date, plats)}}` map `apply_to_run` fills from.
 
         A DATE PER DAY, because `earned_on` is what a day cell and the coming day modal read, and a null
@@ -508,7 +535,10 @@ class Command(BaseCommand):
         # Skipped when it collides with a month that already has a designed shape -- a struck month is a
         # better demonstration than this pattern, and overwriting it would cost the reviewer the
         # completed-month state.
-        now_month = timezone.localtime().month
+        # PASSED IN RATHER THAN READ FROM THE CLOCK, so this function has no clock at all: it took
+        # `timezone.localtime().month`, the SERVER's month, while the board opens on the month in the
+        # OWNER's zone. The two differ for up to a day at each month boundary. It also made the test for
+        # this pattern depend on the day it ran.
         if now_month not in CALENDAR_STRUCK and now_month != CALENDAR_PARTIAL_MONTH:
             for day in CURRENT_MONTH_FILLED:
                 if day > CALENDAR_MONTH_DAYS[now_month - 1]:

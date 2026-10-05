@@ -779,6 +779,26 @@ agreeing with its flag); `challenges/models.py` Meta is the full set.
 
 ## Gotchas and Pitfalls
 
+**The Calendar's hover preview is pointer-only, deliberately.** The side column swaps the month's figures
+for a hovered day's. It mirrored `focusin` at first, on the reasoning that a keyboard reader has no hover,
+and that was a net loss: the preview carries `aria-hidden="true"`, so focusing a square announced nothing
+while removing the month's figures from the accessibility tree, for all 28-31 consecutive day stops. The
+keyboard path is the day modal, which Enter opens and which is a real dialog with real content. Re-adding
+the listener is the easy mistake, so `test_only_a_stacked_day_wears_its_count` asserts `focusin` is absent.
+
+**And its two faces are hidden with `visibility`, never `display`.** They share one grid area so the column
+cannot resize under a moving cursor — but `[hidden]` is `display: none`, which generates no box, is not a
+grid item and contributes nothing to the container's height. With that, exactly one face was ever in layout
+and the panel grew and shrank on every hover, while the CSS comment, the template comment and the test
+docstring all said it did not.
+
+**The crest rim's dash list is written out, not repeated.** The outer gauge leaves a 28-unit notch at the
+bottom for its counter plate, and the rim tiles the remaining 72 — but a repeating `stroke-dasharray`
+cannot be told to stop at unit 72, and `100/6` is not a whole number of periods. A repeating pattern there
+painted five stray dashes across the notch plus a double-length run at the seam. It was defended by a
+comment claiming the leftovers sat "behind an opaque plate": `.pp-cal__sub` is `display: none` until
+1024px, so on every phone and tablet nothing covered them.
+
 **`challengeslot_unique_contract` keys on the FK, not the snapshot.** It read `contract_slug` first, which
 disagreed with the service's own duplicate check — and the disagreement 500s: staff rename a contract, the
 slug frees, another contract takes it, and a placement the service allows collides on two identical frozen

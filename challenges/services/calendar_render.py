@@ -218,7 +218,7 @@ def _cell(month, day, row, today=None):
     }
 
 
-def today_key(profile):
+def today_key(profile, now=None):
     """`(month, day)` for the hunter's own today, folded onto a square that exists.
 
     THE OWNER'S CLOCK, NOT THE READER'S. A run page is public, so these differ -- and every other date on
@@ -229,8 +229,13 @@ def today_key(profile):
     FOLDED, so 29 February marks the 28th. There is no (2, 29) square -- `calendarday_day_within_month`
     forbids the row -- so without the fold the marker would simply vanish for a day every four years,
     which is the kind of absence nobody reports and nobody can reproduce.
+
+    `now` IS A TEST SEAM AND NOTHING ELSE. The fold above cannot be observed for four years at a time and
+    this project has no `freezegun`, so the only alternative was a source-text pin asserting that this
+    module imports `_fold` -- which is precisely the pin shape the suite records as proving nothing about
+    what a function does with what it imports. Every caller passes nothing.
     """
-    now = timezone.now().astimezone(_hunter_timezone(profile))
+    now = (now or timezone.now()).astimezone(_hunter_timezone(profile))
     return _fold(now.month, now.day)
 
 

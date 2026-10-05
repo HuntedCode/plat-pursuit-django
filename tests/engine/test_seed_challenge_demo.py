@@ -108,16 +108,22 @@ def test_the_seeded_board_is_not_empty_on_arrival():
 
     THE STACK IS PART OF THE POINT: the count badge only renders on a day holding two or more, so a
     month seeded entirely with ones would demonstrate the feature by not showing it.
+
+    ALL TWELVE MONTHS, NOT TODAY'S. This read `timezone.localtime().month`, so it asserted about whichever
+    month the suite happened to run in -- and it was WRONG for one of them: September is struck, a struck
+    month takes its per-day counts from `CALENDAR_BUSY`, and September had no entry there, so this test
+    failed every day of September and passed on either side. A test that holds for eleven twelfths of the
+    year is not a weaker test than one that holds always, it is a worse one: it banks a failure for a
+    month nobody is looking.
     """
-    days = Command._calendar_days(False)
-    now_month = timezone.localtime().month
-    clean = days[CALENDAR_VIEW_CLEAN]
+    for month in range(1, 13):
+        # Re-seeded per month, because the opening-month pattern is applied to whichever month is passed.
+        clean = Command._calendar_days(False, month)[CALENDAR_VIEW_CLEAN]
+        filled = [d for (m, d) in clean if m == month]
+        assert filled, 'month %d opens empty, so a reviewer landing in it sees nothing' % month
 
-    filled = [d for (m, d) in clean if m == now_month]
-    assert filled, 'the month the board opens on is empty, so a reviewer sees nothing'
-
-    stacked = [d for (m, d) in clean if m == now_month and clean[(m, d)].plats > 1]
-    assert stacked, 'no day in the opening month stacks, so no count badge is visible on arrival'
+        stacked = [d for (m, d) in clean if m == month and clean[(m, d)].plats > 1]
+        assert stacked, 'no day in month %d stacks, so no count badge is visible on arrival' % month
 
 
 def test_a_seeded_stack_never_hides_on_a_square_that_does_not_draw():
@@ -125,7 +131,7 @@ def test_a_seeded_stack_never_hides_on_a_square_that_does_not_draw():
     invisible -- and a reviewer checking the feature would reasonably conclude it was broken. The one
     deliberately shovelware square carries six platinums precisely to prove that exclusion, and it must
     stay the only stacked square the board does not draw."""
-    days = Command._calendar_days(False)
+    days = Command._calendar_days(False, 1)
     clean, every = days[CALENDAR_VIEW_CLEAN], days[CALENDAR_VIEW_ALL]
 
     off_board = [key for key, fill in every.items() if key not in clean and fill.plats > 1]
