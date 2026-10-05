@@ -2993,13 +2993,20 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     /* ROOM FOR THE RINGS, measured rather than guessed. `overflow-x: auto` computes BOTH axes to scroll
        (the hazard `.nc__filter` documents at length), so this box clips. The widest thing inside is the
        `:focus-visible` ring at `outline-offset: 3px` plus a 2px outline, 5px beyond the coin, and the
-       active coin also lifts 1px; the struck shadow reaches about 8px below. The first budget was
-       4px/2px/6px and clipped all three.
+       active coin also lifts 3px; the struck shadow (`0 2px 6px`) reaches about 5px below. The
+       first budget was 4px/2px/6px and clipped all three. NOTE THE 5px FIGURE IS THE MOBILE ONE: from
+       `md:` the selected coin scales 1.06 and its ring reaches 6.6px, which is harmless there because
+       the row stops clipping at the same breakpoint.
        AND THIS BUDGET IS WHY THERE IS NO IGNITE BLOOM on the crests -- see the note at
-       `.pp-cal__crest`. A `box-shadow: 0 0 20px 3px` reaches ~23px past the box, which no padding on a
-       scroll container is going to host. It is also why the ACTIVE coin's glow is attached at `md:` and
-       not here: the row sets `overflow-x: visible` from 768, and a 16px blur wants ~19px of the 7 this
-       box has. The same argument, applied a second time, to a rule that had not heard it. */
+       `.pp-cal__crest`. A `box-shadow: 0 0 20px 3px` reaches about 13px past the box (a blur radius B
+       paints a transition band of length B CENTRED on the shadow's edge, so the outward reach is B/2,
+       plus the 3px spread), which no padding on a scroll container is going to host. It is also why the
+       ACTIVE coin's glow is attached at `md:` and not here: the row sets `overflow-x: visible` from
+       768, and a 16px blur lifted 3px reaches 11px of the 7 this box has.
+       THE B/2 CORRECTION IS WHY THESE FIGURES CHANGED AND NOT THE DECISIONS. Three numbers in this
+       paragraph were quoted as the full blur radius; every one of them was about double. The clipping
+       they were used to argue for is real either way -- 11px into 7px, 8px into 6px on the first coin's
+       left -- which is the only reason the conclusions survived the arithmetic being wrong. */
     padding: 7px 6px 10px;
     scrollbar-width: none;
     /* AN EDGE FADE, because roughly five of twelve months sit off-screen at 375px with the scrollbar
@@ -3184,6 +3191,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    middle of the medallion. I'd like the text centered with the numbers directly below." A coin's face
    wants to sit on the centre of the coin; the counter hangs off it. Both the rim and the counter are
    absolutely positioned, so neither takes a grid track. */
+/* TWO SHADOW SLOTS, COMPOSED. The struck plate and the selected glow are set by different rules on
+   this same element at the same specificity, so whichever came later used to erase the other. Each owns
+   a token and this rule lists both; the defaults are TRANSPARENT rather than `none`, because a keyword
+   cannot be one item of a `box-shadow` list and the whole declaration would be dropped. */
 .pp-cal__coin {
     position: relative;
     display: grid;
@@ -3191,6 +3202,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     width: 100%;
     height: 100%;
     isolation: isolate;
+    --coin-plate: 0 0 0 0 transparent;
+    --coin-glow: 0 0 0 0 transparent;
+    box-shadow: var(--coin-plate), var(--coin-glow);
 }
 
 /* THE STRUCK COIN gets a plate and an aura; an unearned one stays a bare rim. Background and box-shadow
@@ -3203,7 +3217,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
             color-mix(in srgb, var(--cal-c) 24%, transparent),
             color-mix(in srgb, var(--cal-c) 10%, transparent) 70%,
             transparent 72%);
-    box-shadow:
+    /* ON A CUSTOM PROPERTY, so the selected state's glow can be added instead of replacing this. The
+       `md:` selected rule sets `box-shadow` on the same element at the same specificity and later, so a
+       struck month lost its plate inset and its drop shadow the moment it was selected. Two shadows in
+       one token is fine -- a custom property holds a value fragment, not a single shadow. */
+    --coin-plate:
         inset 0 1px 0 color-mix(in srgb, var(--cal-c) 30%, transparent),
         0 2px 6px rgb(0 0 0 / 0.35);
 }
@@ -3240,8 +3258,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 /* `pathLength="100"` ON THE CIRCLES NORMALISES THE DASH UNITS, which is how `.rp-ring__seg` already does
    this and is why no raw circumference survives here. The first version hardcoded 2*pi*19 and its
-   twelfth (119.38 / 9.948) and overshot a full turn by 0.0195; normalised, a segment is exactly
-   100 / 12 = 8.3333, drawn as a 6-long dash with a 2.3333 gap. */
+   twelfth (119.38 / 9.948) and overshot a full turn by 0.0195.
+   THE SLOT IS 6 UNITS, NOT 100/12. This paragraph said "a segment is exactly 100 / 12 = 8.3333, drawn
+   as a 6-long dash with a 2.3333 gap" for a commit after the rim moved into the gauge's 72-unit arc --
+   so it described the full-circle tiling directly above the block that replaced it, which is the one
+   place a reader cannot miss it. Twelve 6-unit slots now; the rule below carries the arithmetic. */
 /* THE RIM SHARES THE GAUGE'S NOTCH, which is the fix for a real occlusion rather than a tidy-up. The
    outer arc is `dasharray: 72 100` rotated 140.4deg so that a 28-unit notch opens at the bottom for the
    counter plate; the rim never got that treatment and tiled twelve 30-degree slots around the FULL
@@ -3466,9 +3487,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    so the row clips, which is the same budget that already ruled out the ignite bloom for reaching 23px.
    The glow was simply shaved off at mobile.
 
-   SO THE BASE STATE IS LIFT + A TIGHT RING, 3px of total reach against a 3px gap, inside the 7px the row
-   has. FROM 768 THE ROW SETS `overflow-x: visible` AND A 10px GAP, so there is nothing left to clip and
-   nothing to collide with: the scale and the glow are attached there, where they were always affordable.
+   SO THE BASE STATE IS LIFT + A TIGHT RING: 3px of total reach against a 3px gap, inside the 7px the
+   row has. THAT IS TANGENCY, NOT CLEARANCE -- ring radius 25 plus neighbour coin radius 22 is exactly
+   the 47px between centres -- which is honest about what a 3px gap can hold and short of the 2px this
+   file asks for elsewhere "for their rings not to read as touching". The gap is the thing to change if
+   that matters, not the ring.
+   FROM 768 THE ROW SETS `overflow-x: visible` AND A 10px GAP, so nothing clips: the scale and the glow
+   are attached there, where they were always affordable. The glow is not CLEAR of the neighbour even
+   there (16px blur, so ~8px of reach, scaled to ~9.9px into a 10px gap) -- but a soft glow overlapping
+   a gap is a different thing from a hard ring crossing onto a coin, and nothing is occluded.
 
    NO BAR UNDER THE ACTIVE COIN, which is the obvious tab affordance and is taken. `.pp-cal__sub` -- the
    counter plate -- is positioned at `bottom: -2px` INSIDE the coin from `lg:` up, so an underline at the
@@ -3483,19 +3510,36 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-cal__crest[aria-selected="true"] { transform: translateY(-3px) scale(1.06); }
     .pp-cal__crest[aria-selected="true"] .pp-cal__coin {
         outline-offset: 3px;
-        box-shadow: 0 0 16px color-mix(in srgb, var(--pp-primary) 55%, transparent);
+        --coin-glow: 0 0 16px color-mix(in srgb, var(--pp-primary) 55%, transparent);
     }
 }
+/* THE FOCUS RING TAKES THE SAME MOBILE TREATMENT AS THE SELECTED ONE, which the first pass gave to
+   `aria-selected` alone. At 1px it reaches 3px past a 44px coin into a 3px gap, and a focused coin that
+   is ALSO selected lifts 3px, so at `offset: 3px` the ring wanted 8px of the row's 7px of padding in a
+   box that clips both axes. The day grid already made this call one way (`outline-offset: -2px` at
+   mobile, 1px from `md:`, with a comment saying 2px cannot clear a 3px gap); the crests had made it the
+   other way for one of their two states. */
 .pp-cal__crest:focus-visible .pp-cal__coin {
     outline: 2px solid var(--pp-primary);
-    outline-offset: 3px;
+    outline-offset: 1px;
     border-radius: 50%;
+}
+@media (min-width: 768px) {
+    .pp-cal__crest:focus-visible .pp-cal__coin { outline-offset: 3px; }
 }
 @media (any-hover: hover) and (any-pointer: fine) {
     /* A HOVER IS A HINT, NOT A RECOLOUR: a faint ring in the brand colour, so hovering an earned
-       November cannot repaint its berry. The rings themselves brighten instead, which reads as the coin
-       waking up rather than as a different coin. */
-    .pp-cal__crest:hover .pp-cal__coin {
+       November cannot repaint its berry. The rims themselves brighten instead, which reads as the coin
+       waking up rather than as a different coin.
+       AND IT MUST NOT FIRE OVER A STRONGER RING. `outline` does not accumulate any more than
+       `box-shadow` does, and this rule is the same (0,3,0) as the selected and focus rules while
+       sitting LATER in the file -- so a pointer arriving on the open month replaced its 2px solid cyan
+       ring with this 1px 40%-alpha hint, and a pointer arriving on a FOCUSED coin replaced the focus
+       indicator, which is a 2.4.13 failure rather than a cosmetic one. The same defect this file fixed
+       for `.pp-cal__day--today` eighty lines down, and the same one it records paying for on `.pp-csq`.
+       EXCLUDED RATHER THAN REORDERED, because order is the handle that broke: a hint is only a hint
+       when there is nothing stronger to say. */
+    .pp-cal__crest:hover:not([aria-selected="true"]):not(:focus-visible) .pp-cal__coin {
         outline: 1px solid color-mix(in srgb, var(--pp-primary) 40%, transparent);
         outline-offset: 2px;
         border-radius: 50%;
@@ -3685,7 +3729,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* TODAY, AND IT HAS TO READ ON A FILLED SQUARE AND AN EMPTY ONE. A background or a border change would
    fight `--on`, which already owns both -- so the marker is an OUTSET ring, drawn outside the cell where
    nothing else is painted. Same object as the focus ring and deliberately so: a reader who has seen one
-   recognises the other, and they never coexist (`:focus-visible` wins by being later).
+   recognises the other.
+   THEY DO COEXIST, on every focused today square, which is the whole reason for the sentence below --
+   an earlier version of this line claimed they "never coexist (`:focus-visible` wins by being later)"
+   two lines above the sentence explaining why that would be a bug.
    `box-shadow` RATHER THAN `outline`, because an outline would be overwritten by the focus ring instead
    of layering under it, and because the shadow sits in the 3px mobile gap without consuming it -- a 1px
    spread reaches half as far as the 2px outline the focus state uses.
@@ -3720,11 +3767,13 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    `x4`, NOT `4`. A bare numeral in the corner of a cell whose content is already a numeral reads as part
    of the date; the multiplication sign cannot be mistaken for one.
 
-   TOP-RIGHT, CLEAR OF THE CENTRED DATE -- VERTICALLY, which is the part that matters. On a 43.9px cell
-   the badge occupies roughly 4-16px down and the centred numeral 16-28px, so they do not meet. They DO
-   overlap horizontally (the badge spans about 24-38px, a two-digit date about 15-29px); an earlier
-   version of this comment gave 27-42px and claimed "the two never meet", which was both arithmetically
-   off and the wrong axis. Two digits still fit: `x12` is about 21px at this size.
+   TOP-RIGHT, AND THE TWO LINE BOXES ABUT RATHER THAN CLEAR. On a 43.9px cell the badge's 12px line box
+   occupies 4-16px down and the centred numeral's 16-28px, so they touch at 16px exactly -- `line-height:
+   1` leaves the ink inset inside both boxes, so nothing visibly meets, but there is no clearance to
+   spend. They also overlap horizontally (the badge spans about 24-38px, a two-digit date about 15-29px).
+   TWO EARLIER VERSIONS OF THIS PARAGRAPH WERE WRONG ABOUT IT: one gave 27-42px and said "the two never
+   meet" (wrong arithmetic, wrong axis), the next said 4-16 and 16-28 "do not meet" while quoting the
+   figures that show them touching. Two digits still fit: `x12` is about 21px at this size.
 
    12px IS THE FLOOR and this sits on it, so the badge cannot be made secondary by SIZE. It was made
    secondary by COLOUR instead -- `--pp-text-dim` -- on the reasoning that colour was the only lever
@@ -3738,7 +3787,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 
    INSET PAST THE MOBILE FOCUS RING. At `md:` and up the ring is outside the cell, but at mobile it is
    `outline-offset: -2px` -- drawn 2-4px INSIDE the border box, and an outline paints after all content,
-   so a badge at `top: 2px` had a hue line struck through it. 4px/5px clears the band. */
+   so a badge at `top: 2px` had a hue line struck through it. `top: 4px` sits FLUSH with the band's inner
+   edge and `right: 5px` clears it by one pixel: the glyph is no longer crossed, which was the defect,
+   but "clears the band" overstated it on the axis it led with. */
 .pp-cal__stack {
     position: absolute;
     top: 4px;
@@ -3804,16 +3855,31 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    read as belonging to the square that opened it. */
 #cal-day-modal .pp-detail-modal__dialog {
     background:
-        /* 16% AND 5%, DOWN FROM 24% AND 8%. The bloom was chosen by eye and then text was laid over it:
-           measured, `--pp-text-mute` on the strongest part held 2.97:1 and `--pp-text-dim` 3.72:1,
-           against the 4.5 small text needs. Lowering the wash is half the fix and raising those two
-           colours is the other half -- the wash is what makes the dialog wear its month, so it is worth
-           keeping as strong as the text over it allows. */
+        /* 12% AND 4%, AND THE NUMBERS ARE DERIVED RATHER THAN CHOSEN. The bloom started at 24%/8%,
+           picked by eye with text laid over it afterwards, and the first correction took it to 16%/5%
+           on a single-layer estimate that was simply wrong: `--pp-text-dim` still bottoms out at
+           4.34:1 there, under the 4.5 that 12px needs.
+
+           WHAT THE ARITHMETIC ACTUALLY IS, since two attempts got it wrong by not doing it. The
+           radial's centre is OUTSIDE the box (`at 4% -12%`), so its declared stop is never painted:
+           the nearest in-box point is the top edge, 12% of the height from a centre with a 95% radius,
+           which is 12/95 = 0.126 of the way to the `transparent 58%` stop -- so the peak alpha in the
+           box is 1 - 0.126/0.58 = 0.78 of the declared figure. The linear sits UNDER it (first layer
+           in a `background-image` list paints on top) at its full stop. Composited, the worst point in
+           the dialog carries 1 - (1 - 0.78R)(1 - L) of the hue.
+
+           THE CEILING IS A COMPOSITE 15.6%, which is where `--pp-text-dim` reaches exactly 4.5 on the
+           worst of the twelve hues (December, a near-white `oklch(0.90 0.045 235)`, which lightens the
+           surface more than any other). 12%/4% composites to 13.0% and measures 4.87 (Dec) to 5.78
+           (Oct), so the margin is deliberate: a wash tuned to land ON the threshold fails the next
+           time a hue is adjusted.
+           THE WASH IS WHAT MAKES THE DIALOG WEAR ITS MONTH, so it is kept as strong as the text over
+           it allows and not one point stronger. */
         radial-gradient(135% 95% at 4% -12%,
-                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 16%, transparent) 0%,
+                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 12%, transparent) 0%,
                         transparent 58%),
         linear-gradient(180deg,
-                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 5%, transparent) 0%,
+                        color-mix(in oklab, var(--cal-c, var(--pp-primary)) 4%, transparent) 0%,
                         transparent 38%),
         var(--pp-bg-1);
     border-color: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 30%, var(--pp-border));
@@ -3844,14 +3910,24 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    carries a border, a background and an inset highlight -- visibly shrank and grew on every hover, and
    below `lg:` the page's scroll height moved with it. The claim was in the CSS, the template AND the
    test docstring.
-   `visibility` INSTEAD, so both faces stay in flow and the box is sized by the facts (the taller). The
-   companion claim that a bare `display: grid` would override `[hidden]` was also wrong -- blockification
-   applies to in-flow children, and `display: none` generates no box to blockify -- but the rule is
-   needed now for the opposite reason: it has to BEAT the UA's `[hidden] { display: none }`. */
+   AND THE SECOND ATTEMPT MISSED TOO, which is worth recording because it looked right. It kept the
+   `hidden` ATTRIBUTE and added `.pp-cal__stats > [hidden] { display: block; visibility: hidden; }` on
+   the reasoning that it had to beat "the UA's `[hidden] { display: none }`". The UA rule was never the
+   obstacle -- any author declaration beats it. TAILWIND'S PREFLIGHT is the obstacle, and it ships
+   `[hidden]:where(:not([hidden=until-found])) { display: none !important }` -- author origin,
+   `!important`. Importance beats normal within an origin whatever the specificity or the layer, so the
+   face still generated no box and `visibility` was applied to a `display: none` element: a no-op, under
+   a thirteen-line comment asserting the opposite.
+   SO THE ATTRIBUTE GOES AND A CLASS DOES THE WORK. `.pp-cal__face--off` has no `!important` rule to
+   out-rank, and the state is still in the server-rendered markup, so the panel opens on the month's
+   figures with no script. `visibility: hidden` keeps the box in flow AND out of the accessibility tree,
+   which is what the attribute was giving us.
+   THE FIGURE LINE INSIDE THE PEEK KEEPS `hidden`, deliberately: it is not a child of `.pp-cal__stats`,
+   nothing stacks on it, and `display: none` is exactly what it wants. */
 .pp-cal__stats { display: grid; }
 .pp-cal__stats > .pp-cal__peek,
 .pp-cal__stats > .pp-cal__facts { grid-area: 1 / 1; min-width: 0; }
-.pp-cal__stats > [hidden] { display: block; visibility: hidden; }
+.pp-cal__stats > .pp-cal__face--off { visibility: hidden; }
 
 .pp-cal__peek-figure { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin: 0; }
 .pp-cal__peek-figure .pp-tally { font-size: 1.5rem; color: var(--cal-c, var(--pp-text)); }
@@ -3907,11 +3983,13 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 @media (min-width: 768px) { .pp-cday__date { font-size: 1.625rem; } }
 .pp-cday__tally { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+/* NEUTRAL, NOT THE MONTH'S HUE. This figure was `--cal-c` at 18px bold, which is NOT large text by
+   WCAG's reckoning (14pt bold is 18.66px). The masthead beside it keeps the hue because at 22px/800 it
+   IS large text, where the floor is 3.0.
+   THIS PARAGRAPH SAT BELOW ITS OWN RULE for one commit, under `.pp-cday__unit`, so it read as an
+   explanation of the wrong declaration -- this file puts the comment above the rule everywhere else. */
 .pp-cday__tally .pp-tally { font-size: 1.125rem; color: var(--pp-text); }
 .pp-cday__unit { font-size: 0.8125rem; color: var(--pp-text-dim); }
-/* NEUTRAL, NOT THE MONTH'S HUE. This figure was `--cal-c` at 18px bold, which is NOT large text by
-   WCAG's reckoning (14pt bold is 18.66px) and measured 4.19:1 at the bloom above. The masthead beside
-   it keeps the hue because at 22px/800 it IS large text, where the floor is 3.0. */
 
 /* THE SHELF WRAPS RATHER THAN SCROLLING SIDEWAYS. The dialog is `max-height: 88vh; overflow: auto`, so
    wrapping gets vertical scrolling for free -- and a horizontal strip is awkward with a trackpad and
@@ -4036,12 +4114,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     font-weight: 800;
     letter-spacing: 0.1em;
     font-variant-numeric: tabular-nums;
-    /* NEUTRAL FOR THE SAME REASON AS THE TALLY. 12px of `--cal-c` over this dialog's own bloom measured
-       4.19:1 at the old wash and is still short of 4.5 at the new one for the darker hues -- and this
+    /* NEUTRAL FOR THE SAME REASON AS THE TALLY. 12px of `--cal-c` over the dialog's own bloom measured
+       3.51 (Nov) to 6.24 (Dec) at the original wash -- so it failed on most of the twelve -- and this
        file's hue table states the invariant outright: "THE HUE NEVER TOUCHES TEXT ... the reason twelve
-       of these cannot quietly break a contrast ratio". Six declarations in this range broke it; the two
-       that survive are large text (the masthead) and a hue mixed toward a neutral (the peek hint),
-       both measured. */
+       of these cannot quietly break a contrast ratio".
+       SIX DECLARATIONS IN THIS RANGE BROKE IT AND THREE SURVIVE, which an earlier version of this
+       paragraph counted as two: the 22px masthead date and the 24px peek tally are LARGE text (floor
+       3.0, measured 4.25-9.03 and 5.03-12.63), and the peek hint is a hue mixed toward a neutral
+       (4.99-10.46 on the flat panel). A paragraph whose job is to enumerate is the worst place to
+       undercount, because the next reader trusts it instead of grepping. */
     color: var(--pp-text-dim);
     text-shadow: 0 1px 0 oklch(1 0 0 / 0.06);
 }
@@ -4066,8 +4147,12 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     letter-spacing: 0.06em;
     text-transform: uppercase;
     /* `--pp-text-dim`, NOT `--pp-text-mute`. The flag is the only place a hunter learns why a square
-       they remember earning is open, and over the dialog's month wash mute measured 2.97-4.00:1. Dim
-       holds 4.73-5.70 at the reduced bloom. */
+       they remember earning is open, and over the dialog's month wash mute measured 2.68 (Dec) to 3.79
+       (Nov) -- failing on all twelve. Dim holds 4.87-5.78 at the bloom the rule above derives.
+       THE FIGURES THIS COMMENT FIRST CARRIED (2.97-4.00 for mute, 4.73-5.70 for dim) WERE WRONG, and
+       wrong in the dangerous direction: they came from one layer of a two-layer wash at its declared
+       stop rather than its painted one, and quoting a mid-set hue as if it were the worst. Both ends of
+       the "fixed" range were above what the rule actually achieved. */
     color: var(--pp-text-dim);
 }
 .pp-cday__on { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }

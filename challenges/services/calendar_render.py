@@ -218,7 +218,7 @@ def _cell(month, day, row, today=None):
     }
 
 
-def today_key(profile, now=None):
+def today_key(profile, *, now=None):
     """`(month, day)` for the hunter's own today, folded onto a square that exists.
 
     THE OWNER'S CLOCK, NOT THE READER'S. A run page is public, so these differ -- and every other date on
@@ -233,9 +233,16 @@ def today_key(profile, now=None):
     `now` IS A TEST SEAM AND NOTHING ELSE. The fold above cannot be observed for four years at a time and
     this project has no `freezegun`, so the only alternative was a source-text pin asserting that this
     module imports `_fold` -- which is precisely the pin shape the suite records as proving nothing about
-    what a function does with what it imports. Every caller passes nothing.
+    what a function does with what it imports.
+    KEYWORD-ONLY, AND IT REFUSES A NAIVE INSTANT. `.astimezone()` on a naive datetime silently assumes the
+    SERVER's zone, which is the exact confusion this function exists to prevent: it would answer in
+    server-local terms, with no error, in the one place where whose clock is being read IS the question.
     """
-    now = (now or timezone.now()).astimezone(_hunter_timezone(profile))
+    if now is None:
+        now = timezone.now()
+    elif timezone.is_naive(now):
+        raise ValueError('today_key needs an aware instant: a naive one would read as the server zone')
+    now = now.astimezone(_hunter_timezone(profile))
     return _fold(now.month, now.day)
 
 

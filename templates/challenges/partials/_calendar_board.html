@@ -287,22 +287,33 @@ and not a button", and the commit that made them buttons left it standing twenty
         month's figures and the day peek occupy the same grid area, so the column's height is the taller
         of the two and NOTHING MOVES when a pointer crosses the grid -- a column that resized on hover
         would shift the board under the cursor, which is the worst possible response to a hover.
-        THAT SENTENCE ONLY BECAME TRUE IN THE FIX FOR IT. The faces were swapped with the `hidden`
+        IT TOOK TWO ATTEMPTS TO MAKE THAT SENTENCE TRUE. The faces were swapped with the `hidden`
         ATTRIBUTE, which is `display: none` -- and an element with no box is not a grid item, contributes
-        nothing to the container's size, and leaves the grid-area stacking above it inert. Exactly one
-        face was ever in layout, so this bordered, tinted panel visibly shrank and grew on every hover
-        and below `lg:` took the page's scroll height with it. The stylesheet hides them with
-        `visibility` now, so both stay in flow and the box is sized by the taller.
+        nothing to the container's size, and leaves the grid-area stacking inert. Exactly one face was
+        ever in layout, so this bordered, tinted panel visibly shrank by about 96px on every hover and
+        below `lg:` took the page's scroll height with it.
+        THE FIRST FIX KEPT THE ATTRIBUTE and overrode it in the stylesheet, which cannot work: Tailwind's
+        preflight ships `[hidden]:where(:not([hidden=until-found])) { display: none !important }`, and no
+        normal author declaration beats an important one -- not with more specificity, not from a layer,
+        not with `!important` of its own. Measured in a browser against the compiled bundle, the panel
+        still went 170px to 74px.
+        SO THE STATE IS A CLASS. `.pp-cal__face--off` has nothing to out-rank, and rendering it here
+        rather than applying it in script keeps the no-JS state correct: the panel opens on the month's
+        figures, and an empty peek never flashes.
         {% endcomment %}
         <div class="pp-cal__stats">
-            <div class="pp-cal__peek" data-cal-peek aria-hidden="true" hidden>
+            <div class="pp-cal__peek pp-cal__face--off" data-cal-peek aria-hidden="true">
                 <h4 class="pp-cal__stats-head" data-peek-head></h4>
                 {% comment %}THE FIGURE LINE IS HIDEABLE, because a square this board draws EMPTY has no
                 figure this board recognises. An `in_all`-only square carries the shovelware-inclusive
                 count, so printing it read "6 platinums, not counted" -- a number and its own retraction
                 on one line, on a square the grid deliberately leaves open. The state goes in the note
                 instead and the number does not appear at all.{% endcomment %}
-                <p class="pp-cal__peek-figure" data-peek-figure>
+                {% comment %}THIS one keeps the `hidden` ATTRIBUTE, unlike the two faces above: it is not
+                a child of `.pp-cal__stats`, nothing stacks on it, and `display: none` is exactly what a
+                withheld line wants. The preflight rule that defeats the attribute on the faces is what
+                makes it work here.{% endcomment %}
+                <p class="pp-cal__peek-figure" data-peek-figure hidden>
                     <span class="pp-tally" data-peek-count></span>
                     <span class="pp-cal__peek-unit" data-peek-unit></span>
                 </p>

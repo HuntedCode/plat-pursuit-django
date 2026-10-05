@@ -213,30 +213,32 @@ CALENDAR_SHOVELWARE_ONLY = (3, 3)
 CURRENT_MONTH_FILLED = (2, 5, 6, 9, 13, 16, 17, 20, 24, 27, 28)
 CURRENT_MONTH_STACKS = {5: 3, 16: 2, 27: 4}
 
-#: AT LEAST ONE IN EVERY MONTH THAT CAN BE THE OPENING ONE, which is all twelve. The first version
-#: seeded four days across three months and the badge was reviewable whenever the board opened on one of
-#: them -- but a STRUCK month takes its counts from here too, and September (struck) had no entry, so for
-#: the whole of September a seeded board opened on 30 filled squares and not one count badge. The test
-#: for "the opening month shows a stack" would have failed every day of that month and passed on either
-#: side of it, which is the worst shape a time-dependent test can have.
-#: SO EVERY MONTH HAS ONE. The four original entries are the designed ones (a clear winner in February,
-#: a deliberate TIE in May so the panel must name the earlier day, one in the part-filled July); the rest
-#: exist so no month is the unlucky one. The part-filled and current-month patterns bring their own.
+#: READ BY THREE PATHS, AND ONLY THREE: the `finished` board, the STRUCK months and the PART-FILLED
+#: month. A month that is none of those gets its days from the opening-month pattern above, which reads
+#: `CURRENT_MONTH_STACKS` and never looks here -- so an entry for such a month changes nothing on an
+#: in-progress board, which is the only board these figures exist to furnish.
+#:
+#: WHICH IS WHY SEPTEMBER WAS THE ONE GAP. It is struck, so the opening-month pattern is gated out of it,
+#: and it had no entry here -- so for the whole of September a seeded board opened on thirty filled
+#: squares and not one count badge, and the test for "the opening month shows a stack" failed every day
+#: of that month and passed on either side of it. That is the worst shape a time-dependent test can have.
+#: February, May and July were already covered.
+#:
+#: SO SEPTEMBER GOT TWO AND NOTHING ELSE DID. The first fix for that gap added eight more entries, one
+#: per uncovered month, on the stated grounds that "no month is the unlucky one" -- eight dead keys, since
+#: none of those months reads this map, and two of them (March and June) were then overwritten back down
+#: to one by the opening-month pattern anyway. A dict entry that cannot affect the board it exists for is
+#: the kind of thing this project deletes rather than keeps for symmetry.
+#:
+#: THE FOUR ORIGINALS ARE THE DESIGNED ONES: a clear winner in February, a deliberate TIE in May so the
+#: panel must name the EARLIER day, and one in the part-filled July.
 CALENDAR_BUSY = {
-    (1, 11): 2,
     (2, 14): 4,
-    (3, 6): 3,
-    (4, 22): 2,
     (5, 3): 3,
     (5, 21): 3,
-    (6, 17): 2,
     (7, 9): 2,
-    (8, 8): 3,
     (9, 12): 2,
     (9, 25): 3,
-    (10, 19): 2,
-    (11, 4): 3,
-    (12, 23): 2,
 }
 
 

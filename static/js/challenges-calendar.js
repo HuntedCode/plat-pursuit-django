@@ -246,16 +246,19 @@
 
     // ── the side column's day peek ───────────────────────────────────────────────────────────────────
     //
-    // Hovering (or focusing) a square that opens shows that day's figures where the month's normally
-    // sit. NO FETCH: every figure is already on the square, which is why the per-day count is stored at
-    // all -- a hover that asked the server would put a request behind every mouse movement across a
-    // 365-cell grid.
+    // Hovering a square that opens shows that day's figures where the month's normally sit. NO FETCH:
+    // every figure is already on the square, which is why the per-day count is stored at all -- a hover
+    // that asked the server would put a request behind every mouse movement across a 365-cell grid.
     //
-    // SILENT TO SCREEN READERS. The peek is `aria-hidden` and nothing announces it: a live region
-    // firing on every square a pointer crosses would be hostile, and the modal is the accessible path
-    // to the same information. Focus mirrors hover anyway, because a keyboard reader has no hover and a
-    // phone has none at all -- so the peek has to be reachable without a pointer even though it is not
-    // the route a screen reader is meant to take.
+    // SILENT TO SCREEN READERS, AND THEREFORE POINTER-ONLY. The peek is `aria-hidden` and nothing
+    // announces it: a live region firing on every square a pointer crosses would be hostile, and the
+    // modal is the accessible path to the same information.
+    // IT MIRRORED FOCUS AT FIRST, on the reasoning this paragraph used to state as settled -- "a
+    // keyboard reader has no hover, so the peek has to be reachable without a pointer". That was a net
+    // loss, and the reasoning contained its own refutation: an `aria-hidden` subtree cannot be
+    // "reachable" by a screen reader at all, so focusing a square announced nothing while removing the
+    // month's figures from the accessibility tree for every one of a month's 28-31 day stops. The
+    // listeners are gone and the keyboard path is the modal, which Enter opens.
     function wireDayPeek(first) {
         if (!first) { return; }
 
@@ -275,11 +278,26 @@
             return (peek && facts) ? { panel: panel, peek: peek, facts: facts } : null;
         }
 
+        // A CLASS, NOT THE `hidden` ATTRIBUTE, and the reason is not a preference. The two faces share
+        // one grid area so the column cannot resize under a moving cursor -- which requires the hidden
+        // one to stay IN FLOW, and `hidden` is `display: none`. Overriding that from the stylesheet is
+        // not possible: Tailwind's preflight ships
+        // `[hidden]:where(:not([hidden=until-found])) { display: none !important }`, an important author
+        // declaration, and no normal author rule beats one. The class has nothing to out-rank, and the
+        // server renders the off state so the panel still opens on the month's figures with no script.
+        var OFF = 'pp-cal__face--off';
+
         function restore() {
+            // THE PENDING TIMER IS CANCELLED, NOT JUST FORGOTTEN. `restore` has direct callers now (the
+            // month-switch tear-down below, and the cross-panel branch in `show`), and nulling `settling`
+            // without clearing it left a live timer that `hold()` could no longer see -- so a crest click
+            // inside the settle window, followed by a hover, would have the old timer tear down the new
+            // peek. Cheap to clear, and the alternative is a race nobody would reproduce.
+            if (settling !== null) { window.clearTimeout(settling); }
             settling = null;
             if (!shown) { return; }
-            shown.peek.hidden = true;
-            shown.facts.hidden = false;
+            shown.peek.classList.add(OFF);
+            shown.facts.classList.remove(OFF);
             shown = null;
         }
 
@@ -313,32 +331,50 @@
             // square -- `in_clean` implies `in_all` but not the reverse -- and an `in_all`-only square's
             // stored count is shovelware-inclusive, which this board excludes. The first version printed
             // it anyway with ", not counted" appended, so a hovered 3 March read "6 platinums, not
-            // counted": a figure and its retraction on one line, attached to a square drawn empty. The
-            // `plats < 1` arm is the same judgement on a second cause -- `plat_count` is only written
-            // when a row is filled or changes, so a long-standing `in_all` row can still hold 0, and
-            // "0 platinums" is not a preview of anything.
-            // TWO QUESTIONS, NOT ONE, and the first version of this fix folded them. The FIGURE needs
-            // both ("does this board recognise a count here" AND "is there one to print"); the NOTE needs
-            // only the first. Folded, a FILLED square whose stored count is stale at 0 got the shovelware
-            // denial printed on it -- and `plat_count` is only written when a row is filled or changes, so
-            // a stale 0 on a drawn square is a state the data model permits.
+            // counted": a figure and its retraction on one line, attached to a square drawn empty.
+            //
+            // TWO QUESTIONS, NOT ONE, which the first attempt at the fix folded into a single flag. The
+            // FIGURE needs both ("does this board recognise a count here" AND "is there one to print");
+            // the NOTE needs only the first. Folded, a FILLED square whose count is stale at zero got the
+            // shovelware note printed on it -- and `plat_count` is only written when a row is filled or
+            // changes, so a stale zero on a drawn square is a state the data model permits. That is also
+            // the second reason the figure is withheld rather than printed: "0 platinums" previews
+            // nothing. An earlier version of this block stated that reason twice, in consecutive
+            // paragraphs, and called the test `plats < 1` while the code read `plats > 0`.
             var counted = clean && plats > 0;
             f.peek.querySelector('[data-peek-head]').textContent = cell.getAttribute('data-peek-label');
             f.peek.querySelector('[data-peek-figure]').hidden = !counted;
+            // CLEARED ON THE WAY OUT, NOT ONLY WRITTEN ON THE WAY IN. Skipping the writes left the
+            // PREVIOUS square's figures in the DOM, which is invisible today only because the figure is
+            // hidden with `display: none` -- and the stylesheet's own argument for the faces beside it is
+            // that `display` is the wrong tool. If this line ever moves to `visibility`, hovering a
+            // stacked 14 February and then an uncounted 3 March would print "4 platinums" above a note
+            // saying nothing is counted: this fix's own bug, wearing another day's number.
             if (counted) {
                 f.peek.querySelector('[data-peek-count]').textContent = String(plats);
                 f.peek.querySelector('[data-peek-unit]').textContent =
                     plats === 1 ? 'platinum' : 'platinums';
+            } else {
+                f.peek.querySelector('[data-peek-count]').textContent = '';
+                f.peek.querySelector('[data-peek-unit]').textContent = '';
             }
-            // AND THE DENIAL IS EXACT. `in_all` without `in_clean` means every platinum on that day is on
-            // a flagged game -- so the note can say what is true of the day rather than describe the board
-            // to the reader, which is the house rule about copy that talks about itself.
+            // IT SAYS WHAT THE SQUARE IS, NOT WHY. An earlier version read "Shovelware only, so this
+            // square stays open." and claimed to be exact, because `in_all` without `in_clean` does mean
+            // every platinum that day was on a flagged game WHEN THE ROW WAS WRITTEN. Calendar fills are
+            // deliberately monotone and `refresh_due_runs` documents the hole: `auto_flagged -> clean` is
+            // a routine `update_shovelware` outcome, moves neither watermark, and so never makes a
+            // dormant hunter due. That square's platinum can be clean now -- and the modal it opens
+            // derives `clean` LIVE, so it would render the card with no shovelware flag while the peek
+            // beside it insisted shovelware was the reason. Two surfaces on one square disagreeing is
+            // the failure class `platinums_on_day` exists to prevent.
+            // SO THE NOTE REPORTS THE STORED STATE, which is the thing the grid is drawn from and is
+            // true whatever the catalogue has done since.
             f.peek.querySelector('[data-peek-note]').textContent = clean
                 ? (on ? 'first on ' + on : '')
-                : 'Shovelware only, so this square stays open.';
+                : 'Nothing counted here yet.';
 
-            f.facts.hidden = true;
-            f.peek.hidden = false;
+            f.facts.classList.add(OFF);
+            f.peek.classList.remove(OFF);
             shown = f;
         }
 
@@ -350,6 +386,19 @@
             if (!e.target.closest) { return; }
             var cell = e.target.closest('[data-peek-label]');
             if (cell) { show(cell); }
+        });
+        // A MONTH SWITCH TEARS THE PEEK DOWN, because not every switch comes from the pointer. Moving
+        // months with the keyboard (or by a restored history state) while the pointer happens to be
+        // parked on a day square fires no `mouseout`, so `shown` stayed on the departed panel with its
+        // facts still hidden -- and switching back showed a stale day's figures. Pointer paths self-heal
+        // within `SETTLE_MS`; this one had nothing to heal it.
+        document.body.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            if (e.target.closest('.pp-cal__crest')) { restore(); }
+        });
+        document.body.addEventListener('keyup', function (e) {
+            if (!e.target || !e.target.closest) { return; }
+            if (e.target.closest('.pp-cal__crest')) { restore(); }
         });
         document.body.addEventListener('mouseout', function (e) {
             if (!e.target.closest) { return; }

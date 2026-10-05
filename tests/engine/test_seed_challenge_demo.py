@@ -27,8 +27,6 @@ from challenges.management.commands.seed_challenge_demo import (
     MIXED_CLAIMED,
     MIXED_FILLED,
 )
-from django.utils import timezone
-
 from challenges.management.commands.seed_challenge_demo import Command
 from challenges.models import (
     CALENDAR_MONTH_DAYS,
@@ -1211,3 +1209,33 @@ def test_the_report_does_not_invent_a_reason_for_the_missing_title_band(catalogu
     out = capsys.readouterr().out
     assert 'this type grants none yet' in out
     assert 'third or later completion' not in out
+
+
+@override_settings(DEBUG=True)
+def test_the_seeded_opening_month_comes_from_the_boards_own_clock(catalogue, monkeypatch):
+    """`_calendar_days` TAKES THE MONTH AS AN ARGUMENT, and the test for it calls the helper directly for
+    all twelve -- which is right for the helper and leaves the WIRING uncovered. Hardcoding the call site
+    to `1` passed the whole file.
+
+    THE WIRING IS THE BEHAVIOUR CHANGE, though: the seeder read `timezone.localtime().month`, the SERVER's
+    month, while the board opens on the month in the OWNER's zone. The two differ for up to a day at each
+    month boundary, which is exactly when somebody seeding a board would be confused by it.
+
+    PATCHED RATHER THAN CLOCK-DEPENDENT. Asserting against the real `today_key` would pass vacuously
+    whenever the server and the owner agree, which is almost always -- and in January it would also pass
+    against the hardcoded `1` this test exists to catch."""
+    from challenges.services import calendar_render
+
+    monkeypatch.setattr(calendar_render, 'today_key', lambda profile, **kw: (7, 4))
+    seen = []
+    real = Command.__dict__['_calendar_days'].__func__
+
+    def spy(finished, now_month):
+        seen.append(now_month)
+        return real(finished, now_month)
+
+    monkeypatch.setattr(Command, '_calendar_days', staticmethod(spy))
+    _seed(_hunter())
+
+    assert seen, 'the calendar runs were never seeded, so this proves nothing'
+    assert set(seen) == {7}, 'the opening month does not come from `today_key`: %s' % seen

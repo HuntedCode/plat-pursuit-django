@@ -324,17 +324,29 @@ def test_the_today_marker_survives_a_leap_day():
     assert calendar_render.today_key(profile, now=leap) == (2, 28), (
         'the leap day does not fold, so it would mark no square at all'
     )
-    # AND THE ZONE STILL APPLIES ON TOP OF THE FOLD, which is the other half of the function. 23:40 UTC
-    # on the 28th is already the 29th in Tokyo, and that folds back to the 28th -- so a Tokyo hunter and
-    # a UTC hunter land on the same square from instants on different calendar days.
+
+    # AND THE OWNER'S ZONE APPLIES BEFORE THE FOLD, ON AN INSTANT THAT CAN TELL THE DIFFERENCE. The
+    # first version used 23:40 UTC on 28 February, which is (2, 28) in UTC and (2, 29) -> folded ->
+    # (2, 28) in Tokyo: the same answer either way, so deleting `.astimezone(_hunter_timezone(...))`
+    # from `today_key` left this test -- and every other test in the repo -- passing, with the
+    # function's headline decision ("THE OWNER'S CLOCK, NOT THE READER'S") uncovered.
+    # 31 JANUARY 23:40 UTC SEPARATES THEM: 1 February in Tokyo, still 31 January in UTC, and neither
+    # folds, so the two zones cannot agree by accident.
+    edge = dt.datetime(2024, 1, 31, 23, 40, tzinfo=dt.timezone.utc)
+    assert calendar_render.today_key(profile, now=edge) == (1, 31), 'UTC reads its own instant wrongly'
     profile.user.user_timezone = 'Asia/Tokyo'
     profile.user.save(update_fields=['user_timezone'])
+    assert calendar_render.today_key(profile, now=edge) == (2, 1), (
+        "the hunter's zone is ignored, so today is the reader's day and not the owner's"
+    )
+    # The fold still applies through a zone shift: 23:40 UTC on the 28th is the 29th in Tokyo.
     late = dt.datetime(2024, 2, 28, 23, 40, tzinfo=dt.timezone.utc)
     assert calendar_render.today_key(profile, now=late) == (2, 28)
-    # The same instant one zone west is still the 28th directly, not by folding.
-    profile.user.user_timezone = 'UTC'
-    profile.user.save(update_fields=['user_timezone'])
-    assert calendar_render.today_key(profile, now=late) == (2, 28)
+
+    # AND A NAIVE INSTANT IS REFUSED rather than read in the server's zone, which is the one reading this
+    # function exists to rule out.
+    with pytest.raises(ValueError):
+        calendar_render.today_key(profile, now=dt.datetime(2024, 2, 29, 12, 0))
 
 
 def test_the_board_carries_no_state_attributes():
@@ -728,13 +740,19 @@ def test_the_side_column_can_preview_a_day_without_fetching():
     sheet = _script_code()
     peek = sheet[sheet.index('function wireDayPeek'):]
     assert 'fetch(' not in peek, 'the peek must not ask the server'
-    assert 'mouseover' in peek, 'the preview is not wired to the pointer at all'
     # POINTER ONLY, AND DELIBERATELY. It mirrored focus at first, on the reasoning that a keyboard reader
     # has no hover -- but the peek is `aria-hidden="true"`, so swapping on focus announced nothing while
     # removing the month's figures from the accessibility tree for the whole of a 28-31 stop traversal.
-    # Re-adding the listener is the easy mistake here, which is why this is an assertion and not a note.
-    assert 'focusin' not in peek, (
-        'focus swaps an aria-hidden face in, which empties the a11y tree and announces nothing')
+    #
+    # ASSERTED ON THE LISTENER SET, NOT ON THE WORD `focusin`. That was the first form of this guard and
+    # it blocked exactly one spelling: `addEventListener('focus', fn, true)` reaches the same elements by
+    # capture, and the comment this fix DELETED named it outright ("`focusin`/`focusout` bubble where
+    # `focus`/`blur` do not"), so it is the first thing anyone restoring the feature would reach for.
+    # An exhaustive set also makes any OTHER new listener in here a deliberate edit, which is right: the
+    # peek's whole correctness story is which events it answers.
+    types = set(re.findall(r"addEventListener\('([a-z]+)'", peek))
+    assert types == {'mouseover', 'mouseout', 'click', 'keyup'}, (
+        'the peek answers a different set of events now: %s' % sorted(types))
 
 
 def test_the_peek_settles_rather_than_flickering_across_the_grid():
@@ -755,12 +773,17 @@ def test_the_peek_settles_rather_than_flickering_across_the_grid():
 
     assert 'function settle()' in peek and 'function hold()' in peek
     assert 'setTimeout(restore' in peek, 'the restore must be deferred'
-    # EVERY LEAVE PATH SETTLES; NONE OF THEM RESTORES OUTRIGHT. There is one leave path now -- the
-    # pointer's -- because the two focus listeners that carried the other two calls were removed with the
-    # focus mirroring. Counted rather than merely greped so that a new leave path cannot be added with a
-    # bare `restore()`, which is the regression this whole test exists for.
+    # THE POINTER'S LEAVE PATH SETTLES. It is the only one: the two focus listeners that used to carry
+    # their own calls went with the focus mirroring. Counted rather than merely greped so a new leave
+    # path cannot be added with a bare `restore()`, which is the regression this test exists for.
     assert peek.count('settle();') == 1, 'a leave path still restores immediately'
-    assert peek.count('restore();') == 1, 'only the month-switch tear-down restores without settling'
+    # THREE DIRECT RESTORES, AND NONE OF THEM IS A LEAVE. `show` tears down when a hover lands in a
+    # DIFFERENT panel (not a gap, so not a flicker), and the crest click/keyup pair tears down a month
+    # switch that no `mouseout` will ever follow. An earlier version of this line counted one and called
+    # it "the month-switch tear-down", which named a listener that did not exist at the time.
+    assert peek.count('restore();') == 3, 'a restore path was added or removed without updating this'
+    assert 'clearTimeout(settling)' in peek, (
+        'a direct restore must cancel its pending timer, or a later tick tears down the next peek')
     # And arriving cancels a pending restore before swapping.
     # SLICED TO THE END OF `show`, not to the end of the file. The first version fell through to a
     # to-EOF slice (`faces` is declared BEFORE `show`, so its guard was always false), which meant
@@ -776,23 +799,42 @@ def test_the_peek_and_the_month_facts_occupy_one_box():
     column's height is the taller of the two -- a side column that resized on hover would shift the board
     under the cursor, which on a 365-cell grid the cursor crosses constantly.
 
-    `visibility`, NOT `display`, AND THAT IS THE WHOLE TEST. The first version toggled the `hidden`
-    ATTRIBUTE and asserted `[hidden] { display: none; }` -- which is not a stacking rule, it is the
-    opposite of one: an element with `display: none` generates no box, so it is not a grid item, adds
-    nothing to the container's size, and leaves the `grid-area` above it inert. Exactly one face was ever
-    in layout, so the panel grew and shrank on every hover, and the docstring, the CSS comment and the
-    template all said it did not. The test passed throughout, because it pinned the mechanism that broke
-    the behaviour it is named for.
+    A CLASS, NOT THE `hidden` ATTRIBUTE, AND THAT IS THE WHOLE TEST. Two versions of it got this wrong
+    in the same direction. The first toggled `hidden` and asserted `[hidden] { display: none; }` -- not a
+    stacking rule but the opposite of one, since an element with `display: none` generates no box, is not
+    a grid item and adds nothing to the container. The second kept the attribute and asserted an override
+    (`display: block`) that CANNOT WIN: Tailwind's preflight ships
+    `[hidden]:where(:not([hidden=until-found])) { display: none !important }`, and an important author
+    declaration beats every normal one regardless of specificity or layer. A browser measured the panel
+    at 170px and 74px before and after that "fix".
 
-    `display: block` IS STILL DECLARED, now for the opposite reason: it has to beat the UA's
-    `[hidden] { display: none }`, which would otherwise win and take the box back out of layout."""
+    SO THIS PINS THE ATTRIBUTE'S ABSENCE, which is the only form that cannot be satisfied by a cleverer
+    override. The faces are swapped by `.pp-cal__face--off`, which has nothing to out-rank."""
     css = _calendar_css()
     flat = ' '.join(css.split())
     assert '.pp-cal__stats > .pp-cal__peek, .pp-cal__stats > .pp-cal__facts { grid-area: 1 / 1;' in flat
-    hid = _css_rule(css, '.pp-cal__stats > [hidden] {')
-    assert 'visibility: hidden' in hid, 'the hidden face is removed from layout, so the box resizes'
-    assert 'display: block' in hid, 'the UA stylesheet takes the hidden face back out of layout'
-    assert 'display: none' not in hid
+
+    off = _css_rule(css, '.pp-cal__stats > .pp-cal__face--off {')
+    assert 'visibility: hidden' in off, 'the hidden face is not hidden'
+    assert 'display' not in off, (
+        'a `display` here is either a no-op or a sign the attribute is back; neither belongs'
+    )
+    assert '.pp-cal__stats > [hidden]' not in flat, (
+        'the faces are back on an attribute Tailwind preflight pins to `display: none !important`'
+    )
+
+    # THE TEMPLATE AND THE STYLESHEET HAVE TO AGREE, and they are the pair that drifted: a class in one
+    # and an attribute in the other hides nothing at all. Pinned together so neither can move alone.
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    faces = re.findall(r'<div class="pp-cal__(?:peek|facts)[^>]*>', body)
+    assert len(faces) == 24, 'expected both faces in all twelve panels, found %d' % len(faces)
+    assert sum(1 for f in faces if 'pp-cal__face--off' in f) == 12, (
+        'exactly one face per panel starts off, and it must be the peek'
+    )
+    assert not [f for f in faces if ' hidden' in f or 'hidden>' in f], (
+        'a face still carries the `hidden` attribute, which takes it out of flow'
+    )
+    assert all('pp-cal__face--off' in f for f in faces if 'pp-cal__peek' in f)
 
 
 def test_the_peek_is_silent_to_screen_readers():
@@ -800,7 +842,9 @@ def test_the_peek_is_silent_to_screen_readers():
     accessible path to the same information. The peek is a sighted-pointer convenience layered on top,
     so it is `aria-hidden` and announces nothing."""
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    peek = re.search(r'<div class="pp-cal__peek"[^>]*>', body).group(0)
+    # `[^>]*` AFTER THE CLASS NAME, not a closing quote: the peek now carries `.pp-cal__face--off`
+    # beside it, and the exact-attribute form of this match silently stopped finding the element.
+    peek = re.search(r'<div class="pp-cal__peek[^>]*>', body).group(0)
     assert 'aria-hidden="true"' in peek, 'an aria-hidden subtree cannot announce, which is the guarantee'
 
     # SCOPED TO A PANEL, not the page: the nav's search box carries its own `aria-live` region and has
@@ -936,11 +980,18 @@ def test_the_panel_is_resolved_through_aria_controls_rather_than_by_position():
 
 
 def test_the_script_hides_panels_the_same_way_the_server_did():
-    """One mechanism for "not showing". A class plus `hidden` gives a state where the two disagree, and
-    the panel is then visible to a screen reader and not to an eye."""
+    """One mechanism for "not showing" A PANEL. A class plus `hidden` gives a state where the two
+    disagree, and the panel is then visible to a screen reader and not to an eye.
+
+    SCOPED TO THE SWITCHER, because the file-wide form was wrong about its own subject. It asserted
+    `'classList' not in js` over the WHOLE script, which is a claim about the file rather than about
+    panels -- and the day peek legitimately needs a class, since its two faces must stay in flow and
+    `hidden` is `display: none !important` under Tailwind's preflight. The broad form would have refused
+    that fix while saying nothing new about panels."""
     js = _script()
     assert 'panel.hidden = panel !== shown' in js
-    assert 'classList' not in js, 'panels are toggled by `hidden`, not by a class'
+    boot = js[js.index('function boot('):js.index('function wireDaySheet(')]
+    assert 'classList' not in boot, 'panels are toggled by `hidden`, not by a class'
 
 
 # ── the holes the audit found: things nothing was pinning ────────────────────────────────────────────
@@ -2054,13 +2105,26 @@ def test_the_month_rim_paints_nothing_where_only_a_desktop_plate_would_cover_it(
     assert 'display: none;' in rules[0], (
         'the counter plate now renders at mobile, which changes what the rim may rely on'
     )
-    # AND THE RULE THAT SHOWS IT IS INSIDE THE `lg:` BAND, located in the UNFLATTENED source so the
-    # enclosing at-rule can be read. A future `md:` reveal must update the rim's premise rather than
-    # silently restoring the old excuse for it.
+    # AND THE RULE THAT SHOWS IT IS INSIDE THE `lg:` BAND -- by BRACE DEPTH, not by proximity. The first
+    # version took `css.rfind('@media', 0, at)`, the nearest PRECEDING at-rule, with no nesting tracked:
+    # move the reveal rule out of its media block so the plate renders at every width and any earlier
+    # `@media (min-width: 1024px)` above it still satisfied the assertion. That is exactly the regression
+    # this test exists for, and it passed. The project's own lesson about slicing a stylesheet says it:
+    # track the at-rule.
     at = css.index('.pp-cal__sub {\n        display: inline-flex')
-    band = css.rfind('@media', 0, at)
-    assert band != -1 and 'min-width: 1024px' in css[band:css.index('{', band)], (
-        'the plate is shown outside the lg: band, so the rim arithmetic needs rechecking')
+    stack, last = [], 0
+    for i, ch in enumerate(css[:at]):
+        if ch == '{':
+            stack.append(css[last:i].strip())
+            last = i + 1
+        elif ch == '}':
+            if stack:
+                stack.pop()
+            last = i + 1
+    enclosing = [r for r in stack if r.startswith('@media')]
+    assert len(enclosing) == 1 and 'min-width: 1024px' in enclosing[0], (
+        'the plate is revealed outside the lg: band (enclosing at-rules: %s), so the rim arithmetic '
+        'no longer has the cover its comment claims' % enclosing)
 
 
 def test_a_conceptless_game_still_links_somewhere_real():
@@ -2132,6 +2196,10 @@ def test_the_shelf_cascade_is_capped_like_the_day_grid():
     is built on."""
     delay = _css_rule(_calendar_css(), '.pp-cday__card {')
     assert 'min(var(--rev, 0), 12)' in delay, 'the shelf cascade is uncapped, so a stacked day stalls'
+    # THE STEP TOO, not only the cap. Pinning `min(..., 12)` alone let `40ms` become `4000ms` -- 48
+    # seconds to the last card, which is worse than the uncapped version this test was written for.
+    assert '* 40ms' in delay, 'the shelf beat moved, so the cap no longer bounds anything useful'
+    assert 'backwards' in delay, 'without the backwards fill the cascade is a flash, not an entrance'
 
 
 def test_the_hue_never_becomes_small_text_over_the_dialog_wash():
@@ -2141,22 +2209,52 @@ def test_the_hue_never_becomes_small_text_over_the_dialog_wash():
     `--pp-text-mute` on the flag held 2.97:1 and 12px of `--cal-c` 4.19:1, against the 4.5 small text
     needs.
 
-    TWO EXCEPTIONS SURVIVE AND BOTH ARE MEASURED: the masthead date, which at 22px/800 is large text
-    (floor 3.0), and the peek hint, where the hue is mixed toward a neutral. Everything else is a token.
-    """
+    THREE EXCEPTIONS SURVIVE AND ALL THREE ARE MEASURED: the masthead date (22px/800) and the peek tally
+    (24px/800) are LARGE text, where the floor is 3.0, and the peek hint mixes the hue toward a neutral.
+    Everything else is a token.
+
+    ASSERTED AS AN ABSENCE ACROSS THE WHOLE RANGE, with those three named. The first version listed the
+    three selectors it had just fixed, so putting the hue on `.pp-cday__title` (13px, same wash) passed
+    the whole file -- a guard that enumerates is blind, and this suite already carries the right shape in
+    `test_no_state_rule_touches_the_month_hue`: "the only form that cannot be satisfied by one more
+    `:not()`"."""
     css = _calendar_css()
-    for selector, floor in (('.pp-cday__flag', '--pp-text-dim'),
-                            ('.pp-cday__year', '--pp-text-dim')):
-        rule = _css_rule(css, selector)
-        assert floor in rule, '%s does not carry its measured colour' % selector
-        assert 'var(--cal-c' not in rule, '%s paints small text in the month hue' % selector
+    flat = ' '.join(css.split())
+    LARGE_OR_MIXED = ('.pp-cday__date', '.pp-cal__peek-figure .pp-tally', '.pp-cal__peek-hint')
 
-    tally = _css_rule(css, '.pp-cday__tally .pp-tally')
-    assert 'var(--cal-c' not in tally, '18px bold is not large text, so the hue fails here'
+    # Every rule in the day-sheet and peek range that sets a `color`, checked for the hue.
+    offenders = []
+    for m in re.finditer(r'(\.(?:pp-cday|pp-cal__peek)[^{};]*) \{([^}]*)\}', flat):
+        selector, body = m.group(1).strip(), m.group(2)
+        # THE PROPERTY, NOT THE SUBSTRING. `'color:' in body` also matches `border-color:` and
+        # `background-color:`, which are decoration and may carry the hue -- the first version of this
+        # sweep reported `.pp-cday__link:hover .pp-cday__art` (a hue BORDER) as small text in the hue.
+        decls = [d.strip() for d in body.split(';')]
+        if not any(d.startswith('color:') for d in decls) or 'var(--cal-c' not in body:
+            continue
+        if selector in LARGE_OR_MIXED:
+            continue
+        offenders.append(selector)
+    assert not offenders, 'the month hue is small text here: %s' % offenders
 
-    # AND THE WASH ITSELF IS AT THE STRENGTH THOSE RATIOS WERE MEASURED AT. Raising it re-breaks every
-    # figure above, silently, which is the one change this test can see that a colour grep cannot.
+    # The three exceptions must still BE the three, or the allowlist above is quietly covering a fourth.
+    hued = [m.group(1).strip() for m in
+            re.finditer(r'(\.(?:pp-cday|pp-cal__peek)[^{};]*) \{([^}]*)\}', flat)
+            if any(d.strip().startswith('color:') for d in m.group(2).split(';'))
+            and 'var(--cal-c' in m.group(2)]
+    assert sorted(hued) == sorted(LARGE_OR_MIXED), 'the hued-text set moved: %s' % sorted(hued)
+
+    # AND THE WASH IS AT THE STRENGTH THOSE RATIOS WERE MEASURED AT -- BOTH LAYERS. The first version
+    # pinned only the radial, so taking the linear from 5% to 35% destroyed every figure quoted here and
+    # passed. The ceiling is a composite 15.6%, where `--pp-text-dim` reaches exactly 4.5 on December.
     dialog = _css_rule(css, '#cal-day-modal .pp-detail-modal__dialog {')
-    assert 'var(--cal-c, var(--pp-primary)) 16%' in dialog, (
-        'the month wash moved, so the contrast figures behind the text colours above no longer hold'
+    assert 'var(--cal-c, var(--pp-primary)) 12%' in dialog, 'the radial wash moved'
+    assert 'var(--cal-c, var(--pp-primary)) 4%' in dialog, 'the linear wash moved'
+    # COUNTED INSIDE `background` ONLY. The rule also tints its border and an inset highlight with the
+    # hue, which are decoration and do not sit under text -- counting the whole rule gave four and said
+    # "four hue layers", which would have been a confusing way to fail.
+    wash = dialog[dialog.index('background:'):dialog.index(';', dialog.index('background:'))]
+    assert wash.count('var(--cal-c') == 2, (
+        'the dialog paints %d hue layers under its text, not the two the composite was measured on'
+        % wash.count('var(--cal-c')
     )

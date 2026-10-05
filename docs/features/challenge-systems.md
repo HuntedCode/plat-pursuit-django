@@ -784,13 +784,23 @@ for a hovered day's. It mirrored `focusin` at first, on the reasoning that a key
 and that was a net loss: the preview carries `aria-hidden="true"`, so focusing a square announced nothing
 while removing the month's figures from the accessibility tree, for all 28-31 consecutive day stops. The
 keyboard path is the day modal, which Enter opens and which is a real dialog with real content. Re-adding
-the listener is the easy mistake, so `test_only_a_stacked_day_wears_its_count` asserts `focusin` is absent.
+the listener is the easy mistake, so `test_the_side_column_can_preview_a_day_without_fetching` asserts the
+peek registers no listener other than `mouseover` and `mouseout`. Asserted on the listener SET rather than
+on the word `focusin`, because `addEventListener('focus', fn, true)` is the first thing anyone re-adding
+the feature would reach for and the deleted comment named it.
 
-**And its two faces are hidden with `visibility`, never `display`.** They share one grid area so the column
-cannot resize under a moving cursor — but `[hidden]` is `display: none`, which generates no box, is not a
-grid item and contributes nothing to the container's height. With that, exactly one face was ever in layout
-and the panel grew and shrank on every hover, while the CSS comment, the template comment and the test
-docstring all said it did not.
+**And its two faces are swapped with a CLASS, never the `hidden` attribute.** They share one grid area so
+the column cannot resize under a moving cursor, which requires the hidden face to stay IN FLOW. `hidden` is
+`display: none`: no box, not a grid item, no contribution to the container's height. So exactly one face was
+ever in layout and the panel shrank about 96px on every hover, below `lg:` taking the page's scroll height
+with it.
+
+**Overriding `[hidden]` from the stylesheet is not possible, and that is the part worth remembering.**
+Tailwind's preflight ships `[hidden]:where(:not([hidden=until-found])) { display: none !important }`. An
+important author declaration beats every normal author declaration regardless of specificity or layer, so
+`display: block` loses — and so does `display: block !important` from outside a layer. The first attempt at
+this fix shipped with four places (the stylesheet, the template, this doc and a test docstring) asserting a
+fix that a browser measurement showed had changed nothing: 170px to 74px, before and after.
 
 **The crest rim's dash list is written out, not repeated.** The outer gauge leaves a 28-unit notch at the
 bottom for its counter plate, and the rim tiles the remaining 72 — but a repeating `stroke-dasharray`

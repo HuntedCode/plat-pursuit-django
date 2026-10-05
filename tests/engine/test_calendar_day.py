@@ -10,6 +10,7 @@ NOT "the first" ANYTHING. Two earlier versions of this line claimed a superlativ
 `ProfileDayView` is a public unauthenticated per-hunter trophy view. The risk is real without ranking.
 """
 import datetime as dt
+import re
 
 import pytest
 from django.db import connection
@@ -49,7 +50,7 @@ def _run(profile=None, challenge_type=CHALLENGE_TYPE_CALENDAR):
         svc.TYPES_NOT_YET_CREATABLE = original
 
 
-def _platted(profile, when, *, shovelware=False, name=None, cover=False):
+def _platted(profile, when, *, shovelware=False, name=None, cover=False, conceptless=False):
     _SEQ['n'] += 1
     # `cover=True` GIVES THE CONCEPT A TRUSTED IGDB MATCH, which is the only branch of the cover chain
     # that has a SIZE. PSN fallback URLs are fixed strings with no size knob -- the property's own
@@ -58,8 +59,11 @@ def _platted(profile, when, *, shovelware=False, name=None, cover=False):
     #
     # A FACTORY GAME HAS NONE OF THE CHAIN'S SOURCES, so the DEFAULT here is the no-art branch. Worth
     # knowing: a test that forgets `cover=True` is silently asserting against the fallback.
-    concept = ConceptFactory(anchor_migration_completed_at=timezone.now())
-    if cover:
+    # `conceptless=True` IS A REAL CATALOGUE STATE, not a contrived one. `Game.concept` is `null=True`
+    # on `SET_NULL`, so a concept merge or a staff unlink leaves live Games pointing at nothing -- and
+    # the three house guards for it exist because that happens. A fixture is the only way to render one.
+    concept = None if conceptless else ConceptFactory(anchor_migration_completed_at=timezone.now())
+    if cover and concept is not None:
         IGDBMatchFactory(concept=concept, status='auto_accepted',
                          igdb_cover_image_id='co%04d' % _SEQ['n'])
     game = GameFactory(
@@ -304,7 +308,15 @@ def test_opening_a_square_costs_the_same_however_many_platinums_it_holds():
         _platted(many, _utc(year, 4, 4))
     many_run = _fill(_run(many))
 
+    # ONE WARM-UP REQUEST FIRST, AND IT IS NOT A COURTESY. Site-wide lookups that cache per process --
+    # the art-reveal event's `is_active ... LIMIT 1` is the one that bit -- are paid by whichever request
+    # runs first, so capturing the FIRST request in the process charged `small` a query `big` never saw
+    # and the comparison read "4 vs 5". Nothing in the test was wrong about the view; the measurement
+    # was taken through a cold cache. It survived on ordering luck: this file's last test ends with a
+    # `cache.clear()`, so the failure appeared the first time the suite happened to run that one
+    # immediately before this one. The warmed request is thrown away.
     client = Client()
+    assert client.get(_url(one_run, 4, 4)).status_code == 200
     with CaptureQueriesContext(connection) as small:
         assert client.get(_url(one_run, 4, 4)).status_code == 200
     with CaptureQueriesContext(connection) as big:
@@ -490,3 +502,35 @@ def test_the_square_endpoint_is_metered_by_ip_in_its_own_bucket(client):
             'the square endpoint is sharing the browse page bucket')
     finally:
         cache.clear()
+
+
+def test_a_conceptless_game_still_links_to_a_page_that_exists():
+    """`Game.concept` IS NULLABLE, and `{{ plat.game.concept.game_page_url }}` on a null concept renders
+    `href=""` -- which is not an inert link. An empty href resolves to the CURRENT page, so clicking a
+    day card reloaded the challenge.
+
+    RENDERED, NOT GREPPED, and the difference is not academic. The first version of this pin read the
+    template as text and asserted that `plat.game.concept_id` appeared inside the `href`, with a
+    docstring claiming a render test would need "a whole trophy fixture". It needs one keyword. And the
+    source pin accepted two versions that reproduce the bug: swapping the two branches (so a conceptless
+    game takes the `game_page_url` arm and renders empty again) and passing the wrong argument to
+    `{% url %}`. Both satisfy "the guard is mentioned"; neither survives asking the page.
+    """
+    profile = _hunter()
+    run = _run(profile)
+    _platted(profile, _utc(2019, 3, 3), conceptless=True, name='Orphaned Game')
+    _fill(run)
+
+    body = Client().get(_url(run, 3, 3)).content.decode()
+    assert 'Orphaned Game' in body, 'the conceptless platinum never reached the shelf'
+    href = re.search(r'<a class="pp-cday__link" href="([^"]*)"', body).group(1)
+    assert href, 'an empty href navigates to the current page rather than doing nothing'
+    assert href.startswith('/games/'), 'the fallback does not point at a Game page: %r' % href
+
+    # AND THE NORMAL PATH IS UNCHANGED, which is the half a branch swap would break silently.
+    run2 = _run(_hunter())
+    _platted(run2.profile, _utc(2019, 4, 4), name='Normal Game')
+    _fill(run2)
+    body2 = Client().get(_url(run2, 4, 4)).content.decode()
+    href2 = re.search(r'<a class="pp-cday__link" href="([^"]*)"', body2).group(1)
+    assert href2 and href2 != href, 'both branches render the same URL, so one of them is unused'
