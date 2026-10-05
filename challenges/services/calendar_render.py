@@ -469,21 +469,34 @@ def _hero_group(rows):
 
 
 def totals_for(months):
-    """`{'done': days filled, 'all': the same without the shovelware exclusion}` for the whole year.
+    """`{'done', 'all', 'struck', 'open'}` for the whole year.
 
     PURE, AND THAT IS THE POINT: the page needs the year totals for its tally and, shortly, for the
     day-marker rail -- and both are sums of numbers `calendar_groups` has already computed. Asking the
     database again would be a second query for data already on the page, and asking it DIFFERENTLY
     would be two definitions of one figure.
 
-    TWO NAMED KEYS, not a per-lens map. This returned `{view: total}` keyed on `CALENDAR_VIEW_FIELDS`
-    while there were three lenses and a switcher to feed; `done` is now the only figure anything draws,
-    and `all` exists so the headline can be read aloud ("297 days, of 340 you hold platinums for")
-    rather than as a bare number.
+    NAMED KEYS, not a per-lens map. This returned `{view: total}` keyed on `CALENDAR_VIEW_FIELDS`
+    while there were three lenses and a switcher to feed; `done` is now the figure the board draws, and
+    `all` exists so the headline can be read aloud ("297 days, of 340 you hold platinums for") rather
+    than as a bare number.
+
+    `struck` AND `open` ARRIVED WITH THE ALL CREST, which needs year-level figures where a month panel
+    shows its own. They are here rather than in the template for the reason the rest of this function is
+    here: a template cannot subtract, so `open` would otherwise have become a filter or a second context
+    value, and `struck` would have become a loop with a counter. Both are sums over `months`, so they
+    add no query and cannot disagree with the board -- which is the whole argument for this function
+    existing instead of a second aggregate.
+
+    `open` IS COUNTED FROM THE MONTHS' OWN `total`, not from a literal 365. The year's length is
+    `CALENDAR_MONTH_DAYS`' sum and the Feb-29 fold is what makes it 365 rather than 366; a literal here
+    would be a second statement of that, which is how two definitions of one figure start.
     """
     return {
         'done': sum(month['done'] for month in months),
         'all': sum(month['all_done'] for month in months),
+        'struck': sum(1 for month in months if month['is_struck']),
+        'open': sum(month['total'] - month['done'] for month in months),
     }
 
 

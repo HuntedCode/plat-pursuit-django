@@ -333,7 +333,13 @@ def test_the_year_totals_are_the_sum_of_the_months():
     CalendarDay.objects.filter(challenge=run, month=9, day=9).update(in_all=True, in_clean=False)
 
     totals = calendar_render.totals_for(calendar_render.calendar_groups(run))
-    assert totals == {'done': 2, 'all': 3}
+    # EVERY KEY, and compared whole rather than probed one at a time: a new key with no reader is the
+    # thing `_card`'s rule rejects, so the set is part of the contract.
+    assert totals == {'done': 2, 'all': 3, 'struck': 0, 'open': 363}
+    # `open` COUNTS THE YEAR AS THE MONTHS DEFINE IT. 365 and not 366: February is 28 in
+    # `CALENDAR_MONTH_DAYS` because 29 February folds onto the 28th, and a literal 365 anywhere would be
+    # a second statement of that fold.
+    assert totals['done'] + totals['open'] == sum(CALENDAR_MONTH_DAYS) == 365
 
 
 def test_a_run_with_no_day_rows_draws_no_board_at_all():

@@ -108,6 +108,32 @@ completing ends the run. Leading with `all` would show a card at 298/365 on a ru
   deliberately ignores the reconciliation check — you reach for it when you suspect the watermarks are
   wrong.
 
+**The board has a thirteenth tab: the All crest, an overview of the whole year.** Twelve rows of up to
+31 cells, one row per month, columns aligned on day-of-month. Three things about it are decisions rather
+than details:
+
+- **It is not the Hall of Fame hero's shape, deliberately.** The hero draws 365 cells as seven rows
+  flowing by column, and its own comment says why that is right there: *"the rows are NOT weekdays ...
+  Seven is simply what makes 365 cells read as a block at hero width."* On the detail page there is room
+  for rows that mean something, so a row is a month and a column is a date — which also lets each row
+  wear its own hue off the existing `[data-month]` table, and makes the cell about 1.6x bigger. It is the
+  cheaper shape too: a nested loop over the month groups the page already has, so **no new render
+  function and no new query**. A 7x53 grid would need a flat 365-cell list in `calendar_day_keys()` order.
+- **Its cells are not controls, and that is measured.** A cell is about 31px at the 1100px cap and about
+  9px at 375px, under the 44px touch minimum this project defends for the day squares. A 9px control
+  opening the same dialog that a 44px square opens one tab away is a worse affordance, not an extra one.
+  So the overview identifies a day through the side column's hover peek (pointer-only by design) and the
+  month tabs stay the only way to open one. No date numerals either: 12px is the stylesheet's type floor
+  and nothing legible fits a 9px cell.
+- **The crest carries no `data-month`.** The twelve hues each mean one specific month, so a thirteenth
+  reading that table would either steal a meaning or add a second colour axis. It declares its own
+  near-neutral silver instead. Not the brand cyan: that is already every coin's completion arc, so a cyan
+  rim over a cyan arc loses the distinction the two rings exist to make. Its rim is a **dial of the
+  year** — one slot lit per struck month, on the same `--seg` mechanism — and its gauge reads days/365.
+
+`totals_for` grew `struck` and `open` for this, both sums over the month groups, so the overview's figures
+cannot disagree with the board and cost no query.
+
 **Starting a run is members-only during the beta.** `CHALLENGES_BETA_MEMBERS_ONLY` (env var, defaults
 to **on**) is checked inside `start_reporting` after the profile lock, so it refuses the write rather than
 hiding the door: a free hunter sees the Start button marked `aria-disabled`, with the reason as visible text

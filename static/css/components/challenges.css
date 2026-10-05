@@ -3600,6 +3600,109 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    with these selectors revealing whichever matched the checked radio. One lens means one figure, printed
    directly, so the class and its reveal rules went together. */
 
+/* ============================================================
+ * THE YEAR MATRIX -- `.pp-cal__year`
+ *
+ * The All crest's panel: twelve rows of up to 31 cells, one row per month, columns aligned on
+ * day-of-month (owner, 2026-10-05: "a mini-version of the entire year at a glance").
+ *
+ * TWELVE ROWS OF 31, NOT THE HERO'S SEVEN OF 53, and the reason is in `_run_hero.html`'s own comment:
+ * its rows "are NOT weekdays ... Seven is simply what makes 365 cells read as a block at hero width".
+ * That is the right trade at 307px. Here there is room for rows that mean something, and three things
+ * follow from it -- a row is a month, a column is a date, and each row wears its own hue off the
+ * `[data-month]` table with no new declaration. It is also roughly 1.6x the cell: 31 columns against 53.
+ *
+ * `grid-area: grid` IS THE WHOLE PANEL LAYOUT. `.pp-cal__panel` already lays out `"head stats" /
+ * "grid stats"` from `lg:` up, so the matrix takes the day grid's area and the two-column panel, the
+ * aligned edges and the side column all arrive for free.
+ *
+ * THE RAGGED TAIL IS HONEST. February stops at 28 and the short months at 30, so those rows end one to
+ * three columns early rather than padding to a square block -- which is the one thing this layout shows
+ * that a flat 365-cell strip cannot: how long each month is.
+ *
+ * NO ENTRANCE CASCADE. Switching to this panel already runs `slideViewIn`, and a per-cell stagger over
+ * 365 cells is the hazard `.pp-cday__card` paid for twice (an uncapped `--rev` holding every later cell
+ * at `opacity: 0`). One motion per switch is enough; there is nothing to stagger that a reader reads in
+ * sequence. */
+.pp-cal__year {
+    grid-area: grid;
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+}
+/* THE LABEL COLUMN IS A FIXED `rem`, NOT A FRACTION, because the cells must stay square and a
+   proportional label would eat a different share of the row at every width. 2.1rem holds three
+   tracked uppercase characters at the 12px floor with a pixel to spare. */
+.pp-cal__yrow {
+    display: grid;
+    grid-template-columns: 2.1rem repeat(31, minmax(0, 1fr));
+    gap: 1px;
+    align-items: center;
+}
+.pp-cal__ylabel {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    /* THE HUE NEVER TOUCHES TEXT -- the invariant this file states in its hue table and has broken
+       twice. The row's `--cal-c` drives the cells; the label is a measured token. */
+    color: var(--pp-text-dim);
+    text-align: right;
+    padding-right: 3px;
+}
+/* A RECESS, NOT A BORDER, which is the hero's reading of the same problem at the same scale: a 1px
+   border on a 9px cell is most of the cell, so 365 outlined boxes read as a grid of lines rather than
+   as a year with gaps in it. */
+.pp-cal__ycell {
+    display: block;
+    aspect-ratio: 1;
+    border-radius: 1px;
+    background: color-mix(in srgb, var(--pp-bg-0) 70%, transparent);
+}
+/* THE FILLED DAY WEARS ITS MONTH. `--cal-c` comes off the row's `data-month`, so a filled 3 March is
+   March's green and a filled 3 November is November's berry -- which is what makes twelve rows read as
+   twelve months rather than as one 365-cell texture. 68% over `--pp-bg-2` is the hero cell's own recipe,
+   reused rather than re-derived: these two grids are the same object at two scales. */
+.pp-cal__ycell--on {
+    background: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 68%, var(--pp-bg-2));
+}
+/* TODAY, AS A RING RATHER THAN A FILL, for the reason the day grid gives: a background change would
+   fight `--on`, which already owns it. One cell in 365 at this size needs the outline to read at all,
+   so it is drawn OUTSIDE the cell where nothing else is painted. */
+.pp-cal__ycell--today {
+    box-shadow: 0 0 0 1px var(--cal-c, var(--pp-primary)),
+                0 0 6px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 50%, transparent);
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+    /* ONLY A CELL WITH SOMETHING TO SAY. `[data-peek-label]` is the same predicate the peek binds to, so
+       a cell the pointer cannot preview gives no hover feedback either -- the alternative is a cell that
+       lights up and then changes nothing in the column beside it. */
+    .pp-cal__year [data-peek-label]:hover {
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--pp-text) 55%, transparent);
+    }
+}
+@media (min-width: 768px) {
+    /* MORE AIR ONCE THERE IS ROOM FOR IT. At 375px a 2px gutter was over a fifth of a 9px cell, which is
+       the mush the hero's own gap comment describes; from 768 the cell is about 19px and 2px reads as a
+       grid rather than as noise. */
+    .pp-cal__year, .pp-cal__yrow { gap: 2px; }
+    .pp-cal__ycell { border-radius: 2px; }
+}
+@media (min-width: 1024px) {
+    .pp-cal__year, .pp-cal__yrow { gap: 3px; }
+}
+
+/* THE ALL COIN'S METAL, and it is the one crest with no `data-month`. A near-neutral silver: chroma
+   0.015 against twelve hues at 0.13 and above, so it cannot be mistaken for a month, and light enough
+   to read as a precious metal rather than as the unearned grey (`--pp-text-mute`, which is what an
+   undeclared `--cal-c` would fall back to).
+   NOT THE BRAND CYAN, which was the other candidate and is already spoken for: every coin's completion
+   arc is `--pp-primary`, so a cyan rim and a cyan arc on the same coin would lose the distinction the
+   two rings exist to make. NOT A BLEND OF THE TWELVE EITHER -- a conic rim of all twelve hues is the
+   most literal reading of "all" and is exactly the second colour axis this file records turning
+   generated crests muddy. */
+.pp-cal__crest--all { --cal-c: oklch(0.86 0.015 250); }
+
 /* SEVEN ACROSS AT MOBILE, TEN FROM `md:`, AND CAPPED. Not a week alignment -- there is no weekday -- just
    the column count that makes a month read as a block: 31 days over seven is four full rows plus a short
    one, over ten it is three plus one.

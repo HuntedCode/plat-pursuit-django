@@ -119,7 +119,7 @@ def test_the_year_totals_are_the_sum_of_the_months():
     CalendarDay.objects.filter(challenge=run, month=9, day=9).update(in_all=True, in_clean=False)
 
     context = Client().get(_url(run)).context
-    assert context['calendar_totals'] == {'done': 2, 'all': 3}
+    assert context['calendar_totals'] == {'done': 2, 'all': 3, 'struck': 0, 'open': 363}
     # Summed from the groups already on the page rather than asked of the database again.
     assert context['calendar_totals'] == calendar_render.totals_for(context['calendar_months'])
 
@@ -252,7 +252,12 @@ def test_the_board_draws_every_day_of_the_year():
     # follows, which is the same lesson `<div class="(pp-cal__day...)"` taught when the openable squares
     # became buttons.
     assert len(re.findall(r'class="pp-cal__day[ "]', body)) == 365
-    assert body.count('pp-cal__crest"') + body.count('pp-cal__crest ') == 12
+    # TWELVE MONTH CRESTS AND EXACTLY ONE YEAR CREST, counted separately rather than as thirteen. A
+    # bare 13 would go on passing if a month vanished and a second overview appeared, which is the only
+    # way this count can realistically go wrong now that the row holds two kinds of thing.
+    assert len(re.findall(r'id="cal-tab-(?!all)', body)) == 12, 'one crest per month'
+    assert body.count('id="cal-tab-all"') == 1, 'exactly one year overview crest'
+    assert len(re.findall(r'class="pp-cal__crest[ "]', body)) == 13
 
 
 def test_only_the_current_month_is_showing_before_any_script_runs():
@@ -272,13 +277,21 @@ def test_only_the_current_month_is_showing_before_any_script_runs():
     panels = re.findall(r'<section class="pp-cal__panel"[^>]*>', body)
     open_index = calendar_render.today_key(run.profile)[0] - 1
 
-    assert len(panels) == 12
-    assert 'hidden' not in panels[open_index], 'the current month must be the one showing'
-    assert sum(1 for p in panels if 'hidden' not in p) == 1, 'exactly one month shows'
-    assert all('hidden' in p for i, p in enumerate(panels) if i != open_index)
+    # THE YEAR PANEL IS SEPARATED OUT BY ID, NOT LEFT TO POSITION. It renders FIRST, so indexing the
+    # list by month number was off by one the moment it arrived -- and this repo's rule is to never
+    # state a positional index when an id is available.
+    year = [p for p in panels if 'id="cal-month-all"' in p]
+    months = [p for p in panels if 'id="cal-month-all"' not in p]
+    assert len(year) == 1 and len(months) == 12
+    assert 'hidden' in year[0], 'the overview must not be the opening tab'
+
+    assert 'hidden' not in months[open_index], 'the current month must be the one showing'
+    assert sum(1 for p in panels if 'hidden' not in p) == 1, 'exactly one panel shows'
+    assert all('hidden' in p for i, p in enumerate(months) if i != open_index)
 
     # The tab and the panel must agree: the switcher finds the live tab by `aria-selected`.
-    tabs = re.findall(r'<button type="button" role="tab"[^>]*>', body)
+    tabs = [t for t in re.findall(r'<button type="button" role="tab"[^>]*>', body)
+            if 'cal-tab-all' not in t]
     assert sum(1 for t in tabs if 'aria-selected="true"' in t) == 1
     assert 'aria-selected="true"' in tabs[open_index]
 
@@ -374,9 +387,11 @@ def test_the_crest_row_is_a_real_tablist():
     assert only the `role="tab"` count and the tabindex, so dropping `role="tablist"` from the row or
     `role="tabpanel"` from all twelve panels left the suite green with the keyboard contract gone."""
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    assert '<div class="pp-cal__crests" role="tablist" aria-label="Month">' in body
-    assert body.count('role="tabpanel"') == 12
-    assert body.count('role="tab"') == 12
+    # THE LABEL NAMES WHAT THE ROW HOLDS, which stopped being only months when the overview arrived --
+    # "Month" would have had a screen reader announce a thirteen-item month list.
+    assert '<div class="pp-cal__crests" role="tablist" aria-label="Month, or the whole year">' in body
+    assert body.count('role="tabpanel"') == 13, 'twelve months and the year overview'
+    assert body.count('role="tab"') == 13
 
 
 def test_every_crest_is_reachable_before_the_script_narrows_the_row():
@@ -387,7 +402,7 @@ def test_every_crest_is_reachable_before_the_script_narrows_the_row():
     in the same tick as the arrows that make it navigable."""
     crests = re.findall(r'<button type="button" role="tab"[^>]*>',
                         _body(_run(CHALLENGE_TYPE_CALENDAR)))
-    assert len(crests) == 12
+    assert len(crests) == 13, 'twelve months and the year overview'
     assert all('tabindex="0"' in c for c in crests)
     assert sum(1 for c in crests if 'aria-selected="true"' in c) == 1
 
@@ -508,7 +523,8 @@ def test_a_shovelware_platinum_draws_no_square():
 
     days = re.findall(r'<div class="(pp-cal__day[^"]*)"', body)
     assert days[1] == 'pp-cal__day', 'a shovelware platinum must not tint a square'
-    assert Client().get(_url(run)).context['calendar_totals'] == {'done': 0, 'all': 1}
+    assert Client().get(_url(run)).context['calendar_totals'] == {
+        'done': 0, 'all': 1, 'struck': 0, 'open': 365}
 
 
 def test_a_completed_month_is_struck_and_an_incomplete_one_is_not():
@@ -517,8 +533,19 @@ def test_a_completed_month_is_struck_and_an_incomplete_one_is_not():
     _fill(run, 3, 3)
 
     crests = re.findall(r'<button type="button" role="tab"[^>]*>', _body(run))
-    assert 'pp-cal__crest--struck' in crests[1]
-    assert 'pp-cal__crest--struck' not in crests[2], 'one filled day is not a month'
+    # BY ID, NOT BY POSITION. `crests[1]` meant February until the year crest took index 0, and an
+    # off-by-one here asserts the wrong month rather than failing loudly.
+    feb = [c for c in crests if 'id="cal-tab-feb"' in c]
+    assert len(feb) == 1
+    assert 'pp-cal__crest--struck' in feb[0]
+    mar = [c for c in crests if 'id="cal-tab-mar"' in c]
+    assert len(mar) == 1
+    assert 'pp-cal__crest--struck' not in mar[0], 'one filled day is not a month'
+    # AND THE YEAR CREST IS NOT STRUCK EITHER, on one finished month out of twelve. It wears the struck
+    # treatment only on a complete year, which is the same rule applied to the whole rather than a part.
+    year = [c for c in crests if 'id="cal-tab-all"' in c]
+    assert len(year) == 1
+    assert 'pp-cal__crest--struck' not in year[0], 'one month is not a year'
     # NO METAL. The crest was bronze/silver/gold for whichever lens completed the month.
     assert 'data-tier' not in crests[1]
 
@@ -732,9 +759,20 @@ def test_the_side_column_can_preview_a_day_without_fetching():
     _fill(run, 3, 3, plats=4)
     body = _body(run)
 
-    openable = re.findall(r'data-day-url=', body)
-    previewable = re.findall(r'data-peek-label=', body)
+    # SCOPED TO THE MONTH PANEL. The year overview previews the SAME square from its own matrix, so a
+    # page-wide count is two -- and the invariant being pinned is about the month grid, where preview and
+    # open are the same affordance. The overview's own cells open nothing by design, which is why its
+    # preview count is asserted separately below rather than folded into this one.
+    march = _section(body, 'id="cal-month-mar"', until='</section>')
+    openable = re.findall(r'data-day-url=', march)
+    previewable = re.findall(r'data-peek-label=', march)
     assert len(previewable) == len(openable) == 1, 'preview and open must be the same squares'
+
+    # AND THE OVERVIEW PREVIEWS IT TOO, WITHOUT OPENING IT. Its cells are ~9px at 375px, under the touch
+    # minimum this stylesheet defends, so they identify a day through the peek and never become controls.
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+    assert len(re.findall(r'data-peek-label=', year)) == 1, 'the overview previews the same square'
+    assert 'data-day-url=' not in year, 'an overview cell must not be a control at 9px'
     assert 'data-peek-plats="4"' in body, 'the count rides the square, not a request'
 
     sheet = _script_code()
@@ -827,8 +865,11 @@ def test_the_peek_and_the_month_facts_occupy_one_box():
     # and an attribute in the other hides nothing at all. Pinned together so neither can move alone.
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
     faces = re.findall(r'<div class="pp-cal__(?:peek|facts)[^>]*>', body)
-    assert len(faces) == 24, 'expected both faces in all twelve panels, found %d' % len(faces)
-    assert sum(1 for f in faces if 'pp-cal__face--off' in f) == 12, (
+    # THIRTEEN PANELS: twelve months and the year overview, which carries a stats column for the same
+    # reason the months do -- `wireDayPeek` resolves the faces through `cell.closest('.pp-cal__panel')`,
+    # so a panel with no stats column would swallow every hover in it silently.
+    assert len(faces) == 26, 'expected both faces in all thirteen panels, found %d' % len(faces)
+    assert sum(1 for f in faces if 'pp-cal__face--off' in f) == 13, (
         'exactly one face per panel starts off, and it must be the peek'
     )
     assert not [f for f in faces if ' hidden' in f or 'hidden>' in f], (
@@ -1010,7 +1051,15 @@ def test_the_rim_normalises_its_dash_units():
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
     # FOUR CIRCLES PER CREST now: the twelve-segment rim's track and lit segment, plus the completion
     # arc's track and fill. Every one of them is normalised, which is what keeps the radii free to move.
-    assert body.count('pathLength="100"') == 48, 'four circles on each of twelve crests'
+    # SCOPED TO THE MONTH CRESTS, because the year crest's circle count is not fixed: it lights one rim
+    # segment per STRUCK month, so a page-wide total moves between 51 and 63 with the hunter's progress
+    # and would pin a figure that means nothing. Twelve crests x four circles is the invariant.
+    months_only = re.sub(r'<button[^>]*id="cal-tab-all".*?</button>', '', body, flags=re.S)
+    assert months_only.count('pathLength="100"') == 48, 'four circles on each of twelve crests'
+    # THE YEAR CREST'S OWN THREE, with no segment lit on an untouched run -- the track, the arc track and
+    # the arc. Its segments are asserted where they mean something, in the All-crest tests below.
+    year_crest = re.search(r'<button[^>]*id="cal-tab-all".*?</button>', body, flags=re.S).group(0)
+    assert year_crest.count('pathLength="100"') == 3, 'an untouched year lights no month segment'
 
 
 def test_every_crest_names_its_month_without_relying_on_colour():
@@ -1020,7 +1069,7 @@ def test_every_crest_names_its_month_without_relying_on_colour():
     crests = _section(body, 'pp-cal__crests', until='class="pp-cal__panel"')
     for name in ('January', 'February', 'December'):
         assert name in crests
-    assert crests.count('class="sr-only"') == 12
+    assert crests.count('class="sr-only"') == 13, 'every crest names itself, the overview included'
 
 
 def test_the_day_grid_is_a_real_list():
@@ -1039,7 +1088,8 @@ def test_every_tab_and_panel_point_at_each_other():
     controls = re.findall(r'id="cal-tab-(\w+)" aria-controls="([\w-]+)"', body)
     labelled = re.findall(r'id="(cal-month-[\w-]+)"\s+aria-labelledby="(cal-tab-[\w-]+)"', body)
 
-    assert len(controls) == 12 and len(labelled) == 12
+    assert len(controls) == 13 and len(labelled) == 13, 'twelve months and the year overview'
+    assert ('all', 'cal-month-all') in controls, 'the overview tab points at its own panel'
     for slug, panel_id in controls:
         assert panel_id == 'cal-month-%s' % slug
     for panel_id, tab_id in labelled:
@@ -1192,6 +1242,14 @@ def test_no_state_rule_touches_the_month_hue():
     block = _calendar_css()
     for line in block.splitlines():
         if '--cal-c:' not in line:
+            continue
+        # `.pp-cal__crest--all` IS NAMED, AND IT IS THE ONLY EXCEPTION. This guard exists because a
+        # STATE rule setting the hue is what erased a finished square's mark on `.pp-csq`, and the audit's
+        # point was that only an absence-across-every-rule form survives one more `:not()`. The overview
+        # crest is not a state: it is a thirteenth member of the IDENTITY set that deliberately carries no
+        # month, so it declares its own near-neutral silver instead of reading the table. Named here so a
+        # genuine state rule still cannot slip in beside it.
+        if '.pp-cal__crest--all' in line:
             continue
         assert 'data-month' in line or '--cal-c: var(--pp-text-mute)' in line, (
             'only a month hue or the fallback may set --cal-c, not a state: %s' % line.strip())
@@ -1532,13 +1590,18 @@ def test_the_month_figure_appears_in_both_places_it_belongs():
     body = _body(run)
 
     coins = _section(body, 'pp-cal__crests', until='class="pp-cal__panel"')
-    assert coins.count('class="pp-cal__sub"') == 12, 'one figure per coin'
+    assert coins.count('class="pp-cal__sub"') == 13, 'one figure per coin, the overview included'
     assert '<span class="pp-cal__sub">3/28</span>' in coins, (
         "February's coin reads its own progress")
 
     heads = re.findall(r'<p class="pp-cal__tally">([^<]*)</p>', body)
-    assert len(heads) == 12, 'one figure per month head'
-    assert heads[1].strip() == '3 / 28'
+    assert len(heads) == 13, 'one figure per panel head, the overview included'
+    # BY PANEL, NOT BY POSITION: the overview's head renders first, so `heads[1]` stopped being February
+    # the moment it arrived. Same correction as the crest above.
+    feb = _section(body, 'id="cal-month-feb"', until='</section>')
+    assert '<p class="pp-cal__tally">3 / 28</p>' in feb
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+    assert '<p class="pp-cal__tally">3 / 365</p>' in year, 'the overview reads the year, not a month'
 
     # THE SHARED CLASS AND ITS RULES ARE BOTH GONE, pinned together: a `.pp-cal__count` in the markup
     # with no reveal rule behind it rendered an empty figure on all twelve months, which is the defect
@@ -1712,8 +1775,8 @@ def test_each_crest_carries_its_months_completion_as_an_arc():
     assert by_month[1] == 0, 'an untouched month is zero'
 
     # TWO CIRCLES for the arc: a dim track so the ring reads as unfilled rather than absent, and the fill.
-    assert body.count('class="pp-cal__arc-track"') == 12
-    assert body.count('class="pp-cal__arc"') == 12
+    assert body.count('class="pp-cal__arc-track"') == 13, 'the overview gauges the year the same way'
+    assert body.count('class="pp-cal__arc"') == 13
 
 
 def test_an_empty_months_arc_paints_nothing():
@@ -1930,7 +1993,8 @@ def test_the_stats_column_lives_inside_its_own_month_panel():
     a second ordering to keep aligned, which is the class of thing `aria-controls` was introduced here to
     avoid."""
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    assert body.count('class="pp-cal__stats"') == 12, 'one per month, inside its panel'
+    assert body.count('class="pp-cal__stats"') == 13, (
+        'one per month plus the overview, each inside its own panel')
 
     march = _section(body, 'id="cal-month-mar"', until='</section>')
     assert 'pp-cal__stats' in march
@@ -2258,3 +2322,129 @@ def test_the_hue_never_becomes_small_text_over_the_dialog_wash():
         'the dialog paints %d hue layers under its text, not the two the composite was measured on'
         % wash.count('var(--cal-c')
     )
+
+
+# ── the All crest and its year overview ──────────────────────────────────────────────────────────
+
+def test_the_year_overview_draws_every_day_in_twelve_month_rows():
+    """OWNER, 2026-10-05: "a mini-version of the entire year at a glance". TWELVE ROWS OF UP TO 31, one
+    per month, columns aligned on day-of-month -- NOT the Hall of Fame hero's seven-by-53, whose own
+    comment says its rows "are NOT weekdays ... Seven is simply what makes 365 cells read as a block at
+    hero width".
+
+    THE RAGGED TAIL IS THE POINT OF THE SHAPE, and it is what a flat 365-cell strip cannot show: a row
+    stops where its month does, so February is visibly four cells shorter than January."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+
+    rows = re.findall(r'<div class="pp-cal__yrow" data-month="(\d+)">(.*?)</div>', year, re.S)
+    assert len(rows) == 12, 'the overview draws %d month rows' % len(rows)
+    assert [int(m) for m, _cells in rows] == list(range(1, 13)), 'the rows are out of month order'
+
+    per_row = [len(re.findall(r'class="pp-cal__ycell[ "]', cells)) for _m, cells in rows]
+    assert per_row == list(CALENDAR_MONTH_DAYS), (
+        'a row does not match its own month length: %s' % per_row)
+    assert sum(per_row) == 365
+
+    # EVERY ROW NAMES ITSELF, because a row of 31 identical squares is unreadable without its month --
+    # and the label is the only text in the matrix, 12px being this file's floor.
+    assert len(re.findall(r'class="pp-cal__ylabel"', year)) == 12
+    assert '<span class="pp-cal__ylabel">FEB</span>' in year
+
+
+def test_the_year_overviews_cells_are_never_controls():
+    """A MEASURED DECISION, not an omission. At the 1100px cap an overview cell is about 31px and at
+    375px about 9px -- under the 44px touch minimum this stylesheet defends for the day squares. A 9px
+    control opening the same dialog a 44px square opens one tab away is a worse affordance, not an extra
+    one, so the overview identifies a day through the pointer-only peek and the month tabs stay the only
+    way to open one.
+
+    AND THE MATRIX IS `aria-hidden` WITH AN `sr-only` SUMMARY BESIDE IT. 365 empty spans announce
+    nothing, and every fact in here is already reachable through the twelve month panels -- so this is a
+    duplicate VIEW of reachable content, not content without an accessible path."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+    year = _section(_body(run), 'id="cal-month-all"', until='</section>')
+
+    assert 'data-day-url=' not in year, 'an overview cell must not open the day modal'
+    assert '<button' not in year, 'nothing in the overview is a control'
+    assert '<div class="pp-cal__year" aria-hidden="true">' in year
+
+    # THE SUMMARY IS OUTSIDE THE HIDDEN SUBTREE, or it is hidden with it.
+    before = year[:year.index('<div class="pp-cal__year"')]
+    assert 'class="sr-only"' in before, 'the overview says nothing to a screen reader'
+    assert 'months complete' in before
+
+
+def test_the_year_crests_rim_lights_one_slot_per_finished_month():
+    """A DIAL OF THE YEAR, not a thirteenth "which month" mark. A month crest lights ONE of twelve rim
+    slots to say which month it is; this one lights a slot per STRUCK month on the same `--seg`
+    mechanism, so the coin reports the year at a glance and cannot be read as a month's own crest.
+
+    UNLIT SLOTS ARE THE TRACK SHOWING THROUGH, so a year with nothing struck draws a bare rim rather
+    than needing a special case -- which is also why this counts segments rather than asserting a
+    fixed circle total."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month__in=(2, 5)).update(in_all=True, in_clean=True)
+    crest = re.search(r'<button[^>]*id="cal-tab-all".*?</button>',
+                      _body(run), flags=re.S).group(0)
+
+    segs = re.findall(r'class="pp-cal__rim-seg"[^>]*style="--seg: (\d+);"', crest)
+    assert [int(x) for x in segs] == [1, 4], (
+        'the rim lights the wrong slots for February and May: %s' % segs)
+
+    # THE GAUGE READS THE YEAR, not a month: 59 of 365 days for February plus May.
+    assert 'style="--pct: 16;"' in crest, 'the year gauge does not match the days filled'
+    assert '<span class="pp-cal__sub">59/365</span>' in crest
+
+
+def test_the_overview_crest_wears_no_months_hue():
+    """TWELVE HUES EACH MEAN ONE SPECIFIC MONTH. A thirteenth coin reading the table would either steal
+    one of those meanings or add a second colour axis to an object already carrying two -- which this
+    stylesheet records as the way generated crests turn muddy.
+
+    SO THE CREST CARRIES NO `data-month` AND DECLARES ITS OWN NEAR-NEUTRAL SILVER. Not the brand cyan,
+    which is already every coin's completion arc: a cyan rim over a cyan arc loses the distinction the
+    two rings exist to make.
+
+    THE ROWS INSIDE ITS PANEL DO WEAR THEIR HUES, and that is the opposite half of the same decision --
+    it is what makes twelve rows read as twelve months rather than one 365-cell texture."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    crest = re.search(r'<button[^>]*id="cal-tab-all".*?</button>', body, flags=re.S).group(0)
+    assert 'data-month=' not in crest, 'the overview crest claims a month it is not'
+
+    css = _calendar_css()
+    rule = _css_rule(css, '.pp-cal__crest--all {')
+    assert '--cal-c: oklch(' in rule, 'the overview crest falls back to the unearned grey'
+    assert 'var(--pp-primary)' not in rule, 'the overview crest collides with its own gauge colour'
+
+    # A NEAR-NEUTRAL, measured against the twelve: its chroma must be far below any month's.
+    chroma = float(re.search(r'--cal-c: oklch\([\d.]+ ([\d.]+)', rule).group(1))
+    months = [float(c) for _l, c, _h in
+              re.findall(r'data-month="\d+"\]\s*\{\s*--cal-c: oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)', css)]
+    assert len(months) == 12
+    assert chroma < min(months) / 2, (
+        'the overview crest is saturated enough to read as a month: %s against %s' % (chroma, min(months)))
+
+    # AND THE PANEL'S ROWS READ THE TABLE, through the descendant selector it is keyed on.
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+    assert 'data-month="7"' in year, 'the overview rows do not carry their months'
+    cell = _css_rule(css, '.pp-cal__ycell--on {')
+    assert 'var(--cal-c' in cell, 'a filled overview cell does not wear its row\'s month'
+
+
+def test_the_overview_reports_the_year_rather_than_a_month():
+    """ITS STATS COLUMN EXISTS FOR TWO REASONS and only one of them is the figures: `wireDayPeek`
+    resolves the peek faces through `cell.closest('.pp-cal__panel')`, so a panel without one would
+    swallow every hover in it silently. The resting face therefore has to say something, and the year's
+    own figures are what a month panel's equivalent cannot."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month=2).update(in_all=True, in_clean=True)
+    year = _section(_body(run), 'id="cal-month-all"', until='</section>')
+
+    assert '<h4 class="pp-cal__stats-head">The year</h4>' in year
+    assert 'Months complete' in year and '>1</span> of 12' in year
+    assert 'Still open' in year and '>337</span> day' in year, 'the open figure is not 365 minus 28'
+    # BOTH HOOKS, because the script finds the faces by these attributes and a missing one means a
+    # hover in this panel changes nothing at all.
+    assert 'data-cal-peek' in year and 'data-cal-facts' in year
