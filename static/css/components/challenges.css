@@ -3501,6 +3501,50 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 @media (min-width: 768px) { .pp-cal__day { font-size: 0.8125rem; } }
 
+/* ── AN OPENABLE SQUARE ───────────────────────────────────────────────────────────────────────────────
+   The same cell as a `<button>`. Only squares holding a platinum get one -- the owner's call, and
+   `card.counts` (`in_all`) is the predicate -- so the other three hundred stay plain `div`s with no
+   role, no tab stop and no cursor. An affordance that does nothing is worse than none.
+
+   THE RESET IS NOT COSMETIC TIDYING. A `<button>` arrives with the UA's font, padding, border and
+   `background: buttonface`, and `.pp-cal__day` above was written for a `div`, so without these three
+   lines an openable square renders in the platform's button font at the platform's size -- which is also
+   how a 44px cell stops being 44px. `font: inherit` is what carries `--cal-gap`'s measured arithmetic
+   through.
+
+   `text-align` AND `appearance` TOO, because the cell is `display: grid` with `place-items: center` and
+   Safari still applies its own centring and chrome on top of a grid button. */
+.pp-cal__day--open {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    text-align: center;
+    padding: 0;
+    cursor: pointer;
+}
+
+/* THE HOVER IS A GLOW, NOT A SCALE, per the design system: a square that grows on hover shifts the whole
+   grid's optical rhythm, and on a 10-column block the neighbours visibly flinch. `box-shadow` and
+   `border-color` only, and both are already in the cell's `transition` list above.
+   `@media (hover: hover)` SO A TOUCH TAP DOES NOT STICK IT. Without the guard, tapping a square on a
+   phone leaves the hover state painted until something else is touched, which reads as a selected
+   square that is not selected. */
+@media (hover: hover) {
+    .pp-cal__day--open:hover {
+        border-color: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 70%, var(--pp-border));
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 35%, transparent);
+    }
+}
+
+/* THE FOCUS RING IS THE SAME OBJECT AS THE HOVER, offset so it reads outside the cell rather than
+   shaving its border. The grid's gap is 3px at mobile, so a 2px ring at 1px offset is the most that fits
+   without two adjacent rings touching -- which is why this is measured rather than copied from a roomier
+   surface. */
+.pp-cal__day--open:focus-visible {
+    outline: 2px solid var(--cal-c, var(--pp-primary));
+    outline-offset: 1px;
+}
+
 /* A FILLED DAY TAKES ITS MONTH'S COLOUR, which is the other half of the owner's cohesion note: the
    panel inherits `--cal-c` from its own `data-month`, so switching month repaints the squares as well as
    the head and the coin.

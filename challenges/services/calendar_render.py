@@ -179,6 +179,16 @@ def _cell(month, day, row):
         # ONE BOOLEAN. This was `views`, a `{lens: bool}` dict so all three lenses could sit in the DOM
         # and CSS could reveal the active one. One lens needs one answer.
         'filled': _is_filled(row),
+        # WHETHER THIS SQUARE OPENS, and it is `in_all` rather than `filled` -- the owner's call
+        # (2026-10-04): "the clickable squares should be the completed days", and then, on what an
+        # incomplete day would show, the useful answer turned out to be the one square that HAS an
+        # answer. A day in `all` and not `clean` holds a real platinum on a flagged game, so it can
+        # explain why it is still open; a day with nothing has nothing to say and is inert.
+        #
+        # ONE ALREADY-STORED BOOLEAN, which reads exactly as "the hunter platinumed something on this
+        # date". `in_clean` implies `in_all`, so every drawing square is included by construction and
+        # the affordance never has to be two predicates kept in step.
+        'counts': bool(row and row.in_all),
         'earned_on': row.earned_on if row else None,
         # HOW MANY PLATINUMS SIT ON THIS SQUARE, for the month's "busiest day" and, when the day modal
         # lands, for the hover summary that reads it straight off the cell rather than fetching.

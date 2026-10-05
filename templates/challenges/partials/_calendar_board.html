@@ -168,12 +168,32 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
             the twelfth on the same capped delay, so eleven months had no cascade and -- because
             un-hiding an element restarts its animations -- a switched-to panel arrived blank and then
             popped all 31 squares at once.{% endcomment %}
+            {% comment %}A BUTTON ONLY WHERE THERE IS SOMETHING TO OPEN, and a plain `div` otherwise.
+            The alternative -- one `<button disabled>` for all 365 -- would be a single element and the
+            wrong semantics: an empty square is not a temporarily-unavailable control, it is not a
+            control. A disabled button also still carries the role, so a screen reader would announce
+            three hundred of them.
+
+            THE TWO BRANCHES MUST STAY IN STEP, which is the hazard of duplicating an element: both
+            carry `--rev` (the per-month entrance cascade) and both carry the same screen-reader label.
+            `test_both_day_cell_branches_carry_the_same_state` pins that, because the failure mode is a
+            cascade or a label silently existing on only one kind of square.{% endcomment %}
             <li>
+                {% if card.counts %}
+                <button type="button"
+                        class="pp-cal__day pp-cal__day--open{% if card.filled %} pp-cal__day--on{% endif %}"
+                        style="--rev: {{ forloop.counter0 }};"
+                        data-day-url="{% url 'challenge_calendar_day' challenge.id card.month card.day %}">
+                    <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
+                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}. Open.</span>
+                </button>
+                {% else %}
                 <div class="pp-cal__day{% if card.filled %} pp-cal__day--on{% endif %}"
                      style="--rev: {{ forloop.counter0 }};">
                     <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
                     <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}.</span>
                 </div>
+                {% endif %}
             </li>
             {% endfor %}
         </ul>
@@ -281,4 +301,25 @@ separate slice; until it lands a day is not interactive, so it is a `<div>` and 
         </div>
     </section>
     {% endfor %}
+</div>
+
+{% comment %}THE DAY SHEET, one per board and not one per square: 365 shells would be 365 dialogs in the
+accessibility tree. The body is REPLACED on each open, which is the requirement `_calendar_day.html`
+states -- two copies would put two `id="cal-day-title"` in the document and `aria-labelledby` resolves to
+the first, so the dialog would announce the square the reader had just left.
+
+`.pp-detail-modal` IS THE HOUSE SHELL, already used by badge detail, game detail and the landing. Its
+scrim, dialog, close button and entrance animation all come with it; nothing here is new chrome.
+
+`aria-labelledby` POINTS INTO THE FETCHED FRAGMENT, which is why the fragment carries that id at all. It
+is empty until the first open, so the dialog also keeps an `aria-label` as the fallback a screen reader
+gets if a fetch fails and the body stays empty.{% endcomment %}
+<div class="pp-detail-modal" id="cal-day-modal" hidden>
+    <div class="pp-detail-modal__scrim" data-day-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true"
+         aria-label="Day detail" aria-labelledby="cal-day-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-day-close
+                aria-label="Close day detail">&times;</button>
+        <div class="pp-detail-modal__body" data-day-body></div>
+    </div>
 </div>

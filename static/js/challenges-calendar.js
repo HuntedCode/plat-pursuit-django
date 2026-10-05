@@ -100,5 +100,95 @@
         });
     }
 
-    if (PP.onPageReady) { PP.onPageReady(boot); } else { document.addEventListener('DOMContentLoaded', boot); }
+    // ── the day sheet ────────────────────────────────────────────────────────────────────────────────
+    //
+    // A square with a platinum on it opens a list of them. Three shared primitives do the work and this
+    // file supplies only the glue:
+    //
+    //   `.pp-detail-modal`     the shell, already used by badge detail, game detail and the landing
+    //   `PP.takeover`          scroll lock, page-recede, focus capture AND RESTORE, Tab trap, Escape
+    //   `PP.dismissableSheet`  the touch drag-to-dismiss, which `takeover` does not cover
+    //
+    // DELIBERATELY NOT A FOURTH HAND-ROLL. `game-detail.js` and `badge-detail.js` both fetch a fragment
+    // into this same shell and both hand-roll their own focus trap; the first one's comment calls itself
+    // a "refactor candidate: hoist this + badge-detail's copy into a shared PlatPursuit util". The util
+    // it wanted is `takeover`, whose docstring says it exists "because three surfaces now do it and
+    // every one re-implemented the accessibility parts slightly differently". Hoisting those two is a
+    // `refactor/` branch; this one just declines to add to the pile.
+    function wireDaySheet(first) {
+        var modal = document.getElementById('cal-day-modal');
+        var body = modal && modal.querySelector('[data-day-body]');
+        var dialog = modal && modal.querySelector('.pp-detail-modal__dialog');
+        if (!modal || !body || !dialog) { return; }
+
+        var session = null;      // the live `takeover` handle, or null when closed
+        var pending = null;      // the in-flight request's url, so a stale response cannot win
+
+        function close() {
+            if (session) { var s = session; session = null; s.close(); }
+        }
+
+        function finish() {
+            // THE BODY IS EMPTIED ON CLOSE, which is what keeps the fragment's one requirement true:
+            // the next open REPLACES rather than appends, so `id="cal-day-title"` is never duplicated.
+            body.innerHTML = '';
+            modal.hidden = true;
+            session = null;
+        }
+
+        function open(html, opener) {
+            body.innerHTML = html;          // replace, never append
+            modal.hidden = false;
+            // `takeover` captures the active element itself and restores it on close, so the opener does
+            // not have to be tracked here -- it is passed only as the thing to focus FIRST, because the
+            // dialog's own close button is a poor landing spot for a reader who just asked a question.
+            session = PP.takeover(dialog, {
+                focusSel: '.pp-cday__date',
+                onClose: finish,
+            });
+            if (opener && !session) { opener.focus(); }
+        }
+
+        // `first` GUARDS THE BODY LISTENER, per `onPageReady`'s contract: element wiring re-runs on an
+        // HTMX history restore and `document.body` survives it, so an unguarded delegate would bind
+        // twice and fetch twice per click.
+        if (first) {
+            document.body.addEventListener('click', function (e) {
+                if (!e.target.closest) { return; }
+
+                if (e.target.closest('[data-day-close]')) { close(); return; }
+
+                var cell = e.target.closest('[data-day-url]');
+                if (!cell) { return; }
+                var url = cell.getAttribute('data-day-url');
+                pending = url;
+                fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+                    // `r.ok` FIRST, AND THE FRAGMENT'S DOCSTRING ASKS FOR THIS BY NAME. A hidden run and
+                    // a missing square both answer 404, and this project installs a GET-only
+                    // `handler404` -- so without the check the 404 PAGE would be injected into the sheet.
+                    .then(function (r) { return r.ok ? r.text() : null; })
+                    .then(function (html) {
+                        // A SECOND CLICK WINS. Squares are small and close together, so two in quick
+                        // succession is ordinary; without this the slower response could land after the
+                        // faster one and the sheet would show the wrong day.
+                        if (pending !== url) { return; }
+                        if (html === null) { return; }
+                        open(html, cell);
+                    })
+                    .catch(function () { /* offline or aborted: leave the board alone */ });
+            });
+        }
+
+        // THE DRAG GESTURE IS WIRED ONCE PER DIALOG ELEMENT, not per open: `dismissableSheet` adds
+        // listeners to the element it is given, and the element outlives every open.
+        if (PP.dismissableSheet) {
+            PP.dismissableSheet(dialog, {
+                scrim: modal.querySelector('.pp-detail-modal__scrim'),
+                onClose: close,
+            });
+        }
+    }
+
+    if (PP.onPageReady) { PP.onPageReady(function (first) { boot(); wireDaySheet(first); }); }
+    else { document.addEventListener('DOMContentLoaded', function () { boot(); wireDaySheet(true); }); }
 }());

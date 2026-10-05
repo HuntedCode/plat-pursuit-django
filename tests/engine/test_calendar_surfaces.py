@@ -310,12 +310,79 @@ def test_a_filled_day_carries_a_modifier_and_an_empty_one_does_not():
     `data-all`/`data-clean`/`data-contracts` so `:has()` could decide which painted."""
     run = _run(CHALLENGE_TYPE_CALENDAR)
     _fill(run, 1, 2)
-    days = re.findall(r'<div class="(pp-cal__day[^"]*)"', _body(run))
+    body = _body(run)
+    # MATCHED ON THE CLASS, NOT ON `<div`. A square that holds a platinum renders as a `<button>` now,
+    # so an element-anchored pattern silently stopped counting exactly the squares this test is about --
+    # it read 364 of 365 and the missing one was the filled day.
+    days = re.findall(r'class="(pp-cal__day[^"]*)"', body)
 
     assert len(days) == 365
-    assert days[0] == 'pp-cal__day', 'January 1 is unfilled'
-    assert days[1] == 'pp-cal__day pp-cal__day--on'
-    assert 'data-all' not in _body(run) and 'data-clean' not in _body(run)
+    assert days[0] == 'pp-cal__day', 'January 1 is unfilled, so it is not a control'
+    assert days[1] == 'pp-cal__day pp-cal__day--open pp-cal__day--on'
+    assert 'data-all' not in body and 'data-clean' not in body
+
+
+def test_only_a_square_holding_a_platinum_is_a_control():
+    """THE OWNER'S PREDICATE (2026-10-04): "the clickable squares should be the completed days", and then,
+    on what an incomplete day would show, the useful answer was the one square that HAS an answer. So the
+    rule is `in_all` -- "the hunter platinumed something on this date" -- which takes in every drawing
+    square plus the shovelware-only ones that can explain why they are still open.
+
+    A DAY WITH NOTHING IS NOT A CONTROL AT ALL: no button, no role, no tab stop. One `<button disabled>`
+    for all 365 would have been a single element and the wrong semantics, and a screen reader would
+    announce three hundred dimmed controls."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 4, 4)                                     # draws, and counts
+    CalendarDay.objects.filter(challenge=run, month=4, day=5).update(
+        in_all=True, in_clean=False, earned_on=dt.date(2019, 4, 5), plat_count=1)
+
+    body = _body(run)
+    openable = re.findall(r'data-day-url="([^"]*)"', body)
+
+    assert len(openable) == 2, 'exactly the two squares holding a platinum'
+    assert openable[0].endswith('/day/4/4/') and openable[1].endswith('/day/4/5/')
+    assert 'pp-cal__day--open' in body
+
+    april = _section(body, 'id="cal-month-apr"', until='</section>')
+    assert april.count('<button type="button"') == 2, 'no other square became a control'
+
+
+def test_both_day_cell_branches_carry_the_same_state():
+    """THE HAZARD OF DUPLICATING AN ELEMENT, and the reason the template says so out loud. The openable
+    square and the inert one are two separate blocks of markup, so anything added to one can silently
+    exist on only one kind of square -- and this project has already shipped "a hook on ONE template
+    branch is dead for the other" once.
+
+    TWO THINGS MUST MATCH: `--rev`, which is the per-month entrance cascade (missing on a branch, those
+    squares arrive without one), and the screen-reader label, which is the ONLY text on a cell whose
+    numeral is `aria-hidden`."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 6, 1)
+    body = _body(run)
+    june = _section(body, 'id="cal-month-jun"', until='</section>')
+
+    # Every cell, whichever element it is, carries its cascade index.
+    assert june.count('--rev:') == 30, 'a branch is missing the entrance cascade'
+    # And its spelled-out date. `_cell`'s label is "<Month> <day>", so "June 1" rather than "1 June" --
+    # worth stating, because the fragment's own dates read "j F" and the two orders sit a screen apart.
+    # The openable square adds "Open." and is otherwise identical to the inert one.
+    assert 'June 1: filled. Open.' in june, 'the control must say what it does'
+    assert 'June 2.' in june, 'an inert square still names itself'
+
+
+def test_the_day_sheet_is_one_shell_for_the_whole_board():
+    """ONE SHELL, NOT ONE PER SQUARE: 365 would be 365 dialogs in the accessibility tree. It ships empty
+    and the script fills it, which is also what keeps `id="cal-day-title"` unique -- the fragment carries
+    that id, so a second copy in the document would make `aria-labelledby` resolve to the wrong one."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+
+    assert body.count('id="cal-day-modal"') == 1
+    assert body.count('data-day-body') == 1
+    assert '<div class="pp-detail-modal__body" data-day-body></div>' in body, (
+        'the shell must ship EMPTY -- anything rendered into it server-side would be a second title id')
+    # THE FALLBACK LABEL MATTERS because `aria-labelledby` points into a body that is empty until the
+    # first open, and a failed fetch leaves it empty.
+    assert 'aria-label="Day detail"' in body and 'aria-labelledby="cal-day-title"' in body
 
 
 def test_a_shovelware_platinum_draws_no_square():
@@ -405,6 +472,60 @@ def _script_code():
 
 def _script():
     return open('static/js/challenges-calendar.js', encoding='utf-8').read()
+
+
+def test_the_day_sheet_uses_the_shared_primitives_rather_than_a_fourth_hand_roll():
+    """TWO SURFACES ALREADY FETCH A FRAGMENT INTO `.pp-detail-modal` AND BOTH HAND-ROLL A FOCUS TRAP --
+    `game-detail.js`'s own comment calls itself a "refactor candidate: hoist this + badge-detail's copy
+    into a shared PlatPursuit util". The util they wanted is `takeover`, whose docstring says it exists
+    "because three surfaces now do it and every one re-implemented the accessibility parts slightly
+    differently". This asserts the Calendar did not become the fourth copy.
+
+    `aria-modal` ALONE DOES NOT TRAP TAB, which is the reason it matters: without the trap a keyboard
+    reader tabs straight out of the dialog into the board behind the scrim."""
+    js = _script_code()
+
+    assert 'PP.takeover(' in js, 'the a11y half must come from the shared primitive'
+    assert 'PP.dismissableSheet(' in js, 'and the touch drag from the other one'
+    # The hand-rolled shapes the two older call sites carry.
+    assert 'keydown' not in js, 'a hand-rolled Tab trap is back'
+    assert 'activeElement' not in js, 'a hand-rolled focus restore is back'
+
+
+def test_the_day_fetch_checks_the_response_before_injecting_it():
+    """THE FRAGMENT ASKS FOR THIS BY NAME. A hidden run and a missing square both answer 404, and this
+    project installs a GET-only `handler404` -- so an unchecked `.text()` would inject the whole 404
+    PAGE into the sheet."""
+    js = _script_code()
+    assert 'r.ok ? r.text() : null' in js
+
+
+def test_the_day_sheet_replaces_its_body_and_empties_it_on_close():
+    """THE ONE REQUIREMENT `_calendar_day.html` STATES. The fragment carries `id="cal-day-title"` and the
+    dialog's `aria-labelledby` points at it, so two copies in the document would make the dialog announce
+    the square the reader had just left. Replacing on open and emptying on close both keep it unique."""
+    js = _script_code()
+    assert "body.innerHTML = html" in js, 'it must replace, not append'
+    assert "body.innerHTML = ''" in js, 'and empty on close'
+    assert 'insertAdjacentHTML' not in js and 'appendChild(' not in js
+
+
+def test_the_day_sheets_body_listener_binds_once():
+    """`onPageReady`'s CONTRACT. Element wiring re-runs on an HTMX history restore and `document.body`
+    survives it, so an unguarded delegate binds twice and every click fetches twice."""
+    js = _script_code()
+    at = js.index('wireDaySheet')
+    assert 'if (first) {' in js[at:], 'the body listener is not guarded by `first`'
+
+
+def test_a_second_day_click_wins_over_a_slower_first():
+    """SQUARES ARE SMALL AND ADJACENT, so two clicks in quick succession is ordinary rather than
+    pathological -- and without a guard the slower response can land after the faster one and the sheet
+    shows the wrong day. Guarded on the url rather than a boolean, so it survives a repeat click on the
+    same square."""
+    js = _script_code()
+    assert 'pending = url' in js
+    assert 'if (pending !== url) { return; }' in js
 
 
 def test_the_script_leaves_immediately_when_there_is_no_board():
