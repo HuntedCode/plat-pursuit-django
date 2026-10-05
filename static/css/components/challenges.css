@@ -3069,19 +3069,37 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    SOME ANGLES OVERLAP THE DISCIPLINE PALETTE (`--disc-*` owns 0, 25, 75, 155, 285) and that is
    accepted rather than overlooked: disciplines appear on job chips and shelf heads, months only on
    Calendar surfaces, so the two never share one. Worth knowing before a third system wants a hue.
+
+   TWO SELECTORS, ONE TABLE. The day sheet renders in `fixed_overlays` -- outside `.pp-cal`, because
+   `takeover` scales `#page-recede` and a fixed overlay inside a transformed ancestor resolves against
+   THAT ancestor -- so it cannot inherit `--cal-c` by descent the way a month panel does. It is listed
+   beside the board on each rule rather than given a copy of the table, because twelve hues maintained
+   in two places is twelve chances for a month to disagree with itself across a click.
    ── */
-.pp-cal [data-month="1"]  { --cal-c: oklch(0.74 0.13 255); }   /* January   -- deep winter blue */
-.pp-cal [data-month="2"]  { --cal-c: oklch(0.72 0.14 290); }   /* February  -- late-winter violet */
-.pp-cal [data-month="3"]  { --cal-c: oklch(0.80 0.14 150); }   /* March     -- first green */
-.pp-cal [data-month="4"]  { --cal-c: oklch(0.84 0.15 128); }   /* April     -- spring */
-.pp-cal [data-month="5"]  { --cal-c: oklch(0.86 0.16 105); }   /* May       -- lime */
-.pp-cal [data-month="6"]  { --cal-c: oklch(0.88 0.15 88); }    /* June      -- high sun */
-.pp-cal [data-month="7"]  { --cal-c: oklch(0.84 0.16 70); }    /* July      -- gold */
-.pp-cal [data-month="8"]  { --cal-c: oklch(0.78 0.17 52); }    /* August    -- amber */
-.pp-cal [data-month="9"]  { --cal-c: oklch(0.72 0.17 35); }    /* September -- russet */
-.pp-cal [data-month="10"] { --cal-c: oklch(0.68 0.18 18); }    /* October   -- autumn red */
-.pp-cal [data-month="11"] { --cal-c: oklch(0.66 0.15 345); }   /* November  -- berry */
-.pp-cal [data-month="12"] { --cal-c: oklch(0.90 0.045 235); }  /* December  -- frost, near-white */
+.pp-cal [data-month="1"],
+.pp-cday[data-month="1"]  { --cal-c: oklch(0.74 0.13 255); }   /* January   -- deep winter blue */
+.pp-cal [data-month="2"],
+.pp-cday[data-month="2"]  { --cal-c: oklch(0.72 0.14 290); }   /* February  -- late-winter violet */
+.pp-cal [data-month="3"],
+.pp-cday[data-month="3"]  { --cal-c: oklch(0.80 0.14 150); }   /* March     -- first green */
+.pp-cal [data-month="4"],
+.pp-cday[data-month="4"]  { --cal-c: oklch(0.84 0.15 128); }   /* April     -- spring */
+.pp-cal [data-month="5"],
+.pp-cday[data-month="5"]  { --cal-c: oklch(0.86 0.16 105); }   /* May       -- lime */
+.pp-cal [data-month="6"],
+.pp-cday[data-month="6"]  { --cal-c: oklch(0.88 0.15 88); }    /* June      -- high sun */
+.pp-cal [data-month="7"],
+.pp-cday[data-month="7"]  { --cal-c: oklch(0.84 0.16 70); }    /* July      -- gold */
+.pp-cal [data-month="8"],
+.pp-cday[data-month="8"]  { --cal-c: oklch(0.78 0.17 52); }    /* August    -- amber */
+.pp-cal [data-month="9"],
+.pp-cday[data-month="9"]  { --cal-c: oklch(0.72 0.17 35); }    /* September -- russet */
+.pp-cal [data-month="10"],
+.pp-cday[data-month="10"] { --cal-c: oklch(0.68 0.18 18); }    /* October   -- autumn red */
+.pp-cal [data-month="11"],
+.pp-cday[data-month="11"] { --cal-c: oklch(0.66 0.15 345); }   /* November  -- berry */
+.pp-cal [data-month="12"],
+.pp-cday[data-month="12"] { --cal-c: oklch(0.90 0.045 235); }  /* December  -- frost, near-white */
 
 .pp-cal__crest {
     flex: 0 0 auto;
@@ -3596,104 +3614,162 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cal__num { line-height: 1; }
 
 
-/* ── one square, opened: the day fragment ─────────────────────────────────────────────────────────────
+/* ── one square, opened: the day sheet ────────────────────────────────────────────────────────────────
    `templates/challenges/partials/_calendar_day.html`, fetched when a square is clicked and dropped into
-   the board's sheet. The sheet owns the dialog chrome, so this styles CONTENTS only.
+   the `.pp-detail-modal` shell. The shell owns the dialog chrome, so this styles CONTENTS only.
 
-   NO SURFACE OF ITS OWN. It lands inside a sheet that already has one, and a card inside a card is the
-   stacking this project's "content does not sit bare" rule is usually invoked against -- the rule asks
-   for a surface under content, not for one per nesting level. The ROWS get the surface instead, which
-   is what makes a list of games read as a list rather than as text.
+   A SHELF OF OBJECTS, NOT A TABLE OF ROWS (owner, 2026-10-05: "very bland and doesn't really give that
+   pop"). The first version was a list: 38px thumbnails beside a title, which is the shape you reach for
+   when the content is data. These are PLATINUMS -- the hardest thing a hunter does -- and the house's
+   central idiom is badge-as-trading-card, so they get presented as objects with their year struck
+   underneath. It is also the argument for the modal existing: the board carries no art precisely so
+   that a day can.
 
-   SMALL ART, WHICH IS THE WHOLE REASON A DAY IS A MODAL. The board carries no cover art at all: 365
-   cells at ~20px is unreadable, and a Hall of Fame page would be thousands of images. A day holds a
-   handful, lazily, only once somebody asks -- so 38px is deliberate restraint rather than a limitation.
+   AND IT TAKES THE MONTH'S COLOUR. The board is twelve hues and this sheet was the one grey surface in
+   the feature. `--cal-c` arrives via `data-month` on the fragment root (see the hue table above).
+
+   NO SURFACE OF ITS OWN. It lands inside a dialog that already has one, and a card inside a card is the
+   stacking the "content does not sit bare" rule is usually invoked against. The CARDS carry the
+   surfaces, which is what makes a shelf read as a shelf.
    ── */
-.pp-cday { display: flex; flex-direction: column; gap: 12px; }
+.pp-cday { display: flex; flex-direction: column; gap: 16px; }
 
+/* THE DATE IS THE MASTHEAD, in the month's hue and the largest thing in the dialog. It was 1.0625rem of
+   `--pp-text` sharing a line with a dim tally -- a heading that apologised for itself. */
 .pp-cday__head {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--pp-border);
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-bottom: 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--cal-c, var(--pp-primary)) 28%, var(--pp-border));
 }
 .pp-cday__date {
-    font-size: 1.0625rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    color: var(--pp-text);
-    line-height: 1.2;
+    font-size: 1.375rem;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    line-height: 1.1;
+    color: var(--cal-c, var(--pp-text));
 }
-@media (min-width: 768px) { .pp-cday__date { font-size: 1.25rem; } }
-.pp-cday__tally { font-size: 0.8125rem; color: var(--pp-text-dim); white-space: nowrap; }
-
-.pp-cday__list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
-
-/* THE YEAR LEADS, because a square has no year of its own -- "3 March" means every 3 March in the
-   hunter's history, so the year is the one thing a row carries that the heading cannot. Fixed column so
-   the years line up as a column of figures rather than drifting with each title's length. */
-.pp-cday__row {
-    display: grid;
-    grid-template-columns: 2.75rem 38px minmax(0, 1fr);
-    align-items: center;
-    gap: 10px;
-    padding: 6px 8px;
-    border-radius: var(--pp-radius-md);
-    border: 1px solid var(--pp-border);
-    background: var(--pp-bg-1);
-}
-.pp-cday__year {
-    font-size: 0.875rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    color: var(--pp-primary);
-    line-height: 1;
-}
-.pp-cday__art {
-    display: block;
-    width: 38px;
-    aspect-ratio: 3 / 4;
+/* THE HEADING IS A FOCUS TARGET (`tabindex="-1"`), so it gets a ring like any other -- without this the
+   first thing a keyboard reader lands on shows nothing at all. Offset inward, since the masthead sits
+   tight against the dialog's padding. */
+.pp-cday__date:focus-visible {
+    outline: 2px solid var(--cal-c, var(--pp-primary));
+    outline-offset: 3px;
     border-radius: var(--pp-radius-sm);
+}
+@media (min-width: 768px) { .pp-cday__date { font-size: 1.625rem; } }
+.pp-cday__tally { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.pp-cday__tally .pp-tally { font-size: 1.125rem; color: var(--cal-c, var(--pp-text)); }
+.pp-cday__unit { font-size: 0.8125rem; color: var(--pp-text-dim); }
+
+/* THE SHELF WRAPS RATHER THAN SCROLLING SIDEWAYS. The dialog is `max-height: 88vh; overflow: auto`, so
+   wrapping gets vertical scrolling for free -- and a horizontal strip is awkward with a trackpad and
+   worse with a keyboard, where Tab walks focus off-screen past no visible affordance.
+   `112px` IS THE CARD, AND IT IS A FIXED TRACK rather than `1fr`: a day with one platinum should show
+   one card at its proper size, not one card stretched across 660px of dialog. */
+.pp-cday__shelf {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 112px);
+    gap: 18px 14px;
+    justify-content: start;
+    margin: 0;
+    padding: 0;
+}
+
+/* THE CARD. A cover, a struck year, a title -- in that order, because the cover is what a reader is
+   looking for and the year is what tells them which visit to this date they are looking at. */
+.pp-cday__card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    /* THE ENTRANCE, on the board's own cascade token. `--rev` is the card's index, so the shelf fills
+       left to right instead of appearing at once -- the same `staggerReveal`-shaped beat the day grid
+       uses, and the reason a sheet that opens feels like it arrived rather than blinked. */
+    animation: ppCdayIn 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--rev, 0) * 40ms);
+}
+@keyframes ppCdayIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+}
+/* NO STAGGER UNDER REDUCED MOTION, and no entrance at all: the cards are present, which is the whole
+   contract. `backwards` fill means skipping the animation must also skip the delay, or the first paint
+   is an empty shelf. */
+@media (prefers-reduced-motion: reduce) {
+    .pp-cday__card { animation: none; }
+}
+
+/* THE COVER IS THE OBJECT: a framed 3:4 plate with the month's edge on it. `aspect-ratio` plus a fixed
+   track means every card is the same size whatever its art, which is what makes a shelf line up. */
+.pp-cday__art {
+    position: relative;
+    display: block;
+    width: 112px;
+    aspect-ratio: 3 / 4;
+    border-radius: var(--pp-radius-md);
     overflow: hidden;
     background: var(--pp-bg-2);
+    border: 1px solid color-mix(in srgb, var(--cal-c, var(--pp-primary)) 32%, var(--pp-border));
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.38);
 }
-.pp-cday__name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-/* ONE LINE WITH AN ELLIPSIS. A 1fr column at 375px is about 150px and game titles run long, so the
-   alternative to truncating is a row whose height depends on its title. `min-width: 0` on the parent is
-   what lets a grid track actually shrink -- without it the track takes the text's min-content width and
-   the ellipsis never engages. */
+
+/* A FLAGGED PLATINUM IS VEILED AND DASHED, NOT GREYED. That is the Frame's unearned vocabulary and the
+   reason for it is in the identity doc: greyscale "reads 'disabled'", and this platinum is real -- it
+   simply does not count toward the square. Diagonal hatching says "excluded" without saying "broken".
+   NOT `opacity` ON THE CARD, which would take the title's contrast down with it and defeat a measured
+   ratio; the veil sits over the ART only. */
+.pp-cday__card--out .pp-cday__art {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--pp-text-mute) 55%, transparent);
+    box-shadow: none;
+}
+.pp-cday__veil {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        135deg,
+        rgb(5 8 16 / 0.62) 0 6px,
+        rgb(5 8 16 / 0.30) 6px 12px);
+}
+
+/* THE YEAR, STRUCK. `.bdh-earnrank`'s recipe: uppercase, tracked, tabular, with a one-pixel highlight
+   below so it reads as pressed into the shelf rather than printed on it. 12px is the file's floor and
+   this sits on it -- the badge version runs smaller, which this file's guard would refuse. */
+.pp-cday__year {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    font-variant-numeric: tabular-nums;
+    color: var(--cal-c, var(--pp-text-dim));
+    text-shadow: 0 1px 0 oklch(1 0 0 / 0.06);
+}
+
+/* TWO LINES AND THEN AN ELLIPSIS. A fixed 112px track means a long title would otherwise set the card's
+   height and break the shelf's rhythm; two lines is enough to tell most games apart.
+   `min-width: 0` ON THE CARD is what lets this shrink at all -- without it the flex item takes the
+   text's min-content width and the clamp never engages. */
 .pp-cday__title {
     font-size: 0.8125rem;
+    line-height: 1.3;
     color: var(--pp-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
-/* 12px, NOT SMALLER: the file-wide type guard refuses anything under it, which is the right answer here
-   rather than an exception to argue for -- this label is the only thing explaining why a real platinum
-   does not count toward the square. */
-.pp-cday__flag {
+
+.pp-cday__flag,
+.pp-cday__on {
     font-size: 12px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--pp-text-mute);
 }
-
-/* A FLAGGED ROW IS MARKED BY ITS BORDER AND ITS LABEL, NOT BY OPACITY. Dimming the row would take the
-   title's contrast down with it -- an opacity on a container defeats a measured ratio, and the label
-   that explains the exclusion is the one thing in the row that must stay readable. */
-.pp-cday__row--out { border-style: dashed; background: var(--pp-bg-0); }
-
-/* ONLY RENDERED WHERE IT DIFFERS from the square's own date, which is 28 February and nowhere else:
-   29 February folds onto that square, so its rows are the only ones whose day is not the heading's. On
-   every other square this would print the panel title once per row. */
-.pp-cday__on {
-    font-size: 12px;
-    color: var(--pp-text-mute);
-    font-variant-numeric: tabular-nums;
-}
+.pp-cday__on { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
 
 .pp-cday__empty { font-size: 0.8125rem; color: var(--pp-text-dim); margin: 0; }
 

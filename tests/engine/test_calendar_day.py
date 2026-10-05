@@ -197,7 +197,7 @@ def test_the_squares_tally_counts_the_rows_it_rendered():
 
     assert square.plat_count == 3, 'the stored column agrees on a fresh fill'
     assert 'pp-tally">3</span>' in body
-    # COUNTED ON `__year`, ONE PER ROW. `pp-cday__row` is a SUBSTRING of `pp-cday__row--out`, so a
+    # COUNTED ON `__year`, ONE PER ROW. `pp-cday__row` is a SUBSTRING of `pp-cday__card--out`, so a
     # flagged row counts twice -- the arithmetic happens to work on a clean-only fixture and would be
     # silently wrong on the first test that mixes lenses.
     assert body.count('pp-cday__year') == 3, 'and the list under it is the same length'
@@ -244,7 +244,7 @@ def test_a_shovelware_platinum_is_listed_and_marked():
 
     assert 'Flagged Game' in body
     assert 'shovelware' in body, 'the row must say why it does not count'
-    assert 'pp-cday__row--out' in body
+    assert 'pp-cday__card--out' in body
 
 
 def test_a_square_with_nothing_on_it_says_so_rather_than_rendering_an_empty_list():
