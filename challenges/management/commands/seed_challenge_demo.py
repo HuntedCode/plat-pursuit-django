@@ -100,6 +100,8 @@ from challenges.models import (
     Challenge,
     ChallengeSlot,
 )
+from django.utils import timezone
+
 from challenges.services import calendar_fill
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
@@ -194,6 +196,21 @@ CALENDAR_SHOVELWARE_ONLY = (3, 3)
 #: and a figure nobody can see on the dev board is a figure nobody reviews. One clear winner in a
 #: struck month, a tie in another (the panel must name the EARLIER day), and one in the part-filled
 #: month so the row is not only a property of finished months.
+#: HOW THE MONTH THE BOARD OPENS ON IS SEEDED. Every other seeded month is a fixed one -- February, May
+#: and September struck, July part-filled -- which was fine while the board always opened on January and
+#: a reviewer could see the designed content immediately. The board now opens on the CURRENT month
+#: (owner, 2026-10-05), so a fixed seed leaves whoever runs this looking at an empty panel, with the
+#: struck months and every stacked day a click away and no sign they exist.
+#:
+#: THE ONE THING HERE THAT FOLLOWS THE CLOCK, and deliberately narrow: it decides WHICH month gets this
+#: pattern, never what a day's date says. `_seeded_date` still pins the year, for the reason it records
+#: -- a date derived from `today` would quietly change what the board looks like from month to month.
+#:
+#: A SPREAD, NOT A BLOCK, so the month reads like a real history rather than a filled prefix: a little
+#: over a third of the days, with three stacks among them so the count badge is visible on arrival.
+CURRENT_MONTH_FILLED = (2, 5, 6, 9, 13, 16, 17, 20, 24, 27, 28)
+CURRENT_MONTH_STACKS = {5: 3, 16: 2, 27: 4}
+
 CALENDAR_BUSY = {
     (2, 14): 4,
     (5, 3): 3,
@@ -486,6 +503,19 @@ class Command(BaseCommand):
                 days[CALENDAR_VIEW_CLEAN][(CALENDAR_PARTIAL_MONTH, day)] = fill(
                     CALENDAR_PARTIAL_MONTH, day,
                     CALENDAR_BUSY.get((CALENDAR_PARTIAL_MONTH, day), 1))
+
+        # THE MONTH THE BOARD OPENS ON, so a seeded board shows something the moment it is opened.
+        # Skipped when it collides with a month that already has a designed shape -- a struck month is a
+        # better demonstration than this pattern, and overwriting it would cost the reviewer the
+        # completed-month state.
+        now_month = timezone.localtime().month
+        if now_month not in CALENDAR_STRUCK and now_month != CALENDAR_PARTIAL_MONTH:
+            for day in CURRENT_MONTH_FILLED:
+                if day > CALENDAR_MONTH_DAYS[now_month - 1]:
+                    continue
+                plats = CURRENT_MONTH_STACKS.get(day, 1)
+                for view in days:
+                    days[view][(now_month, day)] = fill(now_month, day, plats)
 
         # ONE DAY IN `all` AND NOT ON THE BOARD: a shovelware platinum. It is the only place a reader can
         # see what the comparison figure counts that the board does not draw.

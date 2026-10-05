@@ -27,8 +27,13 @@ from challenges.management.commands.seed_challenge_demo import (
     MIXED_CLAIMED,
     MIXED_FILLED,
 )
+from django.utils import timezone
+
+from challenges.management.commands.seed_challenge_demo import Command
 from challenges.models import (
     CALENDAR_MONTH_DAYS,
+    CALENDAR_VIEW_ALL,
+    CALENDAR_VIEW_CLEAN,
     CHALLENGE_TYPE_AZ,
     CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_JOBS,
@@ -92,6 +97,41 @@ def _demo_runs(profile):
 
 
 # ── it produces the states it advertises ─────────────────────────────────────────────────────────
+
+def test_the_seeded_board_is_not_empty_on_arrival():
+    """A SEEDED BOARD EXISTS TO BE LOOKED AT, and for one slice it opened onto nothing.
+
+    Every other seeded month is fixed -- February, May and September struck, July part-filled -- which
+    was fine while the board always opened on January. It opens on the CURRENT month now, so a reviewer
+    landed on an empty panel with the struck months and every stacked day a click away and no sign they
+    existed.
+
+    THE STACK IS PART OF THE POINT: the count badge only renders on a day holding two or more, so a
+    month seeded entirely with ones would demonstrate the feature by not showing it.
+    """
+    days = Command._calendar_days(False)
+    now_month = timezone.localtime().month
+    clean = days[CALENDAR_VIEW_CLEAN]
+
+    filled = [d for (m, d) in clean if m == now_month]
+    assert filled, 'the month the board opens on is empty, so a reviewer sees nothing'
+
+    stacked = [d for (m, d) in clean if m == now_month and clean[(m, d)].plats > 1]
+    assert stacked, 'no day in the opening month stacks, so no count badge is visible on arrival'
+
+
+def test_a_seeded_stack_never_hides_on_a_square_that_does_not_draw():
+    """THE BADGE READS `filled`, NOT `counts`, so a stack seeded onto a shovelware-only square would be
+    invisible -- and a reviewer checking the feature would reasonably conclude it was broken. The one
+    deliberately shovelware square carries six platinums precisely to prove that exclusion, and it must
+    stay the only stacked square the board does not draw."""
+    days = Command._calendar_days(False)
+    clean, every = days[CALENDAR_VIEW_CLEAN], days[CALENDAR_VIEW_ALL]
+
+    off_board = [key for key, fill in every.items() if key not in clean and fill.plats > 1]
+    assert off_board == [CALENDAR_SHOVELWARE_ONLY], (
+        'a stacked square the board does not draw: %s' % off_board)
+
 
 @override_settings(DEBUG=True)
 def test_it_seeds_a_finished_jobs_run_with_nothing_claimed(catalogue):
