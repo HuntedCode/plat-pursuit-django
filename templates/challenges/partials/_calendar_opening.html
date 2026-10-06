@@ -1,0 +1,84 @@
+{% comment %}THE PLAT CALENDAR'S OPENING CEREMONY: "here is where you stand", once per run.
+
+WHY IT EXISTS AT ALL. Every other challenge type starts empty and fills as a hunter plays. A Calendar run
+backfills their ENTIRE platinum history the moment it is created, so a veteran opens one already standing
+on two or three rungs of a five-rung ladder. Without a beat for that, the single most dramatic thing this
+feature does happens silently between a form POST and a redirect.
+
+PER RUN, NOT PER USER, which is why it is gated on `Challenge.opening_seen_at` rather than on a
+`CustomUser.ui_flags` key like every other one-shot on the site. A hunter can finish or hide a Calendar
+run and start another, and the second backfills again -- so this belongs to the run being opened.
+
+GATED SERVER-SIDE. `DetailModal` reads `data-auto` off this element, so the decision not to show it is
+made in the view; a script deciding would risk a flash of somebody else's progress. The view's gate is
+owner + not-yet-seen, and the owner part matters because a run page is public: "here is where YOU stand"
+shown to a visitor is a stranger's progress addressed in the second person.
+
+IT USES THE HOUSE MOLD AND THE HOUSE CONTROLLER. `.pp-detail-modal` is the shell the day sheet and the
+career explainer already wear, and `PlatPursuit.DetailModal` is the behaviour -- auto-open once, focus
+restore, Escape, and an `onDismiss` that records. Nothing here is a new primitive.
+
+IN `fixed_overlays`, for the reason the day modal records: `takeover` and the recede effect scale
+`#page-recede`, and a `position: fixed` element inside a transformed ancestor resolves against that
+ancestor rather than the viewport.{% endcomment %}
+{% comment %}NO BARE BLOCK CLASS. `.pp-calopen` would carry no rule of its own -- the element
+classes do the styling and the closing animation is keyed on the ID, joining the shared
+`#...is-closing` list in `series-list.css` -- and a class with no rule is what
+`test_every_class_reaches_the_compiled_bundle` exists to catch.{% endcomment %}
+<div class="pp-detail-modal" id="cal-opening"
+     {% comment %}THE URL RIDES THE MARKUP rather than being built in script: the script has no run id
+     and would have to be told one anyway, and a `{% url %}` here fails loudly at render time if the
+     route is renamed, where a hand-built path would 404 silently on dismissal.{% endcomment %}
+     data-seen-url="{% url 'challenge_opening_seen' challenge.id %}"
+     data-run="{{ challenge.id }}"
+     {% if show_calendar_opening %}data-auto{% endif %} hidden>
+    <div class="pp-detail-modal__scrim" data-calopen-close></div>
+    <div class="pp-detail-modal__dialog pp-calopen__dialog" role="dialog" aria-modal="true"
+         aria-labelledby="cal-opening-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-calopen-close
+                aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-calopen__body">
+            <p class="pp-calopen__kicker">Your calendar, backfilled</p>
+            <h2 class="pp-calopen__title" id="cal-opening-title">Here is where you stand</h2>
+
+            {% comment %}THE NUMBER FIRST, because it is the thing that just happened. `.pp-tally` is the
+            house headline-number primitive, the same one the board's month panels use.{% endcomment %}
+            <p class="pp-calopen__figure">
+                <span class="pp-tally">{{ calendar_totals.done }}</span>
+                <span class="pp-calopen__unit">of {{ challenge.total_slots }} days already filled</span>
+            </p>
+
+            {% if calendar_opening_title %}
+            {% comment %}READ FROM THE GRANTED ROW, not computed from the day count: a ladder position
+            derived from arithmetic would name a title the hunter may not hold, since the grant declines
+            to claim a name another system owns and logs instead.{% endcomment %}
+            <p class="pp-calopen__earned">
+                You already hold <strong>{{ calendar_opening_title }}</strong>.
+            </p>
+            {% endif %}
+
+            {% if calendar_rail.next %}
+            <p class="pp-calopen__next">
+                Next up: <strong>{{ calendar_rail.next }} days</strong>, which is
+                {{ calendar_rail.to_next }} more.
+            </p>
+            {% else %}
+            {% comment %}THE 365 CASE. Reaching it on the opening backfill needs roughly 2,153 platinums,
+            so almost nobody will ever see this line -- which is exactly why it must not be a blank space
+            where the next rung would be.{% endcomment %}
+            <p class="pp-calopen__next">Every day of the year is filled. There is no rung above this one.</p>
+            {% endif %}
+
+            <p class="pp-calopen__lede">
+                A day is filled by a platinum earned on that date in any year, so this grows every time
+                you finish something new.
+            </p>
+
+            {% comment %}ITS OWN CLASS, not a borrowed one. `pp-btn--primary` does not exist in this
+            codebase -- the first draft invented it, which `test_every_class_reaches_the_compiled_bundle`
+            exists to catch. The career explainer's dismiss control is `.pp-howto__got`, a one-off on the
+            same mold, so this follows that rather than inventing a button system.{% endcomment %}
+            <button type="button" class="pp-calopen__go" data-calopen-close>See the board</button>
+        </div>
+    </div>
+</div>

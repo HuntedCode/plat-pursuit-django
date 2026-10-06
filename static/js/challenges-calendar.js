@@ -343,6 +343,49 @@
     // "reachable" by a screen reader at all, so focusing a square announced nothing while removing the
     // month's figures from the accessibility tree for every one of a month's 28-31 day stops. The
     // listeners are gone and the keyboard path is the modal, which Enter opens.
+    // ── the opening ceremony ─────────────────────────────────────────────────────────────────────────
+    //
+    // "HERE IS WHERE YOU STAND", once per run. A Calendar run backfills a hunter's entire platinum
+    // history the moment it is created, so a veteran opens one already standing on two or three rungs --
+    // the most dramatic thing this feature does, and without this it happens silently between a form POST
+    // and a redirect.
+    //
+    // `PlatPursuit.DetailModal` IS THE BEHAVIOUR, not a second copy of it. Auto-open once, focus restore,
+    // Escape, and an `onDismiss` that records at most once. The career explainer and the new-contracts
+    // sheet are the other two consumers; this adds no primitive.
+    //
+    // THE SERVER DECIDES WHETHER IT OPENS. `data-auto` is rendered only for the owner of a run that has
+    // not been acknowledged, and `autoOpenDelay` is passed only when that attribute is present -- the
+    // controller reads `armed` from the attribute for the RECORDING half, but the opening half is this
+    // option alone, so passing it unconditionally would reopen the ceremony on every visit.
+    //
+    // `seenKey` CARRIES THE RUN ID, because this one-shot is per RUN rather than per person. A single
+    // key would let a hunter's first Calendar run suppress the ceremony for every later one on that
+    // device -- which is the same mistake using `ui_flags` on the server would have been.
+    function wireOpening(first) {
+        if (!first) { return; }
+        var el = document.getElementById('cal-opening');
+        if (!el || !PP.DetailModal) { return; }
+
+        var url = el.getAttribute('data-seen-url');
+        var opts = {
+            closeSelector: '[data-calopen-close]',
+            seenKey: 'pp-cal-opening-' + (el.getAttribute('data-run') || '0'),
+            onDismiss: function () {
+                // NO RECORD WITHOUT A URL, and no silent success either: returning a rejection is what
+                // makes `DetailModal` fall back to its `seenKey`, so the ceremony stays dismissed on this
+                // device even when the write cannot be made.
+                if (!url || !PP.API) { return Promise.reject(); }
+                return PP.API.post(url, {});
+            }
+        };
+        // ONLY WHEN THE SERVER ARMED IT. `autoOpenDelay` is what actually opens the sheet; `data-auto`
+        // drives the RECORDING half independently, so passing the delay unconditionally would replay the
+        // ceremony on every visit to a run whose owner dismissed it months ago.
+        if (el.hasAttribute('data-auto')) { opts.autoOpenDelay = 450; }
+        PP.DetailModal(el, opts);
+    }
+
     function wireDayPeek(first) {
         if (!first) { return; }
 
@@ -510,6 +553,8 @@
         // different design and not a listener.
     }
 
-    if (PP.onPageReady) { PP.onPageReady(function (first) { boot(); wireDaySheet(first); wireDayPeek(first); }); }
-    else { document.addEventListener('DOMContentLoaded', function () { boot(); wireDaySheet(true); wireDayPeek(true); }); }
+    if (PP.onPageReady) { PP.onPageReady(function (first) { boot(); wireDaySheet(first); wireDayPeek(first); wireOpening(first); }); }
+    else { document.addEventListener('DOMContentLoaded', function () {
+        boot(); wireDaySheet(true); wireDayPeek(true); wireOpening(true);
+    }); }
 }());

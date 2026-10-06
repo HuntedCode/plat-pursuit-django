@@ -129,6 +129,7 @@
 #badge-howto.is-closing,
 #career-howto.is-closing,
 #launch-welcome.is-closing,
+#cal-opening.is-closing,
 #new-contracts.is-closing,
 #whats-new.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }   /* opacity crossfade -- always on */
 
@@ -137,7 +138,8 @@
     #badge-howto.is-closing .pp-detail-modal__dialog,
     #career-howto.is-closing .pp-detail-modal__dialog,
     #launch-welcome.is-closing .pp-detail-modal__dialog,
-    #new-contracts.is-closing .pp-detail-modal__dialog,
+    #cal-opening.is-closing,
+#new-contracts.is-closing .pp-detail-modal__dialog,
     #whats-new.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 

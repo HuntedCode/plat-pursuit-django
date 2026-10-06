@@ -33,7 +33,7 @@ no services and no templates with it; the few lessons worth carrying forward are
 | **Plat Calendar** — creation | **open.** The gate was held for the rewards; the day-marker ladder is what it was waiting for |
 | **Plat Calendar** — the sync-path refresh | **built.** `calendar_fill.refresh_for_profile`, called after contract detection |
 | **Plat Calendar** — the board | **built.** Detail: thirteen crests as the switcher (twelve months plus a year overview), one panel at a time, no cover art. Hero: the whole year as a dense band |
-| **Plat Calendar** — the opening ceremony, richer crest ARTWORK | **NOT built.** The day modal and the 50/100/200/300/365 ladder ARE built; the crest ships struck in its metal with a working face (the month's abbreviation over a twelve-segment rim with one segment lit) |
+| **Plat Calendar** — richer crest ARTWORK | **NOT built.** The day modal, the 50/100/200/300/365 ladder and the opening ceremony ARE built; the crest ships struck in its metal with a working face (the month's abbreviation over a twelve-segment rim with one segment lit) |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
 
@@ -161,6 +161,22 @@ ordering and last-wins — so the highest rung must be the last row written, whi
 `Calendar Legend` rather than `Calendar Marker` on a finished run's plaque (a backfill grants several at
 once, microseconds apart, so `pk` is what actually breaks the tie). And the grant is **idempotent**, since
 it runs on every sync and every nightly sweep for every Calendar run.
+
+**The opening ceremony fires once per RUN, not once per user.** A Calendar run backfills a hunter's
+entire platinum history the moment it is created, so a veteran opens one already standing on two or three
+rungs — the most dramatic thing the feature does, and it would otherwise happen silently between a form
+POST and a redirect. It is gated on `Challenge.opening_seen_at` rather than a `CustomUser.ui_flags` key
+like every other one-shot on the site, because a hunter can finish or hide a run and start another, and
+the second backfills again. A `ui_flags` key would show it to somebody's first Calendar run and never
+again.
+
+**It is gated SERVER-side and wears the house mold.** `data-auto` is rendered only for the owner of an
+unacknowledged run, because `PlatPursuit.DetailModal` reads that attribute — a script deciding would
+risk a flash of a stranger's progress, and a run page is public. The controller supplies auto-open-once,
+focus restore, Escape and a recorded dismissal; the career explainer and the new-contracts sheet are its
+other two consumers, so nothing new was invented. `autoOpenDelay` is passed **only** when the attribute is
+present: the controller reads `armed` from it for the recording half, so passing the delay unconditionally
+would replay the ceremony on every visit.
 
 **Only the finish notifies.** `challenge_completed` fires from `on_run_completed` as it always did; the
 four rungs below it are silent, because a backfilling run passes several at once on day one and would

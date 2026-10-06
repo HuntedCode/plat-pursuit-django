@@ -35,6 +35,7 @@ from challenges.views import (
     SlotPickerView,
     HideChallengeView,
     MyChallengesView,
+    OpeningSeenView,
     RedeemAllView,
     RedeemSlotView,
     StartChallengeView,
@@ -547,6 +548,11 @@ urlpatterns = [
          CalendarDayView.as_view(), name='challenge_calendar_day'),
     path('my-challenges/<int:challenge_id>/hide/', HideChallengeView.as_view(),
          name='challenge_hide'),
+    # THE OPENING CEREMONY'S ACKNOWLEDGEMENT, under the owner-only prefix with every other write: the
+    # ceremony is drawn on the PUBLIC run page, but only its owner can have seen it, and the split here
+    # is by who may call rather than by where the control is drawn.
+    path('my-challenges/<int:challenge_id>/opening-seen/', OpeningSeenView.as_view(),
+         name='challenge_opening_seen'),
     # THE REWARD DOORS, under `/my-challenges/` with every other write even though the surface they serve
     # is the PUBLIC run page. The split is by who may call, not by where the button is drawn: claiming is
     # something only the owner can do, and `/my-challenges/` is this feature's owner-only prefix.

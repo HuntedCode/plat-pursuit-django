@@ -36,6 +36,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.http import Http404
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.utils.cache import patch_cache_control
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
@@ -416,6 +417,29 @@ class ChallengeDetailView(DetailView):
             # month counts already on the page, and the rail is arithmetic over that one number.
             context['calendar_rail'] = calendar_render.marker_rail(
                 context['calendar_totals']['done'], total=challenge.total_slots)
+
+            # THE OPENING CEREMONY, GATED SERVER-SIDE, which is the half that matters: `DetailModal`
+            # reads `data-auto` from the markup, so the decision not to show it has to be made here
+            # rather than by a script that could run after a reader has already seen a flash of it.
+            #
+            # THE OWNER ONLY. A run page is public and the ceremony says "here is where YOU stand" --
+            # shown to a visitor it would be a stranger's progress addressed to them in the second
+            # person. `is_owner` is set below for the rest of the page; this reads the same question
+            # directly because the ordering of two context keys is not a thing to depend on.
+            viewer_profile = getattr(self.request.user, 'profile', None)
+            context['show_calendar_opening'] = (
+                viewer_profile is not None
+                and viewer_profile.id == challenge.profile_id
+                and challenge.opening_seen_at is None
+            )
+            # THE RUNG THEY LANDED ON, read from the granted rows rather than recomputed from the day
+            # count. `rewards` declines to claim a name another system holds and logs instead, so a
+            # ladder position derived from arithmetic would name a title the hunter may not have -- the
+            # same argument `granted_titles_for` makes for reading the grant instead of the ordinal.
+            context['calendar_opening_title'] = (
+                rewards.granted_titles_for([challenge]).get(challenge.pk)
+                if context['show_calendar_opening'] else None
+            )
         else:
             context['groups'] = slot_render.slot_groups(challenge)
         context['is_owner'] = viewer is not None and viewer.id == challenge.profile_id
@@ -1048,6 +1072,40 @@ class HideChallengeView(_ChallengeJsonView):
 
 
 # ── the two public browses ───────────────────────────────────────────────────────────────────────
+
+class OpeningSeenView(_ChallengeJsonView):
+    """Record that this run's owner has acknowledged its opening ceremony. JSON, fired on dismissal.
+
+    PER RUN, WHICH IS WHY THIS EXISTS AT ALL instead of reusing `/api/v1/user/quick-settings/`'s
+    `ui_flag` branch like every other one-shot on the site. That endpoint writes a key on
+    `CustomUser.ui_flags`, so it answers "has this person ever seen one" -- and a hunter can finish or
+    hide a Calendar run and start another, which backfills their whole history again and deserves its
+    own "here is where you stand". A `ui_flags` key would show the ceremony to a hunter's first Calendar
+    run and silently never again.
+
+    IDEMPOTENT, AND IT SAYS SO IN THE RESPONSE. `DetailModal` fires `onDismiss` at most once per load,
+    but a reload before the write lands, or a double-tap, must not be an error -- the first stamp wins
+    and later calls report the same state. `update(opening_seen_at=...)` filtered on the column still
+    being null is a compare-and-swap rather than a read-modify-write, so two tabs cannot race to
+    different timestamps.
+
+    IT DOES NOT CHECK THE TYPE. Only the Calendar renders a ceremony today, but the column is on
+    `Challenge` and a second type wanting one should not need this view changed -- and stamping a run
+    that never showed one is harmless, since nothing reads the column except the gate that already
+    decided not to show it.
+    """
+
+    @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
+                                method='POST', block=True))
+    def post(self, request, challenge_id):
+        challenge = self.get_challenge(request, challenge_id)
+        if challenge is None:
+            return self.not_found()
+        stamped = (Challenge.objects
+                   .filter(pk=challenge.pk, opening_seen_at__isnull=True)
+                   .update(opening_seen_at=timezone.now()))
+        return JsonResponse({'seen': True, 'stamped': bool(stamped)})
+
 
 class _ChallengeBrowseView(HtmxListMixin, ListView):
     """What the Challenges page and the Hall of Fame have in common.

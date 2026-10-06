@@ -4762,3 +4762,93 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 @media (prefers-reduced-motion: no-preference) {
     .pp-cal-rail__fill { animation: ppCalRailFill 0.9s cubic-bezier(0.16, 0.84, 0.34, 1) backwards; }
 }
+
+
+/* NOTE ON PLACEMENT: this section sits at the END of the file, after the rail, and that is deliberate.
+   `_calendar_css()` in the suite slices the calendar BOARD's block and stops at the next banner that
+   CLOSES on a bare rule of equals signs -- which a prose-closed banner like this one does not. Dropped
+   in above the year matrix, every rule here read as a board rule, and `test_the_hero_cells_are_square`
+   failed on this component's `min-height: 44px`. A new component goes after the readers, not between
+   them.
+   AND THIS PARAGRAPH ONCE QUOTED THAT CLOSING SEQUENCE LITERALLY, which ended the comment four lines
+   early and turned the rest of it into stray declarations: the Tailwind build failed, and because the
+   build was being run with its output discarded, the bundle simply stayed stale while a class guard
+   reported a missing rule. Never write the comment-closing pair inside a comment. */
+/* ============================================================
+ * THE OPENING CEREMONY -- `.pp-calopen`
+ *
+ * `templates/challenges/partials/_calendar_opening.html`, worn on the `.pp-detail-modal` mold and driven
+ * by `PlatPursuit.DetailModal`. This styles CONTENTS only: the shell owns the scrim, the dialog box and
+ * the close glyph, exactly as the day sheet does.
+ *
+ * NO MONTH HUE HERE, and that is the one deliberate difference from the day sheet. This fires before a
+ * hunter has chosen a month and speaks about the whole year, so there is no `--cal-c` that would be
+ * honest -- and the brand cyan is already this feature's "progress" colour, which is what the moment is
+ * about. A hue picked for the sake of colour would be the third colour axis this file keeps rejecting.
+ *
+ * CENTRED, UNLIKE THE DAY SHEET, which is a shelf of objects and reads left-to-right. This is one number
+ * and three short lines; centring it is what makes it read as a moment rather than as a panel. */
+/* NARROWER THAN THE SHELL'S DEFAULT, which is `min(720px, 100%)` and sized for the day sheet's shelf of
+   cover art. This dialog holds one number and three short lines; at 720px those lines run to a measure
+   nobody reads comfortably and the figure floats in the middle of an empty box. 460px keeps the whole
+   ceremony inside one glance, which is the entire point of it. */
+.pp-calopen__dialog { max-width: min(460px, 100%); }
+.pp-calopen__body { text-align: center; }
+.pp-calopen__kicker {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--pp-text-mute);
+    margin: 0 0 6px;
+}
+.pp-calopen__title { font-size: 1.375rem; font-weight: 800; margin: 0 0 18px; color: var(--pp-text); }
+/* THE FIGURE IS THE EVENT. `.pp-tally` is the house headline number, the same primitive the month panels
+   and the peek use, so the one thing a hunter is meant to take away is drawn the way this feature draws
+   every other number. */
+.pp-calopen__figure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin: 0 0 16px;
+}
+.pp-calopen__figure .pp-tally { font-size: 2.5rem; color: var(--pp-primary); line-height: 1; }
+.pp-calopen__unit { font-size: 0.875rem; color: var(--pp-text-dim); }
+.pp-calopen__earned,
+.pp-calopen__next { font-size: 0.9375rem; color: var(--pp-text-dim); margin: 0 0 8px; }
+.pp-calopen__earned strong,
+.pp-calopen__next strong { color: var(--pp-text); }
+/* THE EXPLANATION LAST AND QUIETEST. It answers "why do I already have these" for a hunter who has just
+   been handed three titles, which is a real question and not the headline. */
+.pp-calopen__lede {
+    font-size: 0.8125rem;
+    color: var(--pp-text-mute);
+    margin: 14px 0 20px;
+    line-height: 1.5;
+}
+/* A ONE-OFF CONTROL ON THE HOUSE MOLD, which is what `.pp-howto__got` is on the career explainer. This
+   file has no button system to reuse and inventing one for a single dismiss control is the wrong trade. */
+.pp-calopen__go {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 22px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--pp-primary) 45%, var(--pp-border));
+    background: color-mix(in srgb, var(--pp-primary) 16%, var(--pp-bg-2));
+    color: var(--pp-text);
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease;
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+    .pp-calopen__go:hover {
+        background: color-mix(in srgb, var(--pp-primary) 24%, var(--pp-bg-2));
+        border-color: color-mix(in srgb, var(--pp-primary) 65%, var(--pp-border));
+    }
+}
+.pp-calopen__go:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+

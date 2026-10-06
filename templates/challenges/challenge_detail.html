@@ -466,6 +466,12 @@ hunter with JavaScript off gets January on the run's own lens with the right squ
 {% block fixed_overlays %}
 {{ block.super }}
 {% if calendar_months %}
+{% comment %}THE OPENING CEREMONY, first because it is the only overlay that opens ITSELF. Rendered for
+every Calendar run rather than only when it will fire: the element carries the reopen-free controller
+either way and `data-auto` -- which the view gates on owner + not-yet-seen -- is what decides whether it
+auto-opens. Keeping the markup unconditional means one code path and no second gate in the script.
+{% endcomment %}
+{% include "challenges/partials/_calendar_opening.html" %}
 {% comment %}THE DAY SHEET, one per board and not one per square: 365 shells would be 365 dialogs in the
 accessibility tree. The body is REPLACED on each open, which is the requirement `_calendar_day.html`
 states -- two copies would put two `id="cal-day-title"` in the document and `aria-labelledby` resolves to

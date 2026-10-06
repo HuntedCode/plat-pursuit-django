@@ -35,6 +35,7 @@ from django.urls import reverse
 
 from challenges.models import (CALENDAR_MONTH_DAYS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR,
                                CalendarDay)
+from challenges.services import calendar_fill
 from challenges.services import calendar_render
 from tests.factories import ProfileFactory, UserFactory
 
@@ -976,8 +977,13 @@ def test_the_day_delegate_resolves_its_nodes_at_event_time():
 
     THE BOOT-TIME LOOKUP IS LEGITIMATE and deliberately not asserted against: it exists only to MOVE the
     shell out of `#page-recede`. What matters is that the click path re-resolves."""
+    # BOUNDED TO `wireDaySheet`, not run to end-of-file. The slice swept up every later function in the
+    # script, so the opening ceremony's own boot-time `getElementById` -- a different function, a
+    # different element -- failed a pin about the day sheet's delegate. The same to-EOF slice bug this
+    # file has now fixed twice.
     sheet = _script_code()
     sheet = sheet[sheet.index('function wireDaySheet'):]
+    sheet = sheet[:sheet.index('\n    function ', 10)]
     delegate = sheet[sheet.index("addEventListener('click'"):]
 
     assert 'document.getElementById' not in delegate, (
@@ -2857,3 +2863,123 @@ def test_a_jump_tears_down_the_peek_it_leaves_behind():
     guard = re.search(r"closest\('([^']*data-cal-jump[^']*)'\)", peek)
     assert guard, 'the peek is never torn down by a jump'
     assert '.pp-cal__crest' in guard.group(1), 'the crest tear-down was dropped when the jump arrived'
+
+
+# ── the opening ceremony ─────────────────────────────────────────────────────────────────────────
+
+def test_the_opening_ceremony_arms_only_for_the_owner_of_an_unseen_run():
+    """`data-auto` IS THE WHOLE GATE, and it is rendered server-side on purpose: `DetailModal` reads it
+    off the element, so a script deciding would risk a flash of somebody else's progress before it ran.
+
+    THE OWNER ONLY, because a run page is public and the ceremony says "here is where YOU stand" -- shown
+    to a visitor that is a stranger's progress addressed in the second person."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+
+    owner = Client()
+    owner.force_login(run.profile.user)
+    body = owner.get(_url(run)).content.decode()
+    sheet = re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>', body, re.S).group(0)
+    assert 'data-auto' in sheet, 'the owner of a fresh run is not shown the ceremony'
+
+    # A VISITOR GETS THE MARKUP AND NOT THE TRIGGER. The element renders either way so the script has one
+    # code path; the attribute is what decides.
+    visitor = Client()
+    visitor.force_login(ProfileFactory().user)
+    seen_by_visitor = re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>',
+                                visitor.get(_url(run)).content.decode(), re.S).group(0)
+    assert 'data-auto' not in seen_by_visitor, "a visitor is shown the owner's opening ceremony"
+
+    # AND ANONYMOUS, which is the case `getattr(user, 'profile', None)` exists for.
+    anon = re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>',
+                     Client().get(_url(run)).content.decode(), re.S).group(0)
+    assert 'data-auto' not in anon
+
+
+def test_the_opening_ceremony_does_not_return_once_acknowledged():
+    """PER RUN, NOT PER USER, which is the reason this is a column rather than a `ui_flags` key. The stamp
+    is what suppresses it, and nothing else."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    client = Client()
+    client.force_login(run.profile.user)
+
+    url = reverse('challenge_opening_seen', args=[run.pk])
+    assert client.post(url).json() == {'seen': True, 'stamped': True}
+    run.refresh_from_db()
+    assert run.opening_seen_at is not None
+
+    body = client.get(_url(run)).content.decode()
+    sheet = re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>', body, re.S).group(0)
+    assert 'data-auto' not in sheet, 'the ceremony came back after being acknowledged'
+
+    # A SECOND CALL IS NOT AN ERROR. A reload before the write lands, or a double tap, must report the
+    # same state rather than fail -- the filtered UPDATE is a compare-and-swap, so the first stamp wins.
+    first = run.opening_seen_at
+    assert client.post(url).json() == {'seen': True, 'stamped': False}
+    run.refresh_from_db()
+    assert run.opening_seen_at == first, 'a second acknowledgement moved the timestamp'
+
+
+def test_only_the_runs_owner_can_acknowledge_its_ceremony():
+    """The endpoint sits under the owner-only `/my-challenges/` prefix, and `get_challenge` is what
+    enforces it. A visitor stamping somebody else's run would suppress a ceremony they never saw."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    url = reverse('challenge_opening_seen', args=[run.pk])
+
+    intruder = Client()
+    intruder.force_login(ProfileFactory().user)
+    assert intruder.post(url).status_code == 404
+    run.refresh_from_db()
+    assert run.opening_seen_at is None
+
+    # AND IT NEVER REDIRECTS AN ANONYMOUS WRITE, which is this project's recorded JSON-endpoint rule: a
+    # 302 to the login page answers 200 with HTML and reads as success to a caller checking `response.ok`.
+    anon = Client().post(url)
+    assert anon.status_code != 302, 'a JSON write redirects, so a refusal would read as a success'
+
+
+def test_the_ceremony_speaks_only_of_what_the_hunter_actually_holds():
+    """READ FROM THE GRANTED ROW, not computed from the day count. `rewards` declines to claim a name
+    another system owns and logs instead, so a ladder position derived from arithmetic would name a title
+    the hunter may not have -- the same argument `granted_titles_for` makes about ordinals."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    client = Client()
+    client.force_login(run.profile.user)
+
+    # A run with nothing filled claims no title and still offers the next rung.
+    body = client.get(_url(run)).content.decode()
+    assert 'You already hold' not in body, 'an empty run claims a title'
+    assert 'Next up:' in body
+
+    keys = list(run.calendar_days.values_list('pk', flat=True)[:60])
+    run.calendar_days.filter(pk__in=keys).update(in_all=True, in_clean=True)
+    calendar_fill.apply_to_run(run)
+
+    body = client.get(_url(run)).content.decode()
+    assert 'You already hold' in body and 'Calendar Marker' in body
+
+
+def test_the_ceremony_is_wired_to_the_house_controller():
+    """NO NEW PRIMITIVE. `PlatPursuit.DetailModal` already owns auto-open-once, focus restore, Escape and
+    a recorded dismissal; the career explainer and the new-contracts sheet are its other two consumers.
+
+    `autoOpenDelay` ONLY WHEN THE SERVER ARMED IT. The controller reads `armed` from `data-auto` for the
+    RECORDING half, but the opening half is this option alone -- so passing it unconditionally would
+    replay the ceremony on every visit to a run whose owner dismissed it months ago."""
+    js = _script_code()
+    wire = js[js.index('function wireOpening('):]
+    wire = wire[:wire.index('\n    function ', 10)]
+
+    assert 'PP.DetailModal(' in wire, 'the ceremony re-implements a primitive that exists'
+    assert "hasAttribute('data-auto')" in wire and 'autoOpenDelay' in wire, (
+        'the auto-open is not gated on the server-rendered attribute'
+    )
+    assert "data-seen-url" in wire, 'the acknowledge URL is built in script rather than rendered'
+    # THE REJECTION IS THE FALLBACK. Returning one is what makes `DetailModal` fall back to `seenKey`, so
+    # the ceremony stays dismissed on this device even when the write cannot be made.
+    assert 'Promise.reject()' in wire
+    # PER-RUN LOCAL KEY. A single key would let a hunter's first Calendar run suppress every later one.
+    assert "'pp-cal-opening-' +" in wire
+
+    # AND IT IS WIRED INTO BOOT, or none of the above runs.
+    assert js.count('wireOpening(') == 3, 'the ceremony is defined but never wired, or wired twice'

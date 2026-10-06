@@ -344,6 +344,19 @@ class Challenge(models.Model):
     is_complete = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
 
+    #: WHEN THE OWNER ACKNOWLEDGED THIS RUN'S OPENING CEREMONY. Null until they do; null forever on types
+    #: that have no ceremony, which is every type but the Plat Calendar today.
+    #:
+    #: PER RUN, NOT PER USER, and that is why it is a column rather than a `CustomUser.ui_flags` key like
+    #: every other one-shot on the site. A hunter can finish or hide a Calendar run and start another, and
+    #: the second one backfills their whole history again -- so the ceremony is a property of THE RUN
+    #: being opened, not of the person having seen one once. A `ui_flags` key would show it to a hunter's
+    #: first Calendar run and silently never again.
+    #:
+    #: A TIMESTAMP RATHER THAN A BOOLEAN, for the reason `new_contracts_modal` records about markers
+    #: versus receipts: a date can answer "when", a flag cannot, and the cost is the same column.
+    opening_seen_at = models.DateTimeField(null=True, blank=True)
+
     #: WHAT THE CALENDAR SWEEP SAW LAST TIME IT LOOKED -- a reconciliation watermark, not a timestamp.
     #: Zero for every other type.
     #:
