@@ -4615,6 +4615,20 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-mute);
     white-space: nowrap;
 }
+/* THE LAST RUNG IS AT `--at: 100%`, so a centred transform puts half its label OUTSIDE the rail. The
+   ladder's top rung is 365 of 365 (`DAY_MARKERS[-1]` is also the total), and measured in Chromium at
+   375px that overhang made `.pp-cal-rail__marks` 272px of content in a 260px box: 12px of unclipped
+   overflow, from an absolutely positioned child, propagating up through ancestors that all have
+   `overflow-x: visible`.
+   IT DOES NOT REACH THE VIEWPORT at any width from 320 to 1024 -- the rail sits inside `.scard`'s
+   padding, so the page does not scroll today -- which is exactly why it is worth fixing now rather than
+   when something else moves the rail 12px closer to the edge.
+   THE RIGHT EDGE IS ANCHORED INSTEAD, which is also the conventional treatment for the end label of any
+   axis: the numeral stops where the track stops. The FIRST rung needs no twin rule, and that is a fact
+   about the data rather than an oversight -- `DAY_MARKERS` starts at 50, so the first mark sits at 13.7%
+   and has nothing to hang off. A ladder that ever starts at zero needs `:first-child { transform: none }`
+   here. */
+.pp-cal-rail__mark:last-child { transform: translateX(-100%); }
 /* REACHED IS WEIGHT AND BRIGHTNESS, not hue: these are numbers at 12px, so a measured token is what
    keeps them legible -- the same rule the month hues follow by never touching text. */
 .pp-cal-rail__mark--on { color: var(--pp-text); font-weight: 700; }

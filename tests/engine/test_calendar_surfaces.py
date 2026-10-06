@@ -2338,6 +2338,29 @@ def test_the_hue_never_becomes_small_text_over_the_dialog_wash():
     )
 
 
+def test_the_marker_rails_top_rung_does_not_hang_outside_the_rail():
+    """THE LADDER'S TOP RUNG IS 365 OF 365, so its mark renders at `--at: 100%` -- and the shared
+    `translateX(-50%)` then puts half the label outside `.pp-cal-rail__marks`. Measured in Chromium at
+    375px: 272px of content in a 260px box, 12px of unclipped overflow from an absolutely positioned
+    child, propagating through ancestors that are all `overflow-x: visible`.
+
+    IT DOES NOT REACH THE VIEWPORT at any width from 320 to 1024, because the rail sits inside the
+    card's padding -- which is the reason to pin it rather than to shrug: nothing fails today, so
+    nothing would catch it the first time this rail moves 12px closer to an edge."""
+    # `_rail_css`, NOT `_calendar_css`: the rail is its own block beyond the banner the calendar reader
+    # cuts at, and that helper exists precisely so a rail assertion cannot pass against a slice that
+    # does not contain the rule it names.
+    last = _css_rule(_rail_css(), '.pp-cal-rail__mark:last-child {')
+    assert 'translateX(-100%)' in last, 'the top rung is centred on the end of its own track'
+
+    # AND THE PREMISE: the top rung really is at 100%, or this rule is fixing nothing.
+    from challenges.services.calendar_render import DAY_MARKERS, marker_rail
+    rail = marker_rail(0, total=DAY_MARKERS[-1])
+    assert rail['markers'][-1]['pct'] == 100, 'the top rung no longer sits at the end of the rail'
+    assert rail['markers'][0]['pct'] > 0, (
+        'the ladder now starts at zero, so the FIRST mark hangs off the left and needs its own rule')
+
+
 # ── the All crest and its year overview ──────────────────────────────────────────────────────────
 
 def test_the_year_overview_draws_every_day_in_twelve_month_rows():
