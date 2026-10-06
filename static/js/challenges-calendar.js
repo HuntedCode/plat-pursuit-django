@@ -47,7 +47,17 @@
         // month change from a backward one without this file carrying a second copy of the calendar.
         // (An earlier comment said "off the panels", which is not what the line below does.)
         var order = tabs.map(function (tab) { return tab.id.replace('cal-tab-', ''); });
-        var current = order[0];
+
+        // THE LIVE CREST, by the mark the server rendered. Computed here because TWO things need it and
+        // they must not disagree: the slide's starting point, and the strip's opening scroll position.
+        var live = tabs.filter(function (tab) {
+            return tab.getAttribute('aria-selected') === 'true';
+        })[0];
+        // THE SLIDE STARTS WHERE THE BOARD STARTS. This was `order[0]`, which is now the ALL tab and can
+        // never be the live one -- so the first month switch always computed a FORWARD slide, whichever
+        // direction it actually went. It was wrong eleven months in twelve when `order[0]` was January;
+        // the overview made it wrong every time.
+        var current = (live || tabs[0]).id.replace('cal-tab-', '');
 
         // BRING A CREST INTO VIEW BY SCROLLING THE STRIP, never by asking the element to scroll itself.
         // `scrollIntoView` walks EVERY scrollable ancestor, so `inline: 'center'` can pan the document
@@ -129,12 +139,9 @@
         // but nothing ever moved the STRIP: `show` is the only thing that centres a crest and it runs on
         // interaction, so a hunter in October arrived at an October board above a row showing January.
         //
-        // AFTER `wireTablist`, because the live crest is found by the same `aria-selected` the helper's
-        // `isActive` reads, and doing it here keeps one definition of "which tab is live" rather than a
-        // second expression that agrees until it does not.
-        var live = tabs.filter(function (tab) {
-            return tab.getAttribute('aria-selected') === 'true';
-        })[0];
+        // AFTER `wireTablist`, because the roving tabindex has to be settled before the strip moves --
+        // but `live` itself is resolved once, up with `order`, so the slide's starting point and this
+        // scroll cannot disagree about which crest is the live one.
         centreTab(live);
 
         // THE YEAR OVERVIEW'S ROWS JUMP TO THEIR MONTH (owner, 2026-10-05: "being able to click a box or
@@ -164,7 +171,16 @@
             // FOCUS FOLLOWS THE JUMP, so a hunter who clicks a row and then reaches for the arrow keys
             // is moving from the month they landed on rather than from wherever focus happened to be.
             // `wireTablist` has just made this the only crest with `tabIndex = 0`.
-            if (tab.focus) { tab.focus(); }
+            //
+            // `preventScroll` IS THE WHOLE POINT OF THIS LINE'S SECOND ARGUMENT. `focus()` scrolls the
+            // element into view by default -- which is `scrollIntoView` by another name, the thing
+            // `centreTab` above spends twenty lines refusing to use, and on this site it is worse than
+            // the plain version: `html` carries BOTH `scroll-behavior: smooth` and a
+            // `scroll-padding-top` for the sticky chrome, so it would be a smooth, chrome-offset
+            // DOCUMENT scroll. Clicking a row at the bottom of the overview would switch the panel and
+            // then slide the page up under the pointer. Keyboard users are unaffected either way: their
+            // focus moves come from `wireTablist`'s own arrow handling, not from here.
+            if (tab.focus) { tab.focus({ preventScroll: true }); }
         });
     }
 

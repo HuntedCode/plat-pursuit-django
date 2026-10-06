@@ -19,7 +19,7 @@ no services and no templates with it; the few lessons worth carrying forward are
 | `challenge_service` / `eligibility` / `picker` / `slot_render` | **built** |
 | Plat Calendar data path (`calendar_fill`, model, sweep, sync hook, staff doors) | **built**, and unreachable: the type has no creation door yet (`TYPES_NOT_YET_CREATABLE`) |
 | Plat Calendar renderers (`calendar_render`) | **built** |
-| Plat Calendar board (detail + Hall of Fame hero) | **built.** Month-switcher layout: twelve crests double as the month tabs, one month panel at a time, a `.pp-switch` lens switcher. No cover art anywhere |
+| Plat Calendar board (detail + Hall of Fame hero) | **built.** Month-switcher layout: thirteen crests double as the tabs (twelve months and a whole-year overview), one panel at a time. No cover art anywhere |
 | Plat Calendar day modal (which games satisfy a day) | **not built** — the day cell is inert until it lands, so it is a `<div>` rather than a button that does nothing |
 | Plat Calendar reward ladder + richer crest artwork | **not built.** The crest itself renders |
 | Detection (sync hook + `process_challenges` + nightly) | **built** |
@@ -32,7 +32,7 @@ no services and no templates with it; the few lessons worth carrying forward are
 | **Plat Calendar** — type, `CalendarDay`, the three view predicates, the backfill writer, the reconciling sweep, the refresh command | **built** |
 | **Plat Calendar** — creation | **gated shut.** `TYPES_NOT_YET_CREATABLE` keeps the Start button off until the rest lands |
 | **Plat Calendar** — the sync-path refresh | **built.** `calendar_fill.refresh_for_profile`, called after contract detection |
-| **Plat Calendar** — the board | **built.** Detail: twelve crests as the month switcher, one month panel at a time, a `.pp-switch` lens switcher, no cover art. Hero: the whole year as a dense band in one lens |
+| **Plat Calendar** — the board | **built.** Detail: thirteen crests as the switcher (twelve months plus a year overview), one panel at a time, no cover art. Hero: the whole year as a dense band |
 | **Plat Calendar** — the day modal, rewards (the 50/100/200/300/365 day ladder + one ultimate per view), richer crest ARTWORK | **NOT built.** The crest ships struck in its metal with a working face: the month's abbreviation over a twelve-segment rim with one segment lit |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
@@ -963,8 +963,8 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `challenges/services/picker.py` | the three panels — read-only, decides nothing |
 | `challenges/services/slot_render.py` | the A-Z and Job Coverage board: squares, discipline shelves, covers |
 | `challenges/services/calendar_fill.py` | the Plat Calendar's three view predicates, the backfill writer, the reconciling sweep scope, and the sync-path refresh |
-| `challenges/services/calendar_render.py` | the Plat Calendar board: twelve month groups with per-lens counts and a crest for the detail page, one 365-day lens for the hero. Separate from `slot_render` because a day shares no fields with a contract-backed square |
-| `templates/challenges/partials/_calendar_board.html` | the Calendar's detail board: the crest/month switcher, twelve month panels, the lens switcher |
+| `challenges/services/calendar_render.py` | the Plat Calendar board: twelve month groups plus the year totals for the detail page, one 365-day board for the hero. Separate from `slot_render` because a day shares no fields with a contract-backed square |
+| `templates/challenges/partials/_calendar_board.html` | the Calendar's detail board: the crest switcher, twelve month panels and the year overview |
 | `static/js/challenges-calendar.js` | the Calendar's month tablist only, through `PlatPursuit.wireTablist`. The LENS needs no script: `.pp-cal:has(input:checked)` reads the radio directly, so it works with JavaScript off |
 | `challenges/services/plaque.py` | the Hall of Fame plaque's Pursuer Card spine: rank, Pursuer Level, Career XP, the shared disciplines ring's arcs, and the XP a run paid — page-batched, reads nothing per entry |
 | `challenges/services/rewards.py` | **every reward write**: the XP redemption, the titles, the completion hook |

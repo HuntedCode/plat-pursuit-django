@@ -488,15 +488,17 @@ def totals_for(months):
     add no query and cannot disagree with the board -- which is the whole argument for this function
     existing instead of a second aggregate.
 
-    `open` IS COUNTED FROM THE MONTHS' OWN `total`, not from a literal 365. The year's length is
-    `CALENDAR_MONTH_DAYS`' sum and the Feb-29 fold is what makes it 365 rather than 366; a literal here
-    would be a second statement of that, which is how two definitions of one figure start.
+    `open` IS SUMMED FROM THE MONTHS' OWN `open`, not recomputed and not taken from a literal 365. Each
+    group already carries `open`, so `month['total'] - month['done']` here was a SECOND spelling of a
+    figure the data already held -- which is the thing the paragraph above objects to, two lines after
+    objecting to it. (A literal 365 would be worse still: the year's length is `CALENDAR_MONTH_DAYS`'
+    sum, and the Feb-29 fold is what makes it 365 rather than 366.)
     """
     return {
         'done': sum(month['done'] for month in months),
         'all': sum(month['all_done'] for month in months),
         'struck': sum(1 for month in months if month['is_struck']),
-        'open': sum(month['total'] - month['done'] for month in months),
+        'open': sum(month['open'] for month in months),
     }
 
 

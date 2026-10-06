@@ -3029,8 +3029,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        `html`; and `contain: inline-size` anywhere. `contain: size` ALONE does not work either -- the
        `layout` keyword is required with it, which is worth knowing before anyone trims this.
        `contain-intrinsic-height` RATHER THAN A HEIGHT, because size containment means the box is sized
-       as though empty and would otherwise collapse: this says "one coin tall" in the one unit that
-       matters, instead of restating 44 + 7 + 10 as a 61px literal that nothing would keep honest.
+       as though empty and would otherwise collapse. It states the CONTENT height, so it matches the
+       coin's own 44px rather than restating 44 + 7 + 10 as 61 -- one number repeated instead of three
+       added up. (Both are literals and neither is enforced by the cascade; the test is what keeps them
+       in step. An earlier version of this sentence claimed the property was self-honest, which it is
+       not.)
 
        THE ALTERNATIVE WAS TO WRAP, which is what `game-detail.css` chose for its pill row and which
        also measures clean. It is rejected here on the layout: thirteen 44px coins wrap to two ragged
@@ -3643,7 +3646,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  * its rows "are NOT weekdays ... Seven is simply what makes 365 cells read as a block at hero width".
  * That is the right trade at 307px. Here there is room for rows that mean something, and three things
  * follow from it -- a row is a month, a column is a date, and each row wears its own hue off the
- * `[data-month]` table with no new declaration. It is also roughly 1.6x the cell: 31 columns against 53.
+ * `[data-month]` table with no new declaration. It is also a bigger cell: 53 columns against 31 is a
+ * 1.71x wider track per cell, and measured at 375px the two come out at 4.8px and 8.4px.
  *
  * `grid-area: grid` IS THE WHOLE PANEL LAYOUT. `.pp-cal__panel` already lays out `"head stats" /
  * "grid stats"` from `lg:` up, so the matrix takes the day grid's area and the two-column panel, the
@@ -3661,16 +3665,24 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  * THE CELL CARRIES ITS DATE FROM `md:` UP (owner, 2026-10-05: "putting numbers in the boxes would really
  * help, especially with the 'at a glance' feel"). Which breakpoint is arithmetic, not taste: 12px is this
  * file's type floor, a two-digit tabular numeral at 12px advances about 14.4px, and 31 columns inside the
- * 343px a 375px viewport gives this panel is an 8.9px cell. Numerals at mobile would need either a
+ * 325px a 375px viewport gives this panel is an 8.4px cell. (325, not the 343 an earlier version of
+ * this sentence used: that is `main`'s content box, and the panel sits inside `.scard`, whose 8px of
+ * padding and 1px border this file already subtracts once, 800 lines up, after being caught by exactly
+ * this omission -- "the card's border was left out of the content box".) Numerals at mobile would need
  * sub-floor type size or a horizontally scrolling year -- and a year you have to scroll is not a year at
  * a glance, which is the whole point of the panel. From 768 the cell is about 19.6px and from 1024 about
- * 31.4px, so the numeral fits with room either side.
+ * 19.5px, with the stats column taken off the panel. An earlier version said 31.4px, which is the
+ * figure for a panel with NO stats column and is not reachable: the widest the cell ever gets is about
+ * 21.6px, past 1280 where `.pp-cal` caps at 1100 and the stats column steps to 280. The numeral fits
+ * with about 2px either side, which is tight and is the real number.
  *
  * AND THE FILLED CELL'S RECIPE CHANGES WITH IT, because the two jobs need opposite things. At 8.9px
  * nothing sits on the cell and the tile has to read as a colour at a glance, so it takes a strong 68%
- * tint (the Hall of Fame hero's own figure, at the same scale and for the same reason). The moment a
+ * tint (the Hall of Fame hero's own figure, for the same reason -- though not at the same scale: the
+ * hero's cell is 4.8px against this one's 8.4px). The moment a
  * NUMERAL sits on it that tint is unusable: measured across the twelve hues, `--pp-text` on a 68% tint
- * holds 2.27:1 at December and a dark ink manages 3.54 at best, so there is no text colour that works --
+ * holds 2.27:1 at December and the best dark ink -- pure black -- manages 3.95 at November, so there
+ * is no text colour that works --
  * which is why this is a recipe change and not a colour choice. From `md:` the cell takes the DAY
  * SQUARE'S shipped recipe instead (a 22% tint with a 45% ring), already measured at 7.30-9.95 for white
  * text, so the board and its overview agree and nothing new had to be proven. */
@@ -3681,8 +3693,14 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     min-width: 0;
 }
 /* THE LABEL COLUMN IS A FIXED `rem`, NOT A FRACTION, because the cells must stay square and a
-   proportional label would eat a different share of the row at every width. 2.1rem holds three
-   tracked uppercase characters at the 12px floor with a pixel to spare. */
+   proportional label would eat a different share of the row at every width. 2.1rem holds three tracked
+   uppercase characters at the 12px floor -- `MAR`, the widest, runs about 28.7px into 30.6px of usable
+   track -- with roughly two pixels to spare.
+   AT MOBILE THE LABEL IS THE TALLER ITEM, and the row's pitch follows it rather than the cells: 12px of
+   label against an 8.4px cell, so the rows sit about 4.6px apart vertically while the columns sit 1px
+   apart. The matrix reads as twelve bands at that width rather than a square grid. From `md:` the cell
+   is taller than the label and governs, and the grid squares up. Stated because "the cells must stay
+   square" is true of the CELLS and not of the spacing between them. */
 .pp-cal__yrow {
     display: grid;
     grid-template-columns: 2.1rem repeat(31, minmax(0, 1fr));
@@ -3701,25 +3719,43 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     padding-right: 3px;
     transition: color 0.16s ease;
 }
-/* A RECESS, NOT A BORDER, which is the hero's reading of the same problem at the same scale: a 1px
-   border on a 9px cell is most of the cell, so 365 outlined boxes read as a grid of lines rather than
-   as a year with gaps in it. */
+/* A RECESS, NOT A BORDER, which is the hero's reading of the same problem one scale down: a 1px border
+   takes 42% of its 4.8px cell and 24% of this one's 8.4px, so 365 outlined boxes read as a grid of lines
+   rather than as a year with gaps in it. The decision carries over; the arithmetic is not the hero's. */
 .pp-cal__ycell {
     display: grid;
     place-items: center;
     aspect-ratio: 1;
     border-radius: 1px;
     background: color-mix(in srgb, var(--pp-bg-0) 70%, transparent);
-    /* TWO SHADOW SLOTS, COMPOSED, and declared here BEFORE either state needs them. `box-shadow` does
-       not accumulate across rules, so the filled ring and the today mark would erase each other on
-       whichever rule lost -- the defect this file has now paid for on `.pp-csq`, on `.pp-cal__day` and
-       on `.pp-cal__coin`. Three times is enough to stop discovering it. */
+    /* THE SAME EASE THE LABEL HAS. Without it the row's 31 recesses snapped on and off while the label
+       faded over 160ms, and the two visibly desynchronised on mouse-out -- which is the defect recorded
+       twenty lines down on `.pp-cal__day--open`, where "the hover glow snapped on and off while its
+       border eased over 180ms". Copied forward this time rather than rediscovered. */
+    transition: background 0.16s ease;
+    /* THREE SHADOW SLOTS, COMPOSED. `box-shadow` does not accumulate across rules, so any two states
+       writing it erase each other on whichever rule loses -- the defect this file has paid for on
+       `.pp-csq`, on `.pp-cal__day`, on `.pp-cal__coin` and then, immediately, HERE. The comment this
+       replaces said "three times is enough to stop discovering it" while shipping the fourth: the ring
+       got its own slot and the hover rule was pointed at `--yc-mark`, the SAME variable today's marker
+       uses. Hover is (0,3,0) against today's (0,1,0), so hovering the current date erased the one mark
+       the board exists to show -- the exact sentence this file keeps quoting about `.pp-csq`.
+       A SLOT PER STATE IS THE ONLY SHAPE THAT SCALES. Two states sharing a variable is the same bug as
+       two rules sharing a property, just one indirection further away from being obvious.
+       ORDER IS PAINT ORDER: the first shadow in a list paints on TOP, so today's mark sits over the
+       hover ring rather than under it. On today's cell the hover feedback is therefore invisible, which
+       is right -- that cell already carries a ring, and the alternative is a hover that overwrites the
+       marker in a different way. */
     --yc-ring: 0 0 0 0 transparent;
     --yc-mark: 0 0 0 0 transparent;
-    box-shadow: var(--yc-ring), var(--yc-mark);
+    --yc-hover: 0 0 0 0 transparent;
+    box-shadow: var(--yc-ring), var(--yc-mark), var(--yc-hover);
 }
 /* THE DATE, HIDDEN UNTIL THERE IS ROOM FOR IT. `display: none` rather than a smaller size: the type
-   floor is 12px and there is no legible numeral under it, so the choice is the date or nothing. */
+   floor is 12px, and a numeral small enough for an 8.4px cell would be under HALF of it -- so here the
+   choice really is the date or nothing. (Not because nothing under 12px can ever be read: this file
+   ships an 11px badge 300 lines down, which `design-system.md` licenses for decorative glyphs on a
+   calendar grid. The floor is about prose; this is about arithmetic.) */
 .pp-cal__ynum { display: none; }
 @media (min-width: 768px) {
     .pp-cal__ynum {
@@ -3752,20 +3788,30 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     .pp-cal__ycell--on .pp-cal__ynum { color: var(--pp-text); font-weight: 600; }
 }
 /* TODAY, AS A RING RATHER THAN A FILL, for the reason the day grid gives: a background change would
-   fight `--on`, which already owns it. One cell in 365 at this size needs the outline to read at all,
-   so it is drawn OUTSIDE the cell where nothing else is painted. */
+   fight `--on`, which already owns it.
+   IT BLEEDS INTO THE GUTTER AND OVER ITS NEIGHBOURS, DELIBERATELY, and the comment here used to claim
+   the opposite -- "drawn OUTSIDE the cell where nothing else is painted", which was lifted from
+   `.pp-cal__day--today` without re-deriving it. That rule lives in a 3px gap, where it says in as many
+   words that a 1px spread "sits in the 3px mobile gap WITHOUT consuming it". This grid's gap is 1px, so
+   the spread fills the gutter exactly and the blur reaches past the immediate neighbour.
+   WHICH IS THE TRADE, at a cell this small. One cell in 365 at 8.4px cannot be found by a ring confined
+   to its own 8.4px; a soft halo over the cells either side is what makes "today" locatable at all, and
+   it is the only glow on the panel so there is nothing for it to be confused with. The blur is 4px
+   rather than 6 so the halo stays about one cell wide instead of two. */
 .pp-cal__ycell--today {
     --yc-mark: 0 0 0 1px var(--cal-c, var(--pp-primary)),
-               0 0 6px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 50%, transparent);
+               0 0 4px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 50%, transparent);
 }
 @media (any-hover: hover) and (any-pointer: fine) {
     /* ONLY A CELL WITH SOMETHING TO SAY. `[data-peek-label]` is the same predicate the peek binds to, so
        a cell the pointer cannot preview gives no hover feedback either -- the alternative is a cell that
        lights up and then changes nothing in the column beside it.
-       ON `--yc-mark`, not on `box-shadow`: a bare declaration here would erase a filled cell's ring, and
-       hovering today's cell would erase the mark that says it is today. */
+       ON ITS OWN SLOT, not on `box-shadow` and not on `--yc-mark`. A bare `box-shadow` here would erase
+       a filled cell's ring; writing `--yc-mark` -- which is what this rule did -- erased TODAY'S mark
+       instead, since both rules set the same variable and this one is more specific. Each state owns a
+       slot and the base rule lists all three. */
     .pp-cal__year [data-peek-label]:hover {
-        --yc-mark: 0 0 0 1px color-mix(in srgb, var(--pp-text) 55%, transparent);
+        --yc-hover: 0 0 0 1px color-mix(in srgb, var(--pp-text) 55%, transparent);
     }
     /* THE ROW IS THE JUMP TARGET, so the whole row answers a hover rather than the label alone -- the
        owner asked to "click a box or one of the rows", and a row that highlights only where the cursor
@@ -3776,19 +3822,32 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     }
 }
 @media (min-width: 768px) {
-    /* MORE AIR ONCE THERE IS ROOM FOR IT. At 375px a 2px gutter was over a fifth of a 9px cell, which is
-       the mush the hero's own gap comment describes; from 768 the cell is about 19.6px and 2px reads as a
+    /* MORE AIR ONCE THERE IS ROOM FOR IT. At 375px a 2px gutter was a quarter of an 8.4px cell, which is
+       the mush the hero's own gap comment describes; from 768 the cell is about 19.4px and 2px reads as a
        grid rather than as noise.
-       AND THE LABEL COLUMN NARROWS TO BUY THAT WIDTH BACK. Every pixel the label takes is a 31st of a
-       pixel off each cell, and the cell is the thing that has to hold a numeral here: 1.75rem still holds
-       three tracked uppercase characters at 12px. */
+       THE LABEL COLUMN DOES NOT NARROW HERE, and the version that narrowed it to 1.75rem was wrong twice
+       over. It claimed 1.75rem "still holds three tracked uppercase characters at 12px" directly beneath
+       the base rule's claim that 2.1rem holds them "with a pixel to spare" -- 5.6px apart, so at most one
+       of those could be true. Measured, the base rule's is: `MAR`, `MAY`, `AUG` and `NOV` run about
+       28.7px of text, which fits 2.1rem's 30.6px of usable track and overflows 1.75rem's 25px. With
+       `text-align: right` the excess bled LEFT, out of the panel, so four rows of twelve started outside
+       the gutter the label column exists to be. The 0.17px per cell it bought was not a trade. */
     .pp-cal__year, .pp-cal__yrow { gap: 2px; }
-    .pp-cal__yrow { grid-template-columns: 1.75rem repeat(31, minmax(0, 1fr)); }
     .pp-cal__ycell { border-radius: 2px; }
 }
-@media (min-width: 1024px) {
+/* THE WIDER GUTTER WAITS FOR 1280, AND THAT IS THE WHOLE POINT OF THIS BLOCK. It used to arrive at
+   1024, where it made the cell SHRINK as the window widened: the `lg:` band takes the stats column
+   (230px) plus its gutter (24px) out of a container that only grows from 698 to 954, so the matrix's
+   own track goes 698 -> 700 while the gap bill went 62 -> 93. Measured, 19.4px at `md:` became 18.5px at
+   `lg:`. That is the exact defect this file calls out and fixes twice elsewhere -- `--cal-stats` ("the
+   cell shrinking as the window widens, which is the same defect the crest gap had") and `.pp-chero__cal`
+   ("the band went 11.2px at 768, then back to 9.4px at 1024 ... wants the widest row it can get at EVERY
+   size") -- reintroduced here by a third set of eyes that had read both.
+   AT 1280 THE TRACK GENUINELY GROWS: `.pp-cal` caps at 1100, the stats column steps to 280, so the
+   matrix gets 796px and the cell reaches about 21.6px with the wider gutter. The progression is
+   8.4 -> 19.4 -> 19.5 -> 21.6, which is monotonic -- and that, not any particular number, is the rule. */
+@media (min-width: 1280px) {
     .pp-cal__year, .pp-cal__yrow { gap: 3px; }
-    .pp-cal__yrow { grid-template-columns: 2.1rem repeat(31, minmax(0, 1fr)); }
 }
 
 /* THE ROW IS A JUMP TO ITS MONTH (owner, 2026-10-05: "being able to click a box or one of the rows to go
@@ -3798,7 +3857,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cal__yrow { cursor: pointer; }
 
 /* THE ALL COIN'S METAL, and it is the one crest with no `data-month`. A near-neutral silver: chroma
-   0.015 against twelve hues at 0.13 and above, so it cannot be mistaken for a month, and light enough
+   0.015 against eleven hues at 0.13 and above -- December is the exception at 0.045, a near-white frost
+   this file picks out by name, so the All coin is told apart from THAT one by position rather than by
+   saturation (it leads the row; December ends it). It cannot be mistaken for the other eleven, and is
+   light enough
    to read as a precious metal rather than as the unearned grey (`--pp-text-mute`, which is what an
    undeclared `--cal-c` would fall back to).
    NOT THE BRAND CYAN, which was the other candidate and is already spoken for: every coin's completion
@@ -3976,12 +4038,14 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    of the date; the multiplication sign cannot be mistaken for one.
 
    TOP-RIGHT, AND THE TWO LINE BOXES ABUT RATHER THAN CLEAR. On a 43.9px cell the badge's 12px line box
-   occupies 4-16px down and the centred numeral's 16-28px, so they touch at 16px exactly -- `line-height:
-   1` leaves the ink inset inside both boxes, so nothing visibly meets, but there is no clearance to
-   spend. They also overlap horizontally (the badge spans about 24-38px, a two-digit date about 15-29px).
-   TWO EARLIER VERSIONS OF THIS PARAGRAPH WERE WRONG ABOUT IT: one gave 27-42px and said "the two never
-   meet" (wrong arithmetic, wrong axis), the next said 4-16 and 16-28 "do not meet" while quoting the
-   figures that show them touching. Two digits still fit: `x12` is about 21px at this size.
+   occupies 4-15px down and the centred numeral's 16-28px, so there is one pixel between them. They do
+   overlap horizontally (the badge spans about 25-39px, a two-digit date about 15-29px), which is why
+   the vertical gap is the one that matters.
+   THREE EARLIER VERSIONS OF THIS PARAGRAPH WERE WRONG ABOUT IT, which is a record worth keeping: one
+   gave 27-42px and said "the two never meet" (wrong arithmetic, wrong axis); the next said 4-16 and
+   16-28 "do not meet" while quoting figures that show them touching; the third kept those figures after
+   the badge dropped to 11px, so it described a box that no longer existed. Two digits still fit: `x12`
+   is about 19.3px at this size.
 
    ONE PIXEL UNDER THE DATE, AT BOTH SIZES, which is the whole rule and took three goes to find. The
    date is `0.75rem` (12px) at mobile and `0.8125rem` (13px) from `md:`; the badge was a flat 12px, so it
@@ -4666,20 +4730,16 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-mute);
     white-space: nowrap;
 }
-/* THE LAST RUNG IS AT `--at: 100%`, so a centred transform puts half its label OUTSIDE the rail. The
-   ladder's top rung is 365 of 365 (`DAY_MARKERS[-1]` is also the total), and measured in Chromium at
-   375px that overhang made `.pp-cal-rail__marks` 272px of content in a 260px box: 12px of unclipped
-   overflow, from an absolutely positioned child, propagating up through ancestors that all have
-   `overflow-x: visible`.
-   IT DOES NOT REACH THE VIEWPORT at any width from 320 to 1024 -- the rail sits inside `.scard`'s
-   padding, so the page does not scroll today -- which is exactly why it is worth fixing now rather than
-   when something else moves the rail 12px closer to the edge.
-   THE RIGHT EDGE IS ANCHORED INSTEAD, which is also the conventional treatment for the end label of any
-   axis: the numeral stops where the track stops. The FIRST rung needs no twin rule, and that is a fact
-   about the data rather than an oversight -- `DAY_MARKERS` starts at 50, so the first mark sits at 13.7%
-   and has nothing to hang off. A ladder that ever starts at zero needs `:first-child { transform: none }`
-   here. */
-.pp-cal-rail__mark:last-child { transform: translateX(-100%); }
+/* NO `:last-child` RULE HERE, AND THE REASON IS WORTH KEEPING. One was added after measuring
+   `.pp-cal-rail__marks` at 272px of content in a 260px box and calling the 12px an unclipped overflow
+   defect. It is not a defect: `.pp-cal-rail` carries `padding-inline: 14px` for precisely this, and says
+   so -- "the 365 mark at 100% would hang half outside the track. 14px clears a three-digit label at this
+   size". The overhang was budgeted, and the measurement was taken on the wrong box.
+   THE "FIX" COST SOMETHING REAL. Anchoring the last mark's right edge moved its centre about 10.8px left
+   of its own pip, while every other rung stays centred on its pip -- so the end of the ladder read as
+   misregistered, which is the thing `marker_rail` separately worries about ("would visibly misalign it
+   against its own label"). Reverted. If a future rail does need the end label pulled in, the padding is
+   the budget to change, not the transform. */
 /* REACHED IS WEIGHT AND BRIGHTNESS, not hue: these are numbers at 12px, so a measured token is what
    keeps them legible -- the same rule the month hues follow by never touching text. */
 .pp-cal-rail__mark--on { color: var(--pp-text); font-weight: 700; }

@@ -570,7 +570,9 @@ def test_a_completed_month_is_struck_and_an_incomplete_one_is_not():
     assert len(year) == 1
     assert 'pp-cal__crest--struck' not in year[0], 'one month is not a year'
     # NO METAL. The crest was bronze/silver/gold for whichever lens completed the month.
-    assert 'data-tier' not in crests[1]
+    # BY ID. `crests[1]` was February until the year crest took index 0 -- the same positional coupling
+    # the two lookups above were converted away from, three lines below them and missed.
+    assert 'data-tier' not in [c for c in crests if 'id="cal-tab-feb"' in c][0]
 
 
 def test_the_calendar_script_loads_only_on_a_calendar_run():
@@ -1266,13 +1268,17 @@ def test_no_state_rule_touches_the_month_hue():
     for line in block.splitlines():
         if '--cal-c:' not in line:
             continue
-        # `.pp-cal__crest--all` IS NAMED, AND IT IS THE ONLY EXCEPTION. This guard exists because a
-        # STATE rule setting the hue is what erased a finished square's mark on `.pp-csq`, and the audit's
-        # point was that only an absence-across-every-rule form survives one more `:not()`. The overview
-        # crest is not a state: it is a thirteenth member of the IDENTITY set that deliberately carries no
-        # month, so it declares its own near-neutral silver instead of reading the table. Named here so a
-        # genuine state rule still cannot slip in beside it.
-        if '.pp-cal__crest--all' in line:
+        # `.pp-cal__crest--all` IS NAMED, AND ONLY WHEN IT IS THE WHOLE SELECTOR. This guard exists
+        # because a STATE rule setting the hue is what erased a finished square's mark on `.pp-csq`; the
+        # overview crest is not a state but an IDENTITY, a thirteenth member of the set that deliberately
+        # carries no month, so it declares its own near-neutral silver instead of reading the table.
+        # A SUBSTRING SKIP REOPENED THE EXACT CLASS. `'.pp-cal__crest--all' in line` also waved through
+        # `.pp-cal__crest--all:hover { --cal-c: ... }` -- a state rule writing the hue, which is the one
+        # thing this test exists to stop -- while its own comment claimed "a genuine state rule still
+        # cannot slip in beside it". Measured: it passed. The selector must EQUAL the exception.
+        selector = line.split('{')[0].strip() if '{' in line else ''
+        if selector and all(part.strip() == '.pp-cal__crest--all'
+                            for part in selector.split(',') if part.strip()):
             continue
         assert 'data-month' in line or '--cal-c: var(--pp-text-mute)' in line, (
             'only a month hue or the fallback may set --cal-c, not a state: %s' % line.strip())
@@ -2362,7 +2368,10 @@ def test_the_stack_badge_stays_one_pixel_under_the_date():
         value, unit = re.search(r'font-size: ([0-9.]+)(px|rem)', rule).groups()
         return float(value) * (16.0 if unit == 'rem' else 1.0)
 
-    # Source order is base then `md:` for both, which the lengths above already constrain.
+    # SOURCE ORDER IS BASE THEN `md:` FOR BOTH, which the lengths above do NOT constrain -- two matches
+    # say nothing about their order. Stated as the assumption it is: a consistent reversal of both lists
+    # still yields the same pairs, so only a single-list reversal would slip through, and the sizes are
+    # asserted absolutely two lines down anyway.
     for band, (date_px, badge_px) in enumerate(zip(map(_px, day), map(_px, stack))):
         assert badge_px == date_px - 1, (
             'at band %d the badge is %.1fpx against a %.1fpx date; it must sit exactly one pixel under'
@@ -2373,6 +2382,67 @@ def test_the_stack_badge_stays_one_pixel_under_the_date():
     # vanishing -- bold is what holds a sub-floor glyph together.
     base = [r for r in _css_rules(css, '.pp-cal__stack') if 'position: absolute' in r]
     assert len(base) == 1 and 'font-weight: 700' in base[0]
+
+
+def test_both_panels_share_one_peek_face():
+    """`wireDayPeek.show()` WRITES INTO FIVE HOOKS WITH NO NULL GUARD, so a panel whose peek is missing
+    one throws `TypeError` on the first hover of any cell in it. The month panels and the year overview
+    had a copy each, differing only in the hint line -- and an audit showed the overview's copy could
+    lose ALL FIVE with every suite still green, because the existing pins assert the CONTAINERS
+    (`data-cal-peek` / `data-cal-facts`) rather than what is inside them.
+
+    A PARTIAL REMOVES THE DRIFT INSTEAD OF DETECTING IT, which is the better trade when two copies must
+    agree character for character. This pins that neither panel has grown its own copy back."""
+    src = (ROOT_DIR / 'templates' / 'challenges' / 'partials' / '_calendar_board.html').read_text(
+        encoding='utf-8')
+    assert src.count('_calendar_peek.html') == 2, 'a panel stopped sharing the peek face'
+    assert 'data-peek-head' not in src, 'a peek face was inlined again instead of included'
+
+    # THE FIVE HOOKS LIVE IN ONE FILE, and the script's five writes must each find one.
+    peek = (ROOT_DIR / 'templates' / 'challenges' / 'partials' / '_calendar_peek.html').read_text(
+        encoding='utf-8')
+    # THE HOOKS THE SCRIPT WRITES INTO THE FACE, which is not every `data-peek-` selector it uses:
+    # `[data-peek-label]` lives on the day CELLS and is how the peek finds them, so asking the face to
+    # render it would be asking the wrong element for the wrong attribute.
+    js = _script_code()
+    hooks = sorted(set(re.findall(r"f\.peek\.querySelector\('\[data-peek-(\w+)\]'\)", js)))
+    assert len(hooks) >= 5, 'expected the five face hooks, found %s' % hooks
+    for hook in hooks:
+        assert 'data-peek-%s' % hook in peek, (
+            'the script writes [data-peek-%s] into the peek and no panel renders it' % hook
+        )
+
+    # AND THE TWO HINTS STAY DIFFERENT: from a month a square opens its DAY, from the overview its MONTH.
+    hints = re.findall(r'_calendar_peek.html" with hint="([^"]+)"', src)
+    assert len(set(hints)) == 2, 'both panels now promise the same thing: %s' % hints
+
+
+def test_the_year_totals_state_the_years_length_once():
+    """`open` IS SUMMED FROM THE MONTHS, not recomputed and not taken from a literal 365. Each group
+    already carries `open`, so `month['total'] - month['done']` was a second spelling of a figure the
+    data already held -- in a function whose own docstring objects to exactly that two lines earlier.
+
+    A VALUE TEST CANNOT SEE THIS, which is why the pin is on the source. `365 - sum(done)` is
+    numerically identical for every real run (the months sum to 365 by construction), so the obvious
+    assertion -- `done + open == 365` -- is tautologically satisfied by the literal it means to forbid.
+    Measured: that mutation passed in both suites that carry the check."""
+    src = (ROOT_DIR / 'challenges' / 'services' / 'calendar_render.py').read_text(encoding='utf-8')
+    # THE FUNCTION'S OWN BODY, bounded by the next thing at column zero. Slicing on blank lines ran
+    # straight past it into `DAY_MARKERS = (50, 100, 200, 300, 365)`, so the no-literal-365 assertion
+    # below was reading a constant two definitions away and failing on it.
+    body = src[src.index('def totals_for('):]
+    lines = body.split('\n')
+    end = next(i for i, ln in enumerate(lines[1:], 1) if ln and not ln[0].isspace())
+    body = '\n'.join(lines[:end])
+    # THE CODE, NOT THE PROSE. The docstring explains at length why there is no literal 365 here, and
+    # the word it has to use to say that is "365" -- so reading the whole function fails on its own
+    # explanation. Everything after the docstring's closing quotes.
+    body = body[body.index('"""', body.index('"""') + 3) + 3:]
+    assert "month['open']" in body, 'the year re-derives a figure the months already carry'
+    assert '365' not in body, (
+        "the year's length is stated here as well as in CALENDAR_MONTH_DAYS, so the Feb-29 fold is "
+        'written down twice'
+    )
 
 
 def test_the_crest_strip_opens_on_the_live_month():
@@ -2402,9 +2472,17 @@ def test_the_crest_strip_opens_on_the_live_month():
     )
     assert 'strip.scrollLeft +=' in js, 'the strip is no longer scrolled directly'
 
-    # THE BOOT CALL, and that it takes the tab the server marked live rather than an index.
-    assert "aria-selected') === 'true'" in js
+    # THE BOOT CALL, AND THAT `live` IS RESOLVED FROM THE SERVER'S OWN MARK. These were independent
+    # substring checks, and `"aria-selected') === 'true'"` ALSO appears in the `isActive` callback -- so
+    # it was satisfied however `live` was computed. Measured: replacing the filter with
+    # `var live = tabs[1];` passed, while the strip opened on February for every hunter, which is the
+    # entire bug this fixed. Sliced to the assignment, as the `show` check below already does.
     assert 'centreTab(live);' in js, 'nothing centres the live crest on load'
+    live = js[js.index('var live ='):]
+    live = live[:live.index(';')]
+    assert "aria-selected') === 'true'" in live, (
+        'the live crest is chosen some other way than by the mark the server rendered'
+    )
 
     # THE SWITCH USES THE SAME ONE. Two mechanisms for "bring a crest into view" is how they drift.
     show = js[js.index('function show(index)'):]
@@ -2459,34 +2537,42 @@ def test_the_crest_strip_cannot_widen_the_page():
         'the contained height and the coin height disagree: coin is %spx' % coin_h
     )
 
-    # AND IT IS TURNED OFF WHERE THE SCROLL CONTAINER IS.
+    # AND IT IS TURNED OFF WHERE THERE IS NO SCROLL CONTAINER -- the `md:` band, which sets
+    # `overflow-x: visible`. The comment here said the inverse of the rule it reads.
     md = [r for r in _css_rules(css, '.pp-cal__crests') if 'overflow-x: visible' in r]
     assert len(md) == 1 and 'contain: none' in md[0], (
         'size containment survives into the band where the row flexes, which breaks its height'
     )
 
 
-def test_the_marker_rails_top_rung_does_not_hang_outside_the_rail():
-    """THE LADDER'S TOP RUNG IS 365 OF 365, so its mark renders at `--at: 100%` -- and the shared
-    `translateX(-50%)` then puts half the label outside `.pp-cal-rail__marks`. Measured in Chromium at
-    375px: 272px of content in a 260px box, 12px of unclipped overflow from an absolutely positioned
-    child, propagating through ancestors that are all `overflow-x: visible`.
+def test_the_marker_rail_budgets_for_its_end_label_rather_than_anchoring_it():
+    """THE OVERHANG IS BUDGETED, NOT A DEFECT, and a previous version of this file asserted the opposite.
 
-    IT DOES NOT REACH THE VIEWPORT at any width from 320 to 1024, because the rail sits inside the
-    card's padding -- which is the reason to pin it rather than to shrug: nothing fails today, so
-    nothing would catch it the first time this rail moves 12px closer to an edge."""
-    # `_rail_css`, NOT `_calendar_css`: the rail is its own block beyond the banner the calendar reader
-    # cuts at, and that helper exists precisely so a rail assertion cannot pass against a slice that
-    # does not contain the rule it names.
-    last = _css_rule(_rail_css(), '.pp-cal-rail__mark:last-child {')
-    assert 'translateX(-100%)' in last, 'the top rung is centred on the end of its own track'
+    The top rung is 365 of 365, so its mark renders at `--at: 100%` and the shared `translateX(-50%)`
+    puts half the label past the end of `.pp-cal-rail__marks` -- measured as 272px of content in a 260px
+    box. That was read as unclipped overflow and "fixed" with a `:last-child { transform: translateX(-100%) }`.
+    It was never overflow: `.pp-cal-rail` carries `padding-inline: 14px` FOR THIS, and says so in as many
+    words. The measurement was taken on the inner box and the budget lives on the outer one.
 
-    # AND THE PREMISE: the top rung really is at 100%, or this rule is fixing nothing.
+    AND THE FIX COST ALIGNMENT. Anchoring the label's right edge moved its centre about half a label left
+    of its own pip, while every other rung stays centred on its pip -- the misregistration `marker_rail`
+    separately warns about. So this pins the budget and the absence of the transform together: either
+    one alone reads as an oversight to the next person who measures the inner box."""
+    rail = _rail_css()
+    outer = _css_rule(rail, '.pp-cal-rail {')
+    assert 'padding-inline: 14px' in outer, 'the side room the end label hangs into is gone'
+
+    mark = _css_rule(rail, '.pp-cal-rail__mark {')
+    assert 'translateX(-50%)' in mark, 'the marks are no longer centred on their pips'
+    assert ':last-child' not in rail, (
+        'an end-label override is back; it anchors the 365 label off its own pip, and the padding above '
+        'already pays for the overhang it removes'
+    )
+
+    # THE PREMISE: the top rung really is at 100%, or none of the above is about anything.
     from challenges.services.calendar_render import DAY_MARKERS, marker_rail
-    rail = marker_rail(0, total=DAY_MARKERS[-1])
-    assert rail['markers'][-1]['pct'] == 100, 'the top rung no longer sits at the end of the rail'
-    assert rail['markers'][0]['pct'] > 0, (
-        'the ladder now starts at zero, so the FIRST mark hangs off the left and needs its own rule')
+    rung = marker_rail(0, total=DAY_MARKERS[-1])['markers']
+    assert rung[-1]['pct'] == 100 and rung[0]['pct'] > 0
 
 
 # ── the All crest and its year overview ──────────────────────────────────────────────────────────
@@ -2681,27 +2767,40 @@ def test_the_overviews_dates_wait_for_room_and_bring_a_readable_fill_with_them()
 
 
 def test_an_overview_cells_ring_and_its_today_mark_compose():
-    """THE FOURTH TIME THIS FILE WOULD HAVE PAID FOR IT. `box-shadow` does not accumulate across rules, so
-    a filled cell's ring and today's mark would erase whichever lost -- the defect already recorded on
-    `.pp-csq`, on `.pp-cal__day` and on `.pp-cal__coin`. Both states write a custom property and the base
-    rule lists them, so the hover ring cannot erase either one either.
+    """THE FOURTH TIME THIS FILE PAID FOR IT -- and this test watched. `box-shadow` does not accumulate
+    across rules, so any two states writing it erase each other on whichever rule loses: the defect is
+    already recorded on `.pp-csq`, on `.pp-cal__day` and on `.pp-cal__coin`.
+
+    THE FIRST VERSION OF THIS PIN ASSERTED THE COLLISION. It required the hover rule to write
+    `--yc-mark` -- the SAME variable today's marker uses -- so it locked in a hover that erased today's
+    ring, which is the exact sentence this file keeps quoting about `.pp-csq`. A pin that names the
+    mechanism has to check the mechanism is SOUND, not merely present: one slot per state, and no two
+    states sharing one.
 
     TRANSPARENT DEFAULTS, NOT `none`: a keyword cannot be one item of a `box-shadow` list, and the whole
     declaration would be dropped."""
     css = _calendar_css()
     base = _css_rule(css, '.pp-cal__ycell {')
-    assert 'box-shadow: var(--yc-ring), var(--yc-mark)' in base
-    assert base.count('transparent') == 3, 'a default is `none`, which invalidates the list'
+    assert 'box-shadow: var(--yc-ring), var(--yc-mark), var(--yc-hover)' in base
+    assert base.count('0 0 0 0 transparent') == 3, 'a default is `none`, which invalidates the list'
 
     filled = [r for r in _css_rules(css, '.pp-cal__ycell--on') if '--yc-ring' in r]
     today = _css_rule(css, '.pp-cal__ycell--today {')
-    assert len(filled) == 1
-    assert 'box-shadow' not in filled[0], 'the filled ring is declared directly and erases the mark'
-    assert 'box-shadow' not in today, "today's mark is declared directly and erases the filled ring"
-    assert '--yc-mark' in today
+    hover = [r for r in _css_rules(css, '.pp-cal__year [data-peek-label]:hover') if '--yc-' in r]
+    assert len(filled) == 1 and len(hover) == 1
+    for rule, name in ((filled[0], 'the filled ring'), (today, "today's mark"), (hover[0], 'the hover')):
+        assert 'box-shadow' not in rule, '%s is declared directly and erases the others' % name
 
-    hover = [r for r in _css_rules(css, '.pp-cal__year [data-peek-label]:hover') if 'yc-mark' in r]
-    assert len(hover) == 1, 'the hover ring does not compose, so it erases one of the other two'
+    # ONE SLOT EACH, AND NO TWO THE SAME. This is the assertion the first version did not make.
+    slots = {'filled': filled[0], 'today': today, 'hover': hover[0]}
+    used = {}
+    for name, rule in slots.items():
+        found = sorted(set(re.findall(r'--yc-[a-z]+(?=:)', rule)))
+        assert len(found) == 1, '%s writes %d shadow slots, not one: %s' % (name, len(found), found)
+        used[name] = found[0]
+    assert len(set(used.values())) == 3, (
+        'two states share a shadow slot, so the more specific one erases the other: %s' % used
+    )
 
 
 def test_an_overview_row_jumps_to_its_months_tab():
@@ -2733,7 +2832,20 @@ def test_an_overview_row_jumps_to_its_months_tab():
     # THE SAME PAIR `onSelect` USES, so a jump leaves the board exactly where a crest click would --
     # `aria-selected` rewritten, panels re-hidden, the slide run, and the roving tabindex moved.
     assert 'show(index);' in jump and 'api.syncTabindex();' in jump
-    assert 'tab.focus()' in jump, 'focus stays on the overview, so the arrow keys move the wrong tab'
+
+    # AND THE SLIDE STARTS FROM THE LIVE MONTH. `current` was `order[0]`, which is the ALL tab and can
+    # never be live, so the first switch always computed a FORWARD slide whichever way it went.
+    current = js[js.index('var current ='):]
+    current = current[:current.index(';')]
+    assert 'order[0]' not in current, 'the slide starts from the overview rather than from the open month'
+    assert 'live' in current
+    # FOCUS MOVES, AND DOES NOT SCROLL. `focus()` scrolls the element into view by default, which is
+    # `scrollIntoView` wearing another name -- and on this site `html` carries `scroll-behavior: smooth`
+    # AND a `scroll-padding-top` for the sticky chrome, so the default would slide the whole page under
+    # the pointer that just clicked a row. The option is the correctness, not the call.
+    assert 'tab.focus({ preventScroll: true })' in jump, (
+        'focus either stays on the overview, or moves and drags the document with it'
+    )
 
 
 def test_a_jump_tears_down_the_peek_it_leaves_behind():

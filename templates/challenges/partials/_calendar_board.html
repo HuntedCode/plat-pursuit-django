@@ -11,7 +11,7 @@ a curated subset of the catalogue; a Calendar is a hunter's whole platinum histo
 WHY A SWITCHER AND NOT A WALL OF TWELVE MONTHS (owner, 2026-10-04, choosing between three mockups).
 A whole year at 375px is tiny: the Hall of Fame hero draws exactly that and its cells land under 5px,
 which is a density read rather than something you can point at. One month at a time gives a 44px cell --
-the touch minimum -- and it gives the twelve crests a job beyond decoration: they ARE the tabs. The
+the touch minimum -- and it gives the crests a job beyond decoration: they ARE the tabs. The
 year-at-a-glance read is not lost, it lives on the hero where it belongs.
 
 A DAY HAS NO WEEKDAY, which is why this grid has no `S M T W T F S` head and must never grow one. A
@@ -30,9 +30,10 @@ and not a button", and the commit that made them buttons left it standing twenty
 {% endcomment %}
 <div class="pp-cal">
 
-    {% comment %}THE CREST ROW. Twelve tabs, and the run's trophy shelf.
+    {% comment %}THE CREST ROW. Thirteen tabs -- twelve months and the whole-year overview -- and the
+    run's trophy shelf.
 
-    A SCROLLING SNAP STRIP AT MOBILE, twelve across from `md:`. Twelve tabs inside 375px is 22px each --
+    A SCROLLING SNAP STRIP AT MOBILE, thirteen across from `md:`. Thirteen tabs inside 375px is 20px each --
     half the 44px touch minimum, and far too small for a face to say anything -- so the strip keeps each
     crest at a real size and lets the row scroll instead.
     SCROLLING IS THE EXCEPTION, NOT A HOUSE RULE. CLAUDE.md's mobile criterion says to OMIT rather than
@@ -275,15 +276,7 @@ and not a button", and the commit that made them buttons left it standing twenty
         `cell.closest('.pp-cal__panel')`, so a panel without a stats column would have no face to swap
         and a hover would do nothing.{% endcomment %}
         <div class="pp-cal__stats">
-            <div class="pp-cal__peek pp-cal__face--off" data-cal-peek aria-hidden="true">
-                <h4 class="pp-cal__stats-head" data-peek-head></h4>
-                <p class="pp-cal__peek-figure" data-peek-figure hidden>
-                    <span class="pp-tally" data-peek-count></span>
-                    <span class="pp-cal__peek-unit" data-peek-unit></span>
-                </p>
-                <p class="pp-cal__peek-note" data-peek-note></p>
-                <p class="pp-cal__peek-hint">Open its month for the games</p>
-            </div>
+            {% include "challenges/partials/_calendar_peek.html" with hint="Open its month for the games" %}
             <div class="pp-cal__facts" data-cal-facts>
                 <h4 class="pp-cal__stats-head">The year</h4>
                 <dl class="pp-cal__statlist">
@@ -475,24 +468,7 @@ and not a button", and the commit that made them buttons left it standing twenty
         figures, and an empty peek never flashes.
         {% endcomment %}
         <div class="pp-cal__stats">
-            <div class="pp-cal__peek pp-cal__face--off" data-cal-peek aria-hidden="true">
-                <h4 class="pp-cal__stats-head" data-peek-head></h4>
-                {% comment %}THE FIGURE LINE IS HIDEABLE, because a square this board draws EMPTY has no
-                figure this board recognises. An `in_all`-only square carries the shovelware-inclusive
-                count, so printing it read "6 platinums, not counted" -- a number and its own retraction
-                on one line, on a square the grid deliberately leaves open. The state goes in the note
-                instead and the number does not appear at all.{% endcomment %}
-                {% comment %}THIS one keeps the `hidden` ATTRIBUTE, unlike the two faces above: it is not
-                a child of `.pp-cal__stats`, nothing stacks on it, and `display: none` is exactly what a
-                withheld line wants. The preflight rule that defeats the attribute on the faces is what
-                makes it work here.{% endcomment %}
-                <p class="pp-cal__peek-figure" data-peek-figure hidden>
-                    <span class="pp-tally" data-peek-count></span>
-                    <span class="pp-cal__peek-unit" data-peek-unit></span>
-                </p>
-                <p class="pp-cal__peek-note" data-peek-note></p>
-                <p class="pp-cal__peek-hint">Open for the games</p>
-            </div>
+            {% include "challenges/partials/_calendar_peek.html" with hint="Open for the games" %}
             <div class="pp-cal__facts" data-cal-facts>
             <h4 class="pp-cal__stats-head">{{ month.label }} at a glance</h4>
             <dl class="pp-cal__statlist">

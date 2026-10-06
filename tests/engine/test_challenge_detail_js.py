@@ -1686,6 +1686,46 @@ def test_no_type_in_this_stylesheet_falls_below_the_12px_floor():
 
     css = _re.sub(r'/\*.*?\*/', '', CSS, flags=_re.S)
 
+    def _licensed(selector):
+        """Is EVERY part of this selector list covered by `allowed`?
+
+        A SUBSTRING TEST WAS NOT ENOUGH, and the three ways it leaked are all one rule away from real:
+        `.pp-cal__stack, .pp-cal__peek-note { font-size: 9px }` licensed a PROSE line (the peek's note
+        renders whole sentences) off a badge's exception; `.pp-cal__stack span` licensed a different
+        element; and `.pp-cal__stackXYZ` licensed a different class. Each passed. So a part counts only
+        when it IS the licensed selector, pseudo-classes aside, and every part must count -- which is
+        what the docstring already promised ("an exception costs exactly one selector").
+        """
+        parts = [p.strip() for p in selector.split(',') if p.strip()]
+        if not parts:
+            return False
+        return all(_re.sub(r'::?[a-z-]+(\([^)]*\))?$', '', part).strip() in allowed for part in parts)
+
+    def _sizes_in(value):
+        """Every length in a `font-size` value, in px, or `None` for a unit this cannot resolve.
+
+        ALL OF THEM, because `clamp(10px, 1vw, 11px)` is a 10px floor and the first version of this guard
+        required the value to START with a digit -- so every function wrapper was invisible to it. This
+        file ships four `clamp()` font sizes today, one of them on `.pp-cal__sub`, the counter plate
+        sitting directly beside the badge the one exception was written for.
+        AND AN UNRESOLVABLE UNIT IS AN OFFENCE, not a skip. `em`, `%`, `ch` and `ex` depend on an
+        inherited size this reader cannot know, so letting them through silently is how the next
+        sub-floor size arrives. There are none in this file, so the strictness is free -- and if one is
+        ever wanted, it should be argued for here rather than slipped past a regex that only knew two
+        units.
+        """
+        out = []
+        for number, unit in _re.findall(r'(-?[0-9.]+)([a-z%]+)', value):
+            if unit == 'px':
+                out.append(float(number))
+            elif unit == 'rem':
+                out.append(float(number) * 16.0)
+            elif unit in ('vw', 'vh', 'vmin', 'vmax'):
+                continue          # a clamp's middle term; the floor is what binds
+            else:
+                out.append(None)
+        return out
+
     def _selector_of(start):
         """The selector of the rule containing the character at `start`.
 
@@ -1696,20 +1736,37 @@ def test_no_type_in_this_stylesheet_falls_below_the_12px_floor():
         prev = max(css.rfind('}', 0, open_at), css.rfind('{', 0, open_at))
         return ' '.join(css[prev + 1:open_at].split())
 
+    # THE SHORTHAND TOO. `font: 700 11px/1 system-ui` sets a size and the longhand scan never saw it --
+    # which is not hypothetical syntax, it is how the `.pp-cal__day` numeral was once reset to 16px.
+    # Every `font:` in this file is `inherit` today, so anything else is a deliberate new thing.
+    for m in _re.finditer(r'(?<![-a-z])font:\s*([^;]+);', css):
+        value = m.group(1).strip()
+        if value in ('inherit', 'initial', 'unset', 'revert'):
+            continue
+        sizes = [px for px in _sizes_in(value) if px is not None]
+        assert sizes and min(sizes) >= 12.0, (
+            'the `font` shorthand sets sub-floor or unreadable type in `%s`: %s'
+            % (_selector_of(m.start()), value)
+        )
+
     sub_floor = []
-    for m in _re.finditer(r'font-size:\s*([0-9.]+)(px|rem)', css):
-        px = float(m.group(1)) * (16.0 if m.group(2) == 'rem' else 1.0)
-        if px < 12.0:
-            sub_floor.append((_selector_of(m.start()), '%s%s (%.1fpx)' % (m.group(1), m.group(2), px)))
+    for m in _re.finditer(r'font-size:\s*([^;]+);', css):
+        value = m.group(1).strip()
+        sizes = _sizes_in(value)
+        selector = _selector_of(m.start())
+        if any(px is None for px in sizes):
+            sub_floor.append((selector, '%s (a unit this guard cannot resolve)' % value))
+        elif sizes and min(sizes) < 12.0:
+            sub_floor.append((selector, '%s (%.1fpx)' % (value, min(sizes))))
 
     offenders = ['%s in `%s`' % (what, sel) for sel, what in sub_floor
-                 if not any(key in sel for key in allowed)]
+                 if not _licensed(sel)]
     assert offenders == [], 'type below the 12px floor: %s' % '; '.join(sorted(set(offenders)))
 
     # AND EVERY LICENCE IS STILL BEING USED. An allowed selector that no longer declares sub-floor type is a
     # permission nobody needs, and the next reader would take it as precedent for the next one.
     for key in allowed:
-        assert any(key in sel for sel, _what in sub_floor), (
+        assert any(_licensed(sel) and key in sel for sel, _what in sub_floor), (
             '`%s` is allowed sub-floor type and no longer declares any; drop it from `allowed`' % key)
 
 
