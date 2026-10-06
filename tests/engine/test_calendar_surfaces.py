@@ -2340,6 +2340,41 @@ def test_the_hue_never_becomes_small_text_over_the_dialog_wash():
     )
 
 
+def test_the_stack_badge_stays_one_pixel_under_the_date():
+    """OWNER, 2026-10-06: "the plat counter text in the corner on mobile... is a little bit too large."
+
+    THE RULE IS THE RELATIONSHIP, not either number. The date is 12px at mobile and 13px from `md:`; the
+    badge was a flat 12px, so it MATCHED the date at mobile and sat under it only on larger screens -- and
+    at weight 700 against the filled date's 600 it was the heavier of the two, a corner glyph out-shouting
+    the number it annexes. One pixel under at BOTH widths is the same hierarchy everywhere.
+
+    IT COULD NOT BE DIMMED INSTEAD. The badge began at `--pp-text-dim` for exactly that purpose and
+    measured 3.21:1 at December, so colour and opacity were both spent before size was reached."""
+    css = _calendar_css()
+
+    day = [r for r in _css_rules(css, '.pp-cal__day') if 'font-size' in r]
+    stack = [r for r in _css_rules(css, '.pp-cal__stack') if 'font-size' in r]
+    assert len(day) == 2 and len(stack) == 2, (
+        'expected a base and an md: size for each: %d day, %d badge' % (len(day), len(stack))
+    )
+
+    def _px(rule):
+        value, unit = re.search(r'font-size: ([0-9.]+)(px|rem)', rule).groups()
+        return float(value) * (16.0 if unit == 'rem' else 1.0)
+
+    # Source order is base then `md:` for both, which the lengths above already constrain.
+    for band, (date_px, badge_px) in enumerate(zip(map(_px, day), map(_px, stack))):
+        assert badge_px == date_px - 1, (
+            'at band %d the badge is %.1fpx against a %.1fpx date; it must sit exactly one pixel under'
+            % (band, badge_px, date_px)
+        )
+
+    # AND IT KEEPS ITS WEIGHT. Dropping size AND weight together takes the badge from shouting to
+    # vanishing -- bold is what holds a sub-floor glyph together.
+    base = [r for r in _css_rules(css, '.pp-cal__stack') if 'position: absolute' in r]
+    assert len(base) == 1 and 'font-weight: 700' in base[0]
+
+
 def test_the_crest_strip_opens_on_the_live_month():
     """OWNER, 2026-10-05: "the crest bar doesn't automatically scroll to show the current month on the
     screen on load (say October, it is off-screen initially)."

@@ -3983,15 +3983,29 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    meet" (wrong arithmetic, wrong axis), the next said 4-16 and 16-28 "do not meet" while quoting the
    figures that show them touching. Two digits still fit: `x12` is about 21px at this size.
 
-   12px IS THE FLOOR and this sits on it, so the badge cannot be made secondary by SIZE. It was made
-   secondary by COLOUR instead -- `--pp-text-dim` -- on the reasoning that colour was the only lever
-   left. MEASURED, THAT COLOUR FAILS: against `color-mix(cal-c 22%, bg-2)` it holds 3.21:1 (December) to
-   4.37:1 (October), under the 4.5 a 12px label needs, and the comment claimed "about 6:1" for a figure
-   no month reaches. The lever it rejected -- `opacity` -- would have cost exactly the same ratio, which
-   is the point: there was no safe way to dim it.
-   SO IT IS NOT DIMMED. `--pp-text` holds 7.30-9.95 across the twelve, and the badge is distinguished by
-   POSITION and by the `x` instead. A corner glyph does not need to be quieter than the date to read as
-   subordinate to it.
+   ONE PIXEL UNDER THE DATE, AT BOTH SIZES, which is the whole rule and took three goes to find. The
+   date is `0.75rem` (12px) at mobile and `0.8125rem` (13px) from `md:`; the badge was a flat 12px, so it
+   MATCHED the date at mobile and sat under it only on larger screens. At 700 against the filled date's
+   600 it was also the heavier of the two -- a corner glyph out-shouting the number it annexes (owner,
+   2026-10-06: "the plat counter text in the corner on mobile... is a little bit too large"). 11/12 and
+   12/13 is the same relationship at both widths rather than a mobile tweak.
+
+   IT COULD NOT BE DIMMED INSTEAD, which is why this is a size change and not a colour one. The badge
+   began at `--pp-text-dim` for exactly that purpose and MEASURED 3.21:1 (December) to 4.37:1 (October)
+   against `color-mix(cal-c 22%, bg-2)`, under the 4.5 a small label needs -- and `opacity` would have
+   cost the same ratio. `--pp-text` holds 7.30-9.95, so the only levers left were size and weight.
+
+   11px IS UNDER THIS FILE'S 12px FLOOR AND WITHIN THE PROJECT'S, which is worth getting the right way
+   round. `design-system.md` sets the rule as "do not go below 12px for READABLE CONTENT" and reserves
+   smaller sizes for "decorative/supplementary elements like calendar grids" -- a count badge on a
+   calendar square is the example it gives. The file-wide guard in `test_challenge_detail_js` is the
+   STRICTER local rule and simply had no way to express that distinction, so `.pp-cal__stack` is named in
+   it; its docstring asks for exactly that rather than a lowered bound.
+   IT QUALIFIES ON THE DOC'S OWN TERMS: a numeric glyph rather than prose, bold tabular digits at
+   7.30-9.95, and the same count carried by the square's `sr-only` label, by the hover peek and by the
+   day modal -- so nothing is readable ONLY here.
+   WEIGHT STAYS AT 700, because that is what keeps a small glyph crisp; dropping both size and weight
+   would have taken the badge from shouting to vanishing.
 
    INSET PAST THE MOBILE FOCUS RING. At `md:` and up the ring is outside the cell, but at mobile it is
    `outline-offset: -2px` -- drawn 2-4px INSIDE the border box, and an outline paints after all content,
@@ -4002,7 +4016,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     position: absolute;
     top: 4px;
     right: 5px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     line-height: 1;
     letter-spacing: -0.02em;
@@ -4031,6 +4045,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     font-weight: 600;
 }
 .pp-cal__num { line-height: 1; }
+/* THE DATE GROWS AT `md:` AND THE BADGE FOLLOWS IT, keeping the one-pixel gap that makes the badge read
+   as subordinate. Without this the badge would be 11px against a 13px date, which is a different
+   relationship from the one above and reads as an afterthought rather than a hierarchy. */
+@media (min-width: 768px) { .pp-cal__stack { font-size: 12px; } }
 
 
 /* ── one square, opened: the day sheet ────────────────────────────────────────────────────────────────

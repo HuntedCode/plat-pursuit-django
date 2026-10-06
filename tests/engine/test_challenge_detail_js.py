@@ -1658,15 +1658,59 @@ def test_no_type_in_this_stylesheet_falls_below_the_12px_floor():
     size should fail without anybody remembering to add a test for it. `rem` is resolved at the project's 16px
     root; a genuine exception (an uppercase micro-label, say) should be added here deliberately with its reason
     rather than by lowering the bound.
+
+    AN EXCEPTION IS A SELECTOR, NOT A VALUE. The first version scanned bare `font-size` values with no idea
+    which rule they sat in, so the only way to allow one sub-floor badge would have been to allow the VALUE --
+    which silently allows every other use of it in a file of four thousand lines. Resolving each declaration
+    back to its own rule means an exception costs exactly one selector and the floor holds everywhere else.
+
+    COMMENTS ARE STRIPPED IN THE READER, because this file's comments quote CSS at length, braces and all: a
+    rule walk over the raw text would read `[hidden] { display: none !important }` inside a comment as a rule.
     """
     import re as _re
 
-    offenders = []
-    for value, unit in _re.findall(r'font-size:\s*([0-9.]+)(px|rem)', CSS):
-        px = float(value) * (16.0 if unit == 'rem' else 1.0)
+    #: SUB-FLOOR TYPE THAT IS DELIBERATE: selector -> why it is not prose. Adding to this should be as hard
+    #: to do by accident as lowering the bound would be.
+    allowed = {
+        '.pp-cal__stack': (
+            '11px at mobile only, and within the PROJECT standard even though it is under this guard. '
+            '`design-system.md` sets the floor as "do not go below 12px for readable content" and reserves '
+            'smaller sizes for "decorative/supplementary elements like calendar grids" -- a count badge on '
+            'a calendar square is the example it gives. This guard is the stricter local rule and cannot '
+            'tell prose from a glyph, which is why the exception is named rather than the bound lowered. '
+            'The badge: bold tabular digits at a measured 7.30-9.95 contrast, one pixel under the date '
+            'beside it at both widths (12px at mobile, 13px from md: where this returns to 12), with the '
+            "same count carried by the square's sr-only label, the hover peek and the day modal."
+        ),
+    }
+
+    css = _re.sub(r'/\*.*?\*/', '', CSS, flags=_re.S)
+
+    def _selector_of(start):
+        """The selector of the rule containing the character at `start`.
+
+        Back to the rule's opening brace, then back to the end of whatever came before it. Inside a media
+        block that predecessor is the block's own `{`, which is why this takes the LATER of the two.
+        """
+        open_at = css.rfind('{', 0, start)
+        prev = max(css.rfind('}', 0, open_at), css.rfind('{', 0, open_at))
+        return ' '.join(css[prev + 1:open_at].split())
+
+    sub_floor = []
+    for m in _re.finditer(r'font-size:\s*([0-9.]+)(px|rem)', css):
+        px = float(m.group(1)) * (16.0 if m.group(2) == 'rem' else 1.0)
         if px < 12.0:
-            offenders.append('%s%s (%.1fpx)' % (value, unit, px))
-    assert offenders == [], 'type below the 12px floor: %s' % ', '.join(sorted(set(offenders)))
+            sub_floor.append((_selector_of(m.start()), '%s%s (%.1fpx)' % (m.group(1), m.group(2), px)))
+
+    offenders = ['%s in `%s`' % (what, sel) for sel, what in sub_floor
+                 if not any(key in sel for key in allowed)]
+    assert offenders == [], 'type below the 12px floor: %s' % '; '.join(sorted(set(offenders)))
+
+    # AND EVERY LICENCE IS STILL BEING USED. An allowed selector that no longer declares sub-floor type is a
+    # permission nobody needs, and the next reader would take it as precedent for the next one.
+    for key in allowed:
+        assert any(key in sel for sel, _what in sub_floor), (
+            '`%s` is allowed sub-floor type and no longer declares any; drop it from `allowed`' % key)
 
 
 def test_every_list_in_the_challenge_templates_declares_its_role():
