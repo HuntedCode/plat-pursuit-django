@@ -2340,6 +2340,48 @@ def test_the_hue_never_becomes_small_text_over_the_dialog_wash():
     )
 
 
+def test_the_crest_strip_opens_on_the_live_month():
+    """OWNER, 2026-10-05: "the crest bar doesn't automatically scroll to show the current month on the
+    screen on load (say October, it is off-screen initially)."
+
+    THE BOARD HAS OPENED ON THE CURRENT MONTH since the server learned to render it, but nothing ever
+    moved the STRIP -- `show` is the only thing that centres a crest and it runs on interaction. So a
+    hunter in October arrived at an October board sitting under a row of crests showing January, with
+    the live one five coins past the right edge.
+
+    VERIFIED IN A BROWSER under real mobile emulation (iPhone 12, iPhone SE, Pixel 5): the strip lands
+    at a scrollLeft of 280/350/277 with October's crest fully inside the box, `scrollY` still 0, and a
+    1280px desktop is a clean no-op. What is pinned HERE is the mechanism, because this suite has no
+    browser.
+
+    `scrollLeft`, NOT `scrollIntoView`, AND THAT IS THE LOAD-BEARING PART. `scrollIntoView` walks every
+    scrollable ancestor, so it can pan the document as well as the strip -- not hypothetical on this
+    board, which had a 620px strip panning the whole page sideways on a phone. On BOOT the vertical half
+    is worse: the old call carried `block: 'nearest'` to stop the browser scrolling down to centre a
+    44px control, and a board below the fold is not "nearest", so the page would have jumped to it on
+    load."""
+    js = _script_code()
+
+    assert 'scrollIntoView' not in js, (
+        'a crest asks the page to scroll it again, which can pan the document on both axes'
+    )
+    assert 'strip.scrollLeft +=' in js, 'the strip is no longer scrolled directly'
+
+    # THE BOOT CALL, and that it takes the tab the server marked live rather than an index.
+    assert "aria-selected') === 'true'" in js
+    assert 'centreTab(live);' in js, 'nothing centres the live crest on load'
+
+    # THE SWITCH USES THE SAME ONE. Two mechanisms for "bring a crest into view" is how they drift.
+    show = js[js.index('function show(index)'):]
+    show = show[:show.index('\n        }')]
+    assert 'centreTab(tab);' in show, 'switching months no longer brings its crest along'
+
+    # AND IT IS A NO-OP WHERE NOTHING SCROLLS, so the desktop row is never written to.
+    assert 'strip.scrollWidth <= strip.clientWidth' in js, (
+        'the centring writes to a strip with no overflow instead of standing down'
+    )
+
+
 def test_the_crest_strip_cannot_widen_the_page():
     """OWNER, 2026-10-05, ON A PHONE: "they 'extend' the screen so I can scroll the entire screen over to
     the right". A horizontal scroll container sitting in the page's flex column leaks its INTRINSIC width

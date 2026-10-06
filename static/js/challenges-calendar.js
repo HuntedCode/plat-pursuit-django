@@ -34,9 +34,11 @@
         var board = document.querySelector('.pp-cal');
         if (!board) { return; }
 
-        // NO `strip` LOCAL. One was read once, in a guard that `tabs.length` already implies -- the
-        // crests live inside the strip, so there cannot be tabs without it. `wireTablist` binds to the
-        // tabs themselves rather than delegating from the container, so nothing else needed it.
+        // THE STRIP LOCAL IS BACK, AND NOW IT IS READ. It was removed once with a note saying nothing
+        // needed it, which was true then: the only reader was a guard `tabs.length` already implied.
+        // `centreTab` below is a real reader, twice over, and re-querying it per call would be the
+        // version of this that looks tidy and is not.
+        var strip = board.querySelector('.pp-cal__crests');
         var tabs = Array.prototype.slice.call(board.querySelectorAll('.pp-cal__crest'));
         var panels = board.querySelectorAll('.pp-cal__panel');
         if (!tabs.length || !panels.length) { return; }
@@ -46,6 +48,29 @@
         // (An earlier comment said "off the panels", which is not what the line below does.)
         var order = tabs.map(function (tab) { return tab.id.replace('cal-tab-', ''); });
         var current = order[0];
+
+        // BRING A CREST INTO VIEW BY SCROLLING THE STRIP, never by asking the element to scroll itself.
+        // `scrollIntoView` walks EVERY scrollable ancestor, so `inline: 'center'` can pan the document
+        // as well as the strip -- which this board has just finished proving is not hypothetical, since
+        // a 620px strip in a 308px box had the page panning sideways on a phone. Writing `scrollLeft`
+        // touches one box and cannot move anything else.
+        // IT ALSO SIDESTEPS THE VERTICAL HAZARD the old call documented: `block: 'nearest'` was there to
+        // stop the browser scrolling the document down to centre a 44px control. On BOOT that guard is
+        // not enough -- a board below the fold is not "nearest", so the page would have jumped to it on
+        // load, which is the one thing a page must not do while somebody is reading the top of it.
+        // INSTANT, AND NOT BY ACCIDENT: `scroll-behavior: smooth` is declared on `html` and is not an
+        // inherited property, so the strip's own scrolling is unanimated. The strip is where this writes.
+        function centreTab(tab) {
+            if (!strip || !tab) { return; }
+            // NOTHING TO DO WHERE NOTHING SCROLLS. From `md:` the strip is `overflow-x: visible`, so this
+            // is a no-op there rather than a silent write to a box with no overflow.
+            if (strip.scrollWidth <= strip.clientWidth) { return; }
+            // MEASURED OFF RECTS, NOT `offsetLeft`, which is relative to the nearest POSITIONED ancestor
+            // -- a thing this strip does not have and could acquire from any rule above it.
+            var box = strip.getBoundingClientRect();
+            var coin = tab.getBoundingClientRect();
+            strip.scrollLeft += (coin.left - box.left) - (box.width - coin.width) / 2;
+        }
 
         function show(index) {
             var tab = tabs[index];
@@ -70,11 +95,10 @@
             if (PP.slideViewIn) { PP.slideViewIn(shown, current, next, order); }
             current = next;
 
-            // `block: 'nearest'` SO THE PAGE DOES NOT SCROLL. The crest row is a horizontal snap strip at
-            // mobile, so an off-screen crest has to be brought along -- but the default would also scroll
-            // the document vertically to centre a 44px control, which on a phone throws the board off
-            // screen entirely.
-            if (tab.scrollIntoView) { tab.scrollIntoView({ block: 'nearest', inline: 'center' }); }
+            // THE CREST ROW IS A HORIZONTAL SNAP STRIP AT MOBILE, so a switch to an off-screen month has
+            // to bring its crest along. See `centreTab` for why that is a `scrollLeft` write rather than
+            // the `scrollIntoView({ block: 'nearest', inline: 'center' })` this line used to be.
+            centreTab(tab);
         }
 
         if (!PP.wireTablist) { return; }
@@ -98,6 +122,20 @@
                 api.syncTabindex();
             },
         });
+
+        // THE STRIP OPENS ON THE LIVE MONTH (owner, 2026-10-05: "the crest bar doesn't automatically
+        // scroll to show the current month on the screen on load (say October, it is off-screen
+        // initially)"). The board has opened on the current month since the server learned to render it,
+        // but nothing ever moved the STRIP: `show` is the only thing that centres a crest and it runs on
+        // interaction, so a hunter in October arrived at an October board above a row showing January.
+        //
+        // AFTER `wireTablist`, because the live crest is found by the same `aria-selected` the helper's
+        // `isActive` reads, and doing it here keeps one definition of "which tab is live" rather than a
+        // second expression that agrees until it does not.
+        var live = tabs.filter(function (tab) {
+            return tab.getAttribute('aria-selected') === 'true';
+        })[0];
+        centreTab(live);
 
         // THE YEAR OVERVIEW'S ROWS JUMP TO THEIR MONTH (owner, 2026-10-05: "being able to click a box or
         // one of the rows to go to the proper tab would be really nice"). Delegated from the board, so one
