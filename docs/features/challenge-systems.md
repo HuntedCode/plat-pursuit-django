@@ -838,6 +838,15 @@ box as though empty and it would otherwise collapse. Scope it to the band where 
 exists; from `md:` the strip is `overflow-x: visible` and containment would break a row whose height comes
 from coins that size themselves.
 
+**And bring a crest into view by writing the strip's `scrollLeft`, never with `scrollIntoView`.** The
+strip opens centred on the live month: the board has always opened on the current month, but nothing
+moved the row, so a hunter in October met a row showing January with the live crest five coins past the
+edge. `scrollIntoView` walks EVERY scrollable ancestor, so it can pan the document on both axes — not
+hypothetical on this board. On load the vertical half is the worse one: `block: 'nearest'` stops the
+browser centring a control already on screen, but a board below the fold is not "nearest", so the page
+would jump down to it on load. A `scrollLeft` write touches one box and is instant without asking,
+since `scroll-behavior: smooth` sits on `html` and is not inherited.
+
 **The Calendar's hover preview is pointer-only, deliberately.** The side column swaps the month's figures
 for a hovered day's. It mirrored `focusin` at first, on the reasoning that a keyboard reader has no hover,
 and that was a net loss: the preview carries `aria-hidden="true"`, so focusing a square announced nothing
