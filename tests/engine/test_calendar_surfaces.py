@@ -1359,7 +1359,9 @@ def test_the_crest_gap_is_fixed_so_the_coins_do_not_shrink_as_the_window_grows()
     card that does not widen until 1280. The band was at its smallest exactly where this slice meant to
     make it generous, and no test could catch it because none computes a width."""
     flat = ' '.join(_calendar_css().split())
-    assert '.pp-cal__crests { overflow-x: visible; gap: 10px; }' in flat
+    # `contain: none` RIDES ALONG, and deliberately: the base rule contains the scroll container so it
+    # cannot widen the layout viewport, and that containment has to stop where the scrolling does.
+    assert '.pp-cal__crests { overflow-x: visible; gap: 10px; contain: none; }' in flat
     assert '1.4vw' not in flat, 'a viewport-relative gap cannot divide a step-function width'
 
 
@@ -2335,6 +2337,55 @@ def test_the_hue_never_becomes_small_text_over_the_dialog_wash():
     assert wash.count('var(--cal-c') == 2, (
         'the dialog paints %d hue layers under its text, not the two the composite was measured on'
         % wash.count('var(--cal-c')
+    )
+
+
+def test_the_crest_strip_cannot_widen_the_page():
+    """OWNER, 2026-10-05, ON A PHONE: "they 'extend' the screen so I can scroll the entire screen over to
+    the right". A horizontal scroll container sitting in the page's flex column leaks its INTRINSIC width
+    upward -- `game-detail.css` records the identical defect and cause for its pill row -- and a mobile
+    browser answers a 620px demand by EXPANDING THE LAYOUT VIEWPORT. Measured on an emulated iPhone 12:
+    `innerWidth` 619 against a 390 layout viewport, so the whole document panned into empty space.
+
+    THIS PIN IS SOURCE TEXT BECAUSE THE SUITE HAS NO BROWSER, and that limit is worth stating plainly: no
+    assertion here can see a layout viewport, so what is pinned is the MECHANISM rather than the symptom.
+    It was verified in Chromium under real mobile emulation at 320, 375, 390 and 393, and the project
+    already ships Playwright (share cards) if this is ever worth promoting to a rendered test.
+
+    BOTH KEYWORDS ARE LOAD-BEARING. `contain: size` alone does NOT fix it -- measured -- so a tidy-up that
+    drops `layout` silently restores the bug. So does dropping the intrinsic height: size containment
+    sizes the box as though it were empty, and the strip would collapse.
+
+    AND IT IS SCOPED TO THE SCROLL CONTAINER. From `md:` the strip is `overflow-x: visible` and the coins
+    flex, so there is nothing to leak -- and size containment there would break a row whose height comes
+    from coins that size themselves."""
+    css = _calendar_css()
+
+    # FOUND BY ITS DECLARATION, not by position: `.pp-cal__crests` has five rules and `_css_rule` takes
+    # the first, which is the `md:` width block. The lesson `.pp-cal__stats` taught this file.
+    base = [r for r in _css_rules(css, '.pp-cal__crests') if 'overflow-x: auto' in r]
+    assert len(base) == 1, 'the scrolling strip rule moved or split: %d matches' % len(base)
+    base = base[0]
+    assert 'contain: layout size' in base, (
+        'the strip can widen the layout viewport again; `contain: size` alone does not fix it'
+    )
+    assert 'contain-intrinsic-height' in base, 'size containment with no height collapses the strip'
+
+    # THE INTRINSIC HEIGHT IS THE COIN'S HEIGHT. If one moves without the other the strip clips its own
+    # coins or leaves a gap, and nothing else would notice.
+    # THE MOBILE COIN, which is the one the contained height has to match: the `md:` rule sets
+    # `height: auto` and sizes from `aspect-ratio`, so filtering on `height:` alone matches both.
+    crest = [r for r in _css_rules(css, '.pp-cal__crest') if re.search(r'height: \d+px', r)]
+    assert len(crest) == 1, 'the fixed coin size rule moved: %d matches' % len(crest)
+    coin_h = re.search(r'height: (\d+)px', crest[0]).group(1)
+    assert 'contain-intrinsic-height: %spx' % coin_h in base, (
+        'the contained height and the coin height disagree: coin is %spx' % coin_h
+    )
+
+    # AND IT IS TURNED OFF WHERE THE SCROLL CONTAINER IS.
+    md = [r for r in _css_rules(css, '.pp-cal__crests') if 'overflow-x: visible' in r]
+    assert len(md) == 1 and 'contain: none' in md[0], (
+        'size containment survives into the band where the row flexes, which breaks its height'
     )
 
 

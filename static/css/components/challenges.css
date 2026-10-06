@@ -3009,6 +3009,35 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        left -- which is the only reason the conclusions survived the arithmetic being wrong. */
     padding: 7px 6px 10px;
     scrollbar-width: none;
+    /* THE STRIP MUST NOT WIDEN THE PAGE, and on a real phone it did (owner, 2026-10-05: "they 'extend'
+       the screen so I can scroll the entire screen over to the right"). A horizontal scroll container
+       sitting in the page's flex column leaks its INTRINSIC width upward -- `game-detail.css` records
+       the same defect and the same cause: "a scroll container here sits in the page's flex column
+       (#zoom-wrapper) and its intrinsic min-content propagates up, widening the whole page". Thirteen
+       44px coins and their gaps are 620px, and a mobile browser answers that by EXPANDING THE LAYOUT
+       VIEWPORT: measured on an emulated iPhone 12, `innerWidth` was 619 against a 390 layout viewport,
+       so the whole document panned sideways into empty space.
+
+       WHY IT TOOK A BROWSER TO SEE. A desktop-sized headless viewport does not reproduce it at all --
+       the meta viewport is ignored, `window.scrollX` stays 0, and the page looks fine at every width
+       from 320 to 1024. Only true mobile emulation shows it. `documentElement.scrollWidth` reports 618
+       in BOTH cases and is a red herring: it does not move when `overflow-x: clip` is put on `html`.
+
+       SIZE CONTAINMENT IS THE FIX, and it is the only one that worked. Measured, these do NOT: a
+       `min-width: 0` on the strip, on `.pp-cal`, on `main` or on `#zoom-wrapper`; a `max-width: 100%`
+       or an explicit `width: 100%` on the strip; `overflow-x: clip` on any ancestor up to and including
+       `html`; and `contain: inline-size` anywhere. `contain: size` ALONE does not work either -- the
+       `layout` keyword is required with it, which is worth knowing before anyone trims this.
+       `contain-intrinsic-height` RATHER THAN A HEIGHT, because size containment means the box is sized
+       as though empty and would otherwise collapse: this says "one coin tall" in the one unit that
+       matters, instead of restating 44 + 7 + 10 as a 61px literal that nothing would keep honest.
+
+       THE ALTERNATIVE WAS TO WRAP, which is what `game-detail.css` chose for its pill row and which
+       also measures clean. It is rejected here on the layout: thirteen 44px coins wrap to two ragged
+       rows at 390px and THREE at 320px, and the row is a month switcher whose whole affordance is that
+       it reads as one strip. */
+    contain: layout size;
+    contain-intrinsic-height: 44px;
     /* AN EDGE FADE, because roughly five of twelve months sit off-screen at 375px with the scrollbar
        hidden -- so without it nothing says the row scrolls, and the only control that could reveal them
        is itself off-screen. Masked rather than overlaid with a gradient so it works over any surface. */
@@ -3040,7 +3069,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        `width: 100%` band with a 280px side column in every band. They do not reproduce against the
        shipped box, which is 12px wider and pulled back 6px. Kept because they are why this rule exists,
        marked because the arithmetic will not redo from the current file. */
-    .pp-cal__crests { overflow-x: visible; gap: 10px; }
+    /* THE CONTAINMENT GOES WITH THE SCROLL CONTAINER, since that is what leaked. From here the strip
+       is `overflow-x: visible` and the coins flex, so there is nothing to leak and nothing to contain --
+       and size containment would actively break this band, where the row's height comes from coins that
+       size themselves. */
+    .pp-cal__crests { overflow-x: visible; gap: 10px; contain: none; }
 }
 
 /* ── THE TWELVE MONTH HUES ───────────────────────────────────────────────────────────────────────────

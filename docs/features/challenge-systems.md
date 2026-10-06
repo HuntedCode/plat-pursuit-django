@@ -817,6 +817,27 @@ agreeing with its flag); `challenges/models.py` Meta is the full set.
 
 ## Gotchas and Pitfalls
 
+**A horizontal scroll strip inside the page's flex column widens the whole page on mobile.** The crest
+row is thirteen 44px coins — 620px of content in a 308px box with `overflow-x: auto`. That clips
+correctly, but the container still leaks its INTRINSIC width upward through `#zoom-wrapper`, and a mobile
+browser answers by **expanding the layout viewport**: measured on an emulated iPhone 12, `innerWidth` was
+619 against a 390 layout viewport, so the whole document panned sideways into empty space.
+`game-detail.css` records the identical defect for its pill row and chose to wrap instead.
+
+**Three things make this expensive to find, so they are worth writing down.** (1) A desktop-sized headless
+viewport **cannot reproduce it** — the meta viewport is ignored, `window.scrollX` stays 0, and the page
+looks clean from 320 to 1024. Only true mobile emulation (`is_mobile=True`) shows it. (2)
+`documentElement.scrollWidth` reports the inflated figure in both cases and is a **red herring**: it does
+not move even with `overflow-x: clip` on `html`. Measure `window.innerWidth` against
+`document.documentElement.clientWidth` instead. (3) Almost nothing fixes it. Measured as ineffective:
+`min-width: 0` on the strip, on `.pp-cal`, on `main` or on `#zoom-wrapper`; `max-width: 100%` or an
+explicit `width: 100%`; `overflow-x: clip` on any ancestor up to `html`; and `contain: inline-size`
+anywhere. What works is `contain: layout size` on the strip itself — **both keywords**, since
+`contain: size` alone does not — plus a `contain-intrinsic-height`, because size containment sizes the
+box as though empty and it would otherwise collapse. Scope it to the band where the scroll container
+exists; from `md:` the strip is `overflow-x: visible` and containment would break a row whose height comes
+from coins that size themselves.
+
 **The Calendar's hover preview is pointer-only, deliberately.** The side column swaps the month's figures
 for a hovered day's. It mirrored `focusin` at first, on the reasoning that a keyboard reader has no hover,
 and that was a net loss: the preview carries `aria-hidden="true"`, so focusing a square announced nothing
