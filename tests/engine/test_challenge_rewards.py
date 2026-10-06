@@ -27,9 +27,11 @@ import pytest
 from django.db.models import Sum
 from django.utils import timezone
 
-from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS
+from challenges.models import CALENDAR_DAY_MARKERS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS
+from challenges.services import calendar_fill
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
+from challenges.services.rewards import CALENDAR_DAY_TITLES
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory
 from trophies.models import Contract, ContractXPGrant, EarnedContract, Job, ProfileJobXP, Title, UserTitle
 from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
@@ -675,3 +677,112 @@ def test_the_four_names_are_free_in_the_test_database():
     there before the names were fixed."""
     ours = {name for per_type in rewards.TITLE_NAMES.values() for name in per_type.values()}
     assert not Title.objects.filter(name__in=ours).exists()
+
+
+# ── the Plat Calendar's day-marker ladder ────────────────────────────────────────────────────────
+
+def _calendar_run(profile=None, filled=0):
+    """A Calendar run with `filled` days standing, through the real creation path."""
+    from challenges.models import CHALLENGE_TYPE_CALENDAR
+    from challenges.services import challenge_service as svc
+
+    profile = profile or _member()
+    run = svc.start(profile, CHALLENGE_TYPE_CALENDAR)
+    if filled:
+        keys = list(run.calendar_days.values_list('pk', flat=True)[:filled])
+        run.calendar_days.filter(pk__in=keys).update(in_all=True, in_clean=True)
+        calendar_fill._recount_calendar(run, wrote_rows=True)
+        run.refresh_from_db()
+    return run
+
+
+def test_the_ladder_grants_every_rung_a_run_has_reached():
+    """CLIMBED, NOT WON. A hunter at 220 days holds the 50, 100 and 200 rungs -- not just the highest --
+    because each is a title in its own right and a backfilling run passes several at once."""
+    run = _calendar_run(filled=220)
+
+    held = set(UserTitle.objects.filter(profile=run.profile).values_list('title__name', flat=True))
+    assert held == {'Calendar Marker', 'Calendar Keeper', 'Calendar Chronicler'}
+    assert 'Calendar Champion' not in held, '300 is not reached at 220 days'
+
+
+def test_the_ladder_grants_nothing_below_the_first_rung():
+    """49 days is not 50, and an off-by-one here hands out a title nobody earned."""
+    run = _calendar_run(filled=49)
+    assert not UserTitle.objects.filter(profile=run.profile).exists()
+
+    run.calendar_days.filter(in_clean=False).update(in_all=True, in_clean=True)
+    calendar_fill._recount_calendar(run, wrote_rows=True)
+    assert UserTitle.objects.filter(profile=run.profile).count() == len(CALENDAR_DAY_MARKERS)
+
+
+def test_climbing_the_ladder_twice_grants_once():
+    """IT RUNS ON EVERY SYNC AND EVERY NIGHTLY SWEEP, for every Calendar run. The second call and the
+    ten-thousandth must do nothing -- `get_or_create` on `(profile, title)` is the guarantee, and it is
+    the same column pair `unique_together` enforces, so a race writes one row and the loser reads it."""
+    run = _calendar_run(filled=120)
+    first = set(UserTitle.objects.filter(profile=run.profile).values_list('pk', flat=True))
+    assert len(first) == 2
+
+    for _ in range(3):
+        assert rewards.grant_day_markers(run) == [], 'a repeat call granted something'
+    again = set(UserTitle.objects.filter(profile=run.profile).values_list('pk', flat=True))
+    assert again == first, 'the rows were replaced rather than left alone'
+
+
+def test_the_ladder_is_granted_low_to_high_so_the_plaque_reads_the_top_rung():
+    """THE ORDER IS LOAD-BEARING, not tidy. `granted_titles_for` picks a run's title with an ASCENDING
+    `(earned_at, pk)` ordering and last-wins, so the highest rung must be the LAST row written -- that is
+    what puts `Calendar Legend` rather than `Calendar Marker` on a finished run's Hall of Fame plaque.
+
+    A BACKFILL IS WHERE IT BITES: several rungs are granted in one call with `earned_at` values a
+    microsecond apart, so `pk` is what actually breaks the tie, and `pk` follows insertion order.
+    Iterating the rungs high-to-low would invert the plaque silently and nothing else would notice."""
+    run = _calendar_run(filled=365)
+
+    rows = list(UserTitle.objects.filter(profile=run.profile).order_by('earned_at', 'pk')
+                .values_list('title__name', flat=True))
+    assert rows == [CALENDAR_DAY_TITLES[d] for d in CALENDAR_DAY_MARKERS]
+    assert rewards.granted_titles_for([run]) == {run.pk: 'Calendar Legend'}
+
+
+def test_a_finished_calendar_run_is_complete_and_wears_the_top_rung():
+    """365 FILLED DAYS IS BOTH the top rung and the completion, since the lens collapse left one lens and
+    one completion condition. The ladder grants the title; `on_run_completed` is still called, for the
+    notification a hunter finishing one should get."""
+    run = _calendar_run(filled=365)
+
+    assert run.is_complete and run.completed_at is not None
+    assert UserTitle.objects.filter(profile=run.profile,
+                                    title__name='Calendar Legend').exists()
+    # AND ITS ORDINAL GRANT STAYS None: the Calendar has no first/second-completion shape.
+    assert rewards.grant_completion_title(run) is None
+
+
+def test_a_ladder_title_already_held_elsewhere_is_reported_rather_than_claimed():
+    """`UserTitle.unique_together` CARRIES NO `source_type`, so a name another system owns hands that row
+    back and a naive caller reads a successful grant -- the failure `badge_adapters.grant_series_title`
+    carries the scar from. The row must be left alone and the collision logged."""
+    profile = _member()
+    title, _ = Title.objects.get_or_create(name='Calendar Marker')
+    UserTitle.objects.create(profile=profile, title=title, source_type='badge', source_id=4242)
+
+    run = _calendar_run(profile=profile, filled=60)
+    row = UserTitle.objects.get(profile=profile, title=title)
+    assert row.source_type == 'badge' and row.source_id == 4242, 'the foreign row was overwritten'
+    assert 'Calendar Marker' not in rewards.grant_day_markers(run)
+
+
+def test_every_rung_has_a_name_and_the_two_lists_cannot_drift():
+    """TWO COPIES OF A REWARD THRESHOLD is a drift nobody notices until a hunter is owed a title the page
+    does not show. The rungs live in `challenges.models`; the rail re-exports them and the titles key on
+    them, so this asserts the three stay one set."""
+    from challenges.services import calendar_render
+
+    assert calendar_render.DAY_MARKERS is CALENDAR_DAY_MARKERS
+    assert sorted(CALENDAR_DAY_TITLES) == list(CALENDAR_DAY_MARKERS)
+    assert len(set(CALENDAR_DAY_TITLES.values())) == len(CALENDAR_DAY_TITLES), 'two rungs share a name'
+
+    # AND THEY MUST NOT COLLIDE WITH THE ORDINAL TITLES, which are `Title.name`-unique site-wide too.
+    ordinal = {name for names in rewards.TITLE_NAMES.values() for name in names.values()}
+    assert not (ordinal & set(CALENDAR_DAY_TITLES.values()))

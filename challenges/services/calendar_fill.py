@@ -728,13 +728,31 @@ def _recount_calendar(challenge, *, wrote_rows=True):
 
     challenge.save(update_fields=fields)
 
+    from challenges.services import rewards
+
+    # THE DAY-MARKER LADDER IS CLIMBED ON EVERY RECOUNT, not only at the end, which is the whole reason it
+    # is a ladder: 50 days is about 54 platinums where finishing is about 2,153, so without this a hunter
+    # would hold nothing until a figure almost nobody reaches. It is idempotent by `get_or_create` on
+    # `(profile, title)`, so running on every sync and every nightly sweep costs one cheap read per rung
+    # already held.
+    #
+    # IT CONTAINS ITS OWN FAILURES, like the completion hook below and for the same reason: the filled
+    # squares are the fact the hunter earned and the titles are derived from it. A raise here would cost a
+    # hunter their recount -- and, on the sweep, everybody else's after them -- to save a title a later
+    # pass will grant anyway. Logged loudly because a silent one is how a reward quietly stops existing.
+    try:
+        rewards.grant_day_markers(challenge)
+    except Exception:
+        logger.exception('calendar run %s recounted but its day markers could not be granted',
+                         challenge.pk)
+
     if just_completed:
-        from challenges.services import rewards
-        # Grants no title today -- the Calendar is in `TYPES_WITHOUT_ORDINAL_TITLES`, since a 365-day run
-        # has no first/second-completion shape -- but it fires the `challenge_completed` notification,
-        # which a hunter finishing one should get. That call contains its own failures (its title grant is
-        # wrapped, its notification deferred to `on_commit(robust=True)`), so it cannot cost a hunter
-        # their squares or abort a sweep. The per-view ultimates slot in here without changing the call.
+        # The ladder above has already granted `Calendar Legend` -- 365 filled days IS the top rung -- so
+        # this call is here for the `challenge_completed` notification a hunter finishing one should get.
+        # Its own title grant returns None: the Calendar is in `TYPES_WITHOUT_ORDINAL_TITLES`, because a
+        # 365-day run has no first/second-completion shape. It contains its own failures too (the grant is
+        # wrapped, the notification deferred to `on_commit(robust=True)`), so it cannot cost a hunter their
+        # squares or abort a sweep.
         rewards.on_run_completed(challenge)
 
 

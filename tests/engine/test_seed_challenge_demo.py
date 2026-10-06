@@ -394,8 +394,16 @@ def test_reset_removes_the_titles_its_runs_granted():
     Contract.objects.all().delete()
     call_command('seed_challenge_demo', user=profile.psn_username, reset=True, verbosity=0)
 
-    assert not UserTitle.objects.filter(profile=profile, source_type='challenge').exists(), \
-        'titles survived --reset with nothing to re-point them'
+    # NO ORPHANS, which is the invariant -- not "no titles". Emptying the catalogue stops A-Z and Job
+    # Coverage completing, so neither re-earns anything; the CALENDAR fills from a hunter's platinums and
+    # its own designed day map, so the reseeded run legitimately climbs the ladder again and holds five
+    # titles pointing at itself. A blanket "no challenge titles" assertion read that as a leak.
+    live = set(Challenge.objects.filter(profile=profile).values_list('pk', flat=True))
+    orphans = [(name, sid) for name, sid in
+               UserTitle.objects.filter(profile=profile, source_type='challenge')
+               .values_list('title__name', 'source_id')
+               if sid not in live]
+    assert orphans == [], 'titles survived --reset with nothing to re-point them: %s' % orphans
 
 
 @override_settings(DEBUG=True)
@@ -423,8 +431,14 @@ def test_removing_titles_leaves_another_systems_alone():
 
     assert UserTitle.objects.filter(pk=foreign.pk).exists(), \
         "another system's title was deleted because it shared a run id"
-    assert not UserTitle.objects.filter(profile=profile, source_type='challenge').exists(), \
-        'the challenge titles were not removed'
+    # NO ORPHANS, for the reason the reset test above gives: a reseeded Calendar run re-earns its ladder
+    # from platinums rather than from the catalogue this test empties.
+    live = set(Challenge.objects.filter(profile=profile).values_list('pk', flat=True))
+    orphans = [(name, sid) for name, sid in
+               UserTitle.objects.filter(profile=profile, source_type='challenge')
+               .values_list('title__name', 'source_id')
+               if sid not in live]
+    assert orphans == [], 'the challenge titles were not removed: %s' % orphans
 
 
 @override_settings(DEBUG=True)
@@ -444,7 +458,10 @@ def test_a_reseed_still_shows_the_title_band(client, catalogue):
     # DERIVED, not a literal: one finished run per type, and the Plat Calendar made that three. Reading
     # the row count means a fourth type moves this with the feature.
     assert body.count('<a class="pp-chero') == _demo_runs(profile).filter(is_complete=True).count()
-    assert body.count('pp-chero__title') == 2, 'a reseeded finished run is missing its title band'
+    # THREE BANDS NOW: the finished A-Z run, the finished Job Coverage run, and the finished Calendar
+    # run, which wears the top rung its ladder reached.
+    assert body.count('pp-chero__title') == 3, 'a reseeded finished run is missing its title band'
+    assert 'Calendar Legend' in body, 'the finished Calendar run shows no rung'
     assert 'Job Challenge Champion' in body
     assert 'A-Z Champion' in body
 
@@ -1002,19 +1019,6 @@ def test_it_seeds_a_calendar_pair_despite_the_creation_gate(catalogue):
 
 
 @override_settings(DEBUG=True)
-def test_the_gate_is_put_back_after_the_seeder_runs():
-    """A COMMAND THAT LEAVES A GATE OPEN IS WORSE THAN ONE THAT CANNOT OPEN IT. The lift is per-call and
-    restored in a `finally`, so neither a success nor a failure can leave `start` dealing Calendar runs
-    to anybody who presses a button afterwards."""
-    from challenges.services import challenge_service as svc
-
-    before = svc.TYPES_NOT_YET_CREATABLE
-    _seed(_hunter())
-    assert svc.TYPES_NOT_YET_CREATABLE == before
-    assert CHALLENGE_TYPE_CALENDAR in svc.TYPES_NOT_YET_CREATABLE
-
-
-@override_settings(DEBUG=True)
 def test_the_finished_calendar_run_really_is_finished(catalogue):
     """A seeder whose "finished run" is not finished wastes the browser pass it exists to serve. Only a
     finished run reaches the Hall of Fame, so this is what puts the year band on a page at all."""
@@ -1207,8 +1211,13 @@ def test_the_report_does_not_invent_a_reason_for_the_missing_title_band(catalogu
     call_command('seed_challenge_demo', user=profile.psn_username, verbosity=1)
 
     out = capsys.readouterr().out
-    assert 'this type grants none yet' in out
+    # THE CALENDAR NOW HAS A BAND TO REPORT, so the branch this test was written for is unreachable for
+    # it: a finished run holds its top rung and the report prints that. What is still being pinned is the
+    # original point -- the report never INVENTS a reason -- so the fabricated one stays forbidden and the
+    # real title has to appear.
+    assert 'title: Calendar Legend' in out, 'the finished Calendar run reports no title band'
     assert 'third or later completion' not in out
+    assert 'no title band' not in out, 'the report claims a band is missing while printing one'
 
 
 @override_settings(DEBUG=True)

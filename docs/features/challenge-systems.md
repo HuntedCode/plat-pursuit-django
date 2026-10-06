@@ -17,7 +17,7 @@ no services and no templates with it; the few lessons worth carrying forward are
 |---|---|
 | Models, constraints, admin | **built** |
 | `challenge_service` / `eligibility` / `picker` / `slot_render` | **built** |
-| Plat Calendar data path (`calendar_fill`, model, sweep, sync hook, staff doors) | **built**, and unreachable: the type has no creation door yet (`TYPES_NOT_YET_CREATABLE`) |
+| Plat Calendar data path (`calendar_fill`, model, sweep, sync hook, staff doors) | **built** and reachable — `TYPES_NOT_YET_CREATABLE` is empty now that the ladder exists |
 | Plat Calendar renderers (`calendar_render`) | **built** |
 | Plat Calendar board (detail + Hall of Fame hero) | **built.** Month-switcher layout: thirteen crests double as the tabs (twelve months and a whole-year overview), one panel at a time. No cover art anywhere |
 | Plat Calendar day modal (which games satisfy a day) | **not built** — the day cell is inert until it lands, so it is a `<div>` rather than a button that does nothing |
@@ -30,10 +30,10 @@ no services and no templates with it; the few lessons worth carrying forward are
 | Challenge share card | **NOT built.** Moved after the Calendar so all three types are designed together. **Minting it as a Hall of Fame cover was CUT** — the live board is the permanent state; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
 | Rewards (titles, job-XP payout, notification) | **built** for A-Z and Job Coverage. `challenges/services/rewards.py` is the only writer |
 | **Plat Calendar** — type, `CalendarDay`, the three view predicates, the backfill writer, the reconciling sweep, the refresh command | **built** |
-| **Plat Calendar** — creation | **gated shut.** `TYPES_NOT_YET_CREATABLE` keeps the Start button off until the rest lands |
+| **Plat Calendar** — creation | **open.** The gate was held for the rewards; the day-marker ladder is what it was waiting for |
 | **Plat Calendar** — the sync-path refresh | **built.** `calendar_fill.refresh_for_profile`, called after contract detection |
 | **Plat Calendar** — the board | **built.** Detail: thirteen crests as the switcher (twelve months plus a year overview), one panel at a time, no cover art. Hero: the whole year as a dense band |
-| **Plat Calendar** — the day modal, rewards (the 50/100/200/300/365 day ladder + one ultimate per view), richer crest ARTWORK | **NOT built.** The crest ships struck in its metal with a working face: the month's abbreviation over a twelve-segment rim with one segment lit |
+| **Plat Calendar** — the opening ceremony, richer crest ARTWORK | **NOT built.** The day modal and the 50/100/200/300/365 ladder ARE built; the crest ships struck in its metal with a working face (the month's abbreviation over a twelve-segment rim with one segment lit) |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
 
@@ -145,6 +145,26 @@ than details:
 
 `totals_for` grew `struck` and `open` for this, both sums over the month groups, so the overview's figures
 cannot disagree with the board and cost no query.
+
+**The Calendar pays a ladder of five titles, climbed rather than won.** `Calendar Marker` at 50 filled
+days, `Keeper` at 100, `Chronicler` at 200, `Champion` at 300 and `Legend` at 365 — granted on every
+recount rather than only at the end, because 50 days is about 54 platinums where finishing is about
+2,153. A run keyed on 365 days has no first/second-completion shape, so the Calendar is in
+`TYPES_WITHOUT_ORDINAL_TITLES` and the 365 rung IS its ultimate: the lens collapse left one completion
+condition, so the top rung and the finish are the same event.
+
+**Three things about the ladder are load-bearing.** The rungs live in `challenges.models` and are
+re-exported by `calendar_render` and keyed by `rewards.CALENDAR_DAY_TITLES`, because two copies of a
+reward threshold is a drift nobody notices until a hunter is owed a title the page does not show. They are
+granted **ascending**, because `granted_titles_for` picks a run's title with an ascending `(earned_at, pk)`
+ordering and last-wins — so the highest rung must be the last row written, which is what puts
+`Calendar Legend` rather than `Calendar Marker` on a finished run's plaque (a backfill grants several at
+once, microseconds apart, so `pk` is what actually breaks the tie). And the grant is **idempotent**, since
+it runs on every sync and every nightly sweep for every Calendar run.
+
+**Only the finish notifies.** `challenge_completed` fires from `on_run_completed` as it always did; the
+four rungs below it are silent, because a backfilling run passes several at once on day one and would
+otherwise fire three notifications in the same second.
 
 **Starting a run is members-only during the beta.** `CHALLENGES_BETA_MEMBERS_ONLY` (env var, defaults
 to **on**) is checked inside `start_reporting` after the profile lock, so it refuses the write rather than

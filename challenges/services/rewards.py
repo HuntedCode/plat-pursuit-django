@@ -56,6 +56,7 @@ from django.utils import timezone
 
 from challenges.models import CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_JOBS, Challenge, ChallengeSlot
 from challenges.services.challenge_service import ChallengeError
+from challenges.models import CALENDAR_DAY_MARKERS
 from trophies.models import Job, Title, UserTitle
 from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
 
@@ -86,12 +87,34 @@ TITLE_NAMES = {
     'jobs': {1: 'Job Challenge Champion', 2: 'Job Challenge Legend'},
 }
 
+#: THE PLAT CALENDAR'S LADDER, by filled days. Five titles, climbed rather than won at the end, because a
+#: run keyed on 365 days has no meaningful "first completion / second completion" shape -- finishing one
+#: at all needs roughly 2,153 platinums, so an ordinal pair would be a reward almost nobody sees.
+#:
+#: THE 365 RUNG IS THE ULTIMATE, and there is exactly one. The plan wrote this as "a ladder plus one
+#: ultimate PER VIEW" when the board drew three lenses; the collapse to one lens left a single completion
+#: condition (`_recount_calendar`: "With one lens there is nothing to compare and nothing to record"), so
+#: the top rung and the finish are the same event and share a title.
+#:
+#: THE NAMES END Champion THEN Legend, which is the shape A-Z and Job Coverage already use (owner,
+#: 2026-10-06). Three types, one family.
+#:
+#: SAME UNIQUENESS REQUIREMENT AS `TITLE_NAMES` ABOVE, and it is a correctness one: `Title.name` is unique
+#: site-wide and `UserTitle.unique_together` carries no `source_type`, so a name another system owns hands
+#: back THAT row. Whether these five are free in PROD is a question only prod can answer, and was asked
+#: there before they shipped.
+CALENDAR_DAY_TITLES = {
+    50: 'Calendar Marker',
+    100: 'Calendar Keeper',
+    200: 'Calendar Chronicler',
+    300: 'Calendar Champion',
+    365: 'Calendar Legend',
+}
+
 #: Types whose rewards are NOT a first/second-completion ordinal title, so their absence from
 #: `TITLE_NAMES` is correct rather than an oversight.
 #:
-#: The Plat Calendar is the only one: it pays a ladder of day-count markers (50/100/200/300/365) plus one
-#: ultimate per view, because a run keyed on 365 days has no meaningful "first completion / second
-#: completion" shape -- finishing one at all needs roughly 2,150 platinums.
+#: The Plat Calendar is the only one: it pays the day-marker ladder above instead.
 #:
 #: DECLARED RATHER THAN INFERRED, and the distinction is the whole point. A type missing from BOTH this
 #: set and `TITLE_NAMES` grants nothing and reads as "rewards are broken" rather than as a missing dict
@@ -724,16 +747,8 @@ def grant_completion_title(challenge):
     if name is None:
         return None
 
-    title, _ = Title.objects.get_or_create(name=name)
-    user_title, created = UserTitle.objects.get_or_create(
-        profile_id=challenge.profile_id, title=title,
-        defaults={'source_type': TITLE_SOURCE, 'source_id': challenge.pk},
-    )
-    if not created and user_title.source_type != TITLE_SOURCE:
-        logger.error('challenge title %r is already held by profile %s from source %r -- the challenge '
-                     'grant for run %s did nothing. One of the four challenge title names collides with '
-                     'another system.', name, challenge.profile_id, user_title.source_type, challenge.pk)
-    elif not created and user_title.source_id != challenge.pk:
+    user_title, created = _ensure_title(challenge, name)
+    if not created and user_title.source_type == TITLE_SOURCE and user_title.source_id != challenge.pk:
         # AN ORPHANED `source_id` IS RE-POINTED, and this is the repair the docstring promises rather than a
         # new behaviour. `source_id` is in `defaults`, so it is written on CREATE only -- an existing row of
         # our own kept whatever run it was first granted for, silently, and `granted_titles_for` matches on
@@ -795,6 +810,69 @@ def grant_completion_title(challenge):
 
 
 # ── the completion hook ───────────────────────────────────────────────────────────────────────────
+
+def _ensure_title(challenge, name):
+    """`(UserTitle, created)` for `name` against this run, with the collision logged rather than celebrated.
+
+    THE PART BOTH GRANT PATHS SHARE, and only that part. `UserTitle.unique_together` carries no
+    `source_type`, so if a hunter already holds a title of this name from another system, `get_or_create`
+    hands that row back and a naive caller reads a successful grant -- the failure
+    `badge_adapters.grant_series_title` carries the scar from. The row is left exactly as it is (it is not
+    ours to re-point) and the mismatch is logged as an error, because it means one of our names has been
+    taken by something else.
+
+    WHAT IT DELIBERATELY DOES NOT DO is the orphaned-`source_id` repair. That belongs to
+    `grant_completion_title`, because its guard ("two of our rows must never name one run") is TRUE of
+    ordinal titles and FALSE of the ladder: a Calendar run legitimately earns up to five, so "another of
+    our titles already names this run" is the normal state there rather than a warning. Sharing the repair
+    would have imported a premise that does not hold.
+    """
+    title, _ = Title.objects.get_or_create(name=name)
+    user_title, created = UserTitle.objects.get_or_create(
+        profile_id=challenge.profile_id, title=title,
+        defaults={'source_type': TITLE_SOURCE, 'source_id': challenge.pk},
+    )
+    if not created and user_title.source_type != TITLE_SOURCE:
+        logger.error('challenge title %r is already held by profile %s from source %r -- the challenge '
+                     'grant for run %s did nothing. One of our title names collides with another system.',
+                     name, challenge.profile_id, user_title.source_type, challenge.pk)
+    return user_title, created
+
+
+def grant_day_markers(challenge):
+    """Grant every day-marker title `challenge`'s filled count has reached. Returns the names granted NOW.
+
+    CLIMBED, NOT WON. Unlike the ordinal titles this runs on every recount rather than only on completion,
+    because the ladder's whole point is that it moves from a hunter's first platinum -- 50 days is about
+    54 platinums, where finishing is about 2,153.
+
+    ASCENDING, AND IT IS LOAD-BEARING. `granted_titles_for` picks a run's title with an ascending
+    `(earned_at, pk)` ordering and last-wins, so the highest rung must be the LAST row written -- which is
+    what puts "Calendar Legend" rather than "Calendar Marker" on a finished run's Hall of Fame plaque. A
+    backfill grants several in one call with `earned_at` values a microsecond apart, so `pk` is what
+    actually breaks the tie, and `pk` follows insertion order. Iterating the rungs high-to-low would
+    invert the plaque silently.
+
+    IDEMPOTENT, which a ladder needs far more than an ordinal does: this runs on every sync and every
+    nightly sweep for every Calendar run, so the second call and the ten-thousandth must do nothing.
+    `get_or_create` on `(profile, title)` is the guarantee, and it is the same column pair
+    `unique_together` enforces -- so a race writes one row and the loser reads it back.
+
+    IT RETURNS ONLY WHAT IT GRANTED THIS CALL, so a caller can tell "nothing to do" from "granted three"
+    without a second query. Nothing uses that yet; the opening ceremony is the reader it is shaped for.
+    """
+    reached = [days for days in CALENDAR_DAY_MARKERS if challenge.filled_count >= days]
+    if not reached:
+        return []
+
+    granted = []
+    for days in reached:
+        name = CALENDAR_DAY_TITLES[days]
+        _user_title, created = _ensure_title(challenge, name)
+        if created:
+            granted.append(name)
+    return granted
+
 
 def on_run_completed(challenge):
     """Everything that happens the moment a run's last square lands. Returns the granted title or None.

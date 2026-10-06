@@ -147,7 +147,29 @@ CALENDAR_VIEW_FIELDS = (
 #:
 #: Remove the entry in the same change that makes the type playable. An empty frozenset is the normal
 #: state; this is scaffolding for the window between a type's rows existing and its rules existing.
-TYPES_NOT_YET_CREATABLE = frozenset({CHALLENGE_TYPE_CALENDAR})
+#: NOTHING IS GATED OFF ANY MORE. The Calendar sat here from the moment it joined `CHALLENGE_TYPE_CHOICES`
+#: -- real enough to read, with no rules to fill or finish it -- and My Challenges renders a Start button
+#: per choice, so it had to be refused somewhere. Its ladder is built, so the gate is empty.
+#:
+#: KEPT RATHER THAN DELETED, because the mechanism is what a fourth type will need on its first day, and
+#: because `test_every_challenge_type_declares_its_reward_shape` reads it. An empty frozenset says "every
+#: type is creatable" out loud; removing the constant would make the next addition re-derive the argument.
+TYPES_NOT_YET_CREATABLE = frozenset()
+
+#: THE DAY-MARKER LADDER'S RUNGS, in filled days. One home for a figure the rail DRAWS and the rewards
+#: GRANT, because two copies of a reward threshold is the kind of drift nobody notices until a hunter is
+#: owed a title they cannot see.
+#:
+#: DAYS, NOT MONTHS, and the arithmetic is what settled it. Covering a calendar day needs a platinum
+#: earned on that month and day in ANY year, so with N platinums spread across the year expected coverage
+#: is `365 * (1 - e^(-N/365))`: 50 days is about 54 platinums, 100 about 117, 200 about 290, 300 about 630
+#: and 365 about 2,153. A MONTH ladder was rejected on the same arithmetic -- one full month needs roughly
+#: 1,250 platinums, so twelve month rungs are not twelve steps but twelve steps clustered at the ceiling.
+#:
+#: ASCENDING, AND THAT IS LOAD-BEARING rather than tidy: `rewards.grant_day_markers` walks this in order
+#: so the highest rung a run reaches is also the LAST title it earns, which is what makes
+#: `granted_titles_for`'s ascending `(earned_at, pk)` last-wins pick the right one for the Hall of Fame.
+CALENDAR_DAY_MARKERS = (50, 100, 200, 300, 365)
 
 
 def calendar_day_keys():

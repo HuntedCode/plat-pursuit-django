@@ -38,7 +38,8 @@ from fractions import Fraction
 
 from django.utils import timezone
 
-from challenges.models import CALENDAR_MONTH_DAYS, CalendarDay, calendar_day_keys
+from challenges.models import (CALENDAR_DAY_MARKERS, CALENDAR_MONTH_DAYS, CalendarDay,
+                               calendar_day_keys)
 # IMPORTED, NOT RE-SPELLED. `_fold` is the one place that knows 29 February belongs to the 28th,
 # and `_hunter_timezone` is the one place that knows whose clock a Calendar runs on. A second
 # spelling of either is how the marker comes to sit on a different square than the fill did.
@@ -518,7 +519,12 @@ def totals_for(months):
 #: TREAT THOSE PLATINUM FIGURES AS A FLOOR ON DIFFICULTY, not an estimate: the model assumes platinums
 #: fall uniformly across the year, and real ones cluster on weekends, release windows and holidays, so
 #: true coverage is worse at every N.
-DAY_MARKERS = (50, 100, 200, 300, 365)
+#: RE-EXPORTED, NOT RE-SPELLED. The numbers moved to `challenges.models` when a SECOND reader arrived:
+#: while the ladder was only drawn, a presentation constant in a presentation module was right, but
+#: `rewards.CALENDAR_DAY_TITLES` now grants a title per rung, and two copies of a reward threshold is a
+#: drift nobody notices until a hunter is owed a title the page does not show. The paragraphs above are
+#: the ARGUMENT for the numbers and stay here; the numbers themselves have one home.
+DAY_MARKERS = CALENDAR_DAY_MARKERS
 
 
 def marker_rail(done, total=None):

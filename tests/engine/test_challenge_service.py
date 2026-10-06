@@ -38,6 +38,7 @@ from challenges.models import (
     COMPLETED_VIA_IMPORT,
     COMPLETED_VIA_LIVE,
     HATCH_THRESHOLD,
+    TYPES_NOT_YET_CREATABLE,
     Challenge,
 )
 from challenges.services import challenge_service as svc
@@ -198,7 +199,7 @@ def test_an_unknown_type_is_refused_before_anything_is_written():
     assert not Challenge.objects.filter(profile=profile).exists()
 
 
-def test_the_calendar_cannot_be_started_until_its_rules_exist():
+def test_the_calendar_can_be_started_now_that_its_rules_exist():
     """THE DOOR IS SHUT WHILE THE MECHANICS ARE MISSING, and it was open for one commit.
 
     Adding `calendar` to `CHALLENGE_TYPE_CHOICES` was enough to ship a working Start button, because My
@@ -212,13 +213,13 @@ def test_the_calendar_cannot_be_started_until_its_rules_exist():
     """
     profile = _member()
 
-    with _refuses('not ready yet'):
-        svc.start(profile, CHALLENGE_TYPE_CALENDAR)
+    run = svc.start(profile, CHALLENGE_TYPE_CALENDAR)
+    assert run.pk and run.challenge_type == CHALLENGE_TYPE_CALENDAR
 
-    assert not Challenge.objects.filter(profile=profile).exists()
-
-    # AND IT IS STILL A VALID TYPE for everything that only READS. The two questions are different: a
-    # type can be real enough to render while its rules are being built.
+    # THE MECHANISM SURVIVES THE TYPE LEAVING IT. `TYPES_NOT_YET_CREATABLE` is empty rather than deleted,
+    # because it is what a fourth type will need on its first day -- and because the two questions it
+    # separates are still different: a type can be real enough to RENDER while its rules are being built.
+    assert CHALLENGE_TYPE_CALENDAR not in TYPES_NOT_YET_CREATABLE
     assert CHALLENGE_TYPE_CALENDAR in CHALLENGE_TYPES
 
 

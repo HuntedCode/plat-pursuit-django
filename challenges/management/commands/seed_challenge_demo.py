@@ -444,20 +444,15 @@ class Command(BaseCommand):
         profile -- `--only calendar --user`, `--all-calendars`, or simply a sync -- merges the hunter's
         actual days ON TOP of these. The module docstring lists the three doors and what moves.
 
-        THE CREATION GATE IS LIFTED AROUND THE CALL, exactly as the tests do it. `calendar` is in
-        `TYPES_NOT_YET_CREATABLE` because My Challenges renders a Start button per choice and the type's
-        rewards are unbuilt -- but the surfaces it gates are the ones this command exists to show.
-        Lifted for this one call and restored in a `finally`, which covers every exception including
-        `KeyboardInterrupt`. (A signal landing in the instruction before the `try` is set up would
-        escape it; the process dies with the mutation, so there is nothing to restore.)
+        NO CREATION GATE TO LIFT ANY MORE. This used to swap `calendar` out of
+        `TYPES_NOT_YET_CREATABLE` around the call and restore it in a `finally`, because the type was
+        gated shut while its rewards were unbuilt and the surfaces it gated are the ones this command
+        exists to show. The day-marker ladder is what the gate was waiting for, so the set is empty and
+        the swap did nothing but describe a state that had ended. Deleted rather than left as a no-op:
+        a `finally` that restores an unchanged value is the kind of machinery a reader assumes is load
+        bearing. A future gated type re-adds it, with its own reason.
         """
-        original = svc.TYPES_NOT_YET_CREATABLE
-        svc.TYPES_NOT_YET_CREATABLE = frozenset(
-            t for t in original if t != CHALLENGE_TYPE_CALENDAR)
-        try:
-            challenge = self._start_fresh(profile, CHALLENGE_TYPE_CALENDAR, label)
-        finally:
-            svc.TYPES_NOT_YET_CREATABLE = original
+        challenge = self._start_fresh(profile, CHALLENGE_TYPE_CALENDAR, label)
         if challenge is None:
             return None
 
@@ -918,12 +913,13 @@ class Command(BaseCommand):
                     w('    on the HALL OF FAME -- NO title band (ordinal says %s, but no UserTitle names '
                       'this run)' % summary['title_name'])
                 elif run.challenge_type in rewards.TYPES_WITHOUT_ORDINAL_TITLES:
-                    # THE TYPE HAS NO TITLES AT ALL, which is not the same as having run out of them.
-                    # This branch used to fall through to "third or later completion" and state a
-                    # fabricated reason for the Calendar's FIRST completion -- on a page the reader is
-                    # about to inspect for a missing title band, an invented explanation is worse than
-                    # none. `rewards.TITLE_NAMES` has no entry for this type on purpose.
-                    w('    on the HALL OF FAME -- no title band (this type grants none yet)')
+                    # NO *ORDINAL* TITLE, which is not the same as no title and not the same as having run
+                    # out of them. The Calendar pays a ladder by filled days instead, so a finished run
+                    # DOES wear a band -- its top rung -- and saying "grants none yet" would send a reader
+                    # looking for a bug in the band they can see. This branch used to fall through to
+                    # "third or later completion" and invent a reason outright; the correction then
+                    # outlived the thing it corrected.
+                    w('    on the HALL OF FAME -- no ordinal title (this type pays a day-marker ladder)')
                 else:
                     w('    on the HALL OF FAME -- no title (third or later completion)')
             else:
