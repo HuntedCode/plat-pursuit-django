@@ -190,19 +190,39 @@ and not a button", and the commit that made them buttons left it standing twenty
     month grids below already draw, so it needs no new render function and no new query, while a 7x53
     grid would need a flat 365-cell list in `calendar_day_keys()` order.
 
-    THE CELLS ARE NOT CONTROLS, and that is a measured decision rather than a shortcut. At the 1100px cap
-    a cell is about 31px and at 375px about 9px -- under the 44px touch minimum this stylesheet defends
-    for the day squares, and far under it on a phone. A 9px control opening the same dialog that a 44px
-    square opens one tab away is a worse affordance, not an extra one. So the overview identifies a day
-    through the side column's peek, which is pointer-only BY DESIGN (see `wireDayPeek`), and the month
-    tabs stay the only way to open one. Touch gets the overview and drills in by tab.
-    NO DATE NUMERALS EITHER: 12px is this file's type floor and nothing legible fits a 9px cell, so the
-    peek carries identification rather than the cell.
+    A CELL CARRIES ITS DATE FROM `md:` UP (owner, 2026-10-05: "putting numbers in the boxes would
+    really help, especially with the 'at a glance' feel of it"). Which breakpoint is arithmetic: 12px is
+    the stylesheet's type floor, a two-digit tabular numeral advances about 14.4px at that size, and 31
+    columns inside the 343px a 375px viewport gives this panel is an 8.9px cell. Numerals at mobile would
+    need either sub-floor type or a horizontally scrolling year, and a year you scroll is not a year at a
+    glance. From 768 the cell is ~19.6px and from 1024 ~31.4px.
+    THE FILL RECIPE CHANGES WITH THE NUMERAL, and that part was measured rather than assumed: `--pp-text`
+    on the mobile cell's strong 68% tint holds 2.27:1 at December and a dark ink manages 3.54 at best, so
+    NO text colour works on it. From `md:` the cell takes the day square's own shipped recipe (a 22% tint
+    with a 45% ring, already measured at 7.30-9.95 for white text) -- so the overview and the board agree
+    and nothing new had to be proven.
 
-    `aria-hidden` ON THE MATRIX, with an `sr-only` summary beside it. 365 empty spans announce nothing
-    useful, and every fact in here is already stated by the twelve month panels and the marker rail --
-    so this is a duplicate VIEW of content that is reachable, not content with no accessible path. The
-    same call `_run_hero.html` makes about its own board, for the same reason.{% endcomment %}
+    A CELL IS STILL NOT A CONTROL, which is a different question from whether it is CLICKABLE. The ROW is
+    the click target and a cell is inside it, so "click a box or one of the rows" both land on the same
+    handler (owner, 2026-10-05) -- one target per month rather than 365, which is also what keeps this
+    off the 44px touch minimum argument: the row is the full width of the panel.
+    IT JUMPS TO THE MONTH'S TAB, NOT TO THE DAY MODAL. A 9px square opening the same dialog that a 44px
+    day square opens one tab away would be a worse affordance, not an extra one; switching to the month
+    is the thing the overview is for and the day's own square is then right there at full size.
+
+    AND THE ROW IS DELIBERATELY NOT A `<button>`, which looks like a mistake unless the reasoning is
+    written down. The matrix is `aria-hidden`, so a focusable control inside it would be the classic
+    focusable-in-hidden-subtree bug -- reachable by Tab and announced as nothing. Dropping `aria-hidden`
+    instead would mean twelve row buttons announcing exactly what the twelve crests above them already
+    announce, which is a duplicate list rather than an improvement. So the overview is a POINTER surface
+    throughout: its hover peek and its click-to-jump are both pointer conveniences, and the accessible
+    and keyboard path is the crest tablist, which does the same job with arrow keys at 44px. That is the
+    same division the peek already lives by.
+
+    `aria-hidden` ON THE MATRIX, with an `sr-only` summary beside it. 365 cells of bare numerals announce
+    a wall of digits, and every fact in here is already stated by the twelve month panels and the marker
+    rail -- so this is a duplicate VIEW of content that is reachable, not content with no accessible
+    path. The same call `_run_hero.html` makes about its own board, for the same reason.{% endcomment %}
     {% comment %}NO MODIFIER CLASS ON THE SECTION. One was here and had no rule: the panel's two-column
     layout comes from `.pp-cal__panel` and the matrix takes the day grid's `grid-area`, so there was
     nothing for a `--year` modifier to carry -- which is what
@@ -225,7 +245,13 @@ and not a button", and the commit that made them buttons left it standing twenty
             {% comment %}`data-month` ON THE ROW, which is the entire hue wiring: the table is keyed
             `.pp-cal [data-month="N"]`, a descendant selector, so a row inside the board picks up its
             month's `--cal-c` with no new declaration anywhere.{% endcomment %}
-            <div class="pp-cal__yrow" data-month="{{ forloop.counter }}">
+            <div class="pp-cal__yrow" data-month="{{ forloop.counter }}"
+                 {% comment %}THE TAB THIS ROW JUMPS TO, named by ID rather than by index. The script
+                 resolves it with `getElementById` and finds its position in the tab list from there, so
+                 the overview cannot desync from the row of crests the way two parallel orderings
+                 eventually do -- the same argument `aria-controls` already wins on the crests.
+                 {% endcomment %}
+                 data-cal-jump="cal-tab-{{ month.slug }}">
                 <span class="pp-cal__ylabel">{{ month.slug|upper }}</span>
                 {% for card in month.cards %}
                 {% comment %}THE PEEK RIDES THE SAME PREDICATE AS THE MONTH GRID -- `card.counts`, i.e.
@@ -237,7 +263,8 @@ and not a button", and the commit that made them buttons left it standing twenty
                       {% if card.counts %}data-peek-label="{{ card.label }}"
                       data-peek-plats="{{ card.plats }}"
                       data-peek-on="{{ card.earned_on|date:'j M Y' }}"
-                      data-peek-clean="{% if card.filled %}1{% else %}0{% endif %}"{% endif %}></span>
+                      data-peek-clean="{% if card.filled %}1{% else %}0{% endif %}"{% endif %}>
+                    <span class="pp-cal__ynum">{{ card.day }}</span></span>
                 {% endfor %}
             </div>
             {% endfor %}

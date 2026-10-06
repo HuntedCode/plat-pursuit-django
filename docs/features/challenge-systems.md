@@ -119,12 +119,24 @@ than details:
   wear its own hue off the existing `[data-month]` table, and makes the cell about 1.6x bigger. It is the
   cheaper shape too: a nested loop over the month groups the page already has, so **no new render
   function and no new query**. A 7x53 grid would need a flat 365-cell list in `calendar_day_keys()` order.
-- **Its cells are not controls, and that is measured.** A cell is about 31px at the 1100px cap and about
-  9px at 375px, under the 44px touch minimum this project defends for the day squares. A 9px control
-  opening the same dialog that a 44px square opens one tab away is a worse affordance, not an extra one.
-  So the overview identifies a day through the side column's hover peek (pointer-only by design) and the
-  month tabs stay the only way to open one. No date numerals either: 12px is the stylesheet's type floor
-  and nothing legible fits a 9px cell.
+- **Each cell carries its date from `md:` up, and the fill recipe changes with it.** Which breakpoint is
+  arithmetic: 12px is the stylesheet's type floor, a two-digit tabular numeral advances ~14.4px at that
+  size, and 31 columns inside the 343px a 375px viewport gives this panel is an 8.9px cell. Numerals at
+  mobile would need sub-floor type or a horizontally scrolling year, and a year you scroll is not a year
+  at a glance. **The coupled part is the one to remember:** measured across the twelve hues, `--pp-text`
+  on the mobile cell's strong 68% tint holds 2.27:1 and a dark ink manages 3.54 at best — there is *no*
+  text colour that works on it. So from `md:` the cell switches to `.pp-cal__day--on`'s own shipped
+  recipe (a 22% tint with a 45% ring, already measured at 7.30-9.95 for white text). Raising that tint
+  back toward the mobile figure fails AA at every hue; `test_the_overviews_dates_wait_for_room_and_bring_a_readable_fill_with_them`
+  pins the pair together for that reason.
+- **A row jumps to its month's tab, and a cell is inside a row** — so "click a box" and "click a row"
+  are one handler, and there are twelve targets rather than 365. It jumps to the TAB, never to the day
+  modal: a 9px square opening the same dialog a 44px day square opens one tab away would be a worse
+  affordance, not an extra one. **The row is deliberately not a `<button>`:** the matrix is `aria-hidden`,
+  so a focusable control inside it would be reachable by Tab and announced as nothing, and dropping
+  `aria-hidden` instead would mean twelve row buttons announcing exactly what the twelve crests already
+  announce. The overview is a pointer surface throughout — hover preview and click-to-jump both — and the
+  keyboard and screen-reader path is the crest tablist, which does the same job with arrow keys at 44px.
 - **The crest carries no `data-month`.** The twelve hues each mean one specific month, so a thirteenth
   reading that table would either steal a meaning or add a second colour axis. It declares its own
   near-neutral silver instead. Not the brand cyan: that is already every coin's completion arc, so a cyan

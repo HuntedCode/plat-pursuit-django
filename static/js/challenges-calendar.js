@@ -98,6 +98,36 @@
                 api.syncTabindex();
             },
         });
+
+        // THE YEAR OVERVIEW'S ROWS JUMP TO THEIR MONTH (owner, 2026-10-05: "being able to click a box or
+        // one of the rows to go to the proper tab would be really nice"). Delegated from the board, so one
+        // listener serves twelve rows and the 365 cells inside them -- and because the cells are INSIDE
+        // the rows, "click a box" and "click a row" are the same handler rather than two.
+        //
+        // RESOLVED BY ID, NOT BY INDEX. The row names its tab (`data-cal-jump="cal-tab-jul"`) and this
+        // looks the element up, then asks the tab list where it sits. Reading the month number off the
+        // row and using it as an index would work only while the overview is the first tab, which is
+        // exactly the positional coupling that has already bitten this suite twice.
+        //
+        // IT GOES THROUGH `show` AND `syncTabindex`, the same pair `onSelect` uses, so a jump leaves the
+        // board in precisely the state a crest click would: `aria-selected` rewritten, every panel's
+        // `hidden` set from the resolved one, `slideViewIn` run, and the roving tabindex pointing at the
+        // month that is now live. Calling `show` alone would switch the panel and leave the keyboard's
+        // position on the overview.
+        board.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var row = e.target.closest('[data-cal-jump]');
+            if (!row) { return; }
+            var tab = document.getElementById(row.getAttribute('data-cal-jump'));
+            var index = tabs.indexOf(tab);
+            if (index < 0) { return; }
+            show(index);
+            api.syncTabindex();
+            // FOCUS FOLLOWS THE JUMP, so a hunter who clicks a row and then reaches for the arrow keys
+            // is moving from the month they landed on rather than from wherever focus happened to be.
+            // `wireTablist` has just made this the only crest with `tabIndex = 0`.
+            if (tab.focus) { tab.focus(); }
+        });
     }
 
     // ── the day sheet ────────────────────────────────────────────────────────────────────────────────
@@ -394,7 +424,10 @@
         // within `SETTLE_MS`; this one had nothing to heal it.
         document.body.addEventListener('click', function (e) {
             if (!e.target.closest) { return; }
-            if (e.target.closest('.pp-cal__crest')) { restore(); }
+            // `[data-cal-jump]` TOO, which is the year overview's rows: clicking one switches the panel
+            // out from under the pointer exactly as a crest does, so the same tear-down applies. Without
+            // it the peek would stay up on the hidden overview and be waiting there on the way back.
+            if (e.target.closest('.pp-cal__crest, [data-cal-jump]')) { restore(); }
         });
         document.body.addEventListener('keyup', function (e) {
             if (!e.target || !e.target.closest) { return; }

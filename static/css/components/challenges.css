@@ -3623,7 +3623,24 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  * NO ENTRANCE CASCADE. Switching to this panel already runs `slideViewIn`, and a per-cell stagger over
  * 365 cells is the hazard `.pp-cday__card` paid for twice (an uncapped `--rev` holding every later cell
  * at `opacity: 0`). One motion per switch is enough; there is nothing to stagger that a reader reads in
- * sequence. */
+ * sequence.
+ *
+ * THE CELL CARRIES ITS DATE FROM `md:` UP (owner, 2026-10-05: "putting numbers in the boxes would really
+ * help, especially with the 'at a glance' feel"). Which breakpoint is arithmetic, not taste: 12px is this
+ * file's type floor, a two-digit tabular numeral at 12px advances about 14.4px, and 31 columns inside the
+ * 343px a 375px viewport gives this panel is an 8.9px cell. Numerals at mobile would need either a
+ * sub-floor type size or a horizontally scrolling year -- and a year you have to scroll is not a year at
+ * a glance, which is the whole point of the panel. From 768 the cell is about 19.6px and from 1024 about
+ * 31.4px, so the numeral fits with room either side.
+ *
+ * AND THE FILLED CELL'S RECIPE CHANGES WITH IT, because the two jobs need opposite things. At 8.9px
+ * nothing sits on the cell and the tile has to read as a colour at a glance, so it takes a strong 68%
+ * tint (the Hall of Fame hero's own figure, at the same scale and for the same reason). The moment a
+ * NUMERAL sits on it that tint is unusable: measured across the twelve hues, `--pp-text` on a 68% tint
+ * holds 2.27:1 at December and a dark ink manages 3.54 at best, so there is no text colour that works --
+ * which is why this is a recipe change and not a colour choice. From `md:` the cell takes the DAY
+ * SQUARE'S shipped recipe instead (a 22% tint with a 45% ring), already measured at 7.30-9.95 for white
+ * text, so the board and its overview agree and nothing new had to be proven. */
 .pp-cal__year {
     grid-area: grid;
     display: grid;
@@ -3649,48 +3666,103 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     color: var(--pp-text-dim);
     text-align: right;
     padding-right: 3px;
+    transition: color 0.16s ease;
 }
 /* A RECESS, NOT A BORDER, which is the hero's reading of the same problem at the same scale: a 1px
    border on a 9px cell is most of the cell, so 365 outlined boxes read as a grid of lines rather than
    as a year with gaps in it. */
 .pp-cal__ycell {
-    display: block;
+    display: grid;
+    place-items: center;
     aspect-ratio: 1;
     border-radius: 1px;
     background: color-mix(in srgb, var(--pp-bg-0) 70%, transparent);
+    /* TWO SHADOW SLOTS, COMPOSED, and declared here BEFORE either state needs them. `box-shadow` does
+       not accumulate across rules, so the filled ring and the today mark would erase each other on
+       whichever rule lost -- the defect this file has now paid for on `.pp-csq`, on `.pp-cal__day` and
+       on `.pp-cal__coin`. Three times is enough to stop discovering it. */
+    --yc-ring: 0 0 0 0 transparent;
+    --yc-mark: 0 0 0 0 transparent;
+    box-shadow: var(--yc-ring), var(--yc-mark);
+}
+/* THE DATE, HIDDEN UNTIL THERE IS ROOM FOR IT. `display: none` rather than a smaller size: the type
+   floor is 12px and there is no legible numeral under it, so the choice is the date or nothing. */
+.pp-cal__ynum { display: none; }
+@media (min-width: 768px) {
+    .pp-cal__ynum {
+        display: block;
+        font-size: 12px;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        /* TABULAR, so 1 and 11 occupy the same width and the columns read as columns. */
+        color: var(--pp-text-dim);
+    }
 }
 /* THE FILLED DAY WEARS ITS MONTH. `--cal-c` comes off the row's `data-month`, so a filled 3 March is
    March's green and a filled 3 November is November's berry -- which is what makes twelve rows read as
-   twelve months rather than as one 365-cell texture. 68% over `--pp-bg-2` is the hero cell's own recipe,
-   reused rather than re-derived: these two grids are the same object at two scales. */
+   twelve months rather than as one 365-cell texture. At mobile that is 68% over `--pp-bg-2`, the hero
+   cell's own recipe, reused rather than re-derived: at this scale the two grids are the same object. */
 .pp-cal__ycell--on {
     background: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 68%, var(--pp-bg-2));
+}
+@media (min-width: 768px) {
+    /* THE DAY SQUARE'S RECIPE, VERBATIM, once a numeral sits on the cell -- see the block comment above
+       for why 68% cannot carry text at any colour. `--pp-text` on a 22% tint measures 7.30 (December) to
+       9.95 (October), which is the figure `.pp-cal__day--on` already ships against. */
+    .pp-cal__ycell--on {
+        background: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 22%, var(--pp-bg-2));
+        --yc-ring: inset 0 0 0 1px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 45%, var(--pp-border));
+    }
+    /* FULL STRENGTH ON A FILLED DAY, dim on an open one. That contrast between the two is what carries
+       the "at a glance" read once every cell has a number in it -- without it, 365 numerals at one weight
+       are a wall of text and the fill does all the work alone. */
+    .pp-cal__ycell--on .pp-cal__ynum { color: var(--pp-text); font-weight: 600; }
 }
 /* TODAY, AS A RING RATHER THAN A FILL, for the reason the day grid gives: a background change would
    fight `--on`, which already owns it. One cell in 365 at this size needs the outline to read at all,
    so it is drawn OUTSIDE the cell where nothing else is painted. */
 .pp-cal__ycell--today {
-    box-shadow: 0 0 0 1px var(--cal-c, var(--pp-primary)),
-                0 0 6px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 50%, transparent);
+    --yc-mark: 0 0 0 1px var(--cal-c, var(--pp-primary)),
+               0 0 6px color-mix(in srgb, var(--cal-c, var(--pp-primary)) 50%, transparent);
 }
 @media (any-hover: hover) and (any-pointer: fine) {
     /* ONLY A CELL WITH SOMETHING TO SAY. `[data-peek-label]` is the same predicate the peek binds to, so
        a cell the pointer cannot preview gives no hover feedback either -- the alternative is a cell that
-       lights up and then changes nothing in the column beside it. */
+       lights up and then changes nothing in the column beside it.
+       ON `--yc-mark`, not on `box-shadow`: a bare declaration here would erase a filled cell's ring, and
+       hovering today's cell would erase the mark that says it is today. */
     .pp-cal__year [data-peek-label]:hover {
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--pp-text) 55%, transparent);
+        --yc-mark: 0 0 0 1px color-mix(in srgb, var(--pp-text) 55%, transparent);
+    }
+    /* THE ROW IS THE JUMP TARGET, so the whole row answers a hover rather than the label alone -- the
+       owner asked to "click a box or one of the rows", and a row that highlights only where the cursor
+       happens to be would make the clickable area a guess. */
+    .pp-cal__yrow:hover .pp-cal__ylabel { color: var(--pp-text); }
+    .pp-cal__yrow:hover .pp-cal__ycell:not(.pp-cal__ycell--on) {
+        background: color-mix(in srgb, var(--pp-bg-0) 40%, transparent);
     }
 }
 @media (min-width: 768px) {
     /* MORE AIR ONCE THERE IS ROOM FOR IT. At 375px a 2px gutter was over a fifth of a 9px cell, which is
-       the mush the hero's own gap comment describes; from 768 the cell is about 19px and 2px reads as a
-       grid rather than as noise. */
+       the mush the hero's own gap comment describes; from 768 the cell is about 19.6px and 2px reads as a
+       grid rather than as noise.
+       AND THE LABEL COLUMN NARROWS TO BUY THAT WIDTH BACK. Every pixel the label takes is a 31st of a
+       pixel off each cell, and the cell is the thing that has to hold a numeral here: 1.75rem still holds
+       three tracked uppercase characters at 12px. */
     .pp-cal__year, .pp-cal__yrow { gap: 2px; }
+    .pp-cal__yrow { grid-template-columns: 1.75rem repeat(31, minmax(0, 1fr)); }
     .pp-cal__ycell { border-radius: 2px; }
 }
 @media (min-width: 1024px) {
     .pp-cal__year, .pp-cal__yrow { gap: 3px; }
+    .pp-cal__yrow { grid-template-columns: 2.1rem repeat(31, minmax(0, 1fr)); }
 }
+
+/* THE ROW IS A JUMP TO ITS MONTH (owner, 2026-10-05: "being able to click a box or one of the rows to go
+   to the proper tab would be really nice"). `cursor: pointer` is the only affordance it needs beyond the
+   hover above, because the row is not a focusable control -- see the template for why, which is a
+   deliberate decision rather than an omission. */
+.pp-cal__yrow { cursor: pointer; }
 
 /* THE ALL COIN'S METAL, and it is the one crest with no `data-month`. A near-neutral silver: chroma
    0.015 against twelve hues at 0.13 and above, so it cannot be mistaken for a month, and light enough

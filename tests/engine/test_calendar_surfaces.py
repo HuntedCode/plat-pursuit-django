@@ -191,6 +191,29 @@ def _css_rules(block, selector):
             re.finditer(re.escape(selector) + r' \{[^}]*\}', ' '.join(block.split()))]
 
 
+def _enclosing_at_rules(block, at):
+    """The at-rule preludes open at character `at`, outermost first.
+
+    WHY THIS IS NOT `rfind('@media')`. That finds the nearest PRECEDING at-rule with no nesting tracked,
+    so a rule moved OUT of its media block still reports the block above it as its own -- which is how
+    the counter plate's band assertion passed against the exact regression it was written to catch. A
+    brace stack is the only reading that answers "what encloses this".
+
+    PASS IT A COMMENT-STRIPPED BLOCK. `_calendar_css()` already strips, and a brace inside a comment
+    would otherwise unbalance the stack.
+    """
+    stack, last_open = [], 0
+    for i, ch in enumerate(block[:at]):
+        if ch == '{':
+            stack.append(block[last_open:i].strip())
+            last_open = i + 1
+        elif ch == '}':
+            if stack:
+                stack.pop()
+            last_open = i + 1
+    return [r for r in stack if r.startswith('@')]
+
+
 def _css_rule(block, selector, last=False):
     """One rule's declarations, from its selector to its closing brace.
 
@@ -2176,16 +2199,7 @@ def test_the_month_rim_paints_nothing_where_only_a_desktop_plate_would_cover_it(
     # this test exists for, and it passed. The project's own lesson about slicing a stylesheet says it:
     # track the at-rule.
     at = css.index('.pp-cal__sub {\n        display: inline-flex')
-    stack, last = [], 0
-    for i, ch in enumerate(css[:at]):
-        if ch == '{':
-            stack.append(css[last:i].strip())
-            last = i + 1
-        elif ch == '}':
-            if stack:
-                stack.pop()
-            last = i + 1
-    enclosing = [r for r in stack if r.startswith('@media')]
+    enclosing = _enclosing_at_rules(css, at)
     assert len(enclosing) == 1 and 'min-width: 1024px' in enclosing[0], (
         'the plate is revealed outside the lg: band (enclosing at-rules: %s), so the rim arithmetic '
         'no longer has the cover its comment claims' % enclosing)
@@ -2337,7 +2351,10 @@ def test_the_year_overview_draws_every_day_in_twelve_month_rows():
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
     year = _section(body, 'id="cal-month-all"', until='</section>')
 
-    rows = re.findall(r'<div class="pp-cal__yrow" data-month="(\d+)">(.*?)</div>', year, re.S)
+    # TOLERANT OF THE TAG'S SHAPE. The row grew `data-cal-jump` on a second line, which an exact-tag
+    # pattern silently stopped matching -- reporting "0 month rows" rather than the attribute it had not
+    # heard about. `[^>]*` cannot cross the tag because there is no `>` inside it.
+    rows = re.findall(r'<div class="pp-cal__yrow"[^>]*data-month="(\d+)"[^>]*>(.*?)</div>', year, re.S)
     assert len(rows) == 12, 'the overview draws %d month rows' % len(rows)
     assert [int(m) for m, _cells in rows] == list(range(1, 13)), 'the rows are out of month order'
 
@@ -2448,3 +2465,132 @@ def test_the_overview_reports_the_year_rather_than_a_month():
     # BOTH HOOKS, because the script finds the faces by these attributes and a missing one means a
     # hover in this panel changes nothing at all.
     assert 'data-cal-peek' in year and 'data-cal-facts' in year
+
+
+def test_every_overview_cell_carries_its_date():
+    """OWNER, 2026-10-05: "putting numbers in the boxes would really help, especially with the 'at a
+    glance' feel of it."
+
+    EVERY CELL, INCLUDING THE OPEN ONES, because the grid is a calendar and a calendar with gaps in its
+    numbering is unreadable. The hierarchy comes from COLOUR -- full strength on a filled day, dim on an
+    open one -- not from printing some dates and not others."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+    year = _section(_body(run), 'id="cal-month-all"', until='</section>')
+
+    nums = re.findall(r'<span class="pp-cal__ynum">(\d+)</span>', year)
+    assert len(nums) == 365, 'the overview prints %d dates, not one per cell' % len(nums)
+
+    rows = re.findall(r'<div class="pp-cal__yrow"[^>]*>(.*?)</div>', year, re.S)
+    for month, (length, cells) in enumerate(zip(CALENDAR_MONTH_DAYS, rows), start=1):
+        printed = [int(n) for n in re.findall(r'<span class="pp-cal__ynum">(\d+)</span>', cells)]
+        assert printed == list(range(1, length + 1)), (
+            'month %d prints the wrong dates: %s' % (month, printed[:5]))
+
+
+def test_the_overviews_dates_wait_for_room_and_bring_a_readable_fill_with_them():
+    """TWO COUPLED DECISIONS, and neither is a preference.
+
+    THE BREAKPOINT IS ARITHMETIC. 12px is this stylesheet's type floor, and 31 columns inside the 343px
+    a 375px viewport gives this panel is an 8.9px cell -- so a numeral at mobile would need sub-floor type
+    or a horizontally scrolling year, and a year you scroll is not a year at a glance. `display: none`
+    until 768, where the cell is about 19.6px.
+
+    AND THE FILL HAD TO CHANGE WITH IT. Measured across the twelve hues, `--pp-text` on the mobile cell's
+    68% tint holds 2.27:1 at December and a dark ink manages 3.54 at best: there is NO text colour that
+    works on it, which is why the numeral arrives with a different recipe rather than just a colour. From
+    `md:` the cell takes `.pp-cal__day--on`'s shipped 22% tint, already measured at 7.30-9.95 for white.
+
+    PINNED TOGETHER because the hazard is raising one without the other -- a 68% tint with a numeral on
+    it fails AA at every hue, and nothing else in the suite would see it."""
+    css = _calendar_css()
+
+    base = _css_rule(css, '.pp-cal__ynum {')
+    assert 'display: none' in base, 'the date renders at 375px, where no legible numeral fits'
+
+    shown = [r for r in _css_rules(css, '.pp-cal__ynum') if 'font-size' in r]
+    assert len(shown) == 1
+    assert 'font-size: 12px' in shown[0], 'the date is off the type floor'
+    assert 'tabular-nums' in shown[0], 'proportional digits break the column alignment'
+    # LOCATED IN THE UNFLATTENED SOURCE, because the enclosing at-rule is what is being asserted and
+    # `_css_rules` returns a whitespace-flattened copy -- indexing one into the other finds nothing.
+    at = css.index('.pp-cal__ynum {\n        display: block')
+    assert _enclosing_at_rules(css, at) == ['@media (min-width: 768px)'], (
+        'the date is revealed outside the md: band, where the cell cannot hold it')
+
+    # THE TWO FILL RECIPES, and the band each belongs to.
+    fills = _css_rules(css, '.pp-cal__ycell--on')
+    tints = [re.search(r'var\(--cal-c, var\(--pp-primary\)\) (\d+)%, var\(--pp-bg-2\)', f)
+             for f in fills]
+    tints = sorted(int(m.group(1)) for m in tints if m)
+    assert tints == [22, 68], 'the overview fill is %s, not the mobile tile plus the day recipe' % tints
+    with_num = [f for f in fills if '--yc-ring' in f]
+    assert len(with_num) == 1 and '45%' in with_num[0], (
+        'the numeral-bearing cell has no ring, so a 22% tint is all that says it is filled')
+
+
+def test_an_overview_cells_ring_and_its_today_mark_compose():
+    """THE FOURTH TIME THIS FILE WOULD HAVE PAID FOR IT. `box-shadow` does not accumulate across rules, so
+    a filled cell's ring and today's mark would erase whichever lost -- the defect already recorded on
+    `.pp-csq`, on `.pp-cal__day` and on `.pp-cal__coin`. Both states write a custom property and the base
+    rule lists them, so the hover ring cannot erase either one either.
+
+    TRANSPARENT DEFAULTS, NOT `none`: a keyword cannot be one item of a `box-shadow` list, and the whole
+    declaration would be dropped."""
+    css = _calendar_css()
+    base = _css_rule(css, '.pp-cal__ycell {')
+    assert 'box-shadow: var(--yc-ring), var(--yc-mark)' in base
+    assert base.count('transparent') == 3, 'a default is `none`, which invalidates the list'
+
+    filled = [r for r in _css_rules(css, '.pp-cal__ycell--on') if '--yc-ring' in r]
+    today = _css_rule(css, '.pp-cal__ycell--today {')
+    assert len(filled) == 1
+    assert 'box-shadow' not in filled[0], 'the filled ring is declared directly and erases the mark'
+    assert 'box-shadow' not in today, "today's mark is declared directly and erases the filled ring"
+    assert '--yc-mark' in today
+
+    hover = [r for r in _css_rules(css, '.pp-cal__year [data-peek-label]:hover') if 'yc-mark' in r]
+    assert len(hover) == 1, 'the hover ring does not compose, so it erases one of the other two'
+
+
+def test_an_overview_row_jumps_to_its_months_tab():
+    """OWNER, 2026-10-05: "being able to click a box or one of the rows to go to the proper tab would be
+    really nice."
+
+    THE ROW IS THE TARGET AND A CELL IS INSIDE IT, so "click a box" and "click a row" are one handler
+    rather than two -- and one target per month rather than 365, which is what keeps this clear of the
+    44px minimum argument: the row spans the panel.
+
+    BY ID, NOT BY INDEX. The row names its tab and the script looks the element up, then asks the tab
+    list where it sits. Reading the month number off the row and indexing with it would work only while
+    the overview is the first tab, which is the positional coupling that has already bitten this suite
+    twice."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+
+    jumps = re.findall(r'data-cal-jump="([\w-]+)"', year)
+    assert len(jumps) == 12, 'the overview offers %d jumps, not one per month' % len(jumps)
+    assert jumps[0] == 'cal-tab-jan' and jumps[11] == 'cal-tab-dec'
+    # EVERY TARGET EXISTS. A jump naming a tab that is not there is a click that does nothing.
+    for tab_id in jumps:
+        assert 'id="%s"' % tab_id in body, '%s is not a tab on this page' % tab_id
+
+    js = _script()
+    jump = js[js.index("closest('[data-cal-jump]')"):]
+    assert 'getElementById' in jump, 'the jump resolves its tab by position rather than by id'
+    assert 'tabs.indexOf(tab)' in jump
+    # THE SAME PAIR `onSelect` USES, so a jump leaves the board exactly where a crest click would --
+    # `aria-selected` rewritten, panels re-hidden, the slide run, and the roving tabindex moved.
+    assert 'show(index);' in jump and 'api.syncTabindex();' in jump
+    assert 'tab.focus()' in jump, 'focus stays on the overview, so the arrow keys move the wrong tab'
+
+
+def test_a_jump_tears_down_the_peek_it_leaves_behind():
+    """THE JUMP HIDES THE PANEL THE PEEK IS STANDING ON, exactly as a crest click does, and the peek's
+    own state is not reset by a panel going `hidden`. Without this the month's figures would still be
+    swapped out on the overview when a hunter came back to it, showing a day they had left."""
+    js = _script()
+    peek = js[js.index('function wireDayPeek'):]
+    guard = re.search(r"closest\('([^']*data-cal-jump[^']*)'\)", peek)
+    assert guard, 'the peek is never torn down by a jump'
+    assert '.pp-cal__crest' in guard.group(1), 'the crest tear-down was dropped when the jump arrived'
