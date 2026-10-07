@@ -31,7 +31,10 @@ classes do the styling and the closing animation is keyed on the ID, joining the
      route is renamed, where a hand-built path would 404 silently on dismissal.{% endcomment %}
      data-seen-url="{% url 'challenge_opening_seen' challenge.id %}"
      data-run="{{ challenge.id }}"
-     {% if show_calendar_opening %}data-auto{% endif %} hidden>
+     {% comment %}`data-auto` FOR THE REAL CEREMONY, `data-preview` FOR THE TEAM DOOR, and never both.
+     `DetailModal` reads `data-auto` to decide whether closing the sheet RECORDS anything, so the preview
+     must not carry it or looking would spend the run's real ceremony.{% endcomment %}
+     {% if show_calendar_opening %}data-auto{% elif preview_calendar_opening %}data-preview{% endif %} hidden>
     <div class="pp-detail-modal__scrim" data-calopen-close></div>
     <div class="pp-detail-modal__dialog pp-calopen__dialog" role="dialog" aria-modal="true"
          aria-labelledby="cal-opening-title" tabindex="-1">

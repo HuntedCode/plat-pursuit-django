@@ -382,7 +382,16 @@
         // ONLY WHEN THE SERVER ARMED IT. `autoOpenDelay` is what actually opens the sheet; `data-auto`
         // drives the RECORDING half independently, so passing the delay unconditionally would replay the
         // ceremony on every visit to a run whose owner dismissed it months ago.
-        if (el.hasAttribute('data-auto')) { opts.autoOpenDelay = 450; }
+        if (el.hasAttribute('data-auto')) {
+            opts.autoOpenDelay = 450;
+        } else if (el.hasAttribute('data-preview')) {
+            // THE TEAM PREVIEW (`?preview=calendar-opening`): it opens, and that is ALL it does. No
+            // `onDismiss`, so closing it cannot stamp the run -- `data-auto` is absent as well, but
+            // removing the recorder is the belt to that brace. And no `seenKey`, because a key left on
+            // this device by a failed write makes `DetailModal` skip the open AND retry the write: a
+            // preview that shows nothing and writes something, which is both of the wrong things.
+            opts = { closeSelector: opts.closeSelector, autoOpenDelay: 450 };
+        }
         PP.DetailModal(el, opts);
     }
 

@@ -2983,3 +2983,87 @@ def test_the_ceremony_is_wired_to_the_house_controller():
 
     # AND IT IS WIRED INTO BOOT, or none of the above runs.
     assert js.count('wireOpening(') == 3, 'the ceremony is defined but never wired, or wired twice'
+
+
+def _opening_tag(body):
+    """The ceremony's root element, whose attributes are the whole gate."""
+    return re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>', body, re.S).group(0)
+
+
+def _team_member():
+    # ON TOP OF `_hunter()`, because the third test makes this person an OWNER, and starting a run is
+    # members-only during the beta -- a bare profile would be refused before the test began.
+    member = _hunter()
+    member.user.is_staff = True
+    member.user.save(update_fields=['is_staff'])
+    return member
+
+
+def test_the_team_can_preview_a_spent_opening_ceremony():
+    """THE CEREMONY IS A ONE-SHOT, so the first look is also the last: once acknowledged it is stamped for
+    good, and only a fresh run earns another. `?preview=calendar-opening` reopens it on demand -- on ANY
+    Calendar run, since the ceremony reads that run's own numbers and previewing a whale's run is the
+    reason to look.
+
+    IT RENDERS `data-preview`, NEVER `data-auto`. `DetailModal` reads `data-auto` to decide whether
+    closing the sheet RECORDS anything, so a preview carrying it would stamp the run on dismissal."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    run.opening_seen_at = run.created_at
+    run.save(update_fields=['opening_seen_at'])
+
+    staff = Client()
+    staff.force_login(_team_member().user)
+    tag = _opening_tag(staff.get(_url(run) + '?preview=calendar-opening').content.decode())
+    assert 'data-preview' in tag, 'the team door does not open a spent ceremony'
+    assert 'data-auto' not in tag, 'the preview arms the recorder, so looking would spend the ceremony'
+
+    # WITHOUT THE QUERYSTRING NOTHING CHANGES, so the door is opt-in per request rather than a mode.
+    plain = _opening_tag(staff.get(_url(run)).content.decode())
+    assert 'data-preview' not in plain and 'data-auto' not in plain
+
+
+def test_the_opening_preview_is_team_only():
+    """`core.previews` enforces staff-or-moderator for every door. A hunter typing the querystring sees a
+    run page with no ceremony on it, exactly as if they had not typed it."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    run.opening_seen_at = run.created_at
+    run.save(update_fields=['opening_seen_at'])
+
+    hunter = Client()
+    hunter.force_login(ProfileFactory().user)
+    tag = _opening_tag(hunter.get(_url(run) + '?preview=calendar-opening').content.decode())
+    assert 'data-preview' not in tag and 'data-auto' not in tag
+
+    anon = _opening_tag(Client().get(_url(run) + '?preview=calendar-opening').content.decode())
+    assert 'data-preview' not in anon
+
+
+def test_previewing_the_opening_ceremony_writes_nothing():
+    """THE RULE EVERY PREVIEW DOOR SHARES: looking never spends anything, so it never has to be undone.
+    Here that means an owner previewing their OWN unseen run must still meet the real, recording
+    ceremony afterwards -- the GET must not stamp, and a real unseen ceremony outranks the preview so the
+    owner is not handed the non-recording version of the thing actually happening to them."""
+    owner = _team_member()
+    run = _run(CHALLENGE_TYPE_CALENDAR, profile=owner)
+
+    client = Client()
+    client.force_login(owner.user)
+    tag = _opening_tag(client.get(_url(run) + '?preview=calendar-opening').content.decode())
+    assert 'data-auto' in tag and 'data-preview' not in tag, (
+        'a genuinely unseen ceremony was downgraded to the preview, so dismissing it would record nothing'
+    )
+    run.refresh_from_db()
+    assert run.opening_seen_at is None, 'rendering the page stamped the run'
+
+    # AND THE PREVIEW BRANCH OF THE SCRIPT HAS NO RECORDER. The server half above keeps `data-auto` off
+    # the element; this is the other half, so either one alone still writes nothing.
+    js = _script_code()
+    wire = js[js.index('function wireOpening('):]
+    wire = wire[:wire.index('\n    function ', 10)]
+    branch = wire[wire.index("hasAttribute('data-preview')"):]
+    branch = branch[:branch.index('PP.DetailModal(')]
+    assert 'autoOpenDelay' in branch, 'the preview branch does not open the sheet'
+    assert 'onDismiss' not in branch.split('opts = ', 1)[1], 'the preview can record a dismissal'
+    assert 'seenKey' not in branch.split('opts = ', 1)[1], (
+        'a stale device key would skip the preview and retry the write'
+    )

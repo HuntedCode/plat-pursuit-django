@@ -178,6 +178,12 @@ other two consumers, so nothing new was invented. `autoOpenDelay` is passed **on
 present: the controller reads `armed` from it for the recording half, so passing the delay unconditionally
 would replay the ceremony on every visit.
 
+**Preview it with `?preview=calendar-opening`** on any Calendar run's page (staff or moderator only,
+via `core.previews`). It renders `data-preview` rather than `data-auto` and the script gives that branch
+an auto-open and nothing else, so **looking never stamps the run** — `DetailModal` reads `data-auto` to
+decide whether a dismissal is recorded. A genuinely unseen ceremony still outranks the preview for its
+owner, since that is the real thing happening to them.
+
 **Only the finish notifies.** `challenge_completed` fires from `on_run_completed` as it always did; the
 four rungs below it are silent, because a backfilling run passes several at once on day one and would
 otherwise fire three notifications in the same second.

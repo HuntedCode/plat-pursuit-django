@@ -135,6 +135,27 @@ HALL_OF_FAME_RATELIMIT_GROUP = 'challenges:hall-of-fame'
 #: No provider runs, no extra query, nothing reads the viewer's data differently.
 PREVIEW_FREE = 'challenges-free'
 
+#: The team preview door for the Plat Calendar's opening ceremony: `?preview=calendar-opening` on any
+#: Calendar run's page.
+#:
+#: WHY IT NEEDS ONE. The ceremony fires once per run and is then stamped forever, so the first look is
+#: also the last -- and a fresh run is the only way to earn another. `core.previews`' docstring names
+#: exactly this class of thing: "a one-shot that has been spent".
+#:
+#: IT WRITES NOTHING, which is the rule every door shares and the part that took care here. The real
+#: ceremony renders `data-auto`, and `DetailModal` reads that attribute to decide whether a dismissal is
+#: RECORDED -- so a preview rendering it would stamp `opening_seen_at` the moment it was closed, spending
+#: the real ceremony of whichever run you previewed. The preview renders `data-preview` instead, and the
+#: script gives that branch an auto-open and nothing else: no `onDismiss` and no `seenKey`. The `seenKey`
+#: omission matters too: a key left on this device by a failed write would make `DetailModal` SKIP the
+#: open and RETRY the write, which is a preview that neither shows anything nor stays read-only.
+#:
+#: ANY CALENDAR RUN, NOT ONLY YOUR OWN. The ceremony reads the run's own numbers, so previewing a whale's
+#: run shows what a whale sees -- which is the reason to look. The REAL gate still wins when it applies:
+#: an owner whose ceremony is genuinely unseen gets the real, recording version, because that is the
+#: thing actually happening to them.
+PREVIEW_CALENDAR_OPENING = 'calendar-opening'
+
 
 def creation_is_open(request, profile):
     """Can this hunter start a run, as THIS REQUEST should be shown it?
@@ -436,9 +457,14 @@ class ChallengeDetailView(DetailView):
             # count. `rewards` declines to claim a name another system holds and logs instead, so a
             # ladder position derived from arithmetic would name a title the hunter may not have -- the
             # same argument `granted_titles_for` makes for reading the grant instead of the ordinal.
+            # THE PREVIEW DOOR, only where the real gate is shut -- see `PREVIEW_CALENDAR_OPENING`.
+            context['preview_calendar_opening'] = (
+                not context['show_calendar_opening']
+                and previewing(self.request, PREVIEW_CALENDAR_OPENING)
+            )
             context['calendar_opening_title'] = (
                 rewards.granted_titles_for([challenge]).get(challenge.pk)
-                if context['show_calendar_opening'] else None
+                if context['show_calendar_opening'] or context['preview_calendar_opening'] else None
             )
         else:
             context['groups'] = slot_render.slot_groups(challenge)
