@@ -22,6 +22,7 @@ from pathlib import Path
 from challenges.models import (
     CHALLENGE_TYPE_AZ,
     CHALLENGE_TYPE_CHOICES,
+    CHALLENGE_TYPE_SHORT_LABELS,
     CHALLENGE_TYPE_JOBS,
     TYPES_NOT_YET_CREATABLE,
     Challenge,
@@ -34,7 +35,8 @@ from trophies.models import Contract
 #: The types that actually get a card: a card's button is a POST to `challenge_start`, so a type that
 #: cannot be started renders none. Derived rather than listed, so neither adding a type nor making an
 #: existing one playable needs these tests edited.
-CARD_TYPES = [(value, label) for value, label in CHALLENGE_TYPE_CHOICES
+#: The cards' labels are the SHORT ones (`CHALLENGE_TYPE_SHORT_LABELS`): the page already says "Challenges".
+CARD_TYPES = [(value, CHALLENGE_TYPE_SHORT_LABELS[value]) for value, _ in CHALLENGE_TYPE_CHOICES
               if value not in TYPES_NOT_YET_CREATABLE]
 
 pytestmark = pytest.mark.django_db
@@ -108,11 +110,13 @@ def test_every_type_gets_a_card_even_with_no_runs(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
 
+    # ON THE CARD'S HEADING, not anywhere in the page: a bare label like "A-Z" turns up in the nav and copy.
     for _value, label in CARD_TYPES:
-        assert label in body, 'no card for %s' % label
-    for value, label in CHALLENGE_TYPE_CHOICES:
+        assert '>%s</h2>' % label in body, 'no card for %s' % label
+    for value, _ in CHALLENGE_TYPE_CHOICES:
         if value in TYPES_NOT_YET_CREATABLE:
-            assert label not in body, (
+            label = CHALLENGE_TYPE_SHORT_LABELS[value]
+            assert '>%s</h2>' % label not in body, (
                 '%s cannot be started yet, so its card would offer a button that only refuses' % label)
 
 
@@ -591,12 +595,12 @@ def test_a_lapsed_members_existing_run_keeps_a_live_button(client):
     profile.save(update_fields=['user_is_premium'])
 
     body = client.get(reverse('my_challenges')).content.decode()
-    az_card = body[body.index('A-Z Challenge'):body.index('Job Coverage Challenge')]
+    az_card = body[body.index('>A-Z</h2>'):body.index('>Job Coverage</h2>')]
 
     assert 'Continue' in az_card
     assert 'aria-disabled' not in az_card, 'a lapsed member was shown a dead Continue'
     # And the OTHER card, where they genuinely cannot start, still is gated.
-    assert 'aria-disabled' in body[body.index('Job Coverage Challenge'):]
+    assert 'aria-disabled' in body[body.index('>Job Coverage</h2>'):]
 
 
 def test_the_three_outcome_constants_are_distinct():

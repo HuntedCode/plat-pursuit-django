@@ -879,12 +879,13 @@ def test_an_a_z_card_never_shows_owed_xp(client):
     svc.start(profile, CHALLENGE_TYPE_AZ)
 
     body = client.get(reverse('my_challenges')).content.decode()
-    # PICKED BY LABEL, not by index. Splitting on `<section class="card` also catches the page-header card, so
+    # PICKED BY THE CARD'S HEADING, not by index and not by the type's full name: the full name also appears in
+    # a run's `data-name`, and the card heading is the short label. PICKED BY LABEL, not by index. Splitting on `<section class="card` also catches the page-header card, so
     # positional indices were off by one and silently read the wrong chunk -- a slice that lands on the wrong
     # element is the same defect as a slice that is too short.
     chunks = body.split('<section class="card')
-    az = next(c for c in chunks if 'A-Z Challenge' in c)
-    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+    az = next(c for c in chunks if '>A-Z</h2>' in c)
+    jobs = next(c for c in chunks if '>Job Coverage</h2>' in c)
 
     assert 'pp-cowed' in jobs, 'the jobs card has one'
     assert 'pp-cowed' not in az, 'and the A-Z card does not'
@@ -952,7 +953,7 @@ def test_the_chip_describes_the_run_it_links_to(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
     chunks = body.split('<section class="card')
-    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+    jobs = next(c for c in chunks if '>Job Coverage</h2>' in c)
 
     href = re.search(r'<a class="pp-cowed" href="([^"]+)"', jobs)
     assert href.group(1) == reverse('challenge_detail', args=[second.pk]), 'the newest owing run'
@@ -988,7 +989,7 @@ def test_the_chip_calls_a_run_hidden_only_when_the_linked_one_is(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
     chunks = body.split('<section class="card')
-    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+    jobs = next(c for c in chunks if '>Job Coverage</h2>' in c)
 
     assert 'of a hidden run' not in jobs, 'the LINKED run is the visible one'
     assert reverse('challenge_detail', args=[newer.pk]) in jobs
@@ -1006,7 +1007,7 @@ def test_the_chip_says_nothing_extra_when_the_xp_is_on_the_cards_own_run(client)
 
     body = client.get(reverse('my_challenges')).content.decode()
     chunks = body.split('<section class="card')
-    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+    jobs = next(c for c in chunks if '>Job Coverage</h2>' in c)
 
     assert 'pp-cowed' in jobs, 'the chip is there'
     assert 'on another run' not in jobs, 'and does not send them away from the run being offered'
@@ -1027,7 +1028,7 @@ def test_the_chip_does_not_call_the_cards_own_resumable_run_elsewhere(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
     chunks = body.split('<section class="card')
-    jobs = next(c for c in chunks if 'Job Coverage Challenge' in c)
+    jobs = next(c for c in chunks if '>Job Coverage</h2>' in c)
 
     assert 'pp-cowed' in jobs
     assert 'of a hidden run' not in jobs, 'the card IS showing it, so it is not elsewhere'

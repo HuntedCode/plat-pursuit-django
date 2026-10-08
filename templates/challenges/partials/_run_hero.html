@@ -308,7 +308,7 @@ attribute is ignored and the real number renders. Not worth forking a shared par
             standing took that slot. It belongs on the record line rather than being dropped: the board
             states the type implicitly, but a reader who has collapsed or scrolled past the board still
             needs the row to say which of the two challenges this was.{% endcomment %}
-            <span class="pp-chero__type">{% include 'partials/icons/challenge_type.html' with type=run.challenge_type size='' %}{{ run.get_challenge_type_display }}</span>
+            <span class="pp-chero__type">{% include 'partials/icons/challenge_type.html' with type=run.challenge_type size='' %}{{ run.short_label }}</span>
             <span class="pp-chero__dot" aria-hidden="true">&middot;</span>
             <time class="pp-chero__when" datetime="{{ run.completed_at|date:'c' }}">{{ run.completed_at|date:'j M Y' }}</time>
             </div>

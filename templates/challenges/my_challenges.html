@@ -133,8 +133,14 @@
     actions (DaisyUI's `.card-body` is already a flex column) puts the buttons on one line.{% endcomment %}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {% for card in cards %}
-        <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral{% if forloop.last %} md:col-span-2 lg:col-span-1{% endif %}">
+        {% comment %}THE SPANNING CARD (`pp-ccard--wide`) LAYS OUT SIDE BY SIDE AT `md:` ONLY: stretched across
+        two columns, a single stack left the right half empty under a very long bar. `__main` (who and how far)
+        and `__side` (what it is worth and what to do) are plain blocks at every other size, so phones and the
+        three-across desktop row are unchanged. `__side` is a flex column so the actions' `mt-auto` still
+        reaches the bottom of the card.{% endcomment %}
+        <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral{% if forloop.last %} md:col-span-2 lg:col-span-1 pp-ccard--wide{% endif %}">
             <div class="card-body p-3 md:p-5 lg:p-6">
+                <div class="pp-ccard__main">
                 <div class="flex items-start justify-between gap-2">
                     {% comment %}THE TYPE, said with its glyph as well as its name, so the three cards read as three
                     different things at a glance rather than three identical boxes with different headings. The
@@ -200,6 +206,8 @@
                     {{ card.visible_completed_count }} finished before
                 </p>
                 {% endif %}
+                </div>
+                <div class="pp-ccard__side">
 
                 {% comment %}WHAT IT IS WORTH, before you commit. This card is the only surface a hunter sees
                 before starting, so leaving the reward off it made the reward a surprise -- and a hunter
@@ -328,6 +336,7 @@
                         Hide
                     </button>
                     {% endif %}
+                </div>
                 </div>
             </div>
         </section>

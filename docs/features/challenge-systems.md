@@ -536,8 +536,15 @@ and the Hall of Fame plaque's count. Added 2026-10-08 after the third type showe
 two: the Calendar's Start card printed Job Coverage's description, the hub filter gave it the "All" grid,
 and the Hall of Fame counted it in "squares".
 
+**Short labels where the page already says "Challenges"** (`CHALLENGE_TYPE_SHORT_LABELS`, read through
+`Challenge.short_label`): A-Z, Job Coverage, Plat Calendar on My Challenges' cards, the hub's filter and run
+cards, and the Hall of Fame plaque. The full label stays where a type stands alone: the auto-generated run
+names, the run page's title, and the share card.
+
 **My Challenges lays the three cards out three across from `lg:`** (one column on phones, two at `md:` with
-the third spanning). **The Calendar's reward line names a rung**, not a completion title: its titles are a
+the third spanning). The spanning card goes **side by side at `md:` only** (`pp-ccard--wide`: who and how far
+on the left, the reward and actions on the right), because one stack stretched across two columns left the
+right half empty. **The Calendar's reward line names a rung**, not a completion title: its titles are a
 ladder climbed during a run, so the card shows the next rung the hunter can still earn and where it sits
 ("Calendar Keeper at 100 days"), via `rewards.next_calendar_rung`. "Next" skips rungs the run has passed AND
 rungs the hunter already holds, because the titles belong to the hunter: a second run cannot grant Calendar

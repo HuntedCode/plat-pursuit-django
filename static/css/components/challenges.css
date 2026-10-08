@@ -4904,6 +4904,27 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     border-color: var(--pp-border);
 }
 
+/* MY CHALLENGES' TYPE CARD: two plain blocks, side by side only on the SPANNING card at `md:`.
+   The third card spans both columns at `md:` so no type sits alone in half a row, but its stacked content
+   then left the right half empty under a very long bar. Side by side at that one width -- who and how far
+   on the left, what it is worth and what to do on the right -- and back to the stack from `lg:`, where the
+   three cards sit in one row. `__side` is a flex column at every size so the actions' `mt-auto` reaches
+   the card's bottom edge. */
+.pp-ccard__side { display: flex; flex-direction: column; flex: 1 1 auto; }
+/* `min-width: 0` so a long pitch wraps inside its grid column rather than widening it. */
+.pp-ccard__main { min-width: 0; }
+@media (min-width: 768px) and (max-width: 1023.98px) {
+    .pp-ccard--wide > .card-body {
+        display: grid;
+        /* Near-even, not 1.4:1 -- the right column has to hold Continue, Share and Hide on ONE row, which a
+           1.4:1 split did not (~305px of buttons in ~280px). */
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+        column-gap: 1.75rem;
+    }
+    /* The reward line's own top margin would drop it below the title it now sits beside. */
+    .pp-ccard--wide .pp-ccard__side > :first-child { margin-top: 0; }
+}
+
 /* THE TYPE GLYPH WHERE A TYPE IS NAMED SMALL: the hub card's chip and the Hall of Fame plaque's record line.
    Lucide's `case-sensitive` (A-Z) only fills the middle third of its 24px box, so at a chip's 0.85em the "Aa"
    was a smudge; 1.15em makes it read. */

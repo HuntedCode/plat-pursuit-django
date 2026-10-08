@@ -48,6 +48,7 @@ from django.views.generic import DetailView, ListView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
 from challenges.models import (CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_CHOICES,
+                               CHALLENGE_TYPE_SHORT_LABELS,
                                CHALLENGE_TYPE_JOBS, CHALLENGE_TYPES, TYPES_NOT_YET_CREATABLE,
                                Challenge)
 from challenges.services import calendar_render
@@ -214,8 +215,9 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # `challenge_start`, so rendering one for a not-yet-creatable type offers an action whose only
         # outcome is a refusal -- and before the service gate existed it was worse than that, because the
         # action succeeded and dealt a run with no rules behind it.
-        context['cards'] = [self._card(profile, key, label, owed)
-                            for key, label in CHALLENGE_TYPE_CHOICES
+        # THE SHORT LABEL on the card: the page is "My Challenges", so "A-Z Challenge" repeated its heading.
+        context['cards'] = [self._card(profile, key, CHALLENGE_TYPE_SHORT_LABELS[key], owed)
+                            for key, _ in CHALLENGE_TYPE_CHOICES
                             if key not in TYPES_NOT_YET_CREATABLE]
         # `completed()` carries its own ordering (newest finish first) and is built on `visible()`, so a
         # run hidden after finishing correctly drops out of the hunter's own history too -- hiding means
@@ -1430,7 +1432,9 @@ class _ChallengeBrowseView(HtmxListMixin, ListView):
         # A NOT-YET-CREATABLE TYPE IS STILL OFFERED HERE, and that is deliberate rather than an oversight:
         # `_check_type` draws the line between "real enough to read" and "startable", and this is the
         # reading side. My Challenges filters `TYPES_NOT_YET_CREATABLE` out because its cards POST a start.
-        context['types'] = list(CHALLENGE_TYPE_CHOICES) + [('', 'All')]
+        # SHORT LABELS: the filter sits under the page's "Challenges" heading, and the full names took two
+        # rows on a phone.
+        context['types'] = [(key, CHALLENGE_TYPE_SHORT_LABELS[key]) for key, _ in CHALLENGE_TYPE_CHOICES] + [('', 'All')]
         # OUTSIDE the full-page gate, which is the whole reason `enrich` is not part of
         # `full_page_context`: an entry's own extras have to be built on a filter swap and an
         # InfiniteScroller page too, because the grid is what those render.

@@ -64,6 +64,18 @@ CHALLENGE_TYPE_CHOICES = [
 #: Frozenset for service validation, mirroring `gamelists.models.LIST_TYPES`.
 CHALLENGE_TYPES = frozenset(value for value, _ in CHALLENGE_TYPE_CHOICES)
 
+#: The type's name WHERE THE PAGE ALREADY SAYS "CHALLENGES" (owner, 2026-10-08): My Challenges' cards, the hub's
+#: filter and run cards, the Hall of Fame plaque. There "A-Z Challenge" repeats the page's own heading, and
+#: "Job Coverage Challenge" was the one label long enough to wrap -- while "Plat Calendar" never carried the
+#: word, so the three did not match either. The FULL label (`CHALLENGE_TYPE_CHOICES`) stays wherever a type
+#: stands alone: the auto-generated run names, the run page's title, and the share card, which travels to
+#: Discord with no page around it. `Challenge.short_label` reads it.
+CHALLENGE_TYPE_SHORT_LABELS = {
+    CHALLENGE_TYPE_AZ: 'A-Z',
+    CHALLENGE_TYPE_JOBS: 'Job Coverage',
+    CHALLENGE_TYPE_CALENDAR: 'Plat Calendar',
+}
+
 #: What a run's squares ARE, per type: the noun in every "12 of 26 ..." the site prints. One map, because
 #: "squares" on every surface was true of none of them -- a Calendar run counted "365/365 squares" on its
 #: Hall of Fame plaque while its own page said days. `Challenge.unit` reads it; a type missing from it says
@@ -476,6 +488,11 @@ class Challenge(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.profile.display_psn_username})'
+
+    @property
+    def short_label(self):
+        """The type's name inside a "Challenges" context. See `CHALLENGE_TYPE_SHORT_LABELS`."""
+        return CHALLENGE_TYPE_SHORT_LABELS.get(self.challenge_type, self.get_challenge_type_display())
 
     @property
     def unit(self):

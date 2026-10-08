@@ -31,7 +31,7 @@ second tab stop to the same place -- the browse-card pattern the design system s
         type's glyph rides inside it -- the one the run header and My Challenges wear, sized up a touch by
         `.pp-crun__type svg` because Lucide's `case-sensitive` only fills the middle third of its box.
         {% endcomment %}
-        <span class="bd-chip bd-chip--ghost pp-crun__type">{% include 'partials/icons/challenge_type.html' with type=run.challenge_type size='' %}{{ run.get_challenge_type_display }}</span>
+        <span class="bd-chip bd-chip--ghost pp-crun__type">{% include 'partials/icons/challenge_type.html' with type=run.challenge_type size='' %}{{ run.short_label }}</span>
     </div>
 
     {% comment %}THE HUNTER IS THE SUBJECT of this card -- the run's name is auto-generated and identical

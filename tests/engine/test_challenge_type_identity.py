@@ -13,7 +13,8 @@ from django.test import Client
 from django.urls import reverse
 
 from challenges.models import (CALENDAR_DAY_MARKERS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR,
-                               CHALLENGE_TYPE_JOBS, CHALLENGE_TYPE_UNITS, CalendarDay)
+                               CHALLENGE_TYPE_JOBS, CHALLENGE_TYPE_SHORT_LABELS, CHALLENGE_TYPE_UNITS,
+                               CalendarDay)
 from challenges.services import calendar_fill
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
@@ -149,8 +150,8 @@ def test_every_type_card_wears_its_glyph_and_its_own_pitch():
     client = Client()
     _hunter(client)
     _, body = _my_challenges(client)
-    az = _card_html(body, 'A-Z Challenge')
-    jobs = _card_html(body, 'Job Coverage Challenge')
+    az = _card_html(body, 'A-Z')
+    jobs = _card_html(body, 'Job Coverage')
     calendar = _card_html(body, 'Plat Calendar')
     assert 'One game for every letter, A to Z.' in az
     assert 'One game for every job, Freelancer included.' in jobs
@@ -262,3 +263,83 @@ def test_the_hall_of_fame_counts_a_calendar_run_in_days():
     record = body[body.index('class="pp-chero__type"'):]
     record = record[:record.index('</span>')]
     assert GLYPH[CHALLENGE_TYPE_CALENDAR] in record, 'the plaque names the type without its glyph'
+
+
+# ── short labels where the page already says "Challenges" ────────────────────────────────────────────
+
+def test_the_short_labels():
+    """Where the page already says "Challenges", the type's own "Challenge" repeated it, and "Job Coverage
+    Challenge" was the one label long enough to wrap (owner, 2026-10-08)."""
+    assert CHALLENGE_TYPE_SHORT_LABELS == {CHALLENGE_TYPE_AZ: 'A-Z', CHALLENGE_TYPE_JOBS: 'Job Coverage',
+                                          CHALLENGE_TYPE_CALENDAR: 'Plat Calendar'}
+    run = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+    assert run.short_label == 'Job Coverage'
+    run.challenge_type = 'mystery'
+    assert run.short_label == 'mystery', 'a type missing from the map falls back to its display name'
+
+
+def test_my_challenges_cards_use_the_short_labels():
+    client = Client()
+    _hunter(client)
+    _, body = _my_challenges(client)
+    for label in ('A-Z', 'Job Coverage', 'Plat Calendar'):
+        assert '>%s</h2>' % label in body, label
+    assert '>A-Z Challenge</h2>' not in body and '>Job Coverage Challenge</h2>' not in body
+
+
+def test_the_hub_filter_and_cards_use_the_short_labels():
+    run = svc.start(_hunter(), CHALLENGE_TYPE_JOBS)
+    body = Client().get(reverse('challenges')).content.decode()
+    switch = body[body.index('aria-label="Challenge type"'):]
+    switch = switch[:switch.index('</div>')]
+    assert 'Job Coverage Challenge' not in switch and 'Job Coverage' in switch
+    card = body[body.index('href="%s"' % reverse('challenge_detail', args=[run.pk])):]
+    chip = card[card.index('pp-crun__type'):]
+    assert chip[:chip.index('</span>')].endswith('Job Coverage'), 'the hub chip lost its short label'
+
+
+def test_the_full_name_stays_where_a_type_stands_alone():
+    """The run's name, its page title and the share card keep the full label: there is no "Challenges"
+    heading around them to carry the word."""
+    from challenges.services import share_card
+    from django.template.loader import render_to_string
+    client = Client()
+    run = svc.start(_hunter(client), CHALLENGE_TYPE_JOBS)
+    assert run.name == 'Job Coverage Challenge'
+    body = client.get(reverse('challenge_detail', args=[run.id])).content.decode()
+    assert '>Job Coverage Challenge</h1>' in body
+    html = render_to_string(share_card.CARD_TEMPLATE, share_card.build_card_context(run))
+    assert 'Job Coverage Challenge' in html
+
+
+# ── the spanning card's tablet layout ──────────────────────────────────────────────────────────────────
+
+def test_only_the_spanning_card_lays_out_side_by_side():
+    """`pp-ccard--wide` rides the LAST card only -- the one that spans both columns at `md:` -- and every card
+    carries the two blocks it rearranges, so the layout never depends on a card's state."""
+    client = Client()
+    _hunter(client)
+    _, body = _my_challenges(client)
+    assert body.count('pp-ccard--wide') == 1
+    assert 'md:col-span-2 lg:col-span-1 pp-ccard--wide' in body
+    assert body.count('class="pp-ccard__main"') == 3 and body.count('class="pp-ccard__side"') == 3
+    calendar = _card_html(body, 'Plat Calendar')
+    main = calendar[calendar.index('class="pp-ccard__main"'):calendar.index('class="pp-ccard__side"')]
+    side = calendar[calendar.index('class="pp-ccard__side"') + len('class="pp-ccard__side">'):]
+    # INSIDE, not merely after: an emptied side block followed by the reward would pass an ordering check.
+    assert not side.lstrip().startswith('</div>'), 'the side block is empty'
+    assert 'pp-cwr' not in main and 'pt-3 mt-auto' not in main, 'the reward or actions moved into the main block'
+    assert side.index('pp-cwr') < side.index('pt-3 mt-auto'), 'the reward and actions left the side block'
+
+
+def test_the_side_by_side_rule_is_scoped_to_tablet_width():
+    """At `lg:` the three cards share one row again, so the grid must stop there; on a phone it never starts."""
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' / 'challenges.css'
+           ).read_text(encoding='utf-8')
+    block = re.search(r'@media \(min-width: 768px\) and \(max-width: 1023\.98px\) \{(.*?)\n\}', css, re.S)
+    assert block, 'the tablet-only media query is gone'
+    assert '.pp-ccard--wide > .card-body' in block.group(1) and 'display: grid' in block.group(1)
+    outside = css.replace(block.group(0), '')
+    assert '.pp-ccard--wide > .card-body' not in outside, 'the side-by-side grid leaked outside tablet width'
