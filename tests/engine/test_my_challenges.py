@@ -23,6 +23,7 @@ from pathlib import Path
 
 from challenges.models import (
     CHALLENGE_TYPE_AZ,
+    CHALLENGE_TYPE_CALENDAR,
     CHALLENGE_TYPE_CHOICES,
     CHALLENGE_TYPE_SHORT_LABELS,
     CHALLENGE_TYPE_JOBS,
@@ -546,6 +547,42 @@ def test_a_fresh_run_says_it_is_ready(client):
     body = client.post(reverse('challenge_start', args=[CHALLENGE_TYPE_AZ]), follow=True).content.decode()
 
     assert 'is ready' in body
+
+
+def _platted_on(profile, when):
+    """One shovelware-free platinum this hunter earned at `when`, enough to fill one Calendar day."""
+    from trophies.models import EarnedTrophy, ProfileGame, Trophy
+
+    _SEQ['n'] += 1
+    game = GameFactory(concept=ConceptFactory(anchor_migration_completed_at=timezone.now()),
+                       shovelware_status='clean')
+    trophy = Trophy.objects.create(game=game, trophy_type='platinum', trophy_id=_SEQ['n'],
+                                   trophy_name='Platinum %d' % _SEQ['n'])
+    ProfileGame.objects.create(profile=profile, game=game, has_plat=True, progress=100)
+    EarnedTrophy.objects.create(profile=profile, trophy=trophy, earned=True, earned_date_time=when)
+
+
+def test_a_fresh_calendar_run_reports_its_filled_days_not_a_game_to_pick(client):
+    """A Calendar run has nothing to pick, and it is filled at creation, so it says how far along it starts."""
+    import datetime as dt
+
+    profile = _hunter(client)
+    _platted_on(profile, dt.datetime(2019, 3, 3, 12, tzinfo=dt.timezone.utc))
+    _platted_on(profile, dt.datetime(2020, 7, 4, 12, tzinfo=dt.timezone.utc))
+
+    body = client.post(reverse('challenge_start', args=[CHALLENGE_TYPE_CALENDAR]), follow=True).content.decode()
+
+    assert 'is ready, with 2 days already filled.' in body
+    assert 'Pick your first game' not in body
+
+
+def test_a_fresh_calendar_run_with_no_platinums_says_how_it_fills(client):
+    _hunter(client)
+
+    body = client.post(reverse('challenge_start', args=[CHALLENGE_TYPE_CALENDAR]), follow=True).content.decode()
+
+    assert 'is ready. Every platinum you earn fills its day.' in body
+    assert 'Pick your first game' not in body
 
 
 def test_the_card_count_of_finished_runs_obeys_the_pages_own_rule(client):

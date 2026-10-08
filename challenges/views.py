@@ -1171,10 +1171,27 @@ class StartChallengeView(LoginRequiredMixin, _LinkedProfileRequired, _ChallengeA
         if outcome == svc.RESUMED:
             messages.success(request, f'{challenge.name} is back where you left it.')
         elif outcome == svc.CREATED:
-            messages.success(request, f'{challenge.name} is ready. Pick your first game.')
+            messages.success(request, self._ready_message(challenge))
         # ALREADY_ACTIVE says nothing. For a double submit or a stale tab that is right; for a Continue
         # press it is merely all there is to say until the run has a page to go to.
         return self._back(request)
+
+    @staticmethod
+    def _ready_message(challenge):
+        """What a fresh run says. A Plat Calendar has nothing to pick: it is filled from the hunter's history at
+        creation, so its message reports that instead of inviting them to choose a game.
+
+        THE COUNT IS RE-READ, one query: `apply_to_run` writes it onto its own locked copy of the row, so the
+        instance `start` handed back still says 0. Zero is a real answer too (no platinums yet, or a fill
+        that failed and will catch up on the next sync), and the line for it is true either way.
+        """
+        if challenge.challenge_type != CHALLENGE_TYPE_CALENDAR:
+            return f'{challenge.name} is ready. Pick your first game.'
+        challenge.refresh_from_db(fields=['filled_count'])
+        days = challenge.filled_count
+        if not days:
+            return f'{challenge.name} is ready. Every platinum you earn fills its day.'
+        return f'{challenge.name} is ready, with {days:,} {"day" if days == 1 else "days"} already filled.'
 
     @staticmethod
     def _back(request):
