@@ -832,6 +832,15 @@ generation pass, or one whose generation failed, wears it. And generation belong
 command on a cron, never at completion time — `rewards.on_run_completed` is built so nothing there can stall
 or raise, and Playwright is 1–3s.
 
+### The share card is rendered at click time, so the rule holds by construction
+
+Minting was cut, but runs still get a share card: `challenges/services/share_card.py` +
+`templates/shareables/challenge_card.html`, owner-only, finished or in progress. It DOES carry the hunter's
+name and avatar -- the things the rule above keeps out of a minted image -- and that is fine for the
+same reason commit `8b981dd0` was: it is computed when the hunter asks for it, from live rows, and never
+stored. Built one type at a time (A-Z first); see
+[share-images.md](share-images.md#the-challenge-card-a-runs-share-card).
+
 ---
 
 ## Constraints
@@ -1010,12 +1019,13 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `static/js/challenges-calendar.js` | the Calendar's month tablist only, through `PlatPursuit.wireTablist`. The LENS needs no script: `.pp-cal:has(input:checked)` reads the radio directly, so it works with JavaScript off |
 | `challenges/services/plaque.py` | the Hall of Fame plaque's Pursuer Card spine: rank, Pursuer Level, Career XP, the shared disciplines ring's arcs, and the XP a run paid — page-batched, reads nothing per entry |
 | `challenges/services/rewards.py` | **every reward write**: the XP redemption, the titles, the completion hook |
-| `challenges/views.py` | four page views (My Challenges, the run, and the two public browse pages), three JSON read endpoints (the picker panels, all `GET`), six thin POST actions (start, assign, clear, hide, redeem, redeem-all) |
+| `challenges/views.py` | four page views (My Challenges, the run, and the two public browse pages); `GET` reads: the three picker panels (JSON), the Calendar day square (an HTML fragment), and the share card's preview (JSON) and download (PNG); seven thin POST actions (start, assign, clear, hide, redeem, redeem-all, opening-seen) |
 | `challenges/management/commands/process_challenges.py` | the nightly sweep |
 | `challenges/management/commands/seed_challenge_demo.py` | **dev only**: runs in every reward state, so the panel and the pip can be looked at without finishing 25 contracts |
 | `templates/challenges/` | `my_challenges.html`, `challenge_detail.html`, `browse.html`, `hall_of_fame.html`, `partials/_square_body.html`, `partials/_run_card.html`, `partials/_run_hero.html`, `partials/browse_results.html` |
 | `static/js/challenges-browse.js` | the two public pages' reveal + infinite scroll (filters are `browse-filters.js`) |
 | `static/js/challenge-detail.js` | the picker's three modes, the reward panel's claims, and the board's entrance |
+| `challenges/services/share_card.py` + `static/js/challenge-share.js` | the run's share card and its dialog (two owner-only `GET` doors on `views.py`) |
 | `templates/challenges/partials/_rewards_panel.html` | the reward panel and its ledger of finished squares |
 | `static/css/components/challenges.css` | `.pp-csq*` (the slot board), `.pp-cal*` (the Calendar board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), `.pp-crun*` (the browse card), `.pp-chero*` (the Hall of Fame hero, incl. `.pp-chero__cal` for the Calendar's year band), BEM throughout |
 

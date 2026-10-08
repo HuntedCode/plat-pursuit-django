@@ -1,0 +1,72 @@
+{% comment %}
+The share dialog for a challenge run: preview the card, pick its ground, download it.
+
+THE SAME SHELL AS shareables/partials/share_modal.html (the plat card's), class for class, so the two read as
+one feature and every `.pc-modal` rule in plat-cards.css (already in the global bundle) applies unchanged.
+What it leaves out is what only a game completion has: the rating button, the link out to a game, and the
+per-game ART grounds -- a run is 26 games, so there is no one image to back it. `get_ground_themes` is the
+filter the recap's and the Profile Card's pickers use, so all three offer one palette.
+
+ONE DIALOG PER PAGE, opened by any `[data-challenge-share]` button: My Challenges can list more than one
+shareable run, and each button carries its own URLs. Driven by static/js/challenge-share.js.
+
+Expects: share_themes ([(key, theme)] from trophies.themes.get_ground_themes).
+{% endcomment %}
+<dialog id="cc-share" class="pc-modal" aria-labelledby="cc-share-title">
+    <div class="pc-modal__box">
+        <header class="pc-modal__head">
+            <div class="min-w-0">
+                <h2 id="cc-share-title" class="pc-modal__title">Share your run</h2>
+                <p class="pc-modal__sub" data-share-name></p>
+            </div>
+            <button type="button" class="pc-modal__x" data-share-close aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </header>
+
+        <div class="pc-modal__stage">
+            <div class="pc-modal__frame" data-share-frame>
+                <div class="pc-modal__scaler" data-share-preview></div>
+            </div>
+            {% comment %}A skeleton in the CARD's shape, the plat modal's argument: the shape that is coming
+            sets the expectation, so the same wait feels shorter. Here that shape is a heading, the two rows of
+            the alphabet, and the plaque.{% endcomment %}
+            <div class="pc-modal__loading" data-share-loading aria-live="polite" aria-label="Building your card">
+                <div class="pp-ccskel" aria-hidden="true">
+                    <div class="pc-skel__bar pp-ccskel__head"></div>
+                    <div class="pp-ccskel__rows">
+                        <div class="pc-skel__bar"></div>
+                        <div class="pc-skel__bar"></div>
+                    </div>
+                    <div class="pc-skel__bar pp-ccskel__plaque"></div>
+                </div>
+            </div>
+            <p class="pc-modal__error" data-share-error role="alert" hidden></p>
+        </div>
+
+        <div class="pc-modal__controls">
+            <div class="pc-modal__themes" role="radiogroup" aria-label="Card background">
+                {% for key, theme in share_themes %}
+                <label class="pc-theme" title="{{ theme.description }}" style="--pc-theme-bg: {{ theme.background_css }};">
+                    <input type="radio" name="cc-theme" value="{{ key }}" class="sr-only"
+                           {% if forloop.first %}checked{% endif %} data-share-theme />
+                    <span class="pc-theme__swatch" aria-hidden="true"></span>
+                    <span class="pc-theme__name">{{ theme.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+
+            <div class="pc-modal__actions">
+                <button type="button" class="pc-btn" data-share-close>Close</button>
+                <button type="button" class="pc-btn pc-btn--go pp-dl" data-share-download>
+                    {% include 'partials/download_button_icons.html' %}
+                    <span data-dl-label>Download</span>
+                </button>
+            </div>
+        </div>
+
+        {% comment %}Toast host, so a toast fired while the dialog is open lands ABOVE its backdrop. Same as the
+        plat modal's.{% endcomment %}
+        <div class="modal-toast-container" popover="manual"></div>
+    </div>
+</dialog>

@@ -25,14 +25,17 @@ nothing else -- no gate is re-implemented here, including the beta gate, which t
 (`creation_is_open_to`) so it can render a disabled button rather than discovering the refusal after a
 POST.
 """
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models.functions import Lower
 
 from trophies.mixins import HtmxListMixin, LoginRequiredAPIMixin
 from trophies.models import Contract
+from trophies.themes import PLAT_CARD_DEFAULT_THEME, get_ground_themes
 from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.template.loader import render_to_string
 from django.http import Http404
 from django.shortcuts import redirect, render
@@ -51,8 +54,11 @@ from challenges.services import calendar_render
 from challenges.services import challenge_service as svc
 from challenges.services import rewards
 from challenges.services import picker
+from challenges.services import share_card
 from challenges.services import slot_render
 from core.previews import previewing
+
+logger = logging.getLogger(__name__)
 
 #: Shared by all four write doors -- start, hide, assign and clear. ("Both" was true when there were two;
 #: `test_both_write_doors_share_one_rate_limit_bucket` asserts `>= 4`.), so create-hide-create cannot outrun one door by using the other. The cap
@@ -226,6 +232,11 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         context['finished_total'] = finished.count()
         context['finished'] = list(finished[:self.HISTORY_LIMIT])
         context['creation_is_open'] = creation_is_open(self.request, profile)
+        # Which run types have a share card yet, so the active card and the finished rows can offer one.
+        # A set the template asks rather than a type spelled in markup, so a type gains its button the
+        # moment its card ships.
+        context['shareable_types'] = share_card.SHAREABLE_TYPES
+        context['share_themes'] = get_ground_themes()
         # `text`, NOT `label`: `partials/breadcrumb.html` and `seo_tags` both read `text`, so a `label`
         # key rendered two EMPTY crumbs and two blank names in the JSON-LD. Every other caller on the
         # site passes `text` and starts at Home; this did neither.
@@ -488,6 +499,10 @@ class ChallengeDetailView(DetailView):
         context['can_edit'] = (context['is_owner']
                                and not challenge.is_complete
                                and not challenge.is_deleted)
+        # THE SHARE CARD, owner-only and finished-or-not (owner, 2026-10-08). The grounds ride along only
+        # when the dialog renders, so a visitor's page carries none of it.
+        context['can_share'] = context['is_owner'] and share_card.is_shareable(challenge)
+        context['share_themes'] = get_ground_themes() if context['can_share'] else []
         context['progress'] = (
             round(challenge.completed_count / challenge.total_slots * 100)
             if challenge.total_slots else 0
@@ -1131,6 +1146,90 @@ class OpeningSeenView(_ChallengeJsonView):
                    .filter(pk=challenge.pk, opening_seen_at__isnull=True)
                    .update(opening_seen_at=timezone.now()))
         return JsonResponse({'seen': True, 'stamped': bool(stamped)})
+
+
+#: The share card's two doors: one GROUP, and two budgets. `django_ratelimit` keys a bucket on the group AND
+#: the rate, so the preview (60/m, template work) and the download (20/m, a headless-Chromium render on a
+#: single-threaded executor -- the cost this protects) are metered separately, the plat card's two rates.
+#: Their own group so that making cards never spends the picker's or the writes' budget.
+CHALLENGE_SHARE_RATELIMIT_GROUP = 'challenges:share'
+
+class _ChallengeCardView(_ChallengeJsonView):
+    """The run a share card is drawn from: the hunter's OWN, of a type that has a card, and not hidden.
+
+    OWNER ONLY (owner, 2026-10-08), which `get_challenge` already is -- it resolves through `profile=`, so an
+    id alone cannot render somebody else's run. A hidden run answers 404 too: hiding takes a run out of every
+    public place, and a share card is the most public place there is.
+    """
+
+    def card_run(self, request, challenge_id):
+        challenge = self.get_challenge(request, challenge_id)
+        if challenge is None or not share_card.is_shareable(challenge):
+            return None
+        # THE OWNER IS ALREADY IN HAND. `get_challenge` resolved through `profile=` this very profile, so
+        # handing it over saves the card the query `challenge.profile` would otherwise spend.
+        challenge.profile = self._profile(request)
+        return challenge
+
+
+class ChallengeCardHTMLView(_ChallengeCardView):
+    """GET the card's markup for the share modal's preview. JSON, so a failure is a status, never a page.
+
+    The preview is the REAL card, rendered from the same template the PNG is, so what the hunter sees is what
+    downloads. Its images are the remote URLs the browser fetches itself -- see `share_card`'s docstring for
+    why only the download caches them.
+    """
+
+    @method_decorator(ratelimit(group=CHALLENGE_SHARE_RATELIMIT_GROUP, key='user', rate='60/m',
+                                method=('GET', 'HEAD'), block=True))
+    def get(self, request, challenge_id):
+        challenge = self.card_run(request, challenge_id)
+        if challenge is None:
+            return self.not_found()
+        context = share_card.build_card_context(challenge)
+        return JsonResponse({
+            'html': render_to_string(share_card.CARD_TEMPLATE, context),
+            # HERE rather than on the button, so a page listing many runs needs no per-row owner lookup to
+            # name a file it may never download.
+            'filename': share_card.filename_for(challenge),
+        })
+
+
+class ChallengeCardPNGView(_ChallengeCardView):
+    """GET the card as a PNG download. `?theme=` picks one of the designed grounds.
+
+    AN UNKNOWN THEME FALLS BACK RATHER THAN 400ING, which is the plat card's choice and not the Profile Card's.
+    The picker only ever sends a key it was given, so a bad one is a stale tab or a hand-typed URL, and either
+    is better served by the house ground than by an error toast on a download.
+    """
+
+    @method_decorator(ratelimit(group=CHALLENGE_SHARE_RATELIMIT_GROUP, key='user', rate='20/m',
+                                method=('GET', 'HEAD'), block=True))
+    def get(self, request, challenge_id):
+        challenge = self.card_run(request, challenge_id)
+        if challenge is None:
+            return self.not_found()
+
+        # An unknown ground falls back to the plat card's default, the house ground, so an arbitrary site
+        # gradient cannot be painted over a designed card.
+        theme = request.GET.get('theme')
+        if theme not in dict(get_ground_themes()):
+            theme = PLAT_CARD_DEFAULT_THEME
+
+        context = share_card.build_card_context(challenge, cache_images=True)
+        html = render_to_string(share_card.CARD_TEMPLATE, context)
+        try:
+            from core.services.playwright_renderer import render_png
+            # The renderer's default image budget (200px) was sized for exactly this card: 26 covers at
+            # 80x107, so a larger one would base64 several times the pixels any square shows.
+            png = render_png(html, format_type='landscape', theme_key=theme)
+        except Exception:
+            logger.exception('[CHALLENGE-CARD] render failed for challenge %s', challenge.pk)
+            return JsonResponse({'error': 'We could not build your card. Try again in a moment.'}, status=500)
+
+        response = HttpResponse(png, content_type='image/png')
+        response['Content-Disposition'] = 'attachment; filename="%s"' % share_card.filename_for(challenge)
+        return response
 
 
 class _ChallengeBrowseView(HtmxListMixin, ListView):

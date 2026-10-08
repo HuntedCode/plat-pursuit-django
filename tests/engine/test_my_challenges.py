@@ -666,9 +666,15 @@ def test_both_write_doors_share_one_rate_limit_bucket():
     # behalf of whoever opened their public board, so draining it must not shut the pages that merely
     # list runs. Its own group for that reason, and the census is what noticed it had arrived.
     day = [c for c in calls if 'group=CALENDAR_DAY_RATELIMIT_GROUP' in c]
+    # A SIXTH KIND, 2026-10-08: the share card's preview and download. Signed-in, so `key='user'`; and GET
+    # doors, so HEAD must be metered too or `curl -I` renders PNGs unmetered through the aliased `get`.
+    shares = [c for c in calls if 'group=CHALLENGE_SHARE_RATELIMIT_GROUP' in c]
 
-    assert len(writes) + len(reads) + len(redeems) + len(browse) + len(hall) + len(day) == len(calls), \
-        f'a door is on an unknown bucket: {calls}'
+    assert (len(writes) + len(reads) + len(redeems) + len(browse) + len(hall) + len(day) + len(shares)
+            == len(calls)), f'a door is on an unknown bucket: {calls}'
+
+    assert len(shares) == 2, 'both share-card doors must be rate limited'
+    assert all("key='user'" in c and "method=('GET', 'HEAD')" in c for c in shares), shares
 
     assert len(writes) >= 4, 'start, hide, assign and clear must all be rate limited'
     assert len(set(writes)) == 1, f'the write doors do not share one bucket: {set(writes)}'
@@ -701,7 +707,8 @@ def test_both_write_doors_share_one_rate_limit_bucket():
                 views.CHALLENGE_REDEEM_RATELIMIT_GROUP,
                 views.CHALLENGES_BROWSE_RATELIMIT_GROUP,
                 views.HALL_OF_FAME_RATELIMIT_GROUP,
-                views.CALENDAR_DAY_RATELIMIT_GROUP}) == 6, 'two kinds share a bucket value'
+                views.CALENDAR_DAY_RATELIMIT_GROUP,
+                views.CHALLENGE_SHARE_RATELIMIT_GROUP}) == 7, 'two kinds share a bucket value'
 
     # ── THE BROWSE PAGES, where the rule INVERTS ──────────────────────────────────────────────────
     #

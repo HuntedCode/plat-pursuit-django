@@ -1,0 +1,19 @@
+{% comment %}
+The button that opens the share dialog (`_share_dialog.html`) for one run. Owner-only surfaces include it;
+the endpoints behind it refuse anybody else's run regardless.
+
+`compact` drops the label below `md:` and keeps an aria-label, for a dense row like My Challenges' finished
+list, where a word per row would crowd out the run's name on a phone.
+
+The glyph is Lucide's share-2, the one the franchise and tag pages already use for sharing.
+
+Expects: run (a Challenge), compact (optional bool).
+{% endcomment %}
+<button type="button" class="pp-cta pp-cta--ghost{% if compact %} pp-cshare--compact{% endif %}" data-challenge-share
+        data-html-url="{% url 'challenge_card_html' run.id %}"
+        data-png-url="{% url 'challenge_card_png' run.id %}"
+        data-name="{{ run.name }}"
+        aria-label="Share a card of {{ run.name }}">
+    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+    <span{% if compact %} class="hidden md:inline"{% endif %}>Share</span>
+</button>

@@ -23,6 +23,7 @@ ICONS = (ROOT / 'templates' / 'partials' / 'download_button_icons.html').read_te
 SURFACES = {
     'the plat card modal': ROOT / 'static' / 'js' / 'plat-cards.js',
     'the recap': ROOT / 'static' / 'js' / 'monthly-recap.js',
+    'the challenge share dialog': ROOT / 'static' / 'js' / 'challenge-share.js',
 }
 
 
@@ -111,3 +112,29 @@ def test_the_tracking_event_followed_the_download_to_the_primary_surface():
     wire = recap[recap.index('    wireDownload() {'):]
     wire = wire[:wire.index('    cardPngUrl() {')]
     assert 'trackDownload()' in wire, 'the ceremony saves without recording it'
+
+
+def _attach_body():
+    start = UTILS.index('const CardDownload = {')
+    return UTILS[start:UTILS.index('\n};', start)]
+
+
+def test_a_reset_drops_the_render_still_in_flight():
+    """A surface that reuses ONE button across cards resets it when it switches (the challenge dialog on My
+    Challenges, reopened for a second run while the first render is still going). Without a generation check
+    the first render then saved under the second card's name and flipped the second card's button to
+    "Saved". Both completion paths must ask whether their press is still the current one."""
+    body = _attach_body()
+    assert 'reset() { generation += 1;' in body, 'reset no longer invalidates the press in flight'
+    assert body.count('if (mine !== generation) { return; }') == 2, (
+        'the save AND the failure path must each drop a stale completion'
+    )
+
+
+def test_the_file_is_named_when_pressed_not_when_it_lands():
+    """The filename describes the card the hunter pressed Download on. Read when the blob lands, it described
+    whatever the surface was showing seconds later -- or nothing, once a closed dialog had cleared its card."""
+    body = _attach_body()
+    named = body.index('const filename = opts.filename();')
+    assert named < body.index('fetch(opts.url()'), 'the name is read after the fetch starts'
+    assert 'a.download = filename;' in body

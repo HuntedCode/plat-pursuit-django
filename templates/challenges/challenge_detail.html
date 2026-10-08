@@ -122,6 +122,13 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                     Platinum Pursuit can fill a letter straight away, on your first A-Z Challenge only.</p>
             </div>
             {% endif %}
+            {% comment %}THE SHARE CARD, for the owner only (the endpoints refuse anybody else's run anyway).
+            Last in the header because it acts on the run as a whole and is never the next step.{% endcomment %}
+            {% if can_share %}
+            <div class="mt-3">
+                {% include 'challenges/partials/_share_button.html' with run=challenge %}
+            </div>
+            {% endif %}
         </div>
     </section>
 
@@ -461,10 +468,14 @@ bundle every page loads.{% endcomment %}
 neither of. The board itself needs no script: the server renders `data-month` and `data-view`, so a
 hunter with JavaScript off gets January on the run's own lens with the right squares tinted.{% endcomment %}
 {% if calendar_months %}<script src="{% static 'js/challenges-calendar.js' %}"></script>{% endif %}
+{% if can_share %}<script src="{% static 'js/challenge-share.js' %}"></script>{% endif %}
 {% endblock %}
 
 {% block fixed_overlays %}
 {{ block.super }}
+{% comment %}The share dialog, in this block for the same reason as every overlay below: `pageRecede` scales
+`#page-recede`, and a dialog inside it would resolve against the transformed ancestor.{% endcomment %}
+{% if can_share %}{% include 'challenges/partials/_share_dialog.html' %}{% endif %}
 {% if calendar_months %}
 {% comment %}THE OPENING CEREMONY, first because it is the only overlay that opens ITSELF. Rendered for
 every Calendar run rather than only when it will fire: the element carries the reopen-free controller

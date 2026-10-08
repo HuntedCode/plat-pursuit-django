@@ -122,6 +122,40 @@ stroke-dash geometry with hexes attached from `completion_card_service.DISCIPLIN
 `plat_card.html` (same contract as the recap card's pin), the two embedded faces, no `var(--)`,
 ownership on the endpoint and the tab, and graceful degrade when the card build fails.
 
+## The Challenge Card (a run's share card)
+
+The fourth sibling (2026-10). One 1200x630 card per challenge run, **built one type at a time**: A-Z has
+one; Job Coverage and the Plat Calendar get their own layouts rather than inheriting A-Z's
+(`share_card.SHAREABLE_TYPES` is the switch, and a type without a card 404s and shows no button).
+
+**A-Z layout: the alphabet strip.** A-M over N-Z, thirteen covers a row, each lettered, with a full-width
+plaque below (avatar, name + mark, the earned title, letters done, days, date). Two rows of thirteen is
+what makes it read as the alphabet; the live board's 9x3 grid reads as "a lot of games". Squares use the
+board's vocabulary: **done** (full cover, green check while the run is live), **assigned** (cover dimmed
+behind a primary border), **open** (dashed well, letter set large).
+
+**Finished AND in-progress runs** are shareable (owner's call): halfway through is worth showing, and the
+header pill and subline say which it is. A hidden run has no card.
+
+**Where it lives:** a Share button on the run's own page (owner only) and on My Challenges (the live A-Z
+card, and each finished A-Z row). One `#cc-share` dialog per page, opened by any `[data-challenge-share]`
+button; it is the share modal's `.pc-modal` shell without the rating and art-ground parts.
+
+**Images are cached for the DOWNLOAD only.** The preview hands the browser the remote cover URLs; caching
+on preview would be up to 27 synchronous `requests.get` calls on modal open. The PNG path caches them in
+parallel (8 workers), each distinct URL once, and a failed one degrades that square to no art.
+
+**Grounds:** the eight designed ones via `trophies.themes.get_ground_themes()` -- `get_plat_card_themes()`
+minus the art backings, the same palette the recap's and the Profile Card's PICKERS offer (each PNG endpoint
+still validates `?theme=` its own way). A run has 26 games, so there is no one image to back it. An unknown
+`?theme=` falls back to Substrate rather than 400ing.
+
+**Covers are the small IGDB variant** (`display_image_url_small`, 180x256) for 80x107 squares. A cold cache
+is up to 27 downloads, 8 at a time: fewer waves than in series, but not a bound on the total, because
+`requests`' timeout is per connect and per read.
+
+**Pins:** `tests/engine/test_challenge_share_card.py`.
+
 ## The share modal
 
 `templates/shareables/partials/share_modal.html` + `static/js/plat-cards.js`.
@@ -198,6 +232,8 @@ Either way, a successful save **invalidates the preview cache** for that complet
 | GET | `/api/v1/recap/<year>/<month>/html/` | Yes | Monthly recap preview |
 | GET | `/api/v1/recap/<year>/<month>/png/` | Yes | Monthly recap download |
 | GET | `/api/v1/share-temp/<filename>` | No | Serve a cached temp image |
+| GET | `/my-challenges/<id>/card/` | Yes (owner) | Challenge card preview markup + download filename (JSON) |
+| GET | `/my-challenges/<id>/card.png?theme=` | Yes (owner) | Challenge card download |
 
 Cards are keyed on the game's **default `TrophyGroup`**, not the `ProfileTrophyGroup` row: TrophyGroup
 ids are stable where the denorm may legitimately be rebuilt, and ownership is then answered by the same
@@ -224,6 +260,9 @@ art the card already offers.
 | `trophies/views/shareables_views.py` | `PlatCardsView` |
 | `templates/shareables/plat_card.html` | **The card.** Landscape 1200x630, both variants |
 | `templates/shareables/profile_card.html` | **The Profile Card.** Landscape 1200x630, one variant |
+| `templates/shareables/challenge_card.html` | **The Challenge Card.** Landscape 1200x630, A-Z alphabet strip |
+| `challenges/services/share_card.py` | The Challenge Card payload, its image caching, and `SHAREABLE_TYPES` |
+| `templates/challenges/partials/_share_dialog.html` + `_share_button.html` + `static/js/challenge-share.js` | The Challenge Card dialog and its triggers |
 | `templates/trophies/partials/profile_detail/tabs/card_tab.html` + `static/js/profile-card-tab.js` + `static/css/components/profile-card-tab.css` | The profile page's Card tab (inline preview + download) |
 | `templates/shareables/plat_cards.html` | The page |
 | `templates/shareables/partials/plat_card_results.html` | Grid partial (HTMX swaps + infinite-scroll pages) |

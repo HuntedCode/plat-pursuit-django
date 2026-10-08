@@ -36,6 +36,8 @@ from challenges.views import (
     HideChallengeView,
     MyChallengesView,
     OpeningSeenView,
+    ChallengeCardHTMLView,
+    ChallengeCardPNGView,
     RedeemAllView,
     RedeemSlotView,
     StartChallengeView,
@@ -553,6 +555,10 @@ urlpatterns = [
     # is by who may call rather than by where the control is drawn.
     path('my-challenges/<int:challenge_id>/opening-seen/', OpeningSeenView.as_view(),
          name='challenge_opening_seen'),
+    path('my-challenges/<int:challenge_id>/card/', ChallengeCardHTMLView.as_view(),
+         name='challenge_card_html'),
+    path('my-challenges/<int:challenge_id>/card.png', ChallengeCardPNGView.as_view(),
+         name='challenge_card_png'),
     # THE REWARD DOORS, under `/my-challenges/` with every other write even though the surface they serve
     # is the PUBLIC run page. The split is by who may call, not by where the button is drawn: claiming is
     # something only the owner can do, and `/my-challenges/` is this feature's owner-only prefix.
