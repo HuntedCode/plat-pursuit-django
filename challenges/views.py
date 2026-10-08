@@ -304,9 +304,12 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
             # `title_for` returns None past the second, which correctly leaves a third-run card with no
             # title line rather than a wrong one.
             #
-            # NO QUERY OF ITS OWN beyond that count: the XP figure is the shared constant, so this cannot
-            # quote a different number from the run page's panel.
-            'reward': self._reward(challenge_type, counts['all']),
+            # NO QUERY OF ITS OWN beyond that count for A-Z and Job Coverage: the XP figure is the shared
+            # constant, so this cannot quote a different number from the run page's panel. The Calendar's
+            # line costs ONE `UserTitle` read (`rewards.next_calendar_rung`), because its "next" depends on
+            # which rungs the hunter already holds.
+            'reward': self._reward(challenge_type, counts['all'], profile=profile,
+                                   done=run.completed_count if run else 0),
             # WHAT IS WAITING TO BE CLAIMED, which is not NECESSARILY about the run the card is showing --
             # `same_run` is the field that says which. See `_owed`.
             'owed': self._owed(challenge_type, owed_runs, run),
@@ -358,8 +361,18 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         }
 
     @staticmethod
-    def _reward(challenge_type, completed):
-        """`{title_name, per_square}` for the next completion of this type, or None if it earns no title.
+    def _reward(challenge_type, completed, *, profile, done=0):
+        """`{title_name, per_square, at_days}` for what this type is worth next, or None if nothing.
+
+        THE CALENDAR IS ITS OWN BRANCH, because its titles are a LADDER climbed during a run rather than a
+        title per completion (`TYPES_WITHOUT_ORDINAL_TITLES`). Its line names the next rung the hunter can
+        still earn, with `at_days` saying where it sits -- see `rewards.next_calendar_rung` for why "next"
+        skips rungs already held. Before this the Calendar card had no reward line at all, because
+        `title_for` returns None for it and it pays no XP.
+
+        `profile` IS REQUIRED, with no default, although only that branch reads it: a default of None let a
+        caller ask for the Calendar's line without saying whose, and the answer was a confident "Calendar
+        Marker at 50 days" for a hunter who might hold the whole ladder.
 
         TAKES THE COUNT rather than fetching one, so the card's single `completed_counts` query serves this
         too. `completed` is the TRUE count including hidden finished runs, because that is the population
@@ -369,6 +382,9 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         figure: a letter is not a job, so there is nothing for job XP to land in (owner, 2026-09-28).
         Rendering "0 XP" would answer a question nobody asked and read as a bug.
         """
+        if challenge_type == CHALLENGE_TYPE_CALENDAR:
+            rung = rewards.next_calendar_rung(profile, done)
+            return {'title_name': rung[1], 'per_square': 0, 'at_days': rung[0]} if rung else None
         # NOT None WHEN THERE IS NO TITLE, which is the bug this replaced. Returning None dropped the
         # whole reward line, so a hunter with two completed Job Coverage runs saw a card advertising NOTHING
         # while 6,000 XP a square was still being paid -- and the run page, which gates on `per_square`,
@@ -380,6 +396,7 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         return {
             'title_name': name,
             'per_square': per_square,
+            'at_days': None,
         }
 
 

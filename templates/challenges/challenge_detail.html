@@ -23,9 +23,9 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             <div class="flex items-start justify-between gap-3 flex-wrap">
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
-                        <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
-                        </svg>
+                        {% comment %}THE RUN'S TYPE, not the generic challenge flag: the same glyph its My Challenges card
+                        and its hub card wear, so a run reads as the same object on every surface.{% endcomment %}
+                        {% include 'partials/icons/challenge_type.html' with type=challenge.challenge_type size='w-5 h-5 md:w-6 md:h-6' extra_class='text-primary' %}
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ challenge.name }}</h1>
                         {% if challenge.is_complete %}
                         <span class="bd-chip bd-chip--success shrink-0">Finished</span>
@@ -430,7 +430,7 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     {% endif %}
 
     {% if is_owner and challenge.is_complete %}
-    <p class="text-xs text-base-content/60 mt-3">This run is finished, so its squares are fixed.</p>
+    <p class="text-xs text-base-content/60 mt-3">This run is finished, so its {{ challenge.unit }} are fixed.</p>
     {% endif %}
     {% if is_owner and challenge.is_deleted %}
     <p class="text-xs text-base-content/60 mt-3">

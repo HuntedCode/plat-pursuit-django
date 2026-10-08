@@ -64,6 +64,16 @@ CHALLENGE_TYPE_CHOICES = [
 #: Frozenset for service validation, mirroring `gamelists.models.LIST_TYPES`.
 CHALLENGE_TYPES = frozenset(value for value, _ in CHALLENGE_TYPE_CHOICES)
 
+#: What a run's squares ARE, per type: the noun in every "12 of 26 ..." the site prints. One map, because
+#: "squares" on every surface was true of none of them -- a Calendar run counted "365/365 squares" on its
+#: Hall of Fame plaque while its own page said days. `Challenge.unit` reads it; a type missing from it says
+#: "squares" rather than nothing.
+CHALLENGE_TYPE_UNITS = {
+    CHALLENGE_TYPE_AZ: 'letters',
+    CHALLENGE_TYPE_JOBS: 'jobs',
+    CHALLENGE_TYPE_CALENDAR: 'days',
+}
+
 #: The A-Z alphabet, as the single definition of both the slot keys and how many there are.
 #:
 #: RAW first letter, no article stripping: "The Last of Us" sits under T. Three precedents agree --
@@ -466,6 +476,11 @@ class Challenge(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.profile.display_psn_username})'
+
+    @property
+    def unit(self):
+        """The noun this run counts in: letters, jobs or days. See `CHALLENGE_TYPE_UNITS`."""
+        return CHALLENGE_TYPE_UNITS.get(self.challenge_type, 'squares')
 
 
 

@@ -26,10 +26,12 @@ second tab stop to the same place -- the browse-card pattern the design system s
 {% load humanize mark_tags %}
 <a class="pp-crun pp-centry" href="{% url 'challenge_detail' run.pk %}">
     <div class="pp-crun__head">
-        {% comment %}THE TYPE, as a chip rather than an icon alone: "A-Z" and "Job Coverage" are the two
-        things a visitor is choosing between, and a glyph would need decoding. `.bd-chip` is the house pill --
-        the same one the run's own header uses for its state.{% endcomment %}
-        <span class="bd-chip bd-chip--ghost pp-crun__type">{{ run.get_challenge_type_display }}</span>
+        {% comment %}THE TYPE, as a chip with its name rather than an icon alone: a glyph by itself would need
+        decoding. `.bd-chip` is the house pill, the same one the run's own header uses for its state, and the
+        type's glyph rides inside it -- the one the run header and My Challenges wear, sized up a touch by
+        `.pp-crun__type svg` because Lucide's `case-sensitive` only fills the middle third of its box.
+        {% endcomment %}
+        <span class="bd-chip bd-chip--ghost pp-crun__type">{% include 'partials/icons/challenge_type.html' with type=run.challenge_type size='' %}{{ run.get_challenge_type_display }}</span>
     </div>
 
     {% comment %}THE HUNTER IS THE SUBJECT of this card -- the run's name is auto-generated and identical
@@ -39,7 +41,7 @@ second tab stop to the same place -- the browse-card pattern the design system s
 
     <div class="pp-crun__tally">
         <span class="pp-tally pp-tally--sm">{{ run.completed_count }}<span class="pp-crun__of">/{{ run.total_slots }}</span></span>
-        <span class="pp-crun__label">squares</span>
+        <span class="pp-crun__label">{{ run.unit }}</span>
     </div>
 
     {% comment %}The Horizon primitive, not a hand-rolled bar. `progress` is computed in the template because

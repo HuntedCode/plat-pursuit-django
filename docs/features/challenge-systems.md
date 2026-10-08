@@ -527,6 +527,22 @@ for the nightly sweep is inside no guard at all, so an escaping exception would 
 inbox is parked, so this row is **write-only** for now — do not add a route, a bell or a poller to make it
 visible.
 
+### A type reads as itself on every surface
+
+Each type has **one glyph** (`partials/icons/challenge_type.html`), **one unit** (`CHALLENGE_TYPE_UNITS`:
+letters, jobs, days, read through `Challenge.unit`), and **one pitch**, and every surface that names a type
+uses them: My Challenges' cards and finished rows, the hub's run cards and type filter, the run page header,
+and the Hall of Fame plaque's count. Added 2026-10-08 after the third type showed every place that assumed
+two: the Calendar's Start card printed Job Coverage's description, the hub filter gave it the "All" grid,
+and the Hall of Fame counted it in "squares".
+
+**My Challenges lays the three cards out three across from `lg:`** (one column on phones, two at `md:` with
+the third spanning). **The Calendar's reward line names a rung**, not a completion title: its titles are a
+ladder climbed during a run, so the card shows the next rung the hunter can still earn and where it sits
+("Calendar Keeper at 100 days"), via `rewards.next_calendar_rung`. "Next" skips rungs the run has passed AND
+rungs the hunter already holds, because the titles belong to the hunter: a second run cannot grant Calendar
+Marker twice, so promising it would be false. A hunter holding the whole ladder gets no reward line.
+
 ---
 
 ## The two public pages

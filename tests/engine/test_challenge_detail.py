@@ -542,7 +542,7 @@ def test_a_stranger_is_told_nothing_about_a_run_they_do_not_own(client):
 
     body = client.get(_url(challenge)).content.decode()
 
-    assert 'its squares are fixed' not in body
+    assert 'This run is finished, so its' not in body
 
 
 def test_the_trail_never_sends_a_reader_somewhere_they_cannot_go(client):
@@ -680,7 +680,7 @@ def test_an_active_run_gets_no_read_only_note(client):
 
     body = client.get(_url(_az_run(profile))).content.decode()
 
-    assert 'its squares are fixed' not in body
+    assert 'This run is finished, so its' not in body
     assert 'This run is hidden' not in body
 
 
@@ -696,7 +696,7 @@ def test_a_finished_run_that_was_also_hidden_says_both_things(client):
 
     body = client.get(_url(challenge)).content.decode()
 
-    assert 'its squares are fixed' in body
+    assert 'This run is finished, so its' in body
     assert 'This run is hidden' in body
 
 

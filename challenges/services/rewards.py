@@ -839,6 +839,26 @@ def _ensure_title(challenge, name):
     return user_title, created
 
 
+def next_calendar_rung(profile, done=0):
+    """`(days, title_name)` for the next Calendar rung this hunter can still EARN, or None. One query.
+
+    "NEXT" MEANS NEXT UNHELD, NOT NEXT ABOVE `done`. The ladder's titles belong to the hunter, not the run:
+    `_ensure_title` is a `get_or_create` per profile, so a second Calendar run that passes 50 days grants
+    nothing to somebody who already holds Calendar Marker. Advertising "Calendar Marker at 50 days" on that
+    hunter's Start card would promise a title they own. So this skips every rung already held and every
+    rung `done` has passed, and answers None when the whole ladder is theirs.
+    """
+    held = set(
+        UserTitle.objects.filter(profile=profile, title__name__in=CALENDAR_DAY_TITLES.values())
+        .values_list('title__name', flat=True)
+    )
+    for days in CALENDAR_DAY_MARKERS:
+        name = CALENDAR_DAY_TITLES[days]
+        if days > done and name not in held:
+            return days, name
+    return None
+
+
 def grant_day_markers(challenge):
     """Grant every day-marker title `challenge`'s filled count has reached. Returns the names granted NOW.
 

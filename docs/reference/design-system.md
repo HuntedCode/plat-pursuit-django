@@ -686,7 +686,11 @@ lets `currentColor`/token colours flow). The Lucide signature to match:
   re-copied/updated later). Size with Tailwind `w-*`/`h-*`; colour via `stroke` (a token, not a hex).
 - **Shared includes** live in `templates/partials/icons/` (`check`, `percent`, `user`, `octagon-alert`
   via `privacy_warning.html`, `globe`, etc.) — reuse these rather than re-inlining. Each takes `color` +
-  `size` params. Job icons are the Lucide sprite behind the `{% job_icon %}` templatetag.
+  `size` params. Job icons are the Lucide sprite behind the `{% job_icon %}` templatetag. **A challenge
+  type's glyph** is `partials/icons/challenge_type.html` (`type`, `size`, optional `extra_class`): `case-sensitive` for A-Z,
+  `briefcase` for Job Coverage, `calendar-days` for the Plat Calendar, the generic flag for anything else.
+  Every surface that names a type uses it, so a type looks the same on My Challenges, the hub and its run
+  page.
 - **Brand-mark exceptions** (NOT Lucide, deliberately): `partials/icons/ps_logo.html` (the PlayStation
   wordmark) and `partials/icons/pp_logo.html` (the PlatPursuit logo image). Use these for their brands;
   Lucide has no equivalent and shouldn't.

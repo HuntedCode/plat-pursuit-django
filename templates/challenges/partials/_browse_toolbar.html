@@ -22,10 +22,11 @@ the grid so the spinner is the thing being replaced.{% endcomment %}
             {% for value, display in types %}
             <label class="pp-switch__chip">
                 <input type="radio" name="type" value="{{ value }}" class="sr-only" {% if selected_type == value %}checked{% endif %} />
-                {% if value == 'az' %}
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
-                {% elif value == 'jobs' %}
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                {% comment %}EACH TYPE WEARS ITS OWN GLYPH, the shared one its run cards and My Challenges use.
+                This had three hand-inlined branches -- a `T` for A-Z, its own briefcase, and an `else` -- so the
+                Calendar fell into the `else` and wore the four-square grid that means "All".{% endcomment %}
+                {% if value %}
+                {% include 'partials/icons/challenge_type.html' with type=value size='' %}
                 {% else %}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
                 {% endif %}

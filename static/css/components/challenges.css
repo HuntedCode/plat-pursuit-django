@@ -4875,3 +4875,42 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 @media (max-width: 639px) {
     #cc-share .pc-modal__actions [data-share-close] { grid-column: 1 / -1; }
 }
+
+/* ── The challenge TYPE tile ────────────────────────────────────────────────────────────────────────
+   One glyph per type (`partials/icons/challenge_type.html`: Aa, briefcase, calendar) in a tinted tile, so a
+   type reads as itself at a glance on My Challenges' cards rather than as one of three identical boxes.
+   The house accent for all three: a colour per type would be a third colour axis competing with the
+   discipline palette (`--disc-*`) that job glyphs already wear. A hidden run's tile goes quiet beside its
+   ghost chip -- dormant, not gone, which is what the chip says; the card itself is unchanged. */
+.pp-ctype {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--pp-radius-sm);
+    color: var(--pp-primary);
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, transparent);
+}
+.pp-ctype svg { width: 22px; height: 22px; }
+@media (min-width: 768px) {
+    .pp-ctype { width: 44px; height: 44px; }
+    .pp-ctype svg { width: 24px; height: 24px; }
+}
+.pp-ctype--quiet {
+    color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-text) 5%, transparent);
+    border-color: var(--pp-border);
+}
+
+/* THE TYPE GLYPH WHERE A TYPE IS NAMED SMALL: the hub card's chip and the Hall of Fame plaque's record line.
+   Lucide's `case-sensitive` (A-Z) only fills the middle third of its 24px box, so at a chip's 0.85em the "Aa"
+   was a smudge; 1.15em makes it read. */
+.pp-crun__type svg { width: 1.15em; height: 1.15em; }
+.pp-chero__type { display: inline-flex; align-items: center; gap: 0.35em; }
+.pp-chero__type svg { width: 1.15em; height: 1.15em; flex-shrink: 0; }
+
+/* The Calendar's reward line names a rung and WHERE it sits ("Calendar Keeper at 100 days"); the place is
+   context, so it reads quieter than the title it qualifies -- not the accent `.pp-cwr__xp` spends on XP. */
+.pp-cwr__at { color: var(--pp-text-dim); font-weight: 600; }

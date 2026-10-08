@@ -149,7 +149,7 @@ def build_card_context(challenge, *, cache_images=False):
     context = _shell(challenge, profile, avatar, plaque='slim' if is_jobs else 'full')
     context['assigned_count'] = challenge.filled_count - challenge.completed_count
     count = {'num': challenge.completed_count, 'of': challenge.total_slots,
-             'label': 'Jobs' if is_jobs else 'Letters'}
+             'label': challenge.unit.title()}
     if is_jobs:
         context['shelves'] = shelves
         context['board'] = _shelf_geometry(shelves)

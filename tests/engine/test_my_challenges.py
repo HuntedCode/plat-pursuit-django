@@ -259,13 +259,17 @@ def test_the_pages_own_query_cost_is_exact(rf):
     # query". The third type added three. Only the owed-XP read has that property, and it still does --
     # which is the part actually worth pinning, and what the per-card arithmetic below isolates.
     n_types = len(CARD_TYPES)
-    assert cost() == 3 * n_types + 3
+    # PLUS ONE FOR THE CALENDAR'S REWARD LINE, which names the next rung the hunter does not hold yet
+    # (`rewards.next_calendar_rung`, one `UserTitle` read). Per TYPE rather than per card, and fixed: the
+    # other two types price their reward from the count already in hand.
+    calendar_rung = 1
+    assert cost() == 3 * n_types + 3 + calendar_rung
 
     svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.start(profile, CHALLENGE_TYPE_JOBS)
     # Two cards go ACTIVE: `resumable_run` short-circuits on each, so one query fewer apiece. The
     # remaining types stay empty and keep their three.
-    assert cost() == 3 * n_types + 3 - 2
+    assert cost() == 3 * n_types + 3 + calendar_rung - 2
 
     for i in range(12):
         Challenge.objects.create(
@@ -274,7 +278,7 @@ def test_the_pages_own_query_cost_is_exact(rf):
     # AND IT DOES NOT GROW WITH DATA, which is the distinction that matters: the history is one count plus
     # one bounded slice however many runs exist, and the owed-XP read is one `values().annotate()` however
     # many runs owe. Twelve more completed runs cost nothing.
-    assert cost() == 3 * n_types + 3 - 2
+    assert cost() == 3 * n_types + 3 + calendar_rung - 2
 
 
 # ── the beta gate, rendered rather than redirected ───────────────────────────────────────────────

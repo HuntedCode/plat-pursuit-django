@@ -416,14 +416,14 @@ def test_a_third_run_start_card_still_advertises_its_xp():
     """
     from challenges.views import MyChallengesView
 
-    reward = MyChallengesView._reward(CHALLENGE_TYPE_JOBS, completed=2)
+    reward = MyChallengesView._reward(CHALLENGE_TYPE_JOBS, completed=2, profile=None)
 
     assert reward is not None
     assert reward['title_name'] is None
     assert reward['per_square'] == CHALLENGE_SLOT_JOB_XP
 
     # And A-Z past its second completion genuinely has nothing to say, so it stays absent.
-    assert MyChallengesView._reward(CHALLENGE_TYPE_AZ, completed=2) is None
+    assert MyChallengesView._reward(CHALLENGE_TYPE_AZ, completed=2, profile=None) is None
 
 
 def test_a_finished_run_reports_the_title_it_earned():
