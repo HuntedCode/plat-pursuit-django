@@ -19,21 +19,41 @@ avoid for the plat card.
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from django.utils import timezone
+from django.utils import dateformat, timezone
 
 from core.services.completion_card_service import DISCIPLINE_COLOURS, JOB_ICON_PATHS
 from core.services.share_image_cache import ShareImageCache
 from users.services.marks import mark_style
 
-from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS
-from challenges.services import rewards
+from challenges.models import (CALENDAR_MONTH_DAYS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR,
+                               CHALLENGE_TYPE_JOBS)
+from challenges.services import calendar_render, rewards
 from challenges.services.slot_render import slot_groups
 
 logger = logging.getLogger(__name__)
 
 #: Card types that have a share card yet. Built one at a time (owner, 2026-10-08), so a type joins this
 #: set when its card ships rather than inheriting another type's layout.
-SHAREABLE_TYPES = frozenset({CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS})
+SHAREABLE_TYPES = frozenset({CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS, CHALLENGE_TYPE_CALENDAR})
+
+#: The Plat Calendar's twelve month hues, January first -- the `--cal-c` table in
+#: static/css/components/challenges.css, ported because the card renders with no stylesheet. Chromium
+#: renders `oklch()` natively, so they are copied verbatim rather than converted, and
+#: `test_the_calendar_card_wears_the_pages_month_hues` fails the moment the two tables disagree.
+MONTH_HUES = (
+    'oklch(0.74 0.13 255)',     # January   -- deep winter blue
+    'oklch(0.72 0.14 290)',     # February  -- late-winter violet
+    'oklch(0.80 0.14 150)',     # March     -- first green
+    'oklch(0.84 0.15 128)',     # April     -- spring
+    'oklch(0.86 0.16 105)',     # May       -- lime
+    'oklch(0.88 0.15 88)',      # June      -- high sun
+    'oklch(0.84 0.16 70)',      # July      -- gold
+    'oklch(0.78 0.17 52)',      # August    -- amber
+    'oklch(0.72 0.17 35)',      # September -- russet
+    'oklch(0.68 0.18 18)',      # October   -- autumn red
+    'oklch(0.66 0.15 345)',     # November  -- berry
+    'oklch(0.90 0.045 235)',    # December  -- frost, near-white
+)
 
 #: The text-mute grey, for a job square or shelf whose discipline has no colour: a square whose `Job` was
 #: deleted (no atom at all, so `slot_groups` puts it on a shelf of its own) or a discipline missing from
@@ -95,10 +115,20 @@ def build_card_context(challenge, *, cache_images=False):
     - `shelves` for Job Coverage: one per discipline, in the radar's order, each with its colour, glyph and
       tally. Taken from `slot_render.slot_groups`, the same grouping the live board draws, so a square sits
       in the same discipline on the card as on the page.
+    - `months` for the Plat Calendar: the page's year overview, twelve rows of up to 31 days. Taken from
+      `calendar_render.calendar_groups`, the page's own builder, so a day filled on the card is filled on
+      the page -- shovelware-free, the one lens there is.
+
+    `stats` IS THE PLAQUE'S NUMBERS, built here per type rather than branched on in the template: each type
+    counts different things (letters, jobs and job XP, days and struck months), and four `{% if kind %}`
+    blocks in one row was the shape that list replaced.
     """
     profile = challenge.profile
+    kind = challenge.challenge_type
+    if kind == CHALLENGE_TYPE_CALENDAR:
+        return _calendar_context(challenge, profile, cache_images=cache_images)
     groups = slot_groups(challenge)
-    is_jobs = challenge.challenge_type == CHALLENGE_TYPE_JOBS
+    is_jobs = kind == CHALLENGE_TYPE_JOBS
 
     shelves = [{
         'label': group['label'],
@@ -116,32 +146,93 @@ def build_card_context(challenge, *, cache_images=False):
         for square, cover in zip(squares, covers):
             square['cover'] = cover
 
-    context = {
-        'kind': challenge.challenge_type,
-        'username': profile.display_psn_username or profile.psn_username,
-        'mark': mark_style(profile.display_mark),
-        'avatar_image': avatar,
-        'is_complete': challenge.is_complete,
-        'completed_count': challenge.completed_count,
-        'assigned_count': challenge.filled_count - challenge.completed_count,
-        'total_slots': challenge.total_slots,
-        'left': challenge.total_slots - challenge.completed_count,
-        'title': rewards.granted_titles_for([challenge]).get(challenge.pk) if challenge.is_complete else None,
-        'started_at': challenge.created_at,
-        'completed_at': challenge.completed_at,
-        'days': _days(challenge),
-        'plaque': _PLAQUE['slim' if is_jobs else 'full'],
-    }
+    context = _shell(challenge, profile, avatar, plaque='slim' if is_jobs else 'full')
+    context['assigned_count'] = challenge.filled_count - challenge.completed_count
+    context['left'] = challenge.total_slots - challenge.completed_count
+    count = {'num': challenge.completed_count, 'of': challenge.total_slots,
+             'label': 'Jobs' if is_jobs else 'Letters'}
     if is_jobs:
         context['shelves'] = shelves
         context['board'] = _shelf_geometry(shelves)
         # WHAT THE RUN HAS PAID, never what it is owed: XP still waiting on a Claim button is not the hunter's
         # yet, and a card claiming it would disagree with Career until they press it. Read from
         # `rewards.summary`, the run page's own reward panel, so the two cannot quote different figures.
-        context['xp_paid'] = rewards.summary(challenge)['paid_xp']
+        xp = {'num': rewards.summary(challenge)['paid_xp'], 'label': 'Job XP'}
+        context['stats'] = [count, xp, _days_stat(challenge), _date_stat(challenge)]
     else:
         half = (len(squares) + 1) // 2
         context['rows'] = [squares[:half], squares[half:]]
+        context['stats'] = [count, _days_stat(challenge), _date_stat(challenge)]
+    return context
+
+
+def _shell(challenge, profile, avatar, *, plaque):
+    """What every card carries whatever its board: who, the run's state, the title, the plaque's sizes.
+
+    THE TITLE IS READ FOR EVERY RUN, finished or not, because the Calendar's ladder is climbed DURING a run
+    (Calendar Marker at 50 days, Keeper at 100, ...). The two contract-atom types grant theirs only on the
+    finish, so for them an unfinished run simply has none and the line drops.
+    """
+    return {
+        'kind': challenge.challenge_type,
+        'username': profile.display_psn_username or profile.psn_username,
+        'mark': mark_style(profile.display_mark),
+        'avatar_image': avatar,
+        'is_complete': challenge.is_complete,
+        'completed_count': challenge.completed_count,
+        'total_slots': challenge.total_slots,
+        'title': rewards.granted_titles_for([challenge]).get(challenge.pk),
+        'plaque': _PLAQUE[plaque],
+    }
+
+
+def _days_stat(challenge):
+    """How long the run took, or has been going. `Days in` on a live run, so it never reads as a total."""
+    days = _days(challenge)
+    label = 'Day' if days == 1 else 'Days'
+    return {'num': days, 'label': label if challenge.is_complete else label + ' in'}
+
+
+def _date_stat(challenge):
+    """The finish date, or the start date on a live run. Formatted in the ACTIVE timezone -- the hunter's,
+    which `TimezoneMiddleware` sets for the request -- exactly as the template's `|date` filter would."""
+    when = challenge.completed_at if challenge.is_complete else challenge.created_at
+    return {'text': dateformat.format(timezone.localtime(when), 'M j, Y'),
+            'label': 'Finished' if challenge.is_complete else 'Started'}
+
+
+def _calendar_context(challenge, profile, *, cache_images):
+    """The Plat Calendar card: the page's year overview, and the plaque counting days and struck months.
+
+    NO COVERS, by design: a day carries no art on the page either (owner, 2026-10-03), so the only image to
+    cache is the avatar. `calendar_groups` is one query over the run's 365 rows.
+
+    "DAYS IN" IS NOT ON THIS PLAQUE, unlike the other two. A card whose headline is "164/365 days" beside
+    "87 days in" reads as two different day counts arguing; the second figure here is the struck months.
+    """
+    groups = calendar_render.calendar_groups(challenge)
+    totals = calendar_render.totals_for(groups)
+    avatar = profile.avatar_url or ''
+    if cache_images:
+        (avatar,), = _cached([avatar])
+
+    context = _shell(challenge, profile, avatar, plaque='slim')
+    context['months'] = [{
+        'abbr': group['slug'].upper(),
+        'hue': MONTH_HUES[index],
+        'done': group['done'],
+        'total': group['total'],
+        'struck': group['is_struck'],
+        'filled': [cell['filled'] for cell in group['cards']],
+    } for index, group in enumerate(groups)]
+    context['day_numbers'] = range(1, 32)
+    context['stats'] = [
+        {'num': totals['done'], 'of': challenge.total_slots, 'label': 'Days'},
+        # TWELVE, NOT `len(groups)`: a run with no day rows gets no groups, and an `of` of 0 is dropped by
+        # the template, so the plaque read "0 MONTHS" rather than 0/12.
+        {'num': totals['struck'], 'of': len(CALENDAR_MONTH_DAYS), 'label': 'Months'},
+        _date_stat(challenge),
+    ]
     return context
 
 
@@ -214,7 +305,7 @@ def _days(challenge, *, now=None):
     would say it, so a run started and finished on the same day took 1 day, not 0.
 
     IN THE HUNTER'S OWN DAYS, not UTC's. `TimezoneMiddleware` activates their timezone for the request, and
-    the card prints its date through `|date` in that zone, so counting UTC days put "Started Oct 1" beside a
+    the card prints its date in that zone (`_date_stat`), so counting UTC days put "Started Oct 1" beside a
     figure that disagreed with it for anyone whose evening is the next UTC day.
     """
     end = challenge.completed_at or now or timezone.now()

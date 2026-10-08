@@ -124,14 +124,17 @@ ownership on the endpoint and the tab, and graceful degrade when the card build 
 
 ## The Challenge Card (a run's share card)
 
-The fourth sibling (2026-10). One 1200x630 card per challenge run, **built one type at a time**: A-Z and
-Job Coverage have one; the Plat Calendar gets its own layout rather than inheriting another type's
-(`share_card.SHAREABLE_TYPES` is the switch, and a type without a card 404s and shows no button).
+The fourth sibling (2026-10). One 1200x630 card per challenge run, **built one type at a time** (owner's
+call) and now covering all three: A-Z, Job Coverage and the Plat Calendar. `share_card.SHAREABLE_TYPES`
+stays as the gate a fourth type needs on day one: a type outside it 404s on both doors and shows no button,
+rather than inheriting another type's layout.
 
 **One shell, a board per type.** The header, brand and plaque are shared; the board is an include chosen by
-`kind` (`shareables/partials/_challenge_card_az.html` / `_challenge_card_jobs.html`), and both boards draw
-their squares through one partial, `_challenge_card_square.html`, whose only per-type difference is the
-MARK: a letter, or the job's glyph in its discipline colour.
+`kind` (`shareables/partials/_challenge_card_{az,jobs,calendar}.html`). The two cover boards draw their
+squares through one partial, `_challenge_card_square.html`, whose only per-type difference is the MARK: a
+letter, or the job's glyph in its discipline colour. **The plaque's numbers are data**: `share_card` builds a
+`stats` list per type (letters; jobs + job XP; days + struck months) and the template loops it, instead of a
+row of `{% if kind %}` branches.
 
 **A-Z layout: the alphabet strip.** A-M over N-Z, thirteen covers a row, each lettered, with a full-width
 plaque below (avatar, name + mark, the earned title, letters done, days, date). Two rows of thirteen is
@@ -151,11 +154,23 @@ too small to make out (owner, 2026-10-08). Fifteen columns was the reason; stand
 ten, and covers near the A-Z card's 80x107. The extra height comes from this card's header (no subline: the
 plaque's 13/25 says it) and a slimmer plaque (`share_card._PLAQUE['slim']`). A-Z keeps its own.
 
+**Plat Calendar layout: the year overview.** The run page's year overview (the All crest's panel): twelve
+month rows by up to 31 days,
+a filled day (shovelware-free, the one lens) in its month's hue, a day-number ruler on top and each month's
+tally at the right; a struck month wears its hue on that label and tally, which the page does not (it has
+crests for that, the card has none). Built from `calendar_render.calendar_groups`, the
+page's own builder. **No numerals in the squares**, unlike the page from `md:`: at ~37% embed scale a 12px
+numeral is 4px of noise, and a strong fill reads at any size. The hues are `share_card.MONTH_HUES`, a port
+of the page's `--cal-c` table (Chromium renders `oklch()` natively); a test reads the stylesheet and fails if
+the two disagree. The plaque counts **days** (n/365) and **months struck** (n/12), with no "days in" figure:
+"164/365 days" beside "87 days in" reads as two day counts arguing. Its title can show **mid-run**, because the
+Calendar's ladder is climbed during a run (Calendar Marker at 50 days), unlike the other two types' titles.
+
 **Finished AND in-progress runs** are shareable (owner's call): halfway through is worth showing, and the
 header pill (and, on A-Z, the subline) say which it is. A hidden run has no card.
 
 **Where it lives:** a Share button on the run's own page (owner only) and on My Challenges (each live run
-card and each finished row, for the types that have a card). One `#cc-share` dialog per page, opened by any `[data-challenge-share]`
+card and each finished row). One `#cc-share` dialog per page, opened by any `[data-challenge-share]`
 button; it is the share modal's `.pc-modal` shell without the rating and art-ground parts.
 
 **Images are cached for the DOWNLOAD only.** The preview hands the browser the remote cover URLs; caching
@@ -277,7 +292,7 @@ art the card already offers.
 | `trophies/views/shareables_views.py` | `PlatCardsView` |
 | `templates/shareables/plat_card.html` | **The card.** Landscape 1200x630, both variants |
 | `templates/shareables/profile_card.html` | **The Profile Card.** Landscape 1200x630, one variant |
-| `templates/shareables/challenge_card.html` + `partials/_challenge_card_{az,jobs,square}.html` | **The Challenge Card.** Landscape 1200x630: the shared shell, one board per type, and the square both boards draw |
+| `templates/shareables/challenge_card.html` + `partials/_challenge_card_{az,jobs,calendar,square}.html` | **The Challenge Card.** Landscape 1200x630: the shared shell, one board per type, and the square the two cover boards draw |
 | `challenges/services/share_card.py` | The Challenge Card payload, its image caching, and `SHAREABLE_TYPES` |
 | `templates/challenges/partials/_share_dialog.html` + `_share_button.html` + `static/js/challenge-share.js` | The Challenge Card dialog and its triggers |
 | `templates/trophies/partials/profile_detail/tabs/card_tab.html` + `static/js/profile-card-tab.js` + `static/css/components/profile-card-tab.css` | The profile page's Card tab (inline preview + download) |

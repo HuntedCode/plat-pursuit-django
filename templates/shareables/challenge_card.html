@@ -13,7 +13,8 @@ ground with `!important` cannot strip them, and the brand block as a real mark. 
 to keep in sync with input.css; this card uses the same values plus `--pp-success` (#3add9e).
 
 THE BOARDS: A-Z is an alphabet strip (partials/_challenge_card_az.html); Job Coverage is five discipline
-shelves (partials/_challenge_card_jobs.html). Each partial explains its own geometry.
+shelves (partials/_challenge_card_jobs.html); the Plat Calendar is the page's year overview
+(partials/_challenge_card_calendar.html). Each partial explains its own geometry.
 
 Context: challenges/services/share_card.build_card_context.
 {% endcomment %}
@@ -27,7 +28,7 @@ Context: challenges/services/share_card.build_card_context.
         <div style="display: flex; align-items: center; gap: 18px; flex-shrink: 0;">
             <div style="flex: 1; min-width: 0;">
             <div style="display: flex; align-items: center; gap: 16px;">
-                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 46px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.02em; line-height: 1.05; white-space: nowrap;">{% if kind == 'jobs' %}Job Coverage Challenge{% else %}A&ndash;Z Challenge{% endif %}</span>
+                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 46px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.02em; line-height: 1.05; white-space: nowrap;">{% if kind == 'jobs' %}Job Coverage Challenge{% elif kind == 'calendar' %}Plat Calendar{% else %}A&ndash;Z Challenge{% endif %}</span>
                 {% if is_complete %}
                 <span style="display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(58, 221, 158, 0.55); background: rgba(58, 221, 158, 0.12);">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3add9e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 6 9 17l-5-5"/></svg>
@@ -39,9 +40,9 @@ Context: challenges/services/share_card.build_card_context.
                 </span>
                 {% endif %}
             </div>
-            {% comment %}A-Z ONLY. The Job Coverage card spends this line's height on its covers, which are three
-            deep; its plaque's "13/25 jobs" already says what the line said.{% endcomment %}
-            {% if kind != 'jobs' %}
+            {% comment %}A-Z ONLY. The other two boards are taller -- Job Coverage's covers are three deep, the
+            Calendar is twelve rows -- and their plaques' first figure already says what the line said.{% endcomment %}
+            {% if kind == 'az' %}
             <div style="font-size: 20px; line-height: 1.35; font-weight: 500; color: #9da5b1; margin-top: 8px; white-space: nowrap;">{% if is_complete %}One game for every letter, A to Z.{% else %}{{ completed_count }} letter{{ completed_count|pluralize }} down, {{ left }} to go.{% endif %}</div>
             {% endif %}
             </div>
@@ -55,7 +56,7 @@ Context: challenges/services/share_card.build_card_context.
         </div>
 
         {# ── 2. The board ── #}
-        {% if kind == 'jobs' %}{% include 'shareables/partials/_challenge_card_jobs.html' %}{% else %}{% include 'shareables/partials/_challenge_card_az.html' %}{% endif %}
+        {% if kind == 'jobs' %}{% include 'shareables/partials/_challenge_card_jobs.html' %}{% elif kind == 'calendar' %}{% include 'shareables/partials/_challenge_card_calendar.html' %}{% else %}{% include 'shareables/partials/_challenge_card_az.html' %}{% endif %}
 
         {# ── 3. The plaque: who, and the numbers ── #}
         <div style="display: flex; align-items: center; gap: 20px; flex-shrink: 0; padding: {{ plaque.pad }}; border-radius: 14px; background: rgba(10, 14, 19, 0.55); border: 1px solid rgba(64, 72, 83, 0.7);">
@@ -70,37 +71,26 @@ Context: challenges/services/share_card.build_card_context.
                     {% include 'components/_mark_glyphs_inline.html' with star_px=15 svc_px=16 %}
                 </div>
                 {% comment %}NOT the run's name: the header already names the challenge, and repeating it here
-                was the one line on the card saying nothing new. A finished run shows the title it EARNED (third
-                and later finishes earn none, so the line simply drops); a live one shows what is in play.{% endcomment %}
+                was the one line on the card saying nothing new. It shows the title the run has EARNED: on A-Z and Job
+                Coverage only at the finish (third and later finishes earn none, so the line drops), on the
+                Calendar from its first rung, since that ladder is climbed during a run. A live run with no title
+                yet shows what is in play instead.{% endcomment %}
                 {% if title %}
                 <div style="line-height: 1.35; font-size: {{ plaque.line }}px; font-weight: 600; color: #3add9e; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ title }}</div>
                 {% elif not is_complete and assigned_count %}
                 <div style="line-height: 1.35; font-size: {{ plaque.line }}px; font-weight: 500; color: #9da5b1; margin-top: 3px; white-space: nowrap;"><span style="color: #27ebfe; font-weight: 600;">{{ assigned_count }}</span> game{{ assigned_count|pluralize }} in progress</div>
                 {% endif %}
             </div>
-            {% comment %}A fourth stat on Job Coverage, the only type that pays XP; its slimmer plaque also
-            tightens this row, to keep the name's room.{% endcomment %}
+            {% comment %}THE NUMBERS, as data: `share_card` builds `stats` per type (letters; jobs and job XP; days
+            and struck months), so this row draws whatever it is handed. A stat is a count with an optional
+            "of" (14/26), a plain figure (78,000), or a pre-formatted date in `text`.{% endcomment %}
             <div style="flex-shrink: 0; display: flex; align-items: center; gap: {{ plaque.stat_gap }}px;">
+                {% for stat in stats %}
                 <div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.num }}px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ completed_count }}<span style="font-size: {{ plaque.num_sub }}px; color: #8a939f;">/{{ total_slots }}</span></div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">{% if kind == 'jobs' %}Jobs{% else %}Letters{% endif %}</div>
+                    {% if stat.text %}<div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.date }}px; font-weight: 700; color: #f0f6fd; line-height: {{ plaque.num }}px; letter-spacing: -0.01em;">{{ stat.text }}</div>{% else %}<div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.num }}px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ stat.num|intcomma }}{% if stat.of %}<span style="font-size: {{ plaque.num_sub }}px; color: #8a939f;">/{{ stat.of }}</span>{% endif %}</div>{% endif %}
+                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">{{ stat.label }}</div>
                 </div>
-                {% if kind == 'jobs' %}
-                {% comment %}PAID, never owed: XP still behind a Claim button is not the hunter's yet. See
-                `share_card.build_card_context`.{% endcomment %}
-                <div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.num }}px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ xp_paid|intcomma }}</div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">Job XP</div>
-                </div>
-                {% endif %}
-                <div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.num }}px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ days|intcomma }}</div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">{% if is_complete %}Day{{ days|pluralize }}{% else %}Day{{ days|pluralize }} in{% endif %}</div>
-                </div>
-                <div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.date }}px; font-weight: 700; color: #f0f6fd; line-height: {{ plaque.num }}px; letter-spacing: -0.01em;">{% if is_complete %}{{ completed_at|date:"M j, Y" }}{% else %}{{ started_at|date:"M j, Y" }}{% endif %}</div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">{% if is_complete %}Finished{% else %}Started{% endif %}</div>
-                </div>
+                {% endfor %}
             </div>
         </div>
     </div>

@@ -1,7 +1,7 @@
 """The challenge share card: what it draws, who may have it, and where the button is.
 
-Two types have a card (A-Z, Job Coverage); the Plat Calendar does not yet, and stands in below for "a type
-without a card".
+All three types have a card: A-Z, Job Coverage and the Plat Calendar. `share_card.SHAREABLE_TYPES` stays
+as the gate a fourth type needs on day one, so "a type without a card" is tested by narrowing it.
 
 THREE THINGS THIS FILE IS FOR.
 
@@ -77,6 +77,13 @@ def _fill_job(run, profile, slug, *, complete=False):
         svc.mark_slot_completed(slot)
     run.refresh_from_db()
     return slot
+
+
+def _stat(context, label):
+    """The plaque stat with this label. Exactly one, or the card has two figures claiming one name."""
+    found = [stat for stat in context['stats'] if stat['label'] == label]
+    assert len(found) == 1, [stat['label'] for stat in context['stats']]
+    return found[0]
 
 
 def _squares(context):
@@ -353,12 +360,18 @@ def test_a_hidden_run_has_no_card(url):
 
 
 def test_a_type_without_a_card_is_a_404():
-    """Cards ship one type at a time, so the Calendar has none yet and must not inherit another's layout."""
+    """A type outside `SHAREABLE_TYPES` must not inherit another type's layout: it 404s on both doors and its
+    page offers no button. Every type has a card today, so the set is narrowed to make the case."""
     client = Client()
     profile = _hunter(client)
-    run = svc.start(profile, CHALLENGE_TYPE_CALENDAR)
-    assert client.get(_html_url(run)).status_code == 404
-    assert client.get(_png_url(run)).status_code == 404
+    run = _jobs_run(profile)
+    with mock.patch.object(share_card, 'SHAREABLE_TYPES', frozenset({CHALLENGE_TYPE_AZ})):
+        assert client.get(_html_url(run)).status_code == 404
+        assert client.get(_png_url(run)).status_code == 404
+        assert 'data-challenge-share' not in _detail(client, run)
+        # AND MY CHALLENGES ASKS THE SAME SET, so its live card offers no button either.
+        body = client.get(reverse('my_challenges')).content.decode()
+        assert _html_url(run) not in body, 'My Challenges offered a card for a type without one'
 
 
 def test_the_owner_gets_a_job_coverage_preview():
@@ -461,17 +474,16 @@ def test_a_job_coverage_run_page_offers_share():
     assert f'data-html-url="{_html_url(run)}"' in _detail(client, run)
 
 
-def test_a_calendar_run_page_offers_no_share_yet():
+def test_a_calendar_run_page_offers_share():
     client = Client()
     run = svc.start(_hunter(client), CHALLENGE_TYPE_CALENDAR)
     resp = client.get(reverse('challenge_detail', args=[run.id]))
-    assert resp.status_code == 200, 'a page that failed to render offers no button either'
-    assert 'data-challenge-share' not in resp.content.decode()
+    assert resp.status_code == 200
+    assert f'data-html-url="{_html_url(run)}"' in resp.content.decode()
 
 
-def test_my_challenges_offers_share_on_the_types_that_have_a_card():
-    """Both live contract-backed runs carry Share; the Calendar's card is not built, so it has none -- and
-    the page still renders ONE dialog however many buttons it holds."""
+def test_my_challenges_offers_share_on_every_live_run():
+    """Every live run carries Share, and the page still renders ONE dialog however many buttons it holds."""
     client = Client()
     profile = _hunter(client)
     az = _az_run(profile)
@@ -480,7 +492,7 @@ def test_my_challenges_offers_share_on_the_types_that_have_a_card():
     body = client.get(reverse('my_challenges')).content.decode()
     assert f'data-html-url="{_html_url(az)}"' in body
     assert f'data-html-url="{_html_url(jobs)}"' in body
-    assert _html_url(calendar) not in body
+    assert f'data-html-url="{_html_url(calendar)}"' in body
     assert body.count('id="cc-share"') == 1
 
 
@@ -548,9 +560,9 @@ def test_the_xp_stat_is_what_was_paid_not_what_is_owed():
     slugs = list(Job.objects.order_by('slug').values_list('slug', flat=True)[:2])
     for slug in slugs:
         _fill_job(run, profile, slug, complete=True)
-    assert share_card.build_card_context(run)['xp_paid'] == 0
+    assert _stat(share_card.build_card_context(run), 'Job XP')['num'] == 0
     rewards.redeem_slot(run, profile, slugs[0])
-    assert share_card.build_card_context(run)['xp_paid'] == CHALLENGE_SLOT_JOB_XP
+    assert _stat(share_card.build_card_context(run), 'Job XP')['num'] == CHALLENGE_SLOT_JOB_XP
 
 
 def test_the_job_card_renders_its_own_words():
@@ -662,3 +674,137 @@ def test_a_discipline_edit_still_fits_the_card():
     assert max(len(sh['squares']) for sh in context['shelves']) == 6
     _fits(context)
     assert context['board']['cover_w'] < share_card._COVER_W_MAX
+
+
+# ── the Plat Calendar board ──────────────────────────────────────────────────────────────────────────
+
+def _calendar_run(profile, *, fill=(), months=()):
+    """A Calendar run with these `(month, day)` squares, and every day of these months, filled
+    shovelware-free -- written straight onto the rows and recounted, so the card reads what a backfill would
+    have left without a trophy history to build."""
+    from challenges.models import CalendarDay
+    from challenges.services import calendar_fill
+    run = svc.start(profile, CHALLENGE_TYPE_CALENDAR)
+    days = run.calendar_days.all()
+    ids = [d.pk for d in days if (d.month, d.day) in set(fill) or d.month in months]
+    CalendarDay.objects.filter(pk__in=ids).update(in_all=True, in_clean=True, plat_count=1)
+    calendar_fill._recount_calendar(run)
+    run.refresh_from_db()
+    return run
+
+
+def test_the_calendar_card_is_the_year_overview():
+    """Twelve rows, January first, each the length of its month, filled where the PAGE's own builder says a
+    day is filled -- the card reads `calendar_groups`, so the two cannot disagree."""
+    from challenges.services import calendar_render
+    run = _calendar_run(_hunter(), fill=[(1, 1), (2, 28), (12, 31)], months=[3])
+    context = share_card.build_card_context(run)
+    months = context['months']
+    assert [m['abbr'] for m in months] == ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+                                           'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+    assert [len(m['filled']) for m in months] == [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    page = calendar_render.calendar_groups(run)
+    assert [m['filled'] for m in months] == [[c['filled'] for c in g['cards']] for g in page]
+    assert months[0]['filled'][0] and months[1]['filled'][27] and months[11]['filled'][30]
+    assert months[2]['struck'] and not months[0]['struck']
+    assert 'rows' not in context and 'shelves' not in context
+
+
+def test_the_calendar_plaque_counts_days_and_struck_months():
+    """"164/365 days" beside "87 days in" reads as two day counts arguing, so the Calendar's second figure is
+    the months struck, and there is no days-in stat at all."""
+    run = _calendar_run(_hunter(), fill=[(1, 1)], months=[3, 10])
+    context = share_card.build_card_context(run)
+    assert _stat(context, 'Days')['num'] == 31 + 31 + 1 and _stat(context, 'Days')['of'] == 365
+    assert _stat(context, 'Months') == {'num': 2, 'of': 12, 'label': 'Months'}
+    assert [stat['label'] for stat in context['stats']] == ['Days', 'Months', 'Started']
+
+
+def test_the_calendar_wears_the_title_it_has_climbed_to_mid_run():
+    """The ladder is climbed DURING a run (Calendar Marker at 50 days), unlike the other two types' titles,
+    so a live Calendar card shows its rung. Reading the title only for finished runs would hide it."""
+    run = _calendar_run(_hunter(), months=[1, 3])      # 62 days: past the 50-day rung
+    assert not run.is_complete
+    assert share_card.build_card_context(run)['title'] == 'Calendar Marker'
+
+
+_EMPTY_DAY = 'background: rgba(24, 29, 35, 0.8);'
+
+
+def test_the_calendar_card_renders_its_own_words():
+    """Only the filled days are painted: March is struck (31 squares in its hue, its label and tally in its
+    hue too) and January is untouched -- a template painting every square would put 31 in January as well.
+    The other 334 squares draw the empty well."""
+    from django.template.loader import render_to_string
+    run = _calendar_run(_hunter(), months=[3])
+    html = render_to_string(share_card.CARD_TEMPLATE, share_card.build_card_context(run))
+    assert 'Plat Calendar' in html and 'A&ndash;Z' not in html and 'Job Coverage' not in html
+    assert 'to go.' not in html, 'the A-Z subline leaked onto the Calendar'
+    assert '>Days<' in html and '>Months<' in html and '>Job XP<' not in html
+    march, january = share_card.MONTH_HUES[2], share_card.MONTH_HUES[0]
+    assert html.count(f'background: {march};') == 31
+    assert html.count(f'background: {january};') == 0, 'an unfilled month was painted'
+    assert html.count(_EMPTY_DAY) == 365 - 31
+    assert html.count(f'color: {march};') == 2, 'the struck month lost its hue on the label or the tally'
+    assert f'color: {january};' not in html, 'an unstruck month wore its hue'
+    assert '31<span style="font-size: 13px; color: #8a939f;">/31</span>' in html
+
+
+def test_a_shovelware_only_day_is_not_filled_on_the_card():
+    """THE ONE LENS: a day holding only a shovelware platinum (`in_all` without `in_clean`) is a real row and
+    draws NOTHING. Every other fixture fills both populations together, so without this a card reading the
+    shovelware-inclusive population would pass them all."""
+    from challenges.models import CalendarDay
+    from django.template.loader import render_to_string
+    run = _calendar_run(_hunter(), fill=[(4, 4)])
+    CalendarDay.objects.filter(challenge=run, month=4, day=5).update(in_all=True, plat_count=1)
+    context = share_card.build_card_context(run)
+    april = context['months'][3]['filled']
+    assert april[3] is True and april[4] is False, 'the shovelware-only day was drawn filled'
+    html = render_to_string(share_card.CARD_TEMPLATE, context)
+    assert html.count(f"background: {share_card.MONTH_HUES[3]};") == 1
+
+
+def test_the_calendar_card_wears_the_pages_month_hues():
+    """`MONTH_HUES` is a hand port of the page's `--cal-c` table, because the card renders with no stylesheet.
+    Two tables of twelve hues is twelve chances for a month to look different on the card and the page, so
+    this reads the stylesheet and compares every month."""
+    import re
+    from pathlib import Path
+    css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' / 'challenges.css'
+           ).read_text(encoding='utf-8')
+    table = dict(re.findall(r'\.pp-detail-modal\[data-month="(\d+)"\]\s*\{\s*--cal-c:\s*(oklch\([^)]*\))', css))
+    assert len(table) == 12, 'the page hue table moved; this test can no longer find it'
+    assert [table[str(n)] for n in range(1, 13)] == list(share_card.MONTH_HUES)
+
+
+def test_the_calendar_card_costs_the_same_however_full_the_year():
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    profile = _hunter()
+    sparse = _calendar_run(profile, fill=[(1, 1)])
+    sparse.profile.user
+    with CaptureQueriesContext(connection) as few:
+        share_card.build_card_context(sparse)
+    full = _calendar_run(_hunter(), months=range(1, 13))
+    # The owner AND their user loaded before measuring, as the view hands them over: `card_run` sets the run's
+    # profile to `request.user.profile`, whose `user` is the request's own. (`calendar_groups` reads the
+    # user's timezone for today's square, so without this the count includes a query the view never makes.)
+    full.profile.user
+    with CaptureQueriesContext(connection) as many:
+        share_card.build_card_context(full)
+    assert len(many) == len(few), [q['sql'][:120] for q in many.captured_queries]
+    # AND AN ABSOLUTE BOUND, because the hazard grows with ROWS, not with fill: both runs above have 365
+    # rows, so a per-row query (the deferred-FK trap `calendar_render._CELL_FIELDS` documents) would add
+    # 365 to each side and still compare equal. The day rows and the granted title: two.
+    assert len(many) <= 2, [q["sql"][:60] for q in many.captured_queries]
+
+
+def test_a_calendar_run_with_no_rows_still_reads_out_of_twelve():
+    """`calendar_groups` returns no months for a run with no day rows, so the board draws nothing -- and the
+    months stat must still say 0/12, not a bare 0 because its total came from the empty group list."""
+    run = svc.start(_hunter(), CHALLENGE_TYPE_CALENDAR)
+    run.calendar_days.all().delete()
+    context = share_card.build_card_context(run)
+    assert context['months'] == []
+    assert _stat(context, 'Months') == {'num': 0, 'of': 12, 'label': 'Months'}

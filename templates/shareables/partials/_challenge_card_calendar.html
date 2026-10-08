@@ -1,0 +1,45 @@
+{% comment %}
+The Plat Calendar card's board: the run page's YEAR OVERVIEW (owner's pick, 2026-10-08), twelve month rows
+by up to 31 day columns, so a hunter sharing it sees the year exactly as their run page draws it.
+
+ONE LENS. A filled day is a shovelware-free platinum earned on that date in any year -- the only board the
+Calendar has (the three-view model was collapsed on 2026-10-04). A filled day wears its MONTH's hue, the
+page's `--cal-c` table, ported to `share_card.MONTH_HUES`.
+
+NO NUMERALS IN THE SQUARES, unlike the page from `md:` up. The page can afford them because a reader is
+looking at the page; this travels to a Discord embed at ~37% scale, where a 12px numeral is 4px of noise.
+A strong fill reads at a glance at any size, and the ruler above gives the columns their dates.
+
+A STRUCK MONTH WEARS ITS HUE ON ITS LABEL AND TALLY, which the page deliberately does not ("the hue never
+touches text": `.pp-cal__ylabel` stays `--pp-text-dim`). The page can mark a struck month with its crest;
+the card has no crests, so the label is the only place to say it. The hues sit at oklch lightness 0.66 to
+0.90 on a near-black ground, so the text stays readable.
+
+A RUN WITH NO DAY ROWS draws nothing below the ruler's place: `calendar_groups` returns no months for it
+(a board frame around nothing is the failure it guards against), and the ruler is skipped with them.
+
+GEOMETRY: 26px squares, 4px apart: 31 columns is 926px, beside a 52px month column and a 60px tally, and
+12 rows plus the ruler is ~376px, which is what the header and the slim plaque leave.
+
+Expects: months and day_numbers (share_card._calendar_context).
+{% endcomment %}
+<div style="display: flex; flex-direction: column; gap: 4px; flex-shrink: 0;">
+    {% if months %}
+    <div style="display: flex; align-items: flex-end; gap: 4px; padding-left: 62px; height: 16px;">
+        {% for d in day_numbers %}
+        <span style="width: 26px; flex-shrink: 0; text-align: center; font-size: 12px; line-height: 1; font-weight: 600; color: #8a939f; font-variant-numeric: tabular-nums;">{% if d == 1 or d|divisibleby:5 or d == 31 %}{{ d }}{% endif %}</span>
+        {% endfor %}
+    </div>
+    {% for month in months %}
+    <div style="display: flex; align-items: center; gap: 4px;">
+        <span style="width: 52px; margin-right: 6px; flex-shrink: 0; font-size: 14px; line-height: 1; font-weight: 700; letter-spacing: 0.12em; color: {% if month.struck %}{{ month.hue }}{% else %}#9da5b1{% endif %};">{{ month.abbr }}</span>
+        {% for filled in month.filled %}
+        <span style="width: 26px; height: 26px; flex-shrink: 0; border-radius: 5px; box-sizing: border-box; {% if filled %}background: {{ month.hue }};{% else %}background: rgba(24, 29, 35, 0.8); border: 1px solid rgba(64, 72, 83, 0.45);{% endif %}"></span>
+        {% endfor %}
+        {% comment %}The month's tally sits at a fixed column, not after its last square: February and the 30-day
+        months end early, and a tally that followed them would zigzag down the card.{% endcomment %}
+        <span style="margin-left: auto; width: 60px; flex-shrink: 0; text-align: right; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 18px; line-height: 1; font-weight: 700; color: {% if month.struck %}{{ month.hue }}{% else %}#f0f6fd{% endif %};">{{ month.done }}<span style="font-size: 13px; color: #8a939f;">/{{ month.total }}</span></span>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
