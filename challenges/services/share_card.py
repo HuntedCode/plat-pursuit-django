@@ -148,7 +148,6 @@ def build_card_context(challenge, *, cache_images=False):
 
     context = _shell(challenge, profile, avatar, plaque='slim' if is_jobs else 'full')
     context['assigned_count'] = challenge.filled_count - challenge.completed_count
-    context['left'] = challenge.total_slots - challenge.completed_count
     count = {'num': challenge.completed_count, 'of': challenge.total_slots,
              'label': 'Jobs' if is_jobs else 'Letters'}
     if is_jobs:
@@ -162,6 +161,7 @@ def build_card_context(challenge, *, cache_images=False):
     else:
         half = (len(squares) + 1) // 2
         context['rows'] = [squares[:half], squares[half:]]
+        context['left'] = challenge.total_slots - challenge.completed_count     # the A-Z subline's "to go"
         context['stats'] = [count, _days_stat(challenge), _date_stat(challenge)]
     return context
 
@@ -180,7 +180,6 @@ def _shell(challenge, profile, avatar, *, plaque):
         'avatar_image': avatar,
         'is_complete': challenge.is_complete,
         'completed_count': challenge.completed_count,
-        'total_slots': challenge.total_slots,
         'title': rewards.granted_titles_for([challenge]).get(challenge.pk),
         'plaque': _PLAQUE[plaque],
     }

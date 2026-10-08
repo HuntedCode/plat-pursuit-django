@@ -4,7 +4,8 @@ The share dialog for a challenge run: preview the card, pick its ground, downloa
 THE SAME SHELL AS shareables/partials/share_modal.html (the plat card's), class for class, so the two read as
 one feature and every `.pc-modal` rule in plat-cards.css (already in the global bundle) applies unchanged.
 What it leaves out is what only a game completion has: the rating button, the link out to a game, and the
-per-game ART grounds -- a run is 26 games, so there is no one image to back it. `get_ground_themes` is the
+per-game ART grounds -- a run is many games, or none at all on the Calendar, so there is no one image to
+back it. `get_ground_themes` is the
 filter the recap's and the Profile Card's pickers use, so all three offer one palette.
 
 ONE DIALOG PER PAGE, opened by any `[data-challenge-share]` button: My Challenges can list more than one
@@ -29,15 +30,13 @@ Expects: share_themes ([(key, theme)] from trophies.themes.get_ground_themes).
                 <div class="pc-modal__scaler" data-share-preview></div>
             </div>
             {% comment %}A skeleton in the CARD's shape, the plat modal's argument: the shape that is coming
-            sets the expectation, so the same wait feels shorter. Here that shape is a heading, the two rows of
-            the alphabet, and the plaque.{% endcomment %}
+            sets the expectation, so the same wait feels shorter. Here that shape is what all three cards
+            share -- a heading, a board, and the plaque -- because one dialog serves every type and the board
+            is the part that differs (an alphabet, five shelves, a year).{% endcomment %}
             <div class="pc-modal__loading" data-share-loading aria-live="polite" aria-label="Building your card">
                 <div class="pp-ccskel" aria-hidden="true">
                     <div class="pc-skel__bar pp-ccskel__head"></div>
-                    <div class="pp-ccskel__rows">
-                        <div class="pc-skel__bar"></div>
-                        <div class="pc-skel__bar"></div>
-                    </div>
+                    <div class="pc-skel__bar pp-ccskel__board"></div>
                     <div class="pc-skel__bar pp-ccskel__plaque"></div>
                 </div>
             </div>

@@ -1154,6 +1154,7 @@ class OpeningSeenView(_ChallengeJsonView):
 #: Their own group so that making cards never spends the picker's or the writes' budget.
 CHALLENGE_SHARE_RATELIMIT_GROUP = 'challenges:share'
 
+
 class _ChallengeCardView(_ChallengeJsonView):
     """The run a share card is drawn from: the hunter's OWN, of a type that has a card, and not hidden.
 
@@ -1220,8 +1221,8 @@ class ChallengeCardPNGView(_ChallengeCardView):
         html = render_to_string(share_card.CARD_TEMPLATE, context)
         try:
             from core.services.playwright_renderer import render_png
-            # The renderer's default image budget (200px) was sized for exactly this card: 26 covers at
-            # 80x107, so a larger one would base64 several times the pixels any square shows.
+            # The renderer's default image budget (200px) was sized for exactly this card: up to 26 covers
+            # at no more than 80x107, so a larger one would base64 several times the pixels any square shows.
             png = render_png(html, format_type='landscape', theme_key=theme)
         except Exception:
             logger.exception('[CHALLENGE-CARD] render failed for challenge %s', challenge.pk)

@@ -66,24 +66,31 @@ def test_the_idle_label_belongs_to_the_caller():
     )
 
 
-def test_two_reasons_to_be_disabled_do_not_race():
+#: The two surfaces that put a download button inside a PREVIEW MODAL, and so have a second reason to
+#: block it (the preview still loading or failed). The recap has no preview to wait on.
+MODALS = {name: SURFACES[name] for name in ('the plat card modal', 'the challenge share dialog')}
+
+
+@pytest.mark.parametrize('name,path', MODALS.items(), ids=list(MODALS))
+def test_two_reasons_to_be_disabled_do_not_race(name, path):
     """A theme swap re-disabled the plat card's button while the "Saved" revert timer was still queued to
     re-enable it, and whichever fired last won. `disabled` is derived from both reasons, never written by
     either -- which is why the caller's reason comes in through setBlocked() rather than the property."""
     assert 'blocked || busy' in UTILS, 'disabled is not derived from both reasons'
     assert 'setBlocked(on)' in UTILS
-    plat = SURFACES['the plat card modal'].read_text(encoding='utf-8')
-    assert 'downloader.setBlocked' in plat and not re.search(r'\bgo\.disabled\s*=', plat), (
-        'the plat card writes the button disabled directly again'
+    code = path.read_text(encoding='utf-8')
+    assert 'downloader.setBlocked' in code and not re.search(r'\bgo\.disabled\s*=', code), (
+        f'{name} writes the button disabled directly again'
     )
 
 
-def test_a_failed_download_does_not_block_the_retry_it_advises():
+@pytest.mark.parametrize('name,path', MODALS.items(), ids=list(MODALS))
+def test_a_failed_download_does_not_block_the_retry_it_advises(name, path):
     """"Give it a minute" was shown by the same call that disabled the only button that could take the
     advice. A PREVIEW failure blocks (there is no card to download); a DOWNLOAD failure must not."""
-    plat = SURFACES['the plat card modal'].read_text(encoding='utf-8')
-    assert 'showError(msg, false)' in plat, 'download errors block the button again'
-    assert 'blocks !== false' in plat, 'showError lost the distinction between the two failures'
+    code = path.read_text(encoding='utf-8')
+    assert 'showError(msg, false)' in code, f'{name}: download errors block the button again'
+    assert 'blocks !== false' in code, f'{name}: showError lost the distinction between the two failures'
 
 
 def test_the_ceremony_shows_its_failures_on_the_stage():

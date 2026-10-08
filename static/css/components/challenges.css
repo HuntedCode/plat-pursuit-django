@@ -4854,15 +4854,15 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 
 
 /* ── Share dialog skeleton ─────────────────────────────────────────────────────────────────────────
-   The challenge card's shape while it builds: a heading, the alphabet's two rows, the plaque. The bars
+   The challenge card's shape while it builds: a heading, a board, the plaque -- what all three types
+   share, since one dialog serves them all and the board is the part that differs. The bars
    are the plat modal's `.pc-skel__bar` (shimmer included); only the arrangement is this card's. Sized in
    percent of the loading layer, which spans the STAGE rather than the scaled card (`.pc-modal__loading` is
    inset against the stage), so on a short viewport where fit() narrows the frame the skeleton is wider
    than the card it stands in for. The plat modal behaves the same. */
 .pp-ccskel { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 6% 3.7%; }
 .pp-ccskel__head { height: 11%; width: 38%; }
-.pp-ccskel__rows { height: 38%; display: flex; flex-direction: column; gap: 4%; }
-.pp-ccskel__rows .pc-skel__bar { flex: 1; }
+.pp-ccskel__board { height: 52%; }
 .pp-ccskel__plaque { height: 18%; }
 
 /* The share button in a dense row (My Challenges' finished list): icon-only below `md:`, where a word per

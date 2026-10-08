@@ -1027,7 +1027,7 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `challenges/views.py` | four page views (My Challenges, the run, and the two public browse pages); `GET` reads: the three picker panels (JSON), the Calendar day square (an HTML fragment), and the share card's preview (JSON) and download (PNG); seven thin POST actions (start, assign, clear, hide, redeem, redeem-all, opening-seen) |
 | `challenges/management/commands/process_challenges.py` | the nightly sweep |
 | `challenges/management/commands/seed_challenge_demo.py` | **dev only**: runs in every reward state, so the panel and the pip can be looked at without finishing 25 contracts |
-| `templates/challenges/` | `my_challenges.html`, `challenge_detail.html`, `browse.html`, `hall_of_fame.html`, `partials/_square_body.html`, `partials/_run_card.html`, `partials/_run_hero.html`, `partials/browse_results.html` |
+| `templates/challenges/` | `my_challenges.html`, `challenge_detail.html`, `browse.html`, `hall_of_fame.html`, `partials/_square_body.html`, `partials/_run_card.html`, `partials/_run_hero.html`, `partials/browse_results.html`, `partials/_share_dialog.html` + `partials/_share_button.html` (the share card's dialog and its trigger) |
 | `static/js/challenges-browse.js` | the two public pages' reveal + infinite scroll (filters are `browse-filters.js`) |
 | `static/js/challenge-detail.js` | the picker's three modes, the reward panel's claims, and the board's entrance |
 | `challenges/services/share_card.py` + `static/js/challenge-share.js` | the run's share card and its dialog (two owner-only `GET` doors on `views.py`) |

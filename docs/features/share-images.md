@@ -155,8 +155,7 @@ ten, and covers near the A-Z card's 80x107. The extra height comes from this car
 plaque's 13/25 says it) and a slimmer plaque (`share_card._PLAQUE['slim']`). A-Z keeps its own.
 
 **Plat Calendar layout: the year overview.** The run page's year overview (the All crest's panel): twelve
-month rows by up to 31 days,
-a filled day (shovelware-free, the one lens) in its month's hue, a day-number ruler on top and each month's
+month rows by up to 31 days, a filled day (shovelware-free, the one lens) in its month's hue, a day-number ruler on top and each month's
 tally at the right; a struck month wears its hue on that label and tally, which the page does not (it has
 crests for that, the card has none). Built from `calendar_render.calendar_groups`, the
 page's own builder. **No numerals in the squares**, unlike the page from `md:`: at ~37% embed scale a 12px
@@ -179,10 +178,10 @@ parallel (8 workers), each distinct URL once, and a failed one degrades that squ
 
 **Grounds:** the eight designed ones via `trophies.themes.get_ground_themes()` -- `get_plat_card_themes()`
 minus the art backings, the same palette the recap's and the Profile Card's PICKERS offer (each PNG endpoint
-still validates `?theme=` its own way). A run has 26 games, so there is no one image to back it. An unknown
+still validates `?theme=` its own way). A run is many games, or none on the Calendar, so there is no one image to back it. An unknown
 `?theme=` falls back to Substrate rather than 400ing.
 
-**Covers are the small IGDB variant** (`display_image_url_small`, 180x256) for 80x107 squares. A cold cache
+**Covers are the small IGDB variant** (`display_image_url_small`, 180x256) for squares of at most 80x107. A cold cache
 is up to 27 downloads, 8 at a time: fewer waves than in series, but not a bound on the total, because
 `requests`' timeout is per connect and per read.
 
@@ -306,6 +305,23 @@ art the card already offers.
 
 ## Gotchas and Pitfalls
 
+- **Challenge card: the preview never caches images, and the dialog keeps no preview cache.** The
+  preview hands the browser remote cover URLs; only the PNG caches them (up to 27 cold `requests.get`
+  calls otherwise, on modal open). And unlike the plat modal there is no client cache: the picker rewrites
+  squares in place without a reload, so a cached preview would disagree with the freshly rendered PNG.
+- **Challenge card: one download button serves every run on My Challenges.** It relies on
+  `CardDownload.reset()` dropping the render in flight (a generation counter); reopening the dialog for a
+  second run mid-render otherwise saved the first run's PNG under the second's name.
+- **Challenge card: Job Coverage shelf geometry is computed, never fixed.** A deleted `Job` gives its square
+  a SIXTH shelf and a staff edit to `Job.discipline` gives a shelf of SIX; both overflowed the canvas when
+  the sizes were hardcoded. `share_card._shelf_geometry` keeps three rows and shrinks covers to fit, and
+  returns the designed 78x104 on the designed shape. A job square with no glyph falls back to a briefcase
+  rather than printing its slug.
+- **Challenge card: `MONTH_HUES` is a hand port of the page's `--cal-c` table.** Change a month's hue in
+  `challenges.css` and `test_the_calendar_card_wears_the_pages_month_hues` fails until the card's copy
+  follows.
+- **Challenge card: the Calendar draws ONE lens.** A filled day is `in_clean`; `in_all` holds shovelware
+  platinums too and is never drawn. A shovelware-only day is a real row that must render empty.
 - **The card renders with no stylesheet.** Playwright uses `page.set_content()` in an `about:blank`
   origin: no CSS file, no custom properties, no network. Every style is inline and every colour is a
   hand-ported hex. Keep the token map in `plat_card.html`'s header in sync with `input.css`.
