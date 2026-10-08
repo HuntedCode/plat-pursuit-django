@@ -39,7 +39,11 @@ Context: challenges/services/share_card.build_card_context.
                 </span>
                 {% endif %}
             </div>
-            <div style="font-size: 20px; line-height: 1.35; font-weight: 500; color: #9da5b1; margin-top: 8px; white-space: nowrap;">{% if kind == 'jobs' %}{% if is_complete %}One game for every job.{% else %}{{ completed_count }} job{{ completed_count|pluralize }} down, {{ left }} to go.{% endif %}{% else %}{% if is_complete %}One game for every letter, A to Z.{% else %}{{ completed_count }} letter{{ completed_count|pluralize }} down, {{ left }} to go.{% endif %}{% endif %}</div>
+            {% comment %}A-Z ONLY. The Job Coverage card spends this line's height on its covers, which are three
+            deep; its plaque's "13/25 jobs" already says what the line said.{% endcomment %}
+            {% if kind != 'jobs' %}
+            <div style="font-size: 20px; line-height: 1.35; font-weight: 500; color: #9da5b1; margin-top: 8px; white-space: nowrap;">{% if is_complete %}One game for every letter, A to Z.{% else %}{{ completed_count }} letter{{ completed_count|pluralize }} down, {{ left }} to go.{% endif %}</div>
+            {% endif %}
             </div>
             <div style="flex-shrink: 0; display: flex; align-items: center; gap: 13px;">
                 <img src="{% static 'images/logo.png' %}" alt="" style="width: 50px; height: 50px; border-radius: 9px; object-fit: cover; flex-shrink: 0;" />
@@ -54,48 +58,48 @@ Context: challenges/services/share_card.build_card_context.
         {% if kind == 'jobs' %}{% include 'shareables/partials/_challenge_card_jobs.html' %}{% else %}{% include 'shareables/partials/_challenge_card_az.html' %}{% endif %}
 
         {# ── 3. The plaque: who, and the numbers ── #}
-        <div style="display: flex; align-items: center; gap: 20px; flex-shrink: 0; padding: 20px 26px; border-radius: 14px; background: rgba(10, 14, 19, 0.55); border: 1px solid rgba(64, 72, 83, 0.7);">
+        <div style="display: flex; align-items: center; gap: 20px; flex-shrink: 0; padding: {{ plaque.pad }}; border-radius: 14px; background: rgba(10, 14, 19, 0.55); border: 1px solid rgba(64, 72, 83, 0.7);">
             {% if avatar_image %}
-            <img src="{{ avatar_image }}" alt="" style="width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #27ebfe; box-sizing: border-box; flex-shrink: 0;" />
+            <img src="{{ avatar_image }}" alt="" style="width: {{ plaque.avatar }}px; height: {{ plaque.avatar }}px; border-radius: 50%; object-fit: cover; border: 2px solid #27ebfe; box-sizing: border-box; flex-shrink: 0;" />
             {% else %}
-            <div style="width: 72px; height: 72px; border-radius: 50%; border: 2px solid #27ebfe; box-sizing: border-box; background: #232a31; flex-shrink: 0;"></div>
+            <div style="width: {{ plaque.avatar }}px; height: {{ plaque.avatar }}px; border-radius: 50%; border: 2px solid #27ebfe; box-sizing: border-box; background: #232a31; flex-shrink: 0;"></div>
             {% endif %}
             <div style="flex: 1; min-width: 0;">
                 <div style="display: flex; align-items: center; gap: 7px; min-width: 0;">
-                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 32px; font-weight: 700; color: {% if mark %}{{ mark.colour }}{% else %}#f0f6fd{% endif %}; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;">{{ username }}</span>
+                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.name }}px; font-weight: 700; color: {% if mark %}{{ mark.colour }}{% else %}#f0f6fd{% endif %}; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;">{{ username }}</span>
                     {% include 'components/_mark_glyphs_inline.html' with star_px=15 svc_px=16 %}
                 </div>
                 {% comment %}NOT the run's name: the header already names the challenge, and repeating it here
                 was the one line on the card saying nothing new. A finished run shows the title it EARNED (third
                 and later finishes earn none, so the line simply drops); a live one shows what is in play.{% endcomment %}
                 {% if title %}
-                <div style="line-height: 1.35; font-size: 18px; font-weight: 600; color: #3add9e; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ title }}</div>
+                <div style="line-height: 1.35; font-size: {{ plaque.line }}px; font-weight: 600; color: #3add9e; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ title }}</div>
                 {% elif not is_complete and assigned_count %}
-                <div style="line-height: 1.35; font-size: 18px; font-weight: 500; color: #9da5b1; margin-top: 3px; white-space: nowrap;"><span style="color: #27ebfe; font-weight: 600;">{{ assigned_count }}</span> game{{ assigned_count|pluralize }} in progress</div>
+                <div style="line-height: 1.35; font-size: {{ plaque.line }}px; font-weight: 500; color: #9da5b1; margin-top: 3px; white-space: nowrap;"><span style="color: #27ebfe; font-weight: 600;">{{ assigned_count }}</span> game{{ assigned_count|pluralize }} in progress</div>
                 {% endif %}
             </div>
-            {% comment %}A fourth stat on Job Coverage, the only type that pays XP, so the row tightens to
-            keep the name's room.{% endcomment %}
-            <div style="flex-shrink: 0; display: flex; align-items: center; gap: {% if kind == 'jobs' %}32{% else %}40{% endif %}px;">
+            {% comment %}A fourth stat on Job Coverage, the only type that pays XP; its slimmer plaque also
+            tightens this row, to keep the name's room.{% endcomment %}
+            <div style="flex-shrink: 0; display: flex; align-items: center; gap: {{ plaque.stat_gap }}px;">
                 <div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 44px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ completed_count }}<span style="font-size: 25px; color: #8a939f;">/{{ total_slots }}</span></div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 8px;">{% if kind == 'jobs' %}Jobs{% else %}Letters{% endif %}</div>
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.num }}px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ completed_count }}<span style="font-size: {{ plaque.num_sub }}px; color: #8a939f;">/{{ total_slots }}</span></div>
+                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">{% if kind == 'jobs' %}Jobs{% else %}Letters{% endif %}</div>
                 </div>
                 {% if kind == 'jobs' %}
                 {% comment %}PAID, never owed: XP still behind a Claim button is not the hunter's yet. See
                 `share_card.build_card_context`.{% endcomment %}
                 <div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 44px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ xp_paid|intcomma }}</div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 8px;">Job XP</div>
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.num }}px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ xp_paid|intcomma }}</div>
+                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">Job XP</div>
                 </div>
                 {% endif %}
                 <div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 44px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ days|intcomma }}</div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 8px;">{% if is_complete %}Day{{ days|pluralize }}{% else %}Day{{ days|pluralize }} in{% endif %}</div>
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.num }}px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ days|intcomma }}</div>
+                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">{% if is_complete %}Day{{ days|pluralize }}{% else %}Day{{ days|pluralize }} in{% endif %}</div>
                 </div>
                 <div>
-                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 27px; font-weight: 700; color: #f0f6fd; line-height: 44px; letter-spacing: -0.01em;">{% if is_complete %}{{ completed_at|date:"M j, Y" }}{% else %}{{ started_at|date:"M j, Y" }}{% endif %}</div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 8px;">{% if is_complete %}Finished{% else %}Started{% endif %}</div>
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ plaque.date }}px; font-weight: 700; color: #f0f6fd; line-height: {{ plaque.num }}px; letter-spacing: -0.01em;">{% if is_complete %}{{ completed_at|date:"M j, Y" }}{% else %}{{ started_at|date:"M j, Y" }}{% endif %}</div>
+                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: {{ plaque.label_gap }}px;">{% if is_complete %}Finished{% else %}Started{% endif %}</div>
                 </div>
             </div>
         </div>

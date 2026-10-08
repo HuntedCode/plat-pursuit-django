@@ -45,12 +45,25 @@ _NO_DISCIPLINE_COLOUR = '#8a939f'
 #: and "card-shark" at 26px overflows a 64px well. A briefcase, because whatever the square was, it was a job.
 _FALLBACK_JOB_GLYPH = JOB_ICON_PATHS['briefcase']
 
-#: Job Coverage board geometry, in px. The card's content width, the gap between covers, and the cover width
-#: the shelves are designed at (five shelves of five, 3-over-2, see partials/_challenge_card_jobs.html).
+#: Job Coverage board geometry, in px: the card's content width, the gap between covers, the least gap
+#: between shelves, and the widest a cover gets. A shelf is THREE ROWS deep (see _challenge_card_jobs.html),
+#: so the cover's ceiling is set by the card's HEIGHT: 78x104 leaves the rows ~20px of air above and below once
+#: the header and the plaque have theirs (81 fitted, touching). Width allows far more on the designed shape
+#: (~101px), so height is what binds.
 _BOARD_WIDTH = 1112
 _COVER_GAP = 6
 _SHELF_GAP_MIN = 16
-_COVER_W_MAX = 64
+_COVER_W_MAX = 78
+_SHELF_ROWS = 3
+
+#: The plaque's sizes, per type. A-Z keeps the plaque it shipped with; Job Coverage's is slimmer, because its
+#: shelves are three covers deep and the height they need comes out of the header and the plaque.
+_PLAQUE = {
+    'full': {'avatar': 72, 'pad': '20px 26px', 'name': 32, 'line': 18, 'num': 44, 'num_sub': 25,
+             'date': 27, 'label_gap': 8, 'stat_gap': 40},
+    'slim': {'avatar': 60, 'pad': '14px 24px', 'name': 28, 'line': 16, 'num': 38, 'num_sub': 22,
+             'date': 24, 'label_gap': 6, 'stat_gap': 32},
+}
 
 #: How many images download at once on a cold cache. A fully cold card is 27 (26 covers and the avatar),
 #: so 8 at a time is about four waves, where in series it would be 27. That is a REDUCTION, not a bound:
@@ -117,6 +130,7 @@ def build_card_context(challenge, *, cache_images=False):
         'started_at': challenge.created_at,
         'completed_at': challenge.completed_at,
         'days': _days(challenge),
+        'plaque': _PLAQUE['slim' if is_jobs else 'full'],
     }
     if is_jobs:
         context['shelves'] = shelves
@@ -134,16 +148,20 @@ def build_card_context(challenge, *, cache_images=False):
 def _shelf_geometry(shelves):
     """Cover and shelf sizes that FIT, whatever the catalogue did to the run.
 
-    Designed at five shelves of five: three covers over two, the sixth cell the tally, covers 64x85. Two
-    catalogue changes break that shape, and both are real: deleting a `Job` (its square lands on a shelf of
-    its own, so SIX shelves -- 6 x 204px is wider than the card) and a staff edit to `Job.discipline` (a shelf
-    of SIX, whose tally wraps to a third row and pushes the plaque off the 630px canvas). So the shelves are
-    always TWO rows, with as many columns as the biggest shelf needs, and the covers shrink to fit the width.
-    On the designed shape this returns exactly the designed numbers.
+    Designed at five shelves of five, each TWO covers across and THREE deep, the sixth cell the tally, covers
+    78x104 -- near the A-Z card's 80x107. (It was three across and two deep at 64x85 first, and the
+    owner's verdict was that the art was too small to make out, which is the point of the card. Fifteen
+    columns was the cost; ten is what standing the shelves on end buys.)
+
+    Two catalogue changes break the designed shape, and both are real: deleting a `Job` (its square lands on
+    a shelf of its own, so SIX shelves) and a staff edit to `Job.discipline` (a shelf of SIX, which needs a
+    seventh cell for its tally). So the rows stay at three, the columns grow to what the biggest shelf needs,
+    and the covers shrink until every shelf fits the width. On the designed shape it returns the designed
+    numbers.
     """
     count = max(len(shelves), 1)
     cells = max((len(shelf['squares']) for shelf in shelves), default=0) + 1     # the tally takes a cell
-    columns = max(3, -(-cells // 2))                                            # ceil, two rows
+    columns = max(2, -(-cells // _SHELF_ROWS))                                  # ceil
     room = (_BOARD_WIDTH - (count - 1) * _SHELF_GAP_MIN) // count
     cover_w = min(_COVER_W_MAX, (room - (columns - 1) * _COVER_GAP) // columns)
     scale = cover_w / _COVER_W_MAX
@@ -151,10 +169,10 @@ def _shelf_geometry(shelves):
         'cover_w': cover_w,
         'cover_h': round(cover_w * 4 / 3),
         'shelf_w': columns * cover_w + (columns - 1) * _COVER_GAP,
-        'mark_px': round(21 * scale),
-        'well_px': round(26 * scale),
-        'tally_px': round(30 * scale),
-        'tally_sub_px': round(18 * scale),
+        'mark_px': round(26 * scale),
+        'well_px': round(33 * scale),
+        'tally_px': round(36 * scale),
+        'tally_sub_px': round(22 * scale),
     }
 
 

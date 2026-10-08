@@ -561,13 +561,14 @@ def test_the_job_card_renders_its_own_words():
     _fill_job(run, profile, slug, complete=True)
     html = render_to_string(share_card.CARD_TEMPLATE, share_card.build_card_context(run))
     assert 'Job Coverage Challenge' in html and 'A&ndash;Z' not in html
-    assert '1 job down, 24 to go.' in html
+    # NO SUBLINE on this card: its height went to the covers, and the plaque's 1/25 says the same thing.
+    assert 'to go.' not in html and 'One game for every' not in html
     assert '>Job XP<' in html and '>Jobs<' in html
     assert re.search(r'>0</div>\s*<div[^>]*>Job XP<', html), 'nothing is paid yet, so the stat must read 0'
     rewards.redeem_slot(run, profile, slug)
     html = render_to_string(share_card.CARD_TEMPLATE, share_card.build_card_context(run))
     assert re.search(r'>6,000</div>\s*<div[^>]*>Job XP<', html), 'the XP stat lost its value'
-    assert '1<span style="font-size: 18px; color: #8a939f;">/5</span>' in html, 'a shelf tally is missing'
+    assert '1<span style="font-size: 22px; color: #8a939f;">/5</span>' in html, 'a shelf tally is missing'
 
     az = render_to_string(share_card.CARD_TEMPLATE, share_card.build_card_context(_az_run(_hunter())))
     assert '>Job XP<' not in az, 'A-Z pays no XP, so its plaque has no XP stat'
@@ -591,10 +592,21 @@ def test_the_job_card_costs_the_same_however_full_the_run():
 
 
 def test_the_designed_shape_keeps_the_designed_geometry():
-    """Five shelves of five: 64x85 covers on 204px shelves, the numbers the card was drawn at."""
+    """Five shelves of five, two across and three deep: 78x104 covers on 162px shelves. The art was too small
+    to make out at the first cut's 64x85 (owner, 2026-10-08), which is the one thing the card is for."""
     board = share_card.build_card_context(_jobs_run(_hunter()))['board']
-    assert (board['cover_w'], board['cover_h'], board['shelf_w']) == (64, 85, 204)
-    assert (board['mark_px'], board['well_px'], board['tally_px']) == (21, 26, 30)
+    assert (board['cover_w'], board['cover_h'], board['shelf_w']) == (78, 104, 162)
+    assert (board['mark_px'], board['well_px'], board['tally_px']) == (26, 33, 36)
+
+
+def test_the_job_card_has_the_slim_plaque_and_a_z_keeps_its_own():
+    """The height three rows of covers need comes out of the Job Coverage plaque; the A-Z card's approved
+    plaque is untouched."""
+    jobs = share_card.build_card_context(_jobs_run(_hunter()))
+    az = share_card.build_card_context(_az_run(_hunter()))
+    assert jobs['plaque'] == share_card._PLAQUE['slim']
+    assert az['plaque'] == share_card._PLAQUE['full']
+    assert az['plaque']['avatar'] == 72 and az['plaque']['num'] == 44
 
 
 def _fits(context):
@@ -603,7 +615,8 @@ def _fits(context):
     width = len(shelves) * board['shelf_w'] + (len(shelves) - 1) * share_card._SHELF_GAP_MIN
     columns = (board['shelf_w'] + share_card._COVER_GAP) // (board['cover_w'] + share_card._COVER_GAP)
     assert width <= share_card._BOARD_WIDTH, f'{len(shelves)} shelves need {width}px'
-    assert all(len(sh['squares']) + 1 <= columns * 2 for sh in shelves), 'a shelf wraps to a third row'
+    rows = share_card._SHELF_ROWS
+    assert all(len(sh['squares']) + 1 <= columns * rows for sh in shelves), f'a shelf wraps past {rows} rows'
 
 
 def test_a_deleted_job_still_fits_and_never_prints_its_slug():
@@ -635,9 +648,10 @@ def test_a_deleted_job_still_fits_and_never_prints_its_slug():
     assert sized == 25 + 6, f'{sized} cells at the computed size; the squares ignore the geometry'
 
 
-def test_a_discipline_edit_still_fits_in_two_rows():
-    """A staff edit to `Job.discipline` makes a shelf of SIX, whose tally wrapped to a third row and pushed the
-    plaque off the 630px canvas. The board widens its shelves instead."""
+def test_a_discipline_edit_still_fits_the_card():
+    """A staff edit to `Job.discipline` makes a shelf of SIX, which needs a seventh cell for its tally -- more
+    than two columns of three rows hold. Wrapping a fourth row would push the plaque off the 630px canvas, so
+    the board widens its shelves and shrinks the covers instead."""
     profile = _hunter()
     run = _jobs_run(profile)
     moved = Job.objects.filter(discipline='mind').first()
@@ -647,4 +661,4 @@ def test_a_discipline_edit_still_fits_in_two_rows():
     context = share_card.build_card_context(run)
     assert max(len(sh['squares']) for sh in context['shelves']) == 6
     _fits(context)
-    assert context['board']['cover_w'] < 64
+    assert context['board']['cover_w'] < share_card._COVER_W_MAX

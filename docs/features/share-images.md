@@ -140,13 +140,19 @@ board's vocabulary: **done** (full cover, green check while the run is live), **
 behind a primary border), **open** (dashed well, letter set large).
 
 **Job Coverage layout: five discipline shelves.** One shelf per discipline in the radar's order, headed by
-its glyph and name in its colour, covers 3-over-2 at 64x85, and the sixth cell is that discipline's tally
-(4/5, in the discipline's colour once the shelf is full). The shelves come from `slot_render.slot_groups`,
-the live board's own grouping. The plaque adds a fourth stat, **job XP paid**: `rewards.summary`'s
-`paid_xp`, the reward panel's figure, so XP still behind a Claim button never appears on a card.
+its glyph and name in its colour, covers two across and three deep at 78x104, and the sixth cell is that
+discipline's tally (4/5, in the discipline's colour once the shelf is full). The shelves come from
+`slot_render.slot_groups`, the live board's own grouping. The plaque adds a fourth stat, **job XP paid**:
+`rewards.summary`'s `paid_xp`, the reward panel's figure, so XP still behind a Claim button never appears on
+a card.
+
+**Why three deep, and what it cost.** The first cut was three across and two deep at 64x85, and the art was
+too small to make out (owner, 2026-10-08). Fifteen columns was the reason; standing the shelves on end gets
+ten, and covers near the A-Z card's 80x107. The extra height comes from this card's header (no subline: the
+plaque's 13/25 says it) and a slimmer plaque (`share_card._PLAQUE['slim']`). A-Z keeps its own.
 
 **Finished AND in-progress runs** are shareable (owner's call): halfway through is worth showing, and the
-header pill and subline say which it is. A hidden run has no card.
+header pill (and, on A-Z, the subline) say which it is. A hidden run has no card.
 
 **Where it lives:** a Share button on the run's own page (owner only) and on My Challenges (each live run
 card and each finished row, for the types that have a card). One `#cc-share` dialog per page, opened by any `[data-challenge-share]`
