@@ -564,7 +564,9 @@ class Command(BaseCommand):
         live contract for any job), nothing freed the active slot, so the second `start` hands the same run
         back -- which the first draft then tagged a second time, leaving two runs where three were promised.
         """
-        challenge, outcome = svc.start_reporting(profile, challenge_type)
+        # `backfill=False`: a Calendar run fills from the hunter's real history at creation, and the demo
+        # draws a DESIGNED board instead (see `_calendar_run`). The other types ignore the flag.
+        challenge, outcome = svc.start_reporting(profile, challenge_type, backfill=False)
         if outcome != svc.CREATED:
             self.stdout.write(self.style.WARNING(
                 '  skipped "%s": %s already has a run of this type (%s), and this command will not adopt a '

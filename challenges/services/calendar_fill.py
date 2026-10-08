@@ -5,8 +5,10 @@ THREE CONSUMERS, TWO OF THEM ALREADY WIRED -- the nightly sweep, the sync hook (
 a rule like this has no home is that each of them derives it slightly differently: the day modal listing
 games that "satisfy" a day has to agree, exactly, with the predicate that filled it, or a hunter opens a
 filled day to an empty list. So the predicates live here and nothing re-derives them.
-(This said "the opening backfill" rather than the sweep. `challenge_service.start` does no backfill at
-all -- it `bulk_create`s the 365 empty rows and the first pass fills them.)
+A FOURTH WRITER, at creation: `challenge_service.start_reporting` calls `apply_to_run` on a new run
+right after `bulk_create`ing its 365 rows, so the first visit (the opening ceremony) shows the backfilled
+history rather than an empty board waiting for a sync. It used to leave the rows empty for the first
+sweep, and the ceremony then read "0 of 365 days".
 
 THE TWO VIEWS:
 

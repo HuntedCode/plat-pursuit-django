@@ -261,15 +261,14 @@ def test_a_hunter_with_no_platinums_costs_nothing_and_returns_empty():
 # ── writing the fills onto a run ─────────────────────────────────────────────────────────────────
 
 def _calendar_run(profile):
+    """A run with its 365 rows EMPTY, so the tests below can watch `apply_to_run` do the first fill.
+
+    `backfill=False` because creation now fills from history itself (see the creation tests further
+    down); without the opt-out every "newly filled" figure here would read 0."""
     from challenges.models import CHALLENGE_TYPE_CALENDAR
     from challenges.services import challenge_service as svc
 
-    original = svc.TYPES_NOT_YET_CREATABLE
-    svc.TYPES_NOT_YET_CREATABLE = frozenset()
-    try:
-        return svc.start(profile, CHALLENGE_TYPE_CALENDAR)
-    finally:
-        svc.TYPES_NOT_YET_CREATABLE = original
+    return svc.start_reporting(profile, CHALLENGE_TYPE_CALENDAR, backfill=False)[0]
 
 
 def test_the_backfill_writes_the_views_onto_the_right_squares():
@@ -1424,3 +1423,83 @@ def test_hiding_a_finished_run_still_takes_it_off_the_public_board():
 
     assert not Challenge.objects.visible().filter(pk=run.pk).exists(), (
         'a finished run could no longer be taken off the public board')
+
+
+# ── filled at creation ───────────────────────────────────────────────────────────────────────────
+
+def _start_calendar(profile):
+    from challenges.models import CHALLENGE_TYPE_CALENDAR
+    from challenges.services import challenge_service as svc
+
+    return svc.start(profile, CHALLENGE_TYPE_CALENDAR)
+
+
+def test_a_new_run_is_filled_from_history_the_moment_it_is_created():
+    """The first visit is the opening ceremony, "Here is where you stand". Left to the next sync it read
+    "0 of 365 days already filled" for a hunter whose history fills dozens."""
+    profile = _hunter()
+    _platted(profile, _utc(2019, 3, 3))
+    _platted(profile, _utc(2020, 7, 4))
+    _platted(profile, _utc(2021, 9, 9), shovelware=True)
+    profile.total_plats = 3
+    profile.save(update_fields=['total_plats'])
+
+    run = _start_calendar(profile)
+
+    run.refresh_from_db()
+    assert run.filled_count == 2, 'the shovelware-free days were not filled at creation'
+    assert run.calendar_days.get(month=3, day=3).in_clean
+    assert run.calendar_days.get(month=9, day=9).in_all
+    # THE WATERMARK IS STAMPED TOO, so tonight's sweep sees nothing moved rather than refilling the run.
+    assert run.calendar_plats_seen == 3
+    assert run not in calendar_fill.runs_due_for_sweep()
+
+
+def test_the_opt_out_leaves_the_rows_empty():
+    """`seed_challenge_demo` draws a designed board, so it must be able to start a run without the real fill."""
+    from challenges.models import CHALLENGE_TYPE_CALENDAR
+    from challenges.services import challenge_service as svc
+
+    profile = _hunter()
+    _platted(profile, _utc(2019, 3, 3))
+    run = svc.start_reporting(profile, CHALLENGE_TYPE_CALENDAR, backfill=False)[0]
+    run.refresh_from_db()
+    assert run.filled_count == 0
+    assert not run.calendar_days.filter(in_all=True).exists()
+
+
+def test_a_failed_fill_never_blocks_the_start(monkeypatch, caplog):
+    """The fill runs in its own savepoint: if it raises, the run still starts (the next sync or sweep fills
+    it, as every run used to be filled), and the failure is logged rather than swallowed."""
+    from challenges.models import Challenge
+
+    def boom(challenge, **kwargs):
+        # A DATABASE error, not a plain raise: Postgres marks the transaction aborted, and only the
+        # savepoint around the fill lets `start` keep going. A bare try/except would catch this and then
+        # die on the very next statement.
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1 / 0')
+
+    monkeypatch.setattr(calendar_fill, 'apply_to_run', boom)
+    profile = _hunter()
+    _platted(profile, _utc(2019, 3, 3))
+
+    run = _start_calendar(profile)
+
+    assert Challenge.objects.filter(pk=run.pk).exists()
+    assert run.calendar_days.count() == 365, 'the rows were rolled back with the failed fill'
+    assert 'calendar backfill at creation failed' in caplog.text
+    run.refresh_from_db()   # the connection is still usable after the failure
+
+
+def test_only_a_new_run_is_filled_at_creation(monkeypatch):
+    """Resuming or continuing a run costs no history pass: a hidden run keeps filling while hidden, so the
+    sync and the sweep already have it."""
+    calls = []
+    real = calendar_fill.apply_to_run
+    monkeypatch.setattr(calendar_fill, 'apply_to_run', lambda c, **kw: calls.append(c.pk) or real(c, **kw))
+    profile = _hunter()
+
+    run = _start_calendar(profile)
+    _start_calendar(profile)   # already active: handed back, not refilled
+    assert calls == [run.pk]

@@ -1248,3 +1248,24 @@ def test_the_seeded_opening_month_comes_from_the_boards_own_clock(catalogue, mon
 
     assert seen, 'the calendar runs were never seeded, so this proves nothing'
     assert set(seen) == {7}, 'the opening month does not come from `today_key`: %s' % seen
+
+
+@override_settings(DEBUG=True)
+def test_the_seeded_calendar_never_runs_the_real_backfill(catalogue, monkeypatch):
+    """The demo draws a DESIGNED board, so it opts out of the history fill at creation: a dev profile's real
+    platinums would otherwise fill squares the design leaves empty. Every fill it makes carries `found=`."""
+    from challenges.services import calendar_fill
+
+    real = calendar_fill.apply_to_run
+    unscoped = []
+
+    def spy(challenge, *, found=None):
+        if found is None:
+            unscoped.append(challenge.pk)
+        return real(challenge, found=found)
+
+    monkeypatch.setattr(calendar_fill, 'apply_to_run', spy)
+    profile = _hunter()
+    _seed(profile)
+    assert profile.challenges.filter(challenge_type='calendar').exists(), 'no Calendar run was seeded'
+    assert not unscoped, 'the seeder filled a Calendar run from the real history'

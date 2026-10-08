@@ -59,6 +59,8 @@ square -- what it says on the card years later -- not matching.
 The lookup still belongs in this module when it is written, so there is one rule rather than one per
 detector.
 """
+import logging
+
 from django.conf import settings
 from django.db import models, transaction
 from django.db.models import Exists, OuterRef, Q
@@ -81,7 +83,7 @@ from challenges.models import (
     TYPES_NOT_YET_CREATABLE,
     calendar_day_keys,
 )
-from challenges.services import eligibility
+from challenges.services import calendar_fill, eligibility
 from trophies.models import EarnedContract, Job, Profile
 
 
@@ -346,8 +348,11 @@ def start(profile, challenge_type):
     return start_reporting(profile, challenge_type)[0]
 
 
+logger = logging.getLogger(__name__)
+
+
 @transaction.atomic
-def start_reporting(profile, challenge_type):
+def start_reporting(profile, challenge_type, *, backfill=True):
     """Start a run of `challenge_type` -- or hand back the one already in progress.
 
     Returns `(challenge, outcome)` -- the same ARITY as Django's `get_or_create`, though that returns a
@@ -363,7 +368,8 @@ def start_reporting(profile, challenge_type):
        back rather than dealing a fresh one. Nothing to reroll into anyway -- the hunter picks every
        slot themselves, so a "new" run is identical in every respect except that it would have thrown
        away completed work.
-    3. Otherwise create one, with its full set of empty slots.
+    3. Otherwise create one, with its full set of empty slots -- except a Calendar run, whose days are
+       filled from the hunter's history at once (`_backfill_calendar`; `backfill=False` opts out).
 
     The lock is on the PROFILE, not on the challenges. `@transaction.atomic` alone does nothing here:
     at READ COMMITTED two requests both find no active run, both insert, and one dies on the unique
@@ -436,11 +442,37 @@ def start_reporting(profile, challenge_type):
         CalendarDay.objects.bulk_create([
             CalendarDay(challenge=challenge, month=month, day=day) for month, day in keys
         ])
+        if backfill:
+            _backfill_calendar(challenge)
     else:
         ChallengeSlot.objects.bulk_create([
             ChallengeSlot(challenge=challenge, key=key, position=i) for i, key in enumerate(keys)
         ])
     return challenge, CREATED
+
+
+def _backfill_calendar(challenge):
+    """Fill a brand-new Calendar run from the hunter's whole platinum history, before the page opens.
+
+    WHY AT CREATION (owner, 2026-10-08). The run page's first visit is the opening ceremony, "Here is
+    where you stand", and the type tutorial says your whole history counts. Left to the next sync or the
+    nightly sweep, both of those met an EMPTY board: "0 of 365 days already filled" for a veteran with
+    two thousand platinums.
+
+    AFFORDABLE ON THE REQUEST PATH: `filled_days` is one grouped aggregate in the database returning at
+    most 365 rows, whale-safe by construction, and `apply_to_run` stamps the platinum watermark so the
+    sweep does not redo it tonight.
+
+    CONTAINED IN ITS OWN SAVEPOINT. A fill that raises must not take the run's creation down with it:
+    the run starts, the failure is logged, and the next sync or sweep fills it as before -- the state
+    every run was in before this existed. A bare try/except inside the outer atomic block would leave the
+    transaction broken, so the savepoint is what makes the catch safe.
+    """
+    try:
+        with transaction.atomic():
+            calendar_fill.apply_to_run(challenge)
+    except Exception:
+        logger.exception('calendar backfill at creation failed for challenge %s', challenge.pk)
 
 
 @transaction.atomic

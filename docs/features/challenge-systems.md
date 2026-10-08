@@ -101,6 +101,10 @@ NOT the trophy tracker's stricter `status == 'clean'` (which also excludes `manu
   east. `CalendarDay.earned_on` stores the resolved local **date** for that reason.
 - **`hide_hiddens` is ignored.** The Hall of Fame is a board, and `Profile.total_trophies_raw` exists
   because ranking on a filter-respecting figure makes a board unreproducible by anyone but its owner.
+- **A new run is filled at creation.** `start_reporting` runs `apply_to_run` straight after creating the
+  365 rows, in its own savepoint (a failed fill is logged and left to the next sync or sweep; it never
+  blocks the start). Without it the first visit, which is the opening ceremony, read "0 of 365 days".
+  `seed_challenge_demo` passes `backfill=False` because it draws a designed board instead.
 - **Fills are monotone.** A day that is true is never set false. The predicate can stop matching for
   reasons that are not the hunter's doing — a game reclassified as shovelware, a removed trophy row — and
   none may retract an earned square.
