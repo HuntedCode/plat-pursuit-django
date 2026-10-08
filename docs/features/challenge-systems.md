@@ -56,37 +56,40 @@ settled on 2026-09-26. That reversal is recorded rather than edited away, in the
 | Its rows | `ChallengeSlot` | `ChallengeSlot` | **`CalendarDay`** |
 | The atom | a Contract | a Contract | **a date** |
 | What fills it | a Contract whose `name` starts with that letter | a Contract carrying that job | the hunter's own history — nothing is picked |
-| Win condition | every letter | every job, Freelancer included | every day, in a *genuine* view (below) |
+| Win condition | every letter | every job, Freelancer included | every day, filled by a shovelware-free platinum (below) |
 
 **The Calendar is the one type whose atom is not a Contract**, which is why several rules stated elsewhere
 in this doc as if they were universal describe the first two only. It also picks nothing: its squares are
 filled from the hunter's trophy history rather than chosen, so it has no picker, no eligibility query, no
 scarcity hatch and no importer.
 
-### The Calendar's three views
+### The Calendar's one lens
 
-One run, three independent lenses. A day is filled per view, and the views do **not** uniformly nest.
+**A day is filled by a shovelware-free platinum earned on that calendar day, in any year.** That is the
+whole rule, and it is the only board drawn. It was three lenses until 2026-10-04 (all platinums,
+shovelware-free, and contracts), collapsed by the owner's call: *"perhaps we should condense down to just
+one view: non-shovelware plats. It makes the system much simpler ... I know contracts fuel the other
+challenges but those are more curated sets of games and this is more wholistic."* A Contract is a curated
+subset of the catalogue; a Calendar is a hunter's whole platinum history laid against the year, and a
+switcher between them was conflating two kinds of object. `challenges/models.py` records what the collapse
+took with it (the contracts lens and its expensive fill, `Challenge.completed_view`,
+`calendar_contracts_seen`, and a whole class of cross-lens defect).
 
-| View | A day is filled by | Nests inside `all`? |
+| Population | Stored as | Drawn? |
 |---|---|---|
-| `all` | any platinum earned on that calendar day | — |
-| `clean` | the same, minus platinums on shovelware games | **yes**, enforced by `calendarday_clean_implies_all` |
-| `contracts` | a Contract completion, keyed on its earliest qualifying moment | **no** |
+| shovelware-free platinums | `CalendarDay.in_clean` | **yes**: the fill, the progress number, the ladder, the completion |
+| every platinum, shovelware included | `CalendarDay.in_all` | no: a comparison figure only ("297 shovelware-free of 340 platinum days") |
 
-`clean` nests because a shovelware-free platinum is still a platinum. `contracts` does not, for two
-structural reasons: a contract reaches its 100% tier from `progress=100` with **no platinum term**, and a
-contracts day is keyed on the *contract's* completion moment — the earliest qualifying date across its
-member concepts — which differs from any one platinum's whenever a 100% lands later or a contract covers
-several concepts.
+`in_clean` implies `in_all` by construction (a shovelware-free platinum is still a platinum), and
+`calendarday_clean_implies_all` enforces it. Both come out of one fill statement, so keeping `in_all`
+costs nothing and makes the headline interpretable rather than a bare number.
 
-**Completion keys on the genuine views only.** A run finishes when `clean` **or** `contracts` fills,
-whichever comes first, and `Challenge.completed_view` records which. `all` never finishes a run: it is the
-lens shovelware inflates, so it carries the early day-marker ladder and nothing else. A hunter can
-therefore hold "filled all 365 days" and still have an unfinished run — which looks like a bug in a
-screenshot and is the design.
+**One lens means one finish.** A run completes when all 365 days are filled shovelware-free, the progress
+number is that count, and the 365 rung of the title ladder IS the finish. A complete run cannot change
+afterwards: 365 clean days are 365 all days too.
 
-**The progress number is the best genuine view**, the higher of `clean` and `contracts`, because either
-completing ends the run. Leading with `all` would show a card at 298/365 on a run that completes at 164.
+The shovelware rule is the **broad** `SHOVELWARE_FLAGGED_STATUSES`, matching the Shovelware Free board,
+NOT the trophy tracker's stricter `status == 'clean'` (which also excludes `manually_cleared`).
 
 ### Calendar rules worth knowing before you touch it
 
@@ -97,13 +100,15 @@ completing ends the run. Leading with `all` would show a card at 298/365 on a ru
   east. `CalendarDay.earned_on` stores the resolved local **date** for that reason.
 - **`hide_hiddens` is ignored.** The Hall of Fame is a board, and `Profile.total_trophies_raw` exists
   because ranking on a filter-respecting figure makes a board unreproducible by anyone but its owner.
-- **Fills are monotone.** A day that is true is never set false. The predicates can stop matching for
-  reasons that are not the hunter's doing — a reclassification, a `reconcile_contracts` deletion, a staff
-  `igdb_id` edit — and none may retract an earned square.
-- **The sweep reconciles before it refreshes.** `calendar_fill.runs_due_for_sweep()` compares two stored
-  counters (the hunter's platinum count and their earned-contract count) against live values in one
-  site-wide query. A run whose numbers have not moved is skipped without reading a trophy, because
-  recomputing a whole history is the expensive thing and most syncs cannot fill a day.
+- **Fills are monotone.** A day that is true is never set false. The predicate can stop matching for
+  reasons that are not the hunter's doing — a game reclassified as shovelware, a removed trophy row — and
+  none may retract an earned square.
+- **The sweep reconciles before it refreshes.** `calendar_fill.runs_due_for_sweep()` compares ONE stored
+  counter, the hunter's platinum count at the last pass, against `Profile.total_plats` in one site-wide
+  query. A run whose number has not moved is skipped without reading a trophy, because recomputing a whole
+  history is the expensive thing and most syncs cannot fill a day. (There was a second counter for earned
+  contracts while the contracts lens existed; it went with the lens.) **What it cannot see:** a shovelware
+  reclassification moves no counter, so after a bulk one run `process_challenges --all-calendars`.
 - **Refresh one hunter by hand** with `process_challenges --user <psn_username> --only calendar`. It
   deliberately ignores the reconciliation check — you reach for it when you suspect the watermarks are
   wrong.

@@ -331,10 +331,15 @@ def test_the_backfill_is_idempotent():
     assert run.calendar_days.get(month=6, day=6).filled_at == stamped, 'the fill was re-stamped'
 
 
-def test_the_progress_number_is_the_best_genuine_view_not_all_platinums():
-    """`filled_count` tracks the higher of clean and contracts, because either completing finishes the
-    run. All-platinums is the lens shovelware inflates and cannot finish anything, so leading with it
-    would show a card closer to done than the run actually is."""
+def test_the_progress_number_counts_shovelware_free_days_not_all_platinums():
+    """`filled_count` counts SHOVELWARE-FREE days, the one lens the board draws and the only one that can
+    finish a run. All-platinums is kept as a comparison counter (`in_all`) and is the figure shovelware
+    inflates, so leading with it would show a card closer to done than the run actually is.
+
+    (This used to say "the higher of clean and contracts": the Calendar had three lenses until the
+    2026-10-04 collapse. The assertions did not change, because with the contracts lens gone the higher of
+    the two genuine views simply IS the clean count.) It replaces a source-text pin in
+    `test_challenge_models.py` that guarded the stated rule while there was no behaviour to test."""
     profile = _hunter()
     _platted(profile, _utc(2019, 1, 1), shovelware=True)
     _platted(profile, _utc(2019, 2, 2), shovelware=True)

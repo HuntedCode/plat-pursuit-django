@@ -488,11 +488,11 @@ def platinums_on_day(profile, month, day):
 
 
 def apply_to_run(challenge, *, found=None):
-    """Write this hunter's filled days onto a Calendar run, and finish it if a genuine view is full.
+    """Write this hunter's filled days onto a Calendar run, and finish it once all 365 are shovelware-free.
 
-    Returns the number of days this pass NEWLY FILLED -- squares that held no view before and hold one
-    now -- so a caller can say "you start at 154 days" without counting again. A square that merely
-    gained a second view is not a new day and does not count toward it.
+    Returns the number of days this pass NEWLY FILLED -- squares that held neither population before and
+    hold one now -- so a caller can say "you start at 154 days" without counting again. A square promoted
+    from `in_all` to `in_clean` was already filled and does not count toward it.
 
     REFUSES ANYTHING THAT IS NOT A CALENDAR RUN, and that guard is not defensive tidiness. The recount
     below aggregates over `calendar_days`, which is EMPTY for an A-Z or Job Coverage run -- so without
@@ -508,10 +508,9 @@ def apply_to_run(challenge, *, found=None):
     that read the same rows and write all five columns back can RETRACT each other's fills, breaking the
     monotone guarantee below by concurrency rather than by a predicate.
 
-    FILLS ARE MONOTONE: a day that is true is never set back to false. The predicates can legitimately
-    stop matching -- a game is reclassified as shovelware, `reconcile_contracts` deletes an
-    `EarnedContract` when derived membership moves, a staff `igdb_id` edit changes who qualifies -- and
-    none of those are things the hunter did. Un-filling on any of them would retract an earned square for
+    FILLS ARE MONOTONE: a day that is true is never set back to false. The predicate can legitimately
+    stop matching -- a game is reclassified as shovelware, an `EarnedTrophy` row is removed -- and none of
+    those are things the hunter did. Un-filling on any of them would retract an earned square for
     catalogue bookkeeping they never saw, which is the same rule `ChallengeSlot` follows by snapshotting
     its contract. So this ORs the new state onto the old.
 
@@ -760,34 +759,31 @@ def runs_due_for_sweep():
     """Calendar runs whose numbers have actually MOVED since the sweep last looked. One query, site-wide.
 
     A RECONCILIATION CHECK, NOT A REFRESH. The expensive thing here is recomputing a hunter's whole
-    platinum history -- around ninety queries for someone with three thousand earned contracts -- so the
-    sweep asks a cheap question first and only pays for the runs that answer yes.
+    platinum history -- one aggregate over every platinum the hunter holds, which scales with the
+    hunter's library -- so the sweep asks a cheap question first and only pays for the runs that answer
+    yes.
 
     THE CHEAP QUESTION IS NOT "HAS THIS HUNTER SYNCED". That was the first attempt and it is far too
     wide: `last_synced` moves on every sync, and a sync earns a platinum only occasionally -- most carry
     bronzes, silvers and golds, none of which can fill a calendar day. Scoping that way recomputes a full
     history for everyone who opened the app that day, to discover nothing.
 
-    THE RIGHT QUESTION IS "COULD ANYTHING HAVE FILLED A DAY", and two counters answer it exactly:
+    THE RIGHT QUESTION IS "COULD ANYTHING HAVE FILLED A DAY", and one counter answers it exactly:
+    `Profile.total_plats`, since a day in either stored population needs a platinum. It is compared against
+    the watermark stored on the run, and a run whose number has not moved is skipped without reading a
+    single trophy.
 
-    - `Profile.total_plats` covers the all-platinums and shovelware-free views, since a day in either
-      needs a platinum; and
-    - (THERE WAS A SECOND WATERMARK HERE, `calendar_contracts_seen`, because the contracts view could
-      move WITHOUT a platinum. The lens collapse deleted the column and this function's second
-      question with it, so the reconciliation is now a single-column comparison -- which is what the
-      body does. This list described two watermarks for several slices after there was one.)
-      because a contract reaches its 100% tier with no platinum term.
-
-    Both are compared against watermarks stored on the run. A run whose numbers have not moved is skipped
-    without reading a single trophy.
+    (There was a second watermark, `calendar_contracts_seen`, because the contracts lens could move WITHOUT
+    a platinum -- a contract reaches its 100% tier with no platinum term. The lens collapse deleted the
+    column and this function's second question with it. This docstring described two watermarks for
+    several slices after there was one.)
 
     WHAT IT CANNOT SEE, stated plainly because the cron doc briefly claimed otherwise. A SHOVELWARE
-    RECLASSIFICATION moves neither counter and genuinely changes the `clean` view: `auto_flagged ->
+    RECLASSIFICATION moves no counter and genuinely changes the `clean` population: `auto_flagged ->
     clean` is a routine outcome of `update_shovelware`, and staff write `manually_cleared` by hand.
     So a hunter whose platinumed game is un-flagged does not become due, and that day fills only on
-    their next platinum or earned contract -- for a dormant hunter, never. Two smaller cases share the
-    shape: a staff `igdb_id` edit that moves a contract's member concepts, and a hunter changing their
-    timezone, which re-keys every day while moving no counter.
+    their next platinum -- for a dormant hunter, never. A hunter changing their timezone has the same
+    shape: it re-keys every day while moving no counter.
     A third watermark was considered and rejected. The only cheap site-wide signal is "some game's flag
     moved tonight", which marks EVERY run due and defeats the reconciliation on any night
     `update_shovelware` touches anything; targeted invalidation means shovelware detection reaching into

@@ -763,29 +763,3 @@ def test_a_finished_calendar_run_records_no_finishing_view():
     """
     assert not hasattr(Challenge, 'completed_view'), (
         'a one-lens run has no finishing view to record; re-adding the column means re-adding a lens')
-
-
-def test_the_progress_number_is_not_the_all_platinums_count():
-    """A DOC-LEVEL PIN on the one thing a later reader is most likely to "fix".
-
-    `filled_count` for a Calendar run tracks the best GENUINE view (the higher of shovelware-free and
-    contracts), not all-platinums -- because either genuine view completing finishes the run, so that
-    number is distance-to-finish. All-platinums is the easiest lens and cannot finish anything, so
-    leading with it shows a card at 298/365 whose run completes on a view sitting at 164.
-
-    Nothing writes these yet (the fill lands in the next slice), so this pins the STATED rule where the
-    next implementer will read it. It fails if the reasoning is deleted rather than if the code drifts,
-    which is weaker than a behavioural test and is the honest thing to have until there is behaviour.
-    """
-    import inspect
-
-    from challenges import models as m
-
-    source = inspect.getsource(m.Challenge)
-    head = source[:source.index('filled_count = models')]
-
-    assert 'BEST GENUINE VIEW' in head, (
-        'the rule that `filled_count` tracks the best genuine view is gone from where it is read')
-    assert 'all-platinums count is deliberately NOT it' in head, (
-        'the reason all-platinums is not the headline number is gone, which is the part that gets '
-        '"simplified" back')

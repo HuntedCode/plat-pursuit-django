@@ -332,12 +332,10 @@ class Challenge(models.Model):
     #: assigned, `completed_count` is slots finished, and the gap between them is what "planned" shows.
     #:
     #: FOR A CALENDAR RUN THEY ARE EQUAL, because a day has no assigned-but-unfinished state -- it is
-    #: filled or it is not -- and both track the BEST GENUINE VIEW: the higher of the shovelware-free and
-    #: contracts counts. Since either of those completing finishes the run, that number is literally
-    #: distance-to-finish. The all-platinums count is deliberately NOT it: that view is the one
-    #: shovelware inflates and it cannot finish a run, so leading with it would show a card at 298/365
-    #: whose run completes on a view sitting at 164. The all count still renders on the page, as context
-    #: rather than as the headline.
+    #: filled or it is not -- and both count SHOVELWARE-FREE days, the one lens the board draws, so the
+    #: number is literally distance-to-finish. The all-platinums count is deliberately NOT it: shovelware
+    #: inflates it and it cannot finish a run, so leading with it would show 298/365 on a run whose real
+    #: count is 164. It still renders on the page, as a comparison figure rather than as the headline.
     filled_count = models.PositiveSmallIntegerField(default=0)
     completed_count = models.PositiveSmallIntegerField(default=0)
 
@@ -688,8 +686,9 @@ class CalendarDay(models.Model):
     ITS OWN MODEL RATHER THAN A `ChallengeSlot`, and the reasons are structural rather than tidiness.
     A slot's atom is a CONTRACT: it carries a `contract` FK, a frozen slug/name/igdb_id snapshot, a
     partial unique forbidding one contract from filling two slots of a run, and `xp_redeemed_at`. A
-    calendar day's atom is a DATE. None of those four apply, a day is filled by a platinum in two of
-    the three views, and a day legitimately has SEVERAL satisfiers where a slot has exactly one. Bolting
+    calendar day's atom is a DATE. None of those four apply, a day is filled by a shovelware-free
+    platinum rather than by anything picked, and a day legitimately has SEVERAL satisfiers where a slot
+    has exactly one. Bolting
     a nullable second identity onto `ChallengeSlot` would have meant four always-null columns, one
     constraint that never fires, and a `key` column meaning two different kinds of thing.
 
@@ -810,8 +809,8 @@ class CalendarDay(models.Model):
             models.CheckConstraint(condition=Q(day__gte=1, day__lte=31),
                                    name='calendarday_day_range'),
             # `clean` is `all` minus shovelware, so a clean day is always an all day. The database says
-            # so because this is the shape a half-written backfill produces -- three views populated by
-            # three predicates, one of them wrong or interrupted -- and that is a silent wrong answer
+            # so because this is the shape a half-written backfill produces -- two populations written
+            # from one aggregate, one of them wrong or interrupted -- and that is a silent wrong answer
             # on a reward ladder rather than a visible failure. (It used to carry a note that it was
             # deliberately NOT extended to a third `in_contracts` column, which genuinely did not nest;
             # that column went with the one-lens collapse.)
