@@ -10,6 +10,8 @@ both write doors, a 404 (not a 403) for somebody else's run so an id cannot conf
 beta gate rendered as a disabled-but-focusable button with the reason as visible text rather than as an
 attribute nobody can reach.
 """
+import re
+
 import pytest
 from django.test import Client, override_settings
 from django.urls import reverse
@@ -203,15 +205,18 @@ def test_the_hide_button_appears_only_on_an_active_run(client):
 
 
 def test_finished_runs_are_listed_and_the_block_is_omitted_when_there_are_none(client):
+    # THE BLOCK'S HEADING, not the bare word: the intro modal on this page says "Finished runs go up...",
+    # so a page-wide `'Finished' in body` passed whether or not the history rendered.
+    heading = re.compile(r'tracking-wider text-base-content/60">\s*Finished\s*</h2>')
     profile = _hunter(client)
-    assert 'Finished' not in client.get(reverse('my_challenges')).content.decode()
+    assert not heading.search(client.get(reverse('my_challenges')).content.decode())
 
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
     Challenge.objects.filter(pk=challenge.pk).update(
         is_complete=True, completed_at=timezone.now())
 
     body = client.get(reverse('my_challenges')).content.decode()
-    assert 'Finished' in body
+    assert heading.search(body)
     assert challenge.name in body
 
 

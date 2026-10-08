@@ -994,7 +994,8 @@ def test_an_az_run_gets_a_plain_div_not_an_unnamed_landmark(client):
     # class `pp-csq-shelf--plain`, so the loose form failed on markup that was entirely correct. The eighth
     # time on this branch an assertion has matched something other than what it meant to read.
     assert 'id="csq-shelf-' not in body
-    assert 'aria-labelledby' not in body
+    # THE SHELF'S labelledby, not any: the page's tutorial modal is correctly labelled by its own heading.
+    assert 'aria-labelledby="csq-shelf-' not in body
     # Still one grid of 26, still announced as a list.
     assert body.count('class="pp-csq-grid" role="list"') == 1
 

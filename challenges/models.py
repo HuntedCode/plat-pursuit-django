@@ -83,6 +83,14 @@ def short_label_for(challenge_type):
     return CHALLENGE_TYPE_SHORT_LABELS.get(challenge_type) or dict(CHALLENGE_TYPE_CHOICES).get(
         challenge_type, challenge_type)
 
+#: Each type's one-line pitch. One map because two surfaces say it -- the My Challenges card and the system
+#: intro -- and a template branch per surface is how the Calendar card once printed Job Coverage's line.
+CHALLENGE_TYPE_PITCHES = {
+    CHALLENGE_TYPE_AZ: 'One game for every letter, A to Z.',
+    CHALLENGE_TYPE_JOBS: 'One game for every job, Freelancer included.',
+    CHALLENGE_TYPE_CALENDAR: 'A shovelware-free platinum on every day of the year.',
+}
+
 #: What a run's squares ARE, per type: the noun in every "12 of 26 ..." the site prints. One map, because
 #: "squares" on every surface was true of none of them -- a Calendar run counted "365/365 squares" on its
 #: Hall of Fame plaque while its own page said days. `Challenge.unit` reads it; a type missing from it says

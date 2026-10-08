@@ -4965,3 +4965,33 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* The Calendar's reward line names a rung and WHERE it sits ("Calendar Keeper at 100 days"); the place is
    context, so it reads quieter than the title it qualifies -- not the accent `.pp-cwr__xp` spends on XP. */
 .pp-cwr__at { color: var(--pp-text-dim); font-weight: 600; }
+
+/* THE CHALLENGES TUTORIALS (`_challenges_intro.html`, `_type_tutorial.html`), on the `.pp-howto` mold and the
+   Career explainer's `.cxp__*` beats. Only what the mold does not already say lives here.
+
+   NARROWER THAN THE MOLD'S 940px: that width exists so the badge forge journey can run horizontally, and these
+   are a single column of short beats -- at 940px a line of copy ran ~120 characters. Both classes in the
+   selector so it outranks `.pp-howto__dialog` whatever order the two stylesheets are bundled in. */
+.pp-howto__dialog.pp-ctut__dialog { width: min(600px, 100%); }
+/* A SECOND GROUP of beats, under a quiet label and a hairline, so "three challenges" and "every run" read as
+   two lists rather than one list of six. */
+.pp-ctut__kicker {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--pp-border);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pp-text-dim);
+}
+/* The beta line: chip first, copy beside it and wrapping under itself rather than under the chip. */
+.pp-ctut__note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-top: 1.1rem;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--pp-text-dim);
+}

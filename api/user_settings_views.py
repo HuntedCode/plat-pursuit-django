@@ -14,6 +14,7 @@ from rest_framework.authentication import SessionAuthentication
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from challenges.services import tutorials as challenge_tutorials
 from core import whats_new
 from trophies.services import new_contracts_modal
 from trophies.services.profile_stats_service import update_profile_trophy_counts
@@ -76,8 +77,9 @@ class UpdateQuickSettingsAPIView(APIView):
 
     PROFILE_BOOL_SETTINGS = {'hide_hiddens', 'hide_zeros'}
     USER_BOOL_SETTINGS = {'use_24hr_clock'}
-    # One-shot education flags a surface may mark as seen (users.CustomUser.ui_flags keys).
-    UI_FLAGS = ('career_explainer', 'launch_welcome')
+    # One-shot education flags a surface may mark as seen (users.CustomUser.ui_flags keys). The challenge
+    # type tutorials come from the module that renders them, so a new type's key cannot be refused here.
+    UI_FLAGS = ('career_explainer', 'launch_welcome', *challenge_tutorials.TYPE_FLAGS.values())
 
     def post(self, request):
         setting = request.data.get('setting', '').strip()
@@ -157,6 +159,22 @@ class UpdateQuickSettingsAPIView(APIView):
             flags['whats_new_seen'] = value
             request.user.ui_flags = flags
             request.user.save(update_fields=['ui_flags'])
+
+        # The Challenges system intro: the newest VERSION this hunter has been shown (`beta`, then `live`).
+        # Its own branch for the reason `whats_new_seen` has one: `ui_flag` is sticky booleans and this
+        # moves. Validated and merged by `challenge_tutorials.merged_intro_marker`, which refuses a version
+        # above the current one (one POST would otherwise suppress the live intro before it exists) and
+        # never rewinds (a stale beta tab must not re-arm a live intro already read).
+        elif setting == challenge_tutorials.INTRO_FLAG:
+            marker = challenge_tutorials.merged_intro_marker(request.user, value)
+            if marker is None:
+                return Response({'error': 'Unknown intro version.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            flags = request.user.ui_flags or {}
+            flags[challenge_tutorials.INTRO_FLAG] = marker
+            request.user.ui_flags = flags
+            request.user.save(update_fields=['ui_flags'])
+            # The STORED value, which differs from the caller's when a stale tab reported an older version.
+            return Response({'success': True, 'setting': setting, 'value': marker})
 
         # The Career new-contracts marker: the newest `announced_at` this hunter has been SHOWN.
         # Its own branch for the same reason `whats_new_seen` has one -- `ui_flag` is documented as

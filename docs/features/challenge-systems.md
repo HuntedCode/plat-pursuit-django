@@ -20,14 +20,15 @@ no services and no templates with it; the few lessons worth carrying forward are
 | Plat Calendar data path (`calendar_fill`, model, sweep, sync hook, staff doors) | **built** and reachable — `TYPES_NOT_YET_CREATABLE` is empty now that the ladder exists |
 | Plat Calendar renderers (`calendar_render`) | **built** |
 | Plat Calendar board (detail + Hall of Fame hero) | **built.** Month-switcher layout: thirteen crests double as the tabs (twelve months and a whole-year overview), one panel at a time. No cover art anywhere |
-| Plat Calendar day modal (which games satisfy a day) | **not built** — the day cell is inert until it lands, so it is a `<div>` rather than a button that does nothing |
+| Plat Calendar day modal (which games satisfy a day) | **built** (`CalendarDayView`, an HTML fragment into one shared sheet) |
 | Plat Calendar reward ladder + richer crest artwork | **not built.** The crest itself renders |
 | Detection (sync hook + `process_challenges` + nightly) | **built** |
 | My Challenges (`/my-challenges/`) | **built** |
 | The run's page (`community/challenges/<id>/`) | **built** |
 | The picker: square-first, contract-first, history | **built** |
 | Public hub + Hall of Fame | **built.** `community/challenges/` (runs in flight) and `community/challenges/hall-of-fame/` (finished runs) |
-| Challenge share card | **NOT built.** Moved after the Calendar so all three types are designed together. **Minting it as a Hall of Fame cover was CUT** — the live board is the permanent state; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
+| Challenge share card | **built** for all three types. **Minting it as a Hall of Fame cover was CUT** — the live board is the permanent state; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
+| Tutorials (system intro + one per type) | **built.** See [The tutorials](#the-tutorials) |
 | Rewards (titles, job-XP payout, notification) | **built** for A-Z and Job Coverage. `challenges/services/rewards.py` is the only writer |
 | **Plat Calendar** — type, `CalendarDay`, the three view predicates, the backfill writer, the reconciling sweep, the refresh command | **built** |
 | **Plat Calendar** — creation | **open.** The gate was held for the rewards; the day-marker ladder is what it was waiting for |
@@ -893,6 +894,35 @@ stored. Built one type at a time (A-Z, Job Coverage, then the Plat Calendar); se
 
 ---
 
+## The tutorials
+
+Two kinds, on the `.pp-howto` mold and the Career explainer's `.cxp__*` beats, driven by one script
+(`static/js/challenge-tutorials.js`) over `PlatPursuit.DetailModal`. Gates and markers live in
+`challenges/services/tutorials.py`, which reads `ui_flags` off the loaded user at **zero queries**.
+
+| | System intro (`#challenges-intro`) | Type tutorial (`#challenge-tutorial`) |
+|---|---|---|
+| Auto-opens | once, on **My Challenges** | once, for the run's **owner**, on their first visit to a run of that type |
+| Also rendered (recall only) | the public hub | every run page, for every reader, anonymous included |
+| Marker | `ui_flags['challenges_intro_seen']`, a **version**: `beta` then `live` | `ui_flags['challenge_tutorial_<type>'] = True`, sticky |
+| Endpoint branch | its own (`challenges_intro_seen`), validated | the existing `ui_flag` allow-list, built from `tutorials.TYPE_FLAGS` |
+| Preview door | `?preview=challenges-intro` (current), `?preview=challenges-intro-live` | `?preview=challenge-tutorial`, any run |
+
+**Why the intro is a version and not a boolean.** Its copy changes when the beta ends (the "members
+first" line goes), so "has this person dismissed it" is the wrong question. The marker holds the newest
+version the hunter was SHOWN; `live` supersedes `beta`, so a beta hunter meets the live intro once.
+`current_intro_version()` reads `challenge_service.beta_is_on()`, the same predicate the creation gate
+reads, so the intro cannot announce a beta that has ended.
+
+**One auto-opening modal per load.** A Calendar run's opening ceremony goes first; while it is unseen,
+real or previewed, the type tutorial stays shut and arms itself on the next visit.
+
+**The copy quotes the constants.** `HATCH_THRESHOLD`, `CHALLENGE_SLOT_JOB_XP` and `CALENDAR_DAY_MARKERS`
+reach the tutorial as context, and the type pitches come from `CHALLENGE_TYPE_PITCHES` (shared with the My
+Challenges cards), so a changed rule cannot leave the tutorial teaching the old one.
+
+---
+
 ## Constraints
 
 Written in the database because a shell and a data migration write around the service. (The admin is the
@@ -917,6 +947,22 @@ agreeing with its flag); `challenges/models.py` Meta is the full set.
 ---
 
 ## Gotchas and Pitfalls
+
+**A tutorial preview must never carry `data-auto`.** `DetailModal` reads that attribute to decide
+whether a dismissal RECORDS, so a preview rendering it would spend the real tutorial on close. Previews
+render `data-preview`, which the script gives an auto-open and nothing else: no `onDismiss`, no
+`seenKey` (a key left by a failed write makes `DetailModal` skip the open and retry the write). A REAL
+unseen intro also outranks the live preview, because an armed intro rendered as `live` during the beta
+would post a version the endpoint refuses.
+
+**The intro endpoint refuses a version above the current one and never rewinds.** One POST of `live`
+during the beta would otherwise suppress the live intro before it exists, with nothing in the UI to
+undo it; a stale beta tab dismissed after the live one was read keeps `live`.
+
+**A new `.pp-howto` modal needs its ID in BOTH closing lists in `series-list.css`.** The settle list
+names DIALOGS (`#id.is-closing .pp-detail-modal__dialog`). `#cal-opening` was listed there bare, so its
+root ran the settle instead of the fade and the ceremony slid and vanished;
+`test_the_dialog_settle_list_targets_dialogs_only` pins every entry now.
 
 **A horizontal scroll strip inside the page's flex column widens the whole page on mobile.** The crest
 row is thirteen 44px coins — 620px of content in a 308px box with `overflow-x: auto`. That clips
@@ -1075,6 +1121,7 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `templates/challenges/` | `my_challenges.html`, `challenge_detail.html`, `browse.html`, `hall_of_fame.html`, `partials/_square_body.html`, `partials/_run_card.html`, `partials/_run_hero.html`, `partials/browse_results.html`, `partials/_share_dialog.html` + `partials/_share_button.html` (the share card's dialog and its trigger) |
 | `static/js/challenges-browse.js` | the two public pages' reveal + infinite scroll (filters are `browse-filters.js`) |
 | `static/js/challenge-detail.js` | the picker's three modes, the reward panel's claims, and the board's entrance |
+| `challenges/services/tutorials.py` + `static/js/challenge-tutorials.js` | the tutorials' markers and gates, and their one controller. Markup in `partials/_challenges_intro.html` and `partials/_type_tutorial.html` |
 | `challenges/services/share_card.py` + `static/js/challenge-share.js` | the run's share card and its dialog (two owner-only `GET` doors on `views.py`) |
 | `templates/challenges/partials/_rewards_panel.html` | the reward panel and its ledger of finished squares |
 | `static/css/components/challenges.css` | `.pp-csq*` (the slot board), `.pp-cal*` (the Calendar board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), `.pp-crun*` (the browse card), `.pp-chero*` (the Hall of Fame hero, incl. `.pp-chero__year` for the Calendar's year heatmap), BEM throughout |

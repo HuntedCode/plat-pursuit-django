@@ -137,11 +137,13 @@ def _my_challenges(client):
 
 def _card_html(body, label):
     """One type card's markup, from its own `<section>` (so the icon tile, which sits before the heading, is
-    inside the slice) to the next card or the end of the page."""
+    inside the slice) to the next card -- or, for the last card, to the system intro's modal, which repeats
+    every type's pitch and so would make "no other type's pitch" fail on markup that is correct."""
     heading = body.index('>%s</h2>' % label)
     start = body.rindex('<section class="card', 0, heading)
-    end = body.find('<section class="card', heading)
-    return body[start:end if end != -1 else len(body)]
+    ends = [i for i in (body.find('<section class="card', heading), body.find('id="challenges-intro"', heading))
+            if i != -1]
+    return body[start:min(ends) if ends else len(body)]
 
 
 def test_every_type_card_wears_its_glyph_and_its_own_pitch():

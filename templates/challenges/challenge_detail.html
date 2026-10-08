@@ -55,6 +55,12 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                         <a href="{% url 'profile_detail' psn_username=challenge.profile.psn_username %}"
                            class="link-hover font-semibold{% if not challenge.profile.display_mark %} link{% endif %}">{% name_mark name=challenge.profile.display_psn_username|default:challenge.profile.psn_username mark=challenge.profile.display_mark size='sm' %}</a>
                     </p>
+                    {% comment %}THE TYPE TUTORIAL'S RECALL, for every reader: a visitor reading somebody's run can ask
+                    what its squares mean as well as its owner can.{% endcomment %}
+                    <button type="button" class="pp-edhint mt-2" data-ctut-open="challenge-tutorial">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        How this challenge works
+                    </button>
                 </div>
 
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
@@ -469,6 +475,7 @@ neither of. The board itself needs no script: the server renders `data-month` an
 hunter with JavaScript off gets January on the run's own lens with the right squares tinted.{% endcomment %}
 {% if calendar_months %}<script src="{% static 'js/challenges-calendar.js' %}"></script>{% endif %}
 {% if can_share %}<script src="{% static 'js/challenge-share.js' %}"></script>{% endif %}
+<script src="{% static 'js/challenge-tutorials.js' %}"></script>
 {% endblock %}
 
 {% block fixed_overlays %}
@@ -476,6 +483,9 @@ hunter with JavaScript off gets January on the run's own lens with the right squ
 {% comment %}The share dialog, in this block for the same reason as every overlay below: `pageRecede` scales
 `#page-recede`, and a dialog inside it would resolve against the transformed ancestor.{% endcomment %}
 {% if can_share %}{% include 'challenges/partials/_share_dialog.html' %}{% endif %}
+{% comment %}THE TYPE TUTORIAL, on every run page for the recall link; it opens itself only for the owner's
+first visit to a run of this type, and never on the same load as the Calendar's opening ceremony.{% endcomment %}
+{% include 'challenges/partials/_type_tutorial.html' %}
 {% if calendar_months %}
 {% comment %}THE OPENING CEREMONY, first because it is the only overlay that opens ITSELF. Rendered for
 every Calendar run rather than only when it will fire: the element carries the reopen-free controller

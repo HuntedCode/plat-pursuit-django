@@ -47,9 +47,9 @@ from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 from django_ratelimit.decorators import ratelimit
 
-from challenges.models import (CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_CHOICES,
-                               short_label_for,
-                               CHALLENGE_TYPE_JOBS, CHALLENGE_TYPES, TYPES_NOT_YET_CREATABLE,
+from challenges.models import (CALENDAR_DAY_MARKERS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_CHOICES,
+                               CHALLENGE_TYPE_PITCHES, short_label_for,
+                               CHALLENGE_TYPE_JOBS, CHALLENGE_TYPES, HATCH_THRESHOLD, TYPES_NOT_YET_CREATABLE,
                                Challenge)
 from challenges.services import calendar_render
 from challenges.services import challenge_service as svc
@@ -57,6 +57,7 @@ from challenges.services import rewards
 from challenges.services import picker
 from challenges.services import share_card
 from challenges.services import slot_render
+from challenges.services import tutorials
 from core.previews import previewing
 
 logger = logging.getLogger(__name__)
@@ -163,6 +164,40 @@ PREVIEW_FREE = 'challenges-free'
 #: thing actually happening to them.
 PREVIEW_CALENDAR_OPENING = 'calendar-opening'
 
+#: The team preview doors for the tutorials, which are one-shots and so have the same problem as the
+#: ceremony above: the first look is the last. Same rules, same reasons: `data-preview` instead of
+#: `data-auto`, so closing a previewed tutorial records nothing.
+#:
+#: `challenges-intro` opens the system intro as the CURRENT version (My Challenges or the hub).
+#: `challenges-intro-live` opens the LIVE version, which nobody can otherwise see until the beta ends.
+#: `challenge-tutorial` opens the type tutorial on any run page.
+PREVIEW_INTRO = 'challenges-intro'
+PREVIEW_INTRO_LIVE = 'challenges-intro-live'
+PREVIEW_TYPE_TUTORIAL = 'challenge-tutorial'
+
+
+def intro_context(request, *, may_arm):
+    """What the system intro partial needs: whether it auto-opens, which version, and the three types.
+
+    `may_arm` IS THE PAGE'S CALL. Only My Challenges auto-opens the intro (owner, 2026-10-08); the hub
+    renders it for the recall link alone, so a visitor browsing runs is never interrupted.
+
+    THE REAL GATE WINS OVER A PREVIEW, as on the ceremony: a team member whose own intro is genuinely
+    unseen gets the real, recording one, in the current version. Rendering the live copy for an ARMED
+    intro during the beta would post `live`, which the endpoint refuses -- and a refusal parks the
+    device's `seenKey`, spending the real intro on that device without the server knowing.
+    """
+    armed = may_arm and tutorials.intro_is_due(request.user)
+    live_preview = not armed and previewing(request, PREVIEW_INTRO_LIVE)
+    return {
+        'show_challenges_intro': armed,
+        'preview_challenges_intro': not armed and (live_preview or previewing(request, PREVIEW_INTRO)),
+        'intro_version': tutorials.INTRO_LIVE if live_preview else tutorials.current_intro_version(),
+        'intro_flag': tutorials.INTRO_FLAG,
+        'intro_types': [{'type': key, 'label': short_label_for(key), 'pitch': CHALLENGE_TYPE_PITCHES.get(key, '')}
+                        for key, _ in CHALLENGE_TYPE_CHOICES],
+    }
+
 
 def creation_is_open(request, profile):
     """Can this hunter start a run, as THIS REQUEST should be shown it?
@@ -248,6 +283,9 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
             or any(run.challenge_type in share_card.SHAREABLE_TYPES for run in context['finished'])
         )
         context['share_themes'] = get_ground_themes() if context['has_shareable'] else []
+        # THE SYSTEM INTRO, auto-opened here on a first visit (and again once, in its live version, when
+        # the beta ends). See `intro_context`.
+        context.update(intro_context(self.request, may_arm=True))
         # `text`, NOT `label`: `partials/breadcrumb.html` and `seo_tags` both read `text`, so a `label`
         # key rendered two EMPTY crumbs and two blank names in the JSON-LD. Every other caller on the
         # site passes `text` and starts at Home; this did neither.
@@ -288,6 +326,7 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         return {
             'type': challenge_type,
             'label': label,
+            'pitch': CHALLENGE_TYPE_PITCHES.get(challenge_type, ''),
             'state': state,
             'run': run,
             'planned': planned,
@@ -422,6 +461,37 @@ class ChallengeDetailView(DetailView):
     template_name = 'challenges/challenge_detail.html'
     pk_url_kwarg = 'challenge_id'
 
+    def _tutorial_context(self, challenge, context):
+        """The type tutorial: rendered for every reader (the recall link), AUTO-OPENED for one.
+
+        THE OWNER'S FIRST VISIT TO A RUN OF THIS TYPE (owner, 2026-10-08). A visitor reading somebody
+        else's run can open it, and is never interrupted by it.
+
+        AN EDITABLE RUN ONLY. A finished or hidden run's board is locked, so a how-to that opens with
+        "Pick a game" would be teaching an action the page cannot take -- a hunter who finished a run
+        before this shipped would otherwise meet it on their trophy case. It arms on their next live run.
+
+        ONE AUTO-OPENING MODAL PER LOAD. A Calendar run's opening ceremony is the other one, and it goes
+        first: the ceremony is the moment ("here is where you stand"), and the tutorial is what reads
+        best on the next visit, once the board is familiar. So while the ceremony is unseen, real or
+        previewed, the tutorial stays shut -- and arms itself on the visit after.
+
+        The figures the copy quotes come from the constants that enforce them, so the tutorial cannot
+        teach a different threshold or payout from the one the run applies.
+        """
+        ceremony = context.get('show_calendar_opening') or context.get('preview_calendar_opening')
+        armed = (context['can_edit'] and not ceremony
+                 and tutorials.type_tutorial_is_due(self.request.user, challenge.challenge_type))
+        return {
+            'show_type_tutorial': armed,
+            'preview_type_tutorial': (not armed and not ceremony
+                                      and previewing(self.request, PREVIEW_TYPE_TUTORIAL)),
+            'tutorial_flag': tutorials.TYPE_FLAGS.get(challenge.challenge_type, ''),
+            'hatch_threshold': HATCH_THRESHOLD,
+            'slot_job_xp': CHALLENGE_SLOT_JOB_XP,
+            'calendar_rungs': CALENDAR_DAY_MARKERS,
+        }
+
     def _viewer(self):
         """The reading profile, or None.
 
@@ -531,6 +601,7 @@ class ChallengeDetailView(DetailView):
         # when the dialog renders, so a visitor's page carries none of it.
         context['can_share'] = context['is_owner'] and share_card.is_shareable(challenge)
         context['share_themes'] = get_ground_themes() if context['can_share'] else []
+        context.update(self._tutorial_context(challenge, context))
         context['progress'] = (
             round(challenge.completed_count / challenge.total_slots * 100)
             if challenge.total_slots else 0
@@ -1597,6 +1668,8 @@ class ChallengesBrowseView(_ChallengeBrowseView):
         # community, which is a fact about the site, not about the reader's current filter. `paginator.count`
         # is what reports the filtered total, and the grid carries it.
         return {
+            # THE INTRO FOR THE RECALL LINK ONLY: never auto-opened on the hub, which anybody browses.
+            **intro_context(self.request, may_arm=False),
             'in_flight': self.base_queryset().count(),
             # `text`, not `label` -- the partial reads `item.text`, and a missing key renders as an empty
             # crumb rather than raising. `Home -> Challenges` mirrors Game Lists, the sibling page in this

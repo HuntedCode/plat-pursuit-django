@@ -127,9 +127,19 @@ def creation_is_open_to(profile):
     Flipped by `CHALLENGES_BETA_MEMBERS_ONLY`, an env var rather than a code constant, so ending the
     beta is a Render setting change and not a deploy.
     """
-    if not getattr(settings, 'CHALLENGES_BETA_MEMBERS_ONLY', False):
+    if not beta_is_on():
         return True
     return bool(profile is not None and profile.user_is_premium)
+
+
+def beta_is_on():
+    """Whether the members-first beta is still running.
+
+    ONE READER OF THE SETTING, because two things ask it: the creation gate above, and which version of
+    the system intro a hunter is owed (`tutorials.current_intro_version`). Read in two places, the intro
+    could say "members are running these first" on the day creation opened to everybody.
+    """
+    return bool(getattr(settings, 'CHALLENGES_BETA_MEMBERS_ONLY', False))
 
 
 def _refuse_if_beta_gated(profile):
