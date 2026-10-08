@@ -117,13 +117,11 @@ NOT the trophy tracker's stricter `status == 'clean'` (which also excludes `manu
 31 cells, one row per month, columns aligned on day-of-month. Three things about it are decisions rather
 than details:
 
-- **It is not the Hall of Fame hero's shape, deliberately.** The hero draws 365 cells as seven rows
-  flowing by column, and its own comment says why that is right there: *"the rows are NOT weekdays ...
-  Seven is simply what makes 365 cells read as a block at hero width."* On the detail page there is room
-  for rows that mean something, so a row is a month and a column is a date — which also lets each row
-  wear its own hue off the existing `[data-month]` table, and makes the cell about 1.6x bigger. It is the
-  cheaper shape too: a nested loop over the month groups the page already has, so **no new render
-  function and no new query**. A 7x53 grid would need a flat 365-cell list in `calendar_day_keys()` order.
+- **The Hall of Fame hero now shares this shape** (2026-10-08): a row per month, a column per date, each row
+  in its month's hue off the same `[data-month]` table. It used to draw 365 cells as seven rows flowing by
+  column; see "The Calendar's Hall of Fame board is a heatmap" below for why that was replaced. Here the
+  overview is a nested loop over the month groups the page already has, so **no new render function and no
+  new query**.
 - **Each cell carries its date from `md:` up, and the fill recipe changes with it.** Which breakpoint is
   arithmetic: 12px is the stylesheet's type floor, a two-digit tabular numeral advances ~14.4px at that
   size, and 31 columns inside the 343px a 375px viewport gives this panel is an 8.9px cell. Numerals at
@@ -580,6 +578,30 @@ htmx filter swap and an `InfiniteScroller` page both render the grid partial):
 
 - `full_page_context()` — gated behind `is_partial_render()`. Breadcrumb, headline count, SEO string.
 - `enrich(runs)` — **not** gated. Anything an ENTRY draws, built from the paginated page.
+
+### The Calendar's Hall of Fame board is a heatmap
+
+Every run in the Hall of Fame is finished, so a finished Calendar's 365 days are ALL filled -- and the first
+hero drew exactly that: seven rows of identically filled squares, the same block for every hunter, tinted with
+the hunter's RANK colour (`--rk`), so grey for every Newbie. It said nothing about anyone.
+
+It is now the year overview as a **heatmap** (`calendar_render._hero_group`, owner's pick): twelve month rows
+in their `--cal-c` hues, each day shaded by `plat_count` (shovelware-free platinums on that date, across every
+year) in `HEAT_LEVELS` = 4 steps, with a small Fewer/More key under the board. **The shade is relative to the
+run's own counts** on a square-root curve, so every board uses its whole range -- a fixed scale would put a
+whale's whole year at the top step and a modest hunter's at the bottom. The top step is anchored to the run's
+**95th-percentile day, not its busiest**, so one spike cannot flatten the rest of the year back into a block;
+days above it cap at the top. A run whose anchor is one platinum is lit at the top step throughout, and a filled
+day whose live count fell to zero (a reclassification: fills are monotone, counts are not) takes the bottom step.
+
+**The plaque leads with what differs between finished runs**, not "365/365 days": total platinums, the busiest
+day ("6 platinums on 4 Jan"), and the years the platinums were earned ("Earned 2016 to 2023") (`earned_on` is when a day was FIRST filled, so the latest of them
+is when the calendar became complete). All of it comes from the 365 rows the board already reads -- one query
+for the page, unchanged.
+
+**Layout:** stacked on phones, full width from `md:` until 1280, then beside the plaque like A-Z. The break is
+where the cell stops shrinking as the window widens: full width it is ~19px at 768, the generic 2.4fr share at
+1024 would make it ~17px, and the 2.6fr share from 1280 gives ~23px.
 
 ### The Hall of Fame draws heroes, not cards
 
@@ -1055,7 +1077,7 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `static/js/challenge-detail.js` | the picker's three modes, the reward panel's claims, and the board's entrance |
 | `challenges/services/share_card.py` + `static/js/challenge-share.js` | the run's share card and its dialog (two owner-only `GET` doors on `views.py`) |
 | `templates/challenges/partials/_rewards_panel.html` | the reward panel and its ledger of finished squares |
-| `static/css/components/challenges.css` | `.pp-csq*` (the slot board), `.pp-cal*` (the Calendar board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), `.pp-crun*` (the browse card), `.pp-chero*` (the Hall of Fame hero, incl. `.pp-chero__cal` for the Calendar's year band), BEM throughout |
+| `static/css/components/challenges.css` | `.pp-csq*` (the slot board), `.pp-cal*` (the Calendar board), `.pp-cpick*` (the sheet), `.pp-cpay*` (the reward panel), `.pp-crun*` (the browse card), `.pp-chero*` (the Hall of Fame hero, incl. `.pp-chero__year` for the Calendar's year heatmap), BEM throughout |
 
 **Related docs:** [job-board-contracts.md](../design/rebuild/job-board-contracts.md) for the Contract and
 Job model the slot atom comes from, [xp-economy.md](../design/rebuild/xp-economy.md) for the ledger the

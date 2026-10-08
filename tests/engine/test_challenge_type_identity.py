@@ -255,17 +255,28 @@ def test_the_hub_filter_gives_each_type_its_own_glyph_and_keeps_the_grid_for_all
     assert 'value=""' in chips[3] and 'x="14" y="14"' in chips[3], 'All lost its grid'
 
 
-def test_the_hall_of_fame_counts_a_calendar_run_in_days():
+def test_the_hall_of_fame_never_counts_a_calendar_run_in_squares():
+    """It leads with its PLATINUMS now ("365/365" is true of every finished Calendar run), and the type line
+    wears the glyph."""
     run = _calendar_run(_hunter(), months=range(1, 13))
     assert run.is_complete
     body = Client().get(reverse('challenges_hall_of_fame')).content.decode()
-    assert '>days</span>' in body and '>squares</span>' not in body
+    assert '>squares</span>' not in body
+    assert '>platinums</span>' in body
     record = body[body.index('class="pp-chero__type"'):]
     record = record[:record.index('</span>')]
     assert GLYPH[CHALLENGE_TYPE_CALENDAR] in record, 'the plaque names the type without its glyph'
 
 
 # ── short labels where the page already says "Challenges" ────────────────────────────────────────────
+
+def test_every_type_has_a_short_label():
+    """The views and the model both read `short_label_for`, which falls back to the full label -- but a type
+    should not ship relying on that, so the map covers every type."""
+    from challenges.models import CHALLENGE_TYPES, short_label_for
+    assert set(CHALLENGE_TYPE_SHORT_LABELS) == CHALLENGE_TYPES
+    assert short_label_for('mystery') == 'mystery'
+
 
 def test_the_short_labels():
     """Where the page already says "Challenges", the type's own "Challenge" repeated it, and "Job Coverage
@@ -338,8 +349,39 @@ def test_the_side_by_side_rule_is_scoped_to_tablet_width():
     from pathlib import Path
     css = (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components' / 'challenges.css'
            ).read_text(encoding='utf-8')
-    block = re.search(r'@media \(min-width: 768px\) and \(max-width: 1023\.98px\) \{(.*?)\n\}', css, re.S)
-    assert block, 'the tablet-only media query is gone'
-    assert '.pp-ccard--wide > .card-body' in block.group(1) and 'display: grid' in block.group(1)
-    outside = css.replace(block.group(0), '')
+    # THE BLOCK THAT CARRIES THIS RULE, not the first with this query: the Hall of Fame's Calendar hero has
+    # a tablet-only block of its own.
+    blocks = re.findall(r'@media \(min-width: 768px\) and \(max-width: 1023\.98px\) \{.*?\n\}', css, re.S)
+    found = [b for b in blocks if '.pp-ccard--wide > .card-body' in b]
+    assert len(found) == 1, 'the tablet-only media query is gone'
+    assert 'display: grid' in found[0]
+    outside = css.replace(found[0], '')
     assert '.pp-ccard--wide > .card-body' not in outside, 'the side-by-side grid leaked outside tablet width'
+
+
+def test_the_hall_of_fame_calendar_plaque_shows_its_busiest_day_and_years():
+    """The two lines that replace "365/365 days" on a finished Calendar: the busiest day and the years the
+    calendar took to fill. Rendered, not just computed -- a template that drops them passes every data test."""
+    import datetime
+    run = _calendar_run(_hunter(), months=range(1, 13))
+    CalendarDay.objects.filter(challenge=run).update(earned_on=datetime.date(2016, 5, 5))
+    CalendarDay.objects.filter(challenge=run, month=3, day=3).update(
+        plat_count=7, earned_on=datetime.date(2023, 3, 3))
+    body = Client().get(reverse('challenges_hall_of_fame')).content.decode()
+    plaque = body[body.index('Busiest day'):]
+    plaque = plaque[:plaque.index('pp-chero__record')]
+    assert '7' in plaque and 'platinums on 3 Mar' in plaque
+    assert 'Earned' in plaque and '2016 to 2023' in plaque
+
+
+def test_the_card_wrappers_keep_the_card_bodys_gap():
+    """Wrapping a card's children in `__main`/`__side` took them out of DaisyUI's `.card-body` flex gap, so every
+    section lost 8px of space at every width. Each wrapper carries the 0.5rem gap itself."""
+    import re
+    from pathlib import Path
+    css = re.sub(r'/\*.*?\*/', '', (Path(__file__).resolve().parents[2] / 'static' / 'css' / 'components'
+                                    / 'challenges.css').read_text(encoding='utf-8'), flags=re.S)
+    for wrapper in ('.pp-ccard__main {', '.pp-ccard__side {'):
+        rule = css[css.index(wrapper):]
+        rule = rule[:rule.index('}')]
+        assert 'flex-direction: column' in rule and 'gap: 0.5rem' in rule, wrapper

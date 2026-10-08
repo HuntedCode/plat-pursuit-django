@@ -76,6 +76,13 @@ CHALLENGE_TYPE_SHORT_LABELS = {
     CHALLENGE_TYPE_CALENDAR: 'Plat Calendar',
 }
 
+
+def short_label_for(challenge_type):
+    """The short label for a type KEY, falling back to its full label, so a type added without an entry
+    above reads its full name rather than raising. `Challenge.short_label` and the views share this."""
+    return CHALLENGE_TYPE_SHORT_LABELS.get(challenge_type) or dict(CHALLENGE_TYPE_CHOICES).get(
+        challenge_type, challenge_type)
+
 #: What a run's squares ARE, per type: the noun in every "12 of 26 ..." the site prints. One map, because
 #: "squares" on every surface was true of none of them -- a Calendar run counted "365/365 squares" on its
 #: Hall of Fame plaque while its own page said days. `Challenge.unit` reads it; a type missing from it says
@@ -492,7 +499,7 @@ class Challenge(models.Model):
     @property
     def short_label(self):
         """The type's name inside a "Challenges" context. See `CHALLENGE_TYPE_SHORT_LABELS`."""
-        return CHALLENGE_TYPE_SHORT_LABELS.get(self.challenge_type, self.get_challenge_type_display())
+        return short_label_for(self.challenge_type)
 
     @property
     def unit(self):
@@ -791,8 +798,8 @@ class CalendarDay(models.Model):
     #: timezone-aware, whale-sized aggregate on the request path. The fill already groups the hunter's
     #: platinums by (month, day) to find each square's earliest date, so this rides a statement that is
     #: already running. (One such query per DETAIL page. This said "eight of them on a Hall of Fame
-    #: page", which is the one page that does not draw the figure -- `_hero_group`'s cells carry no
-    #: count.)
+    #: page", when the Hall of Fame reads the count from the rows its board already loads -- the hero's
+    #: heatmap shades by it and its plaque sums it, at no query of its own.)
     #:
     #: LIVE, NOT FROZEN, AND IT CAN DISAGREE WITH `earned_on`. A date is the record of an achievement,
     #: so it survives a game being reclassified as shovelware; a count is a tally, and the day modal

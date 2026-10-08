@@ -880,7 +880,8 @@ def test_an_a_z_card_never_shows_owed_xp(client):
 
     body = client.get(reverse('my_challenges')).content.decode()
     # PICKED BY THE CARD'S HEADING, not by index and not by the type's full name: the full name also appears in
-    # a run's `data-name`, and the card heading is the short label. PICKED BY LABEL, not by index. Splitting on `<section class="card` also catches the page-header card, so
+    # a run's `data-name`, and the card heading is the short label. Splitting on `<section class="card` also
+    # catches the page-header card, so
     # positional indices were off by one and silently read the wrong chunk -- a slice that lands on the wrong
     # element is the same defect as a slice that is too short.
     chunks = body.split('<section class="card')

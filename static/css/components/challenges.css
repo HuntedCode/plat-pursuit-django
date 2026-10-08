@@ -3115,7 +3115,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    accepted rather than overlooked: disciplines appear on job chips and shelf heads, months only on
    Calendar surfaces, so the two never share one. Worth knowing before a third system wants a hue.
 
-   THREE SELECTORS, ONE TABLE. The day sheet renders in `fixed_overlays` -- outside `.pp-cal`, because
+   FOUR SELECTORS, ONE TABLE (the fourth is the Hall of Fame hero's month row, `.pp-chero__yrow`). The day sheet renders in `fixed_overlays` -- outside `.pp-cal`, because
    `takeover` scales `#page-recede` and a fixed overlay inside a transformed ancestor resolves against
    THAT ancestor -- so it cannot inherit `--cal-c` by descent the way a month panel does. The third
    selector is the dialog SHELL, and it exists because custom properties inherit DOWNWARD only: the
@@ -3126,39 +3126,51 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    ── */
 .pp-cal [data-month="1"],
 .pp-cday[data-month="1"],
+.pp-chero__yrow[data-month="1"],
 .pp-detail-modal[data-month="1"]  { --cal-c: oklch(0.74 0.13 255); }   /* January   -- deep winter blue */
 .pp-cal [data-month="2"],
 .pp-cday[data-month="2"],
+.pp-chero__yrow[data-month="2"],
 .pp-detail-modal[data-month="2"]  { --cal-c: oklch(0.72 0.14 290); }   /* February  -- late-winter violet */
 .pp-cal [data-month="3"],
 .pp-cday[data-month="3"],
+.pp-chero__yrow[data-month="3"],
 .pp-detail-modal[data-month="3"]  { --cal-c: oklch(0.80 0.14 150); }   /* March     -- first green */
 .pp-cal [data-month="4"],
 .pp-cday[data-month="4"],
+.pp-chero__yrow[data-month="4"],
 .pp-detail-modal[data-month="4"]  { --cal-c: oklch(0.84 0.15 128); }   /* April     -- spring */
 .pp-cal [data-month="5"],
 .pp-cday[data-month="5"],
+.pp-chero__yrow[data-month="5"],
 .pp-detail-modal[data-month="5"]  { --cal-c: oklch(0.86 0.16 105); }   /* May       -- lime */
 .pp-cal [data-month="6"],
 .pp-cday[data-month="6"],
+.pp-chero__yrow[data-month="6"],
 .pp-detail-modal[data-month="6"]  { --cal-c: oklch(0.88 0.15 88); }    /* June      -- high sun */
 .pp-cal [data-month="7"],
 .pp-cday[data-month="7"],
+.pp-chero__yrow[data-month="7"],
 .pp-detail-modal[data-month="7"]  { --cal-c: oklch(0.84 0.16 70); }    /* July      -- gold */
 .pp-cal [data-month="8"],
 .pp-cday[data-month="8"],
+.pp-chero__yrow[data-month="8"],
 .pp-detail-modal[data-month="8"]  { --cal-c: oklch(0.78 0.17 52); }    /* August    -- amber */
 .pp-cal [data-month="9"],
 .pp-cday[data-month="9"],
+.pp-chero__yrow[data-month="9"],
 .pp-detail-modal[data-month="9"]  { --cal-c: oklch(0.72 0.17 35); }    /* September -- russet */
 .pp-cal [data-month="10"],
 .pp-cday[data-month="10"],
+.pp-chero__yrow[data-month="10"],
 .pp-detail-modal[data-month="10"] { --cal-c: oklch(0.68 0.18 18); }    /* October   -- autumn red */
 .pp-cal [data-month="11"],
 .pp-cday[data-month="11"],
+.pp-chero__yrow[data-month="11"],
 .pp-detail-modal[data-month="11"] { --cal-c: oklch(0.66 0.15 345); }   /* November  -- berry */
 .pp-cal [data-month="12"],
 .pp-cday[data-month="12"],
+.pp-chero__yrow[data-month="12"],
 .pp-detail-modal[data-month="12"] { --cal-c: oklch(0.90 0.045 235); }  /* December  -- frost, near-white */
 
 .pp-cal__crest {
@@ -3646,8 +3658,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  * its rows "are NOT weekdays ... Seven is simply what makes 365 cells read as a block at hero width".
  * That is the right trade at 307px. Here there is room for rows that mean something, and three things
  * follow from it -- a row is a month, a column is a date, and each row wears its own hue off the
- * `[data-month]` table with no new declaration. It is also a bigger cell: 53 columns against 31 is a
- * 1.71x wider track per cell, and measured at 375px the two come out at 4.8px and 8.4px.
+ * `[data-month]` table with no new declaration. (The Hall of Fame hero has since taken this same shape.)
  *
  * `grid-area: grid` IS THE WHOLE PANEL LAYOUT. `.pp-cal__panel` already lays out `"head stats" /
  * "grid stats"` from `lg:` up, so the matrix takes the day grid's area and the two-column panel, the
@@ -3678,8 +3689,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
  *
  * AND THE FILLED CELL'S RECIPE CHANGES WITH IT, because the two jobs need opposite things. At 8.9px
  * nothing sits on the cell and the tile has to read as a colour at a glance, so it takes a strong 68%
- * tint (the Hall of Fame hero's own figure, for the same reason -- though not at the same scale: the
- * hero's cell is 4.8px against this one's 8.4px). The moment a
+ * tint (the figure the Hall of Fame hero's old band used, for the same reason). The moment a
  * NUMERAL sits on it that tint is unusable: measured across the twelve hues, `--pp-text` on a 68% tint
  * holds 2.27:1 at December and the best dark ink -- pure black -- manages 3.95 at November, so there
  * is no text colour that works --
@@ -3719,9 +3729,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     padding-right: 3px;
     transition: color 0.16s ease;
 }
-/* A RECESS, NOT A BORDER, which is the hero's reading of the same problem one scale down: a 1px border
-   takes 42% of its 4.8px cell and 24% of this one's 8.4px, so 365 outlined boxes read as a grid of lines
-   rather than as a year with gaps in it. The decision carries over; the arithmetic is not the hero's. */
+/* A RECESS, NOT A BORDER: a 1px border takes 24% of this 8.4px cell, so 365 outlined boxes read as a grid
+   of lines rather than as a year with gaps in it. The Hall of Fame hero makes the same call. */
 .pp-cal__ycell {
     display: grid;
     place-items: center;
@@ -3840,7 +3849,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    (230px) plus its gutter (24px) out of a container that only grows from 698 to 954, so the matrix's
    own track goes 698 -> 700 while the gap bill went 62 -> 93. Measured, 19.4px at `md:` became 18.5px at
    `lg:`. That is the exact defect this file calls out and fixes twice elsewhere -- `--cal-stats` ("the
-   cell shrinking as the window widens, which is the same defect the crest gap had") and `.pp-chero__cal`
+   cell shrinking as the window widens, which is the same defect the crest gap had") and the old hero band
    ("the band went 11.2px at 768, then back to 9.4px at 1024 ... wants the widest row it can get at EVERY
    size") -- reintroduced here by a third set of eyes that had read both.
    AT 1280 THE TRACK GENUINELY GROWS: `.pp-cal` caps at 1100, the stats column steps to 280, so the
@@ -4562,64 +4571,83 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 
 /* -- the Hall of Fame hero's Calendar board -------------------------------------------------------- */
 
-/* A WHOLE YEAR AT HERO WIDTH, in one lens. `calendar_render` picks that lens server-side (the better of
-   shovelware-free and contracts) so the board and the `filled_count` tally beside it cannot disagree --
-   all-platinums is never it, being the lens shovelware inflates and the one that cannot finish a run.
-   `.pp-chero__cal` replaces the discipline shelves entirely rather than sitting inside one, because a
-   year has no sub-structure to shelve.
+/* THE RUN PAGE'S YEAR OVERVIEW, AS A HEATMAP (owner, 2026-10-08). Twelve rows, one per month in that month's
+   `--cal-c` hue (the shared table above), a cell per day shaded by `data-heat`: 0 is an empty day, 1-4 the
+   day's platinums relative to the run's own busiest day (`calendar_render._hero_group`).
 
-   SEVEN ROWS FLOWING BY COLUMN gives 53 columns for 365 cells, which is the dense year read. The rows
-   are NOT weekdays -- a square is a (month, day) with no year, so there is nothing to align to. Seven is
-   simply what tiles 365 into a block that fits a row. */
-/* AUTO ROWS, NOT `1fr`, AND NO `min-height` -- which is what makes the cells square. The first version
-   had `grid-template-rows: repeat(7, 1fr)` plus a `min-height`, so the row tracks were DEFINITE in both
-   axes and the `aspect-ratio: 1` on the cell was simply ignored: every day rendered as a 1:2 rectangle
-   at every width, while the comment claimed squares. With auto rows the column track sets the width and
-   the ratio sets the height, so the band is exactly seven cells tall and the cells are square. */
-.pp-chero__cal {
+   IT REPLACED SEVEN ROWS OF GREY, and both halves of that were the problem. Every finished run has all 365
+   days filled, so a FILL board was the same block for every hunter on the page; and its tint was `--rk`, the
+   hunter's RANK colour, so every Newbie's year was grey. The hue now belongs to the month and the shade to
+   the hunter, which is what makes an entry somebody's own year.
+
+   THE LABEL COLUMN IS FIXED, the day columns share the rest: 31 equal tracks, so a short month ends early
+   rather than stretching its days. */
+.pp-chero__year { display: grid; gap: 2px; width: 100%; }
+@media (min-width: 1024px) { .pp-chero__year { gap: 3px; } }
+/* NO LABEL COLUMN ON A PHONE: the label is hidden there (see `.pp-chero__ylabel`), so the days take the row. */
+.pp-chero__yrow {
     display: grid;
-    grid-template-rows: repeat(7, auto);
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-    /* 1px AT MOBILE, and this is the honest reading of the space. 53 columns inside a 307px board (the
-       figure this stylesheet already computes for the hero at 375px, border and padding taken off first)
-       is a 4.8px cell, and at a 2px gap the gutter was more than a third of the cell -- mush rather than
-       a year. A 1px gap buys back ~1px per cell, which at this size is a fifth more square. The comment
-       that used to sit here claimed "around 7-10px"; the real range across breakpoints is roughly
-       4.8px at 375, 11.2px from 768, and 13px at the widest. */
-    gap: 1px;
-    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    column-gap: 6px;
 }
-@media (min-width: 768px) { .pp-chero__cal { gap: 2px; } }
-@media (min-width: 1024px) { .pp-chero__cal { gap: 3px; } }
-
-/* THE CALENDAR TAKES THE WHOLE ROW FROM `md:` UPWARD, and the UPWARD part is the correction. Sharing the
-   row with the plaque at 768 left the board about 361px for 53 columns -- a 4.85px cell, no better than
-   mobile -- and full width takes it to 11.2px, a bit over double.
-   THE FIRST VERSION CAPPED THIS AT 1023 AND SO RE-CREATED THE EXACT DISCONTINUITY the `--jobs` comment
-   above exists to prevent ("Crossing 1024 the jobs hero then SHRANK by 266px while the A-Z one grew"):
-   the band went 11.2px at 768, then back to 9.4px at 1024 when the generic two-column rule resumed. A
-   53-column board wants the widest row it can get at EVERY size, and unlike jobs it has no second shape
-   to reach for, so there is no upper bound. Source order is what makes this win over the 1024 rule --
-   media queries do not add specificity, and this block is at the end of the file. */
+@media (min-width: 768px) { .pp-chero__yrow { grid-template-columns: 2.1rem minmax(0, 1fr); } }
+/* THE RUN PAGE'S OVERVIEW LABEL from `md:` (12px `--pp-text-dim`, right-aligned in the same 2.1rem column),
+   so the two year views read as one. HIDDEN ON A PHONE rather than shrunk: the cell is ~8px there, so a
+   label at the stylesheet's 12px floor would space the rows further apart than the columns, and anything
+   smaller is under the floor. Twelve rows in twelve hues read as the year's months without it. */
+.pp-chero__ylabel { display: none; }
 @media (min-width: 768px) {
-    .pp-chero--calendar { grid-template-columns: minmax(0, 1fr); }
+    .pp-chero__ylabel {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: var(--pp-text-dim);
+        line-height: 1;
+        text-align: right;
+    }
 }
 
-.pp-chero__cday {
+/* THE KEY under the heatmap: Fewer, the four shades, More. Neutral primary, so it belongs to no month. */
+.pp-chero__ykey {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--pp-text-mute);
+}
+.pp-chero__ykey > span:first-child { margin-right: 3px; }
+.pp-chero__ykey > span:last-child { margin-left: 3px; }
+.pp-chero__yswatch { width: 9px; }
+@media (min-width: 768px) { .pp-chero__yswatch { width: 11px; } }
+.pp-chero__ydays { display: grid; grid-template-columns: repeat(31, minmax(0, 1fr)); gap: 1px; }
+@media (min-width: 768px) { .pp-chero__ydays { gap: 2px; } }
+@media (min-width: 1024px) { .pp-chero__ydays { gap: 3px; } }
+/* FLAT COLOUR, no glow and no shadow, for the reason the old band gave: 365 elements each carrying a shadow
+   is the repeated paint this project has been bitten by on mobile, and at this size a glow reads only as a
+   bigger square. */
+.pp-chero__yday {
     display: block;
     aspect-ratio: 1;
     border-radius: 1px;
-    /* THE EMPTY DAY IS A RECESS, not a border: at this size a 1px border on a 4px cell is most of the
-       cell, so 365 outlined boxes read as a grid of lines rather than as a year with gaps in it. */
     background: color-mix(in srgb, var(--pp-bg-0) 70%, transparent);
 }
-@media (min-width: 1024px) { .pp-chero__cday { border-radius: 2px; } }
+@media (min-width: 1024px) { .pp-chero__yday { border-radius: 2px; } }
+.pp-chero__yday[data-heat="1"] { background: color-mix(in oklab, var(--cal-c, var(--pp-primary)) 30%, var(--pp-bg-1)); }
+.pp-chero__yday[data-heat="2"] { background: color-mix(in oklab, var(--cal-c, var(--pp-primary)) 50%, var(--pp-bg-1)); }
+.pp-chero__yday[data-heat="3"] { background: color-mix(in oklab, var(--cal-c, var(--pp-primary)) 72%, var(--pp-bg-1)); }
+.pp-chero__yday[data-heat="4"] { background: var(--cal-c, var(--pp-primary)); }
 
-/* A FILLED DAY IS FLAT COLOUR, with no glow and no shadow. 365 elements each carrying a shadow is the
-   kind of repeated expensive paint this project has already been bitten by on mobile, and at 7px a glow
-   is indistinguishable from a bigger square anyway. */
-.pp-chero__cday--on { background: color-mix(in srgb, var(--rk) 68%, var(--pp-bg-2)); }
+/* FULL WIDTH UNTIL 1280, then beside the plaque like A-Z. The break is where the cell stops SHRINKING as
+   the window widens: full width the cell is ~19px at 768, but the generic 2.4fr share at 1024 would give
+   ~17px -- smaller on a bigger screen, the discontinuity this file warns about elsewhere. From 1280 the
+   2.6fr share gives ~23px, so the board moves beside the plaque there and grows as it does. */
+@media (min-width: 768px) and (max-width: 1279.98px) {
+    .pp-chero--calendar { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ============================================================
  * THE DAY-MARKER RAIL -- `.pp-cal-rail`
@@ -4910,9 +4938,11 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    on the left, what it is worth and what to do on the right -- and back to the stack from `lg:`, where the
    three cards sit in one row. `__side` is a flex column at every size so the actions' `mt-auto` reaches
    the card's bottom edge. */
-.pp-ccard__side { display: flex; flex-direction: column; flex: 1 1 auto; }
+/* EACH WRAPPER CARRIES `.card-body`'s OWN 0.5rem GAP: wrapping the card's children took them out of the
+   body's flex gap, so every section lost 8px of space at every width until this restored it. */
+.pp-ccard__side { display: flex; flex-direction: column; gap: 0.5rem; flex: 1 1 auto; }
 /* `min-width: 0` so a long pitch wraps inside its grid column rather than widening it. */
-.pp-ccard__main { min-width: 0; }
+.pp-ccard__main { min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 @media (min-width: 768px) and (max-width: 1023.98px) {
     .pp-ccard--wide > .card-body {
         display: grid;

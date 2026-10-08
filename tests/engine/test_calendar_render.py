@@ -420,9 +420,10 @@ def test_the_hero_board_is_one_unlabelled_group_of_every_day():
     # NO always-empty `label`/`slug`. `_board_groups`' single-group branch carries them because
     # `_run_hero.html` tests `group.label`; this group is never drawn by that template, so two keys
     # that are permanently `''` and unreachable are what `_card`'s rule rejects.
-    # ONE KEY. A `view` sat beside `days` naming which of three lenses the band was drawn in, so a
-    # reader could tell two entries apart. One lens means every band means the same thing.
-    assert set(groups[0]) == {'days'}
+    # NO `view` KEY: one sat beside `days` naming which of three lenses the band was drawn in. One lens
+    # means every board means the same thing. What sits beside `days` now is the same cells cut into the
+    # twelve month rows the heatmap draws, and the plaque's figures -- nothing a hero does not read.
+    assert set(groups[0]) == {'days', 'months', 'stats'}
 
 
 def test_the_hero_does_not_reuse_the_key_the_other_heroes_loop():
@@ -439,10 +440,11 @@ def test_the_hero_does_not_reuse_the_key_the_other_heroes_loop():
 def test_a_hero_day_carries_only_what_a_hero_cell_can_draw():
     """`boards_for` builds a four-key hero square inline rather than reusing `_card`'s eight, so the
     hero carries nothing it cannot draw. At roughly 2,900 cells per page the detail cell's label,
-    modal key, per-lens booleans and run index have no reader at this size."""
+    modal key, per-lens booleans and run index have no reader at this size. `plats` and `level` are the
+    heatmap's: the count the plaque sums and the shade the cell draws."""
     run = _calendar_run()
     day = calendar_render.calendar_boards_for([run])[run.pk][0]['days'][0]
-    assert set(day) == {'month', 'day', 'filled'}
+    assert set(day) == {'month', 'day', 'filled', 'plats', 'level'}
 
 
 def test_the_hero_draws_the_same_lens_the_board_does():
@@ -745,3 +747,88 @@ def test_the_months_rank_is_dense_across_unequal_month_lengths():
     months = calendar_render.calendar_groups(run)
     ranks = {m['label']: m['rank'] for m in months if m['rank']}
     assert ranks == {'February': 1, 'June': 1, 'January': 2, 'April': 3}
+
+
+# ── the Hall of Fame heatmap ───────────────────────────────────────────────────────────────────────────
+
+def _heat_run(counts):
+    """A Calendar run with `{(month, day): plat_count}` filled shovelware-free, `earned_on` in 2015 for the
+    first and 2024 for the rest, so the year span has two ends."""
+    import datetime
+    run = _calendar_run()
+    for i, ((month, day), n) in enumerate(counts.items()):
+        CalendarDay.objects.filter(challenge=run, month=month, day=day).update(
+            in_all=True, in_clean=True, plat_count=n,
+            earned_on=datetime.date(2015 if i == 0 else 2024, month, day))
+    return run
+
+
+def test_the_heat_is_relative_to_the_runs_own_busiest_day():
+    """A fixed scale paints a whale's whole year at the top step and a modest hunter's at the bottom, so
+    neither shows a pattern. Relative to the run's own peak, every board uses its whole range."""
+    assert calendar_render._heat_level(1, 9) == 1
+    assert calendar_render._heat_level(9, 9) == calendar_render.HEAT_LEVELS
+    assert 1 < calendar_render._heat_level(3, 9) < calendar_render.HEAT_LEVELS
+    # The square root lifts the common low counts: 3 of 9 is a quarter of the way linearly, but not here.
+    assert calendar_render._heat_level(3, 9) >= 3
+
+
+def test_a_run_with_one_platinum_per_day_is_fully_lit_not_uniformly_faint():
+    assert calendar_render._heat_level(1, 1) == calendar_render.HEAT_LEVELS
+
+
+def test_a_filled_day_with_no_count_takes_the_bottom_shade_not_the_top():
+    """Fills are monotone, so a day stays filled after a reclassification takes its only platinum to
+    shovelware while its live count drops to 0. It must not light at the top step -- an all-zero run would
+    otherwise show a fully lit board beside "0 platinums"."""
+    assert calendar_render._heat_level(0, 0) == 1
+    assert calendar_render._heat_level(0, 9) == 1
+
+
+def test_the_hero_board_cuts_the_year_into_twelve_month_rows():
+    run = _heat_run({(1, 1): 2})
+    group = calendar_render.calendar_boards_for([run])[run.pk][0]
+    assert [m['abbr'] for m in group['months']][:3] == ['JAN', 'FEB', 'MAR']
+    assert [len(m['days']) for m in group['months']] == list(CALENDAR_MONTH_DAYS)
+    assert group['months'][0]['days'][0] is group['days'][0], 'the rows are the same cells, not copies'
+
+
+def test_the_plaque_stats_come_from_the_filled_days():
+    """Total platinums, the busiest day (earliest in the year on a tie) and the years the calendar took to
+    fill -- all from the rows the board already read."""
+    run = _heat_run({(3, 3): 2, (7, 14): 6, (12, 1): 6})
+    stats = calendar_render.calendar_boards_for([run])[run.pk][0]['stats']
+    assert stats['total'] == 14
+    assert (stats['busiest']['month'], stats['busiest']['day'], stats['busiest']['plats']) == (7, 14, 6)
+    assert stats['busiest']['label'] == '14 Jul', "day-first, like the plaque's record line"
+    assert (stats['first_year'], stats['last_year']) == (2015, 2024)
+
+
+def test_a_shovelware_only_day_reaches_neither_the_shade_nor_the_plaque():
+    """`in_all` without `in_clean` is a real row that draws nothing, so its count must not shade the board,
+    raise the peak, or swell the total."""
+    import datetime
+    run = _heat_run({(1, 1): 2})
+    CalendarDay.objects.filter(challenge=run, month=2, day=2).update(
+        in_all=True, in_clean=False, plat_count=40, earned_on=datetime.date(2001, 2, 2))
+    group = calendar_render.calendar_boards_for([run])[run.pk][0]
+    feb2 = group['months'][1]['days'][1]
+    assert feb2['level'] == 0 and feb2['plats'] == 0
+    assert group['stats']['total'] == 2 and group['stats']['busiest']['plats'] == 2
+    assert group['stats']['first_year'] == 2015, 'a shovelware day dated the calendar'
+
+
+def test_the_board_shades_relative_to_the_runs_own_counts_and_one_spike_cannot_flatten_it():
+    """Twenty days of 1 to 20 platinums and one 200-platinum spike. Relative to the BUSIEST day, the spike
+    would push days 1 to 20 into the bottom two shades -- the "same block" again. Anchored to the
+    95th-percentile day, they keep the whole range and the spike simply caps at the top."""
+    counts = {(1, d): d for d in range(1, 21)}
+    counts[(2, 1)] = 200
+    run = _heat_run(counts)
+    months = calendar_render.calendar_boards_for([run])[run.pk][0]['months']
+    jan, feb1 = months[0]['days'], months[1]['days'][0]
+    assert jan[0]['level'] == 1
+    assert jan[19]['level'] == calendar_render.HEAT_LEVELS, 'one spike flattened the rest of the year'
+    assert 1 < jan[9]['level'] < calendar_render.HEAT_LEVELS
+    assert feb1['level'] == calendar_render.HEAT_LEVELS, 'a day above the anchor caps at the top shade'
+    assert {d['level'] for d in jan[:20]} == set(range(1, calendar_render.HEAT_LEVELS + 1))

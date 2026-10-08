@@ -74,14 +74,28 @@ anchor would be a second tab stop to the same place.
             inside a 32px cell -- so the key that keeps the two apart is also the honest test for which
             one arrived. No new context value, and nothing to keep in step with `challenge_type`.
 
-            SEVEN ROWS FLOWING BY COLUMN, which is the dense year view this shape is known for. The rows
-            are NOT weekdays: a square is a (month, day) with no year, so there is nothing to align to.
-            Seven is simply what makes 365 cells read as a block at hero width.{% endcomment %}
+            THE RUN PAGE'S YEAR OVERVIEW, AS A HEATMAP (owner, 2026-10-08): a row per month in that month's
+            hue, a cell per day shaded by how many platinums landed on it (`data-heat`, see
+            `calendar_render._hero_group`). It replaced seven rows of grey: every finished run has all 365
+            days filled, so a FILL board was the same block for every hunter, and it was tinted with the
+            hunter's rank colour rather than the year's -- grey for every Newbie. The heat is what makes each
+            entry somebody's own year.{% endcomment %}
             {% if board.0.days %}
-            <div class="pp-chero__cal">
-                {% for day in board.0.days %}
-                <span class="pp-chero__cday{% if day.filled %} pp-chero__cday--on{% endif %}"></span>
+            <div class="pp-chero__year">
+                {% for month in board.0.months %}
+                <div class="pp-chero__yrow" data-month="{{ month.num }}">
+                    <span class="pp-chero__ylabel">{{ month.abbr }}</span>
+                    <span class="pp-chero__ydays">{% for day in month.days %}<span class="pp-chero__yday" data-heat="{{ day.level }}"></span>{% endfor %}</span>
+                </div>
                 {% endfor %}
+                {% comment %}THE KEY, because a heatmap without one is a pattern nobody can read: the shade is
+                how many platinums landed on the day, darker for more. Four swatches in the neutral primary, so
+                the legend belongs to no single month.{% endcomment %}
+                <div class="pp-chero__ykey">
+                    <span>Fewer</span>
+                    <span class="pp-chero__yday pp-chero__yswatch" data-heat="1"></span><span class="pp-chero__yday pp-chero__yswatch" data-heat="2"></span><span class="pp-chero__yday pp-chero__yswatch" data-heat="3"></span><span class="pp-chero__yday pp-chero__yswatch" data-heat="4"></span>
+                    <span>More platinums</span>
+                </div>
             </div>
             {% else %}
             {% for group in board %}
@@ -248,10 +262,21 @@ attribute is ignored and the real number renders. Not worth forking a shared par
         {% include 'partials/components/_disciplines_ring.html' with ring=plaque.ring level=plaque.level %}
 
         <div class="pp-chero__stats">
+            {% comment %}A FINISHED CALENDAR LEADS WITH ITS PLATINUMS, not "365/365 days": that figure is true of every
+            finished Calendar run, so in a Hall of Fame it says nothing (owner, 2026-10-08). The total is every
+            shovelware-free platinum laid on the calendar -- how deep the year is, not just that it is full.
+            {% endcomment %}
+            {% if board.0.stats %}
+            <span class="pp-chero__tally">
+                <span class="pp-tally pp-tally--sm">{{ board.0.stats.total|intcomma }}</span>
+                <span class="pp-chero__label">platinum{{ board.0.stats.total|pluralize }}</span>
+            </span>
+            {% else %}
             <span class="pp-chero__tally">
                 <span class="pp-tally pp-tally--sm">{{ run.completed_count }}<span class="pp-chero__of">/{{ run.total_slots }}</span></span>
                 <span class="pp-chero__label">{{ run.unit }}</span>
             </span>
+            {% endif %}
 
             {% comment %}CAREER XP, the hunter's standing in the economy, and it rides the career-standing
             row the rank already needed -- so it costs nothing extra.{% endcomment %}
@@ -274,6 +299,26 @@ attribute is ignored and the real number renders. Not worth forking a shared par
         advanced both boards. A Job Coverage run whose owner has not pressed claim yet is also zero. In both
         cases the line is omitted rather than printed as "+0 job XP", which would read as a failed payout
         on a page celebrating the finish.{% endcomment %}
+        {% comment %}THE CALENDAR'S TWO LINES, where the other types put the XP a run paid (a Calendar pays
+        titles, never XP): the busiest day, and the years the calendar took to fill. Both come from the 365 rows
+        the board already read, so they cost nothing.{% endcomment %}
+        {% with stats=board.0.stats %}
+        {% if stats.busiest %}
+        <p class="pp-chero__paid">
+            <span class="pp-chero__label">Busiest day</span>
+            <span class="pp-chero__paidnum">{{ stats.busiest.plats }}</span>
+            <span class="pp-chero__label">platinum{{ stats.busiest.plats|pluralize }} on {{ stats.busiest.label }}</span>
+        </p>
+        {% endif %}
+        {% if stats.first_year %}
+        <p class="pp-chero__paid">
+            {% comment %}"EARNED", not "Filled": beside the plaque's finish date, "Filled 2016 to 2023" read as a
+            second completion date.{% endcomment %}
+            <span class="pp-chero__label">Earned</span>
+            <span class="pp-chero__paidnum">{% if stats.first_year == stats.last_year %}{{ stats.first_year }}{% else %}{{ stats.first_year }} to {{ stats.last_year }}{% endif %}</span>
+        </p>
+        {% endif %}
+        {% endwith %}
         {% if plaque.run_xp %}
         <p class="pp-chero__paid">
             <span class="pp-chero__paidnum">+{{ plaque.run_xp|intcomma }}</span>

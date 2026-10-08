@@ -621,7 +621,7 @@ def test_the_hero_board_is_chosen_by_the_key_the_renderer_returned():
     truth to drift from `challenge_type`."""
     hero = open('templates/challenges/partials/_run_hero.html', encoding='utf-8').read()
     assert '{% if board.0.days %}' in hero
-    assert 'pp-chero__cal' in hero
+    assert 'pp-chero__year' in hero
 
 
 # ── the script, pinned by source text ────────────────────────────────────────────────────────────────
@@ -1192,24 +1192,31 @@ def _hero_html(run):
     })
 
 
-def test_the_hero_draws_a_cell_for_every_day_and_tints_the_filled_ones():
-    """THE HOLE: nothing rendered a hero with a Calendar run, so mutations that emitted no filled class
-    at all, or looped a key that does not exist, both survived -- every day blank and no test noticing."""
+def test_the_hero_draws_a_cell_for_every_day_and_shades_the_filled_ones():
+    """THE HOLE: nothing rendered a hero with a Calendar run, so mutations that emitted no shade at all, or
+    looped a key that does not exist, both survived -- every day blank and no test noticing. The board is the
+    year heatmap now: twelve month rows, a cell per day, `data-heat` 0 for an empty day."""
     run = _run(CHALLENGE_TYPE_CALENDAR)
     _fill(run, 3, 3)
     _fill(run, 5, 5)
     html = _hero_html(run)
 
-    # COUNTED ON THE ATTRIBUTE OPENING, not on the bare class: a filled cell carries both the base class
-    # and the `--on` modifier, so the plain substring appears twice for every tinted day and the total
-    # drifts with however many are filled.
-    assert html.count('class="pp-chero__cday') == 365
-    assert html.count('pp-chero__cday--on') == 2
+    assert html.count('class="pp-chero__yday"') == 365
+    assert html.count('class="pp-chero__yrow"') == 12
+    assert html.count('data-heat="0"') == 363, 'only the two filled days may be shaded'
+    # IN RANGE: an out-of-range level would pass a count of zeros and paint nothing.
+    import re as _re
+    levels = _re.findall(r'class="pp-chero__yday" data-heat="(\d+)"', html)
+    assert sorted(set(levels)) == ['0', '4'] or all(0 <= int(lv) <= 4 for lv in levels)
+    assert [lv for lv in levels if lv != '0'] and all(1 <= int(lv) <= 4 for lv in levels if lv != '0')
+    # EVERY ROW CARRIES ITS MONTH, or every row falls back to the primary and the hue table reads nothing.
+    for month in range(1, 13):
+        assert 'class="pp-chero__yrow" data-month="%d"' % month in html, month
 
 
 def test_the_hero_draws_no_slot_shelf_for_a_calendar_run():
     html = _hero_html(_run(CHALLENGE_TYPE_CALENDAR))
-    assert 'pp-chero__cal' in html
+    assert 'pp-chero__year' in html
     assert 'pp-chero__shelf' not in html
     assert 'pp-chero__sq' not in html
 
@@ -1221,16 +1228,22 @@ def test_the_hero_tints_only_what_the_board_does():
         _fill(run, 2, day)
     CalendarDay.objects.filter(challenge=run, month=3).update(in_all=True, in_clean=False)
 
-    assert _hero_html(run).count('pp-cal__cday--on') == 0, 'sanity: the hero uses its own class'
-    assert _hero_html(run).count('pp-chero__cday--on') == 2
+    html = _hero_html(run)
+    assert html.count('data-heat="0"') == 363, 'a shovelware platinum shaded a Hall of Fame day'
 
 
-def test_the_calendar_hero_takes_the_whole_row_through_the_tablet_band():
-    """53 columns sharing the row with the plaque at 768 left a 3.9px cell, no better than mobile. Only
-    `--jobs` was named in the rule that fixes this, so the widest board in the feature got the narrowest
-    column."""
-    block = _calendar_css()
-    assert '.pp-chero--calendar { grid-template-columns: minmax(0, 1fr); }' in block
+def test_the_calendar_hero_takes_the_whole_row_until_1280():
+    """Full width from `md:` until 1280, then BESIDE the plaque like A-Z. Full width the cell is ~19px at 768;
+    the generic 2.4fr share at 1024 would make it ~17px -- smaller on a bigger screen. From 1280 the 2.6fr share
+    gives ~23px, so the board moves beside the plaque there and grows as it does."""
+    css = re.sub(r'/\*.*?\*/', '', open('static/css/components/challenges.css', encoding='utf-8').read(),
+                 flags=re.S)
+    rule = '.pp-chero--calendar { grid-template-columns: minmax(0, 1fr); }'
+    assert css.count(rule) == 1
+    block = re.search(r'@media \(([^)]*)\) and \(([^)]*)\) \{\s*' + re.escape(rule), css)
+    assert block, 'the full-row rule is not inside a bounded media query'
+    assert (block.group(1), block.group(2)) == ('min-width: 768px', 'max-width: 1279.98px'), (
+        'the Calendar hero must take the whole row from 768 until the cell stops shrinking at 1280')
 
 
 # ── the stylesheet, pinned by source text (there is no CSS test runner either) ───────────────────────
@@ -1531,23 +1544,29 @@ def test_the_lens_switcher_carries_no_explanatory_line():
     assert 'pp-cal__lenshint' not in _calendar_css()
 
 
-def test_the_hero_band_never_shrinks_as_the_viewport_grows():
-    """The first version capped the full-row rule at 1023, which re-created the exact discontinuity the
-    `--jobs` comment above it exists to prevent: 11.2px at 768, back to 9.4px at 1024. A 53-column board
-    wants the widest row it can get at every size and has no second shape to reach for."""
-    block = _calendar_css()
-    assert '@media (min-width: 768px) {\n    .pp-chero--calendar { grid-template-columns: minmax(0, 1fr); }' in block
-    assert 'max-width: 1023px' not in block
+def test_the_hero_heatmap_cells_are_square():
+    """A heatmap day is `aspect-ratio: 1` inside a 31-track row with no definite row height, so the column
+    track sets the width and the ratio the height. (The old 53-column band lost its squares once to
+    `repeat(7, 1fr)` plus a `min-height`, which made both dimensions definite and the ratio inert.)"""
+    css = re.sub(r'/\*.*?\*/', '', open('static/css/components/challenges.css', encoding='utf-8').read(), flags=re.S)
+    day = css[css.index('.pp-chero__yday {'):]
+    day = day[:day.index('}')]
+    assert 'aspect-ratio: 1' in day
+    assert 'height' not in day, 'a definite height makes the aspect ratio inert'
+    assert 'grid-template-columns: repeat(31, minmax(0, 1fr))' in css
 
 
-def test_the_hero_cells_are_square():
-    """`aspect-ratio` is INERT against definite row tracks. With `repeat(7, 1fr)` plus a `min-height`
-    both dimensions were definite and the ratio was ignored, so every day rendered as a rectangle while
-    the comment claimed squares. Auto rows let the column track set the width and the ratio the height."""
-    block = _calendar_css()
-    assert 'grid-template-rows: repeat(7, auto)' in block
-    # `_calendar_css` strips comments now, so this reads rules only.
-    assert 'min-height' not in block
+def test_every_heat_level_has_a_shade_and_none_touches_the_rank_colour():
+    """The old band was tinted with `--rk`, the hunter's RANK colour, so every Newbie's year was grey. The
+    shade belongs to the month (`--cal-c`) and the level to the hunter's own counts."""
+    css = re.sub(r'/\*.*?\*/', '', open('static/css/components/challenges.css', encoding='utf-8').read(), flags=re.S)
+    for level in range(1, 5):
+        rule = css[css.index('.pp-chero__yday[data-heat="%d"]' % level):]
+        rule = rule[:rule.index('}')]
+        assert '--cal-c' in rule, level
+        assert '--rk' not in rule, level
+    assert '.pp-chero__yrow[data-month="1"]' in css, 'the hero row reads no month hue'
+
 
 
 def test_the_crests_take_no_ignite_bloom():

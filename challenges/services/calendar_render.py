@@ -100,9 +100,9 @@ MONTH_NAMES = tuple(calendar.month_name[month] for month in range(1, 13))
 #: turning the cheapest renderer in the app into the most expensive. Caught by the flatness test rather
 #: than by review, which is why that test measures instead of asserting a shape.
 #:
-#: ONE LIST FOR BOTH PATHS, so there is no second copy to keep in step. The hero does not read
-#: `earned_on` or `plat_count`; two small columns over at most 2,920 rows are not worth a divergence to
-#: avoid. (This named only the date until the count arrived.)
+#: ONE LIST FOR BOTH PATHS, so there is no second copy to keep in step. The Hall of Fame hero reads
+#: `plat_count` (its heatmap's shade and the plaque's total and busiest day) and `earned_on` (the years the
+#: calendar took to fill), so the two paths need the same columns.
 _CELL_FIELDS = ('challenge', 'month', 'day', 'in_all', 'in_clean', 'earned_on', 'plat_count')
 
 
@@ -410,8 +410,8 @@ def calendar_boards_for(challenges):
     because a board tinted by "filled in any of them" would have overstated a run's progress. With one
     lens the board and the `filled_count` tally beside it read the same column by construction.
 
-    A DAY CARRIES ONLY WHAT A HERO CELL CAN DRAW -- its date and whether it is filled in that lens.
-    `boards_for` makes the same choice (a four-key square built inline rather than `_card`'s eight),
+    A DAY CARRIES ONLY WHAT A HERO CELL CAN DRAW -- its date, whether it is filled, its platinum count and
+    its heat level (see `_hero_group`). `boards_for` makes the same choice (a four-key square built inline rather than `_card`'s eight),
     and at roughly 2,900 cells per page the difference is real: the detail cell's label, modal key,
     per-lens booleans and run index have no reader at this size.
 
@@ -445,29 +445,113 @@ def calendar_boards_for(challenges):
 
 
 def _hero_group(rows):
-    """One run's hero board: `[]`, or a single group of 365 minimal day cells.
+    """One run's Hall of Fame board: `[]`, or a single group -- the year, as a HEATMAP.
 
-    NO LENS TO PICK ANY MORE. This used to call `headline_view` to choose the better of two lenses and
-    report which one the band was drawn in, because a board tinted by "filled in any lens" would have
-    overstated the run. One lens makes the band and the `filled_count` tally read the same column.
+    `{days, months, stats}`:
+
+    - `days`: the 365 cells in year order, `{month, day, filled, plats, level}`. The flat list stays because
+      it is also what tells the template a Calendar board arrived (`board.0.days`) rather than a slot one.
+    - `months`: the same cells cut into twelve rows, `{num, abbr, days}`, which is what the board DRAWS --
+      the run page's year overview, a row per month in that month's hue (owner, 2026-10-08).
+    - `stats`: what the plaque leads with (see below).
+
+    WHY A HEATMAP, AND NOT A FILL. A run in the Hall of Fame is FINISHED, so every one of its 365 days is
+    filled -- and a board of filled squares was the same solid block for every hunter on the page. It said
+    nothing about anyone, which is the one thing a Hall of Fame entry exists to do. `plat_count` (how many
+    shovelware-free platinums landed on that date, across every year) is already in the row this reads, so
+    shading by it costs no query and turns the block into the hunter's own year: their busy stretches, their
+    quiet weeks.
+
+    THE SHADE IS RELATIVE TO THE RUN'S OWN COUNTS, on a square-root curve, in `HEAT_LEVELS` steps. A fixed
+    scale ("5+ is the darkest") would paint a whale's whole year at the top step and a modest hunter's at the
+    bottom, so neither board would show a pattern. The square root lifts the common low counts off the bottom
+    step, where a linear scale would leave most of a year looking empty.
+
+    THE PEAK IS THE 95th-PERCENTILE DAY, NOT THE BUSIEST, because one spike would otherwise flatten the year
+    back into the block this replaced: with a single 40-platinum day, days of 3 to 10 all landed on one
+    shade. Days above the percentile simply take the top step. Cheap: one sort over at most 365 counts.
+
+    `stats` -- the plaque's figures, because "365/365 days" is true of every finished run and so says
+    nothing in a Hall of Fame (owner, 2026-10-08): `total` platinums laid on the calendar, the `busiest` day
+    (`{month, day, plats, label}`, the earliest in the year on a tie), and `first_year`/`last_year` -- the
+    years of the earliest and latest `earned_on`. `earned_on` is the date a day was FIRST filled, so the
+    latest of them is the moment the calendar became complete in the hunter's own history.
+
+    ONLY FILLED DAYS COUNT, for the reason `_cell` gives: a square that is `in_all` and not `in_clean` carries
+    a shovelware count and a date but draws nothing, so it must not reach the board's shades or the plaque.
     """
     if not rows:
         return []
 
     by_key = _rows_by_key(rows)
-    days = []
+    days, years = [], []
     for month, day in calendar_day_keys():
-        days.append({'month': month, 'day': day, 'filled': _is_filled(by_key.get((month, day)))})
-    # NO `view` KEY. One was here so the band could say which lens it was drawn in -- without it the
-    # same grid of tints meant a different achievement from one entry to the next, which is the one
-    # thing a Hall of Fame must not do. With one lens every band means the same thing.
-    # NO `label`/`slug` EITHER, which `_board_groups`' single-group branch does carry. They are always `''`
-    # there too, but that group is drawn by `_run_hero.html`, which tests `group.label`. This one can
-    # never be, because it deliberately does not use the `squares` key that template loops. Two keys
-    # that are always empty and that no template can reach are what `_card`'s rule rejects, and they
-    # would have survived a trim that minimised the cells beside them for exactly that reason.
-    return [{'days': days}]
+        row = by_key.get((month, day))
+        filled = _is_filled(row)
+        days.append({
+            'month': month,
+            'day': day,
+            'filled': filled,
+            'plats': (row.plat_count or 0) if filled else 0,
+        })
+        if filled and row.earned_on:
+            years.append(row.earned_on.year)
 
+    peak = _heat_peak([d['plats'] for d in days if d['filled']])
+    for d in days:
+        d['level'] = _heat_level(d['plats'], peak) if d['filled'] else 0
+
+    months, start = [], 0
+    for index, length in enumerate(CALENDAR_MONTH_DAYS):
+        months.append({'num': index + 1, 'abbr': MONTH_SLUGS[index].upper(), 'days': days[start:start + length]})
+        start += length
+
+    busiest = max((d for d in days if d['filled']), key=lambda d: d['plats'], default=None)
+    stats = {
+        'total': sum(d['plats'] for d in days),
+        'busiest': None if busiest is None or not busiest['plats'] else {
+            'month': busiest['month'], 'day': busiest['day'], 'plats': busiest['plats'],
+            # DAY-FIRST, matching the plaque's own record line ("8 Oct 2026").
+            'label': '%d %s' % (busiest['day'], MONTH_NAMES[busiest['month'] - 1][:3]),
+        },
+        'first_year': min(years) if years else None,
+        'last_year': max(years) if years else None,
+    }
+    return [{'days': days, 'months': months, 'stats': stats}]
+
+
+#: How many shades a filled day can take on the Hall of Fame heatmap. Four is what reads at the ~8px cell a
+#: phone gets: more steps and neighbouring shades stop being distinguishable, fewer and the year flattens
+#: back into a block.
+HEAT_LEVELS = 4
+
+#: The percentile of a run's daily counts that the top shade is anchored to. See `_hero_group`.
+HEAT_PEAK_PERCENTILE = 0.95
+
+
+def _heat_peak(counts):
+    """The count the top shade is anchored to: the `HEAT_PEAK_PERCENTILE` day, never below 1."""
+    if not counts:
+        return 0
+    ordered = sorted(counts)
+    return max(1, ordered[int(HEAT_PEAK_PERCENTILE * (len(ordered) - 1))])
+
+
+def _heat_level(plats, peak):
+    """1..HEAT_LEVELS for a FILLED day, relative to `peak` (see `_heat_peak`) on a square-root curve.
+
+    A run whose peak is one platinum has nothing to shade between, so every counted day takes the top step:
+    the board reads as complete rather than as uniformly faint. A filled day whose count is ZERO takes the
+    bottom step rather than vanishing -- fills are monotone, so a day stays filled after a reclassification
+    takes its only platinum to shovelware, while its live count follows the aggregate down to 0. Days above
+    the peak (the top 5%) cap at the top step.
+    """
+    if not plats:
+        return 1
+    if peak <= 1:
+        return HEAT_LEVELS
+    ratio = min(1.0, (plats - 1) / (peak - 1))
+    return 1 + round((HEAT_LEVELS - 1) * ratio ** 0.5)
 
 def totals_for(months):
     """`{'done', 'all', 'struck', 'open'}` for the whole year.
