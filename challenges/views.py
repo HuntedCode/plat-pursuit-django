@@ -543,10 +543,12 @@ class ChallengeDetailView(DetailView):
             # one-lens collapse removed the switcher, so both are gone and nothing downstream has to be
             # told which lens is active.
             context['calendar_totals'] = calendar_render.totals_for(months)
-            # THE DAY-MARKER RAIL, off the same figure the board draws. No query: `totals_for` summed
-            # month counts already on the page, and the rail is arithmetic over that one number.
+            # THE DAY-MARKER LADDER, off the same figure the board draws (`totals_for` summed month counts
+            # already on the page), plus ONE query for the titles the owner holds -- never one per rung.
             context['calendar_rail'] = calendar_render.marker_rail(
-                context['calendar_totals']['done'], total=challenge.total_slots)
+                context['calendar_totals']['done'], total=challenge.total_slots,
+                # THE OWNER'S titles, not the viewer's: the ladder describes this run's hunter.
+                held=rewards.held_calendar_titles(challenge.profile))
 
             # THE OPENING CEREMONY, GATED SERVER-SIDE, which is the half that matters: `DetailModal`
             # reads `data-auto` from the markup, so the decision not to show it has to be made here

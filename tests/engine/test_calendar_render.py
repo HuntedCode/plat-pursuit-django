@@ -565,66 +565,101 @@ def test_a_fully_filled_board_costs_no_more_than_an_empty_one():
     assert len(full_cost) == len(empty_cost) == 1
 
 
-# ── the day-marker rail ──────────────────────────────────────────────────────────────────────────────
+# ── the day-marker ladder ────────────────────────────────────────────────────────────────────────────
 
-def test_the_rail_reports_the_ladder_and_where_the_hunter_stands():
+def _titles():
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+    return CALENDAR_DAY_TITLES
+
+
+def _held(*days):
+    return frozenset(_titles()[d] for d in days)
+
+
+def test_the_ladder_names_every_rung_and_where_the_hunter_stands():
     from challenges.services.calendar_render import DAY_MARKERS, marker_rail
 
-    rail = marker_rail(297)
-    assert rail['done'] == 297
-    assert rail['total'] == 365
+    rail = marker_rail(154, held=_held(50, 100))
     assert [m['days'] for m in rail['markers']] == list(DAY_MARKERS)
-    assert [m['reached'] for m in rail['markers']] == [True, True, True, False, False]
-    assert rail['next'] == 300
-    assert rail['to_next'] == 3
+    assert [m['title'] for m in rail['markers']] == [_titles()[d] for d in DAY_MARKERS]
+    assert [m['state'] for m in rail['markers']] == ['earned', 'earned', 'next', 'locked', 'locked']
+    assert rail['next'] == 200 and rail['next_title'] == _titles()[200] and rail['to_next'] == 46
+    assert rail['markers'][2]['to_go'] == 46
+    assert [m['finishes'] for m in rail['markers']] == [False, False, False, False, True]
 
 
-def test_the_rail_is_linear_in_days():
-    """A DELIBERATE CHOICE, and the flattering one. The rail measures days, so a day is the same distance
-    everywhere along it -- but the DIFFICULTY is wildly non-linear (`DAY_MARKERS` carries the
-    coupon-collector arithmetic: the 50 rung is roughly 54 platinums, the 300 rung roughly 630). Spacing
-    the rungs by effort would make the rail lie about the quantity it measures, which is the worse of the
-    two errors; this pins the choice so nobody "fixes" it without reading why.
-    """
+def test_each_rung_fills_across_its_own_span():
+    """Five equal cells, each from the rung before it to its own: 250 days is halfway through 200-300."""
     from challenges.services.calendar_render import marker_rail
 
-    rail = marker_rail(0)
-    for marker in rail['markers']:
-        assert marker['pct'] == round(marker['days'] * 100.0 / 365, 2)
-    # Which means the gaps are proportional to days and NOT to the climb: 50->100 is the same width as
-    # 250->300, while the second costs several hundred more platinums.
-    pcts = [m['pct'] for m in rail['markers']]
-    assert round(pcts[1] - pcts[0], 2) == round(50 * 100.0 / 365, 2)
+    rail = marker_rail(250, held=_held(50, 100, 200))
+    assert [m['fill'] for m in rail['markers']] == [100, 100, 100, 50, 0]
+    # THE LAST SPAN IS 65 DAYS, not 100: 333 is 33 of them, 51% rounded.
+    assert marker_rail(333, held=frozenset())['markers'][4]['fill'] == 51
+    assert marker_rail(25, held=frozenset())['markers'][0]['fill'] == 50
 
 
-def test_a_finished_run_has_no_next_rung():
+def test_a_reached_rung_without_its_title_never_claims_it():
+    """The title row is not there yet (the grant raised and retries on the next recount), so the ladder
+    says "reached" -- shown as "Title pending" -- rather than "earned"."""
     from challenges.services.calendar_render import marker_rail
 
-    rail = marker_rail(365)
-    assert all(m['reached'] for m in rail['markers'])
+    rail = marker_rail(60, held=frozenset())
+    assert rail['markers'][0]['state'] == 'reached'
+    assert rail['next'] == 100
+
+
+def test_a_title_held_from_an_earlier_run_is_not_offered_again():
+    """Titles belong to the hunter, not the run, so a second run below 50 days already holds the first rung.
+    The next title is the first one NOT held -- the rule `next_calendar_rung` gives the Start card."""
+    from challenges.services.calendar_render import marker_rail
+
+    rail = marker_rail(20, held=_held(50))
+    assert [m['state'] for m in rail['markers']][:2] == ['held', 'next']
+    assert rail['next'] == 100 and rail['next_title'] == _titles()[100] and rail['to_next'] == 80
+
+
+def test_a_hunter_holding_the_whole_ladder_has_no_next_rung():
+    from challenges.services.calendar_render import DAY_MARKERS, marker_rail
+
+    rail = marker_rail(20, held=_held(*DAY_MARKERS))
     assert rail['next'] is None and rail['to_next'] is None
-    assert rail['pct'] == 100.0
+    assert {m['state'] for m in rail['markers']} == {'held'}
 
 
-def test_the_rail_clamps_rather_than_overrunning():
-    """A run cannot be past its own total, but `filled_count` is a denormalised figure and a rail that
-    renders `width: 110%` would spill out of its track rather than failing visibly."""
+def test_a_finished_run_has_every_rung_earned():
+    from challenges.services.calendar_render import DAY_MARKERS, marker_rail
+
+    rail = marker_rail(365, held=_held(*DAY_MARKERS))
+    assert {m['state'] for m in rail['markers']} == {'earned'}
+    assert rail['next'] is None
+    assert all(m['fill'] == 100 for m in rail['markers'])
+
+
+def test_the_ladder_clamps_rather_than_overrunning():
+    """`filled_count` is a denormalised figure, and a cell that renders `width: 110%` spills out of its bar."""
     from challenges.services.calendar_render import marker_rail
 
-    assert marker_rail(400)['pct'] == 100.0
-    assert marker_rail(400)['done'] == 365
-    assert marker_rail(-5)['pct'] == 0.0
-    assert marker_rail(-5)['done'] == 0
+    assert marker_rail(400, held=frozenset())['done'] == 365
+    low = marker_rail(-5, held=frozenset())
+    assert low['done'] == 0 and all(m['fill'] == 0 for m in low['markers'])
 
 
-def test_the_marker_positions_keep_their_fraction():
-    """COMPUTED SERVER-SIDE RATHER THAN BY `widthratio`, which floors to an integer: the 50 rung would
-    sit at 13% against a label that says 13.7% of the way along, and the pip and its number would
-    visibly disagree."""
+def test_held_titles_are_required():
+    """No default: an empty one would quietly turn every earned rung into "reached"."""
     from challenges.services.calendar_render import marker_rail
 
-    first = marker_rail(0)['markers'][0]
-    assert first['pct'] == 13.7, 'floored to 13 it would misalign against its own label'
+    with pytest.raises(TypeError):
+        marker_rail(100)
+
+
+def test_the_held_titles_cost_one_query():
+    from challenges.services.rewards import held_calendar_titles
+
+    profile = _hunter()
+    with CaptureQueriesContext(connection) as ctx:
+        held_calendar_titles(profile)
+    assert len(ctx.captured_queries) == 1
 
 
 # ── the month's side-column figures ──────────────────────────────────────────────────────────────────
@@ -832,3 +867,30 @@ def test_the_board_shades_relative_to_the_runs_own_counts_and_one_spike_cannot_f
     assert 1 < jan[9]['level'] < calendar_render.HEAT_LEVELS
     assert feb1['level'] == calendar_render.HEAT_LEVELS, 'a day above the anchor caps at the top shade'
     assert {d['level'] for d in jan[:20]} == set(range(1, calendar_render.HEAT_LEVELS + 1))
+
+
+def test_the_current_rung_is_the_span_the_run_is_in_even_when_its_title_is_held():
+    """A phone draws one bar, under the CURRENT rung. On a second run at 20 days the first title is held, so
+    the next rung is 100 -- but the run is 40% through the 0-50 span, and a bar under the 100 rung would sit
+    at 0%."""
+    from challenges.services.calendar_render import marker_rail
+
+    rail = marker_rail(20, held=_held(50))
+    assert [m['current'] for m in rail['markers']] == [True, False, False, False, False]
+    assert rail['markers'][0]['fill'] == 40 and rail['next'] == 100
+    assert not any(m['current'] for m in marker_rail(365, held=frozenset())['markers'])
+
+
+@pytest.mark.parametrize('done', [0, 20, 49, 50, 60, 154, 300, 364, 365])
+@pytest.mark.parametrize('held_days', [(), (50,), (50, 100), (100,), (50, 100, 200, 300, 365)])
+def test_the_ladder_and_the_start_card_name_the_same_next_title(monkeypatch, done, held_days):
+    """Two surfaces answer "what is the next title": the run page's ladder and My Challenges' Start card
+    (`next_calendar_rung`). They must agree for every position and every set of held titles."""
+    from challenges.services import rewards
+    from challenges.services.calendar_render import marker_rail
+
+    held = _held(*held_days)
+    monkeypatch.setattr(rewards, 'held_calendar_titles', lambda profile: held)
+    rail = marker_rail(done, held=held)
+    card = rewards.next_calendar_rung(None, done)
+    assert (rail['next'], rail['next_title'] or None) == (card or (None, None))

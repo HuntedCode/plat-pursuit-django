@@ -44,6 +44,7 @@ from challenges.models import (CALENDAR_DAY_MARKERS, CALENDAR_MONTH_DAYS, Calend
 # and `_hunter_timezone` is the one place that knows whose clock a Calendar runs on. A second
 # spelling of either is how the marker comes to sit on a different square than the fill did.
 from challenges.services.calendar_fill import _fold, _hunter_timezone
+from challenges.services.rewards import CALENDAR_DAY_TITLES
 
 #: WHAT `.pp-med` ACTUALLY PROVIDES, kept because an earlier comment oversold it and the overselling
 #: was load-bearing -- it claimed the crest "needs no authored artwork". That is FALSE.
@@ -611,41 +612,77 @@ def totals_for(months):
 DAY_MARKERS = CALENDAR_DAY_MARKERS
 
 
-def marker_rail(done, total=None):
-    """The day-marker ladder's state for one run: `{done, total, pct, next, to_next, markers}`.
+def marker_rail(done, *, held, total=None):
+    """The day-marker ladder for one run: `{done, total, next, next_title, to_next, markers}`.
 
-    FOR A RAIL RATHER THAN A ROW OF AWARDS (owner, 2026-10-04, picking between three shapes). The day
-    markers are the one part of this feature that moves from a hunter's very first platinum, so "here is
-    your next rung" is the thing worth surfacing -- and a second row of medal-shaped objects would
-    compete with the twelve crests rather than complement them.
+    EACH RUNG SAYS WHAT IT AWARDS (owner, 2026-10-08: the rail "doesn't really do a great job of
+    explaining what you get at the various milestones"). A marker carries its title from
+    `rewards.CALENDAR_DAY_TITLES`, its STATE (below), how many days remain to it, `fill` (how far through
+    ITS OWN SPAN the run is, 0-100), and `current`: whether the run's progress is inside this rung's span
+    right now, which is the bar a phone shows.
 
-    LINEAR IN DAYS, which is a deliberate choice and arguably a flattering one. The rail measures days,
-    so a day is the same distance everywhere along it; the DIFFICULTY is wildly non-linear (the 50 rung
-    is ~54 platinums, the 300 rung ~630), so the right-hand half is far harder than it looks. Distorting
-    the spacing to show that would make the rail lie about the quantity it measures, which is the worse
-    of the two errors -- but it is worth knowing that the gaps understate the climb.
+    PER-RUNG SPANS, NOT ONE LINEAR TRACK. The ladder draws five equal cells, each filling from the rung
+    before it to its own (0-50, 50-100, 100-200, 200-300, 300-365). The linear rail it replaced put the
+    50 and 100 rungs 13% apart -- about 40px on a phone -- so they could never carry a title beside
+    them. Equal cells give every rung room for its name, and the day count printed on each says how
+    long its span is, so nothing is hidden by the spacing.
 
-    NO REWARD NAMES HERE, because there are none yet. The ladder's titles are a later slice, so this
-    returns the SHAPE of the ladder and its progress and nothing that implies something is claimable.
+    `held` IS THE OWNER'S TITLES (`rewards.held_calendar_titles`), REQUIRED, with no default: an empty
+    default would quietly mark every reached rung as merely "reached". The STATE combines it with the
+    day count, because the two disagree in two real cases:
+
+      earned   reached, and the title is held
+      reached  reached, but the title row is not there yet: the grant runs on the recount and a raise
+               there is logged and retried on the next one, so this is "pending", never a claim. (A NAME
+               COLLISION does not land here: `_ensure_title` hands back the other system's row of the
+               same name, so the name is held.)
+      held     not reached on THIS run, but the title is already theirs from an earlier one
+      next     the first rung neither reached nor held -- the same rule as `next_calendar_rung`, so the
+               Start card and this ladder name the same next title
+      locked   everything after it
+
+    `next` and `to_next` stay for the opening ceremony, which says the same thing in a sentence.
     """
     total = DAY_MARKERS[-1] if total is None else total
     done = max(0, min(done, total))
 
-    markers = [{
-        'days': days,
-        'reached': done >= days,
-        # POSITION AS A PERCENTAGE OF THE RAIL, computed here rather than in the template: a style
-        # attribute wants one number, and `widthratio` floors to an integer -- which would put the 50
-        # rung at 13% instead of 13.7% and visibly misalign it against its own label.
-        'pct': round(days * 100.0 / total, 2),
-    } for days in DAY_MARKERS]
+    markers = []
+    prev = 0
+    nxt = None
+    current = None
+    for days in DAY_MARKERS:
+        title = CALENDAR_DAY_TITLES.get(days, '')
+        reached = done >= days
+        if reached:
+            state = 'earned' if title in held else 'reached'
+        elif title in held:
+            state = 'held'
+        elif nxt is None:
+            state, nxt = 'next', days
+        else:
+            state = 'locked'
+        span = days - prev
+        if not reached and current is None:
+            current = days
+        markers.append({
+            'days': days,
+            'title': title,
+            'state': state,
+            'reached': reached,
+            'to_go': 0 if reached else days - done,
+            # Rounded to whole percent: a width, so a fraction of a percent is invisible, and an
+            # integer reads cleanly in the inline style.
+            'fill': 100 if reached else (round(max(0, done - prev) * 100 / span) if span else 0),
+            'finishes': days == total,
+            'current': current == days,
+        })
+        prev = days
 
-    nxt = next((m['days'] for m in markers if not m['reached']), None)
     return {
         'done': done,
         'total': total,
-        'pct': round(done * 100.0 / total, 2),
         'next': nxt,
+        'next_title': CALENDAR_DAY_TITLES.get(nxt, '') if nxt else '',
         'to_next': None if nxt is None else nxt - done,
         'markers': markers,
     }

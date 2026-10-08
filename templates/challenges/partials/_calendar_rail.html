@@ -1,70 +1,45 @@
-{% comment %}The day-marker rail: how many days are filled, and the next rung.
+{% comment %}The day-marker LADDER: the five Calendar titles, which ones are earned, and how far to the next.
 
-A RAIL RATHER THAN A ROW OF AWARDS (owner, 2026-10-04, picking between three shapes). The day markers
-are the one part of this feature that moves from a hunter's very first platinum, so "here is your next
-rung" is the thing worth surfacing -- and a second row of medal-shaped objects would compete with the
-twelve crests rather than complement them.
+IT REPLACED A LINEAR RAIL (owner, 2026-10-08: it "doesn't really do a great job of explaining what you get
+at the various milestones"). The rail drew five pips and five numbers and never said what a number was
+worth. Each rung now names its title and its state, so the header answers "what do I get, and when" without
+the tutorial.
 
-LINEAR IN DAYS, which is honest about the quantity and flattering about the climb. A day is the same
-distance everywhere along the rail because the rail measures days; the DIFFICULTY is not linear at all
-(the 50 rung is roughly 54 platinums, the 300 rung roughly 630), so the right-hand half is far harder
-than its spacing suggests. `DAY_MARKERS` carries the arithmetic. Distorting the spacing to show the
-difficulty would make the rail lie about the thing it measures, which is the worse of the two errors.
+FIVE EQUAL CELLS, each filling across its own span (see `calendar_render.marker_rail`), because the linear
+rail put the 50 and 100 rungs about 40px apart on a phone, with no room for a title beside either.
 
-NO REWARD NAMES, because there are none yet: the ladder's titles are a later slice. This draws the shape
-of the ladder and the hunter's place on it, and nothing that implies something is claimable.
+ONE MARKUP, TWO LAYOUTS: a row of five columns from `md:`, where each cell's bar joins the next into one
+segmented track; a list on a phone, where five columns of ~58px cannot hold "Calendar Chronicler" at the
+12px floor. On the phone a state glyph leads each row, and only the CURRENT rung keeps its bar, the one whose span the run is in. That is usually the next rung,
+but not on a second run below 50 days, where the first rung is already held and the next one's span has not
+started.
 
-THE COMPARISON FIGURE LIVES HERE, which is the one place it has a job. `in_all` is the same days without
-the shovelware exclusion, and it is what makes the count mean something read aloud -- "297 days, of 340
-you hold platinums for" -- rather than being a bare number. It is deliberately quiet: a reader who does
-not care never has to parse it.
+THE FILE AND CONTEXT KEY KEEP THE RAIL'S NAME (`calendar_rail`): the ceremony reads the same dict, and a
+rename would touch every reader for no change in behaviour. The BLOCK is `.pp-cal-ladder`.
 
-NO HEADLINE FIGURE OF ITS OWN. This carried one, on the shared `.pp-tally` face, while it sat in a card
-of its own below the board. It lives in the page header now (owner: "can we put that rail in the header
-and replace the progress bar there?"), where the big tally two lines above already states the count -- so
-the rail draws the LADDER and the figure is said once.
+"ALREADY YOURS" ONLY TO THE OWNER: the page is public, and a visitor reading a stranger's run is told
+"Already held" instead -- the second-person rule the opening ceremony's gate follows.
+
+THE COMPARISON FIGURE stays as a quiet footnote: `in_all` is the same days without the shovelware
+exclusion, which is what makes the count mean something read aloud.
 {% endcomment %}
-<div class="pp-cal-rail">
-
-    {% comment %}`aria-hidden` ON THE TRACK, because it is a picture of numbers that are all stated in
-    text elsewhere: the header card's tally above it, and the rung list below. A screen reader gets the
-    ladder as a list rather than as a bar it cannot read.{% endcomment %}
-    <div class="pp-cal-rail__track" aria-hidden="true">
-        <span class="pp-cal-rail__fill" style="--pct: {{ calendar_rail.pct }}%;"></span>
-        {% for marker in calendar_rail.markers %}
-        <span class="pp-cal-rail__pip{% if marker.reached %} pp-cal-rail__pip--on{% endif %}"
-              style="--at: {{ marker.pct }}%;"></span>
-        {% endfor %}
-    </div>
-
-    {% comment %}A REAL LIST, and the reason is the same one the day grid gives: `role="list"` survives
-    Tailwind's preflight stripping the implicit role from an unstyled list, which on WebKit is the
-    difference between five rungs announcing themselves and announcing nothing.{% endcomment %}
-    <ul class="pp-cal-rail__marks" role="list">
-        {% for marker in calendar_rail.markers %}
-        <li class="pp-cal-rail__mark{% if marker.reached %} pp-cal-rail__mark--on{% endif %}"
-            style="--at: {{ marker.pct }}%;">
-            <span aria-hidden="true">{{ marker.days }}</span>
-            <span class="sr-only">
-                {{ marker.days }} days{% if marker.reached %}: reached{% endif %}.
+<div class="pp-cal-ladder">
+    {% comment %}AN ORDERED LIST, with `role="list"` because preflight's `list-style: none` strips the implicit
+    role on WebKit. The bars and glyphs are `aria-hidden`: the text in each item says everything they draw.{% endcomment %}
+    <ol class="pp-cal-ladder__rungs" role="list">
+        {% for rung in calendar_rail.markers %}
+        <li class="pp-cal-ladder__rung pp-cal-ladder__rung--{{ rung.state }}{% if rung.current %} pp-cal-ladder__rung--current{% endif %}" style="--fill: {{ rung.fill }}%; --rung: {{ forloop.counter0 }};">
+            <span class="pp-cal-ladder__bar" aria-hidden="true"><span class="pp-cal-ladder__barfill"></span></span>
+            <span class="pp-cal-ladder__glyph" aria-hidden="true">{% if rung.state == 'earned' or rung.state == 'reached' or rung.state == 'held' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% endif %}</span>
+            <span class="pp-cal-ladder__text">
+                <span class="pp-cal-ladder__days">{{ rung.days }} days</span>
+                <span class="pp-cal-ladder__title">{{ rung.title }}</span>
             </span>
+            <span class="pp-cal-ladder__status">{% if rung.state == 'earned' %}Earned{% elif rung.state == 'reached' %}Title pending{% elif rung.state == 'held' %}{% if is_owner %}Already yours{% else %}Already held{% endif %}{% elif rung.state == 'next' %}{{ rung.to_go }} to go{% elif rung.finishes %}Finishes the run{% else %}<span class="sr-only">Not yet earned</span>{% endif %}</span>
         </li>
         {% endfor %}
-    </ul>
-
-    {% comment %}THE FOOTER ROW: what is next on the left, the comparison figure on the right. They were
-    at opposite ends of the rail when it had a head of its own; with the head gone they pair naturally,
-    and both are quiet enough not to compete with the header above them.
-
-    THE NEXT RUNG is the whole argument for a rail over a row of awards: it is the one line on this page
-    that says what to do next. Informative rather than explanatory -- a count and a target, no
-    instruction.{% endcomment %}
-    <div class="pp-cal-rail__foot">
-        {% if calendar_rail.to_next %}
-        <p class="pp-cal-rail__next">{{ calendar_rail.to_next }} to go until {{ calendar_rail.next }}</p>
-        {% endif %}
-        {% if calendar_totals.all > calendar_rail.done %}
-        <p class="pp-cal-rail__aside">{{ calendar_totals.all }} with shovelware counted</p>
-        {% endif %}
-    </div>
+    </ol>
+    {% if calendar_totals.all > calendar_rail.done %}
+    <p class="pp-cal-ladder__aside">{{ calendar_totals.all }} days with shovelware counted</p>
+    {% endif %}
 </div>

@@ -62,9 +62,14 @@ classes do the styling and the closing animation is keyed on the ID, joining the
 
             {% if calendar_rail.next %}
             <p class="pp-calopen__next">
-                Next up: <strong>{{ calendar_rail.next }} days</strong>, which is
-                {{ calendar_rail.to_next }} more.
+                Next up: <strong>{{ calendar_rail.next_title }}</strong> at {{ calendar_rail.next }} days,
+                {{ calendar_rail.to_next }} more to go.
             </p>
+            {% elif calendar_rail.done < calendar_rail.total %}
+            {% comment %}EVERY TITLE ALREADY HELD, on a run that is not full: a hunter on their second Calendar run
+            holds the whole ladder from the first, so there is no title left to name -- but the board is not
+            filled, and the 365 line below would say it was.{% endcomment %}
+            <p class="pp-calopen__next">Every title on this ladder is already yours.</p>
             {% else %}
             {% comment %}THE 365 CASE. Reaching it on the opening backfill needs roughly 2,153 platinums,
             so almost nobody will ever see this line -- which is exactly why it must not be a blank space

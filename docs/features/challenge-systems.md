@@ -21,7 +21,8 @@ no services and no templates with it; the few lessons worth carrying forward are
 | Plat Calendar renderers (`calendar_render`) | **built** |
 | Plat Calendar board (detail + Hall of Fame hero) | **built.** Month-switcher layout: thirteen crests double as the tabs (twelve months and a whole-year overview), one panel at a time. No cover art anywhere |
 | Plat Calendar day modal (which games satisfy a day) | **built** (`CalendarDayView`, an HTML fragment into one shared sheet) |
-| Plat Calendar reward ladder + richer crest artwork | **not built.** The crest itself renders |
+| Plat Calendar reward ladder | **built**, and drawn in the run's header as a ladder of the five titles (see below) |
+| Plat Calendar richer crest artwork | **not built.** The crest itself renders |
 | Detection (sync hook + `process_challenges` + nightly) | **built** |
 | My Challenges (`/my-challenges/`) | **built** |
 | The run's page (`community/challenges/<id>/`) | **built** |
@@ -169,6 +170,21 @@ ordering and last-wins — so the highest rung must be the last row written, whi
 `Calendar Legend` rather than `Calendar Marker` on a finished run's plaque (a backfill grants several at
 once, microseconds apart, so `pk` is what actually breaks the tie). And the grant is **idempotent**, since
 it runs on every sync and every nightly sweep for every Calendar run.
+
+**The run's header draws the ladder as the five titles** (`_calendar_rail.html`, `.pp-cal-ladder`; owner,
+2026-10-08: the linear rail before it "doesn't really do a great job of explaining what you get"). Each rung
+names its day count, its title and its state: Earned, Title pending, Already yours (to the owner; a
+visitor reads "Already held"), "N to go" (the next one only) or "Finishes the run". Five equal cells, each filling across its own span (0-50, 50-100, ... 300-365), in
+columns from `md:` and as a list on a phone. Two rules make it agree with the Start card:
+
+- **It reads the GRANTED titles, not the day count** (`rewards.held_calendar_titles`, one query, the
+  OWNER's). A reached rung whose title row is not there yet (the grant raised and will retry on the next
+  recount) says "Title pending" and never claims it. A name collision does not show this: the hunter
+  holds a title of that name, so the rung reads Earned.
+- **"Next" skips titles already held**, because titles belong to the hunter, not the run: on a second run
+  below 50 days the first rung says "Already yours" and the next is Calendar Keeper. Same rule as
+  `next_calendar_rung`, which now reads the same helper. When every title is held the opening ceremony says
+  so rather than claiming every day is filled.
 
 **The opening ceremony fires once per RUN, not once per user.** A Calendar run backfills a hunter's
 entire platinum history the moment it is created, so a veteran opens one already standing on two or three

@@ -169,7 +169,10 @@ def _rail_css():
     rule it names.
     """
     css = open('static/css/components/challenges.css', encoding='utf-8').read()
-    block = css[css.index('THE DAY-MARKER RAIL'):]
+    block = css[css.index('THE DAY-MARKER LADDER'):]
+    # BOUNDED at the placement note that follows the ladder, so a floor or colour pin cannot pass or fail on
+    # whatever component is appended after it.
+    block = block[:block.index('NOTE ON PLACEMENT')]
     return re.sub(r'/\*.*?\*/', '', block, flags=re.S)
 
 
@@ -1931,27 +1934,23 @@ def test_the_two_rings_do_not_touch():
 
 # ── the rail on the page ─────────────────────────────────────────────────────────────────────────────
 
-def test_the_rail_replaces_the_progress_bar_in_the_header():
+def test_the_ladder_sits_in_the_header_card_and_replaces_the_bar():
     """IN THE HEADER CARD, NOT A CARD OF ITS OWN (owner: "can we put that rail in the header and replace
-    the progress bar there?").
+    the progress bar there?"), and still in place of the bar after the rail became a ladder of titles.
 
-    IT REPLACES RATHER THAN JOINS, which is the part worth pinning. A `.pp-horizon` says how far along a
-    run is, which for 25 or 26 squares is the whole story; for 365 days the interesting fact is which
-    RUNG is next, and a bar cannot say that. Rendering both would also state the count three times --
-    the tally, the bar and the rail.
+    IT REPLACES RATHER THAN JOINS: a `.pp-horizon` says how far along a run is, which for 25 or 26 squares
+    is the whole story; for 365 days the interesting fact is which TITLE is next.
     """
     body = _body(_run(CHALLENGE_TYPE_CALENDAR))
 
-    assert 'pp-cal-rail' in body
+    assert 'pp-cal-ladder' in body
     assert 'pp-horizon' not in body, 'a Calendar run shows the ladder instead of the bar'
-    assert body.index('pp-cal-rail') < body.index('class="pp-cal"'), 'header before board'
-    # ONE CARD for the board; the rail rides in the page header card above it.
+    assert body.index('pp-cal-ladder') < body.index('class="pp-cal"'), 'header before board'
     assert body.count('<section class="scard mb-3"') == 1
 
-    # AND THE SLOT TYPES KEEP THEIR BAR, which is the other half: the swap is per type, not a removal.
     az = _body(_run(CHALLENGE_TYPE_AZ))
     assert 'pp-horizon' in az
-    assert 'pp-cal-rail' not in az
+    assert 'pp-cal-ladder' not in az
 
 
 def test_the_header_tally_counts_days_on_a_calendar_run():
@@ -1961,83 +1960,105 @@ def test_the_header_tally_counts_days_on_a_calendar_run():
     assert '>done</span>' in _body(_run(CHALLENGE_TYPE_AZ))
 
 
-def test_the_rail_states_its_count_once():
-    """It carried a headline figure on the shared `.pp-tally` face while it sat in a card of its own.
-    In the header the big tally two lines above states that count, so the rail draws the LADDER and the
-    number is said once."""
-    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    rail = _section(body, 'pp-cal-rail', until='class="pp-cal"')
-    assert 'pp-cal-rail__figure' not in rail
-    assert 'pp-cal-rail__unit' not in rail
-    assert 'pp-cal-rail__figure' not in _rail_css(), 'the rule went with the markup'
+def _ladder(run):
+    return _section(_body(run), 'pp-cal-ladder', until='class="pp-cal"')
 
 
-def test_the_rail_shows_the_ladder_and_the_next_rung():
+def test_the_ladder_names_what_every_rung_awards():
+    """The owner's report: the rail "doesn't really do a great job of explaining what you get at the various
+    milestones". Every rung names its day count and its title, and the next one says how far it is."""
     from challenges.services.calendar_render import DAY_MARKERS
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
 
     run = _run(CHALLENGE_TYPE_CALENDAR)
     for day in range(1, 29):
         _fill(run, 2, day)          # 28 days
-    body = _body(run)
+    ladder = _ladder(run)
 
-    rail = _section(body, 'pp-cal-rail', until='class="pp-cal"')
     for days in DAY_MARKERS:
-        assert '>%d</span>' % days in rail, 'rung %d is missing' % days
-    assert '22 to go until 50' in rail, '28 filled leaves 22 to the first rung'
-    assert rail.count('pp-cal-rail__pip--on') == 0, 'no rung reached yet'
+        assert '>%d days</span>' % days in ladder, 'rung %d has no day count' % days
+        assert '>%s</span>' % CALENDAR_DAY_TITLES[days] in ladder, 'rung %d does not name its title' % days
+    assert '>22 to go</span>' in ladder, '28 filled leaves 22 to the first rung'
+    assert '>Finishes the run</span>' in ladder
+    assert 'Earned' not in ladder
+    assert ladder.count('pp-cal-ladder__rung--next') == 1
 
 
-def test_a_reached_rung_is_marked_without_relying_on_colour():
+def test_a_reached_rung_says_earned_in_words_and_draws_a_check():
     run = _run(CHALLENGE_TYPE_CALENDAR)
     for month in (1, 2):
         for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
             _fill(run, month, day)   # 59 days, past the 50 rung
-    rail = _section(_body(run), 'pp-cal-rail', until='class="pp-cal"')
+    calendar_fill._recount_calendar(run)   # the recount is what grants the title
+    ladder = _ladder(run)
 
-    assert rail.count('pp-cal-rail__pip--on') == 1
-    assert rail.count('pp-cal-rail__mark--on') == 1
-    assert '50 days: reached' in rail, 'and stated in text, not only in the pip'
+    assert ladder.count('>Earned</span>') == 1
+    assert ladder.count('pp-cal-ladder__rung--earned') == 1
+    assert ladder.count('<path d="M20 6 9 17l-5-5"/>') == 1, 'the earned rung has no check glyph'
 
 
-def test_the_rail_states_the_comparison_figure_only_when_it_differs():
+def test_a_title_already_held_is_not_offered_as_the_next_one():
+    """A second Calendar run holds the first run's titles. The ladder must not call one "next" -- it names
+    the first title still to earn, as the Start card does."""
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+    from trophies.models import Title, UserTitle
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    title, _ = Title.objects.get_or_create(name=CALENDAR_DAY_TITLES[50])
+    UserTitle.objects.create(profile=run.profile, title=title, source_type='challenge', source_id=999999)
+    for day in range(1, 21):
+        _fill(run, 3, day)          # 20 days
+    ladder = _ladder(run)
+
+    assert '>Already held</span>' in ladder   # an anonymous read: see the owner-only test below
+    assert '>80 to go</span>' in ladder, 'the next rung is 100 days, 80 away'
+    assert '>30 to go</span>' not in ladder, 'the held 50 rung was offered as next'
+
+
+def test_the_ladder_states_the_comparison_figure_only_when_it_differs():
     """`in_all` is the same days WITHOUT the shovelware exclusion, and it is what makes the headline mean
-    something read aloud. Shown only when it actually differs: an aside repeating the number beside it
-    is noise."""
+    something read aloud. Shown only when it actually differs."""
     run = _run(CHALLENGE_TYPE_CALENDAR)
     _fill(run, 3, 3)
     assert 'with shovelware counted' not in _body(run), 'nothing to compare yet'
 
     CalendarDay.objects.filter(challenge=run, month=4, day=4).update(in_all=True, in_clean=False)
-    assert '2 with shovelware counted' in _body(run)
+    assert '2 days with shovelware counted' in _body(run)
 
 
-def test_a_finished_run_shows_no_next_rung_line():
+def test_a_finished_run_has_nothing_left_to_go():
+    from challenges.services.calendar_render import DAY_MARKERS
+
     run = _run(CHALLENGE_TYPE_CALENDAR)
     CalendarDay.objects.filter(challenge=run).update(in_all=True, in_clean=True)
-    rail = _section(_body(run), 'pp-cal-rail', until='class="pp-cal"')
+    calendar_fill._recount_calendar(run)
+    ladder = _ladder(run)
 
-    assert 'to go until' not in rail, 'there is nowhere left to go'
-    from challenges.services.calendar_render import DAY_MARKERS
-    assert rail.count('pp-cal-rail__pip--on') == len(DAY_MARKERS)
-
-
-def test_the_rail_track_is_not_announced_twice():
-    """The bar is a PICTURE of numbers that are all stated in text -- the figure above it and the rung
-    list below -- so it is `aria-hidden` and a reader gets the ladder as a list instead of a bar they
-    cannot read."""
-    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
-    track = re.search(r'<div class="pp-cal-rail__track"[^>]*>', body).group(0)
-    assert 'aria-hidden="true"' in track
-    assert '<ul class="pp-cal-rail__marks" role="list">' in body
+    assert 'to go' not in ladder, 'there is nowhere left to go'
+    assert ladder.count('>Earned</span>') == len(DAY_MARKERS)
 
 
-def test_the_rail_uses_the_same_progress_colour_as_the_coin_gauges():
-    """ONE CONVENTION PER PAGE. The coins' arcs and this rail measure the same quantity two ways, so a
-    rail that disagreed about the colour of progress would be a second convention -- and cyan is the
-    site's, per `.pp-phero__ring-fill`."""
-    fill = _css_rule(_rail_css(), '.pp-cal-rail__fill {')
+def test_the_ladder_is_a_list_and_its_pictures_are_hidden():
+    """The bars and glyphs are pictures of what the text in each item says, so a screen reader gets an
+    ordered list of five titles rather than five bars it cannot read."""
+    ladder = _ladder(_run(CHALLENGE_TYPE_CALENDAR))
+    assert '<ol class="pp-cal-ladder__rungs" role="list">' in ladder
+    for picture in re.findall(r'<span class="pp-cal-ladder__(?:bar|glyph)"[^>]*>', ladder):
+        assert 'aria-hidden="true"' in picture, picture
+
+
+def test_the_ladder_uses_the_same_progress_colour_as_the_coin_gauges():
+    """ONE CONVENTION PER PAGE: the coins' arcs and this ladder measure the same quantity, and cyan is the
+    site's progress colour, per `.pp-phero__ring-fill`."""
+    fill = _css_rule(_rail_css(), '.pp-cal-ladder__barfill {')
     assert '--pp-primary' in fill
     assert '--cal-c' not in fill, 'progress does not vary by month'
+
+
+def test_the_ladder_keeps_every_label_at_the_type_floor():
+    """Twelve pixels is the floor in this stylesheet, and a five-column row is where a label gets shrunk."""
+    for size in re.findall(r'font-size:\s*([0-9.]+)px', _rail_css()):
+        assert float(size) >= 12, size
 
 
 # ── the month's side column ──────────────────────────────────────────────────────────────────────────
@@ -2570,36 +2591,6 @@ def test_the_crest_strip_cannot_widen_the_page():
     )
 
 
-def test_the_marker_rail_budgets_for_its_end_label_rather_than_anchoring_it():
-    """THE OVERHANG IS BUDGETED, NOT A DEFECT, and a previous version of this file asserted the opposite.
-
-    The top rung is 365 of 365, so its mark renders at `--at: 100%` and the shared `translateX(-50%)`
-    puts half the label past the end of `.pp-cal-rail__marks` -- measured as 272px of content in a 260px
-    box. That was read as unclipped overflow and "fixed" with a `:last-child { transform: translateX(-100%) }`.
-    It was never overflow: `.pp-cal-rail` carries `padding-inline: 14px` FOR THIS, and says so in as many
-    words. The measurement was taken on the inner box and the budget lives on the outer one.
-
-    AND THE FIX COST ALIGNMENT. Anchoring the label's right edge moved its centre about half a label left
-    of its own pip, while every other rung stays centred on its pip -- the misregistration `marker_rail`
-    separately warns about. So this pins the budget and the absence of the transform together: either
-    one alone reads as an oversight to the next person who measures the inner box."""
-    rail = _rail_css()
-    outer = _css_rule(rail, '.pp-cal-rail {')
-    assert 'padding-inline: 14px' in outer, 'the side room the end label hangs into is gone'
-
-    mark = _css_rule(rail, '.pp-cal-rail__mark {')
-    assert 'translateX(-50%)' in mark, 'the marks are no longer centred on their pips'
-    assert ':last-child' not in rail, (
-        'an end-label override is back; it anchors the 365 label off its own pip, and the padding above '
-        'already pays for the overhang it removes'
-    )
-
-    # THE PREMISE: the top rung really is at 100%, or none of the above is about anything.
-    from challenges.services.calendar_render import DAY_MARKERS, marker_rail
-    rung = marker_rail(0, total=DAY_MARKERS[-1])['markers']
-    assert rung[-1]['pct'] == 100 and rung[0]['pct'] > 0
-
-
 # ── the All crest and its year overview ──────────────────────────────────────────────────────────
 
 def test_the_year_overview_draws_every_day_in_twelve_month_rows():
@@ -3086,3 +3077,88 @@ def test_previewing_the_opening_ceremony_writes_nothing():
     assert 'seenKey' not in branch.split('opts = ', 1)[1], (
         'a stale device key would skip the preview and retry the write'
     )
+
+
+def test_already_yours_is_said_only_to_the_owner():
+    """The page is public. A visitor reading somebody else's run is told the title is "Already held", not
+    that it is theirs."""
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+    from trophies.models import Title, UserTitle
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    title, _ = Title.objects.get_or_create(name=CALENDAR_DAY_TITLES[50])
+    UserTitle.objects.create(profile=run.profile, title=title, source_type='challenge', source_id=999999)
+
+    visitor = _ladder(run)
+    assert '>Already held</span>' in visitor and 'Already yours' not in visitor
+
+    owner = Client()
+    owner.force_login(run.profile.user)
+    mine = _section(owner.get(_url(run)).content.decode(), 'pp-cal-ladder', until='class="pp-cal"')
+    assert '>Already yours</span>' in mine
+
+
+def test_a_reached_rung_whose_title_has_not_landed_says_pending():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for month in (1, 2):
+        for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
+            _fill(run, month, day)   # 59 days, and no recount, so no title row yet
+    ladder = _ladder(run)
+    assert '>Title pending</span>' in ladder
+    assert 'Earned' not in ladder
+
+
+def test_a_locked_rung_states_itself_to_a_screen_reader():
+    ladder = _ladder(_run(CHALLENGE_TYPE_CALENDAR))
+    # 300 is locked and does not finish the run; 365 says "Finishes the run" out loud.
+    assert ladder.count('<span class="sr-only">Not yet earned</span>') == 3
+
+
+def test_each_rung_carries_its_fill_and_its_stagger():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 29):
+        _fill(run, 2, day)          # 28 of the first 50 days
+    ladder = _ladder(run)
+    assert 'style="--fill: 56%; --rung: 0;"' in ladder
+    assert 'style="--fill: 0%; --rung: 4;"' in ladder
+    assert ladder.count('pp-cal-ladder__rung--current') == 1
+
+
+def test_the_ladder_reads_the_owners_titles_in_one_query():
+    """One query for the whole ladder, never one per rung."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    with CaptureQueriesContext(connection) as ctx:
+        Client().get(_url(run))
+    reads = [q['sql'] for q in ctx.captured_queries if 'Calendar Legend' in q['sql']]
+    assert len(reads) == 1, reads
+
+
+def _unseen_ceremony_for(run):
+    client = Client()
+    client.force_login(run.profile.user)
+    body = client.get(_url(run)).content.decode()
+    start = body.index('id="cal-opening"')
+    return body[start:body.index('</div>', body.index('pp-calopen__next', start))]
+
+
+def test_the_ceremony_names_the_next_title():
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    ceremony = _unseen_ceremony_for(run)
+    assert 'Next up: <strong>%s</strong> at 50 days' % CALENDAR_DAY_TITLES[50] in ceremony
+
+
+def test_the_ceremony_never_calls_a_partial_board_full_when_every_title_is_held():
+    """A second Calendar run holds the whole ladder from the first, so there is no title to name -- and the
+    365 line ("Every day of the year is filled") would be false about a board that is not."""
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+    from trophies.models import Title, UserTitle
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for i, name in enumerate(CALENDAR_DAY_TITLES.values()):
+        title, _ = Title.objects.get_or_create(name=name)
+        UserTitle.objects.create(profile=run.profile, title=title, source_type='challenge', source_id=900000 + i)
+    ceremony = _unseen_ceremony_for(run)
+    assert 'Every title on this ladder is already yours.' in ceremony
+    assert 'Every day of the year is filled' not in ceremony

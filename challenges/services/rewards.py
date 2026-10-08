@@ -839,6 +839,21 @@ def _ensure_title(challenge, name):
     return user_title, created
 
 
+def held_calendar_titles(profile):
+    """The Calendar ladder titles this hunter HOLDS, as a frozenset of names. One query.
+
+    THE GRANTED ROWS, NOT THE DAY COUNT, for two reasons the ladder has to respect. A grant can be
+    declined (a name another system owns is logged, not claimed), so "reached" is not "held". And the
+    titles belong to the HUNTER, not the run, so a second run below 50 days already holds the 50 rung's
+    title from the first. `next_calendar_rung` (the Start card) and `calendar_render.marker_rail` (the run
+    page's ladder) both read this, so the two surfaces cannot disagree about what is still to earn.
+    """
+    return frozenset(
+        UserTitle.objects.filter(profile=profile, title__name__in=CALENDAR_DAY_TITLES.values())
+        .values_list('title__name', flat=True)
+    )
+
+
 def next_calendar_rung(profile, done=0):
     """`(days, title_name)` for the next Calendar rung this hunter can still EARN, or None. One query.
 
@@ -848,10 +863,7 @@ def next_calendar_rung(profile, done=0):
     hunter's Start card would promise a title they own. So this skips every rung already held and every
     rung `done` has passed, and answers None when the whole ladder is theirs.
     """
-    held = set(
-        UserTitle.objects.filter(profile=profile, title__name__in=CALENDAR_DAY_TITLES.values())
-        .values_list('title__name', flat=True)
-    )
+    held = held_calendar_titles(profile)
     for days in CALENDAR_DAY_MARKERS:
         name = CALENDAR_DAY_TITLES[days]
         if days > done and name not in held:

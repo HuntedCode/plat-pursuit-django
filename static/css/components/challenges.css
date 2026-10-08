@@ -4650,68 +4650,114 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 
 /* ============================================================
- * THE DAY-MARKER RAIL -- `.pp-cal-rail`
+ * THE DAY-MARKER LADDER -- `.pp-cal-ladder`
  *
- * A horizontal gauge with five rungs, carrying the only "what next" line on the Calendar's page. The
- * owner picked a rail over a row of awards (2026-10-04) and the reason is in the partial: the day
- * markers are the one part of this feature that moves from a hunter's first platinum, and a second row
- * of medal-shaped objects would compete with the twelve crests rather than complement them.
+ * The five Calendar titles in the run's header: each rung's day count, the title it awards, and its
+ * state. It replaced a linear rail (owner, 2026-10-08) that drew pips and numbers and never said what a
+ * number was worth; the partial carries the reasoning.
  *
- * ITS OWN BLOCK, NOT A `.pp-cal__` ELEMENT, because it is a sibling surface rather than part of the
- * board -- the same relationship `.pp-csq-board` and `.pp-csq-shelf` have. It sits in its own `.scard`
- * above the board's.
+ * ONE MARKUP, TWO LAYOUTS. Base (phone): a list, a state glyph leading each row, only the next rung
+ * keeping its bar. From `md:`: five equal columns whose bars sit edge to edge as one segmented track,
+ * each filling across its own span (`marker_rail`'s `fill`).
  *
- * LINEAR IN DAYS. A day is the same distance everywhere, because that is the quantity being measured.
- * The difficulty is not linear at all (`DAY_MARKERS` has the arithmetic: the 50 rung is ~54 platinums,
- * the 300 rung ~630), so the right-hand half is harder than its spacing suggests. Noted rather than
- * corrected: distorting the spacing would make the rail lie about days to tell the truth about effort.
+ * ITS OWN BLOCK, NOT A `.pp-cal__` ELEMENT, because it lives in the page header card rather than in the
+ * board -- the relationship `.pp-csq-board` and `.pp-csq-shelf` have.
  * ============================================================ */
-/* IN THE PAGE HEADER CARD, not a card of its own, so it carries no surface and no vertical padding --
-   only the side room its end labels need. The wrapper in `challenge_detail.html` owns the spacing above
-   it, exactly as the `.pp-horizon` it replaced did. */
-.pp-cal-rail {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    /* HALF A LABEL OF SIDE ROOM, which is what stops the end rungs clipping. Every pip and mark is
-       positioned at `left: var(--at)` and pulled back by half its own width, so the 365 mark at 100%
-       would hang half outside the track. 14px clears a three-digit label at this size. */
-    padding-inline: 14px;
+/* IN THE PAGE HEADER CARD, so no surface and no vertical padding: the wrapper in `challenge_detail.html`
+   owns the space above it, as it did for the `.pp-horizon` this row replaced. */
+.pp-cal-ladder { display: flex; flex-direction: column; gap: 8px; }
+.pp-cal-ladder__rungs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+
+/* ── the phone list ──────────────────────────────────────────────────────────────────────────────── */
+
+/* THREE COLUMNS, glyph | text | status, the day count stacked over the title as it is from `md:`. A
+   separate days column was tried first and left the titles too narrow: "Calendar Marker" wrapped and the
+   last row's title ran into "Finishes the run". */
+.pp-cal-ladder__rung {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    padding: 7px 0;
 }
+.pp-cal-ladder__rung + .pp-cal-ladder__rung { border-top: 1px solid color-mix(in oklab, var(--pp-border) 60%, transparent); }
+.pp-cal-ladder__text { grid-column: 2; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 
-/* THE FOOTER ROW. `.pp-cal-rail__head` lived here, carrying a headline figure on the shared `.pp-tally`
-   face, while the rail sat in a card of its own. In the page header the big tally states that count two
-   lines above, so the head and its figure went and the two quiet lines pair up underneath instead.
-   `space-between` WITH ONE CHILD left-aligns, which is what a finished run wants: the next-rung line is
-   gone and the comparison figure should not jump to the right edge on its own. */
-.pp-cal-rail__foot {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    flex-wrap: wrap;
+/* THE STATE, LEGIBLE WITHOUT COLOUR: a filled disc with a check (earned), a heavier ring (next), a hairline
+   ring (locked). The status text says it again in words. */
+.pp-cal-ladder__glyph {
+    grid-column: 1;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    box-shadow: inset 0 0 0 1.5px var(--pp-border);
 }
-/* THE COMPARISON FIGURE, kept deliberately quiet: it answers a question a reader may not have asked, so
-   it should not compete with the count it qualifies. */
-.pp-cal-rail__aside { font-size: 0.75rem; color: var(--pp-text-mute); }
+.pp-cal-ladder__glyph svg { width: 12px; height: 12px; }
+.pp-cal-ladder__rung--earned .pp-cal-ladder__glyph {
+    background: var(--pp-primary);
+    color: var(--pp-bg-0);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 45%, transparent);
+}
+.pp-cal-ladder__rung--next .pp-cal-ladder__glyph { box-shadow: inset 0 0 0 2px var(--pp-primary); }
+/* REACHED (a declined grant) reads as earned; HELD (theirs from an earlier run) is a quieter check. */
+.pp-cal-ladder__rung--reached .pp-cal-ladder__glyph {
+    background: var(--pp-primary);
+    color: var(--pp-bg-0);
+}
+.pp-cal-ladder__rung--held .pp-cal-ladder__glyph { color: var(--pp-primary); }
 
-/* ── the track ───────────────────────────────────────────────────────────────────────────────────── */
+.pp-cal-ladder__days {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    color: var(--pp-text-dim);
+    white-space: nowrap;
+}
+.pp-cal-ladder__rung--earned .pp-cal-ladder__days,
+.pp-cal-ladder__rung--reached .pp-cal-ladder__days { color: var(--pp-primary); }
+.pp-cal-ladder__title {
+    min-width: 0;
+    font-size: 13.5px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--pp-text);
+}
+/* LOCKED IS DIMMER, NOT HIDDEN: what is still to come is half of what the ladder is for. */
+.pp-cal-ladder__rung--locked .pp-cal-ladder__title { color: var(--pp-text-dim); }
+.pp-cal-ladder__status {
+    grid-column: 3;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--pp-text-dim);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+/* THE NEXT RUNG'S COUNT IS THE ONE CALL TO ACTION, so it alone takes the accent. */
+.pp-cal-ladder__rung--next .pp-cal-ladder__status { color: var(--pp-primary); }
 
-.pp-cal-rail__track {
+/* ONE BAR ON A PHONE, under the CURRENT rung's row (the span the run is in): five stacked bars would read
+   as five separate meters. */
+.pp-cal-ladder__bar {
+    display: none;
     position: relative;
-    height: 8px;
+    height: 6px;
     border-radius: 999px;
-    background: var(--pp-bg-1);
-    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
+    /* A TINT OF THE TEXT, not `--pp-bg-1`: on the header card that token all but vanished, so the
+       locked rungs' empty cells read as no track at all. */
+    background: color-mix(in oklab, var(--pp-text) 9%, transparent);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.3);
+    overflow: hidden;
 }
-
-/* THE SAME CYAN THE COIN GAUGES USE, because it is the same quantity measured a different way, and
-   `.pp-phero__ring-fill` makes cyan this site's progress colour. A rail and a ring that disagreed about
-   the colour of progress would be two conventions on one page. */
-.pp-cal-rail__fill {
+.pp-cal-ladder__rung--current .pp-cal-ladder__bar { display: block; grid-column: 2 / -1; grid-row: 2; margin-top: 7px; }
+/* THE SAME CYAN THE COIN GAUGES USE: one colour for progress on the page, per `.pp-phero__ring-fill`. */
+.pp-cal-ladder__barfill {
     position: absolute;
     inset: 0 auto 0 0;
-    width: var(--pct, 0%);
+    width: var(--fill, 0%);
     border-radius: inherit;
     background: linear-gradient(90deg,
                                 color-mix(in oklab, var(--pp-primary) 70%, transparent),
@@ -4719,80 +4765,43 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 40%, transparent);
 }
 
-/* A PIP PER RUNG, ON the track rather than under it, so the rail reads as a ladder with rungs instead of
-   a bar with numbers nearby. An unreached pip is a recess; a reached one is filled and ringed, which is
-   legible without colour -- the fill has already passed it either way. */
-.pp-cal-rail__pip {
-    position: absolute;
-    top: 50%;
-    left: var(--at);
-    width: 10px;
-    height: 10px;
-    margin: -5px 0 0 -5px;
-    border-radius: 50%;
-    background: var(--pp-bg-0);
-    box-shadow: inset 0 0 0 1.5px var(--pp-border);
-}
-.pp-cal-rail__pip--on {
-    background: var(--pp-primary);
-    box-shadow: inset 0 0 0 1.5px var(--pp-bg-0), 0 0 6px color-mix(in oklab, var(--pp-primary) 55%, transparent);
-}
+.pp-cal-ladder__aside { font-size: 12px; color: var(--pp-text-mute); }
 
-/* ── the labels ──────────────────────────────────────────────────────────────────────────────────── */
-
-/* A ZERO-HEIGHT POSITIONING CONTEXT, so the absolutely positioned marks still occupy a row in the
-   flex column. Without the explicit height the `<ul>` collapses and the marks overlap the track. */
-.pp-cal-rail__marks {
-    position: relative;
-    height: 1.1em;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    font-size: 0.75rem;
-    font-variant-numeric: tabular-nums;
-}
-.pp-cal-rail__mark {
-    position: absolute;
-    left: var(--at);
-    transform: translateX(-50%);
-    color: var(--pp-text-mute);
-    white-space: nowrap;
-}
-/* NO `:last-child` RULE HERE, AND THE REASON IS WORTH KEEPING. One was added after measuring
-   `.pp-cal-rail__marks` at 272px of content in a 260px box and calling the 12px an unclipped overflow
-   defect. It is not a defect: `.pp-cal-rail` carries `padding-inline: 14px` for precisely this, and says
-   so -- "the 365 mark at 100% would hang half outside the track. 14px clears a three-digit label at this
-   size". The overhang was budgeted, and the measurement was taken on the wrong box.
-   THE "FIX" COST SOMETHING REAL. Anchoring the last mark's right edge moved its centre about 10.8px left
-   of its own pip, while every other rung stays centred on its pip -- so the end of the ladder read as
-   misregistered, which is the thing `marker_rail` separately worries about ("would visibly misalign it
-   against its own label"). Reverted. If a future rail does need the end label pulled in, the padding is
-   the budget to change, not the transform. */
-/* REACHED IS WEIGHT AND BRIGHTNESS, not hue: these are numbers at 12px, so a measured token is what
-   keeps them legible -- the same rule the month hues follow by never touching text. */
-.pp-cal-rail__mark--on { color: var(--pp-text); font-weight: 700; }
-
-.pp-cal-rail__next { font-size: 0.8125rem; color: var(--pp-text-dim); }
+/* ── from md: five columns, one segmented track ─────────────────────────────────────────────────── */
 
 @media (min-width: 768px) {
-    .pp-cal-rail { gap: 12px; padding-inline: 16px; }
-    .pp-cal-rail__track { height: 10px; }
-    .pp-cal-rail__pip { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
-    .pp-cal-rail__marks { font-size: 0.8125rem; }
+    .pp-cal-ladder { gap: 10px; }
+    .pp-cal-ladder__rungs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 4px; }
+    .pp-cal-ladder__rung { display: flex; flex-direction: column; align-items: stretch; padding: 0; }
+    .pp-cal-ladder__rung + .pp-cal-ladder__rung { border-top: 0; }
+    .pp-cal-ladder__glyph { display: none; }
+    .pp-cal-ladder__bar,
+    .pp-cal-ladder__rung--current .pp-cal-ladder__bar { display: block; height: 8px; margin: 0 0 10px; }
+    .pp-cal-ladder__text { gap: 2px; padding-inline: 2px; }
+    .pp-cal-ladder__title { font-size: 13px; }
+    /* PINNED TO THE CELL'S FOOT: a title that wraps at 768 ("Calendar Chronicler" is ~140px in a ~130px
+       column) would otherwise push its status a line below its neighbours'. */
+    .pp-cal-ladder__status { margin-top: auto; padding-top: 4px; padding-inline: 2px; }
+    .pp-cal-ladder__aside { text-align: right; }
 }
+@media (min-width: 1024px) { .pp-cal-ladder__title { font-size: 14px; } }
 
-/* THE FILL DRAWS IN, which is the one flourish here and follows `.pp-phero__ring-fill`'s reasoning: a
-   DECELERATING curve rather than a spring, because an overshoot would draw the rail past the hunter's
-   real figure and settle back -- a small lie about a real number. The keyframe declares only `from`, so
-   it interpolates to the element's own computed width and `var(--pct)` stays out of the keyframe, where
-   a custom property is not reliably interpolated. */
-@keyframes ppCalRailFill { from { width: 0; } }
+/* THE BARS DRAW IN LEFT TO RIGHT, a rung at a time, which is the one flourish: a DECELERATING curve rather
+   than a spring, because an overshoot would draw a bar past the hunter's real figure and settle back -- a
+   small lie about a real number (`.pp-phero__ring-fill`'s reasoning). A `scaleX` from the left edge rather
+   than a `width`, so it runs on the compositor; the width itself stays `var(--fill)` and the keyframe only
+   declares `from`. */
+@keyframes ppCalLadderFill { from { transform: scaleX(0); } }
 @media (prefers-reduced-motion: no-preference) {
-    .pp-cal-rail__fill { animation: ppCalRailFill 0.9s cubic-bezier(0.16, 0.84, 0.34, 1) backwards; }
+    .pp-cal-ladder__barfill {
+        transform-origin: left center;
+        animation: ppCalLadderFill 0.6s cubic-bezier(0.16, 0.84, 0.34, 1) backwards;
+        animation-delay: calc(var(--rung, 0) * 0.12s);
+    }
 }
 
 
-/* NOTE ON PLACEMENT: this section sits at the END of the file, after the rail, and that is deliberate.
+/* NOTE ON PLACEMENT: this section sits at the END of the file, after the ladder, and that is deliberate.
    `_calendar_css()` in the suite slices the calendar BOARD's block and stops at the next banner that
    CLOSES on a bare rule of equals signs -- which a prose-closed banner like this one does not. Dropped
    in above the year matrix, every rule here read as a board rule, and `test_the_hero_cells_are_square`
