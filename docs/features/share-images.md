@@ -169,7 +169,9 @@ Calendar's ladder is climbed during a run (Calendar Marker at 50 days), unlike t
 header pill (and, on A-Z, the subline) say which it is. A hidden run has no card.
 
 **Where it lives:** a Share button on the run's own page (owner only) and on My Challenges (each live run
-card and each finished row). One `#cc-share` dialog per page, opened by any `[data-challenge-share]`
+card and each finished row; Share sits before Hide, so the soft-destructive action is last). One `#cc-share`
+dialog per page, and only on a page with something to share (`has_shareable` on My Challenges: a hunter with
+no live or finished run of a shareable type ships no dialog, script or grounds), opened by any `[data-challenge-share]`
 button; it is the share modal's `.pc-modal` shell without the rating and art-ground parts.
 
 **Images are cached for the DOWNLOAD only.** The preview hands the browser the remote cover URLs; caching

@@ -808,3 +808,57 @@ def test_a_calendar_run_with_no_rows_still_reads_out_of_twelve():
     context = share_card.build_card_context(run)
     assert context['months'] == []
     assert _stat(context, 'Months') == {'num': 0, 'of': 12, 'label': 'Months'}
+
+
+# ── My Challenges: the dialog only when there is something to share ──────────────────────────────────
+
+def _my_challenges(client):
+    resp = client.get(reverse('my_challenges'))
+    assert resp.status_code == 200
+    return resp, resp.content.decode()
+
+
+def test_my_challenges_ships_no_share_dialog_with_nothing_to_share():
+    """A hunter with no runs has no Share button, so the dialog, its script and its eight grounds would ship
+    for nothing (owner, 2026-10-08)."""
+    client = Client()
+    _hunter(client)
+    resp, body = _my_challenges(client)
+    assert 'id="cc-share"' not in body
+    assert 'js/challenge-share' not in body
+    assert resp.context['share_themes'] == []
+
+
+def test_a_hidden_run_alone_ships_no_share_dialog():
+    """A hidden run has no Share button (hiding takes it out of every public place), so it is not a reason
+    to load the dialog either."""
+    client = Client()
+    profile = _hunter(client)
+    run = _az_run(profile)
+    svc.hide(run, profile)
+    _, body = _my_challenges(client)
+    assert 'data-challenge-share' not in body
+    assert 'id="cc-share"' not in body and 'js/challenge-share' not in body
+
+
+def test_a_finished_run_alone_ships_the_dialog():
+    """The finished rows carry Share too, so a hunter with no live run but a finished one still needs the
+    dialog behind those buttons."""
+    client = Client()
+    profile = _hunter(client)
+    run = _az_run(profile)
+    for letter in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+        svc.mark_slot_completed(svc.assign(run, profile, letter, _contract(f'{letter} Game')))
+    _, body = _my_challenges(client)
+    assert f'data-html-url="{_html_url(run)}"' in body
+    assert body.count('id="cc-share"') == 1 and 'js/challenge-share' in body
+
+
+def test_share_comes_before_hide_on_the_live_card():
+    """Hide is the soft-destructive action, so it is the last in the row (owner, 2026-10-08)."""
+    client = Client()
+    run = _az_run(_hunter(client))
+    _, body = _my_challenges(client)
+    share = body.index(f'data-html-url="{_html_url(run)}"')
+    hide = body.index('data-chal-hide')
+    assert share < hide, 'Hide comes before Share again'

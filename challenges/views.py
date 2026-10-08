@@ -236,7 +236,16 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # A set the template asks rather than a type spelled in markup, so a type gains its button the
         # moment its card ships.
         context['shareable_types'] = share_card.SHAREABLE_TYPES
-        context['share_themes'] = get_ground_themes()
+        # THE DIALOG ONLY WHEN THERE IS SOMETHING TO SHARE (owner, 2026-10-08): a Share button renders on a
+        # live run of a shareable type and on each finished row of one, so with neither the dialog, its
+        # script and its eight grounds would ship for nothing. The same two conditions the template's
+        # buttons ask, so a page cannot carry a button with no dialog behind it.
+        context['has_shareable'] = (
+            any(card['state'] == 'active' and card['type'] in share_card.SHAREABLE_TYPES
+                for card in context['cards'])
+            or any(run.challenge_type in share_card.SHAREABLE_TYPES for run in context['finished'])
+        )
+        context['share_themes'] = get_ground_themes() if context['has_shareable'] else []
         # `text`, NOT `label`: `partials/breadcrumb.html` and `seo_tags` both read `text`, so a `label`
         # key rendered two EMPTY crumbs and two blank names in the JSON-LD. Every other caller on the
         # site passes `text` and starts at Home; this did neither.
