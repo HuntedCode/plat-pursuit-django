@@ -1,5 +1,8 @@
 """The challenge share card: what it draws, who may have it, and where the button is.
 
+Two types have a card (A-Z, Job Coverage); the Plat Calendar does not yet, and stands in below for "a type
+without a card".
+
 THREE THINGS THIS FILE IS FOR.
 
 **The squares in the card mean what the board means.** A share card is the run's public face, so a square
@@ -16,6 +19,7 @@ calls to the cache, not by reading source.
 """
 import datetime
 import json
+import re
 from unittest import mock
 
 import pytest
@@ -23,11 +27,12 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
-from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_JOBS
+from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_JOBS
 from challenges.services import challenge_service as svc
+from challenges.services import rewards
 from challenges.services import share_card
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory, UserFactory
-from trophies.models import Contract
+from trophies.models import Contract, Job
 
 pytestmark = pytest.mark.django_db
 
@@ -57,6 +62,21 @@ def _contract(name, image=None):
 
 def _az_run(profile):
     return svc.start(profile, CHALLENGE_TYPE_AZ)
+
+
+def _jobs_run(profile):
+    return svc.start(profile, CHALLENGE_TYPE_JOBS)
+
+
+def _fill_job(run, profile, slug, *, complete=False):
+    """Assign a contract carrying `slug` to that job's square, and optionally finish it."""
+    contract = _contract(f'Game for {slug}')
+    contract.jobs.set([Job.objects.get(slug=slug)])
+    slot = svc.assign(run, profile, slug, contract)
+    if complete:
+        svc.mark_slot_completed(slot)
+    run.refresh_from_db()
+    return slot
 
 
 def _squares(context):
@@ -110,7 +130,7 @@ def test_a_live_run_counts_what_is_left_and_shows_no_title():
     assert context['is_complete'] is False
     assert context['completed_count'] == 1
     assert context['assigned_count'] == 1
-    assert context['letters_left'] == 25
+    assert context['left'] == 25
     assert context['title'] is None
 
 
@@ -333,12 +353,20 @@ def test_a_hidden_run_has_no_card(url):
 
 
 def test_a_type_without_a_card_is_a_404():
-    """Cards ship one type at a time, so Job Coverage has none yet and must not inherit A-Z's layout."""
+    """Cards ship one type at a time, so the Calendar has none yet and must not inherit another's layout."""
     client = Client()
     profile = _hunter(client)
-    run = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    run = svc.start(profile, CHALLENGE_TYPE_CALENDAR)
     assert client.get(_html_url(run)).status_code == 404
     assert client.get(_png_url(run)).status_code == 404
+
+
+def test_the_owner_gets_a_job_coverage_preview():
+    client = Client()
+    run = _jobs_run(_hunter(client))
+    resp = client.get(_html_url(run))
+    assert resp.status_code == 200
+    assert 'Job Coverage Challenge' in json.loads(resp.content)['html']
 
 
 # ── the download ─────────────────────────────────────────────────────────────────────────────────────
@@ -427,21 +455,32 @@ def test_a_visitor_sees_no_share_and_no_dialog():
     assert 'js/challenge-share' not in body
 
 
-def test_a_job_coverage_run_page_offers_no_share_yet():
+def test_a_job_coverage_run_page_offers_share():
     client = Client()
-    run = svc.start(_hunter(client), CHALLENGE_TYPE_JOBS)
-    assert 'data-challenge-share' not in _detail(client, run)
+    run = _jobs_run(_hunter(client))
+    assert f'data-html-url="{_html_url(run)}"' in _detail(client, run)
 
 
-def test_my_challenges_offers_share_on_the_live_az_run_only():
-    """The live A-Z card carries Share; the Job Coverage card does not, because its card is not built."""
+def test_a_calendar_run_page_offers_no_share_yet():
+    client = Client()
+    run = svc.start(_hunter(client), CHALLENGE_TYPE_CALENDAR)
+    resp = client.get(reverse('challenge_detail', args=[run.id]))
+    assert resp.status_code == 200, 'a page that failed to render offers no button either'
+    assert 'data-challenge-share' not in resp.content.decode()
+
+
+def test_my_challenges_offers_share_on_the_types_that_have_a_card():
+    """Both live contract-backed runs carry Share; the Calendar's card is not built, so it has none -- and
+    the page still renders ONE dialog however many buttons it holds."""
     client = Client()
     profile = _hunter(client)
     az = _az_run(profile)
-    jobs = svc.start(profile, CHALLENGE_TYPE_JOBS)
+    jobs = _jobs_run(profile)
+    calendar = svc.start(profile, CHALLENGE_TYPE_CALENDAR)
     body = client.get(reverse('my_challenges')).content.decode()
     assert f'data-html-url="{_html_url(az)}"' in body
-    assert _html_url(jobs) not in body
+    assert f'data-html-url="{_html_url(jobs)}"' in body
+    assert _html_url(calendar) not in body
     assert body.count('id="cc-share"') == 1
 
 
@@ -456,3 +495,156 @@ def test_my_challenges_offers_share_on_a_finished_az_run():
     finished = body[body.index('<ul class="mt-2 divide-y'):]
     assert f'data-html-url="{_html_url(run)}"' in finished
     assert 'pp-cshare--compact' in finished
+
+
+# ── the Job Coverage board ───────────────────────────────────────────────────────────────────────────
+
+def test_job_coverage_draws_five_discipline_shelves_in_radar_order():
+    """FIVE SHELVES OF FIVE, the owner's layout, taken from the same grouping the live board draws: the
+    radar's order (combat, exploration, mind, heart, finesse), each in its discipline's colour."""
+    from core.services.completion_card_service import DISCIPLINE_COLOURS
+    context = share_card.build_card_context(_jobs_run(_hunter()))
+    shelves = context['shelves']
+    assert [sh['label'] for sh in shelves] == ['Combat', 'Exploration', 'Mind', 'Heart', 'Finesse']
+    assert [sh['colour'] for sh in shelves] == [DISCIPLINE_COLOURS[k] for k in
+                                               ('combat', 'exploration', 'mind', 'heart', 'finesse')]
+    assert all(len(sh['squares']) == 5 and sh['total'] == 5 for sh in shelves)
+    assert all(sh['glyph'] for sh in shelves), 'a shelf lost its discipline glyph'
+    assert 'rows' not in context
+
+
+def test_a_job_square_carries_its_glyph_and_colour_and_a_letter_does_not():
+    """The mark is the only difference between the boards: a job's glyph in its discipline colour, or the
+    letter. A job square without a glyph would render its SLUG as text."""
+    jobs = share_card.build_card_context(_jobs_run(_hunter()))
+    for shelf in jobs['shelves']:
+        for sq in shelf['squares']:
+            assert sq['is_job'] and sq['glyph']
+            # Its OWN discipline's colour, not merely a colour: the grey fallback is a hex too.
+            assert sq['colour'] == shelf['colour'], (sq['key'], sq['colour'], shelf['label'])
+    az = share_card.build_card_context(_az_run(_hunter()))
+    assert not any(sq['glyph'] or sq['is_job'] for row in az['rows'] for sq in row)
+
+
+def test_a_shelf_tallies_its_own_discipline():
+    profile = _hunter()
+    run = _jobs_run(profile)
+    combat = list(Job.objects.filter(discipline='combat').values_list('slug', flat=True))
+    _fill_job(run, profile, combat[0], complete=True)
+    _fill_job(run, profile, combat[1], complete=True)
+    _fill_job(run, profile, combat[2])
+    shelves = {sh['label']: sh for sh in share_card.build_card_context(run)['shelves']}
+    assert shelves['Combat']['done'] == 2
+    assert [sq['state'] for sq in shelves['Combat']['squares']].count(share_card.ASSIGNED) == 1
+    assert shelves['Mind']['done'] == 0
+
+
+def test_the_xp_stat_is_what_was_paid_not_what_is_owed():
+    """XP behind a Claim button is not the hunter's yet. Two finished squares, one claimed: 6,000, not
+    12,000 -- the figure Career would show."""
+    from trophies.util_modules.constants import CHALLENGE_SLOT_JOB_XP
+    profile = _hunter()
+    run = _jobs_run(profile)
+    slugs = list(Job.objects.order_by('slug').values_list('slug', flat=True)[:2])
+    for slug in slugs:
+        _fill_job(run, profile, slug, complete=True)
+    assert share_card.build_card_context(run)['xp_paid'] == 0
+    rewards.redeem_slot(run, profile, slugs[0])
+    assert share_card.build_card_context(run)['xp_paid'] == CHALLENGE_SLOT_JOB_XP
+
+
+def test_the_job_card_renders_its_own_words():
+    from django.template.loader import render_to_string
+    profile = _hunter()
+    run = _jobs_run(profile)
+    slug = Job.objects.order_by('slug').values_list('slug', flat=True).first()
+    _fill_job(run, profile, slug, complete=True)
+    html = render_to_string(share_card.CARD_TEMPLATE, share_card.build_card_context(run))
+    assert 'Job Coverage Challenge' in html and 'A&ndash;Z' not in html
+    assert '1 job down, 24 to go.' in html
+    assert '>Job XP<' in html and '>Jobs<' in html
+    assert re.search(r'>0</div>\s*<div[^>]*>Job XP<', html), 'nothing is paid yet, so the stat must read 0'
+    rewards.redeem_slot(run, profile, slug)
+    html = render_to_string(share_card.CARD_TEMPLATE, share_card.build_card_context(run))
+    assert re.search(r'>6,000</div>\s*<div[^>]*>Job XP<', html), 'the XP stat lost its value'
+    assert '1<span style="font-size: 18px; color: #8a939f;">/5</span>' in html, 'a shelf tally is missing'
+
+    az = render_to_string(share_card.CARD_TEMPLATE, share_card.build_card_context(_az_run(_hunter())))
+    assert '>Job XP<' not in az, 'A-Z pays no XP, so its plaque has no XP stat'
+
+
+def test_the_job_card_costs_the_same_however_full_the_run():
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+    profile = _hunter()
+    run = _jobs_run(profile)
+    slugs = list(Job.objects.order_by('slug').values_list('slug', flat=True))
+    for slug in slugs[:2]:
+        _fill_job(run, profile, slug, complete=True)
+    with CaptureQueriesContext(connection) as few:
+        share_card.build_card_context(run)
+    for slug in slugs[2:10]:
+        _fill_job(run, profile, slug, complete=True)
+    with CaptureQueriesContext(connection) as many:
+        share_card.build_card_context(run)
+    assert len(many) == len(few), [q['sql'][:120] for q in many.captured_queries]
+
+
+def test_the_designed_shape_keeps_the_designed_geometry():
+    """Five shelves of five: 64x85 covers on 204px shelves, the numbers the card was drawn at."""
+    board = share_card.build_card_context(_jobs_run(_hunter()))['board']
+    assert (board['cover_w'], board['cover_h'], board['shelf_w']) == (64, 85, 204)
+    assert (board['mark_px'], board['well_px'], board['tally_px']) == (21, 26, 30)
+
+
+def _fits(context):
+    """Every shelf on the card's 1112px content width, in two rows."""
+    board, shelves = context['board'], context['shelves']
+    width = len(shelves) * board['shelf_w'] + (len(shelves) - 1) * share_card._SHELF_GAP_MIN
+    columns = (board['shelf_w'] + share_card._COVER_GAP) // (board['cover_w'] + share_card._COVER_GAP)
+    assert width <= share_card._BOARD_WIDTH, f'{len(shelves)} shelves need {width}px'
+    assert all(len(sh['squares']) + 1 <= columns * 2 for sh in shelves), 'a shelf wraps to a third row'
+
+
+def test_a_deleted_job_still_fits_and_never_prints_its_slug():
+    """A deleted `Job` puts its square on a SIXTH shelf (`slot_groups` keeps it drawable). Hardcoded, six
+    204px shelves overflowed the card, and a square with no glyph printed its slug as text."""
+    profile = _hunter()
+    run = _jobs_run(profile)
+    victim = Job.objects.order_by('slug').first()
+    slug = victim.slug
+    victim.delete()
+
+    context = share_card.build_card_context(run)
+    assert len(context['shelves']) == 6
+    _fits(context)
+    orphan = next(sq for sh in context['shelves'] for sq in sh['squares'] if sq['key'] == slug)
+    assert orphan['glyph'] == share_card._FALLBACK_JOB_GLYPH
+    assert orphan['colour'] == share_card._NO_DISCIPLINE_COLOUR
+
+    from django.template.loader import render_to_string
+    html = render_to_string(share_card.CARD_TEMPLATE, context)
+    assert f'>{slug}<' not in html, 'the deleted job square printed its slug'
+    # AND THE MARKUP USES THE NUMBERS. Computing a geometry that fits is worthless if the template still
+    # draws the designed 204px shelves and 64px covers.
+    board = context['board']
+    assert html.count(f'width: {board["shelf_w"]}px; flex-shrink: 0;') == 6, 'the shelves ignore the geometry'
+    # COUNTED, not merely present: the tally cell is drawn at the cover size too, so an `in` check passed with
+    # every square still at 64x85. One per square plus one tally per shelf.
+    sized = html.count(f'width: {board["cover_w"]}px; height: {board["cover_h"]}px;')
+    assert sized == 25 + 6, f'{sized} cells at the computed size; the squares ignore the geometry'
+
+
+def test_a_discipline_edit_still_fits_in_two_rows():
+    """A staff edit to `Job.discipline` makes a shelf of SIX, whose tally wrapped to a third row and pushed the
+    plaque off the 630px canvas. The board widens its shelves instead."""
+    profile = _hunter()
+    run = _jobs_run(profile)
+    moved = Job.objects.filter(discipline='mind').first()
+    moved.discipline = 'combat'
+    moved.save(update_fields=['discipline'])
+
+    context = share_card.build_card_context(run)
+    assert max(len(sh['squares']) for sh in context['shelves']) == 6
+    _fits(context)
+    assert context['board']['cover_w'] < 64

@@ -838,7 +838,7 @@ Minting was cut, but runs still get a share card: `challenges/services/share_car
 `templates/shareables/challenge_card.html`, owner-only, finished or in progress. It DOES carry the hunter's
 name and avatar -- the things the rule above keeps out of a minted image -- and that is fine for the
 same reason commit `8b981dd0` was: it is computed when the hunter asks for it, from live rows, and never
-stored. Built one type at a time (A-Z first); see
+stored. Built one type at a time (A-Z, then Job Coverage); see
 [share-images.md](share-images.md#the-challenge-card-a-runs-share-card).
 
 ---

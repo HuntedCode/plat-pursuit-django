@@ -1,6 +1,10 @@
 {% load static humanize %}{% comment %}
-Challenge card -- the share image for an A-Z run. Landscape only, 1200x630. Finished AND in-progress runs
-(owner, 2026-10-08): a run halfway through is a thing worth showing off too, and the card says which it is.
+Challenge card -- the share image for a challenge run. Landscape only, 1200x630. Finished AND in-progress
+runs (owner, 2026-10-08): a run halfway through is a thing worth showing off too, and the card says which.
+
+ONE SHELL, A BOARD PER TYPE. The header, the brand and the plaque are shared; the board is an include chosen
+by `kind`, and the square inside both boards is one partial (shareables/partials/_challenge_card_square.html).
+Types are built one at a time, so `share_card.SHAREABLE_TYPES` says which have a card.
 
 THE SAME FAMILY AS shareables/plat_card.html, and that file's design brief applies here unchanged: sized to
 survive ~37% scale in a Discord embed, hex-only inline styles (no stylesheet at render), Bricolage for what
@@ -8,14 +12,8 @@ you read first and Inter for labels, the Frame inset rule, scrims as INNER layer
 ground with `!important` cannot strip them, and the brand block as a real mark. Its token map is the one
 to keep in sync with input.css; this card uses the same values plus `--pp-success` (#3add9e).
 
-THE LAYOUT IS AN ALPHABET STRIP (owner's pick): A-M over N-Z, every cover lettered, a full-width plaque
-below. Two rows of thirteen is the only arrangement where the alphabet reads as the alphabet -- a 9x3
-grid is the live board's shape, and on a card it reads as "a lot of games" rather than "A to Z".
-
-SQUARE STATES mirror the live board's vocabulary so a hunter recognises their own run:
-  done      full cover, letter on it, green check (the board's `.pp-csq--done`)
-  assigned  the cover dimmed behind a primary border: picked, not finished yet (`.pp-csq--filled`)
-  open      a dashed well with the letter set large (`.pp-csq--empty`)
+THE BOARDS: A-Z is an alphabet strip (partials/_challenge_card_az.html); Job Coverage is five discipline
+shelves (partials/_challenge_card_jobs.html). Each partial explains its own geometry.
 
 Context: challenges/services/share_card.build_card_context.
 {% endcomment %}
@@ -29,7 +27,7 @@ Context: challenges/services/share_card.build_card_context.
         <div style="display: flex; align-items: center; gap: 18px; flex-shrink: 0;">
             <div style="flex: 1; min-width: 0;">
             <div style="display: flex; align-items: center; gap: 16px;">
-                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 46px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.02em; line-height: 1.05; white-space: nowrap;">A&ndash;Z Challenge</span>
+                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 46px; font-weight: 700; color: #f0f6fd; letter-spacing: -0.02em; line-height: 1.05; white-space: nowrap;">{% if kind == 'jobs' %}Job Coverage Challenge{% else %}A&ndash;Z Challenge{% endif %}</span>
                 {% if is_complete %}
                 <span style="display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(58, 221, 158, 0.55); background: rgba(58, 221, 158, 0.12);">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3add9e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M20 6 9 17l-5-5"/></svg>
@@ -41,7 +39,7 @@ Context: challenges/services/share_card.build_card_context.
                 </span>
                 {% endif %}
             </div>
-            <div style="font-size: 20px; line-height: 1.35; font-weight: 500; color: #9da5b1; margin-top: 8px; white-space: nowrap;">{% if is_complete %}One game for every letter, A to Z.{% else %}{{ completed_count }} letter{{ completed_count|pluralize }} down, {{ letters_left }} to go.{% endif %}</div>
+            <div style="font-size: 20px; line-height: 1.35; font-weight: 500; color: #9da5b1; margin-top: 8px; white-space: nowrap;">{% if kind == 'jobs' %}{% if is_complete %}One game for every job.{% else %}{{ completed_count }} job{{ completed_count|pluralize }} down, {{ left }} to go.{% endif %}{% else %}{% if is_complete %}One game for every letter, A to Z.{% else %}{{ completed_count }} letter{{ completed_count|pluralize }} down, {{ left }} to go.{% endif %}{% endif %}</div>
             </div>
             <div style="flex-shrink: 0; display: flex; align-items: center; gap: 13px;">
                 <img src="{% static 'images/logo.png' %}" alt="" style="width: 50px; height: 50px; border-radius: 9px; object-fit: cover; flex-shrink: 0;" />
@@ -52,33 +50,8 @@ Context: challenges/services/share_card.build_card_context.
             </div>
         </div>
 
-        {# ── 2. The alphabet ── #}
-        <div style="display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;">
-            {% for row in rows %}
-            <div style="display: flex; gap: 6px;">
-                {% for sq in row %}
-                {% if sq.state == 'open' %}
-                <div style="position: relative; width: 80px; height: 107px; flex-shrink: 0; border-radius: 9px; border: 2px dashed #404853; box-sizing: border-box; background: rgba(24, 29, 35, 0.55); display: flex; align-items: center; justify-content: center;">
-                    <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 40px; font-weight: 700; color: #5b6470; line-height: 1;">{{ sq.key }}</span>
-                </div>
-                {% else %}
-                <div style="position: relative; width: 80px; height: 107px; flex-shrink: 0; border-radius: 9px; overflow: hidden; box-sizing: border-box; background: #232a31; border: {% if sq.state == 'done' %}1px solid rgba(58, 221, 158, 0.55){% else %}2px solid rgba(39, 235, 254, 0.55){% endif %}; box-shadow: 0 10px 22px rgba(5, 8, 12, 0.55);">
-                    {% if sq.cover %}
-                    <img src="{{ sq.cover }}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; {% if sq.cover_is_art %}object-fit: cover; object-position: top;{% else %}object-fit: contain; padding: 12px; box-sizing: border-box;{% endif %}{% if sq.state == 'assigned' %} opacity: 0.34;{% endif %}" />
-                    {% endif %}
-                    <div style="position: absolute; inset: auto 0 0 0; height: 46px; background: linear-gradient(to top, rgba(5, 8, 12, 0.92) 0%, rgba(5, 8, 12, 0) 100%);"></div>
-                    <span style="position: absolute; left: 7px; bottom: 4px; font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 27px; font-weight: 700; line-height: 1; color: {% if sq.state == 'done' %}#f0f6fd{% else %}#27ebfe{% endif %}; text-shadow: 0 2px 6px rgba(5, 8, 12, 0.8);">{{ sq.key }}</span>
-                    {% if sq.state == 'done' and not is_complete %}
-                    <span style="position: absolute; top: 5px; right: 5px; width: 18px; height: 18px; border-radius: 50%; background: #3add9e; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(5, 8, 12, 0.6);">
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#05080c" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                    </span>
-                    {% endif %}
-                </div>
-                {% endif %}
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </div>
+        {# ── 2. The board ── #}
+        {% if kind == 'jobs' %}{% include 'shareables/partials/_challenge_card_jobs.html' %}{% else %}{% include 'shareables/partials/_challenge_card_az.html' %}{% endif %}
 
         {# ── 3. The plaque: who, and the numbers ── #}
         <div style="display: flex; align-items: center; gap: 20px; flex-shrink: 0; padding: 20px 26px; border-radius: 14px; background: rgba(10, 14, 19, 0.55); border: 1px solid rgba(64, 72, 83, 0.7);">
@@ -92,7 +65,7 @@ Context: challenges/services/share_card.build_card_context.
                     <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 32px; font-weight: 700; color: {% if mark %}{{ mark.colour }}{% else %}#f0f6fd{% endif %}; letter-spacing: -0.01em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;">{{ username }}</span>
                     {% include 'components/_mark_glyphs_inline.html' with star_px=15 svc_px=16 %}
                 </div>
-                {% comment %}NOT the run's name: the header already says "A-Z Challenge", and repeating it here
+                {% comment %}NOT the run's name: the header already names the challenge, and repeating it here
                 was the one line on the card saying nothing new. A finished run shows the title it EARNED (third
                 and later finishes earn none, so the line simply drops); a live one shows what is in play.{% endcomment %}
                 {% if title %}
@@ -101,11 +74,21 @@ Context: challenges/services/share_card.build_card_context.
                 <div style="line-height: 1.35; font-size: 18px; font-weight: 500; color: #9da5b1; margin-top: 3px; white-space: nowrap;"><span style="color: #27ebfe; font-weight: 600;">{{ assigned_count }}</span> game{{ assigned_count|pluralize }} in progress</div>
                 {% endif %}
             </div>
-            <div style="flex-shrink: 0; display: flex; align-items: center; gap: 40px;">
+            {% comment %}A fourth stat on Job Coverage, the only type that pays XP, so the row tightens to
+            keep the name's room.{% endcomment %}
+            <div style="flex-shrink: 0; display: flex; align-items: center; gap: {% if kind == 'jobs' %}32{% else %}40{% endif %}px;">
                 <div>
                     <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 44px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ completed_count }}<span style="font-size: 25px; color: #8a939f;">/{{ total_slots }}</span></div>
-                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 8px;">Letters</div>
+                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 8px;">{% if kind == 'jobs' %}Jobs{% else %}Letters{% endif %}</div>
                 </div>
+                {% if kind == 'jobs' %}
+                {% comment %}PAID, never owed: XP still behind a Claim button is not the hunter's yet. See
+                `share_card.build_card_context`.{% endcomment %}
+                <div>
+                    <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 44px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ xp_paid|intcomma }}</div>
+                    <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 8px;">Job XP</div>
+                </div>
+                {% endif %}
                 <div>
                     <div style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: 44px; font-weight: 700; color: #f0f6fd; line-height: 1; letter-spacing: -0.02em;">{{ days|intcomma }}</div>
                     <div style="line-height: 1.2; font-size: 14px; font-weight: 600; color: #8a939f; letter-spacing: 0.13em; text-transform: uppercase; margin-top: 8px;">{% if is_complete %}Day{{ days|pluralize }}{% else %}Day{{ days|pluralize }} in{% endif %}</div>
