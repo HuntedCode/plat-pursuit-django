@@ -1,7 +1,7 @@
 """Which calendar days a hunter has filled, and the one place the two views are defined.
 
-THREE CONSUMERS, TWO OF THEM ALREADY WIRED -- the nightly sweep, the sync hook (`token_keeper`'s
-`stats_badges` phase) and the day modal, which is the one still to come. The thing that goes wrong when
+THREE CONSUMERS -- the nightly sweep, the sync hook (`token_keeper`'s `stats_badges` phase) and the day
+modal (`CalendarDayView`, through `platinums_on_day`). The thing that goes wrong when
 a rule like this has no home is that each of them derives it slightly differently: the day modal listing
 games that "satisfy" a day has to agree, exactly, with the predicate that filled it, or a hunter opens a
 filled day to an empty list. So the predicates live here and nothing re-derives them.
@@ -50,6 +50,7 @@ import logging
 import zoneinfo
 from collections import namedtuple
 
+from django.db import transaction
 from django.db.models import Case, Count, DateField, F, Max, Min, Q, Value, When
 from django.db.models.functions import ExtractDay, ExtractMonth, TruncDate
 from django.utils import timezone
@@ -557,8 +558,6 @@ def apply_to_run(challenge, *, found=None):
     --all-calendars` is run by hand. No backfill ships with it: the feature is unreleased, so the only
     rows that can hold the old value are development and seeded ones.
     """
-    from django.db import transaction
-
     from challenges.models import (CALENDAR_VIEW_ALL, CALENDAR_VIEW_CLEAN, CALENDAR_VIEW_FIELDS,
                                    CHALLENGE_TYPE_CALENDAR, CalendarDay, Challenge)
 
@@ -567,8 +566,8 @@ def apply_to_run(challenge, *, found=None):
 
     # THE WATERMARKS ARE READ BEFORE THE FILLS, and the order is the difference between a redundant
     # sweep and a permanently missing day. Reading them AFTER (which is how this shipped) lets them
-    # describe state the fills do not include: a platinum landing during the ~90 queries `filled_days`
-    # takes for a whale is counted by the watermark and absent from `found`, so the next sweep sees
+    # describe state the fills do not include: a platinum landing while `filled_days` runs (one grouped
+    # statement, but a long one for a whale) is counted by the watermark and absent from `found`, so the next sweep sees
     # "nothing moved" and the day is never filled. Read first, the worst case is `watermark <= reality`,
     # which costs one extra sweep and loses nothing.
     # READ FROM THE DATABASE, not through `challenge.profile`. That attribute is the CALLER's cached
@@ -578,10 +577,10 @@ def apply_to_run(challenge, *, found=None):
     plats_seen = (Profile.objects.filter(pk=challenge.profile_id)
                   .values_list('total_plats', flat=True).first() or 0)
 
-    # `found` IS ACCEPTED FROM THE CALLER because it depends only on the PROFILE, not the run. A hunter
-    # can hold more than one Calendar run (runs are sequential, so the finished ones stay),
-    # and computing it per run recomputes an identical ~90-query history pass for each. The two callers
-    # that loop -- the sync hook and the nightly phase -- pass it in; a single-run caller omits it.
+    # `found` IS ACCEPTED FROM THE CALLER because it depends only on the PROFILE, not the run, so a caller
+    # holding several runs computes the history pass once. Since `TYPES_WITH_ONE_RUN` a hunter normally has
+    # one Calendar run; more exist only through writes around the service. The looping callers -- the sync
+    # hook and the nightly phase -- pass it in; a single-run caller omits it.
     if found is None:
         found = filled_days(challenge.profile)
     now = timezone.now()
@@ -741,8 +740,14 @@ def _recount_calendar(challenge, *, wrote_rows=True):
     # squares are the fact the hunter earned and the titles are derived from it. A raise here would cost a
     # hunter their recount -- and, on the sweep, everybody else's after them -- to save a title a later
     # pass will grant anyway. Logged loudly because a silent one is how a reward quietly stops existing.
+    #
+    # IN ITS OWN SAVEPOINT, which is what makes the catch real. This runs inside `apply_to_run`'s
+    # transaction, and after a DATABASE error Postgres refuses every later statement in it -- so a bare
+    # try/except "contained" the failure and then rolled the whole fill back at commit, logging only that
+    # the markers were missing.
     try:
-        rewards.grant_day_markers(challenge)
+        with transaction.atomic():
+            rewards.grant_day_markers(challenge)
     except Exception:
         logger.exception('calendar run %s recounted but its day markers could not be granted',
                          challenge.pk)
@@ -831,8 +836,8 @@ def runs_due_for_sweep():
     "frozen": `hide` is explicit that it destroys nothing and that `start` brings the run back.
     An earlier version of this filtered `is_deleted=False` and so froze any hidden Calendar run. That
     was invisible for the other two types, because a hidden UNFINISHED run resumes on Start and a hidden
-    FINISHED one has nothing left to fill -- but a finished Calendar run does: the view it did not
-    complete on is still reachable, and freezing it silently removed the only path to that ultimate.
+    FINISHED one has nothing left to fill. (A finished Calendar run's squares cannot change either since the
+    one-lens collapse; only its day counts and first dates move.)
     """
     from challenges.models import CHALLENGE_TYPE_CALENDAR, Challenge
 
@@ -856,10 +861,9 @@ def refresh_for_profile(profile):
     against a hook that is commented out, emptied, or wrapped in `if False` -- so no test in the suite
     failed when the hook did nothing. A named function can be called by a test and asserted on.
 
-    THE FILL SET IS COMPUTED ONCE. It depends on the hunter's history, not on the run, and a hunter can
-    own more than one Calendar run: the one-active constraint is partial on `is_complete=False`, and a
-    finished run keeps filling so its other view can still reach an ultimate. Per run, that repeats an
-    identical history pass.
+    THE FILL SET IS COMPUTED ONCE. It depends on the hunter's history, not on the run. A hunter normally
+    has one Calendar run (`TYPES_WITH_ONE_RUN`), but a FINISHED run is refreshed too: its squares cannot
+    change, and its day counts and first dates can (they feed the month panel and the Hall of Fame heatmap).
 
     PER-RUN CONTAINMENT, matching the nightly phase. One run with odd data must not cost the others
     their refresh, and on the sync path it must not cost the hunter the rest of their sync.

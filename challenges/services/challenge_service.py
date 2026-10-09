@@ -12,9 +12,9 @@ reasons it states them; the fourth this feature adds, and it is arguably the mos
    derived from the ROWS rather than incremented -- `filled_count` and `completed_count` are what a
    card renders and what `challenge_completed_within_filled` polices, so drift is visible and fatal.
 4. **State that a reward was paid against is never unwound.** A completed slot locks, so the XP guard
-   keyed on that slot cannot be re-armed by clearing it. Note the payout itself is NOT in this module --
-   `ChallengeSlot.xp_redeemed_at` has no writer yet and gains one with the rewards chunk. The rule is
-   here now because the lock has to exist before the thing it protects does.
+   keyed on that slot cannot be re-armed by clearing it. Note the payout itself is NOT in this module:
+   `rewards.redeem_slot` is the writer of `ChallengeSlot.xp_redeemed_at`, and this lock is what keeps a
+   paid square from being cleared and paid again.
 
 TWO GATES THIS MODULE DELIBERATELY DOES NOT HAVE, because their absence is a design decision rather
 than an omission:
@@ -81,7 +81,9 @@ from challenges.models import (
     ChallengeQuerySet,
     ChallengeSlot,
     TYPES_NOT_YET_CREATABLE,
+    TYPES_WITH_ONE_RUN,
     calendar_day_keys,
+    short_label_for,
 )
 from challenges.services import calendar_fill, eligibility
 from trophies.models import EarnedContract, Job, Profile
@@ -383,7 +385,12 @@ def start_reporting(profile, challenge_type, *, backfill=True):
     # The locked row is BOUND, not discarded, because the beta gate below now reads it -- and rule 2
     # says a precondition inside a lock is re-asserted on the row that came back. While the gate sat
     # above the lock, reading the caller's instance was plainly best-effort; inside it, it is not.
-    locked_profile = Profile.objects.select_for_update().filter(pk=profile.pk).first() or profile
+    #
+    # `no_key=True` (FOR NO KEY UPDATE), because a Calendar run is now filled INSIDE this lock. A plain FOR
+    # UPDATE conflicts with the FOR KEY SHARE that every foreign-key insert takes on its parent, so while a
+    # whale's history query ran, their own concurrent sync's `EarnedTrophy`/`ProfileGame` inserts waited on
+    # it. This lock only has to serialise two Starts against each other, which NO KEY UPDATE still does.
+    locked_profile = Profile.objects.select_for_update(no_key=True).filter(pk=profile.pk).first() or profile
 
     active = active_run(profile, challenge_type)
     if active is not None:
@@ -422,6 +429,11 @@ def start_reporting(profile, challenge_type, *, backfill=True):
     # used to be refused lock-free. Immaterial in practice -- the lock is per-profile and the door is
     # rate limited per user -- but it is no longer literally true that this refusal costs nothing.
     _refuse_if_beta_gated(locked_profile)
+
+    # ONE RUN, FOR GOOD, on the types that read a hunter's whole history (`TYPES_WITH_ONE_RUN`). Hidden
+    # finished runs count too: hiding one and pressing Start must not mint a second finished copy.
+    if challenge_type in TYPES_WITH_ONE_RUN and finished_run(profile, challenge_type) is not None:
+        raise ChallengeError('Your %s is already finished.' % short_label_for(challenge_type))
 
     keys = slot_keys_for(challenge_type)
     if not keys:
@@ -974,7 +986,16 @@ def detect_for_profile(profile):
     qualifying = pending_slots(profile).filter(
         Exists(EarnedContract.objects.filter(profile=profile, contract_id=OuterRef('contract_id')))
     )
-    return sum(1 for slot in list(qualifying) if mark_slot_completed(slot))
+    # ONE SQUARE AT A TIME, each contained: one bad row must not cost the hunter the rest of their squares
+    # on this sync. `mark_slot_completed` is atomic, so a raise rolls back to its own savepoint and the
+    # caller's transaction stays usable -- which is what makes catching it here safe.
+    done = 0
+    for slot in list(qualifying):
+        try:
+            done += 1 if mark_slot_completed(slot) else 0
+        except Exception:
+            logger.exception('challenge slot %s could not be completed', slot.pk)
+    return done
 
 
 def completable_slots():
@@ -1070,6 +1091,17 @@ def completed_counts(profile, challenge_type):
         all=models.Count('pk'),
         visible=models.Count('pk', filter=ChallengeQuerySet.VISIBLE),
     )
+
+
+def finished_run(profile, challenge_type):
+    """The hunter's newest FINISHED run of this type, hidden or not, or None. One query.
+
+    Hidden ones count, because the question is "has this hunter finished one" -- for `TYPES_WITH_ONE_RUN`
+    that is what closes the type, and My Challenges shows that run in place of a Start button.
+    """
+    return Challenge.objects.filter(
+        profile=profile, challenge_type=challenge_type, is_complete=True,
+    ).order_by('-completed_at', '-pk').first()
 
 
 def resumable_run(profile, challenge_type):

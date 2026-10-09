@@ -184,6 +184,8 @@
                             <span class="bd-chip bd-chip--primary shrink-0">In progress</span>
                             {% elif card.state == 'resumable' %}
                             <span class="bd-chip bd-chip--ghost shrink-0">Hidden</span>
+                            {% elif card.state == 'finished' %}
+                            <span class="bd-chip bd-chip--success shrink-0">Finished</span>
                             {% endif %}
                             </div>
                             <p class="text-xs md:text-sm text-base-content/60 mt-0.5 text-pretty lg:min-h-[2lh]">
@@ -197,7 +199,7 @@
                 {% comment %}THE HORIZON, the kit's progress primitive, rather than a bespoke bar. Its
                 fill is inline because the value is per-run data and cannot be a class.{% endcomment %}
                 <p class="text-xs text-base-content/60 mt-3">
-                    {{ card.run.completed_count }} of {{ card.run.total_slots }} {{ card.run.unit }} {% if card.type == 'calendar' %}filled{% else %}done{% endif %}{% if card.planned %}, {{ card.planned }} planned{% endif %}{% if card.visible_completed_count %}<span class="text-base-content/40"> &middot; {{ card.visible_completed_count }} finished before</span>{% endif %}
+                    {{ card.run.completed_count }} of {{ card.run.total_slots }} {{ card.run.unit }} {% if card.type == 'calendar' %}filled{% else %}done{% endif %}{% if card.planned %}, {{ card.planned }} planned{% endif %}{% if card.visible_completed_count and card.state != 'finished' %}<span class="text-base-content/40"> &middot; {{ card.visible_completed_count }} finished before</span>{% endif %}
                 </p>
                 <div class="mt-2">
                     {% include 'components/horizon.html' with progress=card.progress %}
@@ -303,7 +305,9 @@
                     Start and Resume stay forms, because both WRITE: one creates a run and the other
                     un-hides it. A link cannot do either, and a GET that mutated would be worse than
                     the dead button was.{% endcomment %}
-                    {% if card.state == 'active' %}
+                    {% comment %}A FINISHED ONE-RUN TYPE (the Calendar) links to its board the same way: there is
+                    no Start to offer, because `TYPES_WITH_ONE_RUN` refuses a second run.{% endcomment %}
+                    {% if card.state == 'active' or card.state == 'finished' %}
                     <a href="{% url 'challenge_detail' card.run.id %}" class="pp-cta">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3l14 9-14 9V3z"/></svg>
                         {{ card.verb }}
@@ -319,6 +323,9 @@
                     </form>
                     {% endif %}
 
+                    {% if card.state == 'finished' and card.type in shareable_types %}
+                    {% include 'challenges/partials/_share_button.html' with run=card.run %}
+                    {% endif %}
                     {% if card.state == 'active' %}
                     {% comment %}SHARE, on a live run too (owner, 2026-10-08): halfway through is worth showing
                     off, and the card says it is in progress. Not on a hidden run -- hiding takes a run out of

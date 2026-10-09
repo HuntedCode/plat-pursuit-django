@@ -1595,6 +1595,17 @@
                     square.disabled = true;
                 }
             }
+            // THE REWARD PANEL, when finishing this square changed what is owed (a Job Coverage square placed
+            // through the scarcity hatch completes on the spot). The server's markup, swapped into the node the
+            // claim flow swaps -- so the Claim button and "+X waiting" are there without a reload. The panel's
+            // entrance class is dropped first, as the claim flow does, so the swap does not replay its arrival.
+            if (slot.rewards_html) {
+                var payWrap = document.querySelector('[data-cpay-wrap]');
+                if (payWrap) {
+                    payWrap.classList.remove('pp-head-cascade');
+                    payWrap.innerHTML = slot.rewards_html;
+                }
+            }
             // THE SHELF'S OWN COUNTER, which nothing else moves. The header tally and the horizon both
             // update below, and the square gets its ring -- but "0 of 5 done" on the discipline that just
             // advanced kept saying 0 until a reload, and that counter is the entire justification for the

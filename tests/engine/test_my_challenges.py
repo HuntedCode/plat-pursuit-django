@@ -273,13 +273,18 @@ def test_the_pages_own_query_cost_is_exact(rf):
     # (`rewards.next_calendar_rung`, one `UserTitle` read). Per TYPE rather than per card, and fixed: the
     # other two types price their reward from the count already in hand.
     calendar_rung = 1
-    assert cost() == 3 * n_types + 3 + calendar_rung
+    # PLUS ONE PER ONE-RUN TYPE WITH NO RUN IN HAND: a type in `TYPES_WITH_ONE_RUN` asks for a finished run
+    # before offering Start, because a finished one closes the type (2026-10-09). Only when the active and
+    # resumable lookups both came back empty, so a hunter mid-run never pays it.
+    from challenges.models import TYPES_WITH_ONE_RUN
+    one_run_lookup = len([key for key, _ in CARD_TYPES if key in TYPES_WITH_ONE_RUN])
+    assert cost() == 3 * n_types + 3 + calendar_rung + one_run_lookup
 
     svc.start(profile, CHALLENGE_TYPE_AZ)
     svc.start(profile, CHALLENGE_TYPE_JOBS)
     # Two cards go ACTIVE: `resumable_run` short-circuits on each, so one query fewer apiece. The
     # remaining types stay empty and keep their three.
-    assert cost() == 3 * n_types + 3 + calendar_rung - 2
+    assert cost() == 3 * n_types + 3 + calendar_rung + one_run_lookup - 2
 
     for i in range(12):
         Challenge.objects.create(
@@ -288,7 +293,7 @@ def test_the_pages_own_query_cost_is_exact(rf):
     # AND IT DOES NOT GROW WITH DATA, which is the distinction that matters: the history is one count plus
     # one bounded slice however many runs exist, and the owed-XP read is one `values().annotate()` however
     # many runs owe. Twelve more completed runs cost nothing.
-    assert cost() == 3 * n_types + 3 + calendar_rung - 2
+    assert cost() == 3 * n_types + 3 + calendar_rung + one_run_lookup - 2
 
 
 # ── the beta gate, rendered rather than redirected ───────────────────────────────────────────────

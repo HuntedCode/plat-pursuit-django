@@ -237,11 +237,11 @@ def test_the_seeded_finished_runs_are_the_ones_the_hall_of_fame_lists(client, ca
             '%s is in flight and must not be on the Hall of Fame' % run.name
 
     # THE CHAIN PINS TWO DIFFERENT THINGS, which is why both halves are here: that the page draws one
-    # hero per finished ROW (the agreement), and that there are three of them (the absolute count). The
-    # second IS a literal and a fourth challenge type WOULD fail it -- deliberately, because a new type
-    # that does not reach the Hall of Fame is exactly the kind of thing worth being told about. An
-    # earlier comment claimed the opposite, that this moved with the feature on its own.
-    assert body.count('<a class="pp-chero') == _demo_runs(profile).filter(is_complete=True).count() == 3
+    # hero per finished ROW (the agreement), and that there are two of them (the absolute count): A-Z and
+    # Job Coverage. The Calendar is seeded in progress only, since `TYPES_WITH_ONE_RUN` makes a finished
+    # plus an in-progress Calendar impossible for one hunter. The literal is deliberate: a new type that
+    # does not reach the Hall of Fame is worth being told about.
+    assert body.count('<a class="pp-chero') == _demo_runs(profile).filter(is_complete=True).count() == 2
 
 
 # `test_it_says_so_when_the_catalogue_cannot_finish_the_a_z_run` was here and is DELETED, not moved. It had
@@ -458,10 +458,8 @@ def test_a_reseed_still_shows_the_title_band(client, catalogue):
     # DERIVED, not a literal: one finished run per type, and the Plat Calendar made that three. Reading
     # the row count means a fourth type moves this with the feature.
     assert body.count('<a class="pp-chero') == _demo_runs(profile).filter(is_complete=True).count()
-    # THREE BANDS NOW: the finished A-Z run, the finished Job Coverage run, and the finished Calendar
-    # run, which wears the top rung its ladder reached.
-    assert body.count('pp-chero__title') == 3, 'a reseeded finished run is missing its title band'
-    assert 'Calendar Legend' in body, 'the finished Calendar run shows no rung'
+    # TWO BANDS: the finished A-Z run and the finished Job Coverage run (the Calendar is seeded in progress).
+    assert body.count('pp-chero__title') == 2, 'a reseeded finished run is missing its title band'
     assert 'Job Challenge Champion' in body
     assert 'A-Z Champion' in body
 
@@ -830,11 +828,11 @@ def test_it_survives_a_catalogue_too_thin_to_fill_every_square():
     assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_AZ).count() == 1
     assert _demo_runs(profile).filter(filled_count=0).exists()
 
-    # BOTH CALENDAR RUNS SURVIVE A THIN CATALOGUE, which is a real property rather than an accident: a
-    # day is filled by a date, not by a contract, so the Calendar pair needs no catalogue at all. It is
-    # the one type whose surfaces can be looked at on a database with no contracts imported yet.
-    assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_CALENDAR).count() == 2
-    assert _demo_runs(profile).count() == 4
+    # THE CALENDAR RUN SURVIVES A THIN CATALOGUE, which is a real property rather than an accident: a day
+    # is filled by a date, not by a contract, so it needs no catalogue at all. It is the one type whose
+    # surfaces can be looked at on a database with no contracts imported yet.
+    assert _demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_CALENDAR).count() == 1
+    assert _demo_runs(profile).count() == 3
 
 
 @override_settings(DEBUG=True)
@@ -996,38 +994,22 @@ def _in_progress_calendar(profile):
     """
     return _demo_runs(profile).get(challenge_type=CHALLENGE_TYPE_CALENDAR, is_complete=False)
 
-# ── the Plat Calendar pair, which exists because the type has no creation door ───────────────────────
+# ── the Plat Calendar run ────────────────────────────────────────────────────────────────────────
 
 def _calendar_runs(profile):
-    # BY id, NOT by a `run_number` -- `Challenge` has no such field. The plan proposed one and the model
-    # never grew it, so ordering on it raised `FieldError` rather than quietly mis-sorting. Creation order
-    # is what distinguishes the finished run from the in-progress one, and id gives exactly that.
     return list(_demo_runs(profile).filter(challenge_type=CHALLENGE_TYPE_CALENDAR).order_by('id'))
 
 
 @override_settings(DEBUG=True)
-def test_it_seeds_a_calendar_pair_despite_the_creation_gate(catalogue):
-    """THE WHOLE REASON THIS EXISTS. `calendar` is in `TYPES_NOT_YET_CREATABLE`, so there is no button
-    anywhere that deals one -- and the board, the crest switcher and the Hall of Fame year band therefore
-    had no way to be looked at at all. The seeder lifts the gate for its own two calls."""
+def test_it_seeds_one_calendar_run_in_progress(catalogue):
+    """ONE, because a hunter with a finished Calendar cannot start another (`TYPES_WITH_ONE_RUN`), so the
+    finished/in-progress pair the other types get is not a state a real hunter can be in."""
     profile = _hunter()
     _seed(profile)
 
     runs = _calendar_runs(profile)
-    assert len(runs) == 2
-    assert [r.is_complete for r in runs] == [True, False]
-
-
-@override_settings(DEBUG=True)
-def test_the_finished_calendar_run_really_is_finished(catalogue):
-    """A seeder whose "finished run" is not finished wastes the browser pass it exists to serve. Only a
-    finished run reaches the Hall of Fame, so this is what puts the year band on a page at all."""
-    profile = _hunter()
-    _seed(profile)
-    finished = _calendar_runs(profile)[0]
-
-    assert finished.filled_count == finished.total_slots == 365
-    assert finished.completed_at is not None
+    assert len(runs) == 1
+    assert runs[0].is_complete is False
 
 
 @override_settings(DEBUG=True)
@@ -1095,7 +1077,7 @@ def test_every_seeded_day_carries_the_date_a_cell_reads(catalogue):
     look like a row the backfill half-wrote."""
     profile = _hunter()
     _seed(profile)
-    filled = _calendar_runs(profile)[1].calendar_days.filter(in_all=True)
+    filled = _calendar_runs(profile)[0].calendar_days.filter(in_all=True)
 
     assert filled.exists()
     assert not filled.filter(earned_on=None).exists()
@@ -1113,8 +1095,8 @@ def test_reset_takes_the_calendar_runs_and_their_days_with_it(catalogue):
     assert CalendarDay.objects.filter(challenge__profile=profile).exists()
 
     _seed(profile, reset=True)
-    assert len(_calendar_runs(profile)) == 2, 'reseeded, not accumulated'
-    assert CalendarDay.objects.filter(challenge__profile=profile).count() == 2 * 365
+    assert len(_calendar_runs(profile)) == 1, 'reseeded, not accumulated'
+    assert CalendarDay.objects.filter(challenge__profile=profile).count() == 365
 
 
 @override_settings(DEBUG=True)
@@ -1211,11 +1193,8 @@ def test_the_report_does_not_invent_a_reason_for_the_missing_title_band(catalogu
     call_command('seed_challenge_demo', user=profile.psn_username, verbosity=1)
 
     out = capsys.readouterr().out
-    # THE CALENDAR NOW HAS A BAND TO REPORT, so the branch this test was written for is unreachable for
-    # it: a finished run holds its top rung and the report prints that. What is still being pinned is the
-    # original point -- the report never INVENTS a reason -- so the fabricated one stays forbidden and the
-    # real title has to appear.
-    assert 'title: Calendar Legend' in out, 'the finished Calendar run reports no title band'
+    # THE CALENDAR IS SEEDED IN PROGRESS now, so it reports no band at all. What is pinned is the original
+    # point -- the report never INVENTS a reason -- so the fabricated one stays forbidden.
     assert 'third or later completion' not in out
     assert 'no title band' not in out, 'the report claims a band is missing while printing one'
 

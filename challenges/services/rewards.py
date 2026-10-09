@@ -933,8 +933,11 @@ def on_run_completed(challenge):
     this the notification could cost a hunter the rest of their squares, or abort the whole sweep. That is
     the exact outcome rule 4 exists to prevent, reached through the one call the rule did not cover.
     """
+    # IN ITS OWN SAVEPOINT: the caller's transaction holds the completion itself, and a database error
+    # caught without one would leave that transaction aborted, rolling the finished run back at commit.
     try:
-        user_title = grant_completion_title(challenge)
+        with transaction.atomic():
+            user_title = grant_completion_title(challenge)
     except Exception:
         logger.exception('challenge %s completed but its title could not be granted', challenge.pk)
         user_title = None

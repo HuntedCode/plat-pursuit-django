@@ -193,6 +193,17 @@ CALENDAR_VIEW_FIELDS = (
 #: type is creatable" out loud; removing the constant would make the next addition re-derive the argument.
 TYPES_NOT_YET_CREATABLE = frozenset()
 
+#: Types a hunter finishes ONCE: after a finished run of one of these, no new run can start (owner,
+#: 2026-10-09).
+#:
+#: THE PLAT CALENDAR, because every run of it reads the same thing -- the hunter's whole platinum history
+#: -- so a second run is an exact copy of the first. Once runs filled at creation, it was worse than
+#: pointless: for a hunter whose history covers all 365 days, every Start minted a run that was complete
+#: in the same request, with its own Hall of Fame entry and notification, and every one of them was then
+#: re-filled on every sync. A-Z and Job Coverage are picked square by square, so a second run of those is
+#: a genuinely new run and stays allowed.
+TYPES_WITH_ONE_RUN = frozenset({CHALLENGE_TYPE_CALENDAR})
+
 #: THE DAY-MARKER LADDER'S RUNGS, in filled days. One home for a figure the rail DRAWS and the rewards
 #: GRANT, because two copies of a reward threshold is the kind of drift nobody notices until a hunter is
 #: owed a title they cannot see.
@@ -382,11 +393,10 @@ class Challenge(models.Model):
     #: WHEN THE OWNER ACKNOWLEDGED THIS RUN'S OPENING CEREMONY. Null until they do; null forever on types
     #: that have no ceremony, which is every type but the Plat Calendar today.
     #:
-    #: PER RUN, NOT PER USER, and that is why it is a column rather than a `CustomUser.ui_flags` key like
-    #: every other one-shot on the site. A hunter can finish or hide a Calendar run and start another, and
-    #: the second one backfills their whole history again -- so the ceremony is a property of THE RUN
-    #: being opened, not of the person having seen one once. A `ui_flags` key would show it to a hunter's
-    #: first Calendar run and silently never again.
+    #: ON THE RUN, because the run is what is created and backfilled, and the ceremony describes that
+    #: backfill. Since `TYPES_WITH_ONE_RUN` a hunter has one Calendar run for good (hiding an unfinished one
+    #: and pressing Start resumes the same run), so in practice it fires once per hunter -- but keyed to the
+    #: run it stays right if that rule ever relaxes, where a `ui_flags` key would silently skip a second run.
     #:
     #: A TIMESTAMP RATHER THAN A BOOLEAN, for the reason `new_contracts_modal` records about markers
     #: versus receipts: a date can answer "when", a flag cannot, and the cost is the same column.

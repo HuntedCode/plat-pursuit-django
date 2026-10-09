@@ -170,7 +170,16 @@ class Command(BaseCommand):
             # Through the service, never a `bulk_update`: each write takes the Challenge row lock, and
             # completing the LAST square is what finishes the run and stamps `completed_at`. A bulk write
             # would skip both and leave finished runs looking unfinished forever.
-            if svc.mark_slot_completed(slot):
+            # CONTAINED PER SQUARE: one raise used to end the slot phase AND skip the Calendar phase for the
+            # night, since nothing between here and `handle` caught it. `refresh_for_profile` contains each
+            # Calendar run the same way.
+            try:
+                did = svc.mark_slot_completed(slot)
+            except Exception:
+                logger.exception('challenge sweep: slot %s could not be completed', slot.pk)
+                self.stdout.write(self.style.ERROR(f'  failed          {label}'))
+                continue
+            if did:
                 completed += 1
                 self.stdout.write(f'  completed       {label}')
                 # A DIFFERENT instance of the same row from the one `mark_slot_completed` locked (Django
@@ -242,7 +251,7 @@ class Command(BaseCommand):
             scope = 'EVERY run, ignoring the due check (--all-calendars)'
         else:
             runs = calendar_fill.runs_due_for_sweep()
-            scope = 'every run whose platinum or contract count has moved'
+            scope = 'every run whose platinum count has moved'
 
         self.stdout.write(self.style.MIGRATE_HEADING(f'\nPlat Calendar refresh: {scope}'))
 

@@ -284,7 +284,7 @@ def test_names_are_written_as_text_never_as_markup():
     for forbidden in ('outerHTML', 'insertAdjacentHTML', 'document.write'):
         assert forbidden not in JS_CODE, '%s reaches the DOM as markup' % forbidden
 
-    # THREE DELIBERATE `innerHTML` USES, and exactly three. Every one swaps in markup the SERVER rendered
+    # FOUR DELIBERATE `innerHTML` USES, and exactly four. Every one swaps in markup the SERVER rendered
     # from a partial the page itself uses -- `_square_body.html` for a square, `_rewards_panel.html` for the
     # reward panel -- and never anything composed here. Pinned as an exact list rather than as a blanket ban,
     # because the ban is what a future reader would otherwise delete when they needed one of the uses.
@@ -296,6 +296,9 @@ def test_names_are_written_as_text_never_as_markup():
         'if (slot.html) { square.innerHTML = slot.html; }',
         'wrap.innerHTML = data.rewards_html;',
         'if (cell && square.html) { cell.innerHTML = square.html; }',
+        # 2026-10-09: the same `_rewards_panel.html` markup, sent when placing a game FINISHES a Job
+        # Coverage square (`views._slot_json`), so the panel is not stale until a reload.
+        'payWrap.innerHTML = slot.rewards_html;',
     ]), 'unexpected innerHTML use(s): %r' % uses
     assert 'name.textContent = row.name;' in JS
 

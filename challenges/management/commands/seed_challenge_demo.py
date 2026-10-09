@@ -416,10 +416,11 @@ class Command(BaseCommand):
         self._az_run(profile, fill=AZ_FILLED, label='in progress, %d letters' % AZ_FILLED,
                      leave_some_unfinished=True)
 
-        # A FINISHED CALENDAR RUN AND AN IN-PROGRESS ONE, the same pairing as the other two types and for
-        # the same reason: only a finished run reaches the Hall of Fame, so without the first the year
-        # band has no way to be seen at all, and only an unfinished one shows the crest row part-earned.
-        self._calendar_run(profile, label='finished', finished=True)
+        # ONE CALENDAR RUN, IN PROGRESS. It used to be a finished/in-progress pair like the other two
+        # types, and `TYPES_WITH_ONE_RUN` (2026-10-09) made the pair impossible: a hunter with a finished
+        # Calendar cannot start another. The in-progress one stays because it is the designed board -- a
+        # struck crest beside an unstruck one, the part-filled month, the shovelware-only day -- which no
+        # real dev library reproduces. The finished Calendar hero is looked at through a real finished run.
         self._calendar_run(profile, label='in progress, three months struck', finished=False)
 
     def _calendar_run(self, profile, *, label, finished):

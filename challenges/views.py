@@ -29,7 +29,8 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models.functions import Lower
+from django.db.models import F, FloatField
+from django.db.models.functions import Cast, Lower
 
 from trophies.mixins import HtmxListMixin, LoginRequiredAPIMixin
 from trophies.models import Contract
@@ -50,6 +51,7 @@ from django_ratelimit.decorators import ratelimit
 from challenges.models import (CALENDAR_DAY_MARKERS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_CHOICES,
                                CHALLENGE_TYPE_PITCHES, short_label_for,
                                CHALLENGE_TYPE_JOBS, CHALLENGE_TYPES, HATCH_THRESHOLD, TYPES_NOT_YET_CREATABLE,
+                               TYPES_WITH_ONE_RUN,
                                Challenge)
 from challenges.services import calendar_render
 from challenges.services import challenge_service as svc
@@ -278,7 +280,7 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         # script and its eight grounds would ship for nothing. The same two conditions the template's
         # buttons ask, so a page cannot carry a button with no dialog behind it.
         context['has_shareable'] = (
-            any(card['state'] == 'active' and card['type'] in share_card.SHAREABLE_TYPES
+            any(card['state'] in ('active', 'finished') and card['type'] in share_card.SHAREABLE_TYPES
                 for card in context['cards'])
             or any(run.challenge_type in share_card.SHAREABLE_TYPES for run in context['finished'])
         )
@@ -314,6 +316,12 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         if run is None:
             run = svc.resumable_run(profile, challenge_type)
             state = 'resumable' if run is not None else 'empty'
+        # A ONE-RUN TYPE THAT IS DONE shows that run instead of a Start the service would refuse
+        # (`TYPES_WITH_ONE_RUN`): the card becomes the way back to the finished board.
+        if run is None and challenge_type in TYPES_WITH_ONE_RUN:
+            run = svc.finished_run(profile, challenge_type)
+            if run is not None:
+                state = 'finished'
         # Both derived HERE rather than in the template, because Django's `add` filter chains cannot do
         # arithmetic honestly -- the first version of this card computed "planned" as a string of chained
         # `add`s that produced nonsense. A number the page shows is a number the view owes it.
@@ -333,7 +341,7 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
             'progress': progress,
             # The verb IS the state, resolved here rather than in the template so the three cases are
             # visible in one place and a fourth cannot be added by accident in markup.
-            'verb': {'active': 'Continue', 'resumable': 'Resume', 'empty': 'Start'}[state],
+            'verb': {'active': 'Continue', 'resumable': 'Resume', 'empty': 'Start', 'finished': 'View'}[state],
             # Keyed `visible_...` to match what it holds. Named `completed_run_count` it invited back
             # the very confusion it was added to fix -- the two functions differ on hidden runs.
             'visible_completed_count': counts['visible'],
@@ -507,7 +515,7 @@ class ChallengeDetailView(DetailView):
         A hidden run is readable by its owner and nobody else. `select_related('profile')` because the
         byline wants it, and without it the page pays a query to learn whose run it is looking at.
         """
-        return Challenge.objects.readable_by(self._viewer()).select_related('profile')
+        return Challenge.objects.readable_by(self._viewer()).select_related('profile', 'profile__user')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -777,11 +785,12 @@ class SlotPickerView(_SlotView):
     the `error` key the client reads. `api/game_flag_views.py` already records this and this docstring
     re-asserted the comfortable version. The client still fails correctly (`response.ok` is false) but says
     something generic; making these doors answer JSON on a tripped limit needs a `handler403` or the
-    middleware, and belongs with the other 22 `method='GET'` limiters rather than in this chunk.
+    middleware, and belongs with the site's other limiters rather than in this chunk. (These three now meter
+    HEAD as well as GET: Django answers HEAD through `get`, so a HEAD ran the same pool scan unmetered.)
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
-                                method='GET', block=True))
+                                method=('GET', 'HEAD'), block=True))
     def get(self, request, challenge_id, key):
         challenge, slot = self.resolve(request, challenge_id, key)
         if challenge is None:
@@ -805,7 +814,7 @@ class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
-                                method='GET', block=True))
+                                method=('GET', 'HEAD'), block=True))
     def get(self, request, challenge_id):
         challenge = self.editable_run(request, challenge_id)
         if challenge is None:
@@ -841,7 +850,7 @@ class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
     """Which squares this game could fill. GET, and the contract-first half of the picker."""
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
-                                method='GET', block=True))
+                                method=('GET', 'HEAD'), block=True))
     def get(self, request, challenge_id):
         challenge = self.editable_run(request, challenge_id)
         if challenge is None:
@@ -1081,9 +1090,14 @@ def _slot_json(challenge, slot):
 
     The counters travel with it because every write moves them and the page shows them in two places (the
     tally and the Horizon). Returning them here means the client never has to guess or re-fetch.
+
+    THE REWARD PANEL TOO, when the write FINISHED a Job Coverage square. A square placed through the scarcity
+    hatch completes on assignment and owes its XP at once, so the panel's Claim button, its "+X waiting" and
+    Claim all all change -- and patched from the square alone they sat stale until a reload. Same markup the
+    claim flow swaps in (`_rewards_html`), so the two routes cannot draw the panel differently.
     """
     challenge.refresh_from_db()
-    return {
+    payload = {
         'html': _square_html(slot),
         'key': slot.key,
         'is_filled': slot.is_filled,
@@ -1095,6 +1109,9 @@ def _slot_json(challenge, slot):
         'total_slots': challenge.total_slots,
         'is_complete': challenge.is_complete,
     }
+    if slot.is_completed and challenge.challenge_type == CHALLENGE_TYPE_JOBS:
+        payload['rewards_html'] = _rewards_html(challenge)
+    return payload
 
 
 def _panel_json(panel):
@@ -1236,11 +1253,9 @@ class OpeningSeenView(_ChallengeJsonView):
     """Record that this run's owner has acknowledged its opening ceremony. JSON, fired on dismissal.
 
     PER RUN, WHICH IS WHY THIS EXISTS AT ALL instead of reusing `/api/v1/user/quick-settings/`'s
-    `ui_flag` branch like every other one-shot on the site. That endpoint writes a key on
-    `CustomUser.ui_flags`, so it answers "has this person ever seen one" -- and a hunter can finish or
-    hide a Calendar run and start another, which backfills their whole history again and deserves its
-    own "here is where you stand". A `ui_flags` key would show the ceremony to a hunter's first Calendar
-    run and silently never again.
+    `ui_flag` branch like every other one-shot on the site: the ceremony describes the backfill of THE RUN
+    being opened. Since `TYPES_WITH_ONE_RUN` a hunter has one Calendar run for good, so in practice it fires
+    once per hunter -- but keyed to the run, it stays right if that rule ever relaxes.
 
     IDEMPOTENT, AND IT SAYS SO IN THE RESPONSE. `DetailModal` fires `onDismiss` at most once per load,
     but a reload before the write lands, or a double-tap, must not be an error -- the first stamp wins
@@ -1674,7 +1689,11 @@ class ChallengesBrowseView(_ChallengeBrowseView):
     SORTS = {
         'recent': ('Newest', ('-created_at',)),
         'oldest': ('Oldest', ('created_at',)),
-        'progress': ('Most progress', ('-completed_count',)),
+        # THE SHARE DONE, NOT THE COUNT: a Plat Calendar run counts up to 365 and is filled from history the
+        # moment it starts, so ordering on the raw count put every Calendar run above every A-Z and Job
+        # Coverage run (26 and 25 at most). The count breaks ties: at the same share, the bigger run leads.
+        'progress': ('Most progress', (
+            (Cast('completed_count', FloatField()) / F('total_slots')).desc(), '-completed_count')),
         'hunter': ('Hunter A-Z', (Lower('profile__psn_username'),)),
     }
     DEFAULT_SORT = 'progress'
