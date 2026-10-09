@@ -574,6 +574,14 @@
         // Set the moment a swipe commits, because `dismissableSheet` signals a dismissal in no
         // other way the page can see. Cleared on the next open.
         var dismissed = false;
+        // A LINE TO LEAD THE NEXT HISTORY PANEL'S STATUS WITH: "X is in A." after an import that kept the sheet
+        // open, so the reload that follows does not overwrite the only confirmation the hunter gets.
+        var pendingNote = '';
+        // BUMPED BY `reset()`, read by the debounced search. A keystroke typed just before the sheet closed
+        // used to fire 250ms later into whatever opened next -- a history door included -- and replace its
+        // panel with "Type at least two letters".
+        var typedToken = 0;
+        var queuedToken = 0;
 
         // ── the choreographed close ───────────────────────────────────────────────────────────────
         // A QUEUE, not a single callback. The early return for "a close is already running" is the one exit
@@ -656,7 +664,9 @@
                 return blank;
             }
             var img = document.createElement('img');
-            img.className = 'pp-cpick__row-art';
+            // A PS PLACEHOLDER ICON IS CONTAINED, NOT CROPPED: the image rule for game art is `object-cover`,
+            // and for a generic icon it is `object-contain` with padding. The server says which this is.
+            img.className = 'pp-cpick__row-art' + (row.cover_is_art === false ? ' pp-cpick__row-art--icon' : '');
             img.loading = 'lazy';
             img.decoding = 'async';
             img.alt = '';
@@ -703,7 +713,7 @@
             els.title.textContent = panel.label;
             els.sub.textContent = panel.total === panel.showing
                 ? panel.total + (panel.total === 1 ? ' game fits' : ' games fit')
-                : 'showing ' + panel.showing + ' of ' + panel.total;
+                : 'Showing ' + panel.showing + ' of ' + panel.total;
 
             els.rows.textContent = '';
             els.rows.classList.remove('pp-cpick__rows--search');
@@ -717,7 +727,12 @@
             // "12 games fit" was never announced and a screen-reader user got silence on every successful
             // load. The subtitle keeps it visually; `say` is what makes it audible.
             if (!panel.rows.length) {
-                say(panel.query ? 'Nothing matches that here.' : 'No games left for this square.');
+                // NOT "no games left" when the catch-up block below is about to offer some: that read as a dead
+                // end directly above the way out.
+                say(panel.query ? 'Nothing matches that here.'
+                    : (panel.catchup && panel.catchup.length
+                        ? 'No new games left for this square. One you already finished can fill it.'
+                        : 'No games left for this square.'));
             } else {
                 // NAMED, not just counted. `aria-labelledby` points at the title, but nothing announces
                 // that element changing -- so the dialog's announced name stayed "Choose a game" and a
@@ -757,11 +772,16 @@
                     : null;
                 var label = row.via === 'import'
                     ? (when ? 'From your history, ' + when : 'From your history')
-                    : 'Supply is thin here';
+                    : (when ? 'Finished ' + when : 'Already finished');
                 els.catchupRows.appendChild(offerButton(row, label, function (picked, button) {
                     assign(picked.slug, panel.key, false, button);
                 }));
             });
+            // A CUT-SHORT LIST SAYS SO. `catchup_more` travelled and nothing read it, so a truncated block
+            // looked complete.
+            if (panel.catchup_more) {
+                els.catchupNote.textContent += ' Showing the first ' + panel.catchup.length + '.';
+            }
         }
 
         /** Undress the history mode. Both other renderers call it, so the note, the placeholder and the
@@ -784,7 +804,7 @@
                 ? 'Type at least two letters'
                 : (panel.total === panel.showing
                     ? panel.total + (panel.total === 1 ? ' match' : ' matches')
-                    : 'showing ' + panel.showing + ' of ' + panel.total);
+                    : 'Showing ' + panel.showing + ' of ' + panel.total);
             els.catchup.hidden = true;
             els.current.textContent = '';
             els.clear.hidden = true;
@@ -896,7 +916,7 @@
                         // THE NAME CARRIES THE GAME, because the pill alone names only the square and the
                         // game sits in a sibling associated with nothing. The visible text is contained in
                         // the accessible name, so the two do not disagree for voice control.
-                        pick.setAttribute('aria-label', pick.textContent + ' \u2014 ' + row.name);
+                        pick.setAttribute('aria-label', pick.textContent + ': ' + row.name);
                         pick.addEventListener('click', function () {
                             if (!occupant) { assign(row.slug, key, false, pick); return; }
                             ask(pick,
@@ -1059,7 +1079,9 @@
                 if (seq !== requestSeq) { return; }
                 if (key) { renderSlotPanel(panel); } else { renderSearchPanel(panel); }
             }).catch(function (err) {
-                if (seq !== requestSeq) { return; }
+                // A READ THAT FAILS AFTER THE SHEET WAS DISMISSED SAYS NOTHING: there is nothing to retry,
+                // and a toast about a panel nobody is looking at reads as an error in whatever they did next.
+                if (seq !== requestSeq || !stillOpen()) { return; }
                 fail_from(err, 'That did not load. Try again.');
             });
         }
@@ -1076,7 +1098,7 @@
                 if (seq !== requestSeq) { return; }
                 renderHistoryPanel(panel);
             }).catch(function (err) {
-                if (seq !== requestSeq) { return; }
+                if (seq !== requestSeq || !stillOpen()) { return; }
                 fail_from(err, 'That did not load. Try again.');
             });
         }
@@ -1088,8 +1110,8 @@
                     + 'already finished can only fill a square when very few games are left for that job.';
             }
             if (reason === 'spent') {
-                return 'The importer is a one-time head start for your FIRST A-Z Challenge, and you have '
-                    + 'already finished one -- so this run is played from here.';
+                return 'The importer is a one-time head start for your first A-Z Challenge, and you have '
+                    + 'already finished one. This run fills square by square.';
             }
             // A REASON THIS BUILD DOES NOT KNOW. Naming a cause here would be inventing one -- the previous
             // text asserted "we could not work out when your account was created", which would be a
@@ -1195,10 +1217,22 @@
                     ? PP.TimeFormatter.absolute(row.completed_at, { year: 'numeric', month: 'short' })
                     : null;
                 els.rows.appendChild(offerButton(row, historyLabel(row, when), function (picked, button) {
-                    assign(picked.slug, row.key, false, button);
+                    // ASKED FIRST, THEN ONE WRITE. An import always lands the square finished and locked, so
+                    // the server's 409 was a certainty: every letter cost two writes against the 30-a-minute
+                    // budget and a round trip before the question. The question is known here, so it is asked
+                    // here and the write goes out confirmed.
+                    var occupant = occupantFor(row.key);
+                    ask(button,
+                        'Put ' + picked.name + ' in ' + labelFor(row.key) + '?',
+                        'It fills the square straight away, and that square can never be changed.'
+                            + (occupant ? ' ' + occupant + ' would be replaced.' : ''),
+                        'Import and lock it',
+                        occupant ? 'Keep ' + occupant : 'Not this one',
+                        function () { assign(picked.slug, row.key, true, button, true); });
                 }));
             });
-            say('From your history: ' + els.sub.textContent);
+            say((pendingNote ? pendingNote + ' ' : '') + 'From your history: ' + els.sub.textContent);
+            pendingNote = '';
         }
 
         /** One sentence in the note block, for the cases that only have to explain themselves. */
@@ -1266,7 +1300,7 @@
             else if (PP.ToastManager && PP.ToastManager.show) { PP.ToastManager.show(message, 'error'); }
         }
 
-        function assign(slug, key, confirmed, button) {
+        function assign(slug, key, confirmed, button, stay) {
             // IN-FLIGHT LOCKOUT. Nothing disabled the offer, and `requestSeq` guarded only `load()`, so the
             // same offer could be sent twice (two writes, two reload timers, two success toasts) and two
             // DIFFERENT offers could toast two games for one square.
@@ -1300,6 +1334,18 @@
                 { method: 'POST', body: body }
             ).then(function (slot) {
                 release();
+                // AN IMPORT KEEPS THE SHEET OPEN on the history list, so a hunter placing several does not
+                // reopen it for each. The square is swapped behind the sheet, the confirmation goes to the
+                // sheet's own live region (a toast would sit behind the modal and announce nothing), and the
+                // list reloads without the game just placed. Not when that square finished the RUN: applySlot
+                // reloads the page then, and the sheet goes with it.
+                if (stay && stillOpen() && !slot.is_complete) {
+                    applySlot(slot, null);
+                    pendingNote = slot.game_name + ' is in ' + labelFor(key) + '.';
+                    dialog.focus();
+                    loadHistory(els.q ? els.q.value.trim() : '');
+                    return;
+                }
                 // AFTER THE CLOSE, not beside it. A modal `<dialog>` makes everything outside it inert and
                 // takes it out of the accessibility tree, and the toast region lives outside -- so a toast
                 // raised while this is open renders behind the top-layer backdrop and announces nothing.
@@ -1591,8 +1637,24 @@
                 // and losing focus with it -- so it is disabled and loses its open hook instead. `:disabled`
                 // carries the same cursor and kills the hover lift, so it reads identically.
                 if (slot.is_completed) {
+                    var hadFocus = document.activeElement === square || document.activeElement === document.body;
                     square.removeAttribute('data-cpick-open');
                     square.disabled = true;
+                    // FOCUS MOVES ON, NOT TO <body>. The sheet's close returned focus to this square and
+                    // disabling it dropped it, so a keyboard user was thrown to the top of the page. The next
+                    // square that can still be opened, or the board itself.
+                    if (hadFocus) {
+                        var open = grid.querySelectorAll('[data-cpick-open]');
+                        var next = null;
+                        for (var i = 0; i < open.length; i++) {
+                            if (square.compareDocumentPosition(open[i]) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                                next = open[i];
+                                break;
+                            }
+                        }
+                        next = next || open[0] || null;
+                        if (next) { next.focus(); }
+                    }
                 }
             }
             // THE REWARD PANEL, when finishing this square changed what is owed (a Job Coverage square placed
@@ -1684,6 +1746,8 @@
         /** Blank every part of the sheet, so nothing from the last square survives into this one. */
         function reset() {
             dismissed = false;
+            typedToken++;
+            pendingNote = '';
             els.q.value = '';
             els.rows.textContent = '';
             // The search layout is a CLASS on the rows container, so it has to come off too -- it was the
@@ -1760,7 +1824,16 @@
                 // is asking the contract-first question even though they came in through a square.
                 load(null, term);
             };
-            els.q.addEventListener('input', PP.debounce ? PP.debounce(run, 250) : run);
+            var guarded = function () {
+                // A KEYSTROKE FROM BEFORE THE LAST `reset()` IS STALE, whatever the sheet is showing now.
+                if (queuedToken !== typedToken) { return; }
+                run();
+            };
+            var debounced = PP.debounce ? PP.debounce(guarded, 250) : guarded;
+            els.q.addEventListener('input', function () {
+                queuedToken = typedToken;
+                debounced();
+            });
         }
 
         // THE IN-SHEET TOGGLE. Pressing it in history mode goes BACK to whatever the sheet was showing, so a
@@ -1819,7 +1892,9 @@
                 // whatever opened it, so that path was fine by luck; a FAILED one leaves the sheet open with
                 // focus nowhere, which is the case this fixes.
                 closeFootAsk(false);
-                if (els.q && document.contains(els.q)) { els.q.focus(); }
+                // THE SHEET, NOT THE SEARCH FIELD: focusing the field popped the phone keyboard up over the
+                // panel while the write was in flight.
+                dialog.focus();
                 if (go) { go(); }
             });
         }

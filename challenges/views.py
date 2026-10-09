@@ -25,6 +25,7 @@ nothing else -- no gate is re-implemented here, including the beta gate, which t
 (`creation_is_open_to`) so it can render a disabled button rather than discovering the refusal after a
 POST.
 """
+import functools
 import logging
 
 from django.contrib import messages
@@ -69,6 +70,25 @@ logger = logging.getLogger(__name__)
 #: on runs is structural (one active per type) rather than numeric, but the RATE is not bounded by it:
 #: hiding frees nothing and starting resumes, yet each still writes and each still takes a row lock.
 CHALLENGE_WRITE_RATELIMIT_GROUP = 'challenges:write'
+
+#: What a tripped limit on a JSON door says. The picker and the reward panel show a reply's `error` as written.
+RATE_LIMITED_MESSAGE = 'That was a lot at once. Wait a minute and try again.'
+
+
+def _json_when_limited(view_method):
+    """Answer a tripped rate limit as JSON 429 with an `error`, instead of the HTML 403 `block=True` renders.
+
+    WHY: `Ratelimited` subclasses `PermissionDenied` and no `RatelimitMiddleware` is installed, so a blocked
+    request rendered the HTML 403 page. A fetch got no `error` key and the sheet could only say "That did not
+    save." -- with no hint that waiting would fix it. The door's limiter runs with `block=False` (which sets
+    `request.limited` and calls through) and this, directly beneath it, answers.
+    """
+    @functools.wraps(view_method)
+    def inner(self, request, *args, **kwargs):
+        if getattr(request, 'limited', False):
+            return JsonResponse({'error': RATE_LIMITED_MESSAGE}, status=429)
+        return view_method(self, request, *args, **kwargs)
+    return inner
 
 #: THE REWARD DOORS GET THEIR OWN BUDGET, and the reason is the panel's shape: it renders one Claim button
 #: per finished square, up to 25, and claiming them one at a time is what the UI invites. On the shared write
@@ -790,7 +810,8 @@ class SlotPickerView(_SlotView):
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
-                                method=('GET', 'HEAD'), block=True))
+                                method=('GET', 'HEAD'), block=False))
+    @_json_when_limited
     def get(self, request, challenge_id, key):
         challenge, slot = self.resolve(request, challenge_id, key)
         if challenge is None:
@@ -814,7 +835,8 @@ class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
-                                method=('GET', 'HEAD'), block=True))
+                                method=('GET', 'HEAD'), block=False))
+    @_json_when_limited
     def get(self, request, challenge_id):
         challenge = self.editable_run(request, challenge_id)
         if challenge is None:
@@ -838,6 +860,7 @@ class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
                 'slug': r['slug'],
                 'name': r['name'],
                 'cover': _cover_url(r['cover']),
+                'cover_is_art': _cover_is_art(r['cover']),
                 'key': r['key'],
                 'key_label': r['key_label'],
                 'completed_at': r['completed_at'].isoformat() if r['completed_at'] else None,
@@ -850,7 +873,8 @@ class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
     """Which squares this game could fill. GET, and the contract-first half of the picker."""
 
     @method_decorator(ratelimit(group=CHALLENGE_READ_RATELIMIT_GROUP, key='user', rate='90/m',
-                                method=('GET', 'HEAD'), block=True))
+                                method=('GET', 'HEAD'), block=False))
+    @_json_when_limited
     def get(self, request, challenge_id):
         challenge = self.editable_run(request, challenge_id)
         if challenge is None:
@@ -865,6 +889,7 @@ class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
                 'slug': r['slug'],
                 'name': r['name'],
                 'cover': _cover_url(r['cover']),
+                'cover_is_art': _cover_is_art(r['cover']),
                 'keys': r['keys'],
                 'already_in_run': r['already_in_run'],
                 'is_completed_by_you': r['is_completed_by_you'],
@@ -888,7 +913,8 @@ class AssignSlotView(_SlotView):
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
-                                method='POST', block=True))
+                                method='POST', block=False))
+    @_json_when_limited
     def post(self, request, challenge_id, key):
         challenge, _slot = self.resolve(request, challenge_id, key)
         if challenge is None:
@@ -922,7 +948,8 @@ class ClearSlotView(_SlotView):
     """Empty an unfinished square. A finished one is refused by the service, not by this."""
 
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
-                                method='POST', block=True))
+                                method='POST', block=False))
+    @_json_when_limited
     def post(self, request, challenge_id, key):
         challenge, _slot = self.resolve(request, challenge_id, key)
         if challenge is None:
@@ -939,6 +966,11 @@ def _cover_url(game):
     return game.display_image_url if game is not None else None
 
 
+def _cover_is_art(game):
+    """Whether that URL is real cover art or a generic PS icon, which the picker contains rather than crops."""
+    return bool(game is not None and game.has_cover_art)
+
+
 def _square_body_html(card):
     """One square's body from a card that is already built. The template half of `_square_html`.
 
@@ -946,7 +978,7 @@ def _square_body_html(card):
     for what looping the single-slot version cost.
     """
     return render_to_string('challenges/partials/_square_body.html',
-                            {'card': card, 'can_edit': True})
+                            {'card': card, 'can_edit': True, 'is_owner': True})
 
 
 def _square_html(slot):
@@ -1046,7 +1078,8 @@ class RedeemSlotView(_ChallengeJsonView):
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_REDEEM_RATELIMIT_GROUP, key='user', rate='60/m',
-                                method='POST', block=True))
+                                method='POST', block=False))
+    @_json_when_limited
     def post(self, request, challenge_id, key):
         challenge = self.get_challenge(request, challenge_id)
         if challenge is None:
@@ -1073,7 +1106,8 @@ class RedeemAllView(_ChallengeJsonView):
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_REDEEM_RATELIMIT_GROUP, key='user', rate='60/m',
-                                method='POST', block=True))
+                                method='POST', block=False))
+    @_json_when_limited
     def post(self, request, challenge_id):
         challenge = self.get_challenge(request, challenge_id)
         if challenge is None:
@@ -1133,12 +1167,14 @@ def _panel_json(panel):
         # exist yet, which is how a field ships and then quietly means nothing.
         'locked': panel['locked'],
         'catchup_more': panel['catchup_more'],
-        'rows': [{'slug': r['slug'], 'name': r['name'], 'cover': _cover_url(r['cover'])}
+        'rows': [{'slug': r['slug'], 'name': r['name'], 'cover': _cover_url(r['cover']),
+                  'cover_is_art': _cover_is_art(r['cover'])}
                  for r in panel['rows']],
         'catchup': [{
             'slug': r['slug'],
             'name': r['name'],
             'cover': _cover_url(r['cover']),
+            'cover_is_art': _cover_is_art(r['cover']),
             'via': r['via'],
             # ISO 8601 so the client can format it with `TimeFormatter` rather than being handed a
             # server-rendered string in the server's idea of a locale.
@@ -1167,8 +1203,13 @@ class StartChallengeView(LoginRequiredMixin, _LinkedProfileRequired, _ChallengeA
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
-                                method='POST', block=True))
+                                method='POST', block=False))
     def post(self, request, challenge_type):
+        # A FORM, NOT A FETCH, so a tripped limit is said on the page it returns to rather than as JSON.
+        # `block=False` like the other write doors, which keeps the bucket shared (its arguments must match).
+        if getattr(request, 'limited', False):
+            messages.error(request, RATE_LIMITED_MESSAGE)
+            return self._back(request)
         # THE PREVIEW REFUSES TOO, so the door opens the whole behaviour rather than half of it. Only
         # for a genuinely new run: previewing must not take away a run you already have, which is the
         # same line the beta gate itself draws.
@@ -1235,7 +1276,8 @@ class HideChallengeView(_ChallengeJsonView):
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
-                                method='POST', block=True))
+                                method='POST', block=False))
+    @_json_when_limited
     def post(self, request, challenge_id):
         challenge = self.get_challenge(request, challenge_id)
         if challenge is None:
@@ -1270,7 +1312,8 @@ class OpeningSeenView(_ChallengeJsonView):
     """
 
     @method_decorator(ratelimit(group=CHALLENGE_WRITE_RATELIMIT_GROUP, key='user', rate='30/m',
-                                method='POST', block=True))
+                                method='POST', block=False))
+    @_json_when_limited
     def post(self, request, challenge_id):
         challenge = self.get_challenge(request, challenge_id)
         if challenge is None:

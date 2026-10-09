@@ -98,8 +98,9 @@ does not have to guess.{% endcomment %}
 </span>
 {% endif %}
 
-{% if card.xp_pending %}
-{% comment %}UNCLAIMED XP LIVES HERE. A mark rather than a button: the claim itself is in the reward panel,
+{% if card.xp_pending and is_owner %}
+{% comment %}UNCLAIMED XP LIVES HERE, for the OWNER: a visitor cannot claim it, so to them the pip was an
+orange prompt about somebody else's reward. A mark rather than a button: the claim itself is in the reward panel,
 where a row has the width for an icon, a name and a 44px target -- see `_rewards_panel.html` for why a
 ~109px square is the wrong place for one.
 
@@ -114,4 +115,4 @@ name, which is why it names the action too: "empty" alone would give 26 buttons 
 
 `|default:` on the name because the completed-slot constraint requires a `contract_slug`, not a
 `contract_name`, so a row written around the service could otherwise announce "A: , finished".{% endcomment %}
-<span class="sr-only">{{ card.label }}: {% if card.is_completed %}{{ card.game_name|default:'a game' }}, finished{% if card.xp_pending %}, job XP to claim{% endif %}{% elif card.is_filled %}{{ card.game_name|default:'a game' }}, in progress{% if can_edit %}. Change it{% endif %}{% else %}empty{% if can_edit %}. Choose a game{% endif %}{% endif %}</span>
+<span class="sr-only">{{ card.label }}: {% if card.is_completed %}{{ card.game_name|default:'a game' }}, finished{% if card.xp_pending and is_owner %}, job XP to claim{% endif %}{% elif card.is_filled %}{{ card.game_name|default:'a game' }}, in progress{% if can_edit %}. Change it{% endif %}{% else %}empty{% if can_edit %}. Choose a game{% endif %}{% endif %}</span>

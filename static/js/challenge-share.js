@@ -184,7 +184,12 @@
         // Esc closes natively without passing through close(), so the recede is undone here too.
         dlg.addEventListener('close', function () { current = null; reqToken++; pageRecede(false); });
         dlg.addEventListener('cancel', function () { dlg.classList.remove('is-closing'); });
-        if (PP.dismissableSheet) { PP.dismissableSheet(dlg, { onClose: close }); }
+        // A DIRECT close, not the choreographed one: the swipe helper has already slid the sheet away and
+        // cleared its transform, so handing it `close` popped the sheet back and played a second exit (the
+        // picker fixed the same bug the same way). The `close` listener above undoes the recede.
+        if (PP.dismissableSheet) {
+            PP.dismissableSheet(dlg, { onClose: function () { if (dlg.open) { dlg.close(); } } });
+        }
 
         if (first) {
             window.addEventListener('resize', fit);

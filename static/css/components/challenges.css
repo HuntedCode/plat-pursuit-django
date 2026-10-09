@@ -1068,7 +1068,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 
    `.pp-cta--ghost` for the page button rather than a primary: importing is a shortcut, not the main way to
    fill a run, and a filled primary there would compete with the squares themselves. */
-.pp-cpick__histcta { font-size: 12px; }
+/* 44px TALL, like every other control a thumb has to find: it is the primary action on a fresh A-Z run. */
+.pp-cpick__histcta { font-size: 12px; min-height: 44px; }
 .pp-cpick__histhint {
     margin-top: 6px;
     /* 12px, not 0.72rem (11.5px) -- the same decision `.pp-cpick__catchup-note` records further down, for the
@@ -1084,7 +1085,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 .pp-cpick__histswitch {
     display: inline-flex;
     align-items: center;
-    min-height: 34px;
+    min-height: 44px;
     margin-bottom: 10px;
     padding: 6px 12px;
     font: inherit;
@@ -1188,6 +1189,14 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     margin-top: 3px; font-size: 12px; color: var(--pp-text-dim);
 }
 
+/* NOTHING TO SAY, NO BAR. On an empty square the foot held an empty line, a hidden button and a hidden
+   prompt, and still drew a 29px band with a rule above it. */
+.pp-cpick__foot:has(> .pp-cpick__current:empty):has(> [data-cpick-clear][hidden]):has(> [data-cpick-ask][hidden]) {
+    display: none;
+}
+/* The foot's own control, and the run header's Share, at the 44px target. */
+.pp-cpick__foot .pp-cta,
+[data-cpick-horizon] ~ div .pp-cta { min-height: 44px; }
 .pp-cpick__foot {
     flex: none;
     display: flex;
@@ -5004,3 +5013,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     line-height: 1.5;
     color: var(--pp-text-dim);
 }
+
+/* THE PICKER'S SEARCH AT 16px ON A PHONE. iOS Safari zooms the page into any focused field under 16px, and
+   the shared `.stg-input` is 0.84rem -- so tapping Search zoomed the whole sheet. From `md:` the zoom does not
+   apply and the field keeps the house size. */
+@media (max-width: 767.98px) { .pp-cpick__search { font-size: 16px; } }

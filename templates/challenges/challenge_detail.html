@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static mark_tags job_icons %}
 
-{% block title %}{{ challenge.name }} — {{ challenge.profile.display_psn_username }}{% endblock %}
+{% block title %}{{ challenge.name }} - {{ challenge.profile.display_psn_username }}{% endblock %}
 {% comment %}A finished run is meant to be shown to somebody, so this page is indexable -- unlike
 `my_challenges.html`, which is the hunter's own working surface. A HIDDEN run is `noindex`: its owner
 took it out of view, and a crawler that had already seen it must not keep serving it.{% endcomment %}
@@ -98,6 +98,20 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             <div class="mt-3" data-cpick-horizon>
                 {% include 'components/horizon.html' with progress=progress %}
             </div>
+            {% endif %}
+
+            {% comment %}THE OWNER'S STATE NOTES, IN THE HEADER. They sat below the board -- some 1,300px down on a
+            phone -- so the owner of a hidden run, for whom this page is read-only, had to scroll past every
+            square to learn why nothing responded. Two independent notes, not an if/else: a run can be both
+            finished and hidden.{% endcomment %}
+            {% if is_owner and challenge.is_complete %}
+            <p class="text-xs text-base-content/60 mt-3">This run is finished, so its {{ challenge.unit }} are fixed.</p>
+            {% endif %}
+            {% if is_owner and challenge.is_deleted %}
+            <p class="text-xs text-base-content/60 mt-3">
+                This run is hidden, so it is read-only and only you can see it. Press Resume on
+                <a href="{% url 'my_challenges' %}" class="link">My Challenges</a> to bring it back with its progress.
+            </p>
             {% endif %}
 
             {% comment %}THE HISTORY IMPORTER, ON THE PAGE. The owner asked for it here as well as inside the
@@ -340,7 +354,7 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     EMPTY ON PURPOSE. Both panels are fetched, because the pool for one letter already runs to the hundreds
     in prod and the eligibility that shapes it is per-hunter -- so there is nothing to server-render that
     would still be true by the time somebody opened it.{% endcomment %}
-    <dialog id="cpick" class="pp-cpick" aria-labelledby="cpick-title">
+    <dialog id="cpick" class="pp-cpick" aria-labelledby="cpick-title" tabindex="-1">
         <div class="pp-cpick__head">
             <div class="min-w-0">
                 <h2 class="pp-cpick__title" id="cpick-title" data-cpick-title>Choose a game</h2>
@@ -435,15 +449,6 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     </dialog>
     {% endif %}
 
-    {% if is_owner and challenge.is_complete %}
-    <p class="text-xs text-base-content/60 mt-3">This run is finished, so its {{ challenge.unit }} are fixed.</p>
-    {% endif %}
-    {% if is_owner and challenge.is_deleted %}
-    <p class="text-xs text-base-content/60 mt-3">
-        This run is hidden, so it is read-only and only you can see it. Press Resume on
-        <a href="{% url 'my_challenges' %}" class="link">My Challenges</a> to bring it back with its progress.
-    </p>
-    {% endif %}
 </div>
 {% endblock %}
 

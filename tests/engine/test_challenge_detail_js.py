@@ -180,8 +180,11 @@ def test_opening_focuses_the_dialog_and_not_the_search_field():
     """Focusing the field opens the soft keyboard over the panel before a hunter has seen what is in it, on
     a sheet whose first job is to SHOW options."""
     assert 'dialog.showModal();' in JS
-    assert 'dialog.focus();' in JS
-    assert JS.index('dialog.showModal();') < JS.index('dialog.focus();')
+    # SCOPED TO THE OPEN, from `showModal` on: `dialog.focus()` now also follows a confirmed write and a kept
+    # import, which sit earlier in the file, so a whole-file `index` compared the wrong occurrence.
+    start = JS.index('dialog.showModal();')
+    focus_at = JS.index('dialog.focus();', start)
+    assert 'els.q.focus()' not in JS[start:focus_at], 'the search field is focused on open'
 
 
 def test_the_sheet_is_shown_before_it_is_loaded():
@@ -511,7 +514,7 @@ def test_each_square_button_in_a_search_result_names_its_game():
     BUILT FROM THE VISIBLE TEXT rather than composed separately, so the accessible name always CONTAINS the
     label a voice-control user would say -- which a hand-written "Put X in Y" stopped doing the moment the
     single-square case started reading "Add this game to S"."""
-    assert "pick.setAttribute('aria-label', pick.textContent + ' \\u2014 ' + row.name);" in JS
+    assert "pick.setAttribute('aria-label', pick.textContent + ': ' + row.name);" in JS
 
 
 def test_a_non_json_409_does_not_invent_a_reason():
@@ -1569,7 +1572,7 @@ def test_the_importer_says_it_is_one_time_everywhere_it_is_described():
 
     spent = JS_CODE[JS_CODE.index('function historyClosedNote('):]
     spent = spent[:spent.index('\n        }') + 1]
-    assert 'one-time head start for your FIRST A-Z Challenge' in spent
+    assert 'one-time head start for your first A-Z Challenge' in spent
 
 
 def test_the_history_note_is_a_lead_and_a_list_not_a_paragraph():
