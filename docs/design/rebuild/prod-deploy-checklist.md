@@ -42,6 +42,8 @@ carry the reasoning; this is the order. No notification template to load: see ro
      already filled, with the opening ceremony.
    - As a free hunter, `/my-challenges/` shows the beta card, and Start is refused with the beta message.
    - The avatar's What's New dot lights for the beta entry.
+   - On `/career/`, tapping the rank bar under the hero opens "Pursuer ranks" with your rank marked. (Rides
+     the same deploy; nothing to migrate.)
 7. Tonight's nightly runs `process_challenges` after `process_contracts`; nothing to schedule.
 
 **Ending the beta later:** set `CHALLENGES_BETA_MEMBERS_ONLY=False` exactly and restart (row R). Everyone who saw
