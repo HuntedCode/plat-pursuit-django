@@ -550,3 +550,97 @@ def test_a_visitor_reads_the_board_in_the_third_person():
     for phrase in ('Days you hold', 'Among your months', '>Your calendar<'):
         assert phrase not in body, phrase
     assert 'Days with any platinum' in body and 'Plat Calendar board' in body
+
+
+# ── My Challenges, the hub and the Hall of Fame (batch 4 of the audit) ──────────────────────────
+
+def _title(body):
+    return body[body.index('<title>') + 7:body.index('</title>')]
+
+
+def test_the_browse_titles_name_the_page_once():
+    """base.html appends the site name, so a block that also wrote it read "Platinum Pursuit - Platinum Pursuit"."""
+    for name, expected in (('challenges', 'Challenges'), ('challenges_hall_of_fame', 'Hall of Fame')):
+        title = _title(Client().get(reverse(name)).content.decode())
+        assert title.startswith(expected) and title.count('Platinum Pursuit') == 1, title
+        assert '—' not in title
+
+
+def test_an_empty_launch_shows_a_way_in_and_no_toolbar():
+    for name in ('challenges', 'challenges_hall_of_fame'):
+        body = Client().get(reverse(name)).content.decode()
+        assert 'aria-label="Challenge type"' not in body, '%s draws filters over nothing' % name
+        assert 'href="%s" class="pp-cta">Start a challenge' % reverse('my_challenges') in body, name
+
+
+def test_a_filter_keeps_its_toolbar_so_it_can_be_cleared():
+    body = Client().get(reverse('challenges') + '?q=nobody').content.decode()
+    assert 'aria-label="Challenge type"' in body
+    assert 'Start a challenge' not in body, 'a search that matched nobody is not an empty site'
+
+
+def test_the_browse_copy_covers_all_three_types():
+    from challenges.views import ChallengesBrowseView, HallOfFameView
+
+    for view in (ChallengesBrowseView, HallOfFameView):
+        assert 'square' not in ' '.join(view.EMPTY_COPY).lower(), view.__name__
+    for name in ('challenges', 'challenges_hall_of_fame'):
+        body = Client().get(reverse(name)).content.decode()
+        meta = body[body.index('name="description"'):][:300]
+        assert 'Plat Calendar' in meta, name
+    results = (ROOT / 'templates' / 'challenges' / 'partials' / 'browse_results.html').read_text(encoding='utf-8')
+    assert 'Try another type, or All.' in results and 'the other type' not in results
+
+
+def test_the_hall_of_fame_offers_the_intro_but_never_opens_it():
+    body = Client().get(reverse('challenges_hall_of_fame')).content.decode()
+    assert 'data-ctut-open="challenges-intro"' in body and 'id="challenges-intro"' in body
+    tag = re.search(r'<div class="pp-detail-modal pp-howto" id="challenges-intro"[^>]*>', body).group(0)
+    assert 'data-auto' not in tag
+
+
+def test_the_type_switcher_fits_one_row_on_a_phone():
+    assert '.pp-switch--ctypes .pp-switch__chip svg { display: none; }' in CSS
+    toolbar = (ROOT / 'templates' / 'challenges' / 'partials' / '_browse_toolbar.html').read_text(encoding='utf-8')
+    assert 'class="pp-switch pp-switch--ctypes"' in toolbar
+
+
+def test_a_calendar_card_says_when_it_moved_not_when_it_started():
+    run = svc.start(_hunter(), CHALLENGE_TYPE_CALENDAR)
+    body = Client().get(reverse('challenges')).content.decode()
+    card = body[body.index(reverse('challenge_detail', args=[run.id])):]
+    card = card[:card.index('</a>')]
+    assert '>Updated ' in card and 'Started' not in card
+
+
+def test_a_hall_of_fame_entry_has_a_name_of_its_own():
+    profile = _hunter()
+    run = svc.start(profile, CHALLENGE_TYPE_AZ)
+    Challenge.objects.filter(pk=run.pk).update(is_complete=True, completed_at=timezone.now(),
+                                               filled_count=26, completed_count=26)
+    body = Client().get(reverse('challenges_hall_of_fame')).content.decode()
+    hero = re.search(r'<a class="pp-chero[^>]*>', body, re.S).group(0)
+    assert 'aria-label="' in hero, 'the link has no name of its own'
+    label = hero.split('aria-label="', 1)[1].split('"', 1)[0]
+    assert "'s A-Z Challenge, finished " in label, label
+
+
+def test_the_card_actions_fit_three_across_on_a_laptop():
+    client = Client()
+    profile = _hunter(client)
+    svc.start(profile, CHALLENGE_TYPE_AZ)
+    body = client.get(reverse('my_challenges')).content.decode()
+    assert '<span class="lg:max-xl:sr-only">Hide</span>' in body
+    assert '<span class="lg:max-xl:sr-only">Share</span>' in body
+
+
+def test_the_beta_card_says_member_throughout():
+    client = Client()
+    user = UserFactory()
+    ProfileFactory(user=user, user_is_premium=False, is_linked=True)
+    client.force_login(user)
+    body = client.get(reverse('my_challenges')).content.decode()
+    card = body[body.index('Challenges are in beta'):]
+    card = card[:card.index('</section>')]
+    assert 'upporter' not in card, 'the beta card mixes "supporter" with "member"'
+    assert 'Become a member' in card

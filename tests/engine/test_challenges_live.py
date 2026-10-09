@@ -223,6 +223,8 @@ def test_the_hall_of_fame_offers_no_progress_sort(client):
     """Every run there is complete, so the option would be a no-op that implies otherwise. Its absence is the
     decision; the Challenges page keeps it."""
     _run(_hunter('donehunter'), done=25, complete=True)
+    # AND ONE IN FLIGHT: each page renders its toolbar only when it has runs to filter.
+    _run(_hunter('flyinghunter'), done=3)
 
     hall = client.get(reverse('challenges_hall_of_fame')).content.decode()
     flight = client.get(reverse('challenges')).content.decode()
@@ -1138,7 +1140,11 @@ def test_the_hero_does_not_announce_the_hunter_twice(client):
 
     hero = _hero(client.get(reverse('challenges_hall_of_fame')).content.decode())
 
-    assert hero.count('uniquehuntername') == 1, 'the hunter name appears twice in one hero'
+    # THE LINK'S OWN `aria-label` IS SET ASIDE: it REPLACES the contents as the accessible name (that is its
+    # job), so the name inside it and the name on the plaque are never both announced.
+    import re as _re
+    visible = _re.sub(r'aria-label="[^"]*"', '', hero)
+    assert visible.count('uniquehuntername') == 1, 'the hunter name appears twice in one hero'
     assert 'pp-chero__av" aria-hidden="true"' in hero
 
 

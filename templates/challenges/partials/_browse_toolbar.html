@@ -18,7 +18,7 @@ the grid so the spinner is the thing being replaced.{% endcomment %}
       hx-trigger="submit"
       hx-indicator="#browse-results">
     <div class="flex items-center justify-center md:justify-end mt-4 mb-3">
-        <div class="pp-switch" role="group" aria-label="Challenge type">
+        <div class="pp-switch pp-switch--ctypes" role="group" aria-label="Challenge type">
             {% for value, display in types %}
             <label class="pp-switch__chip">
                 <input type="radio" name="type" value="{{ value }}" class="sr-only" {% if selected_type == value %}checked{% endif %} />

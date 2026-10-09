@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static humanize %}
 
-{% block title %}Challenges — Platinum Pursuit{% endblock %}
+{% block title %}Challenges{% endblock %}
 {% block meta_description %}{{ seo_description }}{% endblock %}
 
 {% block content %}
@@ -25,7 +25,7 @@
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Challenges</h1>
                     </div>
-                    <p class="text-xs md:text-sm text-base-content/60 mt-1">
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         Runs in progress across the community. Finished ones move to the
                         <a href="{% url 'challenges_hall_of_fame' %}" class="link link-hover">Hall of Fame</a>.
                     </p>
@@ -51,7 +51,11 @@
         </div>
     </section>
 
+    {% comment %}NO TOOLBAR OVER AN EMPTY PAGE: with no runs at all, a search box and type chips filter nothing.
+    Kept whenever a filter is set, so a reader can always clear what they typed.{% endcomment %}
+    {% if in_flight or has_filters %}
     {% include 'challenges/partials/_browse_toolbar.html' with browse_url=browse_url form_id='ch-form' %}
+    {% endif %}
 
     {% comment %}THE STABLE SWAP TARGET. Only its contents are replaced, so the sentinel and spinner below --
     which live OUTSIDE it -- survive every filter change rather than being torn out by the thing that needs

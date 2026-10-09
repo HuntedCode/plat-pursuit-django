@@ -1726,7 +1726,7 @@ class ChallengesBrowseView(_ChallengeBrowseView):
     BROWSE_URL_NAME = 'challenges'
     EMPTY_COPY = (
         'No runs in flight',
-        'A challenge is 25 or 26 games picked one square at a time. Start one and it shows up here.',
+        'Start a run from My Challenges and it shows up here.',
     )
 
     SORTS = {
@@ -1760,8 +1760,8 @@ class ChallengesBrowseView(_ChallengeBrowseView):
                 {'text': 'Challenges'},
             ],
             'seo_description': (
-                'Challenge runs in progress on Platinum Pursuit: A-Z and Job Coverage boards being filled '
-                'one game at a time by the trophy-hunting community.'
+                'Challenge runs in progress on Platinum Pursuit: A-Z, Job Coverage and Plat Calendar boards '
+                'being filled by the trophy-hunting community.'
             ),
         }
 
@@ -1789,7 +1789,7 @@ class HallOfFameView(_ChallengeBrowseView):
     BROWSE_URL_NAME = 'challenges_hall_of_fame'
     EMPTY_COPY = (
         'Nobody has finished one yet',
-        'A finished run means every square completed. The first one lands here.',
+        'The first finished run lands here.',
     )
     ENTRY_TEMPLATE = 'challenges/partials/_run_hero.html'
     GRID_CLASS = 'pp-chero-list'
@@ -1927,6 +1927,8 @@ class HallOfFameView(_ChallengeBrowseView):
 
     def full_page_context(self):
         return {
+            # THE INTRO FOR THE RECALL LINK, as on the Challenges page: never auto-opened here.
+            **intro_context(self.request, may_arm=False),
             'finished': self.base_queryset().count(),
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse('home')},
@@ -1934,7 +1936,7 @@ class HallOfFameView(_ChallengeBrowseView):
                 {'text': 'Hall of Fame'},
             ],
             'seo_description': (
-                'Finished challenge runs on Platinum Pursuit: complete A-Z and Job Coverage boards, and the '
-                'hunters who filled every square.'
+                'Finished challenge runs on Platinum Pursuit: complete A-Z, Job Coverage and Plat Calendar '
+                'boards, and the hunters who filled them.'
             ),
         }

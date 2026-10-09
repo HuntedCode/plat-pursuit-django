@@ -41,8 +41,8 @@
         var name = btn.dataset.name || 'this challenge';
         var ok = window.confirm(
             'Hide ' + name + '?\n\n'
-            + 'It comes off your profile and out of the hub, but nothing is lost -- every square you have '
-            + 'finished stays finished, and pressing Resume brings this same run back.'
+            + 'It comes off your profile and out of Challenges. Nothing is lost: your progress stays, and '
+            + 'Resume brings this run back.'
         );
         if (!ok) { return; }
 

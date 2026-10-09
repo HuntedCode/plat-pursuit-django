@@ -38,6 +38,9 @@ anchor would be a second tab stop to the same place.
 {% load mark_tags job_icons humanize %}
 <a class="pp-chero pp-centry pp-chero--{{ run.challenge_type }} pp-chero--band-{{ plaque.band }}"
    style="--rk: var(--rank-{{ plaque.rank.key }}, var(--pp-primary));"
+   {% comment %}A NAME, NOT EVERYTHING INSIDE. Without it the link's accessible name was every stat line on the
+   plaque read in a row.{% endcomment %}
+   aria-label="{{ run.profile.display_psn_username|default:run.profile.psn_username }}'s {{ run.get_challenge_type_display }}, finished {{ run.completed_at|date:'j M Y' }}"
    href="{% url 'challenge_detail' run.pk %}">
     {% comment %}THE FRAME IS GATED ON THE BOARD, not just its contents. It rendered unconditionally with
     only the mosaic inside gated, so a finished run with no slot rows drew a bare grey letterbox above a

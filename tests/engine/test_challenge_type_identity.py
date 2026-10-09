@@ -247,6 +247,7 @@ def test_a_hub_card_wears_its_glyph_and_counts_in_its_unit():
 
 def test_the_hub_filter_gives_each_type_its_own_glyph_and_keeps_the_grid_for_all():
     """The filter's `else` branch drew the four-square "All" grid for the Calendar too."""
+    svc.start(_hunter(), CHALLENGE_TYPE_AZ)   # the toolbar only renders once there is a run to filter
     body = Client().get(reverse('challenges')).content.decode()
     switch = body[body.index('aria-label="Challenge type"'):]
     switch = switch[:switch.index('</div>')]

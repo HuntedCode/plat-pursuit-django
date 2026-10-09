@@ -52,5 +52,7 @@ second tab stop to the same place -- the browse-card pattern the design system s
         {% include 'components/horizon.html' with progress=run_progress height='6px' %}
     </div>
 
-    <p class="pp-crun__foot">Started {{ run.created_at|naturaltime }}</p>
+    {% comment %}A CALENDAR SAYS WHEN IT LAST MOVED, NOT WHEN IT STARTED: it is filled from history at creation,
+    so "200/365 · Started 2 hours ago" implied two hundred days of progress since this morning.{% endcomment %}
+    <p class="pp-crun__foot">{% if run.challenge_type == 'calendar' %}Updated {{ run.updated_at|naturaltime }}{% else %}Started {{ run.created_at|naturaltime }}{% endif %}</p>
 </a>

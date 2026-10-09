@@ -500,7 +500,7 @@ def test_the_start_card_says_what_each_type_is_worth(client):
     assert 'A-Z Champion' in body
     assert 'Job Challenge Champion' in body
     # The XP line only where there is XP.
-    assert 'job XP per square' in body
+    assert 'job XP per job' in body
 
 
 def test_the_start_card_and_the_run_page_quote_the_same_figure(client):

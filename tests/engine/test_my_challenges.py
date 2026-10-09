@@ -802,7 +802,7 @@ def test_the_hide_dialog_names_the_button_the_hunter_will_see():
     js = (ROOT / 'static' / 'js' / 'my-challenges.js').read_text(encoding='utf-8')
     dialog = js[js.index('window.confirm('):js.index('if (!ok)')]
 
-    assert 'pressing Resume brings this same run back' in dialog
+    assert 'Resume brings this run back' in dialog
     assert 'pressing Start' not in dialog, 'a hidden run has no Start button'
 
 
@@ -942,7 +942,7 @@ def test_the_beta_card_makes_the_ask_and_the_reassurance(client):
     assert 'Everyone can start one when the beta ends' in body
     assert 'Nothing here stays members-only' in body
     assert reverse('support_hub') in body
-    assert 'Become a supporter' in body
+    assert 'Become a member' in body
 
 
 def test_the_beta_card_uses_the_house_premium_pattern(client):
@@ -982,10 +982,10 @@ def test_the_beta_card_asks_for_support_last(client):
 
     body = ' '.join(client.get(reverse('my_challenges')).content.decode().split())
 
-    assert 'Supporters keep us running' in body
-    assert 'please consider helping us build it' in body
-    assert body.index('Nothing here stays members-only') < body.index('Supporters keep us running')
-    assert body.index('Everyone can start one when the beta ends') < body.index('Supporters keep us running')
+    assert 'Members keep us running' in body
+    assert 'please consider becoming one' in body
+    assert body.index('Nothing here stays members-only') < body.index('Members keep us running')
+    assert body.index('Everyone can start one when the beta ends') < body.index('Members keep us running')
 
 
 def test_the_cards_state_pill_is_the_house_chip(client):

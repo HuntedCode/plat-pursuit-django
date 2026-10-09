@@ -88,7 +88,7 @@
                         </span>
                         <span class="flex items-center gap-1">
                             <svg class="w-3.5 h-3.5 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-                            Supporters are first through the door
+                            Members go first
                         </span>
                     </div>
                 </div>
@@ -97,7 +97,7 @@
                 who has seen one recognises this one. `.pp-cta` is the page-action primitive, which is
                 what the Start buttons below correctly use.{% endcomment %}
                 <a href="{% url 'support_hub' %}" class="btn btn-sm md:btn-md btn-primary shrink-0">
-                    Become a supporter
+                    Become a member
                 </a>
             </div>
 
@@ -118,8 +118,7 @@
             `text-warning` to sit with the border, and a hairline above it so it reads as a footer to
             the card rather than a fourth thing in the stack.{% endcomment %}
             <p class="text-xs text-warning mt-3 pt-2 border-t border-warning/30">
-                Supporters keep us running. If you are enjoying it here, please consider helping us
-                build it.
+                Members keep us running. If you are enjoying it here, please consider becoming one.
             </p>
         </div>
     </section>
@@ -199,7 +198,7 @@
                 {% comment %}THE HORIZON, the kit's progress primitive, rather than a bespoke bar. Its
                 fill is inline because the value is per-run data and cannot be a class.{% endcomment %}
                 <p class="text-xs text-base-content/60 mt-3">
-                    {{ card.run.completed_count }} of {{ card.run.total_slots }} {{ card.run.unit }} {% if card.type == 'calendar' %}filled{% else %}done{% endif %}{% if card.planned %}, {{ card.planned }} planned{% endif %}{% if card.visible_completed_count and card.state != 'finished' %}<span class="text-base-content/40"> &middot; {{ card.visible_completed_count }} finished before</span>{% endif %}
+                    {{ card.run.completed_count }} of {{ card.run.total_slots }} {{ card.run.unit }} {% if card.type == 'calendar' %}filled{% else %}done{% endif %}{% if card.planned %}, {{ card.planned }} planned{% endif %}{% if card.visible_completed_count and card.state != 'finished' %}<span class="text-base-content/50"> &middot; {{ card.visible_completed_count }} finished before</span>{% endif %}
                 </p>
                 <div class="mt-2">
                     {% include 'components/horizon.html' with progress=card.progress %}
@@ -209,7 +208,7 @@
                 {% comment %}"N FINISHED BEFORE" RIDES THE PROGRESS LINE when there is a run, so it does not push one
                 card's reward line below its neighbours'; on a card with no run it stands alone.{% endcomment %}
                 {% if card.visible_completed_count and not card.run %}
-                <p class="text-xs text-base-content/40 mt-3">
+                <p class="text-xs text-base-content/50 mt-3">
                     {{ card.visible_completed_count }} finished before
                 </p>
                 {% endif %}
@@ -242,7 +241,7 @@
                     <span class="pp-cwr__at">at {{ card.reward.at_days }} days</span>
                     {% endif %}
                     {% if card.reward.per_square %}
-                    <span class="pp-cwr__xp">+{{ card.reward.per_square|intcomma }} job XP per square</span>
+                    <span class="pp-cwr__xp">+{{ card.reward.per_square|intcomma }} job XP per job</span>
                     {% endif %}
                 </p>
                 {% endif %}
@@ -269,7 +268,7 @@
                    form say "of a hidden run", pointing away from the very run the card was offering, while
                    the visible text said nothing at all. Two copies of one fact have to branch on the same
                    thing in the same order.{% endcomment %}
-                   aria-label="Claim {{ card.owed.xp|intcomma }} job XP waiting on {{ card.owed.squares }} finished square{{ card.owed.squares|pluralize }}{% if not card.owed.same_run %}{% if card.owed.hidden %} of a hidden run{% else %} of another run{% endif %}{% endif %}{% if card.owed.more %}, and {{ card.owed.more }} other run{{ card.owed.more|pluralize }} also owes XP{% endif %}">
+                   aria-label="Claim {{ card.owed.xp|intcomma }} job XP waiting on {{ card.owed.squares }} finished job{{ card.owed.squares|pluralize }}{% if not card.owed.same_run %}{% if card.owed.hidden %} of a hidden run{% else %} of another run{% endif %}{% endif %}{% if card.owed.more %}, and {{ card.owed.more }} other run{{ card.owed.more|pluralize }} also owes XP{% endif %}">
                     <span class="pp-cowed__mark" aria-hidden="true">XP</span>
                     {% comment %}"on another run" IS THE HALF THAT STOPS A MISREAD. On an empty card the button
                     below says Start, and Start creates a NEW run and pays nothing -- so a bare "+150,000
@@ -332,7 +331,7 @@
                     every public place, and the endpoints refuse one. BEFORE Hide (owner, 2026-10-08), so the
                     soft-destructive action is the last in the row.{% endcomment %}
                     {% if card.type in shareable_types %}
-                    {% include 'challenges/partials/_share_button.html' with run=card.run %}
+                    {% include 'challenges/partials/_share_button.html' with run=card.run tight=True %}
                     {% endif %}
                     {% comment %}HIDE, and it confirms first. The word is "Hide" everywhere a hunter can see
                     it, because that is what it does -- the run keeps every square and RESUME brings it back.
@@ -345,7 +344,9 @@
                             data-url="{% url 'challenge_hide' card.run.id %}"
                             data-name="{{ card.run.name }}">
                         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                        Hide
+                        {% comment %}THE LABEL STEPS ASIDE at 1024-1279, where three across leaves a card ~268px wide and
+                        Continue, Share and Hide wrapped onto two rows; the button keeps its name for a screen reader.{% endcomment %}
+                        <span class="lg:max-xl:sr-only">Hide</span>
                     </button>
                     {% endif %}
                 </div>
@@ -376,7 +377,7 @@
                 <li class="flex items-center justify-between gap-3 py-2">
                     {% comment %}The type's glyph before the name, the same one its card wears above, so a
                     history of mixed runs scans by type without reading every name.{% endcomment %}
-                    <a class="flex items-center gap-2 min-w-0 text-sm link link-hover"
+                    <a class="flex items-center gap-2 min-w-0 min-h-11 text-sm link link-hover"
                        href="{% url 'challenge_detail' run.id %}">
                         <span class="text-primary/70 shrink-0">{% include 'partials/icons/challenge_type.html' with type=run.challenge_type size='w-5 h-5' %}</span>
                         <span class="truncate">{{ run.name }}</span>

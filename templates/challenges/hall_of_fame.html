@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static job_icons %}
 
-{% block title %}Hall of Fame — Challenges — Platinum Pursuit{% endblock %}
+{% block title %}Hall of Fame{% endblock %}
 {% block meta_description %}{{ seo_description }}{% endblock %}
 
 {% block content %}
@@ -50,10 +50,14 @@ view for a fixed-size blob of geometry, and leaving the page one `{% templatetag
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Hall of Fame</h1>
                     </div>
-                    <p class="text-xs md:text-sm text-base-content/60 mt-1">
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
                         Every finished run. Still going?
                         <a href="{% url 'challenges' %}" class="link link-hover">See what is in flight</a>.
                     </p>
+                    <button type="button" class="pp-edhint mt-2" data-ctut-open="challenges-intro">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        How Challenges work
+                    </button>
                 </div>
 
                 <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
@@ -74,7 +78,11 @@ view for a fixed-size blob of geometry, and leaving the page one `{% templatetag
         </div>
     </section>
 
+    {% comment %}NO TOOLBAR UNTIL SOMETHING HAS FINISHED -- the likely state at launch, where filters over
+    nothing read as a broken page. Kept whenever a filter is set.{% endcomment %}
+    {% if finished or has_filters %}
     {% include 'challenges/partials/_browse_toolbar.html' with browse_url=browse_url form_id='hof-form' %}
+    {% endif %}
 
     <div id="browse-results">
         {% include 'challenges/partials/browse_results.html' %}
@@ -90,4 +98,10 @@ view for a fixed-size blob of geometry, and leaving the page one `{% templatetag
     {% comment %}THE SAME SCRIPT AS THE CHALLENGES PAGE. It binds by id (`#ch-sentinel`, `#ch-loading`,
     `#items-grid`), which both pages emit, so one file serves both rather than two that drift.{% endcomment %}
     <script src="{% static 'js/challenges-browse.js' %}"></script>
+    <script src="{% static 'js/challenge-tutorials.js' %}"></script>
+{% endblock %}
+
+{% block fixed_overlays %}
+{{ block.super }}
+{% include 'challenges/partials/_challenges_intro.html' %}
 {% endblock %}

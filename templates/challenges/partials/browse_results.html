@@ -58,15 +58,23 @@ elements, so a class added by JS in `afterSwap` is wiped again and the cards unh
         empty page is a fact about the site.{% endcomment %}
         {% if query %}
         <p class="pp-gtile-empty__title">No hunter matches &ldquo;{{ query }}&rdquo;</p>
-        <p class="pp-gtile-empty__hint">Search is by PSN name. Runs are named automatically, so there is nothing else to match.</p>
+        <p class="pp-gtile-empty__hint">Search is by PSN name.</p>
         {% elif has_filters %}
         <p class="pp-gtile-empty__title">No runs of that type yet</p>
-        <p class="pp-gtile-empty__hint">Try the other type, or All.</p>
+        <p class="pp-gtile-empty__hint">Try another type, or All.</p>
         {% else %}
         <p class="pp-gtile-empty__title">{{ empty_title }}</p>
         <p class="pp-gtile-empty__hint">{{ empty_hint }}</p>
         {% endif %}
 
+        {% if not has_filters and not query %}
+        {% comment %}THE WAY IN, on the page everybody sees first at launch. An empty board with nothing to press
+        was a dead end; My Challenges is where a run starts (and explains the beta to a hunter who cannot yet).
+        A signed-out reader is sent through login and back.{% endcomment %}
+        <div class="pp-gtile-empty__action">
+            <a href="{% url 'my_challenges' %}" class="pp-cta">Start a challenge</a>
+        </div>
+        {% endif %}
         {% if has_filters %}
         {% comment %}Plain navigation rather than an htmx reset, because it has to clear the URL too -- a
         swap would leave `?q=` in the address bar describing a grid that no longer has it.{% endcomment %}
