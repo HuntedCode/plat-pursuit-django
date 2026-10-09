@@ -1552,7 +1552,7 @@ def test_a_closed_history_panel_announces_why():
     why."""
     body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
     body = body[:body.index('function showNote(')]
-    assert "say(els.sub.textContent + '. ' + why);" in body
+    assert "say(lead + els.sub.textContent + '. ' + why);" in body
 
 
 # ── the design pass, 2026-09-28 ───────────────────────────────────────────────────────────────────

@@ -5117,6 +5117,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    broke the segmented control into a ragged 2x2. Below `md:` the glyphs step aside (the words carry the type)
    and the chips tighten; from `md:` there is room for both. */
 @media (max-width: 767.98px) {
+    .pp-switch--ctypes { gap: 2px; }
     .pp-switch--ctypes .pp-switch__chip svg { display: none; }
-    .pp-switch--ctypes .pp-switch__chip { padding: 6px 10px; }
+    /* Measured, not guessed: with the glyphs gone, 10px padding and the chip's 0.03em tracking still put "All"
+       on a second row inside the ~311px toolbar. 8px and no tracking leave it ~20px to spare. */
+    .pp-switch--ctypes .pp-switch__chip { padding: 6px 8px; letter-spacing: 0; }
 }

@@ -244,7 +244,7 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
 
 - **Schedule**: Runs in `nightly`, immediately after `process_contracts`. **No standalone Render entry.**
 - **Command**: `python manage.py process_challenges`
-- **What it does**: two independent phases; a phase that finds nothing (or fails) never skips the other.
+- **What it does**: two phases, squares then the Calendar. A phase that finds nothing never skips the other, and one bad square or Calendar run is logged and skipped; an error outside those per-item loops still ends the command.
   1. **Square sweep**: completes A-Z / Job Coverage squares whose contract their owner has now finished.
      It stamps the SLOT (`is_completed`, `completed_at`, `completed_via='live'`) and never the Contract, and
      grants no XP. Each square is contained, so one bad row does not end the sweep.

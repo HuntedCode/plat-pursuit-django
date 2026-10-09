@@ -63,6 +63,16 @@ def _contract(name, *, jobs=()):
     return c
 
 
+@pytest.fixture
+def frozen_window(monkeypatch):
+    """django_ratelimit counts in FIXED windows keyed on `int(time.time())`, so a test that spends a whole
+    minute's budget fails at random if it happens to straddle a window boundary. Pin the limiter's clock."""
+    import django_ratelimit.core as rl_core
+
+    now = rl_core.time.time()
+    monkeypatch.setattr(rl_core.time, 'time', lambda: now)
+
+
 def _finish_calendar(run):
     CalendarDay.objects.filter(challenge=run).update(in_all=True, in_clean=True, plat_count=1,
                                                      earned_on=dt.date(2020, 1, 1))
@@ -89,13 +99,49 @@ def test_a_finished_calendar_cannot_be_started_again():
     assert Challenge.objects.filter(profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR).count() == 1
 
 
-def test_hiding_a_finished_calendar_does_not_reopen_it():
+def test_a_hidden_finished_calendar_comes_back_through_start_and_is_never_copied():
+    """Hidden runs keep filling, so one can finish while hidden. Start brings THAT run back (the only way back
+    to the profile and the Hall of Fame) rather than refusing, and never deals a second copy."""
     profile = _hunter()
     run = _finish_calendar(svc.start(profile, CHALLENGE_TYPE_CALENDAR))
     svc.hide(run, profile)
 
+    back, outcome = svc.start_reporting(profile, CHALLENGE_TYPE_CALENDAR)
+    assert back.pk == run.pk and outcome == svc.RESUMED
+    back.refresh_from_db()
+    assert back.is_deleted is False
+    assert Challenge.objects.filter(profile=profile, challenge_type=CHALLENGE_TYPE_CALENDAR).count() == 1
     with pytest.raises(svc.ChallengeError, match='already finished'):
         svc.start(profile, CHALLENGE_TYPE_CALENDAR)
+
+
+def test_a_hidden_finished_calendar_card_offers_resume_not_share():
+    client = Client()
+    profile = _hunter(client)
+    run = _finish_calendar(svc.start(profile, CHALLENGE_TYPE_CALENDAR))
+    svc.hide(run, profile)
+    body = client.get(reverse('my_challenges')).content.decode()
+    card = body[body.index('>Plat Calendar</h2>'):]
+    card = card[:card.index('</section>')]
+    assert '>Hidden</span>' in card and 'Resume' in card
+    assert 'data-challenge-share' not in card, 'the share endpoints refuse a hidden run'
+
+
+def test_the_import_confirmation_leads_every_history_render():
+    panel = _fn('renderHistoryPanel')
+    assert panel.index("pendingNote = '';") < panel.index('dropPrompts();'), 'cleared before the branches'
+    assert panel.count('say(lead + ') == 3, 'a branch says something without the import confirmation'
+    catch = _fn('loadHistory')
+    assert "pendingNote = '';" in catch[catch.index('.catch('):]
+
+
+def test_focus_moves_only_when_the_square_had_it():
+    assert 'var hadFocus = document.activeElement === square;' in _fn('applySlot')
+
+
+def test_a_hand_typed_search_on_an_empty_site_keeps_its_toolbar():
+    body = Client().get(reverse('challenges') + '?q=a').content.decode()
+    assert 'aria-label="Challenge type"' in body, 'a short query is not a filter, and left no way to clear it'
 
 
 def test_the_picked_types_still_allow_a_second_run():
@@ -260,7 +306,7 @@ def test_the_picker_swaps_the_panel_it_is_sent():
 
 # ── the picker's read doors meter HEAD ───────────────────────────────────────────────────────────
 
-def test_head_requests_spend_the_picker_budget():
+def test_head_requests_spend_the_picker_budget(frozen_window):
     """`View.setup` aliases `head` to the wrapped `get`, so `method='GET'` alone let a HEAD run the pool
     scan unmetered. Measured by behaviour: a source-text pin cannot prove what a decorator counts."""
     client = Client()
@@ -272,7 +318,7 @@ def test_head_requests_spend_the_picker_budget():
     assert statuses[90] == 429, 'the 91st HEAD in a minute was not refused'
 
 
-def test_a_tripped_write_limit_answers_json_the_sheet_can_show():
+def test_a_tripped_write_limit_answers_json_the_sheet_can_show(frozen_window):
     """A blocked request used to render the HTML 403 page, so the sheet had no `error` to read and could only
     say "That did not save." A JSON 429 carries the reason."""
     from challenges.views import RATE_LIMITED_MESSAGE
@@ -289,7 +335,7 @@ def test_a_tripped_write_limit_answers_json_the_sheet_can_show():
     assert resp.json()['error'] == RATE_LIMITED_MESSAGE
 
 
-def test_a_tripped_start_limit_is_said_on_the_page():
+def test_a_tripped_start_limit_is_said_on_the_page(frozen_window):
     """Start is a FORM, so its refusal is a message on the page it returns to, never a JSON body."""
     from challenges.views import RATE_LIMITED_MESSAGE
 

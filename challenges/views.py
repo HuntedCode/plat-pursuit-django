@@ -341,7 +341,9 @@ class MyChallengesView(LoginRequiredMixin, _LinkedProfileRequired, TemplateView)
         if run is None and challenge_type in TYPES_WITH_ONE_RUN:
             run = svc.finished_run(profile, challenge_type)
             if run is not None:
-                state = 'finished'
+                # HIDDEN, IT RESUMES: Start brings a hidden finished one-run back (`start_reporting`), so the card
+                # offers Resume with the Hidden chip rather than View and a Share the endpoints would refuse.
+                state = 'resumable' if run.is_deleted else 'finished'
         # Both derived HERE rather than in the template, because Django's `add` filter chains cannot do
         # arithmetic honestly -- the first version of this card computed "planned" as a string of chained
         # `add`s that produced nonsense. A number the page shows is a number the view owes it.

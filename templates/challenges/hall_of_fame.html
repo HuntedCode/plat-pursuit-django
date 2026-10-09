@@ -80,7 +80,7 @@ view for a fixed-size blob of geometry, and leaving the page one `{% templatetag
 
     {% comment %}NO TOOLBAR UNTIL SOMETHING HAS FINISHED -- the likely state at launch, where filters over
     nothing read as a broken page. Kept whenever a filter is set.{% endcomment %}
-    {% if finished or has_filters %}
+    {% if finished or has_filters or query %}
     {% include 'challenges/partials/_browse_toolbar.html' with browse_url=browse_url form_id='hof-form' %}
     {% endif %}
 

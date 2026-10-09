@@ -315,8 +315,8 @@ signed out is a JSON 401, an unlinked account a JSON 403. Detail in
 | `/my-challenges/<id>/card/` | `challenge_card_html` | GET -- share card preview (owner only) |
 | `/my-challenges/<id>/card.png` | `challenge_card_png` | GET -- share card download (owner only) |
 
-A tripped limit on a JSON door answers **429 with an `error`** the page shows; the Start form shows the same
-message on the page. The anonymous GETs (browse, Hall of Fame, a Calendar day) are limited by IP and the
+A tripped limit on the picker, write and redeem doors answers **429 with an `error`** the page shows; the Start
+form shows the same message on the page. The share-card doors still answer the HTML 403. The anonymous GETs (browse, Hall of Fame, a Calendar day) are limited by IP and the
 picker, share and write doors by user, all metering HEAD as well as GET where they are GETs.
 
 ### Game Families (Staff Only)

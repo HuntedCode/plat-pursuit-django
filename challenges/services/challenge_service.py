@@ -417,6 +417,20 @@ def start_reporting(profile, challenge_type, *, backfill=True):
         hidden.save(update_fields=['is_deleted', 'deleted_at', 'updated_at'])
         return hidden, RESUMED
 
+    # A HIDDEN FINISHED ONE-RUN TYPE COMES BACK TOO. Hidden runs keep filling, so a Calendar hidden mid-way
+    # can finish while hidden -- and since `TYPES_WITH_ONE_RUN` refuses a new run once one is finished, Start
+    # resuming it is the only way back to the profile and the Hall of Fame. Before this, the run page said
+    # "Press Resume" over a card with no Resume and a Start that refused.
+    if challenge_type in TYPES_WITH_ONE_RUN:
+        hidden_done = (Challenge.objects.select_for_update()
+                       .filter(profile=profile, challenge_type=challenge_type, is_complete=True, is_deleted=True)
+                       .order_by('-completed_at', '-pk').first())
+        if hidden_done is not None:
+            hidden_done.is_deleted = False
+            hidden_done.deleted_at = None
+            hidden_done.save(update_fields=['is_deleted', 'deleted_at', 'updated_at'])
+            return hidden_done, RESUMED
+
     # THE BETA GATE FIRES HERE, not at the top, and the difference is a lapsed member's own run.
     # It gates CREATING a run, never keeping or resuming one -- the same line
     # `gamelists._refuse_if_not_member` draws, where a lapsed member keeps everything and only loses

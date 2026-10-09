@@ -1098,6 +1098,7 @@
                 if (seq !== requestSeq) { return; }
                 renderHistoryPanel(panel);
             }).catch(function (err) {
+                pendingNote = '';
                 if (seq !== requestSeq || !stillOpen()) { return; }
                 fail_from(err, 'That did not load. Try again.');
             });
@@ -1125,6 +1126,10 @@
         }
 
         function renderHistoryPanel(panel) {
+            // THE IMPORT'S CONFIRMATION LEADS WHATEVER THIS PANEL SAYS, on every branch: the last import of a
+            // session reloads to an EMPTY list, and that is exactly when it used to be dropped.
+            var lead = pendingNote ? pendingNote + ' ' : '';
+            pendingNote = '';
             // Any open prompt belonged to the panel being replaced.
             dropPrompts();
             mode = 'history';
@@ -1153,7 +1158,7 @@
                 // THE REASON, NOT JUST THE HEADLINE. `showNote` writes into a plain `<p>`, so a screen reader
                 // heard four words ("Not available on this run") and never learned why -- and the why is the
                 // entire content of a closed panel.
-                say(els.sub.textContent + '. ' + why);
+                say(lead + els.sub.textContent + '. ' + why);
                 return;
             }
 
@@ -1197,7 +1202,7 @@
                         + 'game to look further.';
                     if (els.noteFacts) { els.noteFacts.appendChild(li); }
                 }
-                say(els.sub.textContent);
+                say(lead + els.sub.textContent);
                 return;
             }
             // NO "+" HERE. There is no pagination on this panel, so a plus sign names rows the hunter cannot
@@ -1231,8 +1236,7 @@
                         function () { assign(picked.slug, row.key, true, button, true); });
                 }));
             });
-            say((pendingNote ? pendingNote + ' ' : '') + 'From your history: ' + els.sub.textContent);
-            pendingNote = '';
+            say(lead + 'From your history: ' + els.sub.textContent);
         }
 
         /** One sentence in the note block, for the cases that only have to explain themselves. */
@@ -1637,7 +1641,10 @@
                 // and losing focus with it -- so it is disabled and loses its open hook instead. `:disabled`
                 // carries the same cursor and kills the hover lift, so it reads identically.
                 if (slot.is_completed) {
-                    var hadFocus = document.activeElement === square || document.activeElement === document.body;
+                    // ONLY WHEN THE SQUARE ITSELF HAD FOCUS (a keyboard close returns it there). Safari does not
+                    // focus a button on click, so a mouse fill left focus on <body>, and moving it then scrolled
+                    // the page to another square for no reason.
+                    var hadFocus = document.activeElement === square;
                     square.removeAttribute('data-cpick-open');
                     square.disabled = true;
                     // FOCUS MOVES ON, NOT TO <body>. The sheet's close returned focus to this square and
