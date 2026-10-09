@@ -36,7 +36,8 @@ class Entry:
     want for a new announcement. Give a new announcement a new id.
 
     `beats` are (label, copy) pairs rendered as the numbered stack the Career explainer and the 1.0
-    greeting both use. Two or three; this is a notice, not a changelog page.
+    greeting both use. Two or three, or a fourth when a second, smaller change rides the same release;
+    this is a notice, not a changelog page.
 
     `link_url` is a path we own, never an external URL: the modal is a trusted surface that opens itself
     over the page, and a link out of it is a phishing shape. Enforced by `safe_link_url`, which the
@@ -97,6 +98,11 @@ ENTRIES: tuple[Entry, ...] = (
             ('Titles to earn',
              'Your first two finished A-Z and Job Coverage runs each earn a title, Job Coverage pays job XP '
              'for every job, and the Plat Calendar hands out titles as its days fill.'),
+            # Rides the same release (owner, 2026-10-09), so it shares the announcement rather than
+            # opening a second modal on the same visit.
+            ('Also new: every Pursuer rank',
+             'Tap the rank bar on your Career page to see all eleven ranks, their divisions and the level '
+             'each one starts at.'),
         ),
         link_label='See the challenges',
         link_url='/community/challenges/',
