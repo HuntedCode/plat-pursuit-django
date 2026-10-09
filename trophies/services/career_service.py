@@ -13,7 +13,7 @@ import logging
 
 from trophies.models import ProgressionMilestone, UserTitle
 from trophies.services import job_render
-from trophies.util_modules.leveling import JOB_TIERS, pursuer_rank_ladder
+from trophies.util_modules.leveling import JOB_TIERS, pursuer_rank_ladder, pursuer_rank_table
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +97,11 @@ def _build_hero(profile, jobs):
     )
     for rung in rank_ladder['rungs']:
         rung['reached_at'] = reached.get(rung['key'])
+    # The full table behind the bar (every tier with its division floors), for the rank ladder modal the
+    # bar opens. Same dates, so a reached tier says when in both places.
+    rank_table = pursuer_rank_table(pursuer_level)
+    for tier in rank_table['tiers']:
+        tier['reached_at'] = reached.get(tier['key'])
     # Dominant discipline (highest average level): tints the hero's ambient glow AND labels the
     # identity chip ("Leads with Combat"). Only once you've earned some XP, so a fresh Pursuer stays
     # neutral (a "New Pursuer" fallback in the template).
@@ -111,6 +116,7 @@ def _build_hero(profile, jobs):
         'pursuer_level': pursuer_level,
         'pursuer_rank': rank_ladder['current'],
         'rank_ladder': rank_ladder,
+        'rank_table': rank_table,
         'total_job_xp': jobs['total_xp'] if jobs else 0,
         'job_count': jobs['total'] if jobs else 0,
         'active_title': active.title.name if active else None,

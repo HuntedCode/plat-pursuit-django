@@ -1,0 +1,100 @@
+{% load humanize %}
+{% comment %}
+The Pursuer rank table (owner, 2026-10-09): every rank, its five divisions and the Pursuer Level each one
+starts at. Opened by the hero's rank bar (`[data-rank-open]`), which shows the 11 tiers but only ever said
+what one asks for in a rung `title`, and a title never shows on a phone.
+
+Expects `table` (`leveling.pursuer_rank_table`, with `reached_at` per tier from career_service) and `level`
+(the Pursuer Level). Server-rendered and safe to be: a claim reloads the page, so the table never goes stale
+under an open Career.
+
+A MANUAL modal on the `.pp-detail-modal` mold, driven by `PlatPursuit.DetailModal`: no `data-auto`, no
+`onDismiss`, nothing recorded, so it is not part of the page's modal gate (`_career_modal_gate.html`) and
+never holds the hero's count-ups. Its `is-closing` rule is the ID-scoped one in series-list.css.
+
+Ascending, the order the hero bar reads left to right. Opening scrolls the dialog so the current rank sits
+in the middle: for most hunters it is near the top, but an Ascendant should not have to scroll for it.
+{% endcomment %}
+<div class="pp-detail-modal pp-howto" id="rank-ladder" hidden>
+    <div class="pp-detail-modal__scrim" data-rank-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog prk-dialog" role="dialog" aria-modal="true" aria-labelledby="rank-ladder-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-rank-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+            <h2 class="pp-howto__title" id="rank-ladder-title">
+                <svg class="pp-howto__title-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 11-5-5-5 5"/><path d="m17 18-5-5-5 5"/></svg>
+                Pursuer ranks
+            </h2>
+            <p class="pp-forge__lede">Your Pursuer Level is the sum of all 25 job levels. It climbs through eleven ranks, and every rank between Newbie and Ascendant has five divisions, from V up to I.</p>
+
+            <div class="prk-now" style="--rk: var(--rank-{{ table.current.key }});">
+                <span class="prk-now__label">{{ table.current.label }}</span>
+                <span class="prk-now__lv">Pursuer Level <b class="pp-tally">{{ level|intcomma }}</b></span>
+                <span class="prk-now__next">{% if table.current.next_label %}{{ table.current.levels_to_next|intcomma }} level{{ table.current.levels_to_next|pluralize }} to {{ table.current.next_label }}{% else %}The top rank. Your level keeps climbing.{% endif %}</span>
+            </div>
+
+            <ol class="prk-list">
+                {% for t in table.tiers %}
+                <li class="prk{% if t.current %} is-current{% elif t.reached %} is-reached{% else %} is-locked{% endif %}" style="--rk: var(--rank-{{ t.key }});"{% if t.current %} aria-current="step"{% endif %}>
+                    <div class="prk__head">
+                        <span class="prk__dot" aria-hidden="true"></span>
+                        <span class="prk__name">{{ t.name }}</span>
+                        {% if t.current %}<span class="prk__here">You are here</span>{% endif %}
+                        <span class="prk__lv">Lv {{ t.min_level|intcomma }}{% if not t.next_level %}+{% endif %}</span>
+                    </div>
+                    <p class="prk__meta">{% if t.reached and t.reached_at %}Reached {{ t.reached_at|date:'j M Y' }}{% elif t.reached and t.min_level == 0 %}Where every Pursuer starts{% elif t.reached %}Reached{% else %}{{ t.levels_to|intcomma }} level{{ t.levels_to|pluralize }} to go{% endif %}{% if not t.next_level %}. No divisions: past it, your level keeps climbing{% endif %}</p>
+                    {% if t.divisions %}
+                    <ol class="prk__divs">
+                        {% for d in t.divisions %}
+                        <li class="prk__div{% if d.current %} is-current{% elif d.reached %} is-reached{% endif %}">
+                            <span class="sr-only">{{ d.label }}, Pursuer Level {{ d.min_level|intcomma }}{% if d.current %}, your division{% endif %}</span>
+                            <span class="prk__div-n" aria-hidden="true">{{ d.roman }}</span>
+                            <span class="prk__div-lv" aria-hidden="true">{{ d.min_level|intcomma }}</span>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ol>
+
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-rank-close>Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    'use strict';
+    var el = document.getElementById('rank-ladder');
+    if (!el) { return; }
+
+    // Waits for utils.js (end-of-body), like the explainer beside it.
+    document.addEventListener('DOMContentLoaded', function () {
+        if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { return; }
+        var dialog = el.querySelector('.pp-detail-modal__dialog');
+
+        var api = PlatPursuit.DetailModal(el, {
+            closeSelector: '[data-rank-close]',
+            // Centre the current rank in the dialog (its scroll container). Set directly rather than
+            // through scrollIntoView, which would also scroll the page behind the scrim. Measured in
+            // OFFSETS, not client rects: the dialog is mid `ppDetailIn` (scaled) when this runs, and a
+            // scaled rect lands the far rows short.
+            onOpened: function () {
+                var cur = el.querySelector('.prk.is-current');
+                if (!cur || !dialog) { return; }
+                var top = 0;
+                for (var node = cur; node && node !== dialog; node = node.offsetParent) { top += node.offsetTop; }
+                if (node !== dialog) { top -= dialog.offsetTop; }   // the dialog is not positioned: offsets ran past it
+                dialog.scrollTop = top - (dialog.clientHeight - cur.offsetHeight) / 2;
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest) { return; }
+            var trigger = e.target.closest('[data-rank-open]');
+            if (trigger) { e.preventDefault(); api.open(trigger); }
+        });
+    });
+})();
+</script>

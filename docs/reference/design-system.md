@@ -275,7 +275,7 @@ Shared primitive for ANY tier/rank progression (`static/css/components/elements.
 </div>
 ```
 
-- **Consumers**: Pursuer rank ladder (Career hero, `.pgl--rank`), job prestige ladder (job detail), claim ceremony rank-up (`.is-charging`), badge tier ascent rail (`.pgl--static`). Reuse it — don't re-roll a ladder.
+- **Consumers**: Pursuer rank ladder (Career hero, `.pgl--rank`, wrapped in the `.pgl-open` button that opens the full rank table; a `.pgl` inside a button must be built from spans), job prestige ladder (job detail), claim ceremony rank-up (`.is-charging`), badge tier ascent rail (`.pgl--static`). Reuse it — don't re-roll a ladder.
 - **`.pgl--static`**: disables the entrance choreography (rung draw cascade, current-rung bloom, division ticks) for a resting filled rail — use inside HTMX swap islands or wherever you just want the meter.
 - **Reduced motion**: the mount animations are gated; the resting filled state is the reduced-motion fallback.
 

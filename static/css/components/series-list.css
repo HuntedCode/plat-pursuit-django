@@ -133,6 +133,7 @@
 #challenges-intro.is-closing,
 #challenge-tutorial.is-closing,
 #new-contracts.is-closing,
+#rank-ladder.is-closing,
 #whats-new.is-closing { animation: ppHowtoFadeOut 0.2s ease forwards; }   /* opacity crossfade -- always on */
 
 /* The dialog's settle is transform MOTION, so it is reduced-motion-gated. */
@@ -144,6 +145,7 @@
     #challenges-intro.is-closing .pp-detail-modal__dialog,
     #challenge-tutorial.is-closing .pp-detail-modal__dialog,
     #new-contracts.is-closing .pp-detail-modal__dialog,
+    #rank-ladder.is-closing .pp-detail-modal__dialog,
     #whats-new.is-closing .pp-detail-modal__dialog { animation: ppHowtoDialogOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 
