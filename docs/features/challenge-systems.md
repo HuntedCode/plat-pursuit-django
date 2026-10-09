@@ -16,27 +16,17 @@ no services and no templates with it; the few lessons worth carrying forward are
 | Piece | State |
 |---|---|
 | Models, constraints, admin | **built** |
-| `challenge_service` / `eligibility` / `picker` / `slot_render` | **built** |
-| Plat Calendar data path (`calendar_fill`, model, sweep, sync hook, staff doors) | **built** and reachable — `TYPES_NOT_YET_CREATABLE` is empty now that the ladder exists |
-| Plat Calendar renderers (`calendar_render`) | **built** |
-| Plat Calendar board (detail + Hall of Fame hero) | **built.** Month-switcher layout: thirteen crests double as the tabs (twelve months and a whole-year overview), one panel at a time. No cover art anywhere |
-| Plat Calendar day modal (which games satisfy a day) | **built** (`CalendarDayView`, an HTML fragment into one shared sheet) |
-| Plat Calendar reward ladder | **built**, and drawn in the run's header as a ladder of the five titles (see below) |
-| Plat Calendar richer crest artwork | **not built.** The crest itself renders |
-| Detection (sync hook + `process_challenges` + nightly) | **built** |
-| My Challenges (`/my-challenges/`) | **built** |
-| The run's page (`community/challenges/<id>/`) | **built** |
-| The picker: square-first, contract-first, history | **built** |
-| Public hub + Hall of Fame | **built.** `community/challenges/` (runs in flight) and `community/challenges/hall-of-fame/` (finished runs) |
-| Challenge share card | **built** for all three types. **Minting it as a Hall of Fame cover was CUT** — the live board is the permanent state; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
+| Services: `challenge_service`, `eligibility`, `picker`, `slot_render`, `calendar_fill`, `calendar_render`, `rewards`, `share_card`, `tutorials` | **built** |
+| Detection: the sync hook, `process_challenges` (squares, then the Calendar phase), nightly | **built** |
+| My Challenges, the run page, the picker (square-first, contract-first, history) | **built** |
+| Public hub (`community/challenges/`) and Hall of Fame (`community/challenges/hall-of-fame/`) | **built** |
+| Plat Calendar: one shovelware-free lens, filled from history at creation, one run per hunter, the day sheet, the year heatmap, the title ladder, the opening ceremony | **built** |
+| Plat Calendar: richer crest artwork | **not built.** The crest renders with its month's face and hue |
+| Rewards: A-Z and Job Coverage titles and job XP, the Calendar's day-marker ladder, the completion notification | **built.** `challenges/services/rewards.py` is the only writer |
+| Share cards, all three types | **built.** Minting one as a Hall of Fame cover was **CUT**; see [The Hall of Fame draws heroes](#the-hall-of-fame-draws-heroes-not-cards) |
 | Tutorials (system intro + one per type) | **built.** See [The tutorials](#the-tutorials) |
-| Rewards (titles, job-XP payout, notification) | **built** for A-Z and Job Coverage. `challenges/services/rewards.py` is the only writer |
-| **Plat Calendar** — type, `CalendarDay`, the three view predicates, the backfill writer, the reconciling sweep, the refresh command | **built** |
-| **Plat Calendar** — creation | **open.** The gate was held for the rewards; the day-marker ladder is what it was waiting for |
-| **Plat Calendar** — the sync-path refresh | **built.** `calendar_fill.refresh_for_profile`, called after contract detection |
-| **Plat Calendar** — the board | **built.** Detail: thirteen crests as the switcher (twelve months plus a year overview), one panel at a time, no cover art. Hero: the whole year as a dense band |
-| **Plat Calendar** — richer crest ARTWORK | **NOT built.** The day modal, the 50/100/200/300/365 ladder and the opening ceremony ARE built; the crest ships struck in its metal with a working face (the month's abbreviation over a twelve-segment rim with one segment lit) |
 | Beta gate (`CHALLENGES_BETA_MEMBERS_ONLY`) | **built, and on by default** |
+| Beta release audit (chunk 12) | **done.** See [Beta hardening](#beta-hardening) |
 | Badge + holo award | **deferred to a follow-up branch**, post-beta. Completions are recorded from day one so badges backfill |
 
 What a challenge is worth is now stated on both surfaces a hunter sees — the Start card before they
@@ -686,8 +676,8 @@ twenty-six covers with no key is pretty and says nothing about what the run was,
 make the types look like different achievements rather than one template with different art. (The Plat
 Calendar's board is a different problem again: 365 day cells carry no cover art at all, because eight rows
 of them is ~2,920 images, and at the 5-13px a hero cell actually lands on the art would be invisible
-rather than merely unreadable. Clicking a day WILL open a modal listing the games that satisfy it --
-not built yet, so the cell is a `<div>` rather than a button that does nothing.)
+rather than merely unreadable. Clicking a day on the run page opens a sheet listing the games that
+satisfy it; the hero's cells stay decorative.)
 
 The exact-four-keys rule still holds, for the reason `slot_render._card` states outright — a dict that grows
 a field per guess is how unread columns get fetched for two hundred rows — and
@@ -943,6 +933,26 @@ Challenges cards), so a changed rule cannot leave the tutorial teaching the old 
 
 ---
 
+## Beta hardening
+
+The chunk 12 audit (2026-10-09) ran five reviews before the members-first beta. The rules it added, so they
+are not undone by accident:
+
+| Rule | Why |
+|---|---|
+| **One Plat Calendar run per hunter, for good** (`TYPES_WITH_ONE_RUN`). A finished run, hidden or not, refuses another Start; My Challenges shows that run with View and Share in place of Start. | Every Calendar run reads the same history, so a second run is a copy. With fill-on-create it was worse: a hunter with all 365 days minted a finished run, a Hall of Fame entry and a notification on every Start press. |
+| **A new Calendar run fills from history at creation** (`start_reporting` -> `_backfill_calendar`, in a savepoint). | The first visit is the opening ceremony; left to the next sync it read "0 of 365". `seed_challenge_demo` opts out with `backfill=False`. |
+| **Title grants run in their own savepoints** (`_recount_calendar`, `on_run_completed`). | A caught DATABASE error inside the caller's transaction aborts it, so a bare try/except rolled the whole fill or the finished run back at commit. |
+| **Start locks the profile `FOR NO KEY UPDATE`.** | A plain `FOR UPDATE` blocks the `FOR KEY SHARE` every foreign-key insert takes, so a whale's fill held up their own sync. |
+| **The sync path and the nightly sweep contain each square** (`detect_for_profile`, `process_challenges`). | One bad square ended the slot phase and skipped the Calendar phase for the night. |
+| **Rate-limited JSON doors answer 429 with an `error`** (`_json_when_limited`, `block=False`); Start says it on the page. | `Ratelimited` renders the HTML 403 page, so the picker could only say "That did not save." |
+| **"Most progress" on the hub ranks by share done**, count as the tie-break. | A Calendar run counts to 365 and fills at creation, so the raw count put every one above every A-Z and Job Coverage run. |
+| **The A-Z archive promise is kept by the first-run history importer** (owner, 2026-10-09). | The old placeholder said "your past A-Z runs are safe... they come with you". `ArchivedAZChallenge` stays, unread. |
+
+The audit's page fixes (the history import that asks first and stays open, the day sheet's loading and error
+states, the year heatmap, the ceremony's climb, the empty launch states, the copy for three types) are
+pinned in `tests/engine/test_challenge_beta_hardening.py`.
+
 ## Constraints
 
 Written in the database because a shell and a data migration write around the service. (The admin is the
@@ -967,6 +977,16 @@ agreeing with its flag); `challenges/models.py` Meta is the full set.
 ---
 
 ## Gotchas and Pitfalls
+
+**The year overview carries the count two ways, and both are deliberate.** Below `md:` the cell has no
+numeral, so the shade carries the count (like the Hall of Fame year). From `md:` a numeral sits on a 22% tint
+whose contrast was measured for that text, so the tint stays and the count becomes a bar in the cell's own
+`--yc-heat` shadow slot. Shading the background there would break the measured contrast. The key under the
+matrix is built from the same cell classes, so it always matches the encoding in use.
+
+**`TYPES_WITH_ONE_RUN` is about what a run READS, not about the Calendar.** A type belongs in it when every
+run of it is computed from the same hunter-wide data. A-Z and Job Coverage are picked square by square, so a
+second run is genuinely new and they stay out.
 
 **A tutorial preview must never carry `data-auto`.** `DetailModal` reads that attribute to decide
 whether a dismissal RECORDS, so a preview rendering it would spend the real tutorial on close. Previews
@@ -1112,11 +1132,12 @@ and they come with you."* The data behind that is `ArchivedAZChallenge` in `trop
 the teardown migration: every retired A-Z run's per-letter progress, keyed on `psn_username` +
 `np_communication_id`. It is the only copy.
 
-**Nothing imports it yet.** The rebuilt app reads none of it, and it cannot be restored by a straight
-re-point: a square's atom is now a `Contract`, so each archived row has to travel
-`np_communication_id → Game → Concept → igdb_match.igdb_id → Contract`, and how much of the archive
-survives that hop is a question only prod can answer. Keeping the promise is a requirement of the hub chunk,
-not an optional extra — measure the coverage before deciding what the hub says about it.
+**Decided (owner, 2026-10-09): the first-run history importer keeps the promise.** A hunter's first A-Z run
+can fill letters straight away from games they finished after joining, which is the past they bring with
+them. `ArchivedAZChallenge` is NOT imported and stays in place, unread: restoring it would have to travel
+`np_communication_id → Game → Concept → igdb_match.igdb_id → Contract` per row, with an unmeasured match
+rate, and unmatched letters would simply be lost. If restoring it is ever wanted, measure that coverage on
+prod first.
 
 ---
 
@@ -1129,10 +1150,10 @@ not an optional extra — measure the coverage before deciding what the hub says
 | `challenges/services/eligibility.py` | the pools, the hatch count, the importer's date |
 | `challenges/services/picker.py` | the three panels — read-only, decides nothing |
 | `challenges/services/slot_render.py` | the A-Z and Job Coverage board: squares, discipline shelves, covers |
-| `challenges/services/calendar_fill.py` | the Plat Calendar's three view predicates, the backfill writer, the reconciling sweep scope, and the sync-path refresh |
+| `challenges/services/calendar_fill.py` | the Plat Calendar's fill predicate (shovelware-free platinums, with `in_all` kept as the comparison count), the backfill writer, the reconciling sweep scope, and the sync-path refresh |
 | `challenges/services/calendar_render.py` | the Plat Calendar board: twelve month groups plus the year totals for the detail page, one 365-day board for the hero. Separate from `slot_render` because a day shares no fields with a contract-backed square |
 | `templates/challenges/partials/_calendar_board.html` | the Calendar's detail board: the crest switcher, twelve month panels and the year overview |
-| `static/js/challenges-calendar.js` | the Calendar's month tablist only, through `PlatPursuit.wireTablist`. The LENS needs no script: `.pp-cal:has(input:checked)` reads the radio directly, so it works with JavaScript off |
+| `static/js/challenges-calendar.js` | the Calendar's month tablist (through `PlatPursuit.wireTablist`), the day sheet, the hover peek (fine pointers only) and the opening ceremony's climb |
 | `challenges/services/plaque.py` | the Hall of Fame plaque's Pursuer Card spine: rank, Pursuer Level, Career XP, the shared disciplines ring's arcs, and the XP a run paid — page-batched, reads nothing per entry |
 | `challenges/services/rewards.py` | **every reward write**: the XP redemption, the titles, the completion hook |
 | `challenges/views.py` | four page views (My Challenges, the run, and the two public browse pages); `GET` reads: the three picker panels (JSON), the Calendar day square (an HTML fragment), and the share card's preview (JSON) and download (PNG); seven thin POST actions (start, assign, clear, hide, redeem, redeem-all, opening-seen) |

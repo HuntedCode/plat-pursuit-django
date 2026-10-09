@@ -116,8 +116,9 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   5. `detect_dlc_and_refresh` -- re-evaluates series whose games gained DLC (writes the same tables) AND
      rewrites `ProfileGame.progress`, dropping owners back below 100%
   6. `process_contracts --all --incremental` -- reads that progress, so it MUST follow step 5
-  7. `process_challenges` -- completes Challenge squares whose contract their owner has finished. A square
-     completes when an `EarnedContract` row exists and step 6 is what creates one, so it MUST follow it
+  7. `process_challenges` -- completes Challenge squares whose contract their owner has finished, then
+     refreshes Plat Calendar runs. A square completes when an `EarnedContract` row exists and step 6 is
+     what creates one, so it MUST follow it
   8. `recompute_milestones` -- reads badge standings and ProfileJobXP, so it is last among the writers
   9. `audit_badge_coverage` -- read-only curator email, least urgent
 
@@ -243,20 +244,32 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
 
 - **Schedule**: Runs in `nightly`, immediately after `process_contracts`. **No standalone Render entry.**
 - **Command**: `python manage.py process_challenges`
-- **What it does**: Completes Challenge squares whose contract their owner has now finished. It stamps the
-  SLOT (`is_completed`, `completed_at`, `completed_via='live'`) and never the Contract, and grants no XP.
+- **What it does**: two independent phases; a phase that finds nothing (or fails) never skips the other.
+  1. **Square sweep**: completes A-Z / Job Coverage squares whose contract their owner has now finished.
+     It stamps the SLOT (`is_completed`, `completed_at`, `completed_via='live'`) and never the Contract, and
+     grants no XP. Each square is contained, so one bad row does not end the sweep.
+  2. **Plat Calendar phase**: refreshes unfinished Calendar runs whose owner's `Profile.total_plats`
+     differs from the run's `calendar_plats_seen` watermark, filling newly covered days and finishing a
+     run at 365 shovelware-free days. Each run is contained.
 - **Why it must be scheduled**: the sync hook only sees what a sync touched, so a square goes unfinished
   forever whenever the `EarnedContract` row was written off the sync path -- by the nightly sweep above, by
   a staff `process_contracts --contract`, or by a re-earn after a reconcile. Most commonly: the contract was
   published after the hunter finished the game and they have not synced since.
 - **Ordering**: it MUST follow `process_contracts`. A square completes when an `EarnedContract` row exists,
   and that step is what creates one -- run first, this would sweep yesterday's rows and report nothing to do
-  on precisely the night a contract went live.
-- **No watermark**, unlike `process_contracts`, and deliberately: a square NAMES its own contract, so the
+  on precisely the night a contract went live. (The Calendar phase reads platinums only; it sits there
+  because it shares the command.)
+- **The square sweep has no watermark**, unlike `process_contracts`, and deliberately: a square NAMES its own contract, so the
   question is one query over filled unfinished squares (26 rows for a letter run, one per job for a jobs
   run). It scales with runs in flight, not with the userbase, so there is nothing to ration and a cursor
   would only create a way to miss something.
-- **Ad hoc**: `--user <psn_username>` for one account, `--dry-run` to preview.
+- **Ad hoc**: `--user <psn_username>` for one account (both phases; in the Calendar phase it refreshes all
+  of that hunter's Calendar runs, ignoring the watermark), `--dry-run` to preview both phases,
+  `--only slots` / `--only calendar` to run one phase, and `--all-calendars` to refresh every Calendar run
+  ignoring the watermark.
+- **A shovelware reclassification moves no watermark**, so the nightly Calendar phase cannot see it: an
+  un-flagged game's day fills only on that hunter's next platinum. After a bulk reclassification run
+  `process_challenges --all-calendars` by hand.
 - **Un-publishing a contract does NOT strand a square that already holds it.** Neither detector reads
   `Contract.is_live` -- both ask only whether an `EarnedContract` row exists -- and un-publishing does not
   take a reached stamp back, so a square assigned while its contract was live still completes afterwards

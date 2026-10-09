@@ -287,6 +287,38 @@ and its `?exclude_list=` parameter read `GameListItem` for any list id with no o
 visibility check. The
 models and templates are retained.
 
+### Challenges -- REBUILT (2026-10), off `/api/v1/`
+
+Same shape as Game Lists: the doors live under the pages' own paths and share their gates. Every door that
+takes a run id resolves it through the owner's runs (or `readable_by()` for the public reads) and answers a
+uniform 404, so an id cannot confirm somebody else's hidden run exists. The JSON doors never redirect:
+signed out is a JSON 401, an unlinked account a JSON 403. Detail in
+[challenge-systems.md](../features/challenge-systems.md).
+
+| Route | Name | Method |
+|---|---|---|
+| `/community/challenges/` | `challenges` | GET -- runs in flight (public) |
+| `/community/challenges/hall-of-fame/` | `challenges_hall_of_fame` | GET -- finished runs (public) |
+| `/community/challenges/<id>/` | `challenge_detail` | GET -- the run's page (public; a hidden run is owner-only) |
+| `/community/challenges/<id>/day/<month>/<day>/` | `challenge_calendar_day` | GET -- a Calendar day's games, an HTML fragment |
+| `/my-challenges/` | `my_challenges` | GET -- login and a linked PSN account |
+| `/my-challenges/start/<type>/` | `challenge_start` | POST (form) -- start or resume; members-only during the beta |
+| `/my-challenges/<id>/slot/<key>/` | `challenge_slot` | GET -- what fits this square |
+| `/my-challenges/<id>/search/` | `challenge_search` | GET -- contract-first search |
+| `/my-challenges/<id>/history/` | `challenge_history` | GET -- the first-run importer's offers |
+| `/my-challenges/<id>/slot/<key>/assign/` | `challenge_assign` | POST -- 409 with `needs_confirmation` when it would lock the square |
+| `/my-challenges/<id>/slot/<key>/clear/` | `challenge_clear` | POST -- unfinished squares only |
+| `/my-challenges/<id>/slot/<key>/redeem/` | `challenge_redeem` | POST -- claim one square's job XP |
+| `/my-challenges/<id>/redeem-all/` | `challenge_redeem_all` | POST |
+| `/my-challenges/<id>/hide/` | `challenge_hide` | POST |
+| `/my-challenges/<id>/opening-seen/` | `challenge_opening_seen` | POST -- the Calendar ceremony's dismissal |
+| `/my-challenges/<id>/card/` | `challenge_card_html` | GET -- share card preview (owner only) |
+| `/my-challenges/<id>/card.png` | `challenge_card_png` | GET -- share card download (owner only) |
+
+A tripped limit on a JSON door answers **429 with an `error`** the page shows; the Start form shows the same
+message on the page. The anonymous GETs (browse, Hall of Fame, a Calendar day) are limited by IP and the
+picker, share and write doors by user, all metering HEAD as well as GET where they are GETs.
+
 ### Game Families (Staff Only)
 
 > **REMOVED 2026-08** (staff strip-down): all six `game-families/` staff endpoints were deleted with
@@ -396,12 +428,17 @@ Rate limits are applied via `django-ratelimit` on specific endpoints:
 | Refresh a tracked hunter | 10/min by user | PSN-token cost, across DIFFERENT profiles. The per-profile cooldown caps the cost of any one of them |
 | Search-sync profile (authed) | 15/min by user | PSN-token cost of a sync |
 | Search-sync profile (anon) | 3/min by IP | Same, for an open endpoint. The user bucket is checked first, so a member behind a NAT'd IP is not held to this |
+| Challenges writes (start, hide, assign, clear, opening-seen) | 30/min by user, one shared bucket | Create-hide-create cannot outrun one door by using another |
+| Challenges picker reads (slot, search, history) | 90/min by user | Looser than writes: the search runs while somebody types |
+| Challenges XP redeems | 60/min by user | One Claim button per finished square, up to 25 |
+| Challenge share card (preview / PNG) | 60/min / 20/min by user | The PNG renders through Playwright |
+| Challenges browse, Hall of Fame, Calendar day | 60/min by IP each | Anonymous; each in its own bucket so one cannot shut the others |
 
 ## Related Docs
 
 - [Mobile App](../guides/mobile-app.md): why the mobile API was removed, and what to know when rebuilding it
 - [Roadmap System](../features/roadmap-system.md): Roadmap editor API details (replaced the legacy Checklists API)
-- [Challenge Systems](../features/challenge-systems.md): Challenge API details
+- [Challenge Systems](../features/challenge-systems.md): the Challenges system and its routes
 - [Community Flags](../features/community-flags.md): Game flag categories and effects
 - [Fundraiser](../features/fundraiser.md): Donation/claim API details
 - [Comment System (Legacy)](../features/comment-system.md): Why the comment list/create endpoints are gone

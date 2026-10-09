@@ -84,6 +84,24 @@ class Entry:
 #: NEWEST FIRST. See the module docstring before adding one.
 ENTRIES: tuple[Entry, ...] = (
     Entry(
+        id='2026-10-challenges-beta',
+        published=date(2026, 10, 9),
+        title='Challenges are here, in beta',
+        beats=(
+            ('Three to choose from',
+             'A-Z: one game for every letter. Job Coverage: one game for every job. Plat Calendar: a '
+             'shovelware-free platinum on every day of the year.'),
+            ('Members start first',
+             'Members can start runs during the beta. Everyone can browse the runs in progress and the '
+             'Hall of Fame now, and start their own when the beta ends.'),
+            ('Titles to earn',
+             'Your first two finished A-Z and Job Coverage runs each earn a title, Job Coverage pays job XP '
+             'for every job, and the Plat Calendar hands out titles as its days fill.'),
+        ),
+        link_label='See the challenges',
+        link_url='/community/challenges/',
+    ),
+    Entry(
         id='2026-09-game-lists',
         published=date(2026, 9, 22),
         title='Game Lists are here',

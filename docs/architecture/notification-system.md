@@ -65,7 +65,7 @@ Signal fires (post_save)
 | `trophies/apps.py` | Starts the Discord webhook daemon thread on app ready |
 | `trophies/sync_utils.py` | `sync_signal_suppressor()` context manager to skip pre_save signals during sync |
 | `core/management/commands/process_scheduled_notifications.py` | Hourly cron command for scheduled notification delivery |
-| `notifications/management/commands/create_test_notification.py` | Dev tool: create test platinum/challenge notifications |
+| `notifications/management/commands/create_test_notification.py` | Dev tool: create a test platinum notification |
 | `notifications/management/commands/force_platinum_notification.py` | Dev tool: bypass signal flow and call handler directly |
 
 ## Data Model
@@ -264,7 +264,9 @@ This prevents double-processing if the cron job overlaps (unlikely with hourly r
 
 ### 10. Milestone Notifications Bypass Signals
 
-**Milestone / challenge notifications retired (2026-08).** `create_milestone_notification()` and the `milestone_achieved` / `challenge_completed` types went with the legacy milestone engine and the Challenge system. The `milestones` app is deliberately quiet -- it sends no notification on a tier crossing. The type choices remain in `notifications/models.py` so historical rows still render.
+**Milestone notifications retired (2026-08); `challenge_completed` is live again.** `create_milestone_notification()` and the `milestone_achieved` type went with the legacy milestone engine. The `milestones` app is deliberately quiet -- it sends no notification on a tier crossing. The `milestone_achieved` choice remains in `notifications/models.py` so historical rows still render.
+
+`challenge_completed` came back with the Challenges rebuild. `_notify_completion` in `challenges/services/rewards.py` sends it when a run finishes, deferred through `transaction.on_commit(..., robust=True)` so a completion that rolls back is never announced and a failed send cannot cost the hunter their squares. Its template row is pk 10 in `notifications/fixtures/initial_templates.json`; without it the send logs a warning and skips. While the inbox stays parked these rows are written but not shown.
 
 ### 11. Historical Milestone Notifications Still Render
 
@@ -278,7 +280,7 @@ card. Don't delete that renderer while old rows exist.
 | Command | Schedule | Purpose |
 |---------|----------|---------|
 | `process_scheduled_notifications` | Hourly (Render cron) | Processes pending scheduled notifications that are due. Supports `--dry-run` flag. |
-| `create_test_notification` | Manual (dev) | Creates test platinum or challenge notifications. Supports `--type` (platinum/challenge) and `--username` flags. |
+| `create_test_notification` | Manual (dev) | Creates a test platinum notification. Supports `--type` (only `platinum`) and `--username` flags. |
 | `force_platinum_notification` | Manual (dev) | Bypasses signal flow and calls `notify_platinum_earned` directly for the first superuser's platinum trophy. Useful for debugging the signal handler. |
 | `debug_signals` | Manual (dev) | Signal debugging utility. |
 | `test_signals` | Manual (dev) | Signal testing utility. |

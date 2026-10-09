@@ -168,7 +168,7 @@
       "name": "challenge_completed",
       "notification_type": "challenge_completed",
       "title_template": "🏆 {challenge_name} complete",
-      "message_template": "Every square filled. Your title is waiting on the run.",
+      "message_template": "Take a look at the finished run.",
       "icon": "🏆",
       "action_url_template": "/community/challenges/{challenge_id}/",
       "action_text": "View the run",

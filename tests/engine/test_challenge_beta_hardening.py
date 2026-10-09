@@ -644,3 +644,52 @@ def test_the_beta_card_says_member_throughout():
     card = card[:card.index('</section>')]
     assert 'upporter' not in card, 'the beta card mixes "supporter" with "member"'
     assert 'Become a member' in card
+
+
+# ── release readiness (batch 5 of the audit) ─────────────────────────────────────────────────────
+
+def test_robots_keeps_the_non_pages_out_and_the_pages_in():
+    robots = (ROOT / 'static' / 'robots.txt').read_text(encoding='utf-8')
+    rules = [ln.strip() for ln in robots.splitlines() if ln.startswith('Disallow:')]
+    assert 'Disallow: /my-challenges/' in rules
+    assert 'Disallow: /community/challenges/*/day/' in rules
+    assert not any(r.rstrip('/').endswith('/community/challenges') for r in rules), 'the public pages are blocked'
+
+
+def test_the_deploy_checklist_carries_the_calendar():
+    checklist = (ROOT / 'docs' / 'design' / 'rebuild' / 'prod-deploy-checklist.md').read_text(encoding='utf-8')
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+    row_q = [ln for ln in checklist.splitlines() if ln.startswith('| Q |')]
+    assert row_q, 'no row checks the Calendar title names'
+    for name in CALENDAR_DAY_TITLES.values():
+        assert name in row_q[0], name
+    assert any(ln.startswith('| P |') and '0004' in ln for ln in checklist.splitlines())
+
+
+def test_the_beta_launch_is_the_newest_announcement():
+    from core import whats_new
+
+    top = whats_new.ENTRIES[0]
+    assert top.id == '2026-10-challenges-beta'
+    assert top.link_url == '/community/challenges/', 'a signed-out archive reader would be sent to login'
+
+
+def test_the_membership_perk_no_longer_says_challenges_are_coming():
+    from users.constants import PREMIUM_PERKS
+
+    beta = next(p for p in PREMIUM_PERKS if p['slug'] == 'beta')
+    assert 'returns' not in beta['example'] and 'Challenges' in beta['example']
+
+
+def test_the_completion_notification_promises_nothing_it_may_not_give():
+    """A third finished A-Z or Job Coverage run earns no title, and a Calendar run has days, not squares."""
+    import json
+    rows = json.loads((ROOT / 'notifications' / 'fixtures' / 'initial_templates.json').read_text(encoding='utf-8'))
+    row = next(r for r in rows if r['fields'].get('name') == 'challenge_completed')
+    message = row['fields']['message_template'].lower()
+    assert 'title' not in message and 'square' not in message
+
+
+def test_the_run_page_has_one_line_in_the_subnav_map():
+    src = (ROOT / 'core' / 'hub_subnav.py').read_text(encoding='utf-8')
+    assert src.count("'challenge_detail': (") == 1, 'a duplicate dict key silently shadows the first'

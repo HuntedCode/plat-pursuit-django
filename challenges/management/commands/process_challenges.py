@@ -221,7 +221,7 @@ class Command(BaseCommand):
         THE TWO PHASES ASK OPPOSITE-SHAPED QUESTIONS, which is why this is not folded into the loop
         above. A slot sweep is one site-wide query over squares whose contract may have been finished;
         a Calendar sweep recomputes a hunter's whole platinum history, which is expensive per run. So
-        this one reconciles first (`runs_due_for_sweep` compares two stored counters against live ones)
+        this one reconciles first (`runs_due_for_sweep` compares one stored counter against the live one)
         and only pays for runs that could actually have gained a day.
 
         `--user` DELIBERATELY IGNORES THAT CHECK. The reconciliation is an optimisation for the nightly
@@ -238,7 +238,7 @@ class Command(BaseCommand):
             scope = f'one hunter ({profile.psn_username}), ignoring the due check'
         elif force:
             # THE DOOR FOR THE CHANGE NO WATERMARK CAN SEE. The reconciliation watches the hunter's
-            # platinum and earned-contract counts, and a shovelware reclassification moves NEITHER while
+            # platinum count, and a shovelware reclassification does not move it while
             # genuinely changing the `clean` view -- so a hunter whose game was un-flagged would wait for
             # their next platinum before that day filled, and a dormant hunter would wait forever.
             #

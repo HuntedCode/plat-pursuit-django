@@ -124,7 +124,7 @@ def creation_is_open_to(profile):
 
     The beta gate, and it is a DIAL rather than a door: the hub and every run on it are public to
     everyone from day one, and what members get during the beta is to go FIRST. That is what the
-    storefront already sells by name -- "First through the door when Challenges returns" against an
+    storefront already sells by name -- "First through the door on Challenges" (it read "when Challenges returns" before launch) against an
     everyone-side of "Everything, when it ships" -- so members-create-first honours the words as
     written, and beta's end opens creation to everybody without taking anything back.
 

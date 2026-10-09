@@ -1,6 +1,6 @@
 # Data Model
 
-Platinum Pursuit's data model is organized across five Django apps: **trophies** (the core domain: profiles, games, trophies, badges, challenges, checklists, comments, reviews), **users** (authentication and subscriptions), **notifications** (in-app and push notifications), **core** (site-wide infrastructure: analytics, email logging, settings), and **fundraiser** (donation campaigns). The central axis of the system is the **Profile > Game > Trophy** chain sourced from PSN, with **Concept** acting as the cross-stack unifier that ties together regional/platform variants of the same game. Nearly all user-facing features (badges, ratings, comments, checklists, challenges) hang off either Profile or Concept.
+Platinum Pursuit's data model is organized across five Django apps: **trophies** (the core domain: profiles, games, trophies, badges, checklists, comments, reviews), **users** (authentication and subscriptions), **notifications** (in-app and push notifications), **core** (site-wide infrastructure: analytics, email logging, settings), and **fundraiser** (donation campaigns). The central axis of the system is the **Profile > Game > Trophy** chain sourced from PSN, with **Concept** acting as the cross-stack unifier that ties together regional/platform variants of the same game. Nearly all user-facing features (badges, ratings, comments, checklists, challenges) hang off either Profile or Concept.
 
 ---
 
@@ -25,7 +25,7 @@ Key relationships:
 - `concept` FK to `Concept` (nullable, SET_NULL)
 
 ### Concept
-The cross-stack unifier. All regional/platform variants of the same game share one Concept. Stores publisher info, release date, genres, media URLs, and a `slug` for URL routing. The `absorb(other)` method is critical: it migrates all related data (comments, ratings, checklists, featured guides, badge references, stages, challenge slots, etc.) from one Concept to another when a game is reassigned. Any new model with a relationship to Concept **must** update `absorb()`.
+The cross-stack unifier. All regional/platform variants of the same game share one Concept. Stores publisher info, release date, genres, media URLs, and a `slug` for URL routing. The `absorb(other)` method is critical: it migrates all related data (comments, ratings, checklists, featured guides, badge references, stages, etc.) from one Concept to another when a game is reassigned. Any new model with a relationship to Concept **must** update `absorb()`.
 
 Key relationships:
 - `family` FK to `GameFamily` (nullable)
@@ -225,17 +225,53 @@ the full model and flow.
 
 ---
 
-## Challenge Models
+## Challenge Models (challenges app)
 
-**RETIRED 2026-08.** The `Challenge`, `AZChallengeSlot`, `CalendarChallengeDay`, `GenreChallengeSlot`,
-and `GenreBonusSlot` models were dropped in migration `0281_drop_challenge_system`. Challenges will be
-rewritten from scratch; see [challenge-systems](../features/challenge-systems.md) for the design reference.
+The original system was dropped in 2026-08 (`0281_drop_challenge_system`) and rebuilt as its own
+`challenges` app. See **[docs/features/challenge-systems.md](../features/challenge-systems.md)** for the
+full picture; the model facts that matter elsewhere:
 
-### ArchivedAZChallenge
-Frozen A-Z challenge progress, preserved when the Challenge system was retired. One row per archived
-A-Z challenge, keyed on stable PSN ids (`psn_username` + per-slot `np_communication_id` inside the
-`slots` JSON) so a rebuilt system can re-import it. Read-only historical data, not wired into any live
-feature. Calendar and Genre progress were deliberately not preserved.
+### challenges.Challenge
+One run of one type (`az`, `jobs` or `calendar`) for one hunter.
+
+- `profile` FK to `Profile` (CASCADE, `related_name='challenges'`)
+- `total_slots` is **frozen at creation** (26 for A-Z, 365 for the Calendar, the job count on the day a
+  Job Coverage run started), so a catalogue change cannot move the goalposts under a run in flight
+- Denormalized `filled_count` / `completed_count`, recomputed from rows by the service; check constraints
+  hold `completed_count <= filled_count <= total_slots`
+- `is_complete` + `completed_at`; soft delete via `is_deleted` + `deleted_at`. No privacy flag: runs are public
+- One active run per type per hunter, enforced in the DB by the partial unique `challenge_one_active_per_type`
+- `calendar_plats_seen`: the nightly Calendar sweep's watermark, compared against `Profile.total_plats`
+
+### challenges.ChallengeSlot
+One square of an A-Z or Job Coverage run. `key` is a letter or a `Job.slug`; `position` is stored render order.
+
+- `challenge` FK to `Challenge` (CASCADE, `related_name='slots'`)
+- `contract` FK to `Contract` (**SET_NULL**, nullable) plus the frozen snapshot `contract_slug` /
+  `contract_name`. The snapshot is what the slot IS: it survives the contract being deleted, re-anchored
+  or un-published, and `is_filled` reads it rather than the FK
+- Completion belongs to the slot (`is_completed`, `completed_at`, `completed_via` of `live` / `import` /
+  `hatch`): detected from `EarnedContract`, never read from it, and never reverts
+- `xp_redeemed_at`: the Job Coverage XP guard (one grant per slot)
+
+Slots hang off `Contract`, not `Concept`, so `Concept.absorb()` needs no branch for them.
+
+### challenges.CalendarDay
+One of the 365 day squares of a Plat Calendar run (29 February folds into 28 February). A Calendar run
+has no `ChallengeSlot` rows.
+
+- `challenge` FK to `Challenge` (CASCADE, `related_name='calendar_days'`), unique on `(challenge, month, day)`
+- `in_clean` is the fill (a shovelware-free platinum landed on that day); `in_all` is the same population
+  without the shovelware exclusion, kept for the comparison figure. `calendarday_clean_implies_all`
+  enforces the nesting
+- `earned_on` is a local DATE (not an instant), `plat_count` a live tally, `filled_at` the write time
+
+### ArchivedAZChallenge (trophies app)
+Frozen A-Z challenge progress, preserved when the old system was retired. One row per archived A-Z
+challenge, keyed on stable PSN ids (`psn_username` + per-slot `np_communication_id` inside the `slots`
+JSON). **Still exists and is read by nothing**, the rebuild included. The old placeholder's "your past
+runs come with you" promise is kept by the first-run A-Z history importer instead (owner decision
+2026-10-09). Calendar and Genre progress were deliberately not preserved.
 
 Key relationships:
 - `profile` FK to `Profile` (nullable, SET_NULL)
@@ -607,7 +643,7 @@ Profile
   |-- 1:N --> Comment
   |-- 1:N --> Review
   |-- 1:N --> Checklist
-  |-- 1:N --> Challenge
+  |-- 1:N --> challenges.Challenge
   |-- 1:N --> MonthlyRecap
   |-- 1:N --> GameList          (legacy; the rebuild uses `owner`, see below)
   |-- 1:N --> gamelists.GameList     (as `owner`)
@@ -635,8 +671,6 @@ Game
   |-- 1:N --> Trophy
   |-- 1:N --> TrophyGroup
   |-- 1:N --> ProfileGame
-  |-- 1:N --> AZChallengeSlot
-  |-- 1:N --> CalendarChallengeDay
   |-- 1:N --> GameListItem      (LEGACY only -- the rebuilt item hangs off Concept)
 
 Trophy
@@ -657,12 +691,10 @@ Stage (linked to Badge via series_slug, not FK)
   |-- M2M --> Concept
   |-- 1:N --> StageStatValue
 
-Challenge
+challenges.Challenge
   |-- N:1 --> Profile
-  |-- 1:N --> AZChallengeSlot
-  |-- 1:N --> CalendarChallengeDay
-  |-- 1:N --> GenreChallengeSlot
-  |-- 1:N --> GenreBonusSlot
+  |-- 1:N --> challenges.ChallengeSlot --> N:1 --> Contract (SET_NULL; frozen slug/name snapshot)
+  |-- 1:N --> challenges.CalendarDay   (keyed month + day)
 
 Checklist
   |-- N:1 --> Concept
