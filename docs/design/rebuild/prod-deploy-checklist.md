@@ -14,6 +14,45 @@
 
 ---
 
+## Challenges beta release, 10 Oct 2026 -- the runbook
+
+The branch `feature/challenges/rebuild` carries `trophies/0341` and `challenges/0001`-`0009`, the
+`challenge_completed` fixture row, and the What's New entry. Every challenge table is created empty, so nothing
+needs a backfill. The rows referenced below (M-T, 14) carry the reasoning; this is the order.
+
+**Before deploying (prod shell, all read-only)**
+
+1. **0340 is applied** (row S): `python manage.py showmigrations trophies | tail -4` lists `0340` as `[X]`.
+2. **The nine title names are free** (rows N and Q): in `manage.py shell`,
+   `Title.objects.filter(name__in=['A-Z Champion', 'A-Z Legend', 'Job Challenge Champion', 'Job Challenge Legend', 'Calendar Marker', 'Calendar Keeper', 'Calendar Chronicler', 'Calendar Champion', 'Calendar Legend'])`
+   returns nothing. If one is taken, stop: rename OURS in `challenges/services/rewards.py` first.
+3. **The fixture's slot is free** (row M): `NotificationTemplate.objects.filter(Q(pk=10) | Q(name='challenge_completed'))`
+   returns nothing.
+4. **The beta flag is unset** (row R): `CHALLENGES_BETA_MEMBERS_ONLY` is absent from the Render env (it defaults on).
+
+**Deploying**
+
+5. Merge `feature/challenges/rebuild` into `main` and deploy. `migrate` applies `trophies/0341` (millisecond-scale
+   on ~138k rows, row 14) and the nine challenge migrations (empty tables, rows O and P).
+6. **Straight after `migrate`**, before anyone can start a run:
+   `python manage.py loaddata notifications/fixtures/initial_templates.json` (row M). A Calendar run can finish
+   in its first request, and that sends the notification.
+
+**After deploying**
+
+7. `python manage.py nightly --dry-run` lists challenge detection between contracts and milestones, and
+   `python manage.py process_challenges --dry-run` exits clean (row T).
+8. In a browser:
+   - `/community/challenges/` and the Hall of Fame show their empty states with "Start a challenge" and no toolbar.
+   - As a member, `/my-challenges/` opens the "How Challenges work" intro once. Start a Plat Calendar: it opens
+     already filled, with the opening ceremony.
+   - As a free hunter, `/my-challenges/` shows the beta card, and Start is refused with the beta message.
+   - The avatar's What's New dot lights for the beta entry.
+9. Tonight's nightly runs `process_challenges` after `process_contracts`; nothing to schedule.
+
+**Ending the beta later:** set `CHALLENGES_BETA_MEMBERS_ONLY=False` exactly and restart (row R). Everyone who saw
+the beta intro sees the live one once.
+
 ## Before the Challenges deploy — the one command that must be run by hand
 
 **`python manage.py loaddata notifications/fixtures/initial_templates.json`** (row M below).
