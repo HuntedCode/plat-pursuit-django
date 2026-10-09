@@ -1,0 +1,35 @@
+{% comment %}
+This hunter's challenge runs (owner, 2026-10-09): a quick look at their progress without the browse page.
+In progress first, then finished, as the Challenges page's own run cards (`_run_card.html`) without the
+hunter line, since every card here is theirs.
+
+VISIBLE RUNS ONLY, on your own profile too: hiding a run means "off my profile". My Challenges is where an
+owner manages hidden ones.
+
+ONE GRID, TWO HEADED GROUPS. profile_detail.html finds a tab's cards through `<tab>-grid` and reveals them on
+`.pp-crun` (its `revealSel` branch), so both groups live in `challenges-grid`, with their headings spanning the
+row. No `#challenges-sentinel`: the tab is bounded (see `_build_challenges_tab_context`), so the page builds no
+scroller for it.
+
+The chip only appears when there is a visible run, and a hand-typed `?tab=challenges` on a hunter with none is
+normalized to Games, so the empty branch below is a safety net rather than a designed state.
+{% endcomment %}
+<div id="tab-results">
+    <div id="challenges-grid" class="pp-crun-grid{% if request.htmx %} pp-reveal{% endif %}">
+        {% if challenge_runs_in_progress %}
+        <h3 class="pp-ptab-challenges__head">In progress</h3>
+        {% for run in challenge_runs_in_progress %}
+        {% include 'challenges/partials/_run_card.html' with run=run index=forloop.counter0 hide_hunter=True %}
+        {% endfor %}
+        {% endif %}
+        {% if challenge_runs_finished %}
+        <h3 class="pp-ptab-challenges__head">Finished</h3>
+        {% for run in challenge_runs_finished %}
+        {% include 'challenges/partials/_run_card.html' with run=run index=forloop.counter0 hide_hunter=True %}
+        {% endfor %}
+        {% endif %}
+        {% if not challenge_runs_in_progress and not challenge_runs_finished %}
+        <p class="pp-ptab-challenges__head">No challenge runs to show.</p>
+        {% endif %}
+    </div>
+</div>

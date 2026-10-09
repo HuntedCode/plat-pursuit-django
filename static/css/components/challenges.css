@@ -1685,8 +1685,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 
 .pp-crun__head { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 /* The chip shrink-proof: a two-line type chip would push the card's own rhythm out of step with its
-   neighbours in the grid. `.pp-crun__state` was dropped with the card's Finished chip -- this page only
-   shows runs in flight, so that chip could never render (see `_run_card.html`). */
+   neighbours in the grid. There is no state chip beside it: a finished card (the profile tab) says so on
+   its foot line, because two chips wrapped onto two lines on a phone (see `_run_card.html`). */
 .pp-crun__type { flex: 0 0 auto; }
 
 /* THE HUNTER IS THE CARD'S SUBJECT, so it carries the weight a card title would. One line with an
@@ -5123,3 +5123,16 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
        on a second row inside the ~311px toolbar. 8px and no tracking leave it ~20px to spare. */
     .pp-switch--ctypes .pp-switch__chip { padding: 6px 8px; letter-spacing: 0; }
 }
+
+/* THE PROFILE'S CHALLENGES TAB: the Challenges page's card grid, with a quiet heading spanning the row above
+   each group (in progress, finished). The cards are `.pp-crun`, unchanged. */
+.pp-ptab-challenges__head {
+    grid-column: 1 / -1;
+    margin: 6px 0 -2px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--pp-text-dim);
+}
+.pp-ptab-challenges__head:not(:first-child) { margin-top: 14px; }

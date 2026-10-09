@@ -451,14 +451,21 @@ def test_both_entries_carry_the_shared_reveal_hook(client):
             'the JS names %r directly -- that is the drift the hook exists to prevent' % cls
 
 
-def test_the_in_flight_card_no_longer_claims_a_finished_state(client):
-    """`ChallengesBrowseView` filters `is_complete=False`, so the card's Finished chip could never render.
-    Pinned as a REMOVAL because a dead branch implies the card is still the right way to draw a finish, and
-    the next person to touch this would reasonably believe it."""
-    card = open('templates/challenges/partials/_run_card.html', encoding='utf-8').read()
+def test_the_card_says_finished_only_where_a_finished_run_reaches_it(client):
+    """THE FINISHED BRANCH IS LIVE AGAIN (2026-10-09), and this used to pin its removal. The Challenges page
+    still never sends a finished run (`is_complete=False`), but the profile's Challenges tab lists a hunter's
+    finished runs as this same card -- so the branch is reachable, and what is pinned is WHERE: never on the
+    in-flight page, always on a finished card."""
+    from django.template.loader import render_to_string
 
-    assert 'run.is_complete' not in card, 'an unreachable finished-run branch is back on the card'
-    assert 'pp-crun__state' not in card
+    hunter = _hunter('cardhunter')
+    _run(hunter, done=3)
+    flight = client.get(reverse('challenges')).content.decode()
+    assert 'pp-crun__foot">Finished ' not in flight, 'an in-flight card claims a finish'
+
+    finished = _run(_hunter('donecard'), done=25, complete=True)
+    card = render_to_string('challenges/partials/_run_card.html', {'run': finished, 'index': 0})
+    assert 'pp-crun__foot">Finished ' in card
 
 
 # ── the board ────────────────────────────────────────────────────────────────────────────────────

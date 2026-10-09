@@ -1,6 +1,6 @@
-{% comment %}One run IN FLIGHT, on `/community/challenges/`. Not "on either public page", which is what this
-said when it was the only entry partial: the Hall of Fame draws `_run_hero.html` now, because a finished run
-is a different object from a run in progress and neither is served well by the other's shape.
+{% comment %}One run as a card: in flight on `/community/challenges/`, in flight or finished on a hunter's
+profile tab. A finish shown off at full size is the Hall of Fame's `_run_hero.html`, because a finished run is
+a different object from a run in progress and neither is served well by the other's shape.
 
 NO COVER ART HERE, and the reason has changed even though the answer has not. It used to be cost -- a cover
 join per entry, with the `raw_response` blob that caused the May 2026 OOM sitting behind it. That objection
@@ -13,10 +13,12 @@ subject is how far along it is, and a mosaic of the squares already done says th
 finished part of an unfinished thing. So this card keeps the run's own vocabulary (type, hunter, Horizon,
 Tally) and the art waits for the finish.
 
-NO "FINISHED" STATE, either. `ChallengesBrowseView.base_queryset` filters `is_complete=False`, so a complete
-run can never reach this partial; the branches that drew a Finished chip and a "Finished <when>" foot were
-dead the moment the Hall of Fame took the finished runs, and dead template branches are worse than absent
-ones here -- they imply this card is still the right way to draw a finish.
+A FINISHED STATE, for the profile's Challenges tab (2026-10-09). The Challenges page never sends one (its
+queryset is `is_complete=False`); a hunter's own tab lists their finished runs too, as the same card with the
+finish date on its foot line. No Finished chip beside the type: on a phone the two chips wrapped onto two lines
+and made finished cards taller than their neighbours, to say what the foot already says. The Hall of Fame keeps its own hero for a finish shown off at full size.
+
+`hide_hunter` drops the name line, for that same tab: every card there belongs to the profile it sits on.
 
 THE WHOLE CARD IS THE LINK. A run has one destination and no secondary action, so a nested anchor would be a
 second tab stop to the same place -- the browse-card pattern the design system settles on.
@@ -37,7 +39,9 @@ second tab stop to the same place -- the browse-card pattern the design system s
     {% comment %}THE HUNTER IS THE SUBJECT of this card -- the run's name is auto-generated and identical
     across every run of a type, so the name would be the least informative thing on it. `name_mark` so a
     supporter's mark travels here as it does on every other surface that credits somebody.{% endcomment %}
+    {% if not hide_hunter %}
     <p class="pp-crun__hunter">{% name_mark name=run.profile.display_psn_username|default:run.profile.psn_username mark=run.profile.display_mark size='sm' index=index %}</p>
+    {% endif %}
 
     <div class="pp-crun__tally">
         <span class="pp-tally pp-tally--sm">{{ run.completed_count }}<span class="pp-crun__of">/{{ run.total_slots }}</span></span>
@@ -54,5 +58,5 @@ second tab stop to the same place -- the browse-card pattern the design system s
 
     {% comment %}A CALENDAR SAYS WHEN IT LAST MOVED, NOT WHEN IT STARTED: it is filled from history at creation,
     so "200/365 · Started 2 hours ago" implied two hundred days of progress since this morning.{% endcomment %}
-    <p class="pp-crun__foot">{% if run.challenge_type == 'calendar' %}Updated {{ run.updated_at|naturaltime }}{% else %}Started {{ run.created_at|naturaltime }}{% endif %}</p>
+    <p class="pp-crun__foot">{% if run.is_complete %}Finished <time datetime="{{ run.completed_at|date:'c' }}">{{ run.completed_at|date:'j M Y' }}</time>{% elif run.challenge_type == 'calendar' %}Updated {{ run.updated_at|naturaltime }}{% else %}Started {{ run.created_at|naturaltime }}{% endif %}</p>
 </a>

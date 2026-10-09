@@ -619,6 +619,38 @@ class ProfileDetailView(DetailView):
             game_list.owner = profile
         return {'profile_lists': rows}
 
+    #: Finished runs shown on the Challenges tab, newest first. A guard rather than a feature: runs are
+    #: sequential and a Calendar run happens once, so reaching this takes years of finishing A-Z and Job
+    #: Coverage runs. The run page and the Hall of Fame are where a full history lives.
+    CHALLENGES_TAB_FINISHED_LIMIT = 24
+
+    def _visible_runs_for(self, profile):
+        """This hunter's runs anybody can see: `visible()`, the one public read path, so a hidden run never
+        appears here (hiding means "off my profile"), on your own profile included."""
+        from challenges.models import Challenge
+
+        return Challenge.objects.visible().filter(profile=profile)
+
+    def _build_challenges_tab_context(self, profile):
+        """This hunter's challenge runs: in progress first, then finished, as the Challenges page's cards.
+
+        TWO QUERIES, and bounded: at most one run in progress per type (`challenge_one_active_per_type`), and
+        the finished list sliced. Nothing joins a cover, a slot or the profile -- the card draws type, count
+        and progress, all columns on the row, and its hunter line (the one reader of `run.profile`) is
+        dropped here with `hide_hunter`.
+
+        In progress follows the types' own order (A-Z, Job Coverage, Calendar), the order My Challenges
+        offers them in. Sorted in Python because there are at most three rows.
+        """
+        from challenges.models import CHALLENGE_TYPE_CHOICES, Challenge
+
+        order = [value for value, _ in CHALLENGE_TYPE_CHOICES]
+        in_progress = sorted(Challenge.objects.active().filter(profile=profile),
+                             key=lambda run: order.index(run.challenge_type))
+        finished = list(Challenge.objects.completed().filter(profile=profile)
+                        [:self.CHALLENGES_TAB_FINISHED_LIMIT])
+        return {'challenge_runs_in_progress': in_progress, 'challenge_runs_finished': finished}
+
     def _build_ratings_tab_context(self, profile):
         """What this hunter thinks of what they have played.
 
@@ -714,6 +746,13 @@ class ProfileDetailView(DetailView):
                                   and self._public_lists_for(profile).exists())
         if tab == 'lists' and not self._has_public_lists:
             tab = 'games'
+        # CHALLENGES, the same conditional-chip rule as Lists (owner, 2026-10-09): offered only when the
+        # hunter has a visible run, so most profiles at launch do not grow an empty tab. Computed once and
+        # reused by the chip loop below.
+        self._has_visible_runs = (profile.psn_history_public
+                                  and self._visible_runs_for(profile).exists())
+        if tab == 'challenges' and not self._has_visible_runs:
+            tab = 'games'
         # And the same normalization for anything that is not a tab at all. The dispatch below
         # already defaults an unknown slug to games, but `_resolved_tab` kept the raw string, and
         # `get_template_names` has no default of its own -- so `?tab=anything` over HTMX fell past
@@ -772,6 +811,8 @@ class ProfileDetailView(DetailView):
             tab_context = self._build_ratings_tab_context(profile)
         elif tab == 'lists':
             tab_context = self._build_lists_tab_context(profile)
+        elif tab == 'challenges':
+            tab_context = self._build_challenges_tab_context(profile)
         elif tab == 'card':
             tab_context = self._build_card_tab_context(profile)
         else:
@@ -819,6 +860,8 @@ class ProfileDetailView(DetailView):
         # answer to.
         if self._has_public_lists:
             profile_tabs.append(('lists', 'Lists'))
+        if self._has_visible_runs:
+            profile_tabs.append(('challenges', 'Challenges'))
         # The Card tab is owner-only: the share-card family only ever serves your OWN card (same
         # rule as the plat card endpoints), so a visitor is not offered a chip that would 403.
         if is_own_profile:
@@ -905,6 +948,9 @@ class ProfileDetailView(DetailView):
         # No `_RESULTS_TEMPLATES` or `_INFINITE_SCROLL_TEMPLATES` entry, and that is the design: the
         # wall is capped at `gamelists.MEMBER_MAX_LISTS` so it never has a second page.
         'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
+        # No results or infinite-scroll entry: the tab is bounded (one run in progress per type, and the
+        # finished list capped at `CHALLENGES_TAB_FINISHED_LIMIT`), so it never has a second page.
+        'challenges': 'trophies/partials/profile_detail/tabs/challenges_tab.html',
         'card': 'trophies/partials/profile_detail/tabs/card_tab.html',
     }
     _RESULTS_TEMPLATES = {
@@ -933,6 +979,22 @@ class ProfileDetailView(DetailView):
         rendering the search template over the day wall's context.
         """
         return self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    def render_to_response(self, context, **response_kwargs):
+        response = super().render_to_response(context, **response_kwargs)
+        # A STALE CHIP LANDS ON GAMES, AND THE ADDRESS BAR MUST SAY SO. The chip pushes its own
+        # `?tab=` into history, so a Lists or Challenges chip that went stale (the last list
+        # unpublished, the last run hidden) between render and click would leave the URL naming a tab
+        # the panel is not showing -- and the page script reads the tab from the URL, so it would wire
+        # the Games grid with another tab's card selectors. htmx lets the response's HX-Push-Url
+        # override the pushed URL. The full-page path is fixed by the page script, which replaces the
+        # URL with `current_tab` on load.
+        requested = self.request.GET.get('tab')
+        resolved = getattr(self, '_resolved_tab', None)
+        if (getattr(self.request, 'htmx', False) and requested and resolved
+                and requested != resolved):
+            response['HX-Push-Url'] = f'{self.request.path}?tab={resolved}'
+        return response
 
     def get_template_names(self):
         # The normalized tab from get_context_data (which always runs first on a real request);

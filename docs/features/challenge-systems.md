@@ -590,6 +590,17 @@ htmx filter swap and an `InfiniteScroller` page both render the grid partial):
 - `full_page_context()` — gated behind `is_partial_render()`. Breadcrumb, headline count, SEO string.
 - `enrich(runs)` — **not** gated. Anything an ENTRY draws, built from the paginated page.
 
+### The profile tab
+
+A hunter's profile carries a **Challenges** tab (owner, 2026-10-09) so their runs can be seen without the
+browse page. It follows the Lists tab's rules: the chip appears only when the hunter has a VISIBLE run (hidden
+runs never show, on your own profile included), and a hand-typed `?tab=challenges` with nothing behind it
+lands on Games. Runs in progress come first, in the types' own order (A-Z, Job Coverage, Calendar), then finished ones, newest first (capped at
+`ProfileDetailView.CHALLENGES_TAB_FINISHED_LIMIT`), drawn as the Challenges page's run cards with
+`hide_hunter=True`. That card gained a finished state for it: the foot line reads "Finished <date>". Two
+queries for the runs, whatever is on the tab. View: `trophies/views/profile_views.py`
+(`_build_challenges_tab_context`); template: `tabs/challenges_tab.html`.
+
 ### The Calendar's Hall of Fame board is a heatmap
 
 Every run in the Hall of Fame is finished, so a finished Calendar's 365 days are ALL filled -- and the first
