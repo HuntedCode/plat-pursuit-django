@@ -530,7 +530,9 @@ count in primary, and hue tells the two kinds of waiting apart as well as conten
 ### The notification
 
 `challenge_completed` was already a `NotificationTemplate` choice; its template **row** ships in
-`notifications/fixtures/initial_templates.json` and must be loaded (see the deploy checklist). It is sent
+`notifications/fixtures/initial_templates.json` and is NOT loaded at the beta deploy (owner, 2026-10-09): it waits
+for the notifications rebuild (deploy checklist row M). Until then each finish logs one warning and skips the
+write, and the run completes normally. The write stays so the rebuild inherits a working producer. It is sent
 from `transaction.on_commit(..., robust=True)`: the callback runs after commit on the caller's thread, which
 for the nightly sweep is inside no guard at all, so an escaping exception would abort the whole command. The
 inbox is parked, so this row is **write-only** for now — do not add a route, a bell or a poller to make it

@@ -16,9 +16,9 @@
 
 ## Challenges beta release, 10 Oct 2026 -- the runbook
 
-The branch `feature/challenges/rebuild` carries `trophies/0341` and `challenges/0001`-`0009`, the
-`challenge_completed` fixture row, and the What's New entry. Every challenge table is created empty, so nothing
-needs a backfill. The rows referenced below (M-T, 14) carry the reasoning; this is the order.
+The branch `feature/challenges/rebuild` carries `trophies/0341`, `challenges/0001`-`0009` and the What's New
+entry. Every challenge table is created empty, so nothing needs a backfill. The rows referenced below (N-T, 14)
+carry the reasoning; this is the order. No notification template to load: see row M.
 
 **Before deploying (prod shell, all read-only)**
 
@@ -26,43 +26,26 @@ needs a backfill. The rows referenced below (M-T, 14) carry the reasoning; this 
 2. **The nine title names are free** (rows N and Q): in `manage.py shell`,
    `Title.objects.filter(name__in=['A-Z Champion', 'A-Z Legend', 'Job Challenge Champion', 'Job Challenge Legend', 'Calendar Marker', 'Calendar Keeper', 'Calendar Chronicler', 'Calendar Champion', 'Calendar Legend'])`
    returns nothing. If one is taken, stop: rename OURS in `challenges/services/rewards.py` first.
-3. **The fixture's slot is free** (row M): `NotificationTemplate.objects.filter(Q(pk=10) | Q(name='challenge_completed'))`
-   returns nothing.
-4. **The beta flag is unset** (row R): `CHALLENGES_BETA_MEMBERS_ONLY` is absent from the Render env (it defaults on).
+3. **The beta flag is unset** (row R): `CHALLENGES_BETA_MEMBERS_ONLY` is absent from the Render env (it defaults on).
 
 **Deploying**
 
-5. Merge `feature/challenges/rebuild` into `main` and deploy. `migrate` applies `trophies/0341` (millisecond-scale
+4. Merge `feature/challenges/rebuild` into `main` and deploy. `migrate` applies `trophies/0341` (millisecond-scale
    on ~138k rows, row 14) and the nine challenge migrations (empty tables, rows O and P).
-6. **Straight after `migrate`**, before anyone can start a run:
-   `python manage.py loaddata notifications/fixtures/initial_templates.json` (row M). A Calendar run can finish
-   in its first request, and that sends the notification.
-
 **After deploying**
 
-7. `python manage.py nightly --dry-run` lists challenge detection between contracts and milestones, and
+5. `python manage.py nightly --dry-run` lists challenge detection between contracts and milestones, and
    `python manage.py process_challenges --dry-run` exits clean (row T).
-8. In a browser:
+6. In a browser:
    - `/community/challenges/` and the Hall of Fame show their empty states with "Start a challenge" and no toolbar.
    - As a member, `/my-challenges/` opens the "How Challenges work" intro once. Start a Plat Calendar: it opens
      already filled, with the opening ceremony.
    - As a free hunter, `/my-challenges/` shows the beta card, and Start is refused with the beta message.
    - The avatar's What's New dot lights for the beta entry.
-9. Tonight's nightly runs `process_challenges` after `process_contracts`; nothing to schedule.
+7. Tonight's nightly runs `process_challenges` after `process_contracts`; nothing to schedule.
 
 **Ending the beta later:** set `CHALLENGES_BETA_MEMBERS_ONLY=False` exactly and restart (row R). Everyone who saw
 the beta intro sees the live one once.
-
-## Before the Challenges deploy — the one command that must be run by hand
-
-**`python manage.py loaddata notifications/fixtures/initial_templates.json`** (row M below).
-
-Called out here as well as in the table because of HOW it fails: `NotificationTemplate` rows are seeded by
-fixture in this project, never by a migration, and `rewards._notify_completion` degrades rather than raising
-when the row is missing. So a completion logs a warning, sends nothing, and **nothing user-visible breaks and
-nothing tells you it is missing** — which is precisely the shape of task that gets skipped and stays skipped.
-Idempotent for the other nine rows (keyed on pk, contents unchanged); skim the diff if any template was edited
-by hand in the admin, since `loaddata` would overwrite such an edit.
 
 ## Launch tasks (rebuild cutover)
 
@@ -221,7 +204,7 @@ These are already on the `main`/production path and can/should happen before cut
 | J | **Backfill `Game.monthly_earners_count`** — migration `0285_game_monthly_earners_count` adds the column (+ its index) for the Browse Games **Trending** sort, which now ORDERS BY it instead of aggregating ProfileGame per game on every request. It lands at **0** for every game, so until a full `recalc_earn_rates` pass completes, Trending falls through to its secondary key and reads as "most popular" rather than "trending". That degradation is deliberate (the secondary key is `-played_count`, so the order stays sensible rather than arbitrary), but it IS wrong until backfilled — and the nightly run is budget-capped with a resume cursor, so it can take several nights to reach the whole catalogue on its own. Run it immediately after migrate. Idempotent. | `python manage.py recalc_earn_rates --max-minutes 600` | With the trending-denorm deploy | ☐ |
 | K | **Reconcile series titles** — `UserTitle` under-records the new badge system two ways, and both understate a title's holder count, which is now the rarity numerator on `/titles/`. (1) `grant_series_title` only runs on the `award` branch, and `diff` only awards a badge that isn't already held — so a badge earned *before* its series had a title never gets one, and re-running `evaluate_badges` cannot fix it. (2) `UserTitle` is unique on `(profile, title)` without `source_type`, so a series reusing a legacy Badge's Title got the legacy row back from `get_or_create` and recorded nothing — the hunter holds and can equip a title that reads **"Be the first"**. Symptom on beta: a title whose easiest edition ~78% of the community holds graded Mythic at 0.7%. `grant_series_title` now adopts an existing row going forward; this backfills the history. Idempotent, set-based. Run `--dry-run` first: it reports badge-holders vs countable per title. | `python manage.py sync_series_titles --dry-run` then `python manage.py sync_series_titles` | With the rarity work | ☐ |
 | L | **Migration `0340_remove_stage_tier_fields`** — drops `Stage.required_tiers` and `Stage.has_online_trophies`, dead since the tier engine was replaced (nothing reads them; the two `Badge` methods that did are deleted in the same branch). **No backfill, no command** — listed because a column DROP has a deploy-order hazard that an ADD does not. Django builds its SELECT list from the MODEL, so any instance still running the PRE-0340 code emits `SELECT ... stage.required_tiers ...` and raises `ProgrammingError` the moment the column is gone. Migrate runs before the new image is serving, so the exposed window is migrate → old-instance drain, and the blast radius is every surface that loads Stages: badge detail, the badge evaluation on sync, and `evaluate_badges`. The window is short (a DROP COLUMN in Postgres is a catalogue update, not a rewrite) and the safe direction is free — extra columns the model does not declare are harmless, so NEW code against the OLD schema is fine, only the reverse breaks. **Deploy in a low-traffic window**, or split it across two deploys (code first, migration second) if a few minutes of 500s on badge surfaces is not acceptable. Nothing to verify afterwards beyond the migrate step succeeding. | (auto, on `migrate`) | With the Stage dead-field branch | ☐ |
-| M | **Load the `challenge_completed` notification template** — the Challenge rewards chunk sends a notification when a run's last square lands, and `NotificationTemplate` rows are seeded by FIXTURE in this project, never by a migration or a command. The row ships in `notifications/fixtures/initial_templates.json` as pk 10. Without it every completion logs a warning and sends nothing — `rewards._notify_completion` degrades rather than raising, so **nothing user-visible breaks and nothing tells you it is missing**, which is exactly why this row exists. `loaddata` is idempotent for the other nine rows (they are keyed on pk and their contents are unchanged), so running it is safe on an established database; skim the diff if any of those templates was edited by hand in the admin, because loaddata would overwrite such an edit. **The inbox is parked**, so the row this produces is write-only until that rebuild — loading the template is still required, because the producer is the half a parked rebuild keeps. | **Pre-check first (read-only):** `NotificationTemplate.objects.filter(Q(pk=10) \| Q(name='challenge_completed'))` in `manage.py shell` should be EMPTY. If pk 10 is a template somebody made in the admin, `loaddata` overwrites it silently; if a `challenge_completed` name sits on another pk, `name` is unique and `loaddata` raises. Then: `python manage.py loaddata notifications/fixtures/initial_templates.json` | **Immediately after `migrate`** (a Calendar run filled at creation can finish in its first request, and that sends the notification) | ☐ |
+| M | **NOT AT THIS DEPLOY (owner, 2026-10-09): the `challenge_completed` notification template waits for the notifications rebuild.** The notification system is parked (`/notifications/` redirects home, nothing reads a row), so loading the template would only make `rewards._notify_completion` write rows nobody sees. Without it, each completion logs one warning (`challenge_completed template missing`) and the run finishes normally. The write stays in the code on purpose, so the rebuild inherits a working producer. Skipping `loaddata` also avoids its side effect: it reloads the whole `initial_templates.json` and overwrites any of the other nine templates edited by hand in the admin. | When the notifications rebuild lands: check `NotificationTemplate.objects.filter(Q(pk=10) \| Q(name='challenge_completed'))` is empty, then load the row (pk 10 in `notifications/fixtures/initial_templates.json`) | With the notifications rebuild | ☐ |
 | N | **Check the four challenge title names are free, BEFORE the first completion lands** — `UserTitle` is unique on `(profile, title)` with **no** `source_type`, so if any of *A-Z Champion*, *A-Z Legend*, *Job Challenge Champion* or *Job Challenge Legend* already exists as a Title owned by another system, `Title.objects.get_or_create(name=...)` hands that row back and the challenge grant silently attaches a hunter to a title they did not earn. This is the same failure `badge_adapters.grant_series_title` carries the scar from (row K above is its backfill). The grant now logs an ERROR naming the collision rather than reporting success, so the damage is visible — but the cheap move is to check first: read-only, two seconds, and the answer decides whether a name has to change before anybody finishes a run. If a name IS taken, rename OURS (`rewards.TITLE_NAMES`) rather than touching the other system's row. **ANSWERED (owner, 2026-09-30): all four names are free in prod.** `rewards.TITLE_NAMES` ships as written. The row stays rather than being struck through, because the hazard applies to any title this system adds LATER — run the same check before adding a fifth name. | `Title.objects.filter(name__in=['A-Z Champion', 'A-Z Legend', 'Job Challenge Champion', 'Job Challenge Legend'])` in `manage.py shell` | Done for the current four | ☑ |
 | O | **Migration `challenges/0003_the_unclaimed_xp_index`** — adds one PARTIAL index to `challenges_challengeslot` for the My Pursuit "XP" nav pill, whose question is "does this hunter have Job XP waiting to be claimed?" (completed square, `xp_redeemed_at IS NULL`). **No backfill, no command** — listed because an index build is a lock event and row 14 is the precedent for recording one rather than discovering it. Django does NOT emit `CONCURRENTLY`, so the build takes a SHARE lock and blocks writes to the table for its duration. That duration is nil here: `challenges_challengeslot` was created by `0001_initial` on this same branch, so it is EMPTY in prod on first deploy and the partial index carries only rows in flight thereafter. Ships as generated, no action. | (auto, on `migrate`) | With the Challenges rewards deploy | ☐ |
 | P | **Migrations `challenges/0004`-`0009` (Plat Calendar)** -- `0004` creates `challenges_calendarday` (unique `(challenge, month, day)` plus three checks) and drops/re-adds `challenge_type_valid` to admit `calendar`; `0006` adds `calendarday_day_within_month`, which forbids 29 February by design (`calendar_fill._fold` folds it into the 28th). `0005`/`0007`/`0008`/`0009` are development churn that nets out to three columns: `calendar_plats_seen`, `plat_count` and `opening_seen_at`. Every table involved is created by `0001` in the same deploy, so they are EMPTY: no lock duration and no backfill. **No Calendar sweep is needed:** prod has no runs, a new run fills from history at creation, and the nightly picks up any run whose watermark is unset. | (auto, on `migrate`) | With the Challenges deploy | ☐ |

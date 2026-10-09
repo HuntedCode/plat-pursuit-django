@@ -266,7 +266,7 @@ This prevents double-processing if the cron job overlaps (unlikely with hourly r
 
 **Milestone notifications retired (2026-08); `challenge_completed` is live again.** `create_milestone_notification()` and the `milestone_achieved` type went with the legacy milestone engine. The `milestones` app is deliberately quiet -- it sends no notification on a tier crossing. The `milestone_achieved` choice remains in `notifications/models.py` so historical rows still render.
 
-`challenge_completed` came back with the Challenges rebuild. `_notify_completion` in `challenges/services/rewards.py` sends it when a run finishes, deferred through `transaction.on_commit(..., robust=True)` so a completion that rolls back is never announced and a failed send cannot cost the hunter their squares. Its template row is pk 10 in `notifications/fixtures/initial_templates.json`; without it the send logs a warning and skips. While the inbox stays parked these rows are written but not shown.
+`challenge_completed` came back with the Challenges rebuild. `_notify_completion` in `challenges/services/rewards.py` sends it when a run finishes, deferred through `transaction.on_commit(..., robust=True)` so a completion that rolls back is never announced and a failed send cannot cost the hunter their squares. Its template row is pk 10 in `notifications/fixtures/initial_templates.json`; without it the send logs a warning and skips. The row is deliberately NOT loaded in prod until this system is rebuilt (owner, 2026-10-09; deploy checklist row M), so for now every finish takes the warning-and-skip path. Load it as part of the rebuild.
 
 ### 11. Historical Milestone Notifications Still Render
 
