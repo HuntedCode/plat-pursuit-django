@@ -204,7 +204,7 @@ def _cell(month, day, row, today=None):
         # HOW MANY PLATINUMS SIT ON THIS SQUARE, for the month's "busiest day" and, when the day modal
         # lands, for the hover summary that reads it straight off the cell rather than fetching.
         #
-        # ONLY MEANINGFUL ON A FILLED CELL. A square that draws in no lens carries the `all` count, so
+        # ONLY MEANINGFUL ON A FILLED CELL. An unfilled square carries the `all` count, so
         # it is shovelware-INCLUSIVE -- show it and a hover would report a figure the board excludes
         # while the modal derived clean satisfiers and listed fewer. `busiest` tests `filled` first and
         # the hover must do the same; the trap is the key being readable without that test.
@@ -290,6 +290,12 @@ def calendar_groups(challenge):
     today = today_key(challenge.profile)
     cells = [_cell(month, day, by_key.get((month, day)), today)
              for month, day in calendar_day_keys()]
+    # THE YEAR OVERVIEW IS A HEATMAP, like the Hall of Fame's year (owner, 2026-10-09): the same data drawn
+    # two ways on two surfaces read as two different features. One peak for the whole run, so a month's
+    # shade is comparable across the year; an unfilled day is 0 and draws as an open recess.
+    peak = _heat_peak([c['plats'] for c in cells if c['filled']])
+    for c in cells:
+        c['heat'] = _heat_level(c['plats'], peak) if c['filled'] else 0
 
     groups = []
     start = 0

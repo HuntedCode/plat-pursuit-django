@@ -331,7 +331,7 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
     carries it: `.pp-gbrowse` sets no `gap` and `.scard` no `margin-bottom`.{% endcomment %}
     {% if calendar_months %}
     <section class="scard mb-3" aria-labelledby="cal-board-head">
-        <h2 class="sr-only" id="cal-board-head">Your calendar</h2>
+        <h2 class="sr-only" id="cal-board-head">Plat Calendar board</h2>
         {% include 'challenges/partials/_calendar_board.html' %}
     </section>
     {% endif %}
@@ -476,8 +476,8 @@ bundle every page loads.{% endcomment %}
 {% comment %}THE CALENDAR'S SWITCHERS, on the Calendar branch only -- it is the only branch that renders a
 `.pp-cal`, and the script returns immediately without one. Gated rather than folded into
 `challenge-detail.js` because that file is the picker and the reward panel, which a Calendar run has
-neither of. The board itself needs no script: the server renders `data-month` and `data-view`, so a
-hunter with JavaScript off gets January on the run's own lens with the right squares tinted.{% endcomment %}
+neither of. The board itself needs no script: the server marks the current month's panel open, so a hunter
+with JavaScript off gets this month with the right squares tinted.{% endcomment %}
 {% if calendar_months %}<script src="{% static 'js/challenges-calendar.js' %}"></script>{% endif %}
 {% if can_share %}<script src="{% static 'js/challenge-share.js' %}"></script>{% endif %}
 <script src="{% static 'js/challenge-tutorials.js' %}"></script>

@@ -672,7 +672,7 @@ def test_the_day_fetch_checks_the_response_before_injecting_it():
     project installs a GET-only `handler404` -- so an unchecked `.text()` would inject the whole 404
     PAGE into the sheet."""
     js = _script_code()
-    assert 'r.ok ? r.text() : null' in js
+    assert 'r.ok ? r.text() : Promise.reject(r)' in js
 
 
 def test_the_day_sheet_replaces_its_body_and_empties_it_on_close():
@@ -2020,10 +2020,10 @@ def test_the_ladder_states_the_comparison_figure_only_when_it_differs():
     something read aloud. Shown only when it actually differs."""
     run = _run(CHALLENGE_TYPE_CALENDAR)
     _fill(run, 3, 3)
-    assert 'with shovelware counted' not in _body(run), 'nothing to compare yet'
+    assert 'days with any platinum' not in _body(run), 'nothing to compare yet'
 
     CalendarDay.objects.filter(challenge=run, month=4, day=4).update(in_all=True, in_clean=False)
-    assert '2 days with shovelware counted' in _body(run)
+    assert '2 days with any platinum' in _body(run)
 
 
 def test_a_finished_run_has_nothing_left_to_go():
@@ -2091,7 +2091,7 @@ def test_an_untouched_month_says_so_rather_than_listing_zeroes():
     january = _section(body, 'id="cal-month-jan"', until='</section>')
 
     assert 'No days filled in January yet.' in january
-    assert 'Among your months' not in january, 'an unranked month claims no rank'
+    assert 'Rank among months' not in january, 'an unranked month claims no rank'
     assert 'First filled' not in january
     # THE ROW THIS TEST WAS NAMED FOR AND DID NOT CHECK. `open` is `total - done`, so an untouched
     # January is 31 open and drew "STILL OPEN / 31 days" directly above "No days filled yet" -- the
@@ -2128,7 +2128,7 @@ def test_a_filled_month_lists_its_figures():
     # whose March 26 cell renders `<span class="pp-cal__num" aria-hidden="true">26</span>`. The loose
     # form matched the day numeral, so breaking `open` outright left the assertion passing.
     assert 'Still open' in march and 'pp-tally">26</span>' in march
-    assert 'Among your months' in march and '1st best' in march
+    assert 'Rank among months' in march and '1st best' in march
     assert 'First filled' in march
     assert 'Excluded' in march and 'shovelware' in march
     assert 'No days filled' not in march
@@ -2172,7 +2172,7 @@ def test_a_finished_month_shows_no_open_row():
     february = _section(_body(run), 'id="cal-month-feb"', until='</section>')
 
     assert 'Still open' not in february, 'nothing is open'
-    assert 'Among your months' in february
+    assert 'Rank among months' in february
 
 
 def test_one_dated_day_is_not_reported_twice():
@@ -2797,8 +2797,9 @@ def test_an_overview_cells_ring_and_its_today_mark_compose():
     declaration would be dropped."""
     css = _calendar_css()
     base = _css_rule(css, '.pp-cal__ycell {')
-    assert 'box-shadow: var(--yc-ring), var(--yc-mark), var(--yc-hover)' in base
-    assert base.count('0 0 0 0 transparent') == 3, 'a default is `none`, which invalidates the list'
+    # FOUR SLOTS since the heatmap (2026-10-09): `--yc-heat` carries the count as a bar from `md:`.
+    assert 'box-shadow: var(--yc-ring), var(--yc-mark), var(--yc-hover), var(--yc-heat)' in base
+    assert base.count('0 0 0 0 transparent') == 4, 'a default is `none`, which invalidates the list'
 
     filled = [r for r in _css_rules(css, '.pp-cal__ycell--on') if '--yc-ring' in r]
     today = _css_rule(css, '.pp-cal__ycell--today {')

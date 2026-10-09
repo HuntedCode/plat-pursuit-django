@@ -3767,7 +3767,8 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     --yc-ring: 0 0 0 0 transparent;
     --yc-mark: 0 0 0 0 transparent;
     --yc-hover: 0 0 0 0 transparent;
-    box-shadow: var(--yc-ring), var(--yc-mark), var(--yc-hover);
+    --yc-heat: 0 0 0 0 transparent;
+    box-shadow: var(--yc-ring), var(--yc-mark), var(--yc-hover), var(--yc-heat);
 }
 /* THE DATE, HIDDEN UNTIL THERE IS ROOM FOR IT. `display: none` rather than a smaller size: the type
    floor is 12px, and a numeral small enough for an 8.4px cell would be under HALF of it -- so here the
@@ -4568,7 +4569,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 
 /* AND THE GUARD ITSELF. `switcher.css` was corrected for this exact omission ("this file had no
    `prefers-reduced-motion` block at all"), and this block repeated it: the crest lifts on every month
-   switch and about 31 day cells cross-fade on every lens switch. Transitions are cut rather than the
+   switch and about 31 day cells cross-fade on every month switch. Transitions are cut rather than the
    states changed, so nothing about what the board SAYS depends on motion being allowed. */
 @media (prefers-reduced-motion: reduce) {
     .pp-cal__crest,
@@ -5018,3 +5019,96 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
    the shared `.stg-input` is 0.84rem -- so tapping Search zoomed the whole sheet. From `md:` the zoom does not
    apply and the field keeps the house size. */
 @media (max-width: 767.98px) { .pp-cpick__search { font-size: 16px; } }
+
+/* ============================================================
+ * THE YEAR OVERVIEW AS A HEATMAP, AND THE CEREMONY'S CLIMB (chunk 12)
+ * ============================================================ */
+/* TWO ENCODINGS FOR ONE SCALE, because the cell changes job at `md:`. On a phone it carries no numeral, so
+   the SHADE carries the count, like the Hall of Fame year. From `md:` a numeral sits on a 22% tint whose
+   contrast was measured for that text, so the tint stays and the count becomes a bar along the cell's
+   foot, in its own shadow slot (`--yc-heat`). */
+.pp-cal__ycell--on[data-heat="1"] { background: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 34%, var(--pp-bg-2)); }
+.pp-cal__ycell--on[data-heat="2"] { background: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 52%, var(--pp-bg-2)); }
+.pp-cal__ycell--on[data-heat="3"] { background: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 72%, var(--pp-bg-2)); }
+.pp-cal__ycell--on[data-heat="4"] { background: var(--cal-c, var(--pp-primary)); }
+@media (min-width: 768px) {
+    .pp-cal__ycell--on[data-heat] { background: color-mix(in srgb, var(--cal-c, var(--pp-primary)) 22%, var(--pp-bg-2)); }
+    .pp-cal__ycell--on[data-heat="1"] { --yc-heat: inset 0 -1px 0 0 var(--cal-c, var(--pp-primary)); }
+    .pp-cal__ycell--on[data-heat="2"] { --yc-heat: inset 0 -2px 0 0 var(--cal-c, var(--pp-primary)); }
+    .pp-cal__ycell--on[data-heat="3"] { --yc-heat: inset 0 -3px 0 0 var(--cal-c, var(--pp-primary)); }
+    .pp-cal__ycell--on[data-heat="4"] { --yc-heat: inset 0 -4px 0 0 var(--cal-c, var(--pp-primary)); }
+}
+.pp-cal__ykey {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--pp-text-mute);
+}
+.pp-cal__ykeycell { width: 12px; flex: none; }
+@media (min-width: 768px) { .pp-cal__ykeycell { width: 18px; } }
+
+/* THE DAY SQUARE WHILE ITS SHEET LOADS: a quiet breath on opacity only (no `filter`, which janks on a phone),
+   shown after 150ms by the script setting `aria-busy`. Static under reduced motion. */
+@keyframes ppCalDayBusy { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-cal__day--open[aria-busy="true"] { animation: ppCalDayBusy 0.9s ease-in-out infinite; }
+}
+.pp-cal__day--open[aria-busy="true"] { cursor: progress; }
+
+/* THE CEREMONY'S LADDER: five rungs on a hairline, the reached ones lit. The pip's lit layer pops in with a
+   small spring (a pip is not a number, so an overshoot lies about nothing) at the moment the count passes
+   its rung (`--light-at`, set by the script). Without `.is-live` -- no script, reduced motion -- the reached
+   rungs are simply lit. */
+.pp-calopen__rungs {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    max-width: 300px;
+    margin: 0 auto 18px;
+    padding: 0;
+    list-style: none;
+}
+.pp-calopen__rungs::before {
+    content: '';
+    position: absolute;
+    top: 7px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: var(--pp-border);
+}
+.pp-calopen__rung { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pp-calopen__pip {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--pp-bg-1);
+    box-shadow: inset 0 0 0 2px var(--pp-border);
+}
+.pp-calopen__pip::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--pp-primary);
+    box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 55%, transparent);
+    opacity: 0;
+}
+.pp-calopen__rung.is-reached .pp-calopen__pip::after { opacity: 1; }
+.pp-calopen__days { font-size: 12px; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.pp-calopen__rung.is-reached .pp-calopen__days { color: var(--pp-text); }
+@keyframes ppCalopenRung {
+    from { opacity: 0; transform: scale(0.4); }
+    70% { opacity: 1; transform: scale(1.18); }
+    to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .pp-calopen__rungs.is-live .pp-calopen__rung.is-reached .pp-calopen__pip::after {
+        animation: ppCalopenRung 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        animation-delay: var(--light-at, 0ms);
+    }
+}

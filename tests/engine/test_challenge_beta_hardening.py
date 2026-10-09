@@ -20,6 +20,7 @@ Each test is the failure an auditor described, reproduced:
   THE PICKER'S READ DOORS METER HEAD.
 """
 import datetime as dt
+import re
 from pathlib import Path
 
 import pytest
@@ -449,3 +450,103 @@ def test_a_square_rerendered_after_a_write_keeps_its_xp_pip():
     svc.mark_slot_completed(slot)
     slot.refresh_from_db()
     assert 'pp-csq__pip' in _slot_json(run, slot)['html']
+
+
+# ── the Calendar page (batch 3 of the audit) ────────────────────────────────────────────────────
+
+CAL_JS = (ROOT / 'static' / 'js' / 'challenges-calendar.js').read_text(encoding='utf-8')
+
+
+def _calendar_with(profile, days):
+    run = svc.start_reporting(profile, CHALLENGE_TYPE_CALENDAR, backfill=False)[0]
+    for (month, day), plats in days.items():
+        CalendarDay.objects.filter(challenge=run, month=month, day=day).update(
+            in_all=True, in_clean=True, plat_count=plats, earned_on=dt.date(2020, month, day))
+    calendar_fill._recount_calendar(run)
+    return run
+
+
+def test_the_year_overview_shades_each_day_by_its_count():
+    from challenges.services import calendar_render
+
+    # TEN DAYS COUNTING 1 TO 10, so the 95th-percentile anchor (9) sits near the top and the middle shades.
+    run = _calendar_with(_hunter(), {(1, d): d for d in range(1, 11)})
+    cells = {(c['month'], c['day']): c for m in calendar_render.calendar_groups(run) for c in m['cards']}
+    assert cells[(1, 1)]['heat'] == 1 and cells[(1, 10)]['heat'] == calendar_render.HEAT_LEVELS
+    assert 1 < cells[(1, 4)]['heat'] < calendar_render.HEAT_LEVELS
+    assert cells[(2, 2)]['heat'] == 0, 'an unfilled day carries a shade'
+
+
+def test_the_overview_cells_carry_their_shade_and_a_key():
+    run = _calendar_with(_hunter(), {(1, d): d for d in range(1, 11)})
+    body = Client().get(reverse('challenge_detail', args=[run.id])).content.decode()
+    panel = body[body.index('id="cal-month-all"'):]
+    panel = panel[:panel.index('class="pp-cal__stats"')]
+    # THE DAY CELLS, BEFORE THE KEY: the key's own swatches carry every level, so a whole-panel search passed
+    # with no day shaded at all.
+    cells = panel[:panel.index('class="pp-cal__ykey"')]
+    assert 'data-heat="1"' in cells and 'data-heat="4"' in cells
+    assert '>Fewer<' in panel and '>More<' in panel
+    assert 'tabindex="0"' in body[body.index('id="cal-month-all"'):][:200]
+
+
+def test_the_heat_bar_keeps_the_numeral_tint_from_md():
+    """From `md:` a numeral sits on the cell, on a 22% tint measured for that text -- so the count moves to a
+    bar in its own shadow slot instead of changing the background."""
+    css = re.sub(r'/\*.*?\*/', '', CSS, flags=re.S)
+    md = css[css.index('.pp-cal__ycell--on[data-heat] {'):]
+    assert '22%' in md[:md.index('}')]
+    assert "--yc-heat: inset 0 -4px 0 0" in css
+
+
+def _ceremony(run):
+    client = Client()
+    client.force_login(run.profile.user)
+    body = client.get(reverse('challenge_detail', args=[run.id])).content.decode()
+    start = body.index('id="cal-opening"')
+    return body[start:body.index('pp-calopen__go', start)]
+
+
+def test_an_empty_calendar_opens_on_how_it_fills_not_on_zero():
+    ceremony = _ceremony(svc.start_reporting(_hunter(), CHALLENGE_TYPE_CALENDAR, backfill=False)[0])
+    assert 'It starts now' in ceremony
+    assert 'Here is where you stand' not in ceremony and 'already filled' not in ceremony
+    assert 'shovelware-free platinum' in ceremony
+
+
+def test_the_ceremony_draws_the_climb():
+    run = _calendar_with(_hunter(), {(m, d): 1 for m in (1, 2) for d in range(1, 29)})   # 56 days
+    ceremony = _ceremony(run)
+    assert 'data-calopen-tally data-countup="56"' in ceremony
+    assert ceremony.count('pp-calopen__rung is-reached') == 1, 'only the 50 rung is reached'
+    js = CAL_JS[CAL_JS.index('function playOpening(el)'):]
+    js = js[:js.index('function wireOpening(first)')]
+    assert 'PP.countUp(tally, CEREMONY_MS)' in js
+    assert "Math.pow(1 - share, 1 / 3)" in js, 'a rung lights when the eased count passes it'
+    assert CAL_JS.count('onOpened: function () { playOpening(el); }') == 2, 'real and preview both play'
+
+
+def test_the_day_sheet_says_it_is_loading_and_says_when_it_fails():
+    sheet = CAL_JS[CAL_JS.index("var cell = e.target.closest('[data-day-url]');"):]
+    sheet = sheet[:sheet.index('// ── the side column')]
+    assert "cell.setAttribute('aria-busy', 'true')" in sheet
+    assert "cell.removeAttribute('aria-busy')" in sheet
+    assert "PP.ToastManager.error('That day did not load. Try again.')" in sheet
+    assert sheet.index('cell.focus({ preventScroll: true })') < sheet.index("open(html, cell.getAttribute('data-month'))")
+    assert '.pp-cal__day--open[aria-busy="true"]' in CSS
+
+
+def test_the_peek_never_wires_on_a_touch_screen():
+    peek = CAL_JS[CAL_JS.index('function wireDayPeek(first)'):]
+    head = peek[:peek.index('var shown = null;')]
+    assert "matchMedia('(any-hover: hover) and (any-pointer: fine)').matches" in head
+    assert "'First filled ' + on" in CAL_JS
+
+
+def test_a_visitor_reads_the_board_in_the_third_person():
+    run = _calendar_with(_hunter(), {(3, 1): 1, (3, 2): 2})
+    CalendarDay.objects.filter(challenge=run, month=4, day=4).update(in_all=True, in_clean=False)
+    body = Client().get(reverse('challenge_detail', args=[run.id])).content.decode()
+    for phrase in ('Days you hold', 'Among your months', '>Your calendar<'):
+        assert phrase not in body, phrase
+    assert 'Days with any platinum' in body and 'Plat Calendar board' in body

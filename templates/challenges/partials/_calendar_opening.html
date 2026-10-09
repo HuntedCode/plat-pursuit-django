@@ -41,15 +41,38 @@ classes do the styling and the closing animation is keyed on the ID, joining the
         <button type="button" class="pp-detail-modal__close" data-calopen-close
                 aria-label="Close">&times;</button>
         <div class="pp-detail-modal__body pp-calopen__body">
+            {% comment %}NOTHING FILLED IS ITS OWN MOMENT, not "0 of 365 days already filled" under "Here is where
+            you stand". A hunter with no shovelware-free platinums yet (or whose fill is still to land) is told how
+            the board fills instead.{% endcomment %}
+            {% if calendar_totals.done %}
             <p class="pp-calopen__kicker">Your calendar, backfilled</p>
             <h2 class="pp-calopen__title" id="cal-opening-title">Here is where you stand</h2>
+            {% else %}
+            <p class="pp-calopen__kicker">Your calendar</p>
+            <h2 class="pp-calopen__title" id="cal-opening-title">It starts now</h2>
+            {% endif %}
 
             {% comment %}THE NUMBER FIRST, because it is the thing that just happened. `.pp-tally` is the
-            house headline-number primitive, the same one the board's month panels use.{% endcomment %}
+            house headline-number primitive, the same one the board's month panels use. `data-countup` so the
+            script can run it up from 0 on open; the text is the real figure if the script never runs.{% endcomment %}
+            {% if calendar_totals.done %}
             <p class="pp-calopen__figure">
-                <span class="pp-tally">{{ calendar_totals.done }}</span>
+                <span class="pp-tally" data-calopen-tally data-countup="{{ calendar_totals.done }}">{{ calendar_totals.done }}</span>
                 <span class="pp-calopen__unit">of {{ challenge.total_slots }} days already filled</span>
             </p>
+            {% endif %}
+
+            {% comment %}THE LADDER IN MINIATURE: the five rungs, the reached ones lit. The script lights each one as
+            the count passes it (`wireOpening`), so the climb is drawn rather than stated. `aria-hidden`: the
+            sentences below say the same thing in words.{% endcomment %}
+            <ol class="pp-calopen__rungs" aria-hidden="true" data-calopen-rungs>
+                {% for rung in calendar_rail.markers %}
+                <li class="pp-calopen__rung{% if rung.reached %} is-reached{% endif %}" data-days="{{ rung.days }}">
+                    <span class="pp-calopen__pip"></span>
+                    <span class="pp-calopen__days">{{ rung.days }}</span>
+                </li>
+                {% endfor %}
+            </ol>
 
             {% if calendar_opening_title %}
             {% comment %}READ FROM THE GRANTED ROW, not computed from the day count: a ladder position
@@ -66,9 +89,9 @@ classes do the styling and the closing animation is keyed on the ID, joining the
                 {{ calendar_rail.to_next }} more to go.
             </p>
             {% elif calendar_rail.done < calendar_rail.total %}
-            {% comment %}EVERY TITLE ALREADY HELD, on a run that is not full: a hunter on their second Calendar run
-            holds the whole ladder from the first, so there is no title left to name -- but the board is not
-            filled, and the 365 line below would say it was.{% endcomment %}
+            {% comment %}EVERY TITLE ALREADY HELD, on a run that is not full: rare since a hunter has one Calendar
+            run (`TYPES_WITH_ONE_RUN`), but reachable through a title of the same name held from elsewhere. The board
+            is not filled, and the 365 line below would say it was.{% endcomment %}
             <p class="pp-calopen__next">Every title on this ladder is already yours.</p>
             {% else %}
             {% comment %}THE 365 CASE. Reaching it on the opening backfill needs roughly 2,153 platinums,
@@ -78,8 +101,8 @@ classes do the styling and the closing animation is keyed on the ID, joining the
             {% endif %}
 
             <p class="pp-calopen__lede">
-                A day is filled by a platinum earned on that date in any year, so this grows every time
-                you finish something new.
+                A day is filled by a shovelware-free platinum earned on that date, in any year, so this grows
+                every time you finish something new.
             </p>
 
             {% comment %}ITS OWN CLASS, not a borrowed one. `pp-btn--primary` does not exist in this

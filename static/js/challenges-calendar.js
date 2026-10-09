@@ -15,8 +15,8 @@
  * `slideViewIn`'s directional panel slide, which every other switcher on the site has. (Its other
  * companion, `igniteTab`, is deliberately NOT taken -- see the note at the call.)
  *
- * STILL NO SCRIPT NEEDED FOR A CORRECT BOARD. The server marks the inactive eleven panels `hidden`, so a
- * hunter with no JavaScript gets January with the right squares filled. What they lose is reaching the
+ * STILL NO SCRIPT NEEDED FOR A CORRECT BOARD. The server marks every panel but the current month's `hidden`,
+ * so a hunter with no JavaScript gets this month with the right squares filled. What they lose is reaching the
  * other eleven months, which is navigation rather than information: the crests are `<button>`s, so
  * nothing is a broken link, and the board below them is complete and true for the month it shows.
  *
@@ -314,17 +314,39 @@
             // takeover. A token is per-REQUEST, so a repeat click supersedes its own earlier one.
             token += 1;
             var mine = token;
+            // BUSY AFTER A BEAT, NOT AT ONCE. A fast reply opens the sheet before 150ms and a pulse that
+            // flashed for a frame would read as a glitch; a slow one (a phone, a whale's day) shows the square
+            // working instead of looking dead.
+            var busyTimer = window.setTimeout(function () {
+                if (mine === token) { cell.setAttribute('aria-busy', 'true'); }
+            }, 150);
+            var settle = function () {
+                window.clearTimeout(busyTimer);
+                cell.removeAttribute('aria-busy');
+            };
             fetch(cell.getAttribute('data-day-url'),
                   { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
                 // `r.ok` FIRST, which the fragment's docstring asks for by name: a hidden run and a
                 // missing square both answer 404, and this project installs a GET-only `handler404`, so
                 // an unchecked `.text()` would inject the 404 PAGE into the sheet.
-                .then(function (r) { return r.ok ? r.text() : null; })
+                .then(function (r) { return r.ok ? r.text() : Promise.reject(r); })
                 .then(function (html) {
-                    if (mine !== token || html === null) { return; }
+                    settle();
+                    if (mine !== token) { return; }
+                    // FOCUS THE SQUARE FIRST: Safari does not focus a button on click, so `takeover` would
+                    // record <body> as the place to return to and closing the sheet lost the reader's place.
+                    if (cell.focus) { cell.focus({ preventScroll: true }); }
                     open(html, cell.getAttribute('data-month'));
                 })
-                .catch(function () { /* offline or aborted: leave the board alone */ });
+                .catch(function () {
+                    settle();
+                    if (mine !== token) { return; }
+                    // SAID, NOT SWALLOWED. A 404, the rate limit or a dropped connection used to leave the
+                    // tap doing nothing at all.
+                    if (PP.ToastManager && PP.ToastManager.error) {
+                        PP.ToastManager.error('That day did not load. Try again.');
+                    }
+                });
         });
     }
 
@@ -362,6 +384,26 @@
     // `seenKey` CARRIES THE RUN ID, because this one-shot is per RUN rather than per person. A single
     // key would let a hunter's first Calendar run suppress the ceremony for every later one on that
     // device -- which is the same mistake using `ui_flags` on the server would have been.
+    // THE CLIMB, DRAWN. The tally runs up from 0 (`PP.countUp`, 900ms, ease-out cubic) and each reached rung
+    // lights as the number passes it: the delay is when the eased count crosses that rung's days, which is
+    // `1 - (1 - days/total)^(1/3)` of the duration. Re-armed on every open, so a reopened preview replays.
+    var CEREMONY_MS = 900;
+    function playOpening(el) {
+        var tally = el.querySelector('[data-calopen-tally]');
+        var rungs = el.querySelector('[data-calopen-rungs]');
+        var total = tally ? parseInt(tally.getAttribute('data-countup') || '0', 10) : 0;
+        if (tally && PP.countUp) { PP.countUp(tally, CEREMONY_MS); }
+        if (!rungs) { return; }
+        Array.prototype.forEach.call(rungs.querySelectorAll('.is-reached'), function (rung) {
+            var days = parseInt(rung.getAttribute('data-days') || '0', 10);
+            var share = total ? Math.min(1, days / total) : 1;
+            rung.style.setProperty('--light-at', Math.round(CEREMONY_MS * (1 - Math.pow(1 - share, 1 / 3))) + 'ms');
+        });
+        rungs.classList.remove('is-live');
+        void rungs.offsetWidth;
+        rungs.classList.add('is-live');
+    }
+
     function wireOpening(first) {
         if (!first) { return; }
         var el = document.getElementById('cal-opening');
@@ -370,6 +412,7 @@
         var url = el.getAttribute('data-seen-url');
         var opts = {
             closeSelector: '[data-calopen-close]',
+            onOpened: function () { playOpening(el); },
             seenKey: 'pp-cal-opening-' + (el.getAttribute('data-run') || '0'),
             onDismiss: function () {
                 // NO RECORD WITHOUT A URL, and no silent success either: returning a rejection is what
@@ -390,13 +433,20 @@
             // removing the recorder is the belt to that brace. And no `seenKey`, because a key left on
             // this device by a failed write makes `DetailModal` skip the open AND retry the write: a
             // preview that shows nothing and writes something, which is both of the wrong things.
-            opts = { closeSelector: opts.closeSelector, autoOpenDelay: 450 };
+            opts = { closeSelector: opts.closeSelector, autoOpenDelay: 450,
+                     onOpened: function () { playOpening(el); } };
         }
         PP.DetailModal(el, opts);
     }
 
     function wireDayPeek(first) {
         if (!first) { return; }
+        // A FINE POINTER THAT HOVERS, OR NOTHING. A touch browser fires `mouseover` on a tap, so tapping a
+        // day swapped the side column to its peek and left it there after the sheet closed. The CSS already
+        // limits its hover styling to the same query; the script did not.
+        if (!(window.matchMedia && window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches)) {
+            return;
+        }
 
         var shown = null;      // the panel whose peek is currently up
         var settling = null;   // a restore waiting to happen, or null
@@ -506,7 +556,7 @@
             // SO THE NOTE REPORTS THE STORED STATE, which is the thing the grid is drawn from and is
             // true whatever the catalogue has done since.
             f.peek.querySelector('[data-peek-note]').textContent = clean
-                ? (on ? 'first on ' + on : '')
+                ? (on ? 'First filled ' + on : '')
                 : 'Nothing counted here yet.';
 
             f.facts.classList.add(OFF);

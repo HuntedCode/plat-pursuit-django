@@ -23,10 +23,8 @@ ALL TWELVE PANELS ARE IN THE DOM. The rows are already fetched (one query for th
 rendering everything and revealing with `hidden` makes the switch instant and request-free.
 
 NO COVER ART ANYWHERE (owner): "I don't think we do cover art for the calendar. Instead, we can let the
-user click on a day and it'll pop-up a modal that shows them games that satisfy that day." The modal is a
-A day holding a platinum IS interactive now (the modal landed): those squares are `<button>`s and the
-rest stay `<div>`s. This sentence used to end "until it lands a day is not interactive, so it is a `<div>`
-and not a button", and the commit that made them buttons left it standing twenty-six lines above itself.
+user click on a day and it'll pop-up a modal that shows them games that satisfy that day." A day holding a
+platinum is a `<button>` that opens that sheet; the rest stay `<div>`s.
 {% endcomment %}
 <div class="pp-cal">
 
@@ -221,15 +219,17 @@ and not a button", and the commit that made them buttons left it standing twenty
     same division the peek already lives by.
 
     `aria-hidden` ON THE MATRIX, with an `sr-only` summary beside it. 365 cells of bare numerals announce
-    a wall of digits, and every fact in here is already stated by the twelve month panels and the marker
-    rail -- so this is a duplicate VIEW of content that is reachable, not content with no accessible
+    a wall of digits, and every fact in here is already stated by the twelve month panels and the title
+    ladder -- so this is a duplicate VIEW of content that is reachable, not content with no accessible
     path. The same call `_run_hero.html` makes about its own board, for the same reason.{% endcomment %}
     {% comment %}NO MODIFIER CLASS ON THE SECTION. One was here and had no rule: the panel's two-column
     layout comes from `.pp-cal__panel` and the matrix takes the day grid's `grid-area`, so there was
     nothing for a `--year` modifier to carry -- which is what
     `test_every_class_reaches_the_compiled_bundle` exists to catch.{% endcomment %}
+    {% comment %}`tabindex="0"` BECAUSE NOTHING INSIDE IS FOCUSABLE: the matrix is `aria-hidden`, so without
+    it a keyboard user tabbing from the crests skipped the panel entirely (the WAI-ARIA tabs pattern).{% endcomment %}
     <section class="pp-cal__panel" role="tabpanel" id="cal-month-all"
-             aria-labelledby="cal-tab-all" hidden>
+             aria-labelledby="cal-tab-all" tabindex="0" hidden>
         <div class="pp-cal__head">
             <h3 class="pp-cal__month">The whole year</h3>
             <p class="pp-cal__tally">{{ calendar_totals.done }} / {{ challenge.total_slots }}</p>
@@ -256,11 +256,11 @@ and not a button", and the commit that made them buttons left it standing twenty
                 <span class="pp-cal__ylabel">{{ month.slug|upper }}</span>
                 {% for card in month.cards %}
                 {% comment %}THE PEEK RIDES THE SAME PREDICATE AS THE MONTH GRID -- `card.counts`, i.e.
-                the square has platinums on it in any lens. A cell with nothing to say carries no
+                the square has platinums on it, shovelware or not. A cell with nothing to say carries no
                 attributes and the pointer passes over it without disturbing the month's figures.
                 `--on` IS `card.filled`, the lens the board draws, so a shovelware-only day reads as
                 open here exactly as it does on its own month's grid.{% endcomment %}
-                <span class="pp-cal__ycell{% if card.filled %} pp-cal__ycell--on{% endif %}{% if card.is_today %} pp-cal__ycell--today{% endif %}"
+                <span class="pp-cal__ycell{% if card.filled %} pp-cal__ycell--on{% endif %}{% if card.is_today %} pp-cal__ycell--today{% endif %}"{% if card.heat %} data-heat="{{ card.heat }}"{% endif %}
                       {% if card.counts %}data-peek-label="{{ card.label }}"
                       data-peek-plats="{{ card.plats }}"
                       data-peek-on="{{ card.earned_on|date:'j M Y' }}"
@@ -269,6 +269,14 @@ and not a button", and the commit that made them buttons left it standing twenty
                 {% endfor %}
             </div>
             {% endfor %}
+            {% comment %}THE KEY, built from the same cell classes, so it shows whichever encoding the cells use at
+            this width (a shade on a phone, a bar under the numeral from `md:`). No `data-month`, so it takes the
+            site's progress colour rather than one month's.{% endcomment %}
+            <div class="pp-cal__ykey">
+                <span>Fewer</span>
+                {% for level in '1234' %}<span class="pp-cal__ycell pp-cal__ycell--on pp-cal__ykeycell" data-heat="{{ level }}"></span>{% endfor %}
+                <span>More</span>
+            </div>
         </div>
 
         {% comment %}THE YEAR'S OWN FIGURES, in the same two faces every month panel carries -- which is
@@ -293,7 +301,7 @@ and not a button", and the commit that made them buttons left it standing twenty
                     equal and the row would restate the headline.{% endcomment %}
                     {% if calendar_totals.all > calendar_totals.done %}
                     <div class="pp-cal__stat">
-                        <dt>Days you hold platinums for</dt>
+                        <dt>Days with any platinum</dt>
                         <dd><span class="pp-tally">{{ calendar_totals.all }}</span></dd>
                     </div>
                     {% endif %}
@@ -480,7 +488,7 @@ and not a button", and the commit that made them buttons left it standing twenty
                 {% endif %}
                 {% if month.rank %}
                 <div class="pp-cal__stat">
-                    <dt>Among your months</dt>
+                    <dt>Rank among months</dt>
                     <dd>{{ month.rank }}{% if month.rank == 1 %}st{% elif month.rank == 2 %}nd{% elif month.rank == 3 %}rd{% else %}th{% endif %} best</dd>
                 </div>
                 {% endif %}
