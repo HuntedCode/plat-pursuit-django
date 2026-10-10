@@ -2,7 +2,8 @@
 
 Pins that /career/ renders both the job views and the folded-in Contracts browse, that
 ?view=contracts deep-links the Contracts tab, that the old /research-panel/ 301s into it, and that
-the whole surface is linked-profile gated.
+the whole surface is linked-profile gated. Plus source-text pins on the board controller's status-chip
+re-tap guard (there is no JS runner).
 """
 import itertools
 
@@ -147,3 +148,49 @@ def test_contracts_endpoints_gated_to_linked_profile(client):
     _live_contract('res-gate')
     assert client.get('/career/contracts/results/').status_code == 404
     assert client.get('/career/contracts/res-gate/modal/').status_code == 404
+
+
+def _career_js(start, end):
+    """The career.html source between two UNIQUE anchors, comments stripped so prose about a guard
+    cannot pass for the guard. The `//` strip is naive: a `//` inside a string literal in the slice
+    would be eaten too, which can only make a pin fail (never pass), so a confusing failure here is
+    worth checking for that first."""
+    import pathlib
+    import re
+
+    src = (pathlib.Path(__file__).resolve().parents[2]
+           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    assert src.count(start) == 1 and src.count(end) == 1, f'the anchors moved: {start!r} / {end!r}'
+    code = src.split(start, 1)[1].split(end, 1)[0]
+    code = re.sub(r'/\*.*?\*/', '', code, flags=re.S)
+    return re.sub(r'(?m)//.*$', '', code)
+
+
+def test_tapping_the_active_status_chip_does_not_refetch():
+    """Re-tapping the active status chip (or the claim banner's jump, which clicks it for you) refetched
+    the board it was already showing, and `fetchPage` aborted the request in flight for an identical
+    one: prod logged a run of eleven aborted `?status=claimable&page=1` requests from one user. No JS
+    runner, so this is source text. The guard must sit after the `closest` lookup and BEFORE the chip
+    takes `is-active` (below that it would block every tap) and before the fetch."""
+    import re
+
+    code = _career_js('// Status quick-filter (single-select).', '// Sort control.')
+    guard = re.search(
+        r"if\s*\(\s*chip\.classList\.contains\('is-active'\)\s*&&\s*!boardStale\s*\)\s*return\s*;", code)
+    assert guard, 'tapping the active chip refetches the board again (or never retries a failed one)'
+    for later in ("chip.classList.add('is-active')", 'fetchPage('):
+        at = code.find(later)
+        assert at != -1, f'{later!r} is gone from the handler, so this pin no longer checks the order'
+        assert guard.start() < at, f'the guard runs after {later!r}'
+
+
+def test_a_failed_board_fetch_lets_the_active_chip_retry():
+    """The guard's premise is that the active chip names the board on screen. A failed page-1 fetch
+    breaks it: the chip is already lit and the grid is still the board from before. `boardStale` marks
+    that state so a re-tap retries instead of doing nothing. Set in the failure branch, cleared by the
+    next page-1 fetch."""
+    code = _career_js('function fetchPage(n, append) {', 'var sentIO')
+    failure = code[code.find('.catch('):]
+    assert '.catch(' in code, 'fetchPage lost its failure branch, so this pin no longer checks it'
+    assert 'if (!append) boardStale = true;' in failure, 'a failed fetch no longer marks the board stale'
+    assert 'boardStale = false;' in code[:code.find('fetch(RESULTS_URL')], 'a new fetch never clears it'
