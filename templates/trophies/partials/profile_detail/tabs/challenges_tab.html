@@ -15,6 +15,7 @@ The chip only appears when there is a visible run, and a hand-typed `?tab=challe
 normalized to Games, so the empty branch below is a safety net rather than a designed state.
 {% endcomment %}
 <div id="tab-results">
+    <h2 class="sr-only">{{ profile.display_psn_username|default:profile.psn_username }}&rsquo;s challenges</h2>
     <div id="challenges-grid" class="pp-crun-grid{% if request.htmx %} pp-reveal{% endif %}">
         {% if challenge_runs_in_progress %}
         <h3 class="pp-ptab-challenges__head">In progress</h3>
@@ -29,7 +30,9 @@ normalized to Games, so the empty branch below is a safety net rather than a des
         {% endfor %}
         {% endif %}
         {% if not challenge_runs_in_progress and not challenge_runs_finished %}
-        <p class="pp-ptab-challenges__head">No challenge runs to show.</p>
+        <div class="pp-gtile-empty pp-ptab-challenges__empty">
+            <p class="pp-gtile-empty__title">No challenge runs to show</p>
+        </div>
         {% endif %}
     </div>
 </div>

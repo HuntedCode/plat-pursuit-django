@@ -5130,9 +5130,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
     grid-column: 1 / -1;
     margin: 6px 0 -2px;
     font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
+    font-weight: 600;          /* the design system's section header: semibold, tracking-wider */
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--pp-text-dim);
 }
 .pp-ptab-challenges__head:not(:first-child) { margin-top: 14px; }
+.pp-ptab-challenges__empty { grid-column: 1 / -1; }

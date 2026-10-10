@@ -1539,13 +1539,31 @@
     cursor: pointer; transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
 .pgl-open .pgl { margin-top: 0; }
-.pgl-open:hover { background: color-mix(in oklab, var(--pgl-cur-c, var(--pp-primary)) 7%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--pgl-cur-c, var(--pp-primary)) 22%, transparent); }
 .pgl-open:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pgl__more { display: inline-block; width: 12px; height: 12px; margin-left: 2px; vertical-align: -1px; opacity: 0.7; transition: transform 0.18s ease, opacity 0.18s ease; }
-.pgl-open:hover .pgl__more { transform: translateX(2px); opacity: 1; }
+/* Hover only where hover is real: on touch the tint would stick on the bar after the modal closes. */
+@media (hover: hover) {
+    .pgl-open:hover { background: color-mix(in oklab, var(--pgl-cur-c, var(--pp-primary)) 7%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--pgl-cur-c, var(--pp-primary)) 22%, transparent); }
+    .pgl-open:hover .pgl__more { transform: translateX(2px); opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) { .pgl-open:hover .pgl__more { transform: none; } }
 
-.pp-howto__dialog.prk-dialog { width: min(560px, 100%); }   /* two classes: outranks the mold's 940px whatever the import order */
+/* THE DIALOG IS A FRAME, the new-contracts modal's pattern (`.nc__dialog` above): pinned to 88vh, the
+   header holds still and only `.prk-list` scrolls. `.pp-howto` plus the class outranks the mold's 940px
+   whatever the import order. `min-width: 0` because a grid item's content-based minimum re-arms whenever
+   its overflow is visible, and the shared close rule makes it visible for the fade. */
+.pp-howto .prk-dialog {
+    width: min(560px, 100%); max-height: 88vh; overflow: hidden; min-width: 0;
+    display: flex; flex-direction: column;
+}
+.pp-howto .prk-dialog > .pp-detail-modal__body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+/* A PHONE GIVES THE LIST THE ROOM. At 375px the fixed header left space for about one rank, so below md the
+   "Got it" button goes (the pinned close X and the scrim still dismiss) and the lede and summary tighten. */
+@media (max-width: 767.98px) {
+    #rank-ladder .pp-howto__actions { display: none; }
+    #rank-ladder .pp-forge__lede { margin-bottom: 10px; }
+    #rank-ladder .prk-now { margin-bottom: 10px; padding: 8px 10px; }
+}
 
 .prk-now {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 14px; padding: 10px 12px;
@@ -1557,7 +1575,13 @@
 .prk-now__lv b { color: var(--pp-text); }
 .prk-now__next { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--pp-text-mute); }
 
-.prk-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* The scroll container. Positioned, so it is each row's offsetParent (the open-time centring reads one
+   offsetTop). `overscroll-behavior` because the page has no scroll lock behind the modal. */
+.prk-list {
+    list-style: none; margin: 0; padding: 0 4px 2px 0; display: flex; flex-direction: column; gap: 6px;
+    position: relative; flex: 1 1 auto; min-height: 120px; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
 .prk {
     padding: 9px 10px 10px 12px; border-radius: 12px; background: var(--pp-bg-1); border: 1px solid var(--pp-border);
     border-left: 3px solid color-mix(in oklab, var(--rk) 70%, transparent);
@@ -1579,15 +1603,15 @@
     border: 1px solid color-mix(in oklab, var(--rk) 55%, transparent);
 }
 .prk__lv { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.prk__meta { margin: 3px 0 0 17px; font-size: 11.5px; color: var(--pp-text-mute); }
+.prk__meta { margin: 3px 0 0 17px; font-size: 0.78rem; color: var(--pp-text-dim); }
 
 .prk__divs { list-style: none; margin: 8px 0 0 17px; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
 .prk__div {
     display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 4px 2px 5px;
     border-radius: 8px; background: var(--pp-bg-2); border: 1px solid transparent;
 }
-.prk__div-n { font-size: 11px; font-weight: 800; color: var(--pp-text-mute); }
-.prk__div-lv { font-size: 11px; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.prk__div-n { font-size: 12px; font-weight: 800; color: var(--pp-text-mute); }
+.prk__div-lv { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 .prk__div.is-reached { border-color: color-mix(in oklab, var(--rk) 30%, transparent); }
 .prk__div.is-reached .prk__div-n, .prk__div.is-reached .prk__div-lv { color: var(--pp-text-dim); }
 .prk__div.is-current { background: color-mix(in oklab, var(--rk) 22%, var(--pp-bg-2)); border-color: var(--rk); }

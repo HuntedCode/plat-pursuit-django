@@ -12,8 +12,13 @@ A MANUAL modal on the `.pp-detail-modal` mold, driven by `PlatPursuit.DetailModa
 `onDismiss`, nothing recorded, so it is not part of the page's modal gate (`_career_modal_gate.html`) and
 never holds the hero's count-ups. Its `is-closing` rule is the ID-scoped one in series-list.css.
 
-Ascending, the order the hero bar reads left to right. Opening scrolls the dialog so the current rank sits
-in the middle: for most hunters it is near the top, but an Ascendant should not have to scroll for it.
+Ascending, the order the hero bar reads left to right. Opening scrolls the LIST so the current rank sits in
+its middle: for most hunters it is near the top, but an Ascendant should not have to scroll for it.
+
+THE DIALOG IS A FRAME (the new-contracts modal's pattern): the title, the summary and the close button hold
+still and only `.prk-list` scrolls. When the whole dialog scrolled, centring the current rank scrolled the
+title and the close button away, and the shared close rule (`overflow: visible` on a closing dialog) made
+the list jump to its top and spill out of the box for the fade.
 {% endcomment %}
 <div class="pp-detail-modal pp-howto" id="rank-ladder" hidden>
     <div class="pp-detail-modal__scrim" data-rank-close></div>
@@ -41,7 +46,7 @@ in the middle: for most hunters it is near the top, but an Ascendant should not 
                         {% if t.current %}<span class="prk__here">You are here</span>{% endif %}
                         <span class="prk__lv">Lv {{ t.min_level|intcomma }}{% if not t.next_level %}+{% endif %}</span>
                     </div>
-                    <p class="prk__meta">{% if t.reached and t.reached_at %}Reached {{ t.reached_at|date:'j M Y' }}{% elif t.reached and t.min_level == 0 %}Where every Pursuer starts{% elif t.reached %}Reached{% else %}{{ t.levels_to|intcomma }} level{{ t.levels_to|pluralize }} to go{% endif %}{% if not t.next_level %}. No divisions: past it, your level keeps climbing{% endif %}</p>
+                    <p class="prk__meta">{% if t.reached and t.reached_at %}Reached {{ t.reached_at|date:'M j, Y' }}{% elif t.reached and t.min_level == 0 %}Where every Pursuer starts{% elif t.reached %}Reached{% else %}{{ t.levels_to|intcomma }} level{{ t.levels_to|pluralize }} to go{% endif %}{% if not t.next_level %}. The top rank, with no divisions.{% endif %}</p>
                     {% if t.divisions %}
                     <ol class="prk__divs">
                         {% for d in t.divisions %}
@@ -72,21 +77,19 @@ in the middle: for most hunters it is near the top, but an Ascendant should not 
     // Waits for utils.js (end-of-body), like the explainer beside it.
     document.addEventListener('DOMContentLoaded', function () {
         if (!(window.PlatPursuit && PlatPursuit.DetailModal)) { return; }
-        var dialog = el.querySelector('.pp-detail-modal__dialog');
+        var list = el.querySelector('.prk-list');
 
         var api = PlatPursuit.DetailModal(el, {
             closeSelector: '[data-rank-close]',
-            // Centre the current rank in the dialog (its scroll container). Set directly rather than
+            // Centre the current rank in the list (the scroll container). Set directly rather than
             // through scrollIntoView, which would also scroll the page behind the scrim. Measured in
             // OFFSETS, not client rects: the dialog is mid `ppDetailIn` (scaled) when this runs, and a
-            // scaled rect lands the far rows short.
+            // scaled rect lands the far rows short. `.prk-list` is positioned, so it is the rows'
+            // offsetParent and one offsetTop is the whole distance.
             onOpened: function () {
                 var cur = el.querySelector('.prk.is-current');
-                if (!cur || !dialog) { return; }
-                var top = 0;
-                for (var node = cur; node && node !== dialog; node = node.offsetParent) { top += node.offsetTop; }
-                if (node !== dialog) { top -= dialog.offsetTop; }   // the dialog is not positioned: offsets ran past it
-                dialog.scrollTop = top - (dialog.clientHeight - cur.offsetHeight) / 2;
+                if (!cur || !list) { return; }
+                list.scrollTop = cur.offsetTop - (list.clientHeight - cur.offsetHeight) / 2;
             }
         });
 

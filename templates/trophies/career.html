@@ -88,12 +88,12 @@
             were written, and a title never shows on a phone. A <button>, so its insides are spans. {% endcomment %}
             {% if hero.rank_ladder %}
             <button type="button" class="pgl-open" data-rank-open aria-haspopup="dialog" aria-controls="rank-ladder"
-                    aria-label="Pursuer rank {{ hero.pursuer_rank.label }}, {% if hero.pursuer_rank.next_label %}{{ hero.pursuer_rank.levels_to_next }} to {{ hero.pursuer_rank.next_label }}{% else %}apex reached{% endif %}. See every rank"
+                    aria-label="Pursuer rank {{ hero.pursuer_rank.label }}, {% if hero.pursuer_rank.next_label %}{{ hero.pursuer_rank.levels_to_next }} level{{ hero.pursuer_rank.levels_to_next|pluralize }} to {{ hero.pursuer_rank.next_label }}{% else %}apex reached{% endif %}. See every rank"
                     style="--pgl-cur-c: var(--rank-{{ hero.pursuer_rank.key }});">
             <span class="pgl pgl--rank">
                 <span class="pgl__track">
                     {% for rung in hero.rank_ladder.rungs %}
-                    <span class="pgl__rung{% if rung.current %} is-current{% endif %}{% if rung.reached %} is-on{% endif %}" style="--f: {% if rung.current %}{{ hero.rank_ladder.fill }}{% elif rung.reached %}100{% else %}0{% endif %}%; --i: {{ forloop.counter0 }};{% if rung.current %} --rung-c: var(--rank-{{ rung.key }});{% endif %}" title="{{ rung.name }} &middot; Pursuer Lv {{ rung.min_level }}{% if rung.reached_at %} &middot; reached {{ rung.reached_at|date:'M j, Y' }}{% elif not rung.reached %} &middot; locked{% endif %}">{% if rung.current and hero.pursuer_rank.division %}<span class="pgl__divs" aria-hidden="true"></span>{% endif %}</span>
+                    <span class="pgl__rung{% if rung.current %} is-current{% endif %}{% if rung.reached %} is-on{% endif %}" style="--f: {% if rung.current %}{{ hero.rank_ladder.fill }}{% elif rung.reached %}100{% else %}0{% endif %}%; --i: {{ forloop.counter0 }};{% if rung.current %} --rung-c: var(--rank-{{ rung.key }});{% endif %}" title="{{ rung.name }} &middot; Pursuer Lv {{ rung.min_level }}{% if rung.reached and rung.reached_at %} &middot; reached {{ rung.reached_at|date:'M j, Y' }}{% elif not rung.reached %} &middot; locked{% endif %}">{% if rung.current and hero.pursuer_rank.division %}<span class="pgl__divs" aria-hidden="true"></span>{% endif %}</span>
                     {% endfor %}
                 </span>
                 <span class="pgl__foot">

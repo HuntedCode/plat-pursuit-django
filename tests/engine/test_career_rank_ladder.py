@@ -107,7 +107,7 @@ def test_the_button_names_the_distance_to_the_next_rank(client):
     profile = _climber()
     rank = build_career_context(profile)['hero']['pursuer_rank']
     html, _ = _modal(client, profile)
-    assert f'aria-label="Pursuer rank {rank["label"]}, {rank["levels_to_next"]} to {rank["next_label"]}. See every rank"' in html
+    assert f'aria-label="Pursuer rank {rank["label"]}, {rank["levels_to_next"]} level{"" if rank["levels_to_next"] == 1 else "s"} to {rank["next_label"]}. See every rank"' in html
 
 
 @pytest.mark.django_db
@@ -128,7 +128,7 @@ def test_the_table_still_opens_when_the_career_body_fails(client, monkeypatch):
 def test_a_reached_rank_shows_the_day_it_was_reached(client):
     _, modal = _modal(client, _climber())
     recruit = modal[modal.index('>Recruit<'):]
-    assert recruit[:recruit.index('</p>')].endswith('Reached 3 Sep 2026')
+    assert recruit[:recruit.index('</p>')].endswith('Reached Sep 3, 2026')
 
 
 def test_a_rank_logged_but_since_lost_says_how_far_off_it_is_not_reached():
@@ -149,7 +149,7 @@ def test_a_locked_rank_says_how_far_off_it_is(client):
     level = build_career_context(profile)['hero']['pursuer_level']
     _, modal = _modal(client, profile)
     ascendant = modal[modal.index('>Ascendant<'):]
-    assert f'{APEX - level:,} levels to go. No divisions' in ascendant
+    assert f'{APEX - level:,} levels to go. The top rank, with no divisions.' in ascendant
 
 
 def test_the_modal_closes_on_its_own_id_scoped_rule():
