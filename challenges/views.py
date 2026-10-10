@@ -678,11 +678,24 @@ class ChallengeDetailView(DetailView):
         # bounded by the run rather than by the hunter's library. Compare `history_is_open` above, which is
         # gated on `can_edit` precisely because ITS question is expensive.
         context['rewards'] = rewards.summary(challenge)
-        context['breadcrumb'] = [
-            {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Challenges', 'url': reverse_lazy('challenges')},
-            {'text': challenge.name},
-        ]
+        # THE OWNER'S OWN RUN TRAILS BACK TO MY CHALLENGES (owner, 2026-10-10): for them this page is a working
+        # surface they swap to and from, so the trail, the rail and a back button all point at My Challenges.
+        # Everybody else keeps the public trail above, for the reasons it gives: My Pursuit and My Challenges
+        # are login-gated, and a visitor sent there would land on their OWN runs.
+        if context['is_owner']:
+            context['breadcrumb'] = [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'My Pursuit', 'url': reverse_lazy('career')},
+                {'text': 'My Challenges', 'url': reverse_lazy('my_challenges')},
+                {'text': challenge.name},
+            ]
+            self.request.hub_subnav_override = ('my_pursuit', 'my_challenges')
+        else:
+            context['breadcrumb'] = [
+                {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'Challenges', 'url': reverse_lazy('challenges')},
+                {'text': challenge.name},
+            ]
         return context
 
 

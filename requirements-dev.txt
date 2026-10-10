@@ -5,6 +5,7 @@
 
 pytest==8.3.4
 pytest-django==4.9.0
+pytest-xdist==3.8.0
 factory-boy==3.3.1      # model fixtures (build a Profile/Concept/Badge in one line)
 fakeredis==2.26.1       # in-memory Redis for tests that touch the raw redis client
 responses==0.25.3       # mock outbound HTTP (PSN / IGDB / Discord) at the boundary
