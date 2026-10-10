@@ -96,9 +96,21 @@ jobs:
       - name: Install Playwright chromium
         run: python -m playwright install --with-deps chromium
 
-      # ONE WORKER PER CORE (`-n auto`, 4 on GitHub's runner). The suite is ~7,500 tests at ~0.1s each, nearly
-      # all database setup, so it is bound by being run one at a time rather than by any slow test: locally 12
-      # workers took it from 12 minutes to 2. Each worker gets its own test database (pytest-django names them
-      # per worker) and the Django cache is in-memory per process, so workers share nothing.
+      # THE TEST DATABASE IS BUILT ONCE AND COPIED, not built by every worker. Each pytest-xdist worker needs its
+      # own database (`test_<name>_gw<N>`), and on a fresh runner each one ran every migration itself, all four
+      # at once on four cores: the first measured run spent 4m05s building databases and 3m40s running tests.
+      # Here the migrations run once, Postgres copies the result per worker (`createdb -T` is a file copy,
+      # seconds), and the workers find their databases already there (`--reuse-db` is in pyproject's addopts).
+      - name: Build the test database once
+        run: |
+          python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'plat_pursuit.settings_test'); django.setup(); from django.test.utils import setup_databases; setup_databases(verbosity=1, interactive=False, keepdb=True)"
+          for n in 0 1 2 3; do
+            PGPASSWORD="$TEST_DB_PASSWORD" createdb -h "$TEST_DB_HOST" -p "$TEST_DB_PORT" -U "$TEST_DB_USER" -T "test_$TEST_DB_NAME" "test_${TEST_DB_NAME}_gw$n"
+          done
+
+      # FOUR WORKERS, matching the four copies above (and the runner's four cores). The suite is ~7,500 tests at
+      # ~0.1s each, nearly all database setup, so it is bound by being run one at a time rather than by any slow
+      # test: locally 12 workers took it from 12 minutes to 2. The Django cache is in-memory per process, so
+      # workers share nothing.
       - name: Run tests
-        run: pytest -n auto
+        run: pytest -n 4

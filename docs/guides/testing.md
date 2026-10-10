@@ -65,7 +65,12 @@ pytest --create-db          # force a fresh test DB (default reuses it for speed
 gets its own test database (pytest-django names them per worker) and the Django cache is in-memory per process,
 so workers share nothing. 12 workers is the local sweet spot: past that the Postgres container is the bottleneck,
 and a worker number with no reused database pays to build one. Leave `-n` off for a single file or test, where
-starting workers costs more than it saves. CI runs `pytest -n auto`.
+starting workers costs more than it saves.
+
+**CI builds the test database once and copies it per worker** (the "Build the test database once" step, then
+`pytest -n 4`). On a fresh runner each worker otherwise ran every migration itself, all at once on four cores: the
+first parallel run spent 4m05s building databases and only 3m40s testing. `createdb -T` copies the migrated
+database in seconds, and `--reuse-db` makes the workers use the copies. Keep the copy count and `-n` equal.
 
 ### Run what you changed, not everything
 
