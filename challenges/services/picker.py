@@ -36,7 +36,9 @@ its own short list, and repeating it per page would re-run its trophy read for r
 
 `badge_only` narrows every list to contracts with a game in a live badge (`eligibility.in_live_badge`), and
 `platforms` to contracts with a game on any of them (`eligibility.on_platforms`); `_scope` applies both. Every
-row also carries its PLATFORMS, the union over the contract's member games, read in one query per page.
+row also carries its PLATFORMS, the union over the contract's member games, read in one query per page, and its
+AVAILABILITY: `delisted` / `unobtainable` when no way to finish the contract (any stack of its own concepts, or a
+bundle as a whole) has a listed / obtainable stack (owner, 2026-10-10). See `_decorations`.
 
 THE TWO SLOT-SHAPED PANELS carry a DB `COUNT` beside their slice, because "12 of 340" is a fact a hunter can
 act on. `history_panel` deliberately does NOT: membership there depends on a completion date read from trophy
@@ -200,7 +202,7 @@ def slot_panel(profile, challenge, key, *, query='', limit=PAGE, slot=None, offs
         catchup, catchup_more = _catchup_offers(profile, challenge, key, query=query, limit=limit,
                                                 badge_only=badge_only, platforms=platforms)
 
-    covers, plats = _decorations(rows + [c for c, _, _ in catchup])
+    covers, plats, avail = _decorations(rows + [c for c, _, _ in catchup])
 
     return {
         'key': key,
@@ -212,11 +214,11 @@ def slot_panel(profile, challenge, key, *, query='', limit=PAGE, slot=None, offs
         'current_name': slot.contract_name,
         'total': total,
         'showing': len(rows),
-        'rows': [_row(contract, covers, plats) for contract in rows],
+        'rows': [_row(contract, covers, plats, avail) for contract in rows],
         # Already-completed games a rule lifts. Kept as their own list rather than mixed into `rows` with
         # a flag: they are the only offers that land a square COMPLETE and therefore LOCKED, so the
         # warning and the confirmation belong to one block of the panel rather than to scattered rows.
-        'catchup': [_catchup_row(contract, via, when, covers, plats) for contract, via, when in catchup],
+        'catchup': [_catchup_row(contract, via, when, covers, plats, avail) for contract, via, when in catchup],
         'catchup_more': catchup_more,
         'locked': False,
         'offset': offset,
@@ -284,7 +286,7 @@ def search_panel(profile, challenge, query, *, limit=PAGE, offset=0, badge_only=
     # caches objects, not arbitrary querysets). The bulk call below asks once for the whole page instead.
     rows = list(found.order_by(*BY_NAME)[offset:min(offset + limit, MAX_OFFSET)])
 
-    covers, plats = _decorations(rows)
+    covers, plats, avail = _decorations(rows)
     completed = eligibility.completed_contract_ids(profile, rows)
     keys_by_contract = eligibility.fitting_keys_for(challenge, rows)
     # ATOMS, not just names. A button offering the Slayer square should look like the Slayer square --
@@ -301,7 +303,7 @@ def search_panel(profile, challenge, query, *, limit=PAGE, offset=0, badge_only=
         keys = keys_by_contract.get(contract.id, set()) & open_keys
         already_here = contract.id in used_ids
         out.append({
-            **_row(contract, covers, plats),
+            **_row(contract, covers, plats, avail),
             # Every key it could go in, in display order. A jobs game routinely offers several. The NAMES
             # and the icons are run-level, below: they describe the squares, not this game.
             'keys': sorted(keys, key=lambda k: _key_name(atoms, k)),
@@ -416,13 +418,13 @@ def history_panel(profile, challenge, *, query='', limit=PAGE, cursor=None, badg
     else:
         next_cursor = None
 
-    covers, plats = _decorations(rows)
+    covers, plats, avail = _decorations(rows)
     return {
         'open': True,
         'closed_reason': '',
         'joined_at': joined_at,
         'query': clean_term(query),
-        'rows': [_history_row(c, dates[c.id], occupants, covers, plats) for c in rows],
+        'rows': [_history_row(c, dates[c.id], occupants, covers, plats, avail) for c in rows],
         'showing': len(rows),
         # THERE MAY BE MORE, either because the page was full or because the window was. Not "there are N
         # more": the honest total is not affordable, and a candidate count is a number about the wrong set.
@@ -436,7 +438,7 @@ def history_panel(profile, challenge, *, query='', limit=PAGE, cursor=None, badg
     }
 
 
-def _history_row(contract, when, occupants, covers, plats):
+def _history_row(contract, when, occupants, covers, plats, avail):
     """One history offer: the game, the square it lands in, and when the work happened.
 
     `initial` IS THE DATABASE'S ANSWER, annotated by the pool rather than recomputed here.
@@ -450,7 +452,7 @@ def _history_row(contract, when, occupants, covers, plats):
     What is true is narrower and enough: the pool already asked Postgres for this value, so reading it back is
     free and cannot drift from the filter that selected the row, whatever a future ICU upgrade does to folding.
     """
-    row = _row(contract, covers, plats)
+    row = _row(contract, covers, plats, avail)
     row['key'] = contract.initial
     row['key_label'] = label_for_key(contract.initial)
     # The date the WORK happened, read from trophy data -- never an `EarnedContract` detection stamp, which
@@ -512,29 +514,64 @@ def _scope(pool, badge_only, platforms):
 
 
 def _decorations(contracts):
-    """(covers, platforms) for a page of contracts, sharing one membership read.
+    """(covers, platforms, availability) for a page of contracts, sharing one membership read.
 
     PLATFORMS ARE THE UNION over every member game, in the site's display order (`ordered_platform_union`,
     the same union Browse Games' cards and the game page show), each with the colour tone the platform tags
-    elsewhere use. One `Game` query for the page, however many contracts: bounded by the page, never by a
-    hunter's library.
+    elsewhere use.
+
+    AVAILABILITY ASKS "CAN THIS STILL BE FINISHED?" (owner, 2026-10-10): `delisted` when no way to finish the
+    contract has a listed game, `unobtainable` when none has an obtainable one. A contract is done through ANY
+    one of its own (anchored) concepts' stacks, so one listed stack there clears the flag; or through a bundle,
+    which counts only as a WHOLE (`_detect_tiers`), so a bundle clears it only when every one of its concepts has
+    a listed stack. Pooling bundle games with the rest under-warned: a bundle of one delisted and one listed
+    episode looked available while it could not be finished. A contract with no member games on record says
+    nothing, rather than "all of none". A concept with no games on record yet is UNKNOWN, not unavailable: it
+    never makes a flag show (see `_finishable`), because the flags name a fact about stacks that do exist.
+
+    One `Game` query for the page, however many contracts: bounded by the page, never by a hunter's library.
     """
     if not contracts:
-        return {}, {}
-    concepts = eligibility.member_concepts_by_contract(contracts)
+        return {}, {}, {}
+    membership = eligibility.contract_membership(contracts)
+    concepts = {cid: m['anchored'].union(*m['bundles']) for cid, m in membership.items()}
     covers = covers_by_contract(contracts, concepts)
     every_concept = {cid for ids in concepts.values() for cid in ids}
     by_concept = {}
     if every_concept:
-        for concept_id, platforms in (Game.objects.filter(concept_id__in=every_concept)
-                                      .values_list('concept_id', 'title_platform')):
-            by_concept.setdefault(concept_id, []).append(platforms)
-    plats = {}
+        for concept_id, platforms, delisted, obtainable in (
+                Game.objects.filter(concept_id__in=every_concept)
+                .values_list('concept_id', 'title_platform', 'is_delisted', 'is_obtainable')):
+            by_concept.setdefault(concept_id, []).append((platforms, delisted, obtainable))
+    plats, availability = {}, {}
     for contract_id, concept_ids in concepts.items():
-        union = ordered_platform_union(
-            lists for cid in concept_ids for lists in by_concept.get(cid, []))
+        games = [g for cid in concept_ids for g in by_concept.get(cid, [])]
+        union = ordered_platform_union(platforms for platforms, _, _ in games)
         plats[contract_id] = [{'name': _PLATFORM_LABELS.get(p, p), 'tone': platform_color_str(p)} for p in union]
-    return covers, plats
+        flags = []
+        if games:
+            m = membership[contract_id]
+            if not _finishable(m, by_concept, lambda g: not g[1]):
+                flags.append('delisted')
+            if not _finishable(m, by_concept, lambda g: g[2]):
+                flags.append('unobtainable')
+        availability[contract_id] = flags
+    return covers, plats, availability
+
+
+def _finishable(membership, games_by_concept, ok):
+    """Whether some way to finish a contract has a game `ok` accepts: any anchored concept with one, or a bundle
+    whose every concept has one. See `_decorations` for why a bundle only counts whole.
+
+    A CONCEPT WITH NO GAMES ON RECORD COUNTS AS OK. Nothing about it is delisted or unobtainable; it simply has not
+    synced. Counting it as a failure labelled a bundle of one listed episode and one not-yet-synced one
+    "Delisted", which names a fact that is not true."""
+    def has(concept_id):
+        games = games_by_concept.get(concept_id)
+        return not games or any(ok(g) for g in games)
+
+    return (any(has(cid) for cid in membership['anchored'])
+            or any(all(has(cid) for cid in bundle) for bundle in membership['bundles']))
 
 
 def _after(pool, cursor):
@@ -608,17 +645,18 @@ def _catchup_offers(profile, challenge, key, *, query, limit, badge_only=False, 
     return lifted, len(candidates) >= limit
 
 
-def _row(contract, covers, plats):
+def _row(contract, covers, plats, avail):
     return {
         'slug': contract.slug,
         'name': contract.name,
         'cover': covers.get(contract.id),
         'platforms': plats.get(contract.id, []),
+        'availability': avail.get(contract.id, []),
     }
 
 
-def _catchup_row(contract, via, when, covers, plats):
-    row = _row(contract, covers, plats)
+def _catchup_row(contract, via, when, covers, plats, avail):
+    row = _row(contract, covers, plats, avail)
     row['via'] = via
     # Only an `import` row has a date to show, and it is the date the WORK happened (read from trophy
     # data), never an `EarnedContract` detection stamp -- those record when we noticed, not when they did.

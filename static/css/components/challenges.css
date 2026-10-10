@@ -5202,6 +5202,9 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* The house tag is 0.58rem everywhere else; this sheet holds a 12px floor for anything a hunter has to read to
    choose (see the stylesheet test), and a platform is part of that choice. */
 .pp-cpick__row-plats .bd-meta-tag { font-size: 12px; padding: 1px 6px; }
+/* The Delisted / Unobtainable chips share the row and the 12px floor; they stay pills (an alert) beside the flat
+   platform tags (facts), the house split between `.bd-chip` and `.bd-meta-tag`. */
+.pp-cpick__row-plats .bd-chip { font-size: 12px; }
 
 /* THE NEXT-PAGE CONTROL: centred under the rows, out of the way until it is needed. */
 .pp-cpick__more { display: flex; justify-content: center; padding: 14px 0 4px; }
