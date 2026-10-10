@@ -469,8 +469,19 @@ def member_concepts_by_contract(contracts):
     an admin/episodic Contract whose concepts come only from its bundles" -- which is why the bundle query
     below exists rather than this being a loop over that method.
     """
+    return {cid: m['anchored'].union(*m['bundles']) for cid, m in contract_membership(contracts).items()}
+
+
+def contract_membership(contracts):
+    """{contract_id: {'anchored': {concept_id}, 'bundles': [{concept_id}, ...]}}, in the same two queries.
+
+    THE STRUCTURE `member_concepts_by_contract` flattens away, for a caller whose question depends on it. A
+    contract completes through ANY one anchored concept, but through a bundle only when EVERY concept in that
+    bundle is done (`_detect_tiers`), so "can this contract still be finished?" (the picker's availability
+    flags) has to see each bundle as its own group rather than as more members.
+    """
     by_igdb = {c.igdb_id: c.id for c in contracts if c.igdb_id is not None}
-    out = {c.id: set() for c in contracts}
+    out = {c.id: {'anchored': set(), 'bundles': []} for c in contracts}
 
     if by_igdb:
         rows = (
@@ -481,17 +492,21 @@ def member_concepts_by_contract(contracts):
             .values_list('igdb_match__igdb_id', 'id')
         )
         for igdb_id, concept_id in rows:
-            out[by_igdb[igdb_id]].add(concept_id)
+            out[by_igdb[igdb_id]]['anchored'].add(concept_id)
 
     # The episodic case, included because `_detect_tiers` counts them: leaving them out would report an
-    # episodic contract as never completed and silently make it un-importable.
+    # episodic contract as never completed and silently make it un-importable. Grouped per bundle, since a
+    # bundle qualifies only as a whole.
     bundle_rows = (
         Contract.objects
         .filter(id__in=[c.id for c in contracts], bundles__concepts__isnull=False)
-        .values_list('id', 'bundles__concepts__id')
+        .values_list('id', 'bundles__id', 'bundles__concepts__id')
     )
-    for contract_id, concept_id in bundle_rows:
+    grouped = {}
+    for contract_id, bundle_id, concept_id in bundle_rows:
         if concept_id is not None:
-            out[contract_id].add(concept_id)
+            grouped.setdefault((contract_id, bundle_id), set()).add(concept_id)
+    for (contract_id, _), concept_ids in grouped.items():
+        out[contract_id]['bundles'].append(concept_ids)
 
     return out

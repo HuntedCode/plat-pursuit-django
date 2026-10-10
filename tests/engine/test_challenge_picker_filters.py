@@ -531,3 +531,111 @@ def test_a_square_label_can_ellipsise_on_a_phone():
     assert "labelText.className = 'pp-cpick__key-label';" in JS
     assert JS.index("pick.textContent = single ? 'Add this game to '") < JS.index('labelText.appendChild(pick.firstChild);')
     assert '.pp-cpick__key-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' in _phone_block()
+
+
+# ── availability: delisted / unobtainable only when EVERY stack is ────────────────────────────────
+
+def _stack(contract, *, delisted=False, obtainable=True):
+    """Another trophy list (stack) of the same game."""
+    return GameFactory(concept=contract.concept, is_delisted=delisted, is_obtainable=obtainable)
+
+
+def _flags_for(profile, challenge, name):
+    rows = picker.slot_panel(profile, challenge, 'B')['rows']
+    return next(r['availability'] for r in rows if r['name'] == name)
+
+
+def test_a_contract_is_flagged_only_when_every_stack_is():
+    """One listed or obtainable stack means the game can still be done, so the warning must not show."""
+    profile = _hunter()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    gone = _contract('Bravo Gone')
+    gone.concept.games.update(is_delisted=True, is_obtainable=False)
+    _stack(gone, delisted=True, obtainable=False)
+    mixed = _contract('Bravo Mixed')
+    mixed.concept.games.update(is_delisted=True, is_obtainable=False)
+    _stack(mixed)                                       # one stack still listed and obtainable
+    delisted_only = _contract('Bravo Delisted')
+    delisted_only.concept.games.update(is_delisted=True)
+    _contract('Bravo Fine')
+
+    assert _flags_for(profile, challenge, 'Bravo Gone') == ['delisted', 'unobtainable']
+    assert _flags_for(profile, challenge, 'Bravo Mixed') == []
+    assert _flags_for(profile, challenge, 'Bravo Delisted') == ['delisted']
+    assert _flags_for(profile, challenge, 'Bravo Fine') == []
+
+
+def test_a_bundle_counts_only_as_a_whole():
+    """An episodic contract finishes through a bundle only when EVERY concept in it is done, so one delisted
+    episode makes that bundle unfinishable even though another episode is still listed."""
+    def episodic(name, *, first_delisted, second_delisted):
+        _SEQ['n'] += 1
+        contract = Contract.objects.create(name=name, slug='pf-ep-%d' % _SEQ['n'], is_live=True,
+                                           igdb_id=848_000 + _SEQ['n'])
+        bundle = ContractBundle.objects.create(contract=contract, label='Season')
+        for delisted in (first_delisted, second_delisted):
+            concept = ConceptFactory()
+            GameFactory(concept=concept, is_delisted=delisted)
+            bundle.concepts.add(concept)
+        return contract
+
+    broken = episodic('Bundle Broken', first_delisted=True, second_delisted=False)
+    whole = episodic('Bundle Whole', first_delisted=False, second_delisted=False)
+    _, _, avail = picker._decorations([broken, whole])
+
+    assert avail[broken.id] == ['delisted']
+    assert avail[whole.id] == []
+
+
+def test_a_listed_stack_of_the_contracts_own_game_outweighs_a_broken_bundle():
+    """The contract's own concept is one way to finish it; a bundle is another. Either clears the flag."""
+    contract = _contract('Bravo Own')
+    bundle = ContractBundle.objects.create(contract=contract, label='Season')
+    rider = ConceptFactory()
+    GameFactory(concept=rider, is_delisted=True)
+    bundle.concepts.add(rider)
+    _, _, avail = picker._decorations([contract])
+    assert avail[contract.id] == []
+
+
+def test_a_contract_with_no_games_on_record_is_not_flagged():
+    """"Every stack" of none is vacuously true; the honest answer is to say nothing."""
+    contract = Contract.objects.create(name='Bravo Empty', slug='pf-empty', is_live=True, igdb_id=849_999)
+    _, _, avail = picker._decorations([contract])
+    assert avail[contract.id] == []
+
+
+def test_the_flags_ride_every_door(client):
+    profile = _hunter(client)
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    gone = _contract('Bravo Gone')
+    gone.concept.games.update(is_delisted=True)
+
+    slot = client.get(reverse('challenge_slot', args=[challenge.pk, 'B'])).json()
+    search = client.get(reverse('challenge_search', args=[challenge.pk]), {'q': 'Bravo'}).json()
+    assert slot['rows'][0]['availability'] == ['delisted']
+    assert search['rows'][0]['availability'] == ['delisted']
+
+
+def test_the_flags_ride_the_catch_up_and_history_rows_too(client):
+    """Both serialise their own row shape, so each needs its own check."""
+    profile = _hunter(client)
+    joined = timezone.now() - timedelta(days=400)
+    profile.user.date_joined = joined
+    profile.user.save(update_fields=['date_joined'])
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    old = _importable(profile, 'Bravo Old', earned=joined + timedelta(days=1))
+    old.concept.games.update(is_delisted=True)
+
+    slot = client.get(reverse('challenge_slot', args=[challenge.pk, 'B'])).json()
+    history = client.get(reverse('challenge_history', args=[challenge.pk])).json()
+    assert [r['availability'] for r in slot['catchup']] == [['delisted']]
+    assert [r['availability'] for r in history['rows']] == [['delisted']]
+
+
+def test_the_sheet_draws_each_flag_as_an_alert_chip():
+    tags = JS[JS.index('function rowTags(row) {'):]
+    tags = tags[:tags.index('\n        }')]
+    assert "chip(AVAILABILITY_LABELS[flag], 'error')" in tags
+    assert "var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };" in JS
+    assert JS.count('rowTags(row)') >= 2, 'both the card rows and the search rows draw the tags'

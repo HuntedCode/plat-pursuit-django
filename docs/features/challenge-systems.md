@@ -342,6 +342,14 @@ Every row carries `platforms`: the union over the contract's member games in dis
 (`ordered_platform_union`), each with the `platform_color_str` tone, read in one `Game` query per page
 (`picker._decorations`, which shares one membership read with the covers).
 
+Rows also carry `availability`, drawn as red **Delisted** / **Unobtainable** chips (owner, 2026-10-11). The rule is
+**"can this still be finished?"**: a flag shows only when no way to finish the contract has a listed (or obtainable)
+stack. A contract finishes through ANY stack of its own concepts, so one listed stack there means no flag; or through
+a bundle, which counts only as a WHOLE (`_detect_tiers`), so a bundle clears the flag only when every one of its
+concepts has a listed stack. `eligibility.contract_membership` keeps the bundles grouped for exactly this
+(`member_concepts_by_contract` is its flattened union). A contract with no member games on record shows none. Same
+`Game` query as the platforms, so no extra cost.
+
 The Challenges browse page's toolbar also links **My Challenges** (`show_my_challenges`, browse page only).
 
 **On a phone, a search result's square buttons are a two-column grid under the cover**, not pills beside it.
