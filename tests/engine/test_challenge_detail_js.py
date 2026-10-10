@@ -690,7 +690,10 @@ def test_a_finished_game_is_marked_in_the_search_results():
     immediately. The chip is the house primitive, never DaisyUI's badge."""
     assert "if (row.is_completed_by_you) { head.appendChild(chip('Finished', 'success')); }" in JS
     assert "'bd-chip bd-chip--' + tone" in JS
-    assert 'badge' not in JS_CODE
+    # NO DAISYUI BADGE CLASS: no string literal carries `badge` (or `badge-xs` and kin) as a class TOKEN. A bare
+    # "no `badge` anywhere" stopped being the right rule when the sheet gained an "In a badge" filter, whose
+    # `[data-cpick-badge]` hook and `badge=1` parameter are not classes.
+    assert not re.search(r"""['"](?:[^'"]*\s)?badge(?:-[\w-]+)?(?:\s[^'"]*)?['"]""", JS_CODE)
     # ON THE TITLE'S LINE, at the end of it. Stacked underneath it read as a separate fact about the row
     # rather than part of its heading, and spent a line of height on every finished result.
     assert "head.className = 'pp-cpick__row-head';" in JS
@@ -1527,14 +1530,19 @@ def test_an_empty_history_panel_does_not_claim_the_hunter_has_nothing():
 
 
 def test_the_history_panel_does_not_advertise_rows_it_cannot_reach():
-    """`N+ ready to place` promised a further page on a panel with NO pagination, and `more` can be true purely
-    because the window filled -- which says nothing about how many offers exist. Say what is on screen and how
-    to look further."""
+    """`N+ ready to place` promised rows `more` cannot vouch for: it can be true purely because the window filled,
+    which says nothing about how many offers exist. So the count is what is on screen.
+
+    PAGED SINCE 2026-10-10, so the old "search to look further" tail is gone on purpose: the next page is reached
+    by scrolling (or the Show more button), and the panel hands its cursor to the pager on both of its branches,
+    the empty one included, because an empty window can still have a next one."""
     body = JS_CODE[JS_CODE.index('function renderHistoryPanel('):]
     body = body[:body.index('function showNote(')]
     assert "'+ ready to place'" not in body
     assert "' ready to place'" in body
-    assert 'search to look further' in body
+    assert 'search to look further' not in body
+    render = body[:body.index('function historyCount(')]
+    assert render.count("startPaging('history', null, panel, panel.cursor);") == 2
 
 
 def test_the_history_note_says_the_rule_is_an_instant_not_a_day():

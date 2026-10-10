@@ -54,7 +54,7 @@
     {% comment %}NO TOOLBAR OVER AN EMPTY PAGE: with no runs at all, a search box and type chips filter nothing.
     Kept whenever a filter is set, so a reader can always clear what they typed.{% endcomment %}
     {% if in_flight or has_filters or query %}
-    {% include 'challenges/partials/_browse_toolbar.html' with browse_url=browse_url form_id='ch-form' %}
+    {% include 'challenges/partials/_browse_toolbar.html' with browse_url=browse_url form_id='ch-form' show_my_challenges=True %}
     {% endif %}
 
     {% comment %}THE STABLE SWAP TARGET. Only its contents are replaced, so the sentinel and spinner below --

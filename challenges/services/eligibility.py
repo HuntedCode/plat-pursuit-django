@@ -38,17 +38,20 @@ today and published next month stamps them for everyone who finished it years ag
 sweep in `process_contracts` does the same. So the date comes from trophy data, which records when the
 work actually happened.
 """
-from django.db.models import Exists, Min, OuterRef
+from django.db.models import Exists, Min, OuterRef, Q
 from django.db.models.functions import Substr, Upper
 
 from challenges.models import AZ_LETTERS, CHALLENGE_TYPE_AZ, HATCH_THRESHOLD
 from trophies.models import (
+    BadgeSeries,
     Concept,
     Contract,
     EarnedContract,
     EarnedTrophy,
+    Game,
     IGDBMatch,
     ProfileGame,
+    Stage,
     Trophy,
 )
 
@@ -191,6 +194,55 @@ def _slot_pool(challenge, key):
         .values_list('contract_id', flat=True)
     )
     return _shape(challenge, key).exclude(pk__in=used)
+
+
+def in_live_badge(contracts):
+    """`contracts` narrowed to the ones with a game in a live badge: the picker's "Only games in a badge".
+
+    THE BROWSE PAGE'S RULE, read from the contract's side. A game is "in a badge" when its concept has a
+    `Stage` in a series that ships a live group badge (`browse_helpers`' `in_badge` filter). A contract's
+    games are its MEMBER concepts, which are derived the way `member_concepts_by_contract` derives them:
+    anchored concepts whose trusted match carries the contract's raw igdb id, plus any concept in one of its
+    bundles. Both halves are here, or an episodic contract whose games come only from bundles could never
+    pass the filter.
+
+    `Exists`, so the outer query stays one row per contract and the pool's COUNT and slice keep their cost.
+    Each half is a single `.filter()` call on purpose: conditions in one call bind to the SAME concept, where
+    chained calls would let one concept supply the igdb id and a different one the stage.
+
+    A DISPLAY FILTER, NEVER A RULE. It narrows what a panel shows and nothing else: `hatch_is_open` and
+    `catchup_offers` still count and decide over the whole pool, so turning the toggle on can never change
+    which rule a square is under.
+    """
+    live = BadgeSeries.objects.filter(group_badges__is_live=True).values('series_slug')
+    staged = Stage.objects.filter(series_slug__in=live)
+    return contracts.filter(
+        Q(Exists(staged.filter(
+            concepts__anchor_migration_completed_at__isnull=False,
+            concepts__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+            concepts__igdb_match__igdb_id=OuterRef('igdb_id'),
+        )))
+        | Q(Exists(staged.filter(concepts__contract_bundles__contract=OuterRef('pk'))))
+    )
+
+
+def on_platforms(contracts, platforms):
+    """`contracts` narrowed to the ones with a game on ANY of `platforms`: the picker's platform filter.
+
+    The same two membership halves as `in_live_badge` (a trusted, anchored match on the raw igdb id, or a
+    bundle), over `Game.objects.for_platform`, which is Browse Games' own platform rule rather than a copy of
+    it. ANY, not all: picking PS5 and PS4 means "games I can play on either", the way the browse filter reads.
+    A display filter like the badge one: nothing here decides a rule.
+    """
+    games = Game.objects.for_platform(list(platforms))
+    return contracts.filter(
+        Q(Exists(games.filter(
+            concept__anchor_migration_completed_at__isnull=False,
+            concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+            concept__igdb_match__igdb_id=OuterRef('igdb_id'),
+        )))
+        | Q(Exists(games.filter(concept__contract_bundles__contract=OuterRef('pk'))))
+    )
 
 
 def eligible_contracts(profile, challenge, key):

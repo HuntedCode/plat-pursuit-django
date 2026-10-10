@@ -59,6 +59,17 @@ the grid so the spinner is the thing being replaced.{% endcomment %}
                     {% endfor %}
                 </select>
             </label>
+
+            {% comment %}MY CHALLENGES, at the right end of the control row (owner, 2026-10-10): the same place
+            and the same shape as Game Lists' "My lists". A navigation, not a filter, so it sits apart from the
+            form's inputs and submits nothing. Only the browse page passes `show_my_challenges`; the Hall of
+            Fame shares this toolbar and does not ask for it.{% endcomment %}
+            {% if show_my_challenges and user.is_authenticated and user.profile %}
+            <a href="{% url 'my_challenges' %}" class="pp-cta pp-cta--ghost shrink-0" aria-label="My Challenges">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                <span class="hidden md:inline">My Challenges</span>
+            </a>
+            {% endif %}
         </div>
     </div>
 </form>
