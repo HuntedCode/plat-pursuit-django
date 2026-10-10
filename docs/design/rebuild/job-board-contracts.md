@@ -759,6 +759,15 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   and History), its facets, the empty-state suggestion, or job detail's contract counts.
   This is about cost, not memory: the rows are the curated catalogue, so every user pays it, not
   just whales.
+- **Every platform selected is NO platform filter**, not "has a member game on some platform".
+  `_filter_contracts` skips `_platform_exists` when the selection equals `ALL_PLATFORMS`, because the
+  EXISTS reading silently hid every contract with no platform-tagged member: an episodic/bundle
+  contract (null `igdb_id`, so no igdb-derived members) and any whose games have an empty
+  `title_platform`. The claim banner (`claimable_summary`) ignores platform, so it counted claimables
+  the board it opens could never show. The banner's jump and href now open Ready to Claim with every
+  platform lit, and `test_the_claim_banner_count_matches_the_board_it_opens` holds the board to the
+  banner's N. The client's "every platform" is read from the page's platform chips, which a test keeps
+  equal to `ALL_PLATFORMS`.
 - **Don't recompute granted XP from the Contract's *current* config.** Read the ledger. A
   Contract that changes its jobs or `T` later must not retroactively rewrite past grants.
 - **Unique `igdb_id` is what guarantees "once per game."** Two Contracts can't share an IGDB id,
