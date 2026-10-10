@@ -222,3 +222,35 @@ def pursuer_rank_ladder(level):
     tier_next = PURSUER_RANKS[idx + 1][0] if idx + 1 < len(PURSUER_RANKS) else None
     fill = 100 if tier_next is None else round((level - tier_min) / (tier_next - tier_min) * 100)
     return {'rungs': rungs, 'fill': max(0, min(100, fill)), 'current': cur}
+
+
+def pursuer_rank_table(level):
+    """Every Pursuer rank, with the Pursuer Level each of its divisions starts at, for the Career's
+    rank ladder modal (the hero bar shows the 11 tiers; this is what each one asks for).
+
+    Each tier: {key, name, min_level, next_level, levels_to, reached, current, divisions}, where
+    `levels_to` is how far below the tier `level` sits (0 once reached). `divisions` is empty
+    for Newbie and Ascendant, otherwise five {roman, label, min_level, reached, current} from V (entry)
+    up to I. The division floors are split the way `pursuer_rank_for_level` splits a tier, and a test
+    walks every level to hold the two together: this table must never promise a division at a level
+    where the hero would show a different one.
+    """
+    cur = pursuer_rank_for_level(level)
+    tiers = []
+    for i, (min_lvl, key, name, has_div) in enumerate(PURSUER_RANKS):
+        next_floor = PURSUER_RANKS[i + 1][0] if i + 1 < len(PURSUER_RANKS) else None
+        divisions = []
+        if has_div:
+            step = (next_floor - min_lvl) / PURSUER_DIVISIONS
+            for band, numeral in enumerate(_PURSUER_NUMERALS):
+                floor = round(min_lvl + band * step)
+                divisions.append({
+                    'roman': numeral, 'label': f'{name} {numeral}', 'min_level': floor,
+                    'reached': level >= floor,
+                    'current': key == cur['key'] and numeral == cur['division_roman'],
+                })
+        tiers.append({
+            'key': key, 'name': name, 'min_level': min_lvl, 'next_level': next_floor,
+            'levels_to': max(0, min_lvl - level), 'reached': level >= min_lvl, 'current': key == cur['key'], 'divisions': divisions,
+        })
+    return {'tiers': tiers, 'current': cur}

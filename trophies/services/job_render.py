@@ -28,11 +28,90 @@ DISCIPLINE_TAGLINE = {
     'combat': 'You fight.', 'exploration': 'You discover.', 'mind': 'You outwit.',
     'heart': 'You feel.', 'finesse': 'You perform.',
 }
+# SHORT FORMS, for the places a discipline name has to fit a fixed box. SPARSE ON PURPOSE: only
+# "Exploration" overflows anything -- eleven characters against the disciplines ring's ~70px inner hole,
+# where the next longest ("Finesse") measures ~52px and fits with room to spare. Abbreviating all five for
+# symmetry would shorten four names that have no problem, which is the mistake a CSS attempt at this made
+# from the other direction (a percentage max-width that resolved against each label's own width).
+#
+# Callers fall back to the full label, so adding a name here is opt-in and removing one is safe.
+DISCIPLINE_SHORT = {
+    'exploration': 'Explo.',
+}
+
 # Lucide icon per discipline (the dossier/sheet section headers). Resolved via job_icons.
 DISCIPLINE_ICON = {
     'combat': 'swords', 'exploration': 'compass', 'mind': 'brain',
     'heart': 'heart', 'finesse': 'sparkles',
 }
+
+
+#: Circumference of the disciplines ring's arc circle (r=42 in the 120x120 viewBox that
+#: `partials/components/_disciplines_ring.html` draws). The discipline arcs are stroke-dash segments
+#: summing to this, so it has to stay in step with that `r`.
+#:
+#: MOVED HERE FROM `career_service._RING_C`, which was private and therefore un-shareable: the Hall of Fame
+#: plaque needed the same geometry and the only options were importing a private name or copying the number.
+RING_CIRCUMFERENCE = 263.89
+
+
+def discipline_ring(entries):
+    """Add stroke-dash arc geometry to per-discipline entries, for the shared disciplines ring.
+
+    `entries` is an ORDERED iterable of dicts each carrying at least `total` (that discipline's share of the
+    Pursuer Level). Everything else on the dict is passed through, so a caller can carry `label`, `slug`,
+    `avg` or anything else its template wants. Returns new dicts with `share_pct`, `dash` and `offset` added
+    -- the ready-made `stroke-dasharray` / `stroke-dashoffset` values the partial renders directly.
+
+    ONE IMPLEMENTATION OF THE ARITHMETIC, DELIBERATELY. `_disciplines_ring.html` promises that a smaller
+    ring is "a scale, not a second implementation, which is what keeps the two surfaces from drifting", and
+    that promise is only as good as the geometry having one home. It was inlined in
+    `career_service._build_hero` while Career and the lobby were the only hosts; the Hall of Fame plaque made
+    a third, and copies of a cumulative-offset loop are how one surface ends up drawing arcs that do not
+    meet.
+
+    WHAT THIS DOES *NOT* UNIFY, said plainly because an earlier version of this docstring claimed "all three
+    hosts" and the real count is higher. Data producers: this helper, reached via
+    `career_service._build_hero`, `challenges.services.plaque._ring`, and `profile_card_service` passing
+    `hero.ring` through. The *markup* geometry is still duplicated twice --
+    `templates/shareables/profile_card.html` draws its own inline `r="42"` circles (no stylesheet in the
+    Playwright document) and `core/services/landing_service.py` holds hand-frozen dash values -- so changing
+    the radius is a four-place edit.
+
+    ORDER IS THE CALLER'S. `offset` is cumulative, so the sequence handed in IS the sequence drawn; pass
+    `DISCIPLINE_LABELS` order unless there is a reason not to.
+
+    ROUNDING ACCUMULATES AT UP TO 0.005 PER ENTRY, because `dash` is rounded to 2dp and `offset` sums the
+    ROUNDED values. At five disciplines the worst drift measured is 0.02 against the 0.5 tolerance the
+    arc-sum tests allow, so there is room to spare -- but a caller passing ~100 or more entries would break
+    those tests and the ring would visibly fail to close. Worth stating now that this is a shared helper
+    rather than a private loop with exactly one five-element caller.
+
+    THE EMPTY-TOTAL CASE IS AN EVEN SPLIT, not five zero-length arcs. A hunter at the level floor in every
+    discipline genuinely has an equal share of each, and a ring of nothing reads as broken rather than as
+    new. (`_build_hero` has always done this; it is preserved here rather than rediscovered.)
+    """
+    entries = list(entries)
+    total = sum(e.get('total') or 0 for e in entries)
+    count = len(entries) or 1
+
+    out = []
+    cumulative = 0.0
+    for entry in entries:
+        share = ((entry.get('total') or 0) / total) if total else (1.0 / count)
+        dash = round(share * RING_CIRCUMFERENCE, 2)
+        out.append({
+            **entry,
+            'share_pct': round(share * 100),
+            'dash': dash,
+            'offset': round(-cumulative, 2),
+            # THE SHORT LABEL RIDES ALONG, so both producers get it without either knowing about it. Falls
+            # back to the full label, which is what four of the five disciplines use -- see
+            # `DISCIPLINE_SHORT` for why that map is sparse rather than complete.
+            'short': DISCIPLINE_SHORT.get(entry.get('slug'), entry.get('label')),
+        })
+        cumulative += dash
+    return out
 
 
 def discipline_order():

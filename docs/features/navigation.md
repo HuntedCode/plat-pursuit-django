@@ -158,7 +158,8 @@ These are the cross-links embedded in feature pages. The "mesh" of cross-links r
 
 ## Profile Page Tabs
 
-The profile page has **4 tabs**, switchable via the `?tab=` URL parameter:
+The profile page has **4 tabs for everyone**, plus three that appear only when there is something behind
+them, switchable via the `?tab=` URL parameter:
 
 | Tab | Paginated | Infinite scroll | Filters |
 |-----|-----------|-----------------|---------|
@@ -166,17 +167,21 @@ The profile page has **4 tabs**, switchable via the `?tab=` URL parameter:
 | Trophies | Yes (30 days/page) | Yes | Search + tier chips. TWO shapes behind one tab: the day wall while browsing, trophy cards while searching |
 | Badges | No | No | Sort only |
 | Ratings | Yes | Yes | Sort, plus a Games/DLC switcher |
+| Lists *(only with a published list)* | No (capped at 25) | No | None |
+| Challenges *(only with a visible run)* | No (bounded) | No | None. Runs in progress, then finished, as the Challenges page's run cards without the hunter line |
+| Card *(owner only)* | No | No | None |
 
-Three tabs were retired rather than rebuilt, and the reasons are in the
-[rebuild playbook](../design/rebuild/rebuild-playbook.md): **Lists** (at the time the tab was retired, Game Lists was hidden, so the tab linked to cards whose
-links bounced you home; Game Lists was rebuilt and went PUBLIC in 2026-09, but the profile TAB did not
-come back with it -- lists are reached from their own surfaces), **Challenges** (the system was
-retired), and **Reviews** (text reviews were archived in 2026-05 — the ratings that survived them are
-what the Ratings tab shows). All three builders are gone: `_build_lists_tab_context` went in 2026-09,
-because removing only the CHIP left `?tab=lists` still rendering for anyone who typed it (and running a
-`COUNT(*)` against the parked tables on every profile view, into a context key no template read). The
-revamped Game Lists brings its own tab rather than inheriting the parked one. `lists_tab.html` is still
-on disk, now orphaned, and goes with the rebuild.
+A conditional tab's chip is drawn only when its check passes, and a hand-typed `?tab=` for it otherwise lands
+on Games, so no switcher ever renders with nothing selected. The URL is corrected to match (`?tab=games`):
+the page script reads the tab from the address bar, so a stale `?tab=` would wire the Games grid with another
+tab's card selectors. A full page load rewrites it with `history.replaceState`; an HTMX chip click (a chip that
+went stale since the page drew it) gets an `HX-Push-Url` header from `ProfileDetailView.render_to_response`.
+Hidden challenge runs never appear, on your own profile included (hiding means "off my profile").
+
+**Lists** (2026-09) and **Challenges** (2026-10) came back as new tabs built on the rebuilt systems, not as
+the legacy ones restored; see [game-lists.md](game-lists.md#the-profile-lists-tab-2026-09) and
+[challenge-systems.md](challenge-systems.md#the-profile-tab). **Reviews** stays retired: text reviews were
+archived in 2026-05, and the ratings that survived them are what the Ratings tab shows.
 
 There is deliberately **no About tab** — see the Hunter Profile row in the playbook for why the trophy
 timeline and the showcases it was going to pair both came off the page instead.

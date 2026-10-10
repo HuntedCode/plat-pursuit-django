@@ -1,0 +1,34 @@
+{% comment %}THE SIDE COLUMN'S HOVER FACE, shared by the month panels and the year overview.
+
+ONE COPY BECAUSE THE HOOKS ARE A CONTRACT. `wireDayPeek.show()` writes into `[data-peek-head]`,
+`[data-peek-figure]`, `[data-peek-count]`, `[data-peek-unit]` and `[data-peek-note]` with no null
+guard, so a panel whose peek is missing one of them throws `TypeError` on the first hover of any cell
+in it. These lived in two places, differing only in the hint line, and an audit showed the year
+panel's copy could lose all five hooks with every suite still green -- the existing pins assert the
+CONTAINERS (`data-cal-peek` / `data-cal-facts`), not what is inside them. A partial removes the drift
+rather than detecting it.
+
+`hint` IS THE ONLY DIFFERENCE, and it is a real one: from a month panel a square opens its day, while
+from the overview it opens its month, so the two cannot share a sentence.
+
+`pp-cal__face--off` IS RENDERED HERE, not applied by script: the panel must open on the month's own
+figures with no JavaScript, and an empty peek must never flash. The class rather than the `hidden`
+attribute, because the two faces share a grid area and the hidden one has to stay IN FLOW -- Tailwind's
+preflight pins `[hidden]` to `display: none !important`, which no author rule can beat.{% endcomment %}
+<div class="pp-cal__peek pp-cal__face--off" data-cal-peek aria-hidden="true">
+    <h4 class="pp-cal__stats-head" data-peek-head></h4>
+    {% comment %}THE FIGURE LINE IS HIDEABLE, because a square the board draws EMPTY has no figure the
+    board recognises. An `in_all`-only square carries the shovelware-inclusive count, so printing it read
+    "6 platinums, not counted" -- a number and its own retraction on one line, on a square the grid
+    deliberately leaves open. The state goes in the note instead and the number does not appear.
+
+    THIS one keeps the `hidden` ATTRIBUTE, unlike the face above it: it is not a child of
+    `.pp-cal__stats`, nothing stacks on it, and `display: none` is exactly what a withheld line wants.
+    The preflight rule that defeats the attribute on the faces is what makes it work here.{% endcomment %}
+    <p class="pp-cal__peek-figure" data-peek-figure hidden>
+        <span class="pp-tally" data-peek-count></span>
+        <span class="pp-cal__peek-unit" data-peek-unit></span>
+    </p>
+    <p class="pp-cal__peek-note" data-peek-note></p>
+    <p class="pp-cal__peek-hint">{{ hint }}</p>
+</div>

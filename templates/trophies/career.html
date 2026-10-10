@@ -61,7 +61,12 @@
 
                 {# Disciplines ring (Pursuer Level framed by discipline shares) + legend #}
                 {% if hero.ring %}
-                <div class="flex items-center gap-3 md:gap-4 shrink-0">
+                {% comment %}`lab-dna-pair` is the hook that lets the shared ring and this legend
+                highlight each other in CSS. They are SIBLINGS, so no `.lab-dna`-scoped selector can reach
+                the legend -- which is why this used to be done in JavaScript below, and why that JS and the
+                shared CSS ended up doing overlapping work with different dim values (0.16 here vs 0.2
+                everywhere else). `elements.css` carries the rules.{% endcomment %}
+                <div class="lab-dna-pair flex items-center gap-3 md:gap-4 shrink-0">
                     {% include 'partials/components/_disciplines_ring.html' with ring=hero.ring level=hero.pursuer_level %}
                     <ul class="lab-dna-legend">
                         {% for f in hero.ring %}
@@ -78,18 +83,25 @@
 
             {% comment %} Pursuer rank ladder: all 11 rungs Newbie -> Ascendant, filled to your current
             rank (the current rung shows partial progress through the tier), each reached rung dated. {% endcomment %}
+            {% comment %} THE BAR IS THE DOOR to the full table (`_rank_ladder.html`): every rank, its five
+            divisions and the level each starts at. The rung `title`s were the only place those levels
+            were written, and a title never shows on a phone. A <button>, so its insides are spans. {% endcomment %}
             {% if hero.rank_ladder %}
-            <div class="pgl pgl--rank" aria-label="Pursuer rank ladder" style="--pgl-cur-c: var(--rank-{{ hero.pursuer_rank.key }});">
-                <div class="pgl__track">
+            <button type="button" class="pgl-open" data-rank-open aria-haspopup="dialog" aria-controls="rank-ladder"
+                    aria-label="Pursuer rank {{ hero.pursuer_rank.label }}, {% if hero.pursuer_rank.next_label %}{{ hero.pursuer_rank.levels_to_next }} level{{ hero.pursuer_rank.levels_to_next|pluralize }} to {{ hero.pursuer_rank.next_label }}{% else %}apex reached{% endif %}. See every rank"
+                    style="--pgl-cur-c: var(--rank-{{ hero.pursuer_rank.key }});">
+            <span class="pgl pgl--rank">
+                <span class="pgl__track">
                     {% for rung in hero.rank_ladder.rungs %}
-                    <span class="pgl__rung{% if rung.current %} is-current{% endif %}{% if rung.reached %} is-on{% endif %}" style="--f: {% if rung.current %}{{ hero.rank_ladder.fill }}{% elif rung.reached %}100{% else %}0{% endif %}%; --i: {{ forloop.counter0 }};{% if rung.current %} --rung-c: var(--rank-{{ rung.key }});{% endif %}" title="{{ rung.name }} &middot; Pursuer Lv {{ rung.min_level }}{% if rung.reached_at %} &middot; reached {{ rung.reached_at|date:'M j, Y' }}{% elif not rung.reached %} &middot; locked{% endif %}">{% if rung.current and hero.pursuer_rank.division %}<span class="pgl__divs" aria-hidden="true"></span>{% endif %}</span>
+                    <span class="pgl__rung{% if rung.current %} is-current{% endif %}{% if rung.reached %} is-on{% endif %}" style="--f: {% if rung.current %}{{ hero.rank_ladder.fill }}{% elif rung.reached %}100{% else %}0{% endif %}%; --i: {{ forloop.counter0 }};{% if rung.current %} --rung-c: var(--rank-{{ rung.key }});{% endif %}" title="{{ rung.name }} &middot; Pursuer Lv {{ rung.min_level }}{% if rung.reached and rung.reached_at %} &middot; reached {{ rung.reached_at|date:'M j, Y' }}{% elif not rung.reached %} &middot; locked{% endif %}">{% if rung.current and hero.pursuer_rank.division %}<span class="pgl__divs" aria-hidden="true"></span>{% endif %}</span>
                     {% endfor %}
-                </div>
-                <div class="pgl__foot">
+                </span>
+                <span class="pgl__foot">
                     <span class="pgl__cur">{{ hero.pursuer_rank.label }}</span>
-                    {% if hero.pursuer_rank.next_label %}<span class="pgl__next"><b class="pgl__next-n" data-cd-from="{{ hero.pursuer_rank.next_level }}" data-cd-to="{{ hero.pursuer_rank.levels_to_next }}">{{ hero.pursuer_rank.levels_to_next }}</b> to {{ hero.pursuer_rank.next_label }}</span>{% else %}<span class="pgl__next">Apex reached</span>{% endif %}
-                </div>
-            </div>
+                    <span class="pgl__next">{% if hero.pursuer_rank.next_label %}<b class="pgl__next-n" data-cd-from="{{ hero.pursuer_rank.next_level }}" data-cd-to="{{ hero.pursuer_rank.levels_to_next }}">{{ hero.pursuer_rank.levels_to_next }}</b> to {{ hero.pursuer_rank.next_label }}{% else %}Apex reached{% endif %}<svg class="pgl__more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></span>
+                </span>
+            </span>
+            </button>
             {% endif %}
         </div>
     </section>
@@ -101,6 +113,9 @@
             </div>
         </section>
     {% endif %}
+    {% comment %} Gated on the hero, exactly like the bar that opens it -- NOT inside the `career` block below,
+    whose degraded state still draws the hero and would leave the bar a button that opens nothing. {% endcomment %}
+    {% if hero.rank_table %}{% include 'trophies/partials/career/_rank_ladder.html' with table=hero.rank_table level=hero.pursuer_level %}{% endif %}
 
     {# ── Pending rewards rail: the claim CTA co-located with the jobs it levels ── #}
     {% if claimable.count %}
@@ -981,33 +996,14 @@ function ppCountUp(el, dur) {
     (window.ppAfterCareerModal || function (f) { f(); })(function () { io.observe(el); });
 })();
 
-// Premium: hover a legend row (or arc) -> spotlight its discipline arc, dim the rest, pause the spin.
-(function () {
-    var ring = document.querySelector('.lab-dna');
-    var arcsGroup = ring && ring.querySelector('.lab-dna__arcs');
-    var legend = document.querySelector('.lab-dna-legend');
-    if (!ring || !arcsGroup || !legend) return;
-    var arcs = arcsGroup.querySelectorAll('.lab-dna__arc');
-    var rows = legend.querySelectorAll('[data-disc]');
-    function focusDisc(slug) {
-        arcsGroup.style.animationPlayState = 'paused';   // hold still so the highlight is readable
-        arcs.forEach(function (a) { a.style.opacity = (a.dataset.disc === slug) ? '1' : '0.16'; });
-        rows.forEach(function (r) { r.style.opacity = (r.dataset.disc === slug) ? '1' : '0.4'; });
-    }
-    function clearDisc() {
-        arcsGroup.style.animationPlayState = '';
-        arcs.forEach(function (a) { a.style.opacity = ''; });
-        rows.forEach(function (r) { r.style.opacity = ''; });
-    }
-    rows.forEach(function (r) {
-        r.addEventListener('mouseenter', function () { focusDisc(r.dataset.disc); });
-        r.addEventListener('mouseleave', clearDisc);
-    });
-    arcs.forEach(function (a) {
-        a.addEventListener('mouseenter', function () { focusDisc(a.dataset.disc); });
-        a.addEventListener('mouseleave', clearDisc);
-    });
-})();
+// The discipline cross-highlight (hover an arc or a legend row -> spotlight that discipline) used to live
+// here as ~27 lines of JS. It is now declarative in `elements.css`, scoped to `.lab-dna-pair` above, and
+// shared with the home lobby and the Hall of Fame plaque -- which the JS never reached, so those two had no
+// highlight until the CSS was written and then briefly had a SECOND implementation alongside this one.
+//
+// What the JS did and the CSS now does: dim the other arcs, dim the other legend rows, pause the spin, and
+// (new) swap the ring's centre for the hovered discipline's level. The JS dimmed arcs to 0.16 inline, which
+// beat the stylesheet's 0.2 and made Career the one host that looked different.
 
 // Premium: each dossier band reveals on scroll-in (slides up); its content THEN follows -- the icons
 // draw, the bars fill, the levels count up -- so nothing animates while the band is still sliding in.

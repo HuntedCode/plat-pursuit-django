@@ -1,0 +1,118 @@
+{% load job_icons %}
+{% comment %}One square's CONTENTS, without the element that holds them.
+
+EXTRACTED so the editable and read-only squares can differ in their TAG without duplicating 25 lines of
+markup. An editable square is a real `<button>` -- keyboard, focus and activation for free, which
+`role="button"` would each need hand-wiring -- and a read-only one is a `<div>`, because a cell that takes
+focus and does nothing is worse than one that does not.
+
+`.pp-csq`'s hover and press rules were written scoped to `a.pp-csq` / `button.pp-csq` from the start, so
+they come alive exactly here and nowhere else.
+
+Params: card (from `slot_render.slot_cards`).{% endcomment %}
+
+{% if card.is_filled %}
+    {% if card.cover %}
+    {% comment %}`object-cover object-top` via `.pp-csq__art`, per the image conventions: `object-top`
+    keeps a game's logo when wider PSN fallback art crops into a 3:4 container. The `--icon` modifier
+    switches to `contain` for the generic PS placeholder, which is not art and must not be cropped.
+
+    The first squares are NOT lazy, because lazy-loading an image already on screen defers the page's own
+    LCP candidate to wait for a scroll that has already happened.
+
+    SEVEN, WHICH IS THE WIDEST A SINGLE GRID EVER GETS (7 columns at `lg:`). The threshold was 21 -- three
+    rows of seven, costing a phone fifteen fetches for images it would not show -- and then 6, which made the
+    top-right cell of the first desktop row lazy.
+
+    WHAT SEVEN BUYS DEPENDS ON THE CHALLENGE TYPE, and the paragraph that used to sit here claimed otherwise
+    ("the FIRST ROW is never lazy at any breakpoint. That is the whole requirement"). Two versions of this
+    comment then disagreed eighteen lines apart, with the false one first.
+
+    - **A-Z** is one grid of 26, so seven is exactly its widest row and the first row is genuinely never lazy.
+    - **Job Coverage** is five shelves of five, beginning at indexes 0, 5, 10, 15 and 20. Indexes 0-6 are
+      eager, which is shelf 1 entire plus the first two squares of shelf 2; the first row of shelves 3-5 is
+      lazy, and so is the back half of shelf 2's.
+
+    The threshold stays at seven deliberately. The alternative is eagerly fetching the ~20 covers that sit
+    above the fold at `lg:`, which is the cost this exists to avoid, and a lazy cover a few hundred pixels
+    down arrives before it is looked at. Worth revisiting against a real network profile rather than by
+    argument.
+
+    ONE HONEST LIMITATION, unchanged: this indexes SQUARES, not images, because an empty square has none. A
+    run whose first seven squares are all empty therefore has no eager cover at all -- the early-run case,
+    where there is barely any art to load.
+
+    `card.index` RATHER THAN `forloop.counter0`, and that is load-bearing now the squares are grouped: a loop
+    counter restarts per group, five at a time, so the threshold would never be reached and every cover would
+    load eagerly. It also means this partial needs no loop at all, which is what lets one square be
+    re-rendered on its own after a write.
+    {% endcomment %}
+    <img src="{{ card.cover.display_image_url }}" alt="" decoding="async"
+         {% if card.index >= 7 %}loading="lazy"{% endif %}
+         class="pp-csq__art{% if not card.cover.has_cover_art %} pp-csq__art--icon{% endif %}">
+    {% comment %}The scrim rides with the ART only. Over `.pp-csq__noart` -- a designed dark field with
+    nothing beneath it -- it solved no legibility problem and took that field's own glyph below the
+    contrast floor.{% endcomment %}
+    <span class="pp-csq__scrim" aria-hidden="true"></span>
+    {% else %}
+    <span class="pp-csq__noart" aria-hidden="true">?</span>
+    {% endif %}
+    {% comment %}THE KEY CHIP rides over the art, which is the only reason it exists -- so it belongs to
+    the filled branch. An empty square shows its key once, large and centred, rather than twice.{% endcomment %}
+    <span class="pp-csq__key{% if card.job %} pp-csq__key--job{% endif %}" aria-hidden="true">
+        {% if card.job %}{% job_icon_use card.job.icon '' %}{% else %}{{ card.label }}{% endif %}
+    </span>
+{% else %}
+    {% comment %}An empty square shows its own key: a hunter scanning for gaps is asking "which letters
+    are left", and a generic `+` answers a different question.{% endcomment %}
+    <span class="pp-csq__well{% if card.job %} pp-csq__well--job{% endif %}" aria-hidden="true">
+        {% if card.job %}{% job_icon_use card.job.icon '' %}{% else %}{{ card.label }}{% endif %}
+    </span>
+{% endif %}
+
+{% comment %}THE BODY SITS OUTSIDE THE FILLED BRANCH, and that placement is the fix for a real gap rather
+than tidying. It used to live inside the branch, so an EMPTY Job Coverage square rendered only a
+discipline-tinted glyph and never its job's NAME -- at any breakpoint, desktop included. Half the run type
+could not answer the one question this grid exists to answer, while the screen-reader line answered it
+fine: sighted readers served worse than AT users.
+
+An A-Z square still gets no body when empty, correctly -- there the centred letter IS the name, and
+repeating it would put one datum in two slots for no gain.
+
+`aria-hidden` because the line below says all of this in one sentence. Without it a finished jobs square
+announces "Slayer God of War Slayer: God of War, finished" -- every word twice.{% endcomment %}
+{% if card.job or card.is_filled %}
+<span class="pp-csq__body" aria-hidden="true">
+    {% if card.job %}<span class="pp-csq__job" title="{{ card.label }}">{{ card.label }}</span>{% endif %}
+    {% if card.is_filled %}<span class="pp-csq__name" title="{{ card.game_name }}">{{ card.game_name }}</span>{% endif %}
+</span>
+{% endif %}
+
+{% if card.is_completed %}
+{% comment %}NOT `partials/icons/checkmark.html`, which the design system otherwise asks for: that partial
+fixes `stroke-width="2"` and adds `inline-block flex-shrink-0`, and this glyph is 11px inside an 18px
+filled disc, where a 2-weight stroke disappears. A deliberate exception, said out loud so the next reader
+does not have to guess.{% endcomment %}
+<span class="pp-csq__check" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+</span>
+{% endif %}
+
+{% if card.xp_pending and is_owner %}
+{% comment %}UNCLAIMED XP LIVES HERE, for the OWNER: a visitor cannot claim it, so to them the pip was an
+orange prompt about somebody else's reward. A mark rather than a button: the claim itself is in the reward panel,
+where a row has the width for an icon, a name and a 44px target -- see `_rewards_panel.html` for why a
+~109px square is the wrong place for one.
+
+`aria-hidden`, because the screen-reader line below says it in words. Announcing a coin glyph as well would
+give the cell two names for one fact.{% endcomment %}
+<span class="pp-csq__pip" aria-hidden="true">XP</span>
+{% endif %}
+
+{% comment %}The state in words, and the only thing a screen reader gets from this cell -- everything above
+is decoration by the time it reaches here. On an EDITABLE square this doubles as the button's accessible
+name, which is why it names the action too: "empty" alone would give 26 buttons the same label.
+
+`|default:` on the name because the completed-slot constraint requires a `contract_slug`, not a
+`contract_name`, so a row written around the service could otherwise announce "A: , finished".{% endcomment %}
+<span class="sr-only">{{ card.label }}: {% if card.is_completed %}{{ card.game_name|default:'a game' }}, finished{% if card.xp_pending and is_owner %}, job XP to claim{% endif %}{% elif card.is_filled %}{{ card.game_name|default:'a game' }}, in progress{% if can_edit %}. Change it{% endif %}{% else %}empty{% if can_edit %}. Choose a game{% endif %}{% endif %}</span>

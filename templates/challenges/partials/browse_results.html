@@ -1,0 +1,87 @@
+{% comment %}Challenge browse results -- the grid only, shared by BOTH public pages (Challenges and the
+Hall of Fame). Returned on HTMX filter swaps AND on the InfiniteScroller's `?page=` fetches
+(X-Requested-With, via `HtmxListMixin`'s XHR guard). The scroll sentinel and the spinner live in the host
+page, OUTSIDE this partial, so a filter change swaps only the grid and does not tear out the thing watching
+for the next page.
+
+ONE PARTIAL FOR TWO PAGES, but no longer one ENTRY. The wrapper, the count attributes and the three empty
+states are genuinely common; how a run is drawn is not. The Challenges page draws cards (an in-flight run's
+subject is its progress, and there are many to scan) and the Hall of Fame draws heroes (a finished run is a
+monument, and there will never be many). Each view declares `entry_template` and `grid_class`, so a page
+cannot end up drawing the other page's entry -- the earlier version of this file hardcoded the card and
+asserted that a run card is a run card, which was a claim about the feature rather than about the template.
+
+`browse_url` is passed in by each host page so the empty state's "Clear filters" returns to the page the
+reader is actually on.
+
+`pp-reveal` is baked in on HTMX swaps only: htmx's settle step restores server attributes on id'd swapped
+elements, so a class added by JS in `afterSwap` is wiped again and the cards unhide with a flash.{% endcomment %}
+{% load custom_filters %}
+<div id="items-grid" class="{{ grid_class }}{% if request.htmx %} pp-reveal{% endif %}"
+     data-result-count="{{ paginator.count }}" data-has-filters="{% if has_filters %}1{% else %}0{% endif %}"
+     {% comment %}THE PAGE SIZE, emitted rather than duplicated in JS. The two pages no longer share one:
+     the Hall of Fame paginates by 8 (its heroes are full-width, and more importantly its per-page concept
+     union has to stay inside the budget `cover_games_for`'s cap is argued for), while this page keeps 24.
+     `challenges-browse.js` had the 24 as a literal with a comment saying it MUST match `paginate_by` -- one
+     literal cannot match two values, and the scroller sizes its resume-page arithmetic from it, so a
+     mismatch makes a history restore re-fetch and duplicate rows.{% endcomment %}
+     data-page-size="{{ view.paginate_by }}">
+    {% for run in runs %}
+    {% comment %}`entry_template` is the VIEW's declaration, not a querystring or anything a reader can
+    influence -- it is a class attribute, so there is no template-injection surface here.
+
+    `board` and `earned_title` are looked up by run id from the maps `enrich` built. A page whose entry does
+    not draw them (the card) simply never reads them.
+
+    The two miss DIFFERENTLY, which an earlier version of this comment got wrong by calling both "absent
+    rather than empty": `earned_titles` really is absent for a run that earned no title, while `boards_for`
+    seeds an entry for every run, so a run with no slots yields an empty LIST. Both are falsy, which is why
+    the hero's own `{% templatetag openblock %} if {% templatetag closeblock %}` decides either
+    way.{% endcomment %}
+    {% comment %}`dict_get` and not `get_item`: both are in `custom_filters` and both do this lookup, but
+    `get_item` returns `{}` for a miss, so an absent title would be an empty dict where a string belongs.
+    `dict_get` returns None, which is the honest answer and the one the hero's `{% templatetag openblock %} if
+    {% templatetag closeblock %}` reads.{% endcomment %}
+    {% comment %}`plaque` is the Pursuer Card spine: rank, Pursuer Level, Career XP, the shared disciplines
+    ring's arcs, and the job XP the run itself paid. Like `board` it is seeded for every run, so the hero
+    reads its parts directly rather than guarding the whole thing -- a hunter with no career standing row has
+    a real answer, the catalogue floor, not a missing one. The CARD entry never reads it.
+
+    TWO STALE CLAIMS CORRECTED HERE: this said "the five-discipline band" (deleted -- the plaque hosts the
+    live shared ring) and "level 0" (it is the floor, which is what their Career page shows).{% endcomment %}
+    {% include entry_template with run=run index=forloop.counter0 first=forloop.first board=boards|dict_get:run.pk earned_title=earned_titles|dict_get:run.pk plaque=plaques|dict_get:run.pk %}
+    {% empty %}
+    <div class="pp-gtile-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+        {% comment %}THREE EMPTY STATES, not one, because "nothing here" has three different causes and only
+        one of them is the reader's doing. A search that matched nobody is a dead end they can back out of; an
+        empty page is a fact about the site.{% endcomment %}
+        {% if query %}
+        <p class="pp-gtile-empty__title">No hunter matches &ldquo;{{ query }}&rdquo;</p>
+        <p class="pp-gtile-empty__hint">Search is by PSN name.</p>
+        {% elif has_filters %}
+        <p class="pp-gtile-empty__title">No runs of that type yet</p>
+        <p class="pp-gtile-empty__hint">Try another type, or All.</p>
+        {% else %}
+        <p class="pp-gtile-empty__title">{{ empty_title }}</p>
+        <p class="pp-gtile-empty__hint">{{ empty_hint }}</p>
+        {% endif %}
+
+        {% if not has_filters and not query %}
+        {% comment %}THE WAY IN, on the page everybody sees first at launch. An empty board with nothing to press
+        was a dead end; My Challenges is where a run starts (and explains the beta to a hunter who cannot yet).
+        A signed-out reader is sent through login and back.{% endcomment %}
+        <div class="pp-gtile-empty__action">
+            <a href="{% url 'my_challenges' %}" class="pp-cta">Start a challenge</a>
+        </div>
+        {% endif %}
+        {% if has_filters %}
+        {% comment %}Plain navigation rather than an htmx reset, because it has to clear the URL too -- a
+        swap would leave `?q=` in the address bar describing a grid that no longer has it.{% endcomment %}
+        <div class="pp-gtile-empty__action">
+            <a href="{{ browse_url }}" class="pp-cta pp-cta--ghost">Clear filters</a>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

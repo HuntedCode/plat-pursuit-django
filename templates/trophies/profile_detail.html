@@ -310,6 +310,9 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
             // un-hide it -- the exact failure the trophies comment above records.
             else if (tab === 'lists') { cardSel = revealSel = '.pp-gcard'; }
             else if (tab === 'ratings') { cardSel = revealSel = '.pp-rcard'; }
+            // Challenges reuses the Challenges page's run card, so it reveals on that card. Not optional,
+            // for the reason the Lists branch gives: the default `.card` matches nothing on that grid.
+            else if (tab === 'challenges') { cardSel = revealSel = '.pp-crun'; }
             else if (tab === 'badges') { cardSel = revealSel = '.pp-gallery__card'; }
             else if (tab === 'trophies') {
                 cardSel = isActivity ? '.pp-act__cell' : '.pp-actt__card';
@@ -537,6 +540,18 @@ the HTML -- and document-delegated, so it also covers the standalone day page.{%
 
             // `.is-active` moved above, and that is what the roving tabindex reads.
             if (profileTablist) { profileTablist.syncTabindex(); }
+        }
+
+        // THE URL NAMES THE TAB THE SERVER RENDERED. A conditional tab (Lists, Challenges, Card) typed or
+        // bookmarked with nothing behind it renders Games, but the address bar would keep the old `?tab=`,
+        // and everything below reads the tab from the URL: the Games grid would be wired with another
+        // tab's card selectors, and the scroller would page the wrong tab. The HTMX path is fixed by the
+        // view's HX-Push-Url.
+        var renderedTab = '{{ current_tab|escapejs }}';
+        if (renderedTab && getTabFromUrl() !== renderedTab) {
+            var fixed = new URL(window.location.href);
+            fixed.searchParams.set('tab', renderedTab);
+            history.replaceState(history.state, '', fixed.pathname + fixed.search + fixed.hash);
         }
 
         // Initial setup

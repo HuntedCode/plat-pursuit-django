@@ -1,0 +1,537 @@
+{% extends 'base.html' %}
+{% load static mark_tags job_icons %}
+
+{% block title %}{{ challenge.name }} - {{ challenge.profile.display_psn_username }}{% endblock %}
+{% comment %}A finished run is meant to be shown to somebody, so this page is indexable -- unlike
+`my_challenges.html`, which is the hunter's own working surface. A HIDDEN run is `noindex`: its owner
+took it out of view, and a crawler that had already seen it must not keep serving it.{% endcomment %}
+{% block robots %}{% if challenge.is_deleted %}noindex, nofollow{% else %}{{ block.super }}{% endif %}{% endblock %}
+
+{% block content %}
+{% comment %}THE SPRITE, not inline icons, which is the choice `job_icon_sprite` exists to offer. A jobs
+run draws 25 unique glyphs, and `job_icon` re-inlines every path each time. The sprite emits the library
+once and each square spends a `<use>`.
+
+Gated on the type, because an A-Z run references none of it and an unused sprite is bytes for nothing.{% endcomment %}
+{% if challenge.challenge_type == 'jobs' %}{% job_icon_sprite %}{% endif %}
+
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        {% comment %}THE RUN'S TYPE, not the generic challenge flag: the same glyph its My Challenges card
+                        and its hub card wear, so a run reads as the same object on every surface.{% endcomment %}
+                        {% include 'partials/icons/challenge_type.html' with type=challenge.challenge_type size='w-5 h-5 md:w-6 md:h-6' extra_class='text-primary' %}
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ challenge.name }}</h1>
+                        {% if challenge.is_complete %}
+                        <span class="bd-chip bd-chip--success shrink-0">Finished</span>
+                        {% elif challenge.is_deleted %}
+                        <span class="bd-chip bd-chip--ghost shrink-0">Hidden</span>
+                    {% endif %}
+                        {% comment %}THE TITLE THIS RUN EARNED, or is playing for. It began life in the
+                        reward panel and does not belong there: a title is an identity fact about the run,
+                        not a payout, and an A-Z run pays no XP -- so the panel became a full-width bordered
+                        card containing one line of text, which is exactly the "empty card reads as a broken
+                        block" failure its own gate was written to avoid. Here it sits with the run's other
+                        state chips, where a reader is already looking for what this run IS.
+
+                        `title_earned` comes from the service rather than being inferred from
+                        `is_complete`, because inferring it in the template is how the two tenses get
+                        swapped.{% endcomment %}
+                        {% if rewards.title_name %}
+                        <span class="bd-chip bd-chip--accent shrink-0"
+                              title="{% if rewards.title_earned %}Earned{% else %}Awarded when this run is finished{% endif %}">{{ rewards.title_name }}</span>
+                        {% endif %}
+                    </div>
+                    {% comment %}THE BYLINE, and it is the reason this page is public at all: a run belongs
+                    to a hunter, and a page about somebody's run that does not say whose is an orphan.
+                    `name_mark` rather than the bare name, so a supporter's mark travels with it here as it
+                    does on every other surface that credits somebody.{% endcomment %}
+                    <p class="text-xs md:text-sm text-base-content/60 mt-1">
+                        <a href="{% url 'profile_detail' psn_username=challenge.profile.psn_username %}"
+                           class="link-hover font-semibold{% if not challenge.profile.display_mark %} link{% endif %}">{% name_mark name=challenge.profile.display_psn_username|default:challenge.profile.psn_username mark=challenge.profile.display_mark size='sm' %}</a>
+                    </p>
+                    {% comment %}THE TYPE TUTORIAL'S RECALL, for every reader: a visitor reading somebody's run can ask
+                    what its squares mean as well as its owner can.{% endcomment %}
+                    <button type="button" class="pp-edhint mt-2" data-ctut-open="challenge-tutorial">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        How this challenge works
+                    </button>
+                </div>
+
+                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{% comment %}`data-countup` is the TARGET; the text is what a reader sees if the script never runs, so
+                    it is the real number either way. `countUp` reads the attribute and animates the text
+                    to it.{% endcomment %}<span data-cpick-tally data-countup="{{ challenge.completed_count }}">{{ challenge.completed_count }}</span><span class="text-base-content/40">/{{ challenge.total_slots }}</span></span>
+                    {% comment %}THE UNIT, because "done" is a square's word and a Calendar run counts
+                    DAYS. The figure beside it is the same `completed_count` for every type; only what
+                    it counts differs, so only the noun branches.{% endcomment %}
+                    <span class="text-xs md:text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">{% if calendar_rail %}days{% else %}done{% endif %}</span>
+                </div>
+            </div>
+
+            {% comment %}THE RUN'S PROGRESS, AND A CALENDAR RUN SHOWS A LADDER INSTEAD OF A BAR (owner,
+            2026-10-04: "can we put that rail in the header and replace the progress bar there?").
+
+            WHY THE SWAP IS MORE THAN A MOVE. A `.pp-horizon` says how far along a run is, which for 25
+            or 26 squares is the whole story. 365 days is not: the interesting fact is which RUNG is
+            next, and a bar cannot say that. The rail is the same measure with the ladder drawn on it,
+            so it replaces the bar rather than joining it -- and it also removes a duplicated figure,
+            because the big tally two lines up already states the count.
+
+            THE HOOK STAYS ON THE SLOT BRANCH, where it is still load-bearing. `.pp-horizon` is a shared
+            primitive and this page renders TWO of them: the nav's hidden sync bar (`.pp-avsync__prog`)
+            comes first in the document, so `document.querySelector('.pp-horizon')` found THAT. Every
+            write set the progress on a hidden element in the chrome and the run's own bar never moved
+            until a reload -- the owner's report. The include cannot take an attribute, so the hook goes
+            on the wrapper. A Calendar run has no picker writing to it, so its branch needs none.
+            {% endcomment %}
+            {% if calendar_rail %}
+            <div class="mt-3">
+                {% include 'challenges/partials/_calendar_rail.html' %}
+            </div>
+            {% else %}
+            <div class="mt-3" data-cpick-horizon>
+                {% include 'components/horizon.html' with progress=progress %}
+            </div>
+            {% endif %}
+
+            {% comment %}THE OWNER'S STATE NOTES, IN THE HEADER. They sat below the board -- some 1,300px down on a
+            phone -- so the owner of a hidden run, for whom this page is read-only, had to scroll past every
+            square to learn why nothing responded. Two independent notes, not an if/else: a run can be both
+            finished and hidden.{% endcomment %}
+            {% if is_owner and challenge.is_complete %}
+            <p class="text-xs text-base-content/60 mt-3">This run is finished, so its {{ challenge.unit }} are fixed.</p>
+            {% endif %}
+            {% if is_owner and challenge.is_deleted %}
+            <p class="text-xs text-base-content/60 mt-3">
+                This run is hidden, so it is read-only and only you can see it. Press Resume on
+                <a href="{% url 'my_challenges' %}" class="link">My Challenges</a> to bring it back with its progress.
+            </p>
+            {% endif %}
+
+            {% comment %}THE HISTORY IMPORTER, ON THE PAGE. The owner asked for it here as well as inside the
+            sheet, and the reason is the flow: a hunter who has just started an A-Z run and knows the games they have
+            finished HERE already cover half the alphabet is not thinking about a particular square yet, so
+            making them open one to find this is the wrong first step. ("Their library" is how this used to read
+            and is the wrong population -- a library they arrived with imports nothing, since only completions
+            after `date_joined` qualify.)
+
+            Rendered only when the importer is actually open, which is THREE conditions and not the two an
+            earlier version of this comment listed: the viewer can edit this run (the cheapest term, and the one
+            that keeps a visitor's page free of the query), their profile is linked, and the importer itself is
+            available -- A-Z only, and only before they have finished one. See `history_is_open`.
+
+            It deliberately does NOT ask the expensive question of whether anything qualifies, so it can open an
+            empty panel -- and the panel says which KIND of empty it is.{% endcomment %}
+            {% if history_is_open %}
+            <div class="mt-3">
+                <button type="button" class="pp-cta pp-cta--ghost pp-cpick__histcta" data-cpick-history>
+                    {% comment %}Literal about what it does. "Import" is the verb the square records
+                    (`completed_via='import'`), so the copy and the data say the same word.{% endcomment %}
+                    Import from your history
+                </button>
+                {% comment %}THE ONE-TIME RULE BELONGS IN EVERY PLACE THIS IS DESCRIBED (owner, 2026-09-28).
+                A head start somebody expects to get again on their second run is a disappointment we wrote
+                ourselves, so the copy says "first" before it says what it does.{% endcomment %}
+                <p class="pp-cpick__histhint"><b>A one-time head start.</b> Games you finished after joining
+                    Platinum Pursuit can fill a letter straight away, on your first A-Z Challenge only.</p>
+            </div>
+            {% endif %}
+            {% comment %}THE SHARE CARD, for the owner only (the endpoints refuse anybody else's run anyway).
+            Last in the header because it acts on the run as a whole and is never the next step.{% endcomment %}
+            {% if can_share %}
+            <div class="mt-3">
+                {% include 'challenges/partials/_share_button.html' with run=challenge %}
+            </div>
+            {% endif %}
+        </div>
+    </section>
+
+    {% comment %}WHAT THE RUN IS WORTH, and where its XP is claimed. Between the header and the board on
+    purpose: a hunter arriving at a finished run should meet the reward before the twenty-five squares that
+    earned it, and one arriving mid-run should know what the next square pays without scrolling past the
+    grid to find out.
+
+    RENDERED FOR EVERYBODY, not just the owner, because "what is this worth" is the question a visitor to
+    the Hall of Fame is asking too -- they simply get no Claim buttons (`is_owner` gates those inside the
+    partial, not this include).
+
+    ON A SURFACE, never bare on the page background: the same rule every other block on this page follows.
+    {% endcomment %}
+    {% comment %}A DATA HOOK, not a class: `data-cpay-wrap` is the stable node a claim's reply swaps the
+    inside of, and a class with no rule behind it is what the class-coverage test exists to catch. The
+    wrapper also means the panel's own root is never the node being replaced, so nothing here needs
+    `outerHTML` -- which this page's JS bans outright.{% endcomment %}
+    {% comment %}THE PAYOUT PANEL, for the one challenge type that has a payout. With the title moved up
+    into the header card, an A-Z run has nothing to put here -- so the section does not render at all rather
+    than drawing a bordered surface around a single sentence.
+
+    `mb-3` because `.pp-gbrowse` sets no `gap` and `.scard` no `margin-bottom`: without it this card's bottom
+    hairline sits flush on the first row of squares, and the board's top spacing changes depending on whether
+    the panel rendered. `mb-3` is the design system's own card-stacking token.
+
+    NAMED, via `aria-labelledby`. An unnamed `<section>` is exposed as a plain generic and buys nothing --
+    the argument is already written out at the board's own landmark below, and this section was the
+    counterexample to it.{% endcomment %}
+    {% comment %}`pp-head-cascade` BECAUSE EVERY OTHER BLOCK ON THIS PAGE HAS AN ENTRANCE and this one did
+    not: the header card's body cascades, the board's squares stagger in, and the reward card between them
+    simply appeared. Career runs the cascade on both of its stacked cards, which is the precedent.
+
+    ON THE SECTION, whose direct child is the panel root -- so the panel rises as one block rather than its
+    parts trickling in, which is right for a card that is not the page's header. And `challenge-detail.js`
+    REMOVES the class before its first swap: the section survives a claim but its contents are replaced, so
+    leaving it would replay the entrance on every claim, which reads as the panel arriving again rather than
+    updating.{% endcomment %}
+    {% if rewards.per_square %}
+    <section class="scard mb-3 pp-head-cascade" data-cpay-wrap aria-labelledby="cpay-head">
+        {% include 'challenges/partials/_rewards_panel.html' %}
+    </section>
+    {% endif %}
+
+    {% comment %}THE BOARD AND ITS GRIDS. Columns, gaps, the three square states and the entrance all
+    live in `components/challenges.css` (`.pp-csq-board` / `.pp-csq-shelf` / `.pp-csq-grid` / `.pp-csq`)
+    rather than in utilities here, for the same reason `.pp-gtile-grid` does: a 25-or-26-cell layout with
+    four breakpoints is a component, and spelling it in classes puts the one decision this page makes in
+    the hardest place to read it.
+
+    THE BOARD is where the run's id and the click delegation live, because a jobs run has FIVE grids and
+    anything that assumed one would only ever have found the first.
+
+    A REAL LIST, because the squares are one. Sibling divs each ending in screen-reader text read as one
+    undelimited run of prose with no cell boundary and no count; a list gives "list, N items" and a
+    boundary between each.
+
+    `role="list"` IS NOT BELT-AND-BRACES HERE. Tailwind's preflight ships `ol,ul,menu{list-style:none}`,
+    and WebKit strips the implicit `list` role from a list styled that way -- so on iOS Safari, the
+    dominant screen-reader pairing for a page whose base layout is 375px, the bare `<ul>` announced
+    nothing at all and the sentence above would have been false. The explicit role is what makes it
+    true.{% endcomment %}
+    {% comment %}GATED, because there are two kinds of board now and only one of them is this one. The
+    view sets `groups` to `[]` for a Plat Calendar run, and without this test the wrapper rendered an
+    empty frame -- which is the `_board_groups` regression ("drew the bare grey frame above a '26/26
+    squares' tally") arriving from the other direction. A Calendar board follows below.{% endcomment %}
+    {% if groups %}
+    <div class="pp-csq-board" data-challenge-id="{{ challenge.id }}">
+        {% for group in groups %}
+        {% comment %}ONE SHELF PER DISCIPLINE on a jobs run, and a single plain grid for A-Z.
+
+        A Job Coverage run is 25 squares that are really five groups of five -- the radar's disciplines -- and
+        laying them out seven across broke every group mid-row, so the structure was invisible.
+
+        THE CARDS DO NOT CHANGE SIZE, which is the constraint. At `lg:` the shelf is a SEVEN-column grid
+        matching the page's own, with the head spanning 2 and the cards spanning 5; the inner grid divides
+        that span into 5 columns with 4 gaps, which is exactly the width a card had in the flat 7-column
+        grid. The gap both grids use is one `--csq-gap` declaration on the board, so that stays true when
+        it moves. Below `lg:` the head sits above and the cards keep the page's ordinary columns.
+
+        `<section>` ONLY WHEN THERE IS A HEAD TO NAME IT. A section with no accessible name is exposed as a
+        plain generic, not a region, in every engine -- so an unnamed one buys nothing and an A-Z run, which
+        has a single unlabelled group, gets a `<div>` instead of a semantically empty landmark. Where there
+        IS a label, `aria-labelledby` points at the `<h2>`, which is what actually promotes the element to a
+        named region and gives assistive tech a way to move between disciplines. The same id names the list,
+        so "list, 5 items" is attributed to Combat rather than floating free.
+
+        `group.dom_id` RATHER THAN A SLUG BUILT HERE. Two groups can share a slug-derived id -- a deleted
+        `Job` leaves a blank slug, and a job whose discipline is literally `other` produces the same string --
+        and duplicate ids make every `aria-labelledby` resolve to the FIRST heading. `slot_groups` stamps a
+        deduplicated id instead.{% endcomment %}
+        {% if group.label %}
+        <section class="pp-csq-shelf" aria-labelledby="{{ group.dom_id }}"
+                 {% if group.slug %}style="--disc: var(--disc-{{ group.slug }}, var(--pp-primary));"{% endif %}>
+            <div class="pp-csq-shelf__head">
+                {% comment %}A group whose `Job` rows were deleted has no icon, and `job_icon_use` renders
+                nothing for a blank name -- so the span is only emitted when there is a glyph to put in it,
+                rather than leaving an empty box contributing the head's gap.{% endcomment %}
+                {% if group.icon %}
+                <span class="pp-csq-shelf__icon" aria-hidden="true">{% job_icon_use group.icon '' %}</span>
+                {% endif %}
+                <h2 class="pp-csq-shelf__title" id="{{ group.dom_id }}">{{ group.label }}</h2>
+                {% comment %}Per-discipline progress, which is what the label area is for: the page's tally
+                says how the RUN is going and cannot say how this discipline is. `challenge-detail.js`
+                rewrites this after a write, because nothing else moves it.{% endcomment %}
+                <p class="pp-csq-shelf__sub">{{ group.done }} of {{ group.total }} done</p>
+            </div>
+        {% else %}
+        <div class="pp-csq-shelf pp-csq-shelf--plain">
+        {% endif %}
+            <ul class="pp-csq-grid" role="list"
+                {% if group.label %}aria-labelledby="{{ group.dom_id }}"{% endif %}>
+        {% for card in group.cards %}
+        {% comment %}THE `<li>` IS THE GRID ITEM; the square inside it is the thing you look at and, for
+        its owner, press. Splitting them is what lets an editable square be a real `<button>` while a
+        read-only one stays a `<div>`: a cell that takes focus and does nothing is worse than one that
+        does not, and `role="button"` would need Enter and Space wired by hand.
+
+        `--rev` drives the pure-CSS entrance stagger (capped in the stylesheet), and `--disc` tints a jobs
+        square by its discipline. Both ride the SQUARE rather than the `<li>`, because the square is what
+        animates and what the tint applies to.
+
+        A COMPLETED SQUARE IS NOT A BUTTON even for its owner -- it can never be reassigned or cleared, so
+        there is nothing for a press to do. That is the same rule `can_edit` encodes at the run level,
+        applied per square.{% endcomment %}
+        {% with square_class=card.job|yesno:"pp-csq pp-csq--jobs,pp-csq" %}
+        <li>
+        {% if can_edit and not card.is_completed %}
+            <button type="button"
+                    class="{{ square_class }}{% if card.is_filled %} pp-csq--filled{% else %} pp-csq--empty{% endif %}"
+                    style="--rev: {{ card.index }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}"
+                    data-cpick-open data-key="{{ card.key }}">
+                {% include 'challenges/partials/_square_body.html' %}
+            </button>
+        {% else %}
+            {% comment %}`data-key` ON THIS BRANCH TOO, and its absence was a real bug rather than an
+            omission. It used to live only on the editable `<button>` above -- but a square carrying
+            unclaimed XP is by definition COMPLETE, so on every page load it renders here, with no key for
+            the client to find. A claim's reply carries re-rendered squares that could never be matched:
+            the panel updated, the toast fired, and 25 orange XP pips stayed on the board until a manual
+            reload. It only ever appeared to work when the square had completed in the same session, where
+            `applySlot` leaves the key on the now-disabled button.
+
+            It is an identifier, not an affordance. Nothing about having one makes a div interactive.{% endcomment %}
+            <div class="{{ square_class }}{% if card.is_completed %} pp-csq--done{% elif card.is_filled %} pp-csq--filled{% else %} pp-csq--empty{% endif %}"
+                 style="--rev: {{ card.index }};{% if card.job %} --disc: var(--disc-{{ card.job.disc_slug }}, var(--pp-primary));{% endif %}"
+                 data-key="{{ card.key }}">
+                {% include 'challenges/partials/_square_body.html' %}
+            </div>
+        {% endif %}
+        </li>
+        {% endwith %}
+        {% endfor %}
+            </ul>
+        {% if group.label %}</section>{% else %}</div>{% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% comment %}THE CALENDAR'S BOARD, a different design rather than a bigger one: 365 day cells in
+    twelve month panels behind a crest switcher, with no cover art anywhere. Its own partial because a
+    day shares no field with a contract-backed square -- no cover, no job, no XP -- and the two dict
+    shapes are deliberately kept apart (`calendar_render`'s module docstring argues it).
+
+    `calendar_months` IS THE TEST, mirroring `{% templatetag openblock %} if groups {% templatetag closeblock %}`
+    above: the view sets it only on the Calendar branch, and `calendar_groups` returns `[]` for a run
+    whose day rows are gone -- so an empty board draws nothing rather than a frame.
+
+    ON A `.scard`, WHICH THE SLOT BOARD ABOVE IS NOT, and the difference is the rule rather than an
+    inconsistency. The owner caught this on a browser pass: "the contents of the page are up against
+    the raw background. This is not really used anywhere else on the site." Correct, and it is a
+    project rule -- content belongs on a surface -- that this board broke while the stylesheet beside
+    it records `.pp-csq-shelf__head` being banded for exactly the same reason ("the shelf label used to
+    sit on the bare page background... broke the rule that content belongs on a surface").
+
+    THE SLOT BOARD IS THE EXCEPTION, NOT THE NORM. "Free content" means PAGE-FILLING grids: 26 pieces
+    of cover art at 100-176px fill the row and read as the page's subject, so a card around them would
+    be a frame around a frame. A month panel is a numbered grid, a text head and a row of coins -- a
+    stats-shaped section, which still gets a card. `mb-3` for the same reason the reward panel above
+    carries it: `.pp-gbrowse` sets no `gap` and `.scard` no `margin-bottom`.{% endcomment %}
+    {% if calendar_months %}
+    <section class="scard mb-3" aria-labelledby="cal-board-head">
+        <h2 class="sr-only" id="cal-board-head">Plat Calendar board</h2>
+        {% include 'challenges/partials/_calendar_board.html' %}
+    </section>
+    {% endif %}
+
+    {% comment %}TWO INDEPENDENT NOTES, not an if/else. They were nested, and the inner condition was
+    always true: inside `{% templatetag openblock %} if is_owner and not can_edit {% templatetag closeblock %}`
+    the test reduced to `is_complete`, so the hidden-run sentence could never render -- and the owner of a
+    hidden run, the one reader for whom this page is a dead end, was told nothing at all. A run can also be
+    both finished and hidden, which an if/else cannot say.{% endcomment %}
+    {% if can_edit %}
+    {% comment %}THE PICKER, rendered once and driven by `challenge-detail.js`. Only for a hunter who can
+    actually change this run -- there is nothing for a visitor to open, and markup nobody can reach is
+    markup that rots.
+
+    A NATIVE `<dialog>` on `.gl-dialog`'s recipe, which is the site's real modal primitive and the record
+    of three earlier attempts that got it wrong (raw DaisyUI, then a version that landed in the top-left
+    corner because Tailwind's preflight zeroes the UA's `dialog { margin: auto }`, then one that centred
+    with grid and made overflow past the top edge unreachable with a soft keyboard up).
+
+    EMPTY ON PURPOSE. Both panels are fetched, because the pool for one letter already runs to the hundreds
+    in prod and the eligibility that shapes it is per-hunter -- so there is nothing to server-render that
+    would still be true by the time somebody opened it.{% endcomment %}
+    <dialog id="cpick" class="pp-cpick" aria-labelledby="cpick-title" tabindex="-1">
+        <div class="pp-cpick__head">
+            <div class="min-w-0">
+                <h2 class="pp-cpick__title" id="cpick-title" data-cpick-title>Choose a game</h2>
+                <p class="pp-cpick__sub" data-cpick-sub></p>
+            </div>
+            {% comment %}`type="button"`: inside a `<dialog>` a bare button still defaults to `submit`, and
+            a submit with no form closes the dialog with no `returnValue` -- which looks identical until
+            something starts reading one.{% endcomment %}
+            <button type="button" class="pp-cpick__close" data-cpick-close aria-label="Close">&times;</button>
+        </div>
+
+        <div class="pp-cpick__body">
+            {% comment %}THE SAME DOOR AT THE TOP OF THE SHEET, because a hunter who opened a square and
+            then realised they had already finished something should not have to close it again. It TOGGLES:
+            pressing it in history mode goes back to whatever the sheet was showing, so the mode is not a dead
+            end for somebody who arrived through a square.{% endcomment %}
+            {% if history_is_open %}
+            <button type="button" class="pp-cpick__histswitch" data-cpick-history-switch
+                    aria-pressed="false">From your history</button>
+            {% endif %}
+
+            <label class="sr-only" for="cpick-q">Search for a game</label>
+            <input id="cpick-q" class="stg-input pp-cpick__search" type="search" autocomplete="off"
+                   placeholder="Search for a game" data-cpick-q>
+
+            {% comment %}A live region INSIDE the dialog. A modal `<dialog>` makes everything outside it
+            inert and removes it from the accessibility tree, so the page-level status region announces
+            nothing while this is open -- the same reason `ToastManager` builds a per-dialog region.{% endcomment %}
+            <p class="pp-cpick__status" data-cpick-status role="status" aria-live="polite"></p>
+
+            {% comment %}`role="list"` for the reason the grid above spells out: preflight's
+            `list-style: none` makes WebKit drop the implicit list role, and these rows are the
+            sheet's actionable content on the same iOS Safari. The grid got it and these did not.{% endcomment %}
+            {% comment %}A BLOCK, NOT A PARAGRAPH. Four facts a hunter needs before pressing anything here,
+            and a wall of prose is the wrong shape for facts -- the date the rule measures from is the anchor,
+            so it leads and the rest reads as a short scannable list.{% endcomment %}
+            <div class="pp-cpick__note" id="cpick-note" data-cpick-note hidden>
+                <p class="pp-cpick__note-lead" data-cpick-note-lead></p>
+                {% comment %}`role="list"` for the reason the two lists above spell out: preflight ships
+                `ol,ul,menu{list-style:none}` and WebKit drops the implicit role from a list styled that way --
+                and this one is additionally `display: flex`, which strips it in Chrome too. Without it these
+                four facts announce as four loose runs of text, with no count and no list, immediately before
+                the only irreversible action in the feature.{% endcomment %}
+                <ul class="pp-cpick__note-facts" role="list" data-cpick-note-facts></ul>
+            </div>
+
+            {% comment %}`aria-describedby` points at the note above, so a reader reaching the offers is told
+            what that block said. The note explains this list and was associated with nothing.{% endcomment %}
+            <ul class="pp-cpick__rows" role="list" data-cpick-rows aria-describedby="cpick-note"></ul>
+
+            {% comment %}THE CATCH-UP BLOCK, and it is separate from the rows above for one reason: these
+            are the only offers that land a square COMPLETE and therefore LOCKED. Keeping them together
+            means the warning is written once, above all of them, instead of repeated per row or -- worse --
+            omitted.{% endcomment %}
+            <section class="pp-cpick__catchup" data-cpick-catchup hidden>
+                <h3 class="pp-cpick__catchup-title" data-cpick-catchup-title></h3>
+                <p class="pp-cpick__catchup-note" data-cpick-catchup-note></p>
+                <ul class="pp-cpick__rows" role="list" data-cpick-catchup-rows></ul>
+            </section>
+        </div>
+
+        {% comment %}THE FOOT, which is also where a confirmation is asked when the offers are a GRID.
+
+        The inline prompt reads well in the search panel, where each result is a full-width row and a prompt
+        inserted after one is just another row. In the square picker the offers are a multi-column grid of
+        cover cards, so a full-width prompt row reflowed the grid and pushed the card being decided about far
+        enough to clip its own art -- the owner's note. This bar is the same question in a place that cannot
+        reflow anything: the foot is `flex: none` outside the scrolling body, so it is always visible and the
+        grid never moves. The card keeps its place and takes a ring instead.{% endcomment %}
+        <div class="pp-cpick__foot" data-cpick-foot>
+            <p class="pp-cpick__current" data-cpick-current></p>
+            <button type="button" class="pp-cta pp-cta--ghost" data-cpick-clear hidden>Clear this square</button>
+            <div class="pp-cpick__footask" data-cpick-ask hidden>
+                {% comment %}`id` because the pressed card points `aria-describedby` at this, so a screen
+                reader reaching the ring hears the question rather than only seeing it.{% endcomment %}
+                {% comment %}TWO LINES, because a confirmation asks ONE thing and costs ANOTHER, and running
+                them together made the cost the tail of a sentence nobody finishes. The question leads; the
+                consequence sits under it in the warning tone.{% endcomment %}
+                <div class="pp-cpick__ask-body" id="cpick-ask-text">
+                    <p class="pp-cpick__ask-text" data-cpick-ask-text></p>
+                    <p class="pp-cpick__ask-cost" data-cpick-ask-cost hidden></p>
+                </div>
+                <div class="pp-cpick__ask-row pp-cpick__ask-row--foot">
+                    {% comment %}THE SAFE BUTTON FIRST, and named after what it keeps -- the house recipe
+                    (`.stg-confirm__row`, used by account deletion in Settings). Labels are set by the script,
+                    because both depend on what is being replaced.{% endcomment %}
+                    <button type="button" class="pp-cpick__ask-keep" data-cpick-ask-keep></button>
+                    <button type="button" class="pp-cpick__ask-go" data-cpick-ask-go></button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+{% comment %}UNCONDITIONAL, and it used to be gated on `can_edit` with the reasoning that a visitor's
+page has no picker so the bytes were wasted. That premise is gone: the file now also owns the page's ENTRANCE
+-- the tally counting up and the Horizon filling from zero -- and those belong to every viewer, not only to
+the hunter who can change the run. The Hall of Fame is precisely people reading somebody else's finished run,
+which is the case the animation is most for.
+
+The picker half still bails on its own guard (`boot` exits when there is no dialog), so a visitor gets the
+entrance and nothing else.{% endcomment %}
+{% comment %}THE CLAIM CEREMONY, for the one viewer who can trigger one. Gated on both halves of that: a
+payout exists only on a Job Coverage run (`per_square` is 0 for A-Z), and only its owner gets Claim buttons.
+A visitor reading the Hall of Fame can never open this overlay, so they should not download it.
+
+BEFORE `challenge-detail.js`, which feature-tests `PlatPursuit.ClaimCeremony` at click time rather than at
+load -- so the order is for clarity, not correctness. The sprite it draws job icons from is emitted at the top
+of this template under the same jobs-run condition.
+
+NO CSS TAG: `claim-ceremony.css` is imported by `input.css`, so its rules are already in the compiled
+bundle every page loads.{% endcomment %}
+{% if is_owner and rewards.per_square %}<script src="{% static 'js/claim-ceremony.js' %}"></script>{% endif %}
+<script src="{% static 'js/challenge-detail.js' %}"></script>
+{% comment %}THE CALENDAR'S SWITCHERS, on the Calendar branch only -- it is the only branch that renders a
+`.pp-cal`, and the script returns immediately without one. Gated rather than folded into
+`challenge-detail.js` because that file is the picker and the reward panel, which a Calendar run has
+neither of. The board itself needs no script: the server marks the current month's panel open, so a hunter
+with JavaScript off gets this month with the right squares tinted.{% endcomment %}
+{% if calendar_months %}<script src="{% static 'js/challenges-calendar.js' %}"></script>{% endif %}
+{% if can_share %}<script src="{% static 'js/challenge-share.js' %}"></script>{% endif %}
+<script src="{% static 'js/challenge-tutorials.js' %}"></script>
+{% endblock %}
+
+{% block fixed_overlays %}
+{{ block.super }}
+{% comment %}The share dialog, in this block for the same reason as every overlay below: `pageRecede` scales
+`#page-recede`, and a dialog inside it would resolve against the transformed ancestor.{% endcomment %}
+{% if can_share %}{% include 'challenges/partials/_share_dialog.html' %}{% endif %}
+{% comment %}THE TYPE TUTORIAL, on every run page for the recall link; it opens itself only for the owner's
+first visit to a run of this type, and never on the same load as the Calendar's opening ceremony.{% endcomment %}
+{% include 'challenges/partials/_type_tutorial.html' %}
+{% if calendar_months %}
+{% comment %}THE OPENING CEREMONY, first because it is the only overlay that opens ITSELF. Rendered for
+every Calendar run rather than only when it will fire: the element carries the reopen-free controller
+either way and `data-auto` -- which the view gates on owner + not-yet-seen -- is what decides whether it
+auto-opens. Keeping the markup unconditional means one code path and no second gate in the script.
+{% endcomment %}
+{% include "challenges/partials/_calendar_opening.html" %}
+{% comment %}THE DAY SHEET, one per board and not one per square: 365 shells would be 365 dialogs in the
+accessibility tree. The body is REPLACED on each open, which is the requirement `_calendar_day.html`
+states -- two copies would put two `id="cal-day-title"` in the document and `aria-labelledby` resolves to
+the first, so the dialog would announce the square the reader had just left.
+
+IN `fixed_overlays`, OUTSIDE `#page-recede`, AND THAT IS LOAD-BEARING. `takeover` scales
+`#page-recede`, and a `position: fixed` overlay inside a transformed ancestor resolves against THAT
+ancestor rather than the viewport -- so a sheet left in the page content laid out over the whole document
+and drew thousands of pixels from wherever the reader was looking. Every other `.pp-detail-modal` on a
+receding surface lives in this block for exactly this reason, and `badge_detail.html` spells it out.
+(It briefly lived in the board partial and was moved to `<body>` by the script, which worked and was
+half the pattern. This is the whole one.)
+
+`.pp-detail-modal` IS THE HOUSE SHELL, already used by badge detail, game detail and the landing. Its
+scrim, dialog, close button and entrance animation all come with it; nothing here is new chrome.
+
+`aria-labelledby` POINTS INTO THE FETCHED FRAGMENT, which is why the fragment carries that id at all.
+The dialog keeps an `aria-label` too, and the accname spec is clear about which wins: `aria-labelledby`
+is only consulted when it holds at least one VALID idref, so before the body is filled the name falls
+through to `aria-label`, and afterwards the heading wins.
+
+THE SCENARIO THIS USED TO CITE WAS UNREACHABLE: "the fallback a screen reader gets if a fetch fails and
+the body stays empty". A failed fetch never opens the sheet at all -- the script returns before `open()`
+-- so the dialog stays `hidden` and has no name to fall back to. The attribute is insurance for the
+window before the first open, which is the only state where the shell is in the document and empty.
+{% endcomment %}
+<div class="pp-detail-modal" id="cal-day-modal" hidden>
+    <div class="pp-detail-modal__scrim" data-day-close></div>
+    <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true"
+         aria-label="Day detail" aria-labelledby="cal-day-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-day-close
+                aria-label="Close day detail">&times;</button>
+        <div class="pp-detail-modal__body" data-day-body></div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

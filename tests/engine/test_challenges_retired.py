@@ -14,6 +14,20 @@ that table takes the data with it, silently, and the rebuild's import path with 
 This file is written BEFORE the challenge rebuild starts, on purpose: it is the thing that has to be
 true while the new system is being built beside it, and it is what the rebuild will edit deliberately
 rather than break by accident.
+
+THE REBUILD HAS STARTED (2026-09), so read the next paragraph before being confused by this one.
+
+There is a live `Challenge` model again -- `challenges.Challenge`, in the new `challenges` app. Every
+assertion here still holds and still matters, because what was retired was `trophies.Challenge` and
+its four slot tables, and `RETIRED_MODELS` below is scoped to
+`apps.get_app_config('trophies')` deliberately for exactly this reason. The two facts are both true at
+once: the old models must stay gone (their tables were dropped, and re-adding a model with those names
+to `trophies` would resurrect a schema nothing can populate), while the rebuilt system lives in its
+own app with its own tables and its own migration history.
+
+`ArchivedAZChallenge` stays the thing this file is really for. The rebuilt system is PLANNED to read it
+(nothing in `challenges/` references it yet) and will not replace it, so this file must not be the only
+thing standing between that table and a squash.
 """
 import pathlib
 
@@ -35,7 +49,7 @@ RETIRED_PATHS = (
     # canonical
     # `/community/challenges/` IS NOT HERE ANY MORE. It answers a real "coming back soon" page as of
     # 2026-09-19, holding the URL and the url_name the rebuilt browse will take so nothing that
-    # links to it has to change. `test_challenges_coming_soon.py` pins what it does and that it
+    # links to it has to change. `test_challenges_live.py` pins what it does and that it
     # stays a placeholder (noindex, no queries). Every other path below is still a 404: the rebuild
     # is not reusing them.
     '/community/challenges/az/create/',
@@ -48,7 +62,11 @@ RETIRED_PATHS = (
     '/community/challenges/genre/1/',
     '/community/challenges/genre/1/setup/',
     '/community/challenges/genre/1/edit/',
-    '/my-challenges/',
+    # `/my-challenges/` IS NOT HERE ANY MORE either, as of 2026-09-27. The rebuilt My Challenges page
+    # answers it, deliberately reusing the retired system's address and url_name for the same reason
+    # `/community/challenges/` does: anything that linked to a hunter's own challenges page still
+    # lands somewhere true. `test_my_challenges.py` pins what it does. What is NOT reused is the
+    # per-type create/setup/edit family below -- the rebuild has no such addresses.
     # the legacy 301 shims, which went with them
     '/challenges/',
     '/challenges/az/1/',
@@ -73,8 +91,11 @@ RETIRED_API_PATHS = (
 
 #: Every URL NAME the system owned, page and API, from the same commit. The three `*_detail` names
 #: take a `challenge_id`, which is exactly why the test below cannot use `reverse()`.
+#: `my_challenges` was removed from this tuple in 2026-09 when the rebuilt page took the name back.
+#: `challenges_browse` stays: the placeholder and the future browse both answer to `challenges`, so
+#: the old browse name is genuinely dead rather than reassigned.
 RETIRED_URL_NAMES = (
-    'challenges_browse', 'my_challenges',
+    'challenges_browse',
     'az_challenge_create', 'az_challenge_detail', 'az_challenge_setup', 'az_challenge_edit',
     'calendar_challenge_create', 'calendar_challenge_detail',
     'genre_challenge_create', 'genre_challenge_detail', 'genre_challenge_setup',
@@ -156,12 +177,41 @@ def test_the_sync_pipeline_does_not_call_a_challenge_checker():
     Its honest limit: a rebuilt hook named something else (`progress_hooks.run(...)`) passes this.
     That is acceptable -- what it defends against is the OLD system being wired back in, and the new
     one arriving here is a deliberate act that will edit this file anyway.
+
+    THE REBUILT HOOK ARRIVED (2026-09), and this is that deliberate edit. `token_keeper` now imports
+    `challenges.services.challenge_service.detect_for_profile` -- the NEW app -- and the guard was
+    failing on the bare substring `challenge_service`, which both modules share.
+
+    So it is scoped to the OLD module's path instead. That is what it always meant: the retired service
+    lived at `trophies/services/challenge_service.py`, `test_the_service_and_its_views_stay_gone` asserts
+    that file is deleted, and this asserts nothing imports it.
+
+    FOUR SPELLINGS, not one, because the first narrowing lost two. `trophies.services.challenge_service`
+    catches only the fully-dotted form -- `from trophies.services import challenge_service` and the
+    relative `from .services.challenge_service import ...` (this file lives in `trophies/`, and relative
+    imports are used here) both slipped through. My own check missed it because I tested the dotted form,
+    which matches two patterns at once, so it proved less than it looked like it did.
+
+    Note what CANNOT be a pattern: the bare `services.challenge_service`, because
+    `challenges.services.challenge_service` -- the new app's module, legitimately imported here --
+    contains it. Every pattern below is chosen to exclude that string.
+
+    The three `check_*_challenge` entries are PREFIXES of the retired service's exported functions
+    (`check_az_challenge_progress` and its two siblings), not their full names. They work as substrings
+    and no rebuilt hook will reuse them.
     """
     source = (ROOT / 'trophies' / 'token_keeper.py').read_text(encoding='utf-8')
 
-    for wired in ('challenge_service', 'check_az_challenge', 'check_calendar_challenge',
-                  'check_genre_challenge', 'import challenge', 'challenge_views'):
-        assert wired not in source, f'token_keeper is wired to challenges again: {wired}'
+    for wired in ('trophies.services.challenge_service', 'trophies/services/challenge_service',
+                  'trophies.services import challenge_service',
+                  'from .services.challenge_service', 'from .services import challenge_service',
+                  'check_az_challenge', 'check_calendar_challenge', 'check_genre_challenge',
+                  'challenge_views'):
+        assert wired not in source, f'token_keeper is wired to the RETIRED challenge system: {wired}'
+
+    # And the positive half, so this file records what the seam holds now rather than only what it must
+    # not: the rebuilt hook is present, and it is the new app's.
+    assert 'challenges.services.challenge_service import detect_for_profile' in source
 
 
 def test_the_az_archive_table_still_exists_and_keeps_its_columns():

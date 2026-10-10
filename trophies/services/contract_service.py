@@ -634,7 +634,105 @@ def _levels_snapshot(profile, job_ids):
 def _empty_claim():
     """A fresh, full-shape empty payload (same keys as the success path so callers see one shape).
     A function, not a module constant, so each caller gets its own `accepted`/`jobs` lists."""
-    return {'xp': 0, 'accepted': [], 'first_claim': False, 'rank_now': '', 'jobs': [], 'pursuer': None}
+    return {'xp': 0, 'accepted': [], 'eyebrow': '', 'first_claim': False, 'rank_now': '', 'jobs': [],
+            'pursuer': None}
+
+
+def ceremony_payload(profile, job_by_id, pre, pre_pursuer, *, total, accepted,
+                     first_claim, eyebrow='', post_pursuer=None):
+    """The "what just happened" payload that drives the claim animation. ONE BUILDER, TWO CALLERS.
+
+    EXTRACTED FROM `claim` WHEN THE CHALLENGE REDEEM NEEDED THE SAME CEREMONY. The alternative was a second
+    copy of the level/tier/rank math in `challenges.services.rewards`, and calling one function is the only
+    way to make "the same animation" a structural fact rather than a resemblance somebody has to maintain.
+    (`covers.sort_key` is the neighbouring argument for keeping one home, and worth citing accurately: the
+    four cover surfaces it names went down over a TYPE bug inside that one expression, not over duplication.
+    What it records is how fragile such an expression is, which is the case against a second copy of it --
+    not a duplication outage.)
+
+    IT MUST BE CALLED INSIDE THE WRITE, and that is the whole reason the Challenge path can use it at all.
+    `pre` and `pre_pursuer` are snapshots taken before the grant; this takes the matching ones after. Two
+    reads microseconds apart inside one transaction is what makes every number here exact -- a payload built
+    later cannot reconstruct the before state, because a level is a threshold and any other payout can cross
+    it in the gap. The Challenge redeem was designed the other way first (celebrate on the hunter's next
+    Career visit) and abandoned on that reasoning: a tier bloom a Contract claim had earned would have been
+    attributed to a challenge square. That is the mechanism, not an observed incident -- nothing shipped.
+
+    `eyebrow` is the one thing a caller may add. The player's own line counts Contract slugs, which a
+    challenge payout does not have, so the line travels with the payload rather than the player guessing.
+
+    Args:
+        job_by_id: {Job pk: Job} for every job the write could have paid -- bounded to those, never the
+            hunter's library.
+        pre: `_levels_snapshot(profile, job_by_id)` from before the grant.
+        pre_pursuer: `_pursuer_level(profile)` from before the grant.
+        total: the XP actually granted.
+        accepted: contract slugs, for `claim`; empty for anything else.
+        first_claim: whether this was the hunter's first job XP ever.
+        post_pursuer: the post-grant Pursuer level, when the caller has already read it. Omitted, this reads
+            it. `None` is safe as the "not supplied" marker because a level is always an int: a real 0 is
+            still `is not None`, so passing one cannot be silently rewritten into a fresh read.
+    """
+    post = _levels_snapshot(profile, job_by_id.keys())
+    # NOT RE-READ WHEN THE CALLER HAS IT. `_pursuer_level` is an aggregate plus `catalogue_job_count`, so
+    # two queries -- and a caller that brackets the grant for milestone logging has already taken exactly
+    # this reading, inside the same transaction, with nothing in between that can change it. Those two
+    # queries were being spent while holding the run, slot and ProfileJobXP row locks.
+    if post_pursuer is None:
+        post_pursuer = _pursuer_level(profile)
+    pre_rank = pursuer_rank_for_level(pre_pursuer)
+    post_rank = pursuer_rank_for_level(post_pursuer)
+    # On a rank-up, the footer first fills the OLD rank (from_rank) to 100% -- completed to its top --
+    # BEFORE the hand-off, then swaps to the new rank on return. Basing it on the FROM rank (not the rank
+    # just below the new one) keeps it consistent with the hand-off's from->to on multi-rank skips.
+    # None for a division step.
+    ladder_pre = None
+    if post_rank['key'] != pre_rank['key']:
+        floor = next_rank_floor(pre_rank['key'])
+        if floor is not None:
+            ladder_pre = pursuer_rank_ladder(floor - 1)
+            ladder_pre['fill'] = 100
+
+    jobs = []
+    for jid, job in job_by_id.items():
+        (frm_lvl, frm_xp), (to_lvl, to_xp) = pre[jid], post[jid]
+        if to_xp <= frm_xp:
+            continue   # this job received no XP from the claimed Contracts
+        jobs.append({
+            'slug': job.slug, 'name': job.name, 'disc': job.discipline, 'icon': job.icon,
+            'xp': to_xp - frm_xp,                      # XP this claim gave the job (the "+N" on its tile)
+            'from_level': frm_lvl, 'to_level': to_lvl,
+            'from_frac': frac_into_level(frm_xp),      # where the bar starts / lands within each level band
+            'to_frac': frac_into_level(to_xp),
+            'tier': tier_for_level(to_lvl)['name'],    # the job's RESTING tier (the at-rest subtitle)
+            # `level` = the tier's min_level (blooms exactly when the bar ticks past it); `rank` =
+            # its ladder position (Apprentice 1 .. Legend 7), so the bloom escalates toward Legend.
+            'tiers': [{'key': k, 'name': n, 'level': lvl, 'rank': tier_rank(k)}
+                      for lvl, k, n in tiers_crossed(frm_lvl, to_lvl)],
+        })
+    jobs.sort(key=lambda j: (j['to_level'] - j['from_level'], j['xp']), reverse=True)   # biggest promotions, then XP
+    return {
+        'xp': total,
+        'accepted': accepted,
+        # EMPTY FOR A CONTRACT CLAIM, so the player keeps its own line ("N Contracts claimed"). A caller
+        # whose payout has no contracts passes one.
+        'eyebrow': eyebrow,
+        'first_claim': first_claim,
+        'rank_now': post_rank['label'],
+        'jobs': jobs,
+        'pursuer': {
+            'from_level': pre_pursuer, 'to_level': post_pursuer,
+            'from_label': pre_rank['label'], 'to_label': post_rank['label'],
+            'from_key': pre_rank['key'], 'to_key': post_rank['key'],   # for the hand-off screen's per-rank colours
+            # Two finale intensities: rank_up = crossed into a new NAMED rank (heavy); div_up = climbed
+            # a division within the same rank (lighter). Both false = no rank movement, no finale.
+            'rank_up': post_rank['key'] != pre_rank['key'],
+            'div_up': post_rank['key'] == pre_rank['key'] and post_rank['division'] != pre_rank['division'],
+            'ranks': [{'key': k, 'name': n} for _lvl, k, n, _hd in ranks_crossed(pre_pursuer, post_pursuer)],
+            'ladder': pursuer_rank_ladder(post_pursuer),   # the new-rank ladder (footer after a rank-up / all else)
+            'ladder_pre': ladder_pre,                      # rank-up only: old rank filled 100% (footer pre hand-off)
+        },
+    }
 
 
 @transaction.atomic
@@ -646,6 +744,7 @@ def claim(profile, *, contract=None, all_claimable=False):
 
     The payload:
         {xp, accepted:[slug], first_claim, rank_now,
+         eyebrow,                                    # '' here; a non-contract caller sets it (ceremony_payload)
          jobs:[{slug, name, disc, icon, xp, from_level, to_level, from_frac, to_frac, tier,
                 tiers:[{key,name,level,rank}]}],   # every job the claim gave XP to (bar fills; may or may not level)
          pursuer:{from_level, to_level, from_label, to_label, from_key, to_key, rank_up, div_up,
@@ -684,58 +783,8 @@ def claim(profile, *, contract=None, all_claimable=False):
     # other direction, so on_commit costs nothing.
     transaction.on_commit(lambda: _forget_nav_badge(profile))
 
-    post = _levels_snapshot(profile, job_by_id.keys())
-    post_pursuer = _pursuer_level(profile)
-    pre_rank = pursuer_rank_for_level(pre_pursuer)
-    post_rank = pursuer_rank_for_level(post_pursuer)
-    # On a rank-up, the footer first fills the OLD rank (from_rank) to 100% -- completed to its top --
-    # BEFORE the hand-off, then swaps to the new rank on return. Basing it on the FROM rank (not the rank
-    # just below the new one) keeps it consistent with the hand-off's from->to on multi-rank skips.
-    # None for a division step.
-    ladder_pre = None
-    if post_rank['key'] != pre_rank['key']:
-        floor = next_rank_floor(pre_rank['key'])
-        if floor is not None:
-            ladder_pre = pursuer_rank_ladder(floor - 1)
-            ladder_pre['fill'] = 100
-
-    jobs = []
-    for jid, job in job_by_id.items():
-        (frm_lvl, frm_xp), (to_lvl, to_xp) = pre[jid], post[jid]
-        if to_xp <= frm_xp:
-            continue   # this job received no XP from the claimed Contracts
-        jobs.append({
-            'slug': job.slug, 'name': job.name, 'disc': job.discipline, 'icon': job.icon,
-            'xp': to_xp - frm_xp,                      # XP this claim gave the job (the "+N" on its tile)
-            'from_level': frm_lvl, 'to_level': to_lvl,
-            'from_frac': frac_into_level(frm_xp),      # where the bar starts / lands within each level band
-            'to_frac': frac_into_level(to_xp),
-            'tier': tier_for_level(to_lvl)['name'],    # the job's RESTING tier (the at-rest subtitle)
-            # `level` = the tier's min_level (blooms exactly when the bar ticks past it); `rank` =
-            # its ladder position (Apprentice 1 .. Legend 7), so the bloom escalates toward Legend.
-            'tiers': [{'key': k, 'name': n, 'level': lvl, 'rank': tier_rank(k)}
-                      for lvl, k, n in tiers_crossed(frm_lvl, to_lvl)],
-        })
-    jobs.sort(key=lambda j: (j['to_level'] - j['from_level'], j['xp']), reverse=True)   # biggest promotions, then XP
-    return {
-        'xp': total,
-        'accepted': accepted,
-        'first_claim': first_claim,
-        'rank_now': post_rank['label'],
-        'jobs': jobs,
-        'pursuer': {
-            'from_level': pre_pursuer, 'to_level': post_pursuer,
-            'from_label': pre_rank['label'], 'to_label': post_rank['label'],
-            'from_key': pre_rank['key'], 'to_key': post_rank['key'],   # for the hand-off screen's per-rank colours
-            # Two finale intensities: rank_up = crossed into a new NAMED rank (heavy); div_up = climbed
-            # a division within the same rank (lighter). Both false = no rank movement, no finale.
-            'rank_up': post_rank['key'] != pre_rank['key'],
-            'div_up': post_rank['key'] == pre_rank['key'] and post_rank['division'] != pre_rank['division'],
-            'ranks': [{'key': k, 'name': n} for _lvl, k, n, _hd in ranks_crossed(pre_pursuer, post_pursuer)],
-            'ladder': pursuer_rank_ladder(post_pursuer),   # the new-rank ladder (footer after a rank-up / all else)
-            'ladder_pre': ladder_pre,                      # rank-up only: old rank filled 100% (footer pre hand-off)
-        },
-    }
+    return ceremony_payload(profile, job_by_id, pre, pre_pursuer,
+                            total=total, accepted=accepted, first_claim=first_claim)
 
 
 # --- cache repair ----------------------------------------------------------

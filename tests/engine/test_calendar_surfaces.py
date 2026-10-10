@@ -1,0 +1,3165 @@
+"""The Plat Calendar's surfaces: the view dispatch, the detail board, and the Hall of Fame hero.
+
+WHAT THIS FILE IS FOR, as distinct from `test_calendar_render`. That one asks what the renderers return;
+this one asks whether the right renderer is CHOSEN and whether its output actually reaches the page. The
+two defects it exists to catch are both silent:
+
+  - a Calendar run handed to `slot_render.boards_for` gets `[]`, because it owns no `ChallengeSlot` rows.
+    So the WRONG dispatch does not raise -- the entry simply draws no board, which looks like a run with
+    nothing in it. Same in reverse for an A-Z run handed to `calendar_boards_for`.
+  - the detail page's slot board was ungated, so a Calendar run (whose `groups` is `[]`) rendered an
+    empty `.pp-csq-board` frame. That is the `_board_groups` regression ("drew the bare grey frame above
+    a '26/26 squares' tally") arriving from the other direction.
+
+THE BOARD MUST WORK WITH NO JAVASCRIPT, which is the other thing pinned here -- and the two switchers get
+there differently, which an earlier version of this docstring flattened into "both are CSS over an
+attribute":
+
+  - THE LENS is pure CSS. `.pp-cal:has(input[value="..."]:checked)` reads the checked radio, so the tints
+    and the tallies follow the chip with no script at all.
+  - THE MONTH is the `hidden` attribute, rendered by the server and moved by `PlatPursuit.wireTablist`.
+    Without JS the board shows January: correct, and fixed.
+
+The board itself carries NO state attributes, which one of the tests below asserts outright. The script is
+pinned by SOURCE TEXT, because this project has no JS test runner.
+"""
+import datetime as dt
+import re
+from pathlib import Path
+
+import pytest
+from django.db import connection
+from django.test import Client
+from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
+
+from challenges.models import (CALENDAR_MONTH_DAYS, CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR,
+                               CalendarDay)
+from challenges.services import calendar_fill
+from challenges.services import calendar_render
+from tests.factories import ProfileFactory, UserFactory
+
+#: The repo root, for the pins that read a template as text.
+ROOT_DIR = Path(__file__).resolve().parents[2]
+
+pytestmark = pytest.mark.django_db
+
+
+def _hunter():
+    return ProfileFactory(user=UserFactory(), is_linked=True, user_is_premium=True)
+
+
+def _run(challenge_type, profile=None):
+    """A real run of `challenge_type`, created through the service.
+
+    The Calendar has no creation door yet (`TYPES_NOT_YET_CREATABLE`), so the constant is lifted around
+    the call -- the same door `test_calendar_fill` and `test_calendar_render` use, for the same reason:
+    these tests want the rows the real creation path makes.
+    """
+    from challenges.services import challenge_service as svc
+
+    original = svc.TYPES_NOT_YET_CREATABLE
+    svc.TYPES_NOT_YET_CREATABLE = frozenset()
+    try:
+        return svc.start(profile or _hunter(), challenge_type)
+    finally:
+        svc.TYPES_NOT_YET_CREATABLE = original
+
+
+def _url(challenge):
+    return reverse('challenge_detail', args=[challenge.id])
+
+
+def _fill(run, month, day, *, on=None, plats=1):
+    """Fill one day. BOTH columns, because `in_clean` implies `in_all` and the database enforces it; a
+    test wanting a shovelware day -- in `all` and off the board -- writes the row itself.
+
+    `earned_on` AND `plat_count` ARE SET, and neither was at first. The real fill always writes a date
+    and a count alongside the booleans, so a helper that left them at null and zero produced rows no
+    backfill could make -- and the month's side column reads both, so its rows silently rendered empty
+    and the tests asserting them failed against a gap in the FIXTURE rather than in the page. The count
+    defaults to 1 for the same reason: a square is filled BY a platinum.
+    """
+    # `dt.date(2019, month, day)`, NOT `min(day, 28)` -- see the twin helper in
+    # `test_calendar_render.py`. The clamp stored a date whose day-of-month was not the square's, and
+    # collapsed days 29/30 of a month onto one date so `first == last` and "Most recent" vanished.
+    written = CalendarDay.objects.filter(challenge=run, month=month, day=day).update(
+        in_all=True, in_clean=True, plat_count=plats,
+        earned_on=on or dt.date(2019, month, day))
+    assert written == 1, 'no row at (%d, %d) -- the fill was a silent no-op' % (month, day)
+
+
+# ── the detail view's dispatch ───────────────────────────────────────────────────────────────────────
+
+def test_a_calendar_run_gets_month_groups_and_no_slot_groups():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    context = Client().get(_url(run)).context
+
+    assert context['groups'] == [], (
+        'the slot board must be empty, not merely unused -- its template gates on this')
+    assert len(context['calendar_months']) == 12
+    assert context['calendar_months'][0]['label'] == 'January'
+
+
+def test_a_slot_run_gets_no_calendar_context_at_all():
+    """THE DISPATCH IN THE OTHER DIRECTION. A stray `calendar_months` on an A-Z page would render a
+    second board below the first, and the Calendar partial's own `{% if calendar_months %}` is the only
+    thing standing between the two."""
+    context = Client().get(_url(_run(CHALLENGE_TYPE_AZ))).context
+    assert context['groups'], 'an A-Z run still draws the slot board'
+    assert 'calendar_months' not in context
+
+
+def test_the_year_totals_are_the_sum_of_the_months():
+    """TWO FIGURES: the days filled, and the same count without the shovelware exclusion. The second is
+    what lets the first be read aloud -- "297 days, of 340 you hold platinums for" -- rather than as a
+    bare number, and nothing on the board draws it."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 1, 1)
+    _fill(run, 6, 6)
+    CalendarDay.objects.filter(challenge=run, month=9, day=9).update(in_all=True, in_clean=False)
+
+    context = Client().get(_url(run)).context
+    assert context['calendar_totals'] == {'done': 2, 'all': 3, 'struck': 0, 'open': 363}
+    # Summed from the groups already on the page rather than asked of the database again.
+    assert context['calendar_totals'] == calendar_render.totals_for(context['calendar_months'])
+
+
+def test_the_page_offers_no_lens_to_choose():
+    """THREE CONTEXT KEYS STOOD HERE. `calendar_views` fed the switcher's options and `calendar_view`
+    decided which lens the board opened on, so the page was correct before any script ran. One lens
+    means nothing downstream has to be told which is active."""
+    context = Client().get(_url(_run(CHALLENGE_TYPE_CALENDAR))).context
+    assert 'calendar_views' not in context
+    assert 'calendar_view' not in context
+    assert context['calendar_months'], 'the board itself is still there'
+
+
+def test_the_detail_page_stays_flat_however_many_days_are_filled():
+    """The board is one query, so filling the whole year must not add any."""
+    empty = _run(CHALLENGE_TYPE_CALENDAR)
+    full = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=full).update(in_all=True, in_clean=True)
+
+    client = Client()
+    with CaptureQueriesContext(connection) as empty_cost:
+        client.get(_url(empty))
+    with CaptureQueriesContext(connection) as full_cost:
+        client.get(_url(full))
+
+    assert len(full_cost) == len(empty_cost), (
+        'a filled board cost %d queries against an empty board\'s %d'
+        % (len(full_cost), len(empty_cost)))
+
+
+# ── the rendered detail board ────────────────────────────────────────────────────────────────────────
+
+def _body(run):
+    return Client().get(_url(run)).content.decode()
+
+
+
+
+def _rail_css():
+    """The rail's own block of `challenges.css`, bounded and comment-stripped.
+
+    A SEPARATE READER, because `_calendar_css` cuts at the next top-level banner -- which is exactly
+    what it was fixed to do -- and `.pp-cal-rail` is its own block beyond that line. Reusing the
+    calendar reader for a rail assertion is how a pin passes against a slice that does not contain the
+    rule it names.
+    """
+    css = open('static/css/components/challenges.css', encoding='utf-8').read()
+    block = css[css.index('THE DAY-MARKER LADDER'):]
+    # BOUNDED at the placement note that follows the ladder, so a floor or colour pin cannot pass or fail on
+    # whatever component is appended after it.
+    block = block[:block.index('NOTE ON PLACEMENT')]
+    return re.sub(r'/\*.*?\*/', '', block, flags=re.S)
+
+
+def _css_rules(block, selector):
+    """Every rule for `selector`, comment-stripped and whitespace-flattened.
+
+    `_css_rule` TAKES THE FIRST OR THE LAST, which is the wrong handle whenever a selector appears more
+    than twice -- `.pp-cal__crests` has five rules and `.pp-cal__stats` three, and in both cases the one
+    worth asserting on is in the middle. Position also moves for reasons that change no computed value:
+    the width-story block sits above the base rule in the stylesheet, so "last" is the `md:` gap rather
+    than the cap. Callers filter these on a declaration they actually care about.
+
+    PASS IT A COMMENT-STRIPPED BLOCK. This does not strip -- `_calendar_css()` and `_rail_css()` already
+    do, and every caller goes through one of them -- so handing it raw stylesheet text would let a match
+    run through commentary. It also requires exactly one space before the brace, which is this file's
+    house style throughout; `.pp-cal__crests{` would return `[]`, and both callers assert a length so an
+    empty result fails loudly rather than passing vacuously.
+    """
+    return [m.group(0) for m in
+            re.finditer(re.escape(selector) + r' \{[^}]*\}', ' '.join(block.split()))]
+
+
+def _enclosing_at_rules(block, at):
+    """The at-rule preludes open at character `at`, outermost first.
+
+    WHY THIS IS NOT `rfind('@media')`. That finds the nearest PRECEDING at-rule with no nesting tracked,
+    so a rule moved OUT of its media block still reports the block above it as its own -- which is how
+    the counter plate's band assertion passed against the exact regression it was written to catch. A
+    brace stack is the only reading that answers "what encloses this".
+
+    PASS IT A COMMENT-STRIPPED BLOCK. `_calendar_css()` already strips, and a brace inside a comment
+    would otherwise unbalance the stack.
+    """
+    stack, last_open = [], 0
+    for i, ch in enumerate(block[:at]):
+        if ch == '{':
+            stack.append(block[last_open:i].strip())
+            last_open = i + 1
+        elif ch == '}':
+            if stack:
+                stack.pop()
+            last_open = i + 1
+    return [r for r in stack if r.startswith('@')]
+
+
+def _css_rule(block, selector, last=False):
+    """One rule's declarations, from its selector to its closing brace.
+
+    SLICING A STYLESHEET BY HAND IS A GUESS, which this file has paid for three times now -- once
+    landing on a single line and passing against nothing, once matching a comment that explained the
+    thing it was asserting was absent, and once matching a SHARED rule because the selector it wanted
+    also appears as the second half of `.pp-cal__arc-track, .pp-cal__arc {`. `_calendar_css` already
+    strips comments; this bounds the slice to one rule.
+
+    `last=True` IS FOR THAT THIRD CASE: when a selector appears both in a shared rule and in its own,
+    the standalone one comes later. Naming it at the call site is better than a cleverer search,
+    because the caller knows which of the two it means.
+    """
+    at = block.rindex(selector) if last else block.index(selector)
+    return block[at:block.index('}', at)]
+
+def _section(body, class_name, until):
+    """The rendered markup of one block, bounded by an EXPLICIT end marker.
+
+    An unbounded `body[body.index(...):]` slice reaches the end of the document, so any `count()` on it
+    silently counts the footer and the scripts too. That is the whole reason this helper exists.
+
+    THE END MARKER IS AN ARGUMENT, not a guessed list, and the first version learned why the hard way:
+    it carried a fixed list of boundaries tuned to the document order at the time, and moving the lens
+    switcher above the month panels silently made the crest section swallow three more `sr-only`
+    elements. Worse, one boundary was `pp-cal__lens`, which is a PREFIX of `pp-cal__lenscount` -- so
+    scoping to the lens block cut it off inside its own first chip. A caller naming its own end marker
+    cannot drift when the markup is reordered.
+    """
+    start = body.index(class_name)
+    end = body.index(until, start + len(class_name))
+    return body[start:end]
+
+
+def test_the_calendar_page_does_not_render_an_empty_slot_frame():
+    """THE REGRESSION THIS GATE EXISTS FOR. `groups` is `[]` on a Calendar run, and the slot board's
+    wrapper used to render regardless -- a bare frame with no squares in it."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'pp-csq-board' not in body
+    assert 'pp-cal__grid' in body
+
+
+def test_a_slot_page_does_not_render_a_calendar_board():
+    """ASSERTED ON THE BOARD, NOT ON ITS GRID. This used to forbid `pp-cal__grid` alone, so changing the
+    include's gate to something always-true survived: an A-Z page would have shipped an empty `.pp-cal`,
+    an empty `role="tablist"` and a bare bordered `.pp-switch`, and the suite stayed green."""
+    body = _body(_run(CHALLENGE_TYPE_AZ))
+    assert 'pp-csq-board' in body
+    assert 'pp-cal__crests' not in body
+    assert 'class="pp-cal"' not in body
+    assert 'pp-cal__grid' not in body
+
+
+def test_the_board_draws_every_day_of_the_year():
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    # COUNTED ON THE CLASS, NOT ON AN EXACT ATTRIBUTE. It was `class="pp-cal__day"` verbatim, which was
+    # chosen because it "cannot silently match nothing" -- and then silently matched 364 the moment a
+    # square started carrying a modifier (today's). The pattern anchors on the class and allows whatever
+    # follows, which is the same lesson `<div class="(pp-cal__day...)"` taught when the openable squares
+    # became buttons.
+    assert len(re.findall(r'class="pp-cal__day[ "]', body)) == 365
+    # TWELVE MONTH CRESTS AND EXACTLY ONE YEAR CREST, counted separately rather than as thirteen. A
+    # bare 13 would go on passing if a month vanished and a second overview appeared, which is the only
+    # way this count can realistically go wrong now that the row holds two kinds of thing.
+    assert len(re.findall(r'id="cal-tab-(?!all)', body)) == 12, 'one crest per month'
+    assert body.count('id="cal-tab-all"') == 1, 'exactly one year overview crest'
+    assert len(re.findall(r'class="pp-cal__crest[ "]', body)) == 13
+
+
+def test_only_the_current_month_is_showing_before_any_script_runs():
+    """`hidden` ON THE INACTIVE ELEVEN rather than a stylesheet rule, so the rendered HTML is a correct
+    board on its own and a reader never meets twelve months of squares at once -- even with CSS off, and
+    before `wireTablist` has wired anything.
+
+    AND THE ONE SHOWING IS THE CURRENT MONTH (owner, 2026-10-05), not January. The board opened on
+    `forloop.first` whatever the date, so a hunter arriving in October had to find October before the
+    page told them anything about now.
+
+    COMPUTED THROUGH `today_key`, NOT WITH A SECOND `timezone.now()`. A test that spells the clock
+    itself passes on the wrong square for anyone whose timezone differs from the runner's, and would be
+    a second definition of exactly the thing this feature keeps in one place."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    body = _body(run)
+    panels = re.findall(r'<section class="pp-cal__panel"[^>]*>', body)
+    open_index = calendar_render.today_key(run.profile)[0] - 1
+
+    # THE YEAR PANEL IS SEPARATED OUT BY ID, NOT LEFT TO POSITION. It renders FIRST, so indexing the
+    # list by month number was off by one the moment it arrived -- and this repo's rule is to never
+    # state a positional index when an id is available.
+    year = [p for p in panels if 'id="cal-month-all"' in p]
+    months = [p for p in panels if 'id="cal-month-all"' not in p]
+    assert len(year) == 1 and len(months) == 12
+    assert 'hidden' in year[0], 'the overview must not be the opening tab'
+
+    assert 'hidden' not in months[open_index], 'the current month must be the one showing'
+    assert sum(1 for p in panels if 'hidden' not in p) == 1, 'exactly one panel shows'
+    assert all('hidden' in p for i, p in enumerate(months) if i != open_index)
+
+    # The tab and the panel must agree: the switcher finds the live tab by `aria-selected`.
+    tabs = [t for t in re.findall(r'<button type="button" role="tab"[^>]*>', body)
+            if 'cal-tab-all' not in t]
+    assert sum(1 for t in tabs if 'aria-selected="true"' in t) == 1
+    assert 'aria-selected="true"' in tabs[open_index]
+
+
+def test_todays_square_is_marked_on_the_grid():
+    """"We should somehow identify on the grid the current day" (owner, 2026-10-05).
+
+    THE OWNER'S CLOCK, NOT THE READER'S, which is the decision worth pinning rather than the ring: a run
+    page is public, and every other date on the surface is resolved in the owner's zone, so taking the
+    reader's would leave "today" as the one date on the board keyed differently from the squares around
+    it.
+
+    AND IT IS SPOKEN, not only drawn. The numeral is `aria-hidden`, so the `sr-only` label is the only
+    thing a screen reader gets -- a marker that exists only in colour would not exist at all for them."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    body = _body(run)
+    month, day = calendar_render.today_key(run.profile)
+
+    assert body.count('pp-cal__day--today') == 1, 'exactly one square is today'
+    assert ' Today.</span>' in body, 'the marker must be spoken, not only painted'
+
+    # It is on the right square: the label and the modifier belong to the same cell.
+    cell = re.search(r'<[^>]*pp-cal__day--today[^>]*>.*?</(?:button|div)>', body, re.S).group(0)
+    assert '%s %d' % (calendar_render.MONTH_NAMES[month - 1], day) in cell
+
+
+def test_the_today_marker_survives_a_leap_day():
+    """THERE IS NO (2, 29) SQUARE -- `calendarday_day_within_month` forbids the row -- so an unfolded
+    marker would simply vanish for a day every four years, which is the kind of absence nobody reports
+    and nobody can reproduce.
+
+    `today_key` IS THE THING TESTED, which the first version of this was not. It asserted
+    `calendar_fill._fold(2, 29) == (2, 28)` -- a function with its own tests -- and then that
+    `calendar_render.py` contains an IMPORT LINE. So `today_key` could have dropped the fold, or applied
+    it to the wrong value, and this would still have passed: a source-text pin cannot see what a function
+    does with what it imports, which is the same lesson the decorator pins in this suite record.
+
+    THE INSTANT IS INJECTED because there is no `freezegun` in this project. `today_key` takes an optional
+    `now` for exactly this: the hazard is a date arithmetic nobody can wait four years to observe."""
+    leap = dt.datetime(2024, 2, 29, 12, 0, tzinfo=dt.timezone.utc)
+    profile = _hunter()
+
+    assert calendar_render.today_key(profile, now=leap) == (2, 28), (
+        'the leap day does not fold, so it would mark no square at all'
+    )
+
+    # AND THE OWNER'S ZONE APPLIES BEFORE THE FOLD, ON AN INSTANT THAT CAN TELL THE DIFFERENCE. The
+    # first version used 23:40 UTC on 28 February, which is (2, 28) in UTC and (2, 29) -> folded ->
+    # (2, 28) in Tokyo: the same answer either way, so deleting `.astimezone(_hunter_timezone(...))`
+    # from `today_key` left this test -- and every other test in the repo -- passing, with the
+    # function's headline decision ("THE OWNER'S CLOCK, NOT THE READER'S") uncovered.
+    # 31 JANUARY 23:40 UTC SEPARATES THEM: 1 February in Tokyo, still 31 January in UTC, and neither
+    # folds, so the two zones cannot agree by accident.
+    edge = dt.datetime(2024, 1, 31, 23, 40, tzinfo=dt.timezone.utc)
+    assert calendar_render.today_key(profile, now=edge) == (1, 31), 'UTC reads its own instant wrongly'
+    profile.user.user_timezone = 'Asia/Tokyo'
+    profile.user.save(update_fields=['user_timezone'])
+    assert calendar_render.today_key(profile, now=edge) == (2, 1), (
+        "the hunter's zone is ignored, so today is the reader's day and not the owner's"
+    )
+    # The fold still applies through a zone shift: 23:40 UTC on the 28th is the 29th in Tokyo.
+    late = dt.datetime(2024, 2, 28, 23, 40, tzinfo=dt.timezone.utc)
+    assert calendar_render.today_key(profile, now=late) == (2, 28)
+
+    # AND A NAIVE INSTANT IS REFUSED rather than read in the server's zone, which is the one reading this
+    # function exists to rule out.
+    with pytest.raises(ValueError):
+        calendar_render.today_key(profile, now=dt.datetime(2024, 2, 29, 12, 0))
+
+
+def test_the_board_carries_no_state_attributes():
+    """The board used to carry `data-view`/`data-month` for the stylesheet to read, which meant the lens
+    only worked with JavaScript. The tint read the checked radio through `:has()` instead, and then the
+    collapse removed the lens entirely -- so there is nothing left for an attribute to say."""
+    board = re.search(r'<div class="pp-cal"[^>]*>',
+                      _body(_run(CHALLENGE_TYPE_CALENDAR))).group(0)
+    assert board == '<div class="pp-cal">', board
+
+
+def test_the_page_renders_no_lens_switcher():
+    """CUT WITH THE LENSES (owner, 2026-10-04). A `.pp-switch` with three radios sat between the crests
+    and the board. Pinned because the control is the obvious thing to re-add when somebody wants the
+    contracts view back, and the point is that the DATA for it is gone too."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'cal-view' not in body
+    assert 'pp-cal__lens' not in body
+    assert 'Shovelware free' not in body, 'the lens names were the chip labels'
+    assert 'pp-cal__crests' in body, 'the MONTH switcher is still there'
+
+
+def test_the_crest_row_is_a_real_tablist():
+    """The roles ARE the promise -- that Tab reaches the row and arrows move within it. This used to
+    assert only the `role="tab"` count and the tabindex, so dropping `role="tablist"` from the row or
+    `role="tabpanel"` from all twelve panels left the suite green with the keyboard contract gone."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    # THE LABEL NAMES WHAT THE ROW HOLDS, which stopped being only months when the overview arrived --
+    # "Month" would have had a screen reader announce a thirteen-item month list.
+    assert '<div class="pp-cal__crests" role="tablist" aria-label="Month, or the whole year">' in body
+    assert body.count('role="tabpanel"') == 13, 'twelve months and the year overview'
+    assert body.count('role="tab"') == 13
+
+
+def test_every_crest_is_reachable_before_the_script_narrows_the_row():
+    """A ROVING TABINDEX IS ONLY SAFE ONCE SOMETHING IS ROVING. The server used to render it directly
+    (`0` on the first crest, `-1` on the rest), which with JavaScript off meant Tab skipped eleven
+    crests and no arrow key moved between them -- a keyboard-only visitor losing eleven twelfths of the
+    board with no way to reach it. `wireTablist.syncTabindex()` runs at wire time, so the rover arrives
+    in the same tick as the arrows that make it navigable."""
+    crests = re.findall(r'<button type="button" role="tab"[^>]*>',
+                        _body(_run(CHALLENGE_TYPE_CALENDAR)))
+    assert len(crests) == 13, 'twelve months and the year overview'
+    assert all('tabindex="0"' in c for c in crests)
+    assert sum(1 for c in crests if 'aria-selected="true"' in c) == 1
+
+
+def test_a_filled_day_carries_a_modifier_and_an_empty_one_does_not():
+    """A CLASS, NOT ATTRIBUTES. A filled day used to carry up to three of
+    `data-all`/`data-clean`/`data-contracts` so `:has()` could decide which painted."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 1, 2)
+    body = _body(run)
+    # MATCHED ON THE CLASS, NOT ON `<div`. A square that holds a platinum renders as a `<button>` now,
+    # so an element-anchored pattern silently stopped counting exactly the squares this test is about --
+    # it read 364 of 365 and the missing one was the filled day.
+    days = re.findall(r'class="(pp-cal__day[^"]*)"', body)
+
+    assert len(days) == 365
+    assert days[0] == 'pp-cal__day', 'January 1 is unfilled, so it is not a control'
+    assert days[1] == 'pp-cal__day pp-cal__day--open pp-cal__day--on'
+    assert 'data-all' not in body and 'data-clean' not in body
+
+
+def test_an_openable_square_still_fills_its_cell():
+    """THE DEFECT A BROWSER FOUND IN TEN SECONDS AND SIX AUDIT ROUNDS DID NOT, because nothing in a test
+    suite renders CSS.
+
+    A `<button>` with `width: auto` SHRINK-FITS to its content, where the `<div>` it replaced filled its
+    parent -- and `.pp-cal__day` pairs that with `aspect-ratio: 1`, so each openable square collapsed to
+    the width of its numeral and then squared THAT. A struck month is all buttons, so a finished February
+    rendered as 28 tiny chips floating in a full-width grid.
+
+    THE `<li>` IS THE GRID ITEM, not the cell, which is why the track's width never reached it.
+
+    A SOURCE-TEXT PIN, AND A WEAK ONE BY NATURE: it cannot see layout. It exists so the declaration is
+    not tidied away as redundant by someone reading `aspect-ratio` and assuming the cell is square on its
+    own account."""
+    rule = _css_rule(_calendar_css(), '.pp-cal__day--open {')
+    assert 'width: 100%' in rule, (
+        'an openable square shrinks to its numeral and the whole month turns to confetti')
+
+
+def test_only_a_square_holding_a_platinum_is_a_control():
+    """THE OWNER'S PREDICATE (2026-10-04): "the clickable squares should be the completed days", and then,
+    on what an incomplete day would show, the useful answer was the one square that HAS an answer. So the
+    rule is `in_all` -- "the hunter platinumed something on this date" -- which takes in every drawing
+    square plus the shovelware-only ones that can explain why they are still open.
+
+    A DAY WITH NOTHING IS NOT A CONTROL AT ALL: no button, no role, no tab stop. One `<button disabled>`
+    for all 365 would have been a single element and the wrong semantics, and a screen reader would
+    announce three hundred dimmed controls."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 4, 4)                                     # draws, and counts
+    CalendarDay.objects.filter(challenge=run, month=4, day=5).update(
+        in_all=True, in_clean=False, earned_on=dt.date(2019, 4, 5), plat_count=1)
+
+    body = _body(run)
+    openable = re.findall(r'data-day-url="([^"]*)"', body)
+
+    assert len(openable) == 2, 'exactly the two squares holding a platinum'
+    assert openable[0].endswith('/day/4/4/') and openable[1].endswith('/day/4/5/')
+    assert 'pp-cal__day--open' in body
+
+    april = _section(body, 'id="cal-month-apr"', until='</section>')
+    assert april.count('<button type="button"') == 2, 'no other square became a control'
+
+
+def test_both_day_cell_branches_carry_the_same_state():
+    """THE HAZARD OF DUPLICATING AN ELEMENT, and the reason the template says so out loud. The openable
+    square and the inert one are two separate blocks of markup, so anything added to one can silently
+    exist on only one kind of square -- and this project has already shipped "a hook on ONE template
+    branch is dead for the other" once.
+
+    TWO THINGS MUST MATCH: `--rev`, which is the per-month entrance cascade (missing on a branch, those
+    squares arrive without one), and the screen-reader label, which is the ONLY text on a cell whose
+    numeral is `aria-hidden`."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 6, 1)
+    body = _body(run)
+    june = _section(body, 'id="cal-month-jun"', until='</section>')
+
+    # Every cell, whichever element it is, carries its cascade index.
+    assert june.count('--rev:') == 30, 'a branch is missing the entrance cascade'
+    # And its spelled-out date. `_cell`'s label is "<Month> <day>", so "June 1" rather than "1 June" --
+    # worth stating, because the fragment's own dates read "j F" and the two orders sit a screen apart.
+    # The openable square adds "Open." and is otherwise identical to the inert one.
+    assert 'June 1: filled.' in june, 'the control still names its own date'
+    assert 'Open.' not in june, (
+        'the name promised an action the square cannot perform without a script -- the button role\n'
+        '        already says it is a control')
+    assert 'June 2.' in june, 'an inert square still names itself'
+
+
+def test_the_day_sheet_is_one_shell_for_the_whole_board():
+    """ONE SHELL, NOT ONE PER SQUARE: 365 would be 365 dialogs in the accessibility tree. It ships empty
+    and the script fills it, which is also what keeps `id="cal-day-title"` unique -- the fragment carries
+    that id, so a second copy in the document would make `aria-labelledby` resolve to the wrong one."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+
+    assert body.count('id="cal-day-modal"') == 1
+    assert body.count('data-day-body') == 1
+    assert '<div class="pp-detail-modal__body" data-day-body></div>' in body, (
+        'the shell must ship EMPTY -- anything rendered into it server-side would be a second title id')
+    # THE FALLBACK LABEL MATTERS because `aria-labelledby` points into a body that is empty until the
+    # first open, and a failed fetch leaves it empty.
+    assert 'aria-label="Day detail"' in body and 'aria-labelledby="cal-day-title"' in body
+
+    # AND NOT ON A RUN THAT HAS NO SQUARES. The shell moved into the page's `fixed_overlays` block, which
+    # renders for every challenge type -- so the `{% if calendar_months %}` gate is the only thing
+    # keeping a stray dialog out of the accessibility tree on every A-Z and Job Coverage page.
+    assert 'cal-day-modal' not in _body(_run(CHALLENGE_TYPE_AZ))
+
+
+def test_a_shovelware_platinum_draws_no_square():
+    """THE ONE LENS, stated on the rendered page: a platinum on a flagged game counts toward the
+    comparison figure and draws nothing."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month=1, day=2).update(in_all=True, in_clean=False)
+    body = _body(run)
+
+    days = re.findall(r'<div class="(pp-cal__day[^"]*)"', body)
+    assert days[1] == 'pp-cal__day', 'a shovelware platinum must not tint a square'
+    assert Client().get(_url(run)).context['calendar_totals'] == {
+        'done': 0, 'all': 1, 'struck': 0, 'open': 365}
+
+
+def test_a_completed_month_is_struck_and_an_incomplete_one_is_not():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month=2).update(in_all=True, in_clean=True)
+    _fill(run, 3, 3)
+
+    crests = re.findall(r'<button type="button" role="tab"[^>]*>', _body(run))
+    # BY ID, NOT BY POSITION. `crests[1]` meant February until the year crest took index 0, and an
+    # off-by-one here asserts the wrong month rather than failing loudly.
+    feb = [c for c in crests if 'id="cal-tab-feb"' in c]
+    assert len(feb) == 1
+    assert 'pp-cal__crest--struck' in feb[0]
+    mar = [c for c in crests if 'id="cal-tab-mar"' in c]
+    assert len(mar) == 1
+    assert 'pp-cal__crest--struck' not in mar[0], 'one filled day is not a month'
+    # AND THE YEAR CREST IS NOT STRUCK EITHER, on one finished month out of twelve. It wears the struck
+    # treatment only on a complete year, which is the same rule applied to the whole rather than a part.
+    year = [c for c in crests if 'id="cal-tab-all"' in c]
+    assert len(year) == 1
+    assert 'pp-cal__crest--struck' not in year[0], 'one month is not a year'
+    # NO METAL. The crest was bronze/silver/gold for whichever lens completed the month.
+    # BY ID. `crests[1]` was February until the year crest took index 0 -- the same positional coupling
+    # the two lookups above were converted away from, three lines below them and missed.
+    assert 'data-tier' not in [c for c in crests if 'id="cal-tab-feb"' in c][0]
+
+
+def test_the_calendar_script_loads_only_on_a_calendar_run():
+    """A hook on one template branch is dead for the other, and the reverse -- a script loaded on every
+    run would run a Calendar boot on a page with no `.pp-cal`."""
+    assert 'challenges-calendar.js' in _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'challenges-calendar.js' not in _body(_run(CHALLENGE_TYPE_AZ))
+
+
+# ── the Hall of Fame hero ────────────────────────────────────────────────────────────────────────────
+
+def test_each_renderer_is_fed_only_its_own_type():
+    """THE SILENT DISPATCH BUG. `boards_for` returns `[]` for a Calendar run because it owns no
+    `ChallengeSlot` rows, so the wrong dispatch draws no board rather than raising."""
+    from challenges.views import HallOfFameView
+
+    runs = [_run(CHALLENGE_TYPE_CALENDAR), _run(CHALLENGE_TYPE_AZ)]
+    boards = HallOfFameView().enrich(runs)['boards']
+
+    assert set(boards) == {runs[0].pk, runs[1].pk}, 'every run asked about gets an entry'
+    assert boards[runs[0].pk][0]['days'], 'the Calendar run got a Calendar board'
+    assert 'squares' in boards[runs[1].pk][0], 'the A-Z run still got a slot board'
+
+
+def test_a_page_with_no_calendar_run_pays_nothing_for_the_calendar_renderer():
+    """The same only-if-needed discipline `boards_for` already applies to the job catalogue: both
+    renderers return `{}` without a query when handed nothing."""
+    from challenges.views import HallOfFameView
+
+    az_only = [_run(CHALLENGE_TYPE_AZ)]
+    mixed = az_only + [_run(CHALLENGE_TYPE_CALENDAR)]
+
+    with CaptureQueriesContext(connection) as without:
+        HallOfFameView().enrich(az_only)
+    with CaptureQueriesContext(connection) as with_calendar:
+        HallOfFameView().enrich(mixed)
+
+    assert len(with_calendar) == len(without) + 1, (
+        'a Calendar run on the page should cost exactly one more query, its day rows')
+
+
+def test_the_hero_board_is_chosen_by_the_key_the_renderer_returned():
+    """`calendar_boards_for` returns `days` where `boards_for` returns `squares`, so the key that keeps
+    the two markup branches apart is also the template's test for which one arrived. No second source of
+    truth to drift from `challenge_type`."""
+    hero = open('templates/challenges/partials/_run_hero.html', encoding='utf-8').read()
+    assert '{% if board.0.days %}' in hero
+    assert 'pp-chero__year' in hero
+
+
+# ── the script, pinned by source text ────────────────────────────────────────────────────────────────
+
+def _script_code():
+    """The script with its comments stripped.
+
+    EVERY ASSERTION ABOUT WHAT THE SCRIPT DOES NOT DO HAS TO READ THIS, never the raw file. The
+    comments explain at length why `data-view` and the ignite bloom are absent, so a raw substring
+    search finds the prose documenting the fix and reports it as the bug -- which happened twice in
+    this file before the reader existed. It is the same discipline the stylesheet readers use.
+    """
+    return re.sub(r'/\*.*?\*/|//[^\n]*', '', _script(), flags=re.S)
+
+
+def _script():
+    return open('static/js/challenges-calendar.js', encoding='utf-8').read()
+
+
+def test_the_day_sheet_uses_the_shared_primitives_rather_than_a_fourth_hand_roll():
+    """TWO SURFACES ALREADY FETCH A FRAGMENT INTO `.pp-detail-modal` AND BOTH HAND-ROLL A FOCUS TRAP --
+    `game-detail.js`'s own comment calls itself a "refactor candidate: hoist this + badge-detail's copy
+    into a shared PlatPursuit util". The util they wanted is `takeover`, whose docstring says it exists
+    "because three surfaces now do it and every one re-implemented the accessibility parts slightly
+    differently". This asserts the Calendar did not become the fourth copy.
+
+    `aria-modal` ALONE DOES NOT TRAP TAB, which is the reason it matters: without the trap a keyboard
+    reader tabs straight out of the dialog into the board behind the scrim."""
+    js = _script_code()
+
+    assert 'PP.takeover(' in js, 'the a11y half must come from the shared primitive'
+    assert 'PP.dismissableSheet(' in js, 'and the touch drag from the other one'
+    # SCOPED TO THE SHEET, not the whole file. These stand in for "do not hand-roll the modal a11y",
+    # and file-wide they asserted something far stronger and far less durable: that this file contains
+    # no keyboard handling of ANY kind. A 365-cell grid is a textbook candidate for arrow-key roving
+    # (the WAI-ARIA grid pattern), which needs a `keydown` here and has nothing to do with a focus
+    # trap -- and would have failed as "a hand-rolled Tab trap is back".
+    sheet = js[js.index('function wireDaySheet'):]
+    assert 'keydown' not in sheet, 'a hand-rolled Tab trap is back'
+    assert 'activeElement' not in sheet, 'a hand-rolled focus restore is back'
+
+
+def test_the_day_fetch_checks_the_response_before_injecting_it():
+    """THE FRAGMENT ASKS FOR THIS BY NAME. A hidden run and a missing square both answer 404, and this
+    project installs a GET-only `handler404` -- so an unchecked `.text()` would inject the whole 404
+    PAGE into the sheet."""
+    js = _script_code()
+    assert 'r.ok ? r.text() : Promise.reject(r)' in js
+
+
+def test_the_day_sheet_replaces_its_body_and_empties_it_on_close():
+    """THE ONE REQUIREMENT `_calendar_day.html` STATES. The fragment carries `id="cal-day-title"` and the
+    dialog's `aria-labelledby` points at it, so two copies in the document would make the dialog announce
+    the square the reader had just left. Replacing on open and emptying on close both keep it unique."""
+    js = _script_code()
+    assert "body.innerHTML = html" in js, 'it must replace, not append'
+    assert "body.innerHTML = ''" in js, 'and empty on close'
+    # SCOPED TO THE BODY WRITE. The blanket `'appendChild(' not in js` was predicted to misfire and
+    # did, on the very next change: the shell is now `appendChild`ed to `document.body`, which is how
+    # it gets out of `#page-recede` and back after `takeover` removes it. What must not happen is the
+    # FRAGMENT being appended into the body, so that is what this asks.
+    assert 'insertAdjacentHTML' not in js
+    assert 'body.appendChild(html' not in js and 'body.append(' not in js
+
+
+def test_the_day_sheets_body_listener_binds_once():
+    """`onPageReady`'s CONTRACT. Element wiring re-runs on an HTMX history restore and `document.body`
+    survives it, so an unguarded delegate binds twice and every click fetches twice."""
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+    # READ AS AN EARLY RETURN, not as a substring. The first version asserted `'if (first) {'` appeared
+    # somewhere after `wireDaySheet`, which it would for any unrelated use of the flag while the
+    # delegate sat outside the block.
+    assert sheet.index('if (!first) { return; }') < sheet.index("addEventListener('click'"), (
+        'the delegate is bound before the `first` guard, so a history restore binds it again')
+
+
+def test_the_months_colour_reaches_the_dialog_shell():
+    """CUSTOM PROPERTIES INHERIT DOWNWARD ONLY, which is the whole reason this needs wiring at all.
+    `--cal-c` is set by `data-month` on the fragment root, and the fragment sits INSIDE the dialog -- so
+    the dialog that wraps it can never read the hue from its own child. The square carries its month,
+    the script copies it onto the shell, and the hue table lists the shell as a third selector.
+
+    IT FAILS SILENTLY IF ANY LINK BREAKS: the dialog simply renders grey, which is exactly the state the
+    owner asked to be rid of ("maybe a gradient using the month colors"), and nothing else would notice.
+    """
+    # ON A DAY SQUARE, which is what the script reads. `data-month="1"` matches the January crest and
+    # the January panel as well, both of which carry it for the hue table -- so the bare substring was
+    # satisfied by markup that has nothing to do with the modal, and deleting the attribute from the
+    # squares would not have failed it.
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    # A FILLED JANUARY DAY, because only an OPENABLE square carries `data-month` for the script. An
+    # untouched board renders 365 inert `div`s and this test would have had nothing to look at.
+    _fill(run, 1, 1)
+    board = _body(run)
+    squares = re.findall(r'<button[^>]*class="pp-cal__day[^>]*>', board, re.S)
+    assert squares, 'no openable day square rendered, so this test proves nothing'
+    assert all('data-month="' in sq for sq in squares), (
+        'a day square must carry its own month for the script to copy')
+
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+    assert "modal.setAttribute('data-month'" in sheet, 'the month never reaches the shell'
+
+    css = _calendar_css()
+    assert '.pp-detail-modal[data-month="1"]' in css, 'the hue table does not reach the shell'
+    dialog = _css_rule(css, '#cal-day-modal .pp-detail-modal__dialog {')
+    assert 'var(--cal-c' in dialog, 'the dialog is not wearing the month at all'
+
+
+def test_only_a_stacked_day_wears_its_count():
+    """OWNER, 2026-10-05, choosing the badge over a toggle. MOST FILLED DAYS HOLD EXACTLY ONE PLATINUM,
+    so a count on every one would print "1" across the board -- the same information as "filled", just
+    louder. The signal is the minority that stack, which is the threshold the side column's "busiest
+    day" already uses.
+
+    `x4` RATHER THAN `4`, because a bare numeral in the corner of a cell whose content is already a
+    numeral reads as part of the date."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 5, 2)                 # one platinum -- no badge
+    _fill(run, 5, 9, plats=4)        # four -- badged
+    may = _section(_body(run), 'id="cal-month-may"', until='</section>')
+
+    assert may.count('pp-cal__stack') == 1, 'exactly the stacked day carries a count'
+    assert '&times;4' in may or '×4' in may
+    assert '&times;1' not in may, 'a day holding one platinum must not announce it'
+
+
+def test_a_shovelware_only_day_is_never_badged():
+    """`card.filled`, NOT `card.counts`. A square that is `in_all` and not `in_clean` carries the
+    SHOVELWARE-INCLUSIVE count -- `CalendarDay.plat_count`'s own comment says so -- so badging it would
+    advertise a figure this board excludes, on a square the board deliberately draws empty."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month=5, day=4).update(
+        in_all=True, in_clean=False, earned_on=dt.date(2019, 5, 4), plat_count=6)
+    may = _section(_body(run), 'id="cal-month-may"', until='</section>')
+
+    assert 'pp-cal__stack' not in may
+    assert '&times;6' not in may
+
+
+def test_the_count_is_spoken_as_well_as_drawn():
+    """THE NUMERAL IS `aria-hidden`, so the `sr-only` label is the only thing a screen reader gets -- a
+    count that existed only in the corner of a tile would not exist at all for them."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 5, 9, plats=4)
+    may = _section(_body(run), 'id="cal-month-may"', until='</section>')
+
+    assert 'May 9: filled, 4 platinums.' in may
+
+
+def test_the_side_column_can_preview_a_day_without_fetching():
+    """OWNER, 2026-10-05: "I'd like the card on the right to show information on a filled in day when
+    hovered". Every figure it shows is carried on the square, which is why the per-day count is stored at
+    all -- a hover that asked the server would put a request behind every mouse movement across a
+    365-cell grid.
+
+    THE SAME PREDICATE AS THE CLICK. A square previews exactly when it opens, because an element that
+    previews something a click will not open is worse than one that does neither."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3, plats=4)
+    body = _body(run)
+
+    # SCOPED TO THE MONTH PANEL. The year overview previews the SAME square from its own matrix, so a
+    # page-wide count is two -- and the invariant being pinned is about the month grid, where preview and
+    # open are the same affordance. The overview's own cells open nothing by design, which is why its
+    # preview count is asserted separately below rather than folded into this one.
+    march = _section(body, 'id="cal-month-mar"', until='</section>')
+    openable = re.findall(r'data-day-url=', march)
+    previewable = re.findall(r'data-peek-label=', march)
+    assert len(previewable) == len(openable) == 1, 'preview and open must be the same squares'
+
+    # AND THE OVERVIEW PREVIEWS IT TOO, WITHOUT OPENING IT. Its cells are ~9px at 375px, under the touch
+    # minimum this stylesheet defends, so they identify a day through the peek and never become controls.
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+    assert len(re.findall(r'data-peek-label=', year)) == 1, 'the overview previews the same square'
+    assert 'data-day-url=' not in year, 'an overview cell must not be a control at 9px'
+    assert 'data-peek-plats="4"' in body, 'the count rides the square, not a request'
+
+    sheet = _script_code()
+    peek = sheet[sheet.index('function wireDayPeek'):]
+    assert 'fetch(' not in peek, 'the peek must not ask the server'
+    # POINTER ONLY, AND DELIBERATELY. It mirrored focus at first, on the reasoning that a keyboard reader
+    # has no hover -- but the peek is `aria-hidden="true"`, so swapping on focus announced nothing while
+    # removing the month's figures from the accessibility tree for the whole of a 28-31 stop traversal.
+    #
+    # ASSERTED ON THE LISTENER SET, NOT ON THE WORD `focusin`. That was the first form of this guard and
+    # it blocked exactly one spelling: `addEventListener('focus', fn, true)` reaches the same elements by
+    # capture, and the comment this fix DELETED named it outright ("`focusin`/`focusout` bubble where
+    # `focus`/`blur` do not"), so it is the first thing anyone restoring the feature would reach for.
+    # An exhaustive set also makes any OTHER new listener in here a deliberate edit, which is right: the
+    # peek's whole correctness story is which events it answers.
+    types = set(re.findall(r"addEventListener\('([a-z]+)'", peek))
+    assert types == {'mouseover', 'mouseout', 'click', 'keyup'}, (
+        'the peek answers a different set of events now: %s' % sorted(types))
+
+
+def test_the_peek_settles_rather_than_flickering_across_the_grid():
+    """OWNER, 2026-10-05: "sliding the mouse over multiple days doesn't look great due to the peek
+    altering back and forth quickly between days and the monthly status."
+
+    THE RESTORE WAS IMMEDIATE, so every cell boundary played day -> month -> next day. The grid gap is
+    3px, so a drag across a row fired that three-state sequence once per square, and the month's figures
+    -- the longest of the three -- flashed in every gap.
+
+    DEFER THE RESTORE, NOT THE SHOW. Deferring the show would make the preview feel laggy, which is the
+    opposite of what a hover is for. A pending restore is cancelled the moment another square takes
+    over, so day-to-day is a direct swap and the month only returns on a genuine leave.
+
+    A MONTH SWITCH IS NOT A FLICKER and still tears down at once: it is a different panel, not a gap."""
+    sheet = _script_code()
+    peek = sheet[sheet.index('function wireDayPeek'):]
+
+    assert 'function settle()' in peek and 'function hold()' in peek
+    assert 'setTimeout(restore' in peek, 'the restore must be deferred'
+    # THE POINTER'S LEAVE PATH SETTLES. It is the only one: the two focus listeners that used to carry
+    # their own calls went with the focus mirroring. Counted rather than merely greped so a new leave
+    # path cannot be added with a bare `restore()`, which is the regression this test exists for.
+    assert peek.count('settle();') == 1, 'a leave path still restores immediately'
+    # THREE DIRECT RESTORES, AND NONE OF THEM IS A LEAVE. `show` tears down when a hover lands in a
+    # DIFFERENT panel (not a gap, so not a flicker), and the crest click/keyup pair tears down a month
+    # switch that no `mouseout` will ever follow. An earlier version of this line counted one and called
+    # it "the month-switch tear-down", which named a listener that did not exist at the time.
+    assert peek.count('restore();') == 3, 'a restore path was added or removed without updating this'
+    assert 'clearTimeout(settling)' in peek, (
+        'a direct restore must cancel its pending timer, or a later tick tears down the next peek')
+    # And arriving cancels a pending restore before swapping.
+    # SLICED TO THE END OF `show`, not to the end of the file. The first version fell through to a
+    # to-EOF slice (`faces` is declared BEFORE `show`, so its guard was always false), which meant
+    # `hold();` anywhere in the remaining 60 lines satisfied it -- including inside `settle` itself.
+    start = peek.index('function show(')
+    show = peek[start:peek.index('\n        }', start)]
+    assert 'hold();' in show, 'arriving at a square does not cancel the pending restore'
+    assert len(show) < len(peek) - 400, 'the slice still runs past the end of `show`'
+
+
+def test_the_peek_and_the_month_facts_occupy_one_box():
+    """NOTHING MOVES WHEN A POINTER CROSSES THE GRID. Both faces sit in the same grid area, so the
+    column's height is the taller of the two -- a side column that resized on hover would shift the board
+    under the cursor, which on a 365-cell grid the cursor crosses constantly.
+
+    A CLASS, NOT THE `hidden` ATTRIBUTE, AND THAT IS THE WHOLE TEST. Two versions of it got this wrong
+    in the same direction. The first toggled `hidden` and asserted `[hidden] { display: none; }` -- not a
+    stacking rule but the opposite of one, since an element with `display: none` generates no box, is not
+    a grid item and adds nothing to the container. The second kept the attribute and asserted an override
+    (`display: block`) that CANNOT WIN: Tailwind's preflight ships
+    `[hidden]:where(:not([hidden=until-found])) { display: none !important }`, and an important author
+    declaration beats every normal one regardless of specificity or layer. A browser measured the panel
+    at 170px and 74px before and after that "fix".
+
+    SO THIS PINS THE ATTRIBUTE'S ABSENCE, which is the only form that cannot be satisfied by a cleverer
+    override. The faces are swapped by `.pp-cal__face--off`, which has nothing to out-rank."""
+    css = _calendar_css()
+    flat = ' '.join(css.split())
+    assert '.pp-cal__stats > .pp-cal__peek, .pp-cal__stats > .pp-cal__facts { grid-area: 1 / 1;' in flat
+
+    off = _css_rule(css, '.pp-cal__stats > .pp-cal__face--off {')
+    assert 'visibility: hidden' in off, 'the hidden face is not hidden'
+    assert 'display' not in off, (
+        'a `display` here is either a no-op or a sign the attribute is back; neither belongs'
+    )
+    assert '.pp-cal__stats > [hidden]' not in flat, (
+        'the faces are back on an attribute Tailwind preflight pins to `display: none !important`'
+    )
+
+    # THE TEMPLATE AND THE STYLESHEET HAVE TO AGREE, and they are the pair that drifted: a class in one
+    # and an attribute in the other hides nothing at all. Pinned together so neither can move alone.
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    faces = re.findall(r'<div class="pp-cal__(?:peek|facts)[^>]*>', body)
+    # THIRTEEN PANELS: twelve months and the year overview, which carries a stats column for the same
+    # reason the months do -- `wireDayPeek` resolves the faces through `cell.closest('.pp-cal__panel')`,
+    # so a panel with no stats column would swallow every hover in it silently.
+    assert len(faces) == 26, 'expected both faces in all thirteen panels, found %d' % len(faces)
+    assert sum(1 for f in faces if 'pp-cal__face--off' in f) == 13, (
+        'exactly one face per panel starts off, and it must be the peek'
+    )
+    assert not [f for f in faces if ' hidden' in f or 'hidden>' in f], (
+        'a face still carries the `hidden` attribute, which takes it out of flow'
+    )
+    assert all('pp-cal__face--off' in f for f in faces if 'pp-cal__peek' in f)
+
+
+def test_the_peek_is_silent_to_screen_readers():
+    """A LIVE REGION FIRING ON EVERY SQUARE A POINTER CROSSES WOULD BE HOSTILE, and the modal is the
+    accessible path to the same information. The peek is a sighted-pointer convenience layered on top,
+    so it is `aria-hidden` and announces nothing."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    # `[^>]*` AFTER THE CLASS NAME, not a closing quote: the peek now carries `.pp-cal__face--off`
+    # beside it, and the exact-attribute form of this match silently stopped finding the element.
+    peek = re.search(r'<div class="pp-cal__peek[^>]*>', body).group(0)
+    assert 'aria-hidden="true"' in peek, 'an aria-hidden subtree cannot announce, which is the guarantee'
+
+    # SCOPED TO A PANEL, not the page: the nav's search box carries its own `aria-live` region and has
+    # nothing to do with the board. A page-wide absence assertion was wrong, not merely broad.
+    january = _section(body, 'id="cal-month-jan"', until='</section>')
+    assert 'aria-live' not in january, 'the board must not announce a hover'
+
+
+def test_the_day_sheet_obeys_takeovers_three_contract_rules():
+    """REUSING A PRIMITIVE MEANS READING ITS CONTRACT, and the first version of this slice reused the
+    name. Three blockers shipped, each documented elsewhere in this repo, and each contradicted by a
+    comment in the commit that broke it.
+
+    IT REMOVES ITS ROOT on close, so the root must be re-attached per open -- `monthly-recap.js` appends
+    its container to `document.body` on every open for exactly this reason. Passing a server-rendered
+    element and letting it be deleted meant the sheet worked ONCE, then wrote into a detached node: a
+    scrim over a blank page, scroll locked, Tab dead, Escape the only way out.
+
+    IT SCALES `#page-recede`, and a `position: fixed` overlay inside a transformed ancestor resolves
+    against that ancestor rather than the viewport -- so the shell must sit outside it.
+
+    ITS `focusSel` IS A PLAIN `querySelector().focus()`, so the target has to be focusable or focus never
+    enters the dialog and the Tab trap never arms.
+    """
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+
+    assert 'document.body.appendChild' in sheet, (
+        'the root is never re-attached, so the sheet dies on its first close')
+    assert 'exitMs: 0' in sheet, (
+        'the default 240ms teardown leaves a window where the old close empties the new sheet')
+
+    frag = (ROOT_DIR / 'templates' / 'challenges' / 'partials' / '_calendar_day.html').read_text(
+        encoding='utf-8')
+    assert 'id="cal-day-title" tabindex="-1"' in frag, (
+        'the focus target cannot hold focus, so the Tab trap never arms')
+
+
+def test_a_repeat_click_on_one_square_cannot_open_the_sheet_twice():
+    """THE GUARD THAT WAS ITS OWN DEFECT. `pending = url` could not tell two clicks on the SAME square
+    apart -- the case the slice was written for, since squares are 44px and adjacent -- so both responses
+    passed `pending !== url` and `open()` ran twice. The second `takeover` overwrote the handle and
+    orphaned the first: its capture-phase keydown listener leaked for the life of the page, and because
+    it had captured `overflow: hidden` as the value to restore, closing left the page unscrollable.
+
+    A PER-REQUEST TOKEN, so a repeat click supersedes its own earlier one, plus a `close()` at the top of
+    `open()` so a double-open is impossible rather than merely unlikely."""
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+
+    assert 'token += 1' in sheet and 'mine !== token' in sheet
+    assert 'pending' not in sheet, 'the url-identity guard is back'
+    at = sheet.index('function open(')
+    assert 'close();' in sheet[at:sheet.index('PP.takeover(', at)], (
+        'a live sheet is not torn down before a new one opens')
+
+
+def test_the_day_delegate_resolves_its_nodes_at_event_time():
+    """THE OTHER HALF OF `onPageReady`'s CONTRACT. `if (first)` stops the double-bind; it does not stop a
+    once-bound delegate holding element references from the FIRST wiring. An `htmx:historyRestore`
+    replaces the page content, so those nodes are gone and the sheet went silently dead after a Back --
+    a 200 in the network tab and nothing on screen.
+
+    THE BOOT-TIME LOOKUP IS LEGITIMATE and deliberately not asserted against: it exists only to MOVE the
+    shell out of `#page-recede`. What matters is that the click path re-resolves."""
+    # BOUNDED TO `wireDaySheet`, not run to end-of-file. The slice swept up every later function in the
+    # script, so the opening ceremony's own boot-time `getElementById` -- a different function, a
+    # different element -- failed a pin about the day sheet's delegate. The same to-EOF slice bug this
+    # file has now fixed twice.
+    sheet = _script_code()
+    sheet = sheet[sheet.index('function wireDaySheet'):]
+    sheet = sheet[:sheet.index('\n    function ', 10)]
+    delegate = sheet[sheet.index("addEventListener('click'"):]
+
+    assert 'document.getElementById' not in delegate, (
+        'the delegate holds boot-time nodes instead of going through `shell()`')
+    assert 'function shell()' in sheet
+    opener = sheet[sheet.index('function open('):sheet.index("addEventListener('click'")]
+    assert "modal.querySelector('[data-day-body]')" in opener
+    assert "modal.querySelector('.pp-detail-modal__dialog')" in opener
+
+
+def test_the_script_leaves_immediately_when_there_is_no_board():
+    """It is gated in the template, but a gate is one branch: the guard is what makes the file safe to
+    load anywhere, and it is the reason the gate can be relaxed later without a console error."""
+    js = _script()
+    assert "querySelector('.pp-cal')" in js
+    assert re.search(r'if \(!board\)\s*\{\s*return;', js)
+
+
+def test_the_month_tabs_go_through_the_shared_tablist_helper():
+    """THE REUSE MISS THIS PINS. The first version hand-rolled roving tabindex, Arrow/Home/End with wrap
+    and the focus-versus-activate split -- all of which `PlatPursuit.wireTablist` already does, and it is
+    explicitly "markup/class-agnostic: pass the tab elements and a select callback". Going through it also
+    buys the two companions a hand-rolled copy silently skipped.
+
+    READ THROUGH `_script_code()`, WHICH STRIPS COMMENTS, and this test did not -- which made it wrong in
+    both directions at once. `assert 'ignite: true' in js` was satisfied ONLY by the comment that says
+    the crests take NO ignite (a square 44px button wrapping a round coin would get a square halo), so
+    the assertion asserted the opposite of the code and passed. And `'keydown' not in js` fails the
+    moment any comment in the file uses the word -- which is exactly how it broke when the day sheet
+    added a note about `takeover`'s capture-phase listener. This file's own `_script_code` docstring
+    records the same trap happening twice before the reader existed.
+    """
+    code = _script_code()
+    assert 'PP.wireTablist(tabs, {' in code
+    assert 'ignite' not in code, (
+        'the crests deliberately take NO ignite bloom -- see the comment on `.pp-cal__crest`')
+    assert 'PP.slideViewIn(' in code, 'the month panel slides in directionally'
+    # The hand-rolled keyboard handling must not come back alongside the helper. Scoped to the TABLIST
+    # wiring: the day sheet is in this file too, and a future arrow-key roving grid would legitimately
+    # add a `keydown` that has nothing to do with this switcher.
+    tablist = code[:code.index('function wireDaySheet')]
+    assert 'ArrowRight' not in tablist and 'keydown' not in tablist
+
+
+def test_the_roving_tabindex_is_resynced_after_the_selection_moves():
+    """`isActive` reads `aria-selected`, which `show` rewrites -- so the helper has to be told AFTER that,
+    or the one Tab-reachable crest stays pointing at the month that was active before the switch."""
+    js = _script()
+    assert "return tab.getAttribute('aria-selected') === 'true';" in js
+    assert js.index('show(tabs.indexOf(tab));') < js.index('api.syncTabindex();')
+
+
+def test_the_script_keeps_the_page_still_when_scrolling_the_crest_strip():
+    """`block: 'nearest'` is load-bearing on a phone: the default would scroll the document vertically
+    to centre a 44px control and throw the board off screen."""
+    assert "{ block: 'nearest', inline: 'center' }" in _script()
+
+
+def test_the_panel_is_resolved_through_aria_controls_rather_than_by_position():
+    """Pairing the tab list against the panel list by index works only while both render in the same
+    order, and fails SILENTLY when they do not -- the script showing one month while the accessible tree
+    names another. Reading the attribute makes the declared relationship the only thing that decides."""
+    js = _script()
+    assert "document.getElementById(tab.getAttribute('aria-controls'))" in js
+    assert 'panel !== shown' in js, 'panels are matched against the resolved one, not against an index'
+
+
+def test_the_script_hides_panels_the_same_way_the_server_did():
+    """One mechanism for "not showing" A PANEL. A class plus `hidden` gives a state where the two
+    disagree, and the panel is then visible to a screen reader and not to an eye.
+
+    SCOPED TO THE SWITCHER, because the file-wide form was wrong about its own subject. It asserted
+    `'classList' not in js` over the WHOLE script, which is a claim about the file rather than about
+    panels -- and the day peek legitimately needs a class, since its two faces must stay in flow and
+    `hidden` is `display: none !important` under Tailwind's preflight. The broad form would have refused
+    that fix while saying nothing new about panels."""
+    js = _script()
+    assert 'panel.hidden = panel !== shown' in js
+    boot = js[js.index('function boot('):js.index('function wireDaySheet(')]
+    assert 'classList' not in boot, 'panels are toggled by `hidden`, not by a class'
+
+
+# ── the holes the audit found: things nothing was pinning ────────────────────────────────────────────
+
+def test_each_crest_lights_its_own_segment_of_the_rim():
+    """THE RIM IS HOW A CREST SAYS WHICH MONTH IT IS -- position, not the three-letter face. Nothing
+    pinned it, so forcing every `--seg` to the same value survived: twelve identical coins."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    segs = re.findall(r'class="pp-cal__rim-seg"[^>]*style="--seg: (\d+);"', body)
+    assert [int(s) for s in segs] == list(range(12))
+
+
+def test_the_rim_normalises_its_dash_units():
+    """`pathLength="100"` is what removed the hardcoded circumference, and it is load-bearing: without it
+    the dash arrays are in user units and a radius change silently breaks the twelve segments."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    # FOUR CIRCLES PER CREST now: the twelve-segment rim's track and lit segment, plus the completion
+    # arc's track and fill. Every one of them is normalised, which is what keeps the radii free to move.
+    # SCOPED TO THE MONTH CRESTS, because the year crest's circle count is not fixed: it lights one rim
+    # segment per STRUCK month, so a page-wide total moves between 51 and 63 with the hunter's progress
+    # and would pin a figure that means nothing. Twelve crests x four circles is the invariant.
+    months_only = re.sub(r'<button[^>]*id="cal-tab-all".*?</button>', '', body, flags=re.S)
+    assert months_only.count('pathLength="100"') == 48, 'four circles on each of twelve crests'
+    # THE YEAR CREST'S OWN THREE, with no segment lit on an untouched run -- the track, the arc track and
+    # the arc. Its segments are asserted where they mean something, in the All-crest tests below.
+    year_crest = re.search(r'<button[^>]*id="cal-tab-all".*?</button>', body, flags=re.S).group(0)
+    assert year_crest.count('pathLength="100"') == 3, 'an untouched year lights no month segment'
+
+
+def test_every_crest_names_its_month_without_relying_on_colour():
+    """The face is a three-letter abbreviation and the state is carried in metal, so the full month name
+    and the per-lens figures have to be in the accessible tree. Colour is never the only cue."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    crests = _section(body, 'pp-cal__crests', until='class="pp-cal__panel"')
+    for name in ('January', 'February', 'December'):
+        assert name in crests
+    assert crests.count('class="sr-only"') == 13, 'every crest names itself, the overview included'
+
+
+def test_the_day_grid_is_a_real_list():
+    """Sibling divs each ending in screen-reader text read as one run-on sentence. `role="list"` is not
+    belt-and-braces: Tailwind's preflight strips the implicit role from a list styled with
+    `list-style: none`, which `.pp-cal__grid` sets itself."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert body.count('<ul class="pp-cal__grid" role="list">') == 12
+
+
+def test_every_tab_and_panel_point_at_each_other():
+    """THE TABLIST RELATIONSHIP, which nothing pinned -- and the script now RESOLVES the panel through
+    `aria-controls` rather than by matching list positions, so dropping it breaks the switcher rather
+    than only the accessible tree."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    controls = re.findall(r'id="cal-tab-(\w+)" aria-controls="([\w-]+)"', body)
+    labelled = re.findall(r'id="(cal-month-[\w-]+)"\s+aria-labelledby="(cal-tab-[\w-]+)"', body)
+
+    assert len(controls) == 13 and len(labelled) == 13, 'twelve months and the year overview'
+    assert ('all', 'cal-month-all') in controls, 'the overview tab points at its own panel'
+    for slug, panel_id in controls:
+        assert panel_id == 'cal-month-%s' % slug
+    for panel_id, tab_id in labelled:
+        assert tab_id == 'cal-tab-%s' % panel_id[len('cal-month-'):]
+
+
+def test_the_day_cascade_uses_the_name_the_page_already_reads():
+    """`--rev` is the house name for this on this very page: the slot board stamps it per square and the
+    stylesheet reads it to drive `ppRevealIn`. The Calendar first stamped `--i` and wrote no rule, so it
+    shipped 365 dead inline styles and snapped in beside a board that cascades."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    # PER MONTH, so the counter tops out at 30 (a 31-day month, zero-based) and twelve cells carry 0.
+    # A run-wide index would reach 364, which is exactly the bug: every cell past the twelfth shared one
+    # capped delay, so eleven months had no cascade and a switched-to panel arrived blank.
+    assert body.count('--rev: 0;') == 12
+    assert '--rev: 30;' in body
+    assert '--rev: 364;' not in body
+    assert '--rev: 31;' not in body
+    assert '--i:' not in body
+
+    block = _calendar_css()
+    assert 'var(--rev, 0)' in block, 'the markup half is useless without the CSS half'
+
+
+def test_the_calendar_block_guards_reduced_motion():
+    """`switcher.css` was corrected for this exact omission. The crest lifts on every month switch and
+    every day cell cross-fades on a lens switch."""
+    block = _calendar_css()
+    assert 'prefers-reduced-motion: reduce' in block
+
+
+def test_no_lens_machinery_survives_in_the_stylesheet_or_the_script():
+    """THE COLLAPSE, PINNED. The tint read the checked radio through `:has()` and the figures were
+    revealed per lens; both are gone, and so is every `data-view` the script once wrote. Pinned together
+    because re-adding any one of them without the others is how a half-collapsed lens comes back."""
+    block = _calendar_css()
+    assert ':has(input' not in block
+    # `.pp-cal__count`, THE RETIRED NAME -- not `.pp-cal__stack`, which is the live per-day count
+    # badge added later. A blanket rename once swept this assertion onto the new class, where it
+    # guarded the absence of something that is supposed to be there.
+    assert '.pp-cal__count' not in block
+    assert '.pp-cal__lens' not in block
+    assert '[data-view' not in block
+
+    code = _script_code()
+    assert 'dataset.view' not in code
+    assert 'cal-view' not in code
+
+
+# ── the hero, which had no behavioural coverage at all ───────────────────────────────────────────────
+
+def _hero_html(run):
+    from django.template.loader import render_to_string
+    from challenges.services.calendar_render import calendar_boards_for
+    from challenges.services.plaque import plaques_for
+    from challenges.services.rewards import granted_titles_for
+    # ALL SIX VARIABLES the production caller passes (`browse_results.html` sends
+    # `run index first board earned_title plaque`), so the helper renders what the page renders. The
+    # first version passed three, which left the avatar's `eager` and the name mark's `index` empty --
+    # harmless for the board assertions, and exactly the kind of near-miss that makes a helper
+    # unreusable for the next thing that needs it.
+    return render_to_string('challenges/partials/_run_hero.html', {
+        'run': run,
+        'index': 0,
+        'first': True,
+        'board': calendar_boards_for([run])[run.pk],
+        'earned_title': granted_titles_for([run]).get(run.pk),
+        'plaque': plaques_for([run]).get(run.pk),
+    })
+
+
+def test_the_hero_draws_a_cell_for_every_day_and_shades_the_filled_ones():
+    """THE HOLE: nothing rendered a hero with a Calendar run, so mutations that emitted no shade at all, or
+    looped a key that does not exist, both survived -- every day blank and no test noticing. The board is the
+    year heatmap now: twelve month rows, a cell per day, `data-heat` 0 for an empty day."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+    _fill(run, 5, 5)
+    html = _hero_html(run)
+
+    assert html.count('class="pp-chero__yday"') == 365
+    assert html.count('class="pp-chero__yrow"') == 12
+    assert html.count('data-heat="0"') == 363, 'only the two filled days may be shaded'
+    # IN RANGE: an out-of-range level would pass a count of zeros and paint nothing.
+    import re as _re
+    levels = _re.findall(r'class="pp-chero__yday" data-heat="(\d+)"', html)
+    assert sorted(set(levels)) == ['0', '4'] or all(0 <= int(lv) <= 4 for lv in levels)
+    assert [lv for lv in levels if lv != '0'] and all(1 <= int(lv) <= 4 for lv in levels if lv != '0')
+    # EVERY ROW CARRIES ITS MONTH, or every row falls back to the primary and the hue table reads nothing.
+    for month in range(1, 13):
+        assert 'class="pp-chero__yrow" data-month="%d"' % month in html, month
+
+
+def test_the_hero_draws_no_slot_shelf_for_a_calendar_run():
+    html = _hero_html(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'pp-chero__year' in html
+    assert 'pp-chero__shelf' not in html
+    assert 'pp-chero__sq' not in html
+
+
+def test_the_hero_tints_only_what_the_board_does():
+    """The band and the board read the same column, so a shovelware platinum tints neither."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 3):
+        _fill(run, 2, day)
+    CalendarDay.objects.filter(challenge=run, month=3).update(in_all=True, in_clean=False)
+
+    html = _hero_html(run)
+    assert html.count('data-heat="0"') == 363, 'a shovelware platinum shaded a Hall of Fame day'
+
+
+def test_the_calendar_hero_takes_the_whole_row_until_1280():
+    """Full width from `md:` until 1280, then BESIDE the plaque like A-Z. Full width the cell is ~19px at 768;
+    the generic 2.4fr share at 1024 would make it ~17px -- smaller on a bigger screen. From 1280 the 2.6fr share
+    gives ~23px, so the board moves beside the plaque there and grows as it does."""
+    css = re.sub(r'/\*.*?\*/', '', open('static/css/components/challenges.css', encoding='utf-8').read(),
+                 flags=re.S)
+    rule = '.pp-chero--calendar { grid-template-columns: minmax(0, 1fr); }'
+    assert css.count(rule) == 1
+    block = re.search(r'@media \(([^)]*)\) and \(([^)]*)\) \{\s*' + re.escape(rule), css)
+    assert block, 'the full-row rule is not inside a bounded media query'
+    assert (block.group(1), block.group(2)) == ('min-width: 768px', 'max-width: 1279.98px'), (
+        'the Calendar hero must take the whole row from 768 until the cell stops shrinking at 1280')
+
+
+# ── the stylesheet, pinned by source text (there is no CSS test runner either) ───────────────────────
+
+def _calendar_css():
+    """The Calendar's own RULES from `challenges.css`: bounded, and with the comments stripped.
+
+    BOUNDED, because `css[css.index('PLAT CALENDAR BOARD'):]` runs to the end of the file -- which works
+    only while this block happens to be last, and the next appended component would silently put every
+    assertion below into somebody else's rules. Same unbounded-slice mistake `_section` exists to avoid,
+    so it gets the same treatment: cut at the next top-level block banner.
+
+    STRIPPED, because this block documents its own history at length -- which rules were deleted, which
+    values were wrong -- and every assertion here is about RULES. Reading the raw text made an absence
+    assertion match the comment explaining the absence, three separate times in this file. Slicing
+    happens first because the boundaries ARE comments; stripping happens to the result.
+    """
+    css = open('static/css/components/challenges.css', encoding='utf-8').read()
+    block = css[css.index('PLAT CALENDAR BOARD'):]
+    nxt = block.find('* ============================================================ */',
+                     block.index('============================================================ */') + 10)
+    if nxt != -1:
+        block = block[:nxt]
+    return re.sub(r'/\*.*?\*/', '', block, flags=re.S)
+
+
+def test_no_state_rule_touches_the_month_hue():
+    """COLOUR AND STATE ARE SEPARATE AXES, which is now enforceable rather than scoped around.
+
+    The earlier version scoped the active colour with `:not(--struck)` because otherwise selecting an
+    earned month recoloured it -- the exact bug this stylesheet records paying for on `.pp-csq`
+    ("hovering a finished square erased the one mark the page exists to show"). With a hue per month
+    that scoping is not enough: the honest rule is that no state declaration writes `--cal-c` at all.
+    Active and hover are a lift and an outline in the BRAND colour; the hue says which month and whether
+    it is earned.
+
+    ASSERTED AS AN ABSENCE ACROSS EVERY STATE RULE, because that is the only form that cannot be
+    satisfied by one more `:not()`.
+    """
+    block = _calendar_css()
+    for line in block.splitlines():
+        if '--cal-c:' not in line:
+            continue
+        # `.pp-cal__crest--all` IS NAMED, AND ONLY WHEN IT IS THE WHOLE SELECTOR. This guard exists
+        # because a STATE rule setting the hue is what erased a finished square's mark on `.pp-csq`; the
+        # overview crest is not a state but an IDENTITY, a thirteenth member of the set that deliberately
+        # carries no month, so it declares its own near-neutral silver instead of reading the table.
+        # A SUBSTRING SKIP REOPENED THE EXACT CLASS. `'.pp-cal__crest--all' in line` also waved through
+        # `.pp-cal__crest--all:hover { --cal-c: ... }` -- a state rule writing the hue, which is the one
+        # thing this test exists to stop -- while its own comment claimed "a genuine state rule still
+        # cannot slip in beside it". Measured: it passed. The selector must EQUAL the exception.
+        selector = line.split('{')[0].strip() if '{' in line else ''
+        if selector and all(part.strip() == '.pp-cal__crest--all'
+                            for part in selector.split(',') if part.strip()):
+            continue
+        assert 'data-month' in line or '--cal-c: var(--pp-text-mute)' in line, (
+            'only a month hue or the fallback may set --cal-c, not a state: %s' % line.strip())
+
+    assert 'data-tier' not in block, 'the lens metals went with the lenses'
+    # The active cue is shape plus the brand colour, never the month's. Strengthened 2026-10-05 (the
+    # owner could not tell which month was selected) -- a lift, a scale, a full-strength ring and a glow
+    # instead of a 1px lift and a 65%-alpha ring. The FIRST attempt at that tinted the ring `--cal-c`,
+    # which this test caught: it would have put the ring in the same colour as the coin it surrounds,
+    # lowering the contrast it exists to create.
+    assert '.pp-cal__crest[aria-selected="true"] { transform: translateY(-3px) scale(1.06); }' in block
+    active = _css_rule(block, '.pp-cal__crest[aria-selected="true"] .pp-cal__coin {')
+    assert 'var(--cal-c' not in active, 'the active ring took the month hue'
+    assert 'outline: 2px solid var(--pp-primary);' in active
+
+
+def test_the_rim_draws_twelve_segments_rather_than_a_solid_ring():
+    """ROUND CAPS WERE THE DEFECT, and it is invisible in a screenshot of one crest: a cap extends each
+    dash by `stroke-width / 2` at BOTH ends, so a 2.5 stroke grew each dash past its own gap and the
+    twelve segments painted as one ring. The lit segment still read against the dim track, which is why
+    only arithmetic caught it."""
+    rim = _css_rule(_calendar_css(), '.pp-cal__rim-track,')
+    assert 'stroke-linecap: butt' in rim
+    assert 'stroke-linecap: round' not in rim, 'round caps are what ate the gaps'
+    # NORMALISED UNITS, AND THE TWELVE LIVE IN THE GAUGE'S ARC. `pathLength="100"` makes a unit one
+    # percent of the circle; the gauge runs 72 of them and leaves a 28-unit notch at the bottom for the
+    # counter plate. The rim used to tile all 100 -- twelve slots of 8.3333 -- which put FOUR months
+    # underneath that plate. Twelve slots of 6 inside the same 72 instead, at the same 140.4deg origin,
+    # so nothing is occluded and both rings sweep the same way.
+    block = _calendar_css()
+    assert 'stroke-dasharray: 4.6 95.4' in block, 'the lit segment does not match the track slot'
+
+    # THE DASH LIST IS READ AND WALKED, not matched. The first version of this asserted the SUBSTRING
+    # `stroke-dasharray: 4.6 1.4` -- which is a prefix of the explicit list that replaced it, so the
+    # test passed both before and after the geometry changed, and passed on the version that painted
+    # five stray dashes across the notch. The defect was a repeating pattern over a path it did not
+    # divide; nothing short of walking the list can see that.
+    track_decl = [r for r in _css_rules(block, '.pp-cal__rim-track') if 'stroke-dasharray' in r]
+    assert len(track_decl) == 1, 'the rim track declares its dashes in more than one rule'
+    raw = re.search(r'stroke-dasharray:\s*([^;]+);', track_decl[0]).group(1)
+    runs = [float(n) for n in raw.split()]
+    assert len(runs) % 2 == 0, 'an odd dash list is implicitly doubled, which changes the geometry'
+
+    # THE NOTCH IS 28 UNITS WIDE AND MUST STAY EMPTY. The gauge is `72 100` at the same origin, so units
+    # 72-100 are the gap the counter plate sits in -- and `.pp-cal__sub` is `display: none` until 1024px,
+    # so below that NOTHING covers it. Anything painted there is simply visible, which is the bug.
+    GAUGE_SPAN = 72
+    at, dashes = 0.0, []
+    for i, run in enumerate(runs):
+        if i % 2 == 0:
+            dashes.append((at, at + run))
+        at += run
+    assert round(at, 6) == 100, 'the dash list sums to %r, so the pattern repeats mid-path' % at
+    assert len(dashes) == 12, 'the rim no longer draws twelve months, it draws %d' % len(dashes)
+    strays = [d for d in dashes if d[1] > GAUGE_SPAN]
+    assert not strays, 'dashes painted in the notch, where nothing covers them below 1024px: %s' % strays
+    # And they are evenly spaced, or the months do not read as twelve equal slots.
+    steps = {round(b[0] - a[0], 6) for a, b in zip(dashes, dashes[1:])}
+    assert len(steps) == 1, 'the twelve slots are no longer evenly spaced: %s' % steps
+
+    # THE TWO RINGS MUST SHARE AN ORIGIN or the lit segment sits off its own track slot. Asserted on the
+    # rotation rather than on the look, because a half-slot drift is invisible at 70px and arithmetic is
+    # the only thing that catches it -- which is how the round-cap bug above was found.
+    # FOUND BY WHAT THEY DECLARE. `.pp-cal__rim-seg` appears twice -- once in the shared stroke/cap rule
+    # with `.pp-cal__rim-track`, once on its own -- and the first is not the one meant. Position is the
+    # wrong handle on a selector this file reuses, which is the lesson `.pp-cal__stats` taught.
+    seg = [r for r in _css_rules(block, '.pp-cal__rim-seg') if 'rotate(' in r]
+    assert len(seg) == 1 and 'rotate(calc(140.4deg + var(--seg) * 21.6deg))' in seg[0]
+    track = [r for r in _css_rules(block, '.pp-cal__rim-track') if 'rotate(' in r]
+    assert len(track) == 1 and 'rotate(140.4deg)' in track[0]
+    # THE LIT SEGMENT'S STEP MUST BE THE TRACK'S OWN SLOT WIDTH, read from the list walked above rather
+    # than asserted against a literal. The earlier version computed `round(21.6 / 3.6) == 6` -- an
+    # arithmetic identity between two numbers typed into the test, true whatever the stylesheet said.
+    step_deg = float(re.search(r'var\(--seg\) \* ([\d.]+)deg', seg[0]).group(1))
+    assert round(step_deg / 3.6, 6) == round(steps.pop(), 6), (
+        'the lit segment steps by %sdeg, which is not the track\'s slot width' % step_deg)
+    assert round(12 * (step_deg / 3.6)) == GAUGE_SPAN, 'the twelve slots no longer fill the gauge span'
+
+
+def test_the_crest_gap_is_fixed_so_the_coins_do_not_shrink_as_the_window_grows():
+    """`clamp(8px, 1.4vw, 20px)` against a STEP-FUNCTION container: `.container` holds its width across
+    each band while a `vw` gap keeps growing, so twelve coins shrank monotonically from 47px at 768 to
+    37px at 1279 -- with a step DOWN at `lg:`, where the stats column arrived and took 304px out of a
+    card that does not widen until 1280. The band was at its smallest exactly where this slice meant to
+    make it generous, and no test could catch it because none computes a width."""
+    flat = ' '.join(_calendar_css().split())
+    # `contain: none` RIDES ALONG, and deliberately: the base rule contains the scroll container so it
+    # cannot widen the layout viewport, and that containment has to stop where the scrolling does.
+    assert '.pp-cal__crests { overflow-x: visible; gap: 10px; contain: none; }' in flat
+    assert '1.4vw' not in flat, 'a viewport-relative gap cannot divide a step-function width'
+
+
+def test_the_coin_band_paints_flush_with_the_panel():
+    """`box-sizing: border-box` IS APP-WIDE, so a crest row at `width: 100%` paints its coins inside
+    [6, W-6] -- the row carries `padding: 7px 6px 10px`, a measured budget for the focus ring and the
+    struck shadow, so the padding cannot simply go. Six pixels at each edge reads as a mistake against
+    a head and a grid that both start at 0.
+
+    SO THE BOX IS 12px WIDER AND PULLED BACK 6px. The two declarations are a PAIR: either one alone
+    moves the band off the panel's edge, in opposite directions, which is why they are asserted
+    together rather than one standing in for the other.
+
+    SHAPE 3 INSET THE DAY GRID BY 6px INSTEAD, matching the band because the two were then the same
+    width. Shape 4 makes the band wider on purpose -- the owner asked for the coins to "cover the area
+    of the calendar + the stats on the side" -- so there is nothing to match and the grid gets its 12px
+    back. The old inset must not survive: it would silently narrow every day cell for no reason.
+    """
+    flat = ' '.join(_calendar_css().split())
+    assert 'padding: 7px 6px 10px' in flat, 'the row inset the negative margin cancels'
+    assert 'width: calc(100% + 12px);' in flat and 'margin-inline: -6px;' in flat
+    assert 'padding-inline: 6px' not in flat, (
+        "shape 3's grid inset has no job once the band is wider than the grid")
+
+
+def test_the_side_column_narrows_in_the_first_desktop_band():
+    """`.container` steps at 1024 and again at 1280, so one fixed column width takes the same pixels out
+    of a 954px card and a 1210px one.
+
+    IT IS THE DAY CELL THIS PROTECTS, NOT THE COIN. Shape 4 took the coins off this arithmetic entirely
+    -- the band spans the panel, so the side column no longer comes out of its width -- but the grid
+    track still loses it. At 280px throughout, the track at 1024 is 650px and the cell 57.8px, DOWN from
+    62.6px at 768: the cell shrinking as the window widens, which is the defect the crest gap had and is
+    no better on the squares. At 230px the cell goes 62.6 -> 62.8 -> 72.4 and only grows.
+
+    THE VALUE HAS NOW SURVIVED THREE DIFFERENT ARGUMENTS, two of which were wrong (both quoted coin
+    sizes measured in a state the same slice had already changed). Worth knowing before trusting the
+    reason attached to a number here."""
+    flat = ' '.join(_calendar_css().split())
+    assert '--cal-stats: 230px' in flat, 'the first desktop band gets the narrower column'
+    assert '@media (min-width: 1280px) { .pp-cal { --cal-stats: 280px; } }' in flat
+
+
+def test_the_statlist_keeps_its_description_list_roles():
+    """A GRID OR FLEX `<dl>` DROPS ITS TERM/DEFINITION MAPPING in Chromium and WebKit, so the column
+    announces as one run with no pairing between a label and its figure. It is the same role-stripping
+    that makes `role="list"` mandatory on every `<ul>` in these templates -- and a `<dl>` has no
+    attribute to answer it with, so the only fix is not to take the role off. The app-wide guard only
+    scans `<ul>`, which is why this needs its own pin."""
+    statlist = _css_rule(_calendar_css(), '.pp-cal__statlist {')
+    assert 'display: grid' not in statlist and 'display: flex' not in statlist
+    assert 'grid-template-columns' not in statlist
+
+
+def test_the_day_cell_is_capped_so_it_does_not_balloon_on_desktop():
+    """Seven columns at every width made the cell 135px at 1024 and 208px at 1920 -- a panel of enormous
+    near-empty boxes each holding one 13px numeral, on the primary target."""
+    block = _calendar_css()
+    assert 'repeat(10, minmax(0, 1fr))' in block
+    # THE CAP IS ON THE PANEL, not the grid inside it. On the grid alone it left-aligned while the month
+    # head stayed at full width, so the head and the squares under it disagreed; the head and the grid
+    # are both inside the panel, so capping there is what makes them share an edge.
+    # THE CAP IS ON `.pp-cal` NOW, not on the panel: a side column arrived at `lg:` and the panel has
+    # to fill the row so its two columns can divide it. The crest row is capped to the board column's
+    # width by the same two tokens, which is what keeps the coins lined up with the days.
+    flat = ' '.join(block.split())
+    assert '.pp-cal { max-width: 1100px; margin-inline: auto; }' in flat
+    # SCOPED TO THE CREST ROW. Unscoped, this assertion passed if the declaration moved onto any
+    # selector at all -- so the one line that is supposed to guarantee the coins sit over the days
+    # could not tell WHICH box was being capped. (The `margin-inline: auto` assertion that stood here
+    # was worse: the string is in both the `md:` and the `lg:` rule, so it could not fail.)
+    #
+    # FOUND BY WHAT IT DECLARES, not by position. `.pp-cal__crests` has five rules and the one that
+    # bounds it is not the last: the width-story block sits ABOVE the base rule in the file, so `last=`
+    # lands on the `md:` gap instead. Position is the wrong handle on a selector this file reuses --
+    # the same lesson `.pp-cal__stats` taught two tests below.
+    #
+    # THE BAND'S OWN BOUND IS THE `md:` CEILING NOW. Shape 4 removed its desktop cap, so what is left to
+    # assert here is that exactly one rule bounds it and that the bound is the shared body token plus
+    # the 12px the negative margin cancels -- not a second number that could drift from `--cal-body`.
+    crests = [r for r in _css_rules(block, '.pp-cal__crests') if 'max-width: calc(' in r]
+    assert len(crests) == 1, 'exactly one rule puts a computed ceiling on the crest row'
+    assert 'max-width: calc(var(--cal-body) + 12px);' in crests[0]
+
+
+def test_the_crest_band_carries_no_cap_of_its_own_at_desktop():
+    """SHAPE 4 (owner, 2026-10-04): "I still think the medallions should cover the area of the calendar
+    + the stats on the side." So the band is bounded only by `.pp-cal`'s own 1100px, and shape 3's
+    `calc(100% - stats - gutter)` cap is gone.
+
+    THE `md:` CEILING HAS TO BE LIFTED EXPLICITLY, which is the part that would fail silently: the
+    tablet rule caps the row at `--cal-body + 12px`, and a cap set in a lower band keeps applying in a
+    higher one. Left standing, a 712px band would sit inside a 954px panel -- shape 3's misalignment
+    with different numbers, and nothing else in the suite would notice.
+    """
+    flat = ' '.join(_calendar_css().split())
+    assert 'max-width: calc(100% - var(--cal-stats) - var(--cal-gutter));' not in flat, (
+        "shape 3 capped the band to the board column; shape 4 spans the panel")
+    assert '.pp-cal__crests { max-width: none; }' in flat
+
+
+def test_the_crest_band_divides_whatever_row_it_is_given():
+    """THE OWNER'S THIRD SHAPE for this width, and the test is rewritten rather than retired because the
+    first two are still worth not going back to.
+
+    1. Everything capped at one width. Fixed a real defect (a grid capped on its own, left-aligning
+       under a full-width head) and made the twelve medallions small.
+    2. The band full-bleed, the panel capped -- "we could even make them larger to allow them to span
+       across the whole screen."
+    3. BOTH MATCHED, WITH A SIDE COLUMN: "if we reduce the size of the medallions again to match the
+       length of the days, could we potentially float something to the right side".
+
+    This test described shape 2 for a slice after the CSS moved to shape 3, and still passed, because
+    every string it asserted survived the change. A suite that documents two shapes as current is worse
+    than one that documents neither.
+    """
+    block = _calendar_css()
+
+    # ONE TOKEN for the body width, so the two capped blocks cannot drift apart.
+    assert '--cal-body: 712px' in block
+    assert block.count('max-width: var(--cal-body)') == 1, (
+        'both capped blocks must read the same token in one rule, or they will diverge')
+
+    # The coins divide whatever row they are given, so capping the row is what sizes them.
+    flat = ' '.join(block.split())
+    assert '.pp-cal__crest { flex: 1 1 0;' in flat
+    assert 'aspect-ratio: 1' in flat
+    # THE 112px CEILING IS PINNED AS A GUARD, NOT AS A SHAPE. It no longer binds at any width (the band
+    # is bounded by `.pp-cal`'s 1100px, which puts a coin at 82.5px), and the assertion that used to
+    # cover it was dropped when this test was rewritten for shape 4 -- leaving a live declaration no
+    # test mentioned, which is how one gets deleted as dead. The stylesheet documents it as a
+    # deliberate non-binding guard, so the pin says that rather than claiming it does work.
+    assert 'max-width: 112px' in flat, (
+        'a deliberate non-binding ceiling: it mattered when the band was full-bleed over a 712px panel')
+
+
+def test_the_crest_face_scales_with_the_coin():
+    """A fixed 12px label on a 110px medallion reads as a mistake, and the coin is fluid (`flex: 1 1 0`),
+    so a per-breakpoint step would only agree with it at the widths somebody happened to write rules
+    for. The clamp floor is the project's 12px type minimum, which the file-wide guard enforces."""
+    block = _calendar_css()
+    assert 'clamp(0.75rem' in block
+
+
+def test_the_lens_switcher_carries_no_explanatory_line():
+    """CUT ON THE BROWSER PASS. A sentence under the chips explained that a contract can be finished
+    without a platinum, so the Contracts lens can hold a day the others do not -- true, and the owner's
+    answer was that a hunter works it out: "Users can figure that out on their own, it's not really a
+    huge deal." Pinned so it does not drift back in, because the explanation is genuinely tempting."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'pp-cal__lenshint' not in body
+    assert 'without a platinum' not in body
+
+    # The rule went with the markup: a dead rule is weight the next reader has to check.
+    assert 'pp-cal__lenshint' not in _calendar_css()
+
+
+def test_the_hero_heatmap_cells_are_square():
+    """A heatmap day is `aspect-ratio: 1` inside a 31-track row with no definite row height, so the column
+    track sets the width and the ratio the height. (The old 53-column band lost its squares once to
+    `repeat(7, 1fr)` plus a `min-height`, which made both dimensions definite and the ratio inert.)"""
+    css = re.sub(r'/\*.*?\*/', '', open('static/css/components/challenges.css', encoding='utf-8').read(), flags=re.S)
+    day = css[css.index('.pp-chero__yday {'):]
+    day = day[:day.index('}')]
+    assert 'aspect-ratio: 1' in day
+    assert 'height' not in day, 'a definite height makes the aspect ratio inert'
+    assert 'grid-template-columns: repeat(31, minmax(0, 1fr))' in css
+
+
+def test_every_heat_level_has_a_shade_and_none_touches_the_rank_colour():
+    """The old band was tinted with `--rk`, the hunter's RANK colour, so every Newbie's year was grey. The
+    shade belongs to the month (`--cal-c`) and the level to the hunter's own counts."""
+    css = re.sub(r'/\*.*?\*/', '', open('static/css/components/challenges.css', encoding='utf-8').read(), flags=re.S)
+    for level in range(1, 5):
+        rule = css[css.index('.pp-chero__yday[data-heat="%d"]' % level):]
+        rule = rule[:rule.index('}')]
+        assert '--cal-c' in rule, level
+        assert '--rk' not in rule, level
+    assert '.pp-chero__yrow[data-month="1"]' in css, 'the hero row reads no month hue'
+
+
+
+def test_the_crests_take_no_ignite_bloom():
+    """`ppTabIgnite` animates a `box-shadow: 0 0 20px 3px` on the element it is given. Every other
+    consumer is a `.pp-switch__chip` with a 5px radius; here the element is a square button wrapping a
+    round coin, inside a clipped scroll strip behind a mask fade, so the bloom would be a square halo
+    around a circle with its edges cut off."""
+    code = _script_code()
+    assert 'ignite: true' not in code
+    assert 'PP.slideViewIn(' in code, 'the directional panel slide is still taken'
+
+
+# ── the view layer's own fixes ───────────────────────────────────────────────────────────────────────
+
+def test_the_hall_of_fame_survives_a_one_shot_iterable():
+    """`enrich` reads its argument THREE times now (the partition, the titles, the plaques), so the
+    `list(runs)` it had once deleted as dead defence is live again. A generator drained by the partition
+    leaves every hero on the page with no board, no title and no plaque, and raises nothing. Neither the
+    live caller (a cached paginated queryset) nor the other tests here (lists) can show it."""
+    from challenges.views import HallOfFameView
+
+    runs = [_run(CHALLENGE_TYPE_CALENDAR), _run(CHALLENGE_TYPE_AZ)]
+    out = HallOfFameView().enrich(iter(runs))
+
+    assert set(out['boards']) == {runs[0].pk, runs[1].pk}
+    assert out['boards'][runs[0].pk][0]['days']
+    assert set(out['plaques']) == {runs[0].pk, runs[1].pk}
+
+
+def test_the_slot_renderer_is_never_asked_about_a_calendar_run(monkeypatch):
+    """THE PARTITION'S FORWARD DIRECTION, which the merge hides. `calendar_boards_for` is spread SECOND,
+    so it overwrites whatever `boards_for` returned for a Calendar run -- meaning passing the whole list
+    to `boards_for` produces identical output and the obvious assertion cannot see it. Recording the
+    argument is what actually pins the split."""
+    from challenges.services import slot_render
+    from challenges.views import HallOfFameView
+
+    seen = {}
+    original = slot_render.boards_for
+
+    def spy(challenges):
+        challenges = list(challenges)
+        seen['types'] = {c.challenge_type for c in challenges}
+        return original(challenges)
+
+    monkeypatch.setattr('challenges.views.boards_for', spy, raising=False)
+    monkeypatch.setattr(slot_render, 'boards_for', spy)
+
+    HallOfFameView().enrich([_run(CHALLENGE_TYPE_CALENDAR), _run(CHALLENGE_TYPE_AZ)])
+    assert seen['types'] == {CHALLENGE_TYPE_AZ}, (
+        'the slot renderer must not be asked about a type it has no rows for')
+
+
+def test_the_hero_emits_the_class_its_own_css_rule_needs():
+    """A PIN THAT SURVIVES DELETING THE FEATURE PINS NOTHING. The full-row rule is pinned by its text,
+    but nothing checked that the hero emits `pp-chero--calendar` -- so replacing the class with a literal
+    left the suite green and the rule dead."""
+    html = _hero_html(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'pp-chero--calendar' in html
+
+
+def test_the_month_figure_appears_in_both_places_it_belongs():
+    """TWO PLACES, ASSERTED SEPARATELY rather than as one total: the month head and inside each
+    medallion. A single combined count would stay green if one place lost its figures while the other
+    grew duplicates.
+
+    ONE FIGURE EACH NOW. Both places rendered three -- one per lens -- sharing `.pp-cal__count` so a
+    single set of `:has()` rules governed them and they could not disagree about which lens was active.
+    The collapse left one figure printed directly, so the shared class and its rules went too.
+
+    NOT TO BE CONFUSED WITH `.pp-cal__stack`, which is live: the per-day count badge on a stacked square.
+    The retired name was deliberately NOT reused for it, so that this guard keeps meaning what it says.
+    """
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 4):
+        _fill(run, 2, day)
+    body = _body(run)
+
+    coins = _section(body, 'pp-cal__crests', until='class="pp-cal__panel"')
+    assert coins.count('class="pp-cal__sub"') == 13, 'one figure per coin, the overview included'
+    assert '<span class="pp-cal__sub">3/28</span>' in coins, (
+        "February's coin reads its own progress")
+
+    heads = re.findall(r'<p class="pp-cal__tally">([^<]*)</p>', body)
+    assert len(heads) == 13, 'one figure per panel head, the overview included'
+    # BY PANEL, NOT BY POSITION: the overview's head renders first, so `heads[1]` stopped being February
+    # the moment it arrived. Same correction as the crest above.
+    feb = _section(body, 'id="cal-month-feb"', until='</section>')
+    assert '<p class="pp-cal__tally">3 / 28</p>' in feb
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+    assert '<p class="pp-cal__tally">3 / 365</p>' in year, 'the overview reads the year, not a month'
+
+    # THE SHARED CLASS AND ITS RULES ARE BOTH GONE, pinned together: a `.pp-cal__count` in the markup
+    # with no reveal rule behind it rendered an empty figure on all twelve months, which is the defect
+    # this test was written for in the first place.
+    assert 'pp-cal__count' not in body
+    assert 'pp-cal__count' not in _calendar_css()
+
+
+def test_the_coin_counter_only_appears_where_it_fits():
+    """A 44px coin at mobile has no room for a second line, and 52px at `md:` leaves about 41px of clear
+    circle -- two lines of 12px type plus leading does not fit. So the wrapper is gated to `lg:`, where
+    the coin is around 70px. The owner's own framing: "we don't have to do it for every use of the
+    medallions but for these larger ones"."""
+    block = _calendar_css()
+    flat = ' '.join(block.split())
+    assert '.pp-cal__sub { display: none; }' in flat
+    # `lg:`, NOT `xl:`. This gate has been at both, each time on correct arithmetic over a different
+    # band width: shape 3 capped the band to the board column and left the coin at 48.2px through the
+    # 1024 band (33px of chord against the ~34px the plate needs), so it moved up; shape 4 spans the
+    # panel and the same band gives 70.3px and 47.8px of chord, so it comes back down.
+    assert '@media (min-width: 1024px) { .pp-cal__sub { display: inline-flex;' in flat
+
+
+def test_the_coin_counter_is_not_announced_twice():
+    """The coin is already `aria-hidden`, and the `sr-only` label beside it enumerates every lens's
+    figure in full -- so the visual counter inside the coin must not add a second announcement."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    coin = body[body.index('class="pp-cal__coin"'):body.index('class="sr-only"',
+                                                              body.index('class="pp-cal__coin"'))]
+    assert 'aria-hidden="true"' in body[:body.index('class="pp-cal__coin"') + 60]
+    assert 'pp-cal__sub' in coin, 'the counter is inside the aria-hidden coin, not beside it'
+
+
+# ── the board's surface, which it shipped without ────────────────────────────────────────────────────
+
+def test_the_board_sits_on_a_surface():
+    """CONTENT NEVER SITS ON THE RAW PAGE BACKGROUND -- a project rule this board broke, caught by the
+    owner on a browser pass: "the contents of the page are up against the raw background. This is not
+    really used anywhere else on the site."
+
+    `.scard` IS THE PRIMITIVE, not a hand-rolled surface: the reward panel on this same page uses it,
+    and `challenges.css` records `.pp-csq-shelf__head` being banded for the identical reason ("the shelf
+    label used to sit on the bare page background... broke the rule that content belongs on a surface").
+
+    THE SLOT BOARD IS DELIBERATELY NOT CARDED, which is why this is asserted rather than assumed: "free
+    content" means PAGE-FILLING grids, and 26 pieces of cover art at 100-176px are the page's subject.
+    A numbered grid with a text head and a row of coins is a stats-shaped section, which still gets a
+    card.
+    """
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    at = body.index('class="pp-cal"')
+    before = body[:at]
+
+    assert '<section class="scard mb-3"' in before, 'the Calendar board must be on a `.scard`'
+    # `mb-3` for the reason the reward panel carries it: `.pp-gbrowse` sets no `gap` and `.scard` no
+    # `margin-bottom`, so without it the card's bottom edge meets the next block.
+    assert 'pp-csq-board' not in body, 'and the slot board is a different page'
+
+
+def test_a_day_cell_clears_the_touch_minimum_at_the_narrowest_width():
+    """MEASURED, BECAUSE THE CARD CHANGED IT. A day cell becomes a BUTTON when the day modal lands, so
+    44px is a floor rather than a preference -- and moving the board onto a `.scard` took the content
+    box at 375px from 343px to 327px, which put a 6px gap's cell at 41.6px.
+
+    The arithmetic is pinned rather than the appearance: seven columns and the gap are what decide it,
+    so a change to either has to come back here and redo the sum.
+    """
+    block = _calendar_css()
+    flat = ' '.join(block.split())
+    assert '--cal-gap: 3px;' in flat, 'the base gap is what buys the 44px'
+    assert 'grid-template-columns: repeat(7, minmax(0, 1fr));' in flat
+
+    # 375px viewport - 32px page gutter = 343px, less the card's 8px padding either side.
+    inner = 343 - 2 * 8
+    cell = (inner - 6 * 3) / 7
+    assert cell >= 44, 'a day cell is %.1fpx at 375px, under the 44px touch minimum' % cell
+
+
+# ── the month hues and the completion arc ────────────────────────────────────────────────────────────
+
+def test_every_month_declares_its_own_hue():
+    """TWELVE HUES, KEYED ON `data-month`, which is the one state attribute on this board with a reader
+    -- three others were deleted for having none, so this is the exception and it is pinned.
+
+    A CYCLE RATHER THAN A SPECTRUM, because that is what a calendar is: January opens cold and December
+    returns to frost so the row closes on itself. Adjacent pairs in the midsummer run are only ~17
+    degrees apart, which is why lightness steps with the hue -- two coins differ on both axes.
+    """
+    block = _calendar_css()
+    for month in range(1, 13):
+        # KEYED UNDER `.pp-cal`, NOT ON THE CREST, so the month PANEL inherits its own colour from the
+        # same declaration -- one set of rules for the coin and the content it switches to.
+        rule = '.pp-cal [data-month="%d"]' % month
+        assert rule in block, 'no hue declared for month %d' % month
+
+    hues = re.findall(r'data-month="\d+"\]\s*\{\s*--cal-c: oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)', block)
+    assert len(hues) == 12, 'every month hue must be an oklch triple: %r' % hues
+    assert len({h for _l, _c, h in hues}) == 12, 'two months share a hue angle'
+    # The cycle closes: December sits nearer January than it does to the autumn run it follows.
+    jan, dec, nov = float(hues[0][2]), float(hues[11][2]), float(hues[10][2])
+    assert abs(dec - jan) < abs(dec - nov), 'December should turn back toward January, not trail November'
+
+
+def test_the_progress_arc_is_one_colour_for_every_month():
+    """ONE COLOUR AXIS, ONE MEANING -- the owner's point: "all be the same color so you can tell it
+    specifically means progress". The month hue says WHICH month and WHETHER it is earned; the arc says
+    HOW FAR. Overloading one axis with both is what produced the `tier` and `crest` defects, and one
+    colour across twelve also makes the arcs comparable at a glance.
+
+    AND IT IS THE BRAND CYAN, because that is the site's progress colour already: `.pp-phero__ring-fill`
+    is `var(--pp-primary)`. An earlier version of this test asserted a NEUTRAL instead, on two grounds --
+    that no such convention existed, and that cyan collided with January. The second was true and is
+    fixed where it belongs, in the winter hues; the first was simply wrong, reached by grepping one
+    stylesheet rather than the set.
+    """
+    arc = _css_rule(_calendar_css(), '.pp-cal__arc {', last=True)
+    assert 'stroke: var(--pp-primary);' in arc, 'the arc is the site progress colour'
+    assert '--cal-c' not in arc, 'the arc must not vary by month'
+
+    # AND THE COLLISION IS GONE: no winter hue sits within 30 degrees of the arc.
+    block = _calendar_css()
+    hues = re.findall(r'--cal-c: oklch\([\d.]+ ([\d.]+) ([\d.]+)\)', block)
+    for chroma, hue in hues:
+        if abs(float(hue) - 206) < 30:
+            assert float(chroma) < 0.07, (
+                'hue %s sits near the cyan arc and is saturated enough to be confused with it' % hue)
+
+
+def test_the_two_rings_split_colour_from_progress():
+    """THE INNER RIM CARRIES THE HUE AND THE OUTER ARC DOES NOT, which is what makes two concentric
+    rings legible instead of busy: identity on one, measure on the other."""
+    block = _calendar_css()
+    rim_rule = block[block.index('.pp-cal__rim-track,'):]
+    rim_rule = rim_rule[:rim_rule.index('}')]
+    assert 'stroke: var(--cal-c);' in rim_rule, 'the rim is the month identity'
+
+
+def test_the_hue_never_reaches_the_text():
+    """THE SAFETY RULE, and the reason twelve hues cannot quietly break a contrast ratio: the face and
+    the counter read measured tokens, and the hue drives only the rim, the arc, the plate and the aura.
+    This is the recorded lesson about shrinking a colour recipe and voiding a measured ratio."""
+    block = _calendar_css()
+    face = block[block.index('.pp-cal__face {'):]
+    face = face[:face.index('}')]
+    assert '--cal-c' not in face, 'the face must not take the month hue'
+
+    sub = block[block.index('.pp-cal__sub {'):]
+    sub = sub[:sub.index('}')]
+    assert '--cal-c' not in sub, 'the counter must not take the month hue'
+
+    # And the crest's own `color` is a token, not the hue.
+    crest = block[block.index('.pp-cal__crest {'):]
+    crest = crest[:crest.index('\n}')]
+    assert 'color: var(--pp-text-mute);' in crest
+    assert 'color: var(--cal-c)' not in crest
+
+
+def test_each_crest_carries_its_months_completion_as_an_arc():
+    """THE OUTER RING, added without removing anything (the owner's condition). Its length is served by
+    `widthratio` rather than a new field on the group, because it is a ratio of two figures already
+    there -- the same arithmetic `_run_card.html` does for its progress bar."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 15):      # half of February
+        _fill(run, 2, day)
+    body = _body(run)
+
+    pcts = re.findall(r'data-month="(\d+)"\s*\n?\s*style="--pct: (\d+);"', body)
+    assert len(pcts) == 12, 'every crest carries a percentage: %r' % pcts
+    by_month = {int(m): int(p) for m, p in pcts}
+    assert by_month[2] == 50, '14 of 28 days is half of February'
+    assert by_month[1] == 0, 'an untouched month is zero'
+
+    # TWO CIRCLES for the arc: a dim track so the ring reads as unfilled rather than absent, and the fill.
+    assert body.count('class="pp-cal__arc-track"') == 13, 'the overview gauges the year the same way'
+    assert body.count('class="pp-cal__arc"') == 13
+
+
+def test_an_empty_months_arc_paints_nothing():
+    """THE OFFSET MECHANISM IS WHAT MAKES ZERO SAFE, which the earlier shape could not manage.
+
+    The arc was `stroke-dasharray: var(--pct) 100`, where a zero-length dash with a round cap still
+    paints a DOT -- an untouched month wearing a pip at twelve o'clock that reads as "one day done". That
+    forced butt caps. Ported from `.pp-phero__ring-fill`, the length is a fixed `72 100` dash moved by
+    `stroke-dashoffset`, so at 0 the dash sits entirely off the 100-unit path and nothing draws at all.
+    Round caps came back with it.
+    """
+    arc = _css_rule(_calendar_css(), '.pp-cal__arc {', last=True)
+    assert 'stroke-dasharray: 72 100;' in arc
+    assert 'stroke-dashoffset: calc((72 - var(--pct, 0) * 0.72) * 1px);' in arc
+    assert 'stroke-linecap: round;' in arc, 'safe again, because zero shifts the dash off the path'
+
+
+def test_the_gauge_starts_at_the_bottom_with_a_notch_for_its_plate():
+    """THE SHAPE THE OWNER ASKED FOR, ported from the profile hero's level ring rather than invented:
+    "can we have the rings start from the bottom... align them to the bottom of the ring in a way that
+    sort of overlaps and causes the ring to start a bit offset (we do this for level on the profile
+    page)".
+
+    THE ARITHMETIC IS THAT RING'S. `pathLength="100"` makes a unit 3.6 degrees. A 28-unit notch leaves a
+    72-unit arc starting at unit 64, so the origin moves 64 x 3.6 = 230.4 degrees off the default
+    three-o'clock start: `rotate(-90 + 230.4) = 140.4deg`. Progress then runs lower-left, over the top,
+    to lower-right.
+    """
+    block = _calendar_css()
+    shared = _css_rule(block, '.pp-cal__arc-track,')
+    assert 'transform: rotate(140.4deg);' in shared, 'the gauge must start from the bottom'
+
+    track = _css_rule(block, '.pp-cal__arc-track {')
+    assert 'stroke-dasharray: 72 28;' in track, 'the notch is cut out of the track itself'
+
+    # 72 + 28 = 100: the arc and its gap account for the whole circle, so no unit is drawn twice.
+    assert 72 + 28 == 100
+
+
+def test_the_counter_is_worn_in_the_notch():
+    """OUT OF THE CENTRE AND ONTO THE RIM, which is what makes the notch read as deliberate rather than
+    as a missing piece of ring -- and hands the coin's middle back to the face. `.pp-phero__lvl`'s shape:
+    a pill on the substrate, centred on the bottom edge, overlapping the arc's gap."""
+    sub = _css_rule(_calendar_css(), '.pp-cal__sub {\n        display: inline-flex;')
+    assert 'bottom: -2px;' in sub, 'it sits on the coin\'s bottom edge, overlapping the ring'
+    assert 'left: 50%;' in sub and 'translateX(-50%)' in sub, 'centred in the notch'
+    assert 'background: var(--pp-bg-0);' in sub, 'on the substrate, so the arc cannot read through it'
+    assert 'top:' not in sub, 'positioned off the coin now, not off the face'
+
+
+def test_the_month_panel_takes_its_own_months_colour():
+    """THE COHESION THE OWNER ASKED FOR: "when swapping tabs I think we should incorporate the colors of
+    that month into the content of the tab". The panel carries `data-month`, so it inherits `--cal-c`
+    from the same twelve declarations the coins read -- one source, two surfaces.
+
+    AND THE COLOUR STOPS AT THE TEXT. The head is a BAND with a hue edge and wash; the month name stays
+    on a token, because the hues run down to 0.66 lightness and November's berry on this card measures
+    about 3.9:1 -- under the 4.5 a 16px name needs. A filled day may take the hue because there the text
+    is white on a 22% mix into `--pp-bg-2`, which lands near 0.4 lightness whatever the hue.
+    """
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    panels = re.findall(r'<section class="pp-cal__panel"[^>]*data-month="(\d+)"', body)
+    assert [int(m) for m in panels] == list(range(1, 13))
+
+    block = _calendar_css()
+    # `last=True`: `.pp-cal__head` has two rules now -- the `lg:` grid-area placement comes first in
+    # the file and the band is the one carrying the colour.
+    head = _css_rule(block, '.pp-cal__head {', last=True)
+    assert 'border-left: 3px solid var(--cal-c' in head, 'the band carries the hue on its edge'
+
+    day = _css_rule(block, '.pp-cal__day--on {')
+    assert 'var(--cal-c' in day, 'a filled square takes its month colour'
+    assert 'color: #fff;' in day, 'on a dark mix, so the hue cannot break the text'
+
+    month_name = _css_rule(block, '.pp-cal__month {')
+    assert '--cal-c' not in month_name, 'the month name must stay on a measured token'
+
+
+def test_the_two_rings_do_not_touch():
+    """MEASURED, because concentric strokes that overlap read as one thick ring and the two say different
+    things -- position and progress. In a 44-unit viewBox the half-width is 22: the rim spans 14.9 to
+    17.1 and the arc 18.8 to 21.2, so 1.7 units of air between them and 0.8 inside the edge."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'class="pp-cal__rim-track" cx="22" cy="22" r="16"' in body
+    assert 'class="pp-cal__arc-track" cx="22" cy="22" r="20"' in body
+
+    block = _calendar_css()
+    rim_w, arc_w = 2.2, 2.4
+    rim_outer = 16 + rim_w / 2
+    arc_inner, arc_outer = 20 - arc_w / 2, 20 + arc_w / 2
+    assert 'stroke-width: %s' % rim_w in block
+    assert 'stroke-width: %s' % arc_w in block
+    assert arc_inner > rim_outer, 'the rings overlap'
+    assert arc_outer < 22, 'the arc clips the viewBox edge'
+
+
+# ── the rail on the page ─────────────────────────────────────────────────────────────────────────────
+
+def test_the_ladder_sits_in_the_header_card_and_replaces_the_bar():
+    """IN THE HEADER CARD, NOT A CARD OF ITS OWN (owner: "can we put that rail in the header and replace
+    the progress bar there?"), and still in place of the bar after the rail became a ladder of titles.
+
+    IT REPLACES RATHER THAN JOINS: a `.pp-horizon` says how far along a run is, which for 25 or 26 squares
+    is the whole story; for 365 days the interesting fact is which TITLE is next.
+    """
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+
+    assert 'pp-cal-ladder' in body
+    assert 'pp-horizon' not in body, 'a Calendar run shows the ladder instead of the bar'
+    assert body.index('pp-cal-ladder') < body.index('class="pp-cal"'), 'header before board'
+    assert body.count('<section class="scard mb-3"') == 1
+
+    az = _body(_run(CHALLENGE_TYPE_AZ))
+    assert 'pp-horizon' in az
+    assert 'pp-cal-ladder' not in az
+
+
+def test_the_header_tally_counts_days_on_a_calendar_run():
+    """"Done" is a square's word. The figure beside it is the same `completed_count` for every type, so
+    only the noun branches."""
+    assert '>days</span>' in _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert '>done</span>' in _body(_run(CHALLENGE_TYPE_AZ))
+
+
+def _ladder(run):
+    return _section(_body(run), 'pp-cal-ladder', until='class="pp-cal"')
+
+
+def test_the_ladder_names_what_every_rung_awards():
+    """The owner's report: the rail "doesn't really do a great job of explaining what you get at the various
+    milestones". Every rung names its day count and its title, and the next one says how far it is."""
+    from challenges.services.calendar_render import DAY_MARKERS
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 29):
+        _fill(run, 2, day)          # 28 days
+    ladder = _ladder(run)
+
+    for days in DAY_MARKERS:
+        assert '>%d days</span>' % days in ladder, 'rung %d has no day count' % days
+        assert '>%s</span>' % CALENDAR_DAY_TITLES[days] in ladder, 'rung %d does not name its title' % days
+    assert '>22 to go</span>' in ladder, '28 filled leaves 22 to the first rung'
+    assert '>Finishes the run</span>' in ladder
+    assert 'Earned' not in ladder
+    assert ladder.count('pp-cal-ladder__rung--next') == 1
+
+
+def test_a_reached_rung_says_earned_in_words_and_draws_a_check():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for month in (1, 2):
+        for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
+            _fill(run, month, day)   # 59 days, past the 50 rung
+    calendar_fill._recount_calendar(run)   # the recount is what grants the title
+    ladder = _ladder(run)
+
+    assert ladder.count('>Earned</span>') == 1
+    assert ladder.count('pp-cal-ladder__rung--earned') == 1
+    assert ladder.count('<path d="M20 6 9 17l-5-5"/>') == 1, 'the earned rung has no check glyph'
+
+
+def test_a_title_already_held_is_not_offered_as_the_next_one():
+    """A second Calendar run holds the first run's titles. The ladder must not call one "next" -- it names
+    the first title still to earn, as the Start card does."""
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+    from trophies.models import Title, UserTitle
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    title, _ = Title.objects.get_or_create(name=CALENDAR_DAY_TITLES[50])
+    UserTitle.objects.create(profile=run.profile, title=title, source_type='challenge', source_id=999999)
+    for day in range(1, 21):
+        _fill(run, 3, day)          # 20 days
+    ladder = _ladder(run)
+
+    assert '>Already held</span>' in ladder   # an anonymous read: see the owner-only test below
+    assert '>80 to go</span>' in ladder, 'the next rung is 100 days, 80 away'
+    assert '>30 to go</span>' not in ladder, 'the held 50 rung was offered as next'
+
+
+def test_the_ladder_states_the_comparison_figure_only_when_it_differs():
+    """`in_all` is the same days WITHOUT the shovelware exclusion, and it is what makes the headline mean
+    something read aloud. Shown only when it actually differs."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+    assert 'days with any platinum' not in _body(run), 'nothing to compare yet'
+
+    CalendarDay.objects.filter(challenge=run, month=4, day=4).update(in_all=True, in_clean=False)
+    assert '2 days with any platinum' in _body(run)
+
+
+def test_a_finished_run_has_nothing_left_to_go():
+    from challenges.services.calendar_render import DAY_MARKERS
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run).update(in_all=True, in_clean=True)
+    calendar_fill._recount_calendar(run)
+    ladder = _ladder(run)
+
+    assert 'to go' not in ladder, 'there is nowhere left to go'
+    assert ladder.count('>Earned</span>') == len(DAY_MARKERS)
+
+
+def test_the_ladder_is_a_list_and_its_pictures_are_hidden():
+    """The bars and glyphs are pictures of what the text in each item says, so a screen reader gets an
+    ordered list of five titles rather than five bars it cannot read."""
+    ladder = _ladder(_run(CHALLENGE_TYPE_CALENDAR))
+    assert '<ol class="pp-cal-ladder__rungs" role="list">' in ladder
+    for picture in re.findall(r'<span class="pp-cal-ladder__(?:bar|glyph)"[^>]*>', ladder):
+        assert 'aria-hidden="true"' in picture, picture
+
+
+def test_the_ladder_uses_the_same_progress_colour_as_the_coin_gauges():
+    """ONE CONVENTION PER PAGE: the coins' arcs and this ladder measure the same quantity, and cyan is the
+    site's progress colour, per `.pp-phero__ring-fill`."""
+    fill = _css_rule(_rail_css(), '.pp-cal-ladder__barfill {')
+    assert '--pp-primary' in fill
+    assert '--cal-c' not in fill, 'progress does not vary by month'
+
+
+def test_the_ladder_keeps_every_label_at_the_type_floor():
+    """Twelve pixels is the floor in this stylesheet, and a five-column row is where a label gets shrunk."""
+    for size in re.findall(r'font-size:\s*([0-9.]+)px', _rail_css()):
+        assert float(size) >= 12, size
+
+
+# ── the month's side column ──────────────────────────────────────────────────────────────────────────
+
+def test_the_stats_column_lives_inside_its_own_month_panel():
+    """INSIDE THE PANEL, NOT A SIBLING COLUMN, which is the decision that makes this cheap: the figures
+    are per MONTH and one month is visible, so living in the panel means they switch with it for free.
+    A sibling column would need the script toggling twelve more blocks in step with the twelve panels --
+    a second ordering to keep aligned, which is the class of thing `aria-controls` was introduced here to
+    avoid."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert body.count('class="pp-cal__stats"') == 13, (
+        'one per month plus the overview, each inside its own panel')
+
+    march = _section(body, 'id="cal-month-mar"', until='</section>')
+    assert 'pp-cal__stats' in march
+    assert 'March at a glance' in march
+
+
+def test_an_untouched_month_says_so_rather_than_listing_zeroes():
+    """EVERY ROW IS CONDITIONAL, because a stat reading "0" is worse than an absent one -- on a fresh run
+    the column would otherwise be a stack of zeroes. Which leaves one case needing its own line: a month
+    with nothing at all, where an empty column beside a full grid reads as a render fault.
+
+    NO ROW COUNT IN THIS DOCSTRING. It said "five zeroes" while there were six, four lines from a
+    template comment that had just removed the same number for having been wrong twice. A count of
+    conditional rows is a fact that changes every time the column gains one, stated in prose nothing
+    checks."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    january = _section(body, 'id="cal-month-jan"', until='</section>')
+
+    assert 'No days filled in January yet.' in january
+    assert 'Rank among months' not in january, 'an unranked month claims no rank'
+    assert 'First filled' not in january
+    # THE ROW THIS TEST WAS NAMED FOR AND DID NOT CHECK. `open` is `total - done`, so an untouched
+    # January is 31 open and drew "STILL OPEN / 31 days" directly above "No days filled yet" -- the
+    # column of zeroes in a different costume, twelve panels deep on a fresh run.
+    assert 'Still open' not in january, 'nothing is open in a month that has not started'
+
+
+def test_a_month_held_only_by_shovelware_says_what_it_is_excluding():
+    """THE ONE FIGURE THAT STILL RENDERS BESIDE AN EMPTY MONTH, and it is deliberate where "still open"
+    was not. A hunter whose only March platinums are on flagged games has `done=0` and a real exclusion
+    count, and that row ANSWERS the blank month rather than restating it -- "31 open" tells them the
+    length of March, "3 excluded" tells them why March is empty.
+
+    The empty-month test above uses a fresh run where `shovelware` is 0, so nothing covered this."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in (4, 5, 6):
+        CalendarDay.objects.filter(challenge=run, month=3, day=day).update(
+            in_all=True, in_clean=False, earned_on=dt.date(2018, 3, day))
+    march = _section(_body(run), 'id="cal-month-mar"', until='</section>')
+
+    assert 'No days filled in March yet.' in march
+    assert 'Excluded' in march and 'pp-tally">3</span>' in march
+    assert 'Still open' not in march, 'the open row stays gated on a month with nothing filled'
+
+
+def test_a_filled_month_lists_its_figures():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 6):
+        _fill(run, 3, day)
+    CalendarDay.objects.filter(challenge=run, month=3, day=9).update(in_all=True, in_clean=False)
+    march = _section(_body(run), 'id="cal-month-mar"', until='</section>')
+
+    # `pp-tally">26</span>`, NOT `>26</span>`: the section this reads includes the whole 31-cell grid,
+    # whose March 26 cell renders `<span class="pp-cal__num" aria-hidden="true">26</span>`. The loose
+    # form matched the day numeral, so breaking `open` outright left the assertion passing.
+    assert 'Still open' in march and 'pp-tally">26</span>' in march
+    assert 'Rank among months' in march and '1st best' in march
+    assert 'First filled' in march
+    assert 'Excluded' in march and 'shovelware' in march
+    assert 'No days filled' not in march
+
+
+def test_a_month_with_a_stacked_day_names_it():
+    """THE OWNER'S ASK (2026-10-04): "could we maybe add a 'busiest day' to the stats?" The month is the
+    panel's own title, so the day number alone is unambiguous and "4 on the 12th" fits a 230px column
+    where "4 platinums on 12 July" would wrap."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 7, 12, plats=4)
+    _fill(run, 7, 20)
+    july = _section(_body(run), 'id="cal-month-jul"', until='</section>')
+
+    assert 'Busiest day' in july
+    # `pp-tally">4</span>`, NOT `>4</span>`: this section holds the whole 31-cell grid, so the loose
+    # form matches the numeral in the 4 July cell. The same trap this file hit on the "still open" row.
+    assert 'pp-tally">4</span>' in july
+    assert 'on the 12th' in july, "humanize's `ordinal`, not a local suffix chain"
+
+
+def test_a_month_of_single_platinum_days_names_no_busiest_day():
+    """EVERY FILLED SQUARE HOLDS AT LEAST ONE, so the row would render on every month with a single
+    filled day and say nothing. Suppressed below two."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in (3, 4, 5):
+        _fill(run, 8, day)
+    august = _section(_body(run), 'id="cal-month-aug"', until='</section>')
+
+    assert 'Busiest day' not in august
+    assert 'First filled' in august, 'the rest of the column still renders'
+
+
+def test_a_finished_month_shows_no_open_row():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    # `earned_on` TOO, which this left null. The real fill always writes a date beside the booleans, so
+    # the month had `first is None` and the test quietly exercised the one row shape `_fill`'s docstring
+    # says no backfill can produce.
+    CalendarDay.objects.filter(challenge=run, month=2).update(
+        in_all=True, in_clean=True, earned_on=dt.date(2019, 2, 14))
+    february = _section(_body(run), 'id="cal-month-feb"', until='</section>')
+
+    assert 'Still open' not in february, 'nothing is open'
+    assert 'Rank among months' in february
+
+
+def test_one_dated_day_is_not_reported_twice():
+    """"Most recent" is suppressed when it is the same square as "First filled", because a month with one
+    filled day would otherwise state the same date under two labels."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 6, 6)
+    june = _section(_body(run), 'id="cal-month-jun"', until='</section>')
+
+    assert 'First filled' in june
+    assert 'Most recent' not in june
+
+
+def test_the_board_and_its_figures_share_one_width_story():
+    """THE OWNER'S FOURTH SHAPE for this page (2026-10-04): "I still think the medallions should cover
+    the area of the calendar + the stats on the side." So the band is the lid of the whole panel, and
+    the two columns under it divide what the coins span.
+
+    WHAT CHANGED FROM SHAPE 3, which this test used to describe: the crest row read the same two tokens
+    as the panel, capping itself to the board column so each coin sat over the day cells. The owner
+    wanted the band wider than that, so the tokens now govern the SPLIT below the band and nothing
+    about the band itself. Both halves are asserted here because a panel whose columns stop reading one
+    pair of tokens is how the head, the grid and the figures start disagreeing about where they end.
+    """
+    flat = ' '.join(_calendar_css().split())
+    assert '--cal-stats: 280px' in flat and '--cal-gutter: 24px' in flat
+    assert 'grid-template-columns: 1fr var(--cal-stats);' in flat
+    # `head stats`, NOT `head head`. The head spanned both columns at first, which put its tinted band
+    # 254px past the day grid -- three right edges in a panel built around shared ones. The side column
+    # spans the rows instead, so the head stops where the days stop.
+    assert 'grid-template-areas: "head stats" "grid stats";' in flat
+    assert '"head head"' not in flat, 'a spanning head overhangs the board column it titles'
+    # THE GUTTER IS READ ONCE, by the panel. Shape 3 had the crest row reading it too; a second reader
+    # is what let the band and the columns drift apart as the shapes changed.
+    assert flat.count('var(--cal-gutter)') == 1, (
+        'the token is declared once and consumed once -- by the panel\'s column gap')
+
+
+def test_the_stats_column_sits_on_a_surface():
+    """CONTENT DOES NOT SIT BARE, which is the rule that put the whole board on a `.scard` and the month
+    head on a band. Recessed rather than raised -- `--pp-bg-1` on a `--pp-bg-2` card -- so it reads as a
+    panel let into the card rather than a second card stacked on it."""
+    # THE RULE THAT CARRIES A BACKGROUND, found rather than named, because THREE rules share this
+    # selector -- the `lg:` grid-area placement, the surface, and the `lg:` margin reset -- so neither
+    # the first nor the last is the one meant and `_css_rule`'s `last` flag cannot express "the middle
+    # one". Naming it by its first declaration worked and pinned the test to declaration ORDER: moving
+    # `padding` above `margin-top` broke it without changing a single computed value.
+    # VIA `_css_rules`, which was introduced in this same slice for precisely this problem and then
+    # not used here -- two hand-rolled copies of one regex, which is how they drift.
+    rules = [r for r in _css_rules(_calendar_css(), '.pp-cal__stats') if 'background' in r]
+    assert len(rules) == 1, 'exactly one `.pp-cal__stats` rule paints a surface'
+    stats = rules[0]
+    assert 'background: var(--pp-bg-1);' in stats
+    assert 'border: 1px solid var(--pp-border);' in stats
+
+
+def test_the_month_rim_paints_nothing_where_only_a_desktop_plate_would_cover_it():
+    """THE REGRESSION THIS FILE EXISTS TO CATCH TWICE. The rim was retiled into the gauge's 28-unit notch
+    with a REPEATING `4.6 1.4` pattern, defended by a comment claiming the leftovers fell "behind an
+    opaque plate". There is no plate below 1024px: `.pp-cal__sub` is `display: none` until then, so on
+    every phone and tablet the pattern simply kept going -- five stray dashes across the bottom and a
+    double-length run where the truncated last dash abutted the first.
+
+    SO THE TEST IS THE WIDTH, not the arithmetic. The dash walk in
+    `test_the_rim_draws_twelve_segments_rather_than_a_solid_ring` proves the list tiles exactly; this one
+    proves the thing that made the bug invisible, which is that the cover it relied on does not exist at
+    the width most hunters are at."""
+    css = _calendar_css()
+    rules = _css_rules(css, '.pp-cal__sub')
+    assert len(rules) == 2, 'the plate is declared in %d rules, not the base + lg pair' % len(rules)
+    assert 'display: none;' in rules[0], (
+        'the counter plate now renders at mobile, which changes what the rim may rely on'
+    )
+    # AND THE RULE THAT SHOWS IT IS INSIDE THE `lg:` BAND -- by BRACE DEPTH, not by proximity. The first
+    # version took `css.rfind('@media', 0, at)`, the nearest PRECEDING at-rule, with no nesting tracked:
+    # move the reveal rule out of its media block so the plate renders at every width and any earlier
+    # `@media (min-width: 1024px)` above it still satisfied the assertion. That is exactly the regression
+    # this test exists for, and it passed. The project's own lesson about slicing a stylesheet says it:
+    # track the at-rule.
+    at = css.index('.pp-cal__sub {\n        display: inline-flex')
+    enclosing = _enclosing_at_rules(css, at)
+    assert len(enclosing) == 1 and 'min-width: 1024px' in enclosing[0], (
+        'the plate is revealed outside the lg: band (enclosing at-rules: %s), so the rim arithmetic '
+        'no longer has the cover its comment claims' % enclosing)
+
+
+def test_a_conceptless_game_still_links_somewhere_real():
+    """`Game.concept` IS `null=True` ON `SET_NULL`, so a concept merge or a staff unlink leaves real Games
+    pointing at nothing -- and `{{ plat.game.concept.game_page_url }}` on one of those renders `href=""`,
+    which resolves to the CURRENT page. Clicking the card reloaded the challenge.
+
+    THE HOUSE ALREADY GUARDS THIS in `game_cards.html`, `game_views` and `landing_service`; the shelf was
+    written without it. Pinned on the TEMPLATE because a conceptless Game needs a whole trophy fixture to
+    reach this fragment, and the guard is the thing that can be deleted."""
+    src = (ROOT_DIR / 'templates' / 'challenges' / 'partials' / '_calendar_day.html').read_text(
+        encoding='utf-8')
+    link = re.search(r'<a class="pp-cday__link" href="([^"]*)"', src).group(1)
+    assert 'plat.game.concept_id' in link, 'the nullable concept is dereferenced unguarded'
+    assert "url 'game_detail'" in link, 'a conceptless game loses its link entirely'
+
+
+def test_the_peek_prints_no_figure_this_board_does_not_recognise():
+    """AN OPENABLE SQUARE IS NOT A FILLED ONE. `in_clean` implies `in_all` and not the reverse, so a
+    shovelware-only day opens (there are games to list) while the grid draws it empty -- and its stored
+    count is shovelware-inclusive. The peek printed it with ", not counted" appended, so the seeded
+    3 March read "6 platinums, not counted": a number and its own retraction on one line.
+
+    `plats < 1` IS THE SAME JUDGEMENT ON A SECOND CAUSE. `plat_count` is only written when a row is
+    filled or changes, so a long-standing `in_all` row can still hold 0, and "0 platinums" previews
+    nothing."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    assert 'data-peek-figure' in body, 'the figure line has no hook, so it cannot be withheld'
+
+    peek = _script_code()
+    peek = peek[peek.index('function wireDayPeek'):]
+    assert "[data-peek-figure]').hidden = !counted" in peek, 'the figure is printed unconditionally'
+    assert 'clean && plats > 0' in peek, 'an uncounted or empty square still claims a platinum count'
+    assert 'not counted' not in peek, 'the retraction-after-the-number copy is back'
+
+
+def test_todays_ring_survives_being_hovered():
+    """`box-shadow` DOES NOT ACCUMULATE ACROSS RULES -- a later or more specific rule replaces the whole
+    value -- and `.pp-cal__day--open:hover` is (0,2,0) against `.pp-cal__day--today`'s (0,1,0). So
+    hovering today's square erased the one mark on the board that says it is today, which is the exact
+    defect this stylesheet records paying for on `.pp-csq` ("hovering a finished square erased the one
+    mark the page exists to show"). The comment claimed the two "never coexist"; they are on the same
+    square the moment a pointer reaches it.
+
+    COMPOSED THROUGH A CUSTOM PROPERTY, so the hover rule layers rather than replaces. The default is a
+    TRANSPARENT shadow and not `none`, because `box-shadow: none, <glow>` is invalid -- a keyword cannot
+    be one item of a list -- and the whole declaration would be dropped."""
+    css = _calendar_css()
+    assert '--day-ring' in _css_rule(css, '.pp-cal__day--today {'), (
+        "today's ring is declared directly, so a hover rule replaces it"
+    )
+    default = [r for r in _css_rules(css, '.pp-cal__day') if '--day-ring' in r]
+    assert len(default) == 1, 'the ring default is declared %d times' % len(default)
+    assert 'transparent' in default[0] and 'none' not in default[0], (
+        'an invalid `none` in the list would drop the hover rule entirely'
+    )
+    hover = [r for r in _css_rules(css, '.pp-cal__day--open:hover') if 'box-shadow' in r]
+    assert len(hover) == 1 and 'var(--day-ring)' in hover[0], (
+        'the hover glow still replaces the today ring instead of layering over it'
+    )
+
+
+def test_the_shelf_cascade_is_capped_like_the_day_grid():
+    """`platinums_on_day` DOCUMENTS "several hundred" ROWS on a stacked 28 February. The shelf's entrance
+    was `calc(var(--rev) * 40ms)` with no cap and `animation-fill-mode: backwards`, so the last card of
+    three hundred began almost twelve seconds after the sheet opened, every card before it held at
+    `opacity: 0`. The day grid has capped this since it was written and its own comment says why; the
+    shelf's comment claimed to be "the same staggerReveal-shaped beat" while omitting the cap that beat
+    is built on."""
+    delay = _css_rule(_calendar_css(), '.pp-cday__card {')
+    assert 'min(var(--rev, 0), 12)' in delay, 'the shelf cascade is uncapped, so a stacked day stalls'
+    # THE STEP TOO, not only the cap. Pinning `min(..., 12)` alone let `40ms` become `4000ms` -- 48
+    # seconds to the last card, which is worse than the uncapped version this test was written for.
+    assert '* 40ms' in delay, 'the shelf beat moved, so the cap no longer bounds anything useful'
+    assert 'backwards' in delay, 'without the backwards fill the cascade is a flash, not an entrance'
+
+
+def test_the_hue_never_becomes_small_text_over_the_dialog_wash():
+    """THE FILE'S OWN INVARIANT, stated in its hue table: "THE HUE NEVER TOUCHES TEXT ... the reason
+    twelve of these cannot quietly break a contrast ratio". The shelf redesign broke it six times, and
+    measured against the dialog's own month wash the failures were real rather than theoretical:
+    `--pp-text-mute` on the flag held 2.97:1 and 12px of `--cal-c` 4.19:1, against the 4.5 small text
+    needs.
+
+    THREE EXCEPTIONS SURVIVE AND ALL THREE ARE MEASURED: the masthead date (22px/800) and the peek tally
+    (24px/800) are LARGE text, where the floor is 3.0, and the peek hint mixes the hue toward a neutral.
+    Everything else is a token.
+
+    ASSERTED AS AN ABSENCE ACROSS THE WHOLE RANGE, with those three named. The first version listed the
+    three selectors it had just fixed, so putting the hue on `.pp-cday__title` (13px, same wash) passed
+    the whole file -- a guard that enumerates is blind, and this suite already carries the right shape in
+    `test_no_state_rule_touches_the_month_hue`: "the only form that cannot be satisfied by one more
+    `:not()`"."""
+    css = _calendar_css()
+    flat = ' '.join(css.split())
+    LARGE_OR_MIXED = ('.pp-cday__date', '.pp-cal__peek-figure .pp-tally', '.pp-cal__peek-hint')
+
+    # Every rule in the day-sheet and peek range that sets a `color`, checked for the hue.
+    offenders = []
+    for m in re.finditer(r'(\.(?:pp-cday|pp-cal__peek)[^{};]*) \{([^}]*)\}', flat):
+        selector, body = m.group(1).strip(), m.group(2)
+        # THE PROPERTY, NOT THE SUBSTRING. `'color:' in body` also matches `border-color:` and
+        # `background-color:`, which are decoration and may carry the hue -- the first version of this
+        # sweep reported `.pp-cday__link:hover .pp-cday__art` (a hue BORDER) as small text in the hue.
+        decls = [d.strip() for d in body.split(';')]
+        if not any(d.startswith('color:') for d in decls) or 'var(--cal-c' not in body:
+            continue
+        if selector in LARGE_OR_MIXED:
+            continue
+        offenders.append(selector)
+    assert not offenders, 'the month hue is small text here: %s' % offenders
+
+    # The three exceptions must still BE the three, or the allowlist above is quietly covering a fourth.
+    hued = [m.group(1).strip() for m in
+            re.finditer(r'(\.(?:pp-cday|pp-cal__peek)[^{};]*) \{([^}]*)\}', flat)
+            if any(d.strip().startswith('color:') for d in m.group(2).split(';'))
+            and 'var(--cal-c' in m.group(2)]
+    assert sorted(hued) == sorted(LARGE_OR_MIXED), 'the hued-text set moved: %s' % sorted(hued)
+
+    # AND THE WASH IS AT THE STRENGTH THOSE RATIOS WERE MEASURED AT -- BOTH LAYERS. The first version
+    # pinned only the radial, so taking the linear from 5% to 35% destroyed every figure quoted here and
+    # passed. The ceiling is a composite 15.6%, where `--pp-text-dim` reaches exactly 4.5 on December.
+    dialog = _css_rule(css, '#cal-day-modal .pp-detail-modal__dialog {')
+    assert 'var(--cal-c, var(--pp-primary)) 12%' in dialog, 'the radial wash moved'
+    assert 'var(--cal-c, var(--pp-primary)) 4%' in dialog, 'the linear wash moved'
+    # COUNTED INSIDE `background` ONLY. The rule also tints its border and an inset highlight with the
+    # hue, which are decoration and do not sit under text -- counting the whole rule gave four and said
+    # "four hue layers", which would have been a confusing way to fail.
+    wash = dialog[dialog.index('background:'):dialog.index(';', dialog.index('background:'))]
+    assert wash.count('var(--cal-c') == 2, (
+        'the dialog paints %d hue layers under its text, not the two the composite was measured on'
+        % wash.count('var(--cal-c')
+    )
+
+
+def test_the_stack_badge_stays_one_pixel_under_the_date():
+    """OWNER, 2026-10-06: "the plat counter text in the corner on mobile... is a little bit too large."
+
+    THE RULE IS THE RELATIONSHIP, not either number. The date is 12px at mobile and 13px from `md:`; the
+    badge was a flat 12px, so it MATCHED the date at mobile and sat under it only on larger screens -- and
+    at weight 700 against the filled date's 600 it was the heavier of the two, a corner glyph out-shouting
+    the number it annexes. One pixel under at BOTH widths is the same hierarchy everywhere.
+
+    IT COULD NOT BE DIMMED INSTEAD. The badge began at `--pp-text-dim` for exactly that purpose and
+    measured 3.21:1 at December, so colour and opacity were both spent before size was reached."""
+    css = _calendar_css()
+
+    day = [r for r in _css_rules(css, '.pp-cal__day') if 'font-size' in r]
+    stack = [r for r in _css_rules(css, '.pp-cal__stack') if 'font-size' in r]
+    assert len(day) == 2 and len(stack) == 2, (
+        'expected a base and an md: size for each: %d day, %d badge' % (len(day), len(stack))
+    )
+
+    def _px(rule):
+        value, unit = re.search(r'font-size: ([0-9.]+)(px|rem)', rule).groups()
+        return float(value) * (16.0 if unit == 'rem' else 1.0)
+
+    # SOURCE ORDER IS BASE THEN `md:` FOR BOTH, which the lengths above do NOT constrain -- two matches
+    # say nothing about their order. Stated as the assumption it is: a consistent reversal of both lists
+    # still yields the same pairs, so only a single-list reversal would slip through, and the sizes are
+    # asserted absolutely two lines down anyway.
+    for band, (date_px, badge_px) in enumerate(zip(map(_px, day), map(_px, stack))):
+        assert badge_px == date_px - 1, (
+            'at band %d the badge is %.1fpx against a %.1fpx date; it must sit exactly one pixel under'
+            % (band, badge_px, date_px)
+        )
+
+    # AND IT KEEPS ITS WEIGHT. Dropping size AND weight together takes the badge from shouting to
+    # vanishing -- bold is what holds a sub-floor glyph together.
+    base = [r for r in _css_rules(css, '.pp-cal__stack') if 'position: absolute' in r]
+    assert len(base) == 1 and 'font-weight: 700' in base[0]
+
+
+def test_both_panels_share_one_peek_face():
+    """`wireDayPeek.show()` WRITES INTO FIVE HOOKS WITH NO NULL GUARD, so a panel whose peek is missing
+    one throws `TypeError` on the first hover of any cell in it. The month panels and the year overview
+    had a copy each, differing only in the hint line -- and an audit showed the overview's copy could
+    lose ALL FIVE with every suite still green, because the existing pins assert the CONTAINERS
+    (`data-cal-peek` / `data-cal-facts`) rather than what is inside them.
+
+    A PARTIAL REMOVES THE DRIFT INSTEAD OF DETECTING IT, which is the better trade when two copies must
+    agree character for character. This pins that neither panel has grown its own copy back."""
+    src = (ROOT_DIR / 'templates' / 'challenges' / 'partials' / '_calendar_board.html').read_text(
+        encoding='utf-8')
+    assert src.count('_calendar_peek.html') == 2, 'a panel stopped sharing the peek face'
+    assert 'data-peek-head' not in src, 'a peek face was inlined again instead of included'
+
+    # THE FIVE HOOKS LIVE IN ONE FILE, and the script's five writes must each find one.
+    peek = (ROOT_DIR / 'templates' / 'challenges' / 'partials' / '_calendar_peek.html').read_text(
+        encoding='utf-8')
+    # THE HOOKS THE SCRIPT WRITES INTO THE FACE, which is not every `data-peek-` selector it uses:
+    # `[data-peek-label]` lives on the day CELLS and is how the peek finds them, so asking the face to
+    # render it would be asking the wrong element for the wrong attribute.
+    js = _script_code()
+    hooks = sorted(set(re.findall(r"f\.peek\.querySelector\('\[data-peek-(\w+)\]'\)", js)))
+    assert len(hooks) >= 5, 'expected the five face hooks, found %s' % hooks
+    for hook in hooks:
+        assert 'data-peek-%s' % hook in peek, (
+            'the script writes [data-peek-%s] into the peek and no panel renders it' % hook
+        )
+
+    # AND THE TWO HINTS STAY DIFFERENT: from a month a square opens its DAY, from the overview its MONTH.
+    hints = re.findall(r'_calendar_peek.html" with hint="([^"]+)"', src)
+    assert len(set(hints)) == 2, 'both panels now promise the same thing: %s' % hints
+
+
+def test_the_year_totals_state_the_years_length_once():
+    """`open` IS SUMMED FROM THE MONTHS, not recomputed and not taken from a literal 365. Each group
+    already carries `open`, so `month['total'] - month['done']` was a second spelling of a figure the
+    data already held -- in a function whose own docstring objects to exactly that two lines earlier.
+
+    A VALUE TEST CANNOT SEE THIS, which is why the pin is on the source. `365 - sum(done)` is
+    numerically identical for every real run (the months sum to 365 by construction), so the obvious
+    assertion -- `done + open == 365` -- is tautologically satisfied by the literal it means to forbid.
+    Measured: that mutation passed in both suites that carry the check."""
+    src = (ROOT_DIR / 'challenges' / 'services' / 'calendar_render.py').read_text(encoding='utf-8')
+    # THE FUNCTION'S OWN BODY, bounded by the next thing at column zero. Slicing on blank lines ran
+    # straight past it into `DAY_MARKERS = (50, 100, 200, 300, 365)`, so the no-literal-365 assertion
+    # below was reading a constant two definitions away and failing on it.
+    body = src[src.index('def totals_for('):]
+    lines = body.split('\n')
+    end = next(i for i, ln in enumerate(lines[1:], 1) if ln and not ln[0].isspace())
+    body = '\n'.join(lines[:end])
+    # THE CODE, NOT THE PROSE. The docstring explains at length why there is no literal 365 here, and
+    # the word it has to use to say that is "365" -- so reading the whole function fails on its own
+    # explanation. Everything after the docstring's closing quotes.
+    body = body[body.index('"""', body.index('"""') + 3) + 3:]
+    assert "month['open']" in body, 'the year re-derives a figure the months already carry'
+    assert '365' not in body, (
+        "the year's length is stated here as well as in CALENDAR_MONTH_DAYS, so the Feb-29 fold is "
+        'written down twice'
+    )
+
+
+def test_the_crest_strip_opens_on_the_live_month():
+    """OWNER, 2026-10-05: "the crest bar doesn't automatically scroll to show the current month on the
+    screen on load (say October, it is off-screen initially)."
+
+    THE BOARD HAS OPENED ON THE CURRENT MONTH since the server learned to render it, but nothing ever
+    moved the STRIP -- `show` is the only thing that centres a crest and it runs on interaction. So a
+    hunter in October arrived at an October board sitting under a row of crests showing January, with
+    the live one five coins past the right edge.
+
+    VERIFIED IN A BROWSER under real mobile emulation (iPhone 12, iPhone SE, Pixel 5): the strip lands
+    at a scrollLeft of 280/350/277 with October's crest fully inside the box, `scrollY` still 0, and a
+    1280px desktop is a clean no-op. What is pinned HERE is the mechanism, because this suite has no
+    browser.
+
+    `scrollLeft`, NOT `scrollIntoView`, AND THAT IS THE LOAD-BEARING PART. `scrollIntoView` walks every
+    scrollable ancestor, so it can pan the document as well as the strip -- not hypothetical on this
+    board, which had a 620px strip panning the whole page sideways on a phone. On BOOT the vertical half
+    is worse: the old call carried `block: 'nearest'` to stop the browser scrolling down to centre a
+    44px control, and a board below the fold is not "nearest", so the page would have jumped to it on
+    load."""
+    js = _script_code()
+
+    assert 'scrollIntoView' not in js, (
+        'a crest asks the page to scroll it again, which can pan the document on both axes'
+    )
+    assert 'strip.scrollLeft +=' in js, 'the strip is no longer scrolled directly'
+
+    # THE BOOT CALL, AND THAT `live` IS RESOLVED FROM THE SERVER'S OWN MARK. These were independent
+    # substring checks, and `"aria-selected') === 'true'"` ALSO appears in the `isActive` callback -- so
+    # it was satisfied however `live` was computed. Measured: replacing the filter with
+    # `var live = tabs[1];` passed, while the strip opened on February for every hunter, which is the
+    # entire bug this fixed. Sliced to the assignment, as the `show` check below already does.
+    assert 'centreTab(live);' in js, 'nothing centres the live crest on load'
+    live = js[js.index('var live ='):]
+    live = live[:live.index(';')]
+    assert "aria-selected') === 'true'" in live, (
+        'the live crest is chosen some other way than by the mark the server rendered'
+    )
+
+    # THE SWITCH USES THE SAME ONE. Two mechanisms for "bring a crest into view" is how they drift.
+    show = js[js.index('function show(index)'):]
+    show = show[:show.index('\n        }')]
+    assert 'centreTab(tab);' in show, 'switching months no longer brings its crest along'
+
+    # AND IT IS A NO-OP WHERE NOTHING SCROLLS, so the desktop row is never written to.
+    assert 'strip.scrollWidth <= strip.clientWidth' in js, (
+        'the centring writes to a strip with no overflow instead of standing down'
+    )
+
+
+def test_the_crest_strip_cannot_widen_the_page():
+    """OWNER, 2026-10-05, ON A PHONE: "they 'extend' the screen so I can scroll the entire screen over to
+    the right". A horizontal scroll container sitting in the page's flex column leaks its INTRINSIC width
+    upward -- `game-detail.css` records the identical defect and cause for its pill row -- and a mobile
+    browser answers a 620px demand by EXPANDING THE LAYOUT VIEWPORT. Measured on an emulated iPhone 12:
+    `innerWidth` 619 against a 390 layout viewport, so the whole document panned into empty space.
+
+    THIS PIN IS SOURCE TEXT BECAUSE THE SUITE HAS NO BROWSER, and that limit is worth stating plainly: no
+    assertion here can see a layout viewport, so what is pinned is the MECHANISM rather than the symptom.
+    It was verified in Chromium under real mobile emulation at 320, 375, 390 and 393, and the project
+    already ships Playwright (share cards) if this is ever worth promoting to a rendered test.
+
+    BOTH KEYWORDS ARE LOAD-BEARING. `contain: size` alone does NOT fix it -- measured -- so a tidy-up that
+    drops `layout` silently restores the bug. So does dropping the intrinsic height: size containment
+    sizes the box as though it were empty, and the strip would collapse.
+
+    AND IT IS SCOPED TO THE SCROLL CONTAINER. From `md:` the strip is `overflow-x: visible` and the coins
+    flex, so there is nothing to leak -- and size containment there would break a row whose height comes
+    from coins that size themselves."""
+    css = _calendar_css()
+
+    # FOUND BY ITS DECLARATION, not by position: `.pp-cal__crests` has five rules and `_css_rule` takes
+    # the first, which is the `md:` width block. The lesson `.pp-cal__stats` taught this file.
+    base = [r for r in _css_rules(css, '.pp-cal__crests') if 'overflow-x: auto' in r]
+    assert len(base) == 1, 'the scrolling strip rule moved or split: %d matches' % len(base)
+    base = base[0]
+    assert 'contain: layout size' in base, (
+        'the strip can widen the layout viewport again; `contain: size` alone does not fix it'
+    )
+    assert 'contain-intrinsic-height' in base, 'size containment with no height collapses the strip'
+
+    # THE INTRINSIC HEIGHT IS THE COIN'S HEIGHT. If one moves without the other the strip clips its own
+    # coins or leaves a gap, and nothing else would notice.
+    # THE MOBILE COIN, which is the one the contained height has to match: the `md:` rule sets
+    # `height: auto` and sizes from `aspect-ratio`, so filtering on `height:` alone matches both.
+    crest = [r for r in _css_rules(css, '.pp-cal__crest') if re.search(r'height: \d+px', r)]
+    assert len(crest) == 1, 'the fixed coin size rule moved: %d matches' % len(crest)
+    coin_h = re.search(r'height: (\d+)px', crest[0]).group(1)
+    assert 'contain-intrinsic-height: %spx' % coin_h in base, (
+        'the contained height and the coin height disagree: coin is %spx' % coin_h
+    )
+
+    # AND IT IS TURNED OFF WHERE THERE IS NO SCROLL CONTAINER -- the `md:` band, which sets
+    # `overflow-x: visible`. The comment here said the inverse of the rule it reads.
+    md = [r for r in _css_rules(css, '.pp-cal__crests') if 'overflow-x: visible' in r]
+    assert len(md) == 1 and 'contain: none' in md[0], (
+        'size containment survives into the band where the row flexes, which breaks its height'
+    )
+
+
+# ── the All crest and its year overview ──────────────────────────────────────────────────────────
+
+def test_the_year_overview_draws_every_day_in_twelve_month_rows():
+    """OWNER, 2026-10-05: "a mini-version of the entire year at a glance". TWELVE ROWS OF UP TO 31, one
+    per month, columns aligned on day-of-month -- NOT the Hall of Fame hero's seven-by-53, whose own
+    comment says its rows "are NOT weekdays ... Seven is simply what makes 365 cells read as a block at
+    hero width".
+
+    THE RAGGED TAIL IS THE POINT OF THE SHAPE, and it is what a flat 365-cell strip cannot show: a row
+    stops where its month does, so February is visibly four cells shorter than January."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+
+    # TOLERANT OF THE TAG'S SHAPE. The row grew `data-cal-jump` on a second line, which an exact-tag
+    # pattern silently stopped matching -- reporting "0 month rows" rather than the attribute it had not
+    # heard about. `[^>]*` cannot cross the tag because there is no `>` inside it.
+    rows = re.findall(r'<div class="pp-cal__yrow"[^>]*data-month="(\d+)"[^>]*>(.*?)</div>', year, re.S)
+    assert len(rows) == 12, 'the overview draws %d month rows' % len(rows)
+    assert [int(m) for m, _cells in rows] == list(range(1, 13)), 'the rows are out of month order'
+
+    per_row = [len(re.findall(r'class="pp-cal__ycell[ "]', cells)) for _m, cells in rows]
+    assert per_row == list(CALENDAR_MONTH_DAYS), (
+        'a row does not match its own month length: %s' % per_row)
+    assert sum(per_row) == 365
+
+    # EVERY ROW NAMES ITSELF, because a row of 31 identical squares is unreadable without its month --
+    # and the label is the only text in the matrix, 12px being this file's floor.
+    assert len(re.findall(r'class="pp-cal__ylabel"', year)) == 12
+    assert '<span class="pp-cal__ylabel">FEB</span>' in year
+
+
+def test_the_year_overviews_cells_are_never_controls():
+    """A MEASURED DECISION, not an omission. At the 1100px cap an overview cell is about 31px and at
+    375px about 9px -- under the 44px touch minimum this stylesheet defends for the day squares. A 9px
+    control opening the same dialog a 44px square opens one tab away is a worse affordance, not an extra
+    one, so the overview identifies a day through the pointer-only peek and the month tabs stay the only
+    way to open one.
+
+    AND THE MATRIX IS `aria-hidden` WITH AN `sr-only` SUMMARY BESIDE IT. 365 empty spans announce
+    nothing, and every fact in here is already reachable through the twelve month panels -- so this is a
+    duplicate VIEW of reachable content, not content without an accessible path."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+    year = _section(_body(run), 'id="cal-month-all"', until='</section>')
+
+    assert 'data-day-url=' not in year, 'an overview cell must not open the day modal'
+    assert '<button' not in year, 'nothing in the overview is a control'
+    assert '<div class="pp-cal__year" aria-hidden="true">' in year
+
+    # THE SUMMARY IS OUTSIDE THE HIDDEN SUBTREE, or it is hidden with it.
+    before = year[:year.index('<div class="pp-cal__year"')]
+    assert 'class="sr-only"' in before, 'the overview says nothing to a screen reader'
+    assert 'months complete' in before
+
+
+def test_the_year_crests_rim_lights_one_slot_per_finished_month():
+    """A DIAL OF THE YEAR, not a thirteenth "which month" mark. A month crest lights ONE of twelve rim
+    slots to say which month it is; this one lights a slot per STRUCK month on the same `--seg`
+    mechanism, so the coin reports the year at a glance and cannot be read as a month's own crest.
+
+    UNLIT SLOTS ARE THE TRACK SHOWING THROUGH, so a year with nothing struck draws a bare rim rather
+    than needing a special case -- which is also why this counts segments rather than asserting a
+    fixed circle total."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month__in=(2, 5)).update(in_all=True, in_clean=True)
+    crest = re.search(r'<button[^>]*id="cal-tab-all".*?</button>',
+                      _body(run), flags=re.S).group(0)
+
+    segs = re.findall(r'class="pp-cal__rim-seg"[^>]*style="--seg: (\d+);"', crest)
+    assert [int(x) for x in segs] == [1, 4], (
+        'the rim lights the wrong slots for February and May: %s' % segs)
+
+    # THE GAUGE READS THE YEAR, not a month: 59 of 365 days for February plus May.
+    assert 'style="--pct: 16;"' in crest, 'the year gauge does not match the days filled'
+    assert '<span class="pp-cal__sub">59/365</span>' in crest
+
+
+def test_the_overview_crest_wears_no_months_hue():
+    """TWELVE HUES EACH MEAN ONE SPECIFIC MONTH. A thirteenth coin reading the table would either steal
+    one of those meanings or add a second colour axis to an object already carrying two -- which this
+    stylesheet records as the way generated crests turn muddy.
+
+    SO THE CREST CARRIES NO `data-month` AND DECLARES ITS OWN NEAR-NEUTRAL SILVER. Not the brand cyan,
+    which is already every coin's completion arc: a cyan rim over a cyan arc loses the distinction the
+    two rings exist to make.
+
+    THE ROWS INSIDE ITS PANEL DO WEAR THEIR HUES, and that is the opposite half of the same decision --
+    it is what makes twelve rows read as twelve months rather than one 365-cell texture."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    crest = re.search(r'<button[^>]*id="cal-tab-all".*?</button>', body, flags=re.S).group(0)
+    assert 'data-month=' not in crest, 'the overview crest claims a month it is not'
+
+    css = _calendar_css()
+    rule = _css_rule(css, '.pp-cal__crest--all {')
+    assert '--cal-c: oklch(' in rule, 'the overview crest falls back to the unearned grey'
+    assert 'var(--pp-primary)' not in rule, 'the overview crest collides with its own gauge colour'
+
+    # A NEAR-NEUTRAL, measured against the twelve: its chroma must be far below any month's.
+    chroma = float(re.search(r'--cal-c: oklch\([\d.]+ ([\d.]+)', rule).group(1))
+    months = [float(c) for _l, c, _h in
+              re.findall(r'data-month="\d+"\]\s*\{\s*--cal-c: oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)', css)]
+    assert len(months) == 12
+    assert chroma < min(months) / 2, (
+        'the overview crest is saturated enough to read as a month: %s against %s' % (chroma, min(months)))
+
+    # AND THE PANEL'S ROWS READ THE TABLE, through the descendant selector it is keyed on.
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+    assert 'data-month="7"' in year, 'the overview rows do not carry their months'
+    cell = _css_rule(css, '.pp-cal__ycell--on {')
+    assert 'var(--cal-c' in cell, 'a filled overview cell does not wear its row\'s month'
+
+
+def test_the_overview_reports_the_year_rather_than_a_month():
+    """ITS STATS COLUMN EXISTS FOR TWO REASONS and only one of them is the figures: `wireDayPeek`
+    resolves the peek faces through `cell.closest('.pp-cal__panel')`, so a panel without one would
+    swallow every hover in it silently. The resting face therefore has to say something, and the year's
+    own figures are what a month panel's equivalent cannot."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    CalendarDay.objects.filter(challenge=run, month=2).update(in_all=True, in_clean=True)
+    year = _section(_body(run), 'id="cal-month-all"', until='</section>')
+
+    assert '<h4 class="pp-cal__stats-head">The year</h4>' in year
+    assert 'Months complete' in year and '>1</span> of 12' in year
+    assert 'Still open' in year and '>337</span> day' in year, 'the open figure is not 365 minus 28'
+    # BOTH HOOKS, because the script finds the faces by these attributes and a missing one means a
+    # hover in this panel changes nothing at all.
+    assert 'data-cal-peek' in year and 'data-cal-facts' in year
+
+
+def test_every_overview_cell_carries_its_date():
+    """OWNER, 2026-10-05: "putting numbers in the boxes would really help, especially with the 'at a
+    glance' feel of it."
+
+    EVERY CELL, INCLUDING THE OPEN ONES, because the grid is a calendar and a calendar with gaps in its
+    numbering is unreadable. The hierarchy comes from COLOUR -- full strength on a filled day, dim on an
+    open one -- not from printing some dates and not others."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+    year = _section(_body(run), 'id="cal-month-all"', until='</section>')
+
+    nums = re.findall(r'<span class="pp-cal__ynum">(\d+)</span>', year)
+    assert len(nums) == 365, 'the overview prints %d dates, not one per cell' % len(nums)
+
+    rows = re.findall(r'<div class="pp-cal__yrow"[^>]*>(.*?)</div>', year, re.S)
+    for month, (length, cells) in enumerate(zip(CALENDAR_MONTH_DAYS, rows), start=1):
+        printed = [int(n) for n in re.findall(r'<span class="pp-cal__ynum">(\d+)</span>', cells)]
+        assert printed == list(range(1, length + 1)), (
+            'month %d prints the wrong dates: %s' % (month, printed[:5]))
+
+
+def test_the_overviews_dates_wait_for_room_and_bring_a_readable_fill_with_them():
+    """TWO COUPLED DECISIONS, and neither is a preference.
+
+    THE BREAKPOINT IS ARITHMETIC. 12px is this stylesheet's type floor, and 31 columns inside the 343px
+    a 375px viewport gives this panel is an 8.9px cell -- so a numeral at mobile would need sub-floor type
+    or a horizontally scrolling year, and a year you scroll is not a year at a glance. `display: none`
+    until 768, where the cell is about 19.6px.
+
+    AND THE FILL HAD TO CHANGE WITH IT. Measured across the twelve hues, `--pp-text` on the mobile cell's
+    68% tint holds 2.27:1 at December and a dark ink manages 3.54 at best: there is NO text colour that
+    works on it, which is why the numeral arrives with a different recipe rather than just a colour. From
+    `md:` the cell takes `.pp-cal__day--on`'s shipped 22% tint, already measured at 7.30-9.95 for white.
+
+    PINNED TOGETHER because the hazard is raising one without the other -- a 68% tint with a numeral on
+    it fails AA at every hue, and nothing else in the suite would see it."""
+    css = _calendar_css()
+
+    base = _css_rule(css, '.pp-cal__ynum {')
+    assert 'display: none' in base, 'the date renders at 375px, where no legible numeral fits'
+
+    shown = [r for r in _css_rules(css, '.pp-cal__ynum') if 'font-size' in r]
+    assert len(shown) == 1
+    assert 'font-size: 12px' in shown[0], 'the date is off the type floor'
+    assert 'tabular-nums' in shown[0], 'proportional digits break the column alignment'
+    # LOCATED IN THE UNFLATTENED SOURCE, because the enclosing at-rule is what is being asserted and
+    # `_css_rules` returns a whitespace-flattened copy -- indexing one into the other finds nothing.
+    at = css.index('.pp-cal__ynum {\n        display: block')
+    assert _enclosing_at_rules(css, at) == ['@media (min-width: 768px)'], (
+        'the date is revealed outside the md: band, where the cell cannot hold it')
+
+    # THE TWO FILL RECIPES, and the band each belongs to.
+    fills = _css_rules(css, '.pp-cal__ycell--on')
+    tints = [re.search(r'var\(--cal-c, var\(--pp-primary\)\) (\d+)%, var\(--pp-bg-2\)', f)
+             for f in fills]
+    tints = sorted(int(m.group(1)) for m in tints if m)
+    assert tints == [22, 68], 'the overview fill is %s, not the mobile tile plus the day recipe' % tints
+    with_num = [f for f in fills if '--yc-ring' in f]
+    assert len(with_num) == 1 and '45%' in with_num[0], (
+        'the numeral-bearing cell has no ring, so a 22% tint is all that says it is filled')
+
+
+def test_an_overview_cells_ring_and_its_today_mark_compose():
+    """THE FOURTH TIME THIS FILE PAID FOR IT -- and this test watched. `box-shadow` does not accumulate
+    across rules, so any two states writing it erase each other on whichever rule loses: the defect is
+    already recorded on `.pp-csq`, on `.pp-cal__day` and on `.pp-cal__coin`.
+
+    THE FIRST VERSION OF THIS PIN ASSERTED THE COLLISION. It required the hover rule to write
+    `--yc-mark` -- the SAME variable today's marker uses -- so it locked in a hover that erased today's
+    ring, which is the exact sentence this file keeps quoting about `.pp-csq`. A pin that names the
+    mechanism has to check the mechanism is SOUND, not merely present: one slot per state, and no two
+    states sharing one.
+
+    TRANSPARENT DEFAULTS, NOT `none`: a keyword cannot be one item of a `box-shadow` list, and the whole
+    declaration would be dropped."""
+    css = _calendar_css()
+    base = _css_rule(css, '.pp-cal__ycell {')
+    # FOUR SLOTS since the heatmap (2026-10-09): `--yc-heat` carries the count as a bar from `md:`.
+    assert 'box-shadow: var(--yc-ring), var(--yc-mark), var(--yc-hover), var(--yc-heat)' in base
+    assert base.count('0 0 0 0 transparent') == 4, 'a default is `none`, which invalidates the list'
+
+    filled = [r for r in _css_rules(css, '.pp-cal__ycell--on') if '--yc-ring' in r]
+    today = _css_rule(css, '.pp-cal__ycell--today {')
+    hover = [r for r in _css_rules(css, '.pp-cal__year [data-peek-label]:hover') if '--yc-' in r]
+    assert len(filled) == 1 and len(hover) == 1
+    for rule, name in ((filled[0], 'the filled ring'), (today, "today's mark"), (hover[0], 'the hover')):
+        assert 'box-shadow' not in rule, '%s is declared directly and erases the others' % name
+
+    # ONE SLOT EACH, AND NO TWO THE SAME. This is the assertion the first version did not make.
+    slots = {'filled': filled[0], 'today': today, 'hover': hover[0]}
+    used = {}
+    for name, rule in slots.items():
+        found = sorted(set(re.findall(r'--yc-[a-z]+(?=:)', rule)))
+        assert len(found) == 1, '%s writes %d shadow slots, not one: %s' % (name, len(found), found)
+        used[name] = found[0]
+    assert len(set(used.values())) == 3, (
+        'two states share a shadow slot, so the more specific one erases the other: %s' % used
+    )
+
+
+def test_an_overview_row_jumps_to_its_months_tab():
+    """OWNER, 2026-10-05: "being able to click a box or one of the rows to go to the proper tab would be
+    really nice."
+
+    THE ROW IS THE TARGET AND A CELL IS INSIDE IT, so "click a box" and "click a row" are one handler
+    rather than two -- and one target per month rather than 365, which is what keeps this clear of the
+    44px minimum argument: the row spans the panel.
+
+    BY ID, NOT BY INDEX. The row names its tab and the script looks the element up, then asks the tab
+    list where it sits. Reading the month number off the row and indexing with it would work only while
+    the overview is the first tab, which is the positional coupling that has already bitten this suite
+    twice."""
+    body = _body(_run(CHALLENGE_TYPE_CALENDAR))
+    year = _section(body, 'id="cal-month-all"', until='</section>')
+
+    jumps = re.findall(r'data-cal-jump="([\w-]+)"', year)
+    assert len(jumps) == 12, 'the overview offers %d jumps, not one per month' % len(jumps)
+    assert jumps[0] == 'cal-tab-jan' and jumps[11] == 'cal-tab-dec'
+    # EVERY TARGET EXISTS. A jump naming a tab that is not there is a click that does nothing.
+    for tab_id in jumps:
+        assert 'id="%s"' % tab_id in body, '%s is not a tab on this page' % tab_id
+
+    js = _script()
+    jump = js[js.index("closest('[data-cal-jump]')"):]
+    assert 'getElementById' in jump, 'the jump resolves its tab by position rather than by id'
+    assert 'tabs.indexOf(tab)' in jump
+    # THE SAME PAIR `onSelect` USES, so a jump leaves the board exactly where a crest click would --
+    # `aria-selected` rewritten, panels re-hidden, the slide run, and the roving tabindex moved.
+    assert 'show(index);' in jump and 'api.syncTabindex();' in jump
+
+    # AND THE SLIDE STARTS FROM THE LIVE MONTH. `current` was `order[0]`, which is the ALL tab and can
+    # never be live, so the first switch always computed a FORWARD slide whichever way it went.
+    current = js[js.index('var current ='):]
+    current = current[:current.index(';')]
+    assert 'order[0]' not in current, 'the slide starts from the overview rather than from the open month'
+    assert 'live' in current
+    # FOCUS MOVES, AND DOES NOT SCROLL. `focus()` scrolls the element into view by default, which is
+    # `scrollIntoView` wearing another name -- and on this site `html` carries `scroll-behavior: smooth`
+    # AND a `scroll-padding-top` for the sticky chrome, so the default would slide the whole page under
+    # the pointer that just clicked a row. The option is the correctness, not the call.
+    assert 'tab.focus({ preventScroll: true })' in jump, (
+        'focus either stays on the overview, or moves and drags the document with it'
+    )
+
+
+def test_a_jump_tears_down_the_peek_it_leaves_behind():
+    """THE JUMP HIDES THE PANEL THE PEEK IS STANDING ON, exactly as a crest click does, and the peek's
+    own state is not reset by a panel going `hidden`. Without this the month's figures would still be
+    swapped out on the overview when a hunter came back to it, showing a day they had left."""
+    js = _script()
+    peek = js[js.index('function wireDayPeek'):]
+    guard = re.search(r"closest\('([^']*data-cal-jump[^']*)'\)", peek)
+    assert guard, 'the peek is never torn down by a jump'
+    assert '.pp-cal__crest' in guard.group(1), 'the crest tear-down was dropped when the jump arrived'
+
+
+# ── the opening ceremony ─────────────────────────────────────────────────────────────────────────
+
+def test_the_opening_ceremony_arms_only_for_the_owner_of_an_unseen_run():
+    """`data-auto` IS THE WHOLE GATE, and it is rendered server-side on purpose: `DetailModal` reads it
+    off the element, so a script deciding would risk a flash of somebody else's progress before it ran.
+
+    THE OWNER ONLY, because a run page is public and the ceremony says "here is where YOU stand" -- shown
+    to a visitor that is a stranger's progress addressed in the second person."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    _fill(run, 3, 3)
+
+    owner = Client()
+    owner.force_login(run.profile.user)
+    body = owner.get(_url(run)).content.decode()
+    sheet = re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>', body, re.S).group(0)
+    assert 'data-auto' in sheet, 'the owner of a fresh run is not shown the ceremony'
+
+    # A VISITOR GETS THE MARKUP AND NOT THE TRIGGER. The element renders either way so the script has one
+    # code path; the attribute is what decides.
+    visitor = Client()
+    visitor.force_login(ProfileFactory().user)
+    seen_by_visitor = re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>',
+                                visitor.get(_url(run)).content.decode(), re.S).group(0)
+    assert 'data-auto' not in seen_by_visitor, "a visitor is shown the owner's opening ceremony"
+
+    # AND ANONYMOUS, which is the case `getattr(user, 'profile', None)` exists for.
+    anon = re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>',
+                     Client().get(_url(run)).content.decode(), re.S).group(0)
+    assert 'data-auto' not in anon
+
+
+def test_the_opening_ceremony_does_not_return_once_acknowledged():
+    """PER RUN, NOT PER USER, which is the reason this is a column rather than a `ui_flags` key. The stamp
+    is what suppresses it, and nothing else."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    client = Client()
+    client.force_login(run.profile.user)
+
+    url = reverse('challenge_opening_seen', args=[run.pk])
+    assert client.post(url).json() == {'seen': True, 'stamped': True}
+    run.refresh_from_db()
+    assert run.opening_seen_at is not None
+
+    body = client.get(_url(run)).content.decode()
+    sheet = re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>', body, re.S).group(0)
+    assert 'data-auto' not in sheet, 'the ceremony came back after being acknowledged'
+
+    # A SECOND CALL IS NOT AN ERROR. A reload before the write lands, or a double tap, must report the
+    # same state rather than fail -- the filtered UPDATE is a compare-and-swap, so the first stamp wins.
+    first = run.opening_seen_at
+    assert client.post(url).json() == {'seen': True, 'stamped': False}
+    run.refresh_from_db()
+    assert run.opening_seen_at == first, 'a second acknowledgement moved the timestamp'
+
+
+def test_only_the_runs_owner_can_acknowledge_its_ceremony():
+    """The endpoint sits under the owner-only `/my-challenges/` prefix, and `get_challenge` is what
+    enforces it. A visitor stamping somebody else's run would suppress a ceremony they never saw."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    url = reverse('challenge_opening_seen', args=[run.pk])
+
+    intruder = Client()
+    intruder.force_login(ProfileFactory().user)
+    assert intruder.post(url).status_code == 404
+    run.refresh_from_db()
+    assert run.opening_seen_at is None
+
+    # AND IT NEVER REDIRECTS AN ANONYMOUS WRITE, which is this project's recorded JSON-endpoint rule: a
+    # 302 to the login page answers 200 with HTML and reads as success to a caller checking `response.ok`.
+    anon = Client().post(url)
+    assert anon.status_code != 302, 'a JSON write redirects, so a refusal would read as a success'
+
+
+def test_the_ceremony_speaks_only_of_what_the_hunter_actually_holds():
+    """READ FROM THE GRANTED ROW, not computed from the day count. `rewards` declines to claim a name
+    another system owns and logs instead, so a ladder position derived from arithmetic would name a title
+    the hunter may not have -- the same argument `granted_titles_for` makes about ordinals."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    client = Client()
+    client.force_login(run.profile.user)
+
+    # A run with nothing filled claims no title and still offers the next rung.
+    body = client.get(_url(run)).content.decode()
+    assert 'You already hold' not in body, 'an empty run claims a title'
+    assert 'Next up:' in body
+
+    keys = list(run.calendar_days.values_list('pk', flat=True)[:60])
+    run.calendar_days.filter(pk__in=keys).update(in_all=True, in_clean=True)
+    calendar_fill.apply_to_run(run)
+
+    body = client.get(_url(run)).content.decode()
+    assert 'You already hold' in body and 'Calendar Marker' in body
+
+
+def test_the_ceremony_is_wired_to_the_house_controller():
+    """NO NEW PRIMITIVE. `PlatPursuit.DetailModal` already owns auto-open-once, focus restore, Escape and
+    a recorded dismissal; the career explainer and the new-contracts sheet are its other two consumers.
+
+    `autoOpenDelay` ONLY WHEN THE SERVER ARMED IT. The controller reads `armed` from `data-auto` for the
+    RECORDING half, but the opening half is this option alone -- so passing it unconditionally would
+    replay the ceremony on every visit to a run whose owner dismissed it months ago."""
+    js = _script_code()
+    wire = js[js.index('function wireOpening('):]
+    wire = wire[:wire.index('\n    function ', 10)]
+
+    assert 'PP.DetailModal(' in wire, 'the ceremony re-implements a primitive that exists'
+    assert "hasAttribute('data-auto')" in wire and 'autoOpenDelay' in wire, (
+        'the auto-open is not gated on the server-rendered attribute'
+    )
+    assert "data-seen-url" in wire, 'the acknowledge URL is built in script rather than rendered'
+    # THE REJECTION IS THE FALLBACK. Returning one is what makes `DetailModal` fall back to `seenKey`, so
+    # the ceremony stays dismissed on this device even when the write cannot be made.
+    assert 'Promise.reject()' in wire
+    # PER-RUN LOCAL KEY. A single key would let a hunter's first Calendar run suppress every later one.
+    assert "'pp-cal-opening-' +" in wire
+
+    # AND IT IS WIRED INTO BOOT, or none of the above runs.
+    assert js.count('wireOpening(') == 3, 'the ceremony is defined but never wired, or wired twice'
+
+
+def _opening_tag(body):
+    """The ceremony's root element, whose attributes are the whole gate."""
+    return re.search(r'<div class="pp-detail-modal" id="cal-opening"[^>]*>', body, re.S).group(0)
+
+
+def _team_member():
+    # ON TOP OF `_hunter()`, because the third test makes this person an OWNER, and starting a run is
+    # members-only during the beta -- a bare profile would be refused before the test began.
+    member = _hunter()
+    member.user.is_staff = True
+    member.user.save(update_fields=['is_staff'])
+    return member
+
+
+def test_the_team_can_preview_a_spent_opening_ceremony():
+    """THE CEREMONY IS A ONE-SHOT, so the first look is also the last: once acknowledged it is stamped for
+    good, and only a fresh run earns another. `?preview=calendar-opening` reopens it on demand -- on ANY
+    Calendar run, since the ceremony reads that run's own numbers and previewing a whale's run is the
+    reason to look.
+
+    IT RENDERS `data-preview`, NEVER `data-auto`. `DetailModal` reads `data-auto` to decide whether
+    closing the sheet RECORDS anything, so a preview carrying it would stamp the run on dismissal."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    run.opening_seen_at = run.created_at
+    run.save(update_fields=['opening_seen_at'])
+
+    staff = Client()
+    staff.force_login(_team_member().user)
+    tag = _opening_tag(staff.get(_url(run) + '?preview=calendar-opening').content.decode())
+    assert 'data-preview' in tag, 'the team door does not open a spent ceremony'
+    assert 'data-auto' not in tag, 'the preview arms the recorder, so looking would spend the ceremony'
+
+    # WITHOUT THE QUERYSTRING NOTHING CHANGES, so the door is opt-in per request rather than a mode.
+    plain = _opening_tag(staff.get(_url(run)).content.decode())
+    assert 'data-preview' not in plain and 'data-auto' not in plain
+
+
+def test_the_opening_preview_is_team_only():
+    """`core.previews` enforces staff-or-moderator for every door. A hunter typing the querystring sees a
+    run page with no ceremony on it, exactly as if they had not typed it."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    run.opening_seen_at = run.created_at
+    run.save(update_fields=['opening_seen_at'])
+
+    hunter = Client()
+    hunter.force_login(ProfileFactory().user)
+    tag = _opening_tag(hunter.get(_url(run) + '?preview=calendar-opening').content.decode())
+    assert 'data-preview' not in tag and 'data-auto' not in tag
+
+    anon = _opening_tag(Client().get(_url(run) + '?preview=calendar-opening').content.decode())
+    assert 'data-preview' not in anon
+
+
+def test_previewing_the_opening_ceremony_writes_nothing():
+    """THE RULE EVERY PREVIEW DOOR SHARES: looking never spends anything, so it never has to be undone.
+    Here that means an owner previewing their OWN unseen run must still meet the real, recording
+    ceremony afterwards -- the GET must not stamp, and a real unseen ceremony outranks the preview so the
+    owner is not handed the non-recording version of the thing actually happening to them."""
+    owner = _team_member()
+    run = _run(CHALLENGE_TYPE_CALENDAR, profile=owner)
+
+    client = Client()
+    client.force_login(owner.user)
+    tag = _opening_tag(client.get(_url(run) + '?preview=calendar-opening').content.decode())
+    assert 'data-auto' in tag and 'data-preview' not in tag, (
+        'a genuinely unseen ceremony was downgraded to the preview, so dismissing it would record nothing'
+    )
+    run.refresh_from_db()
+    assert run.opening_seen_at is None, 'rendering the page stamped the run'
+
+    # AND THE PREVIEW BRANCH OF THE SCRIPT HAS NO RECORDER. The server half above keeps `data-auto` off
+    # the element; this is the other half, so either one alone still writes nothing.
+    js = _script_code()
+    wire = js[js.index('function wireOpening('):]
+    wire = wire[:wire.index('\n    function ', 10)]
+    branch = wire[wire.index("hasAttribute('data-preview')"):]
+    branch = branch[:branch.index('PP.DetailModal(')]
+    assert 'autoOpenDelay' in branch, 'the preview branch does not open the sheet'
+    assert 'onDismiss' not in branch.split('opts = ', 1)[1], 'the preview can record a dismissal'
+    assert 'seenKey' not in branch.split('opts = ', 1)[1], (
+        'a stale device key would skip the preview and retry the write'
+    )
+
+
+def test_already_yours_is_said_only_to_the_owner():
+    """The page is public. A visitor reading somebody else's run is told the title is "Already held", not
+    that it is theirs."""
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+    from trophies.models import Title, UserTitle
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    title, _ = Title.objects.get_or_create(name=CALENDAR_DAY_TITLES[50])
+    UserTitle.objects.create(profile=run.profile, title=title, source_type='challenge', source_id=999999)
+
+    visitor = _ladder(run)
+    assert '>Already held</span>' in visitor and 'Already yours' not in visitor
+
+    owner = Client()
+    owner.force_login(run.profile.user)
+    mine = _section(owner.get(_url(run)).content.decode(), 'pp-cal-ladder', until='class="pp-cal"')
+    assert '>Already yours</span>' in mine
+
+
+def test_a_reached_rung_whose_title_has_not_landed_says_pending():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for month in (1, 2):
+        for day in range(1, CALENDAR_MONTH_DAYS[month - 1] + 1):
+            _fill(run, month, day)   # 59 days, and no recount, so no title row yet
+    ladder = _ladder(run)
+    assert '>Title pending</span>' in ladder
+    assert 'Earned' not in ladder
+
+
+def test_a_locked_rung_states_itself_to_a_screen_reader():
+    ladder = _ladder(_run(CHALLENGE_TYPE_CALENDAR))
+    # 300 is locked and does not finish the run; 365 says "Finishes the run" out loud.
+    assert ladder.count('<span class="sr-only">Not yet earned</span>') == 3
+
+
+def test_each_rung_carries_its_fill_and_its_stagger():
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for day in range(1, 29):
+        _fill(run, 2, day)          # 28 of the first 50 days
+    ladder = _ladder(run)
+    assert 'style="--fill: 56%; --rung: 0;"' in ladder
+    assert 'style="--fill: 0%; --rung: 4;"' in ladder
+    assert ladder.count('pp-cal-ladder__rung--current') == 1
+
+
+def test_the_ladder_reads_the_owners_titles_in_one_query():
+    """One query for the whole ladder, never one per rung."""
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    with CaptureQueriesContext(connection) as ctx:
+        Client().get(_url(run))
+    reads = [q['sql'] for q in ctx.captured_queries if 'Calendar Legend' in q['sql']]
+    assert len(reads) == 1, reads
+
+
+def _unseen_ceremony_for(run):
+    client = Client()
+    client.force_login(run.profile.user)
+    body = client.get(_url(run)).content.decode()
+    start = body.index('id="cal-opening"')
+    return body[start:body.index('</div>', body.index('pp-calopen__next', start))]
+
+
+def test_the_ceremony_names_the_next_title():
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    ceremony = _unseen_ceremony_for(run)
+    assert 'Next up: <strong>%s</strong> at 50 days' % CALENDAR_DAY_TITLES[50] in ceremony
+
+
+def test_the_ceremony_never_calls_a_partial_board_full_when_every_title_is_held():
+    """A second Calendar run holds the whole ladder from the first, so there is no title to name -- and the
+    365 line ("Every day of the year is filled") would be false about a board that is not."""
+    from challenges.services.rewards import CALENDAR_DAY_TITLES
+    from trophies.models import Title, UserTitle
+
+    run = _run(CHALLENGE_TYPE_CALENDAR)
+    for i, name in enumerate(CALENDAR_DAY_TITLES.values()):
+        title, _ = Title.objects.get_or_create(name=name)
+        UserTitle.objects.create(profile=run.profile, title=title, source_type='challenge', source_id=900000 + i)
+    ceremony = _unseen_ceremony_for(run)
+    assert 'Every title on this ladder is already yours.' in ceremony
+    assert 'Every day of the year is filled' not in ceremony

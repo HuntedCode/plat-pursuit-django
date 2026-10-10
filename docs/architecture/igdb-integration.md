@@ -122,6 +122,22 @@ OneToOne to Concept. Stores matching metadata (`match_confidence`, `match_method
 
 **`cover_url(size='cover_big')`** method: Constructs an IGDB Cloudinary image URL from `igdb_cover_image_id`. Returns `f'https://images.igdb.com/igdb/image/upload/t_{size}/{igdb_cover_image_id}.png'`, or `None` if no image ID is stored. Same pattern as `Company.logo_url()`. Available sizes include `cover_small` (90x128), `cover_big` (264x374), `720p` (1280x720), `1080p` (1920x1080).
 
+**Every cover size also has a `_2x` variant** — `cover_small_2x` (180x256), `cover_big_2x` (528x748) — and they are the ones you usually want. **There is no whitelist**: the size is interpolated straight into the URL, so an invalid token yields a silent 404 and a broken image rather than an error. Verify a new token against a real URL before shipping it.
+
+**Pick the size against DEVICE pixels, not CSS pixels.** This is the trap: a 60px-wide square looks like it wants `cover_small` (90x128), but a phone is the high-DPI case — 60 CSS px on a 3x screen needs 180 device px, so `cover_small` is visibly soft on nearly every phone, i.e. worst on the device class a smaller source is meant to help. **Multiply the CSS width by 3 before choosing.**
+
+The three `Game` properties that wrap this:
+
+| Property | IGDB size | For |
+|---|---|---|
+| `display_image_url` | `cover_big` (264x374) | **The default, at every size the others do not name.** Covers CSS widths up to ~88px at 3x and ~132px at 2x. |
+| `display_image_url_small` | `cover_small_2x` (180x256) | Surfaces drawing MANY covers at thumbnail size, where bandwidth beats sharpness. Its one caller is the challenge Hall of Fame board (25-26 covers per row, 8 rows a page). |
+| `display_image_url_large` | `cover_big_2x` (528x748) | Share cards and other large single renders. |
+
+**The size bands are not a rule you can apply from this table alone** — measure the surface. `display_image_url` is used by ~30 templates at everything from quarter-tiles in a 4-up mosaic to a game-page hero, so "the default" means exactly that and not a size band. The Hall of Fame board is instructive about how wide one surface's range can be: A-Z draws **nine** squares across and Job Coverage **five** per shelf, so cells run 32px to 112px on the same page, demanding ~97 to ~225 device px. `cover_small_2x` is ~20% short at that top end, accepted there to keep a 53% byte saving on phones. Another surface may make the opposite trade.
+
+A density `srcset` would serve all of these properly, but the project has no precedent for one (`landing.html`'s `srcset` is webp/png format switching, not resolution), so named sizes remain the cheaper answer. PSN fallback URLs have no size knob, so a concept without a trusted match always serves full-size art whichever property is used.
+
 `status` values:
 - `auto_accepted`: Matched at >= 85% confidence and enrichment applied automatically.
 - `pending_review`: Matched at 50-84% confidence, awaiting staff approval.
@@ -298,7 +314,7 @@ Properties:
 
 ## Integration Points
 
-- **Cover Art (IGDB-first)**: `Game.display_image_url` resolves in this order: **trusted IGDB cover → `concept.concept_icon_url` (PSN MASTER, skipped for `PP_*` stub concepts) → `game.title_image` → `game.title_icon_url`**. IGDB is the primary source, not a fallback: enrichment coverage is ~16k of ~18k concepts and IGDB provides consistent portrait aspect ratios where PSN art varies (PS4 ≈ 4:3, PS5 ≈ square). `Concept.get_cover_url(size)` returns the PSN MASTER icon for non-stub concepts, else constructs an IGDB cover URL from `igdb_cover_image_id` for trusted matches. `Concept.cover_url` property provides no-arg access. All game-cover containers across the site use `aspect-[3/4]` with `object-cover object-top`. **All querysets that render covers must `select_related('concept', 'concept__igdb_match')` — this is load-bearing since IGDB is the first lookup on every render.**
+- **Cover Art (IGDB-first)**: `Game.display_image_url` resolves in this order: **trusted IGDB cover → `concept.concept_icon_url` (PSN MASTER, skipped for `PP_*` stub concepts) → `game.title_image` → `game.title_icon_url`**. IGDB is the primary source, not a fallback: enrichment coverage is ~16k of ~18k concepts and IGDB provides consistent portrait aspect ratios where PSN art varies (PS4 ≈ 4:3, PS5 ≈ square). `Concept.get_cover_url(size)` returns the PSN MASTER icon for non-stub concepts, else constructs an IGDB cover URL from `igdb_cover_image_id` for trusted matches. `Concept.cover_url` property provides no-arg access. All game-cover containers across the site use `aspect-[3/4]` with `object-cover object-top`. **All querysets that render covers must `select_related('concept', 'concept__igdb_match')` — this is load-bearing since IGDB is the first lookup on every render — and must pair it with `.defer('concept__igdb_match__raw_response')`.** The defer is not optional: `raw_response` is the ~30KB IGDB API blob no cover template reads, and pulling it into the join payload across concurrent renders was the trigger for the May 2026 web-server OOM. CLAUDE.md states the pairing as a hard rule; this doc omitted the second half of it for some time.
 - **Shovelware Detection** (`trophies/services/shovelware_detection_service.py`): Company `company_size` and `game_engine_name` can be used as additional shovelware signals
 - **Stats Service** (`trophies/services/stats_service.py`): DELETED 2026-08 with My Stats. It aggregated top developers / unique developer counts via a bulk ConceptCompany query; whatever replaces My Stats will want the same shape.
 - **SEO Tags** (`core/templatetags/seo_tags.py`): Developer as `author` Organization, `timeRequired` ISO 8601 duration, IGDB genres with PSN fallback

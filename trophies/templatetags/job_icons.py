@@ -69,6 +69,20 @@ def job_icon(name, css_class='w-5 h-5'):
     )
 
 
+def has_icon(name):
+    """Whether the sprite carries a glyph for `name`.
+
+    `job_icon_use` returns `''` for a name it does not know, so a server-rendered icon simply is not there.
+    A CLIENT cannot make that judgement -- it has no copy of the registry and should not get one -- so the
+    payload that feeds a JavaScript-built `<use>` asks here first and sends no icon rather than a reference
+    that resolves to nothing. Same answer, decided on the same side.
+
+    `core.services.completion_card_service` reaches for `_ICONS` directly and could ask this instead. Left
+    alone deliberately: it is not this branch's file.
+    """
+    return (name or '') in _ICONS
+
+
 @register.simple_tag
 def job_icon_sprite():
     """Emit every icon ONCE as an off-screen <symbol> library so a page that repeats the same

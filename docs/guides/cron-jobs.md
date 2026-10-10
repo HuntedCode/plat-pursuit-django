@@ -17,7 +17,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Every 15 min | `refresh_profiles` | Every 15 minutes (**live**) | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
 | ~~Top of every hour~~ | ~~`process_scheduled_notifications`~~ | **PAUSED (2026-08)** | Notification system hidden |
-| 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs, in dependency order: `update_shovelware` -> `recompute_clean_standings` -> `recompute_rarity_standings` -> `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `process_contracts --all --incremental` -> `recompute_milestones` -> `audit_badge_coverage`. The middle two are DRIFT NETS: sync only evaluates what a sync touched, so anything authored after a hunter last touched the game needs a sweep to reach them. |
+| 04:00 UTC daily | `nightly` | Daily | TokenKeeper sync caught up. Runs, in dependency order: `update_shovelware` -> `recompute_clean_standings` -> `recompute_rarity_standings` -> `evaluate_badges --all` -> `detect_dlc_and_refresh` -> `process_contracts --all --incremental` -> `process_challenges` -> `recompute_milestones` -> `audit_badge_coverage`. `process_contracts`, `process_challenges` and `recompute_milestones` are DRIFT NETS: sync only evaluates what a sync touched, so anything authored after a hunter last touched the game needs a sweep to reach them. `process_challenges` MUST follow `process_contracts`: a Challenge square completes when an `EarnedContract` row exists, and that step is what creates one -- run first, it would complete nothing that this night's sweep earned. **`process_challenges` now runs TWO phases**: the square sweep, and a Plat Calendar refresh. The calendar phase does NOT depend on `process_contracts` (it reads platinums only, since the Calendar collapsed to one shovelware-free lens on 2026-10-04 and its contracts view went with it); it sits after it simply because it shares the command. **It does NOT inherit a working dependency on `update_shovelware` either, and an earlier version of this row wrongly claimed it did.** Step order does put `update_shovelware` first, but the calendar phase then refuses to look at any run whose platinum count has not moved -- and a shovelware reclassification does not move it. So a flag change written by step 1 cannot reach step 7. No day fills incorrectly (fills are monotone, so the cost is a day that fills late), though a day's live `plat_count` can sit stale on a dormant hunter's run; after a bulk reclassification run `process_challenges --all-calendars` by hand, which skips the reconciliation. **Its one SOFT dependency is not**: the calendar phase decides which runs to refresh by comparing `Profile.total_plats` against a stored watermark, and `recalc_profile_counters` (03:30, a separate entry) is that column's drift corrector. The 30-minute gap currently satisfies it by WALL CLOCK rather than by step order -- the pattern this table exists to discourage. Getting it wrong costs one day of latency on a drifted counter and nothing else, so it is recorded rather than fixed; folding `recalc_profile_counters` into `nightly` ahead of step 7 is the real answer and belongs with the open nightly-coordinator work. |
 | Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
 | 06:00 UTC daily | `announce_contracts` | Daily | After `nightly` (04:00) finishes, so a wave published by a curator during the day and one made claimable overnight land in ONE post. Silent when nothing is new, which is most days. **Run `announce_contracts --baseline` by hand once before registering this** -- REQUIRED, not optional: the ~1,000 launch contracts carry real `went_live_at` stamps, so the first run refuses the wave over `MAX_WAVE` and posts nothing. It also gates the Career new-contracts modal, which cannot fire until something is posted. |
 | Tue 14:00 UTC | `djstripe_sync_models Subscription && audit_subscription_status --fix` (ONE entry, `&&`) | Weekly | MUST run as a pair in that order: the audit only reads djstripe's local mirror, and a stale mirror is how a paying subscriber reads as [NO SUB]. Repoints duplicate-customer mismatches (premium kept), revokes only rows with no live subscription anywhere; sends no USER emails. Also sweeps for ORPHANED subscriptions (live sub, no user -- the account-deletion race; report-only, cancel by hand) and mails the full run report to `AUDIT_REPORT_EMAIL` (operator email, topline counts in the subject; empty setting = no email, `--no-email` skips) |
@@ -26,7 +26,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
 | 03:45 UTC daily | `recompute_tag_covers` | Daily | Since 2026-08-31 also fills `Franchise/Company.game_count+version_count` and `Genre/Theme.game_count+player_count+avg_rating` -- the columns the Franchises/Companies/Genres browse pages FILTER on, so a browse-visible entity's counts are at most a day stale and a brand-new entity appears after this run. (Its reads are link tables + games/players/ratings; it does NOT depend on `recalc_earn_rates` -- the slot order is historical) |
-| ~~05:30 UTC daily~~ | ~~`recompute_milestones`~~ | **Folded into `nightly` (step 7)** | Do NOT create a separate entry. The old 05:30 slot existed to follow `recalc_profile_counters`, but that dependency is not real: no milestone metric reads any of the four counters that job writes. |
+| ~~05:30 UTC daily~~ | ~~`recompute_milestones`~~ | **Folded into `nightly` (step 8)** | Do NOT create a separate entry. The old 05:30 slot existed to follow `recalc_profile_counters`, but that dependency is not real: no milestone metric reads any of the four counters that job writes. |
 | 04:45 UTC daily | `evaluate_contract_candidates` | Daily | Runs AFTER `update_shovelware` (04:00 -- the shovelware override reads the flags): evaluates the media-density contract rule over new/changed trusted matches, auto-STAGES Tier A contracts (`is_live=False`, jobs auto-suggested, `--max-stage 150`/run in player-demand order) and maintains the ContractCandidate review/snooze queues in admin. Idempotent; `--dry-run` to preview |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
@@ -92,7 +92,7 @@ shovelware override reads the flags it writes. Idempotent; one bad row cannot ab
 > | 04:00 | ~~`update_shovelware`~~ (now `nightly` step 1) |
 > | 05:30 | `recompute_milestones` |
 >
-> RESOLVED 2026-08: the example this block used -- `recompute_milestones` needing `recalc_profile_counters` -- was never a real dependency. `recalc_profile_counters` writes only `total_bronzes/silvers/golds/plats`, and no milestone metric reads any of them; the metrics read `total_trophies` and `total_completes`, whose only writers are `sync_complete` and the profile settings POST. No cron ordering can influence those. `recompute_milestones` is now step 7 of `nightly`, where its REAL dependencies (badge standings, ProfileJobXP) are written earlier in the same run and enforced by the step order rather than by wall-clock spacing.
+> RESOLVED 2026-08: the example this block used -- `recompute_milestones` needing `recalc_profile_counters` -- was never a real dependency. `recalc_profile_counters` writes only `total_bronzes/silvers/golds/plats`, and no milestone metric reads any of them; the metrics read `total_trophies` and `total_completes`, whose only writers are `sync_complete` and the profile settings POST. No cron ordering can influence those. `recompute_milestones` is now step 8 of `nightly`, where its REAL dependencies (badge standings, ProfileJobXP) are written earlier in the same run and enforced by the step order rather than by wall-clock spacing.
 
 ### nightly
 
@@ -116,8 +116,11 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   5. `detect_dlc_and_refresh` -- re-evaluates series whose games gained DLC (writes the same tables) AND
      rewrites `ProfileGame.progress`, dropping owners back below 100%
   6. `process_contracts --all --incremental` -- reads that progress, so it MUST follow step 5
-  7. `recompute_milestones` -- reads badge standings and ProfileJobXP, so it is last among the writers
-  8. `audit_badge_coverage` -- read-only curator email, least urgent
+  7. `process_challenges` -- completes Challenge squares whose contract their owner has finished, then
+     refreshes Plat Calendar runs. A square completes when an `EarnedContract` row exists and step 6 is
+     what creates one, so it MUST follow it
+  8. `recompute_milestones` -- reads badge standings and ProfileJobXP, so it is last among the writers
+  9. `audit_badge_coverage` -- read-only curator email, least urgent
 
   (There was a fourth, `recalc_board_entrants`, which counted the standings the first two write. It went
   with the board directories in 2026-08 -- the `BadgeSeries.entrants` / `Job.entrants` columns it
@@ -133,10 +136,11 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   failed, so the run goes red rather than green-with-an-error-in-the-logs.
 - **Operator flags**: `--dry-run` lists the order, `--only '<label>'` re-runs one step after a failure
   without repeating the expensive evaluation, `--skip '<label>'` is repeatable.
-- **The two drift nets (steps 6 and 7)**: sync only evaluates what a sync TOUCHED, so anything authored
-  after a hunter last touched the relevant game is invisible to them forever without a sweep.
-  `evaluate_badges --all` has always been that net for badges; contracts and milestones had none. A
-  Contract published for a game 10,000 hunters had already platinumed reached exactly zero of them until
+- **The three drift nets (steps 6, 7 and 8)**: sync only evaluates what a sync TOUCHED, so anything
+  authored after a hunter last touched the relevant game is invisible to them forever without a sweep.
+  `evaluate_badges --all` has always been that net for badges; contracts, challenges and milestones had
+  none. A Contract published for a game 10,000 hunters had already platinumed reached exactly zero of them
+  until
   `process_contracts --all` was added here in 2026-08.
 - **Adding nightly work**: add a step to `STEPS` in `core/management/commands/nightly.py`, NOT a new cron
   entry. Tests assert every step names a real command, that both drift nets are present, and that the
@@ -235,6 +239,44 @@ replaces five separate entries (`evaluate_badges --all`, `detect_dlc_and_refresh
   (`CURSOR_GRACE`) to cover the remaining sliver: `updated_at` is stamped in Python, so it always
   predates the instant the row's transaction commits and becomes visible to the sweep, and a publish
   that commits just after the cursor would otherwise be skipped until the weekly pass.
+
+### process_challenges
+
+- **Schedule**: Runs in `nightly`, immediately after `process_contracts`. **No standalone Render entry.**
+- **Command**: `python manage.py process_challenges`
+- **What it does**: two phases, squares then the Calendar. A phase that finds nothing never skips the other, and one bad square or Calendar run is logged and skipped; an error outside those per-item loops still ends the command.
+  1. **Square sweep**: completes A-Z / Job Coverage squares whose contract their owner has now finished.
+     It stamps the SLOT (`is_completed`, `completed_at`, `completed_via='live'`) and never the Contract, and
+     grants no XP. Each square is contained, so one bad row does not end the sweep.
+  2. **Plat Calendar phase**: refreshes unfinished Calendar runs whose owner's `Profile.total_plats`
+     differs from the run's `calendar_plats_seen` watermark, filling newly covered days and finishing a
+     run at 365 shovelware-free days. Each run is contained.
+- **Why it must be scheduled**: the sync hook only sees what a sync touched, so a square goes unfinished
+  forever whenever the `EarnedContract` row was written off the sync path -- by the nightly sweep above, by
+  a staff `process_contracts --contract`, or by a re-earn after a reconcile. Most commonly: the contract was
+  published after the hunter finished the game and they have not synced since.
+- **Ordering**: it MUST follow `process_contracts`. A square completes when an `EarnedContract` row exists,
+  and that step is what creates one -- run first, this would sweep yesterday's rows and report nothing to do
+  on precisely the night a contract went live. (The Calendar phase reads platinums only; it sits there
+  because it shares the command.)
+- **The square sweep has no watermark**, unlike `process_contracts`, and deliberately: a square NAMES its own contract, so the
+  question is one query over filled unfinished squares (26 rows for a letter run, one per job for a jobs
+  run). It scales with runs in flight, not with the userbase, so there is nothing to ration and a cursor
+  would only create a way to miss something.
+- **Ad hoc**: `--user <psn_username>` for one account (both phases; in the Calendar phase it refreshes all
+  of that hunter's Calendar runs, ignoring the watermark), `--dry-run` to preview both phases,
+  `--only slots` / `--only calendar` to run one phase, and `--all-calendars` to refresh every Calendar run
+  ignoring the watermark.
+- **A shovelware reclassification moves no watermark**, so the nightly Calendar phase cannot see it: an
+  un-flagged game's day fills only on that hunter's next platinum. After a bulk reclassification run
+  `process_challenges --all-calendars` by hand.
+- **Un-publishing a contract does NOT strand a square that already holds it.** Neither detector reads
+  `Contract.is_live` -- both ask only whether an `EarnedContract` row exists -- and un-publishing does not
+  take a reached stamp back, so a square assigned while its contract was live still completes afterwards
+  (pinned by `test_a_draft_contract_still_completes_a_square_it_already_occupies`). The narrow case neither
+  detector covers is the other order: a contract un-published *before* the hunter's completion was ever
+  detected, where no stamp was ever written and there is nothing to find. Completion is sticky in the far
+  direction too -- a revoke cannot un-complete a finished square.
 
 ### announce_contracts
 
@@ -361,7 +403,7 @@ historical pass after Phase 3's rematch run.
 
 ### audit_badge_coverage
 
-- **Schedule**: Runs as step 8 of `nightly`. **No standalone Render entry.**
+- **Schedule**: Runs as step 9 of `nightly`. **No standalone Render entry.**
 - **Command**: `python manage.py audit_badge_coverage` (add `--always` for a daily heartbeat email even when there are no gaps)
 - **What it does**: For each tier-1 badge that tracks a franchise and/or developer, checks that every non-excluded franchise-linked concept / developed game is covered by one of the badge's series stages. Emails any gaps to `badge-alerts@platpursuit.com`. A gap usually means a new game shipped and needs adding to the badge (or a data error). See [Management Commands](management-commands.md). Logic lives in `trophies/services/badge_coverage_service.py`.
 - **Dependencies**: None. Read-only. More accurate after IGDB enrichment (franchise/developer + concept links) is current.
@@ -370,7 +412,7 @@ historical pass after Phase 3's rematch run.
 
 ### recompute_milestones
 
-- **Schedule**: Runs as step 7 of `nightly`. **No standalone Render entry.**
+- **Schedule**: Runs as step 8 of `nightly`. **No standalone Render entry.**
 - **Command**: `python manage.py recompute_milestones`
 - **What it does**: Sweeps every community-member profile (a site account OR a verified Discord link — `milestones.services.member_q`; scouts / unregistered syncs excluded), recomputing each active milestone ladder (platinums, trophies, completions, badges, Pursuer level, playtime, tenure, premium), awarding any newly-crossed tiers and writing the materialized progress read-model. Then drift-corrects every tier's `earned_count` and refreshes the cached rarity denominator (`total_hunters`). Milestones are also recomputed per-profile at the end of each PSN sync (`token_keeper` `sync_complete`); this daily sweep is the safety-net + the **only** refresh of the rarity denominator. Logic in `milestones/services.py`; see [milestones-revamp](../design/milestones-revamp.md).
 - **Dependencies**: none from cron. Its real inputs (badge standings, ProfileJobXP) are written earlier in the same `nightly` run, and the profile counters it reads are written by `sync_complete`, which no cron ordering can influence. The old "schedule after `recalc_profile_counters`" line was never a real dependency.

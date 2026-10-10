@@ -1,4 +1,4 @@
-"""The two attention markers on the My Pursuit nav item: a claim COUNT and a NEW pill.
+"""The three attention markers on the My Pursuit nav item: a claim COUNT, an XP pill, a NEW pill.
 
 They render in the site-wide navbar and mobile tab bar, so the cost rules matter as much as the
 behaviour: this runs on every page of the site for every signed-in hunter.
@@ -345,7 +345,7 @@ def _chrome_css():
 def test_the_nav_item_never_wraps_and_the_row_can_shrink(hunter):
     """Nothing in the nav row is shrink-protected except the brand and the end cap, so under pressure
     the hub row is what gives -- and the way it gave was breaking "My Pursuit" over two lines inside a
-    58px bar, dragging the active underline down with it. The two pills add ~71px, which is what
+    58px bar, dragging the active underline down with it. The three pills add ~102px, which is what
     turned "tight" into "wrapped"."""
     css = _chrome_css()
     item = css.split('.pp-navhub {', 1)[1].split('}', 1)[0]
@@ -359,13 +359,23 @@ def test_the_nav_item_never_wraps_and_the_row_can_shrink(hunter):
 
 
 def test_only_one_marker_shows_in_the_narrow_desktop_band():
-    """The `lg` container step is 1024px wide from 1024 all the way to 1279, so that whole band
-    shares one layout -- and there the hub row plus both pills leaves the search field about 80px,
-    roughly three characters. The count wins: it is the half about the reader's own work."""
+    """The `lg` container step is 1024px wide from 1024 all the way to 1279, so that whole band shares one
+    layout -- and there the hub row plus the pills leaves the search field about 80px, roughly three
+    characters. The count wins: it is the half about the reader's own work.
+
+    THREE MARKERS NOW, so the rule is a chain of sibling selectors rather than one. Every PAIR has to be
+    covered, which is what this asserts: the count beats both, and the XP mark beats New when there is no
+    count. A rule that only suppressed New would let the count and the XP mark show together in a band that
+    has room for neither.
+    """
     css = _chrome_css()
 
     band = css.split('@media (max-width: 1279px) {', 1)[1].split('}', 1)[0]
-    assert '.pp-navhub__n ~ .pp-navhub__new { display: none' in band
+    for pair in ('.pp-navhub__n ~ .pp-navhub__xp',
+                 '.pp-navhub__n ~ .pp-navhub__new',
+                 '.pp-navhub__xp ~ .pp-navhub__new'):
+        assert pair in band, 'the narrow band does not suppress %s' % pair
+    assert 'display: none' in band
 
 
 def test_the_active_item_does_not_stack_four_glows():
@@ -374,7 +384,10 @@ def test_the_active_item_does_not_stack_four_glows():
     in monochrome instead of in reds."""
     css = _chrome_css()
 
+    # EVERY MARKER, not the two it was written for: a third glowing pill on the active item is the same
+    # pile-up, and the one most likely to be forgotten because it was added last.
     rule = ('.pp-navhub.is-active .pp-navhub__n,' + chr(10)
+            + '.pp-navhub.is-active .pp-navhub__xp,' + chr(10)
             + '.pp-navhub.is-active .pp-navhub__new { box-shadow: none; }')
     assert rule in css
 
@@ -385,7 +398,15 @@ def test_no_marker_text_is_below_the_readable_floor():
     reserves for DECORATIVE marks, and on the one screen CLAUDE.md says must stay readable."""
     css = _chrome_css()
 
-    for rule in ('.pp-navhub__new {', '.pp-navhub__new--tab {', '.pp-navhub__n {', '.pp-navhub__n--tab {'):
+    # EVERY MARKER RULE, and the newest two were missing. Both happen to be 0.56rem, so the floor held by
+    # LUCK rather than by this guard -- the same way the third pill escaped three other tests in this
+    # file. A guard that LISTS its subjects has to be extended when a subject is added.
+    # THE MERGED RULE COUNTS ONCE. The two `--tab` word pills were byte-identical rulesets and are now one
+    # selector list, so the old per-selector literals no longer open a rule -- which this loop discovered by
+    # raising `IndexError` rather than passing, because `_chrome_css().split(rule, 1)` has no second element.
+    merged_tab = '.pp-navhub__xp--tab,\n.pp-navhub__new--tab {'
+    for rule in ('.pp-navhub__new {', '.pp-navhub__n {', '.pp-navhub__n--tab {',
+                 '.pp-navhub__xp {', merged_tab):
         body = css.split(rule, 1)[1].split('}', 1)[0]
         for line in body.splitlines():
             if 'font-size:' in line:
@@ -572,7 +593,7 @@ def test_the_tab_bar_shows_NEW_alone_when_nothing_is_claimable(hunter):
     assert 'pp-navhub__new--tab' in tab, 'no New marker on the phone nav'
     assert 'pp-navhub__n--tab' not in tab, 'fixture wrong: something is claimable'
     # The suppression must be the SIBLING form, or the pill is hidden with nothing to hide it for.
-    css_rule = '.pp-navhub__n--tab ~ .pp-navhub__new--tab { display: none; }'
+    css_rule = '.pp-navhub__n--tab ~ .pp-navhub__new--tab,'
     from pathlib import Path
 
     from django.conf import settings
@@ -588,9 +609,13 @@ def test_the_tab_bar_shows_NEW_alone_when_nothing_is_claimable(hunter):
 
 
 def test_the_tab_bar_shows_one_marker_at_a_time():
-    """Both at once would overlap on a 20px icon, so the New pill steps aside for the count -- the
-    count already says there is something waiting, which is the more urgent half. CSS-only, because
-    both are rendered and the suppression is a sibling rule."""
+    """Two at once would overlap on a 20px icon -- every tab marker is absolutely positioned on the same
+    spot -- so the later one steps aside. Precedence: the count, then the XP mark, then New.
+
+    CSS-ONLY, because all three are rendered and the suppression is a sibling rule. And every PAIR is
+    asserted: with three markers, covering only "count beats New" would let the count and the XP mark paint
+    on top of each other.
+    """
     from pathlib import Path
 
     from django.conf import settings
@@ -598,14 +623,28 @@ def test_the_tab_bar_shows_one_marker_at_a_time():
     css = (Path(settings.BASE_DIR) / 'static' / 'css' / 'components' / 'chrome.css').read_text(
         encoding='utf-8')
 
-    assert '.pp-navhub__n--tab ~ .pp-navhub__new--tab { display: none; }' in css
+    for pair in ('.pp-navhub__n--tab ~ .pp-navhub__xp--tab',
+                 '.pp-navhub__n--tab ~ .pp-navhub__new--tab',
+                 '.pp-navhub__xp--tab ~ .pp-navhub__new--tab'):
+        assert pair in css, 'the tab bar does not suppress %s' % pair
+
+    # AND THE TAB MARKS ARE POSITIONED, which they have to be: the desktop rules set no `position` at all, so
+    # without one here a pill would sit inline inside the icon span and push the label. (`position` is not an
+    # inherited property, and the desktop rule does not declare `static` -- an earlier version of this comment
+    # said both.) The two word pills share one ruleset now, so this reads the merged selector.
+    merged = '.pp-navhub__xp--tab,\n.pp-navhub__new--tab {'
+    assert merged in css, 'the tab word-pills lost their shared ruleset'
+    assert 'position: absolute' in css.split(merged, 1)[1].split('}', 1)[0]
 
 
 def test_a_quiet_account_gets_no_markers(hunter):
+    """ALL THREE, and the third was missing: a quiet account leaking an XP pill would have passed this,
+    which is how the newest marker escapes a guard written for its predecessors."""
     body = hunter.get('/career/', **CF).content.decode()
 
     assert _count_marker(body) is None
     assert 'pp-navhub__new' not in body
+    assert 'pp-navhub__xp' not in body
 
 
 def test_the_count_is_capped_in_the_markup(hunter):
@@ -648,3 +687,378 @@ def test_the_markers_never_break_a_page(hunter, monkeypatch):
     monkeypatch.setattr(career_attention, 'claimable_count', _boom)
 
     assert hunter.get('/career/', **CF).status_code == 200
+
+
+# -- the sub-nav marks: the strip disambiguates what the parent aggregates --------------------
+
+def test_the_career_tab_carries_the_claimable_count(hunter):
+    """WHY THE STRIP NEEDS MARKS AT ALL: the parent My Pursuit item AGGREGATES, so with two pages now paying
+    job XP it cannot say WHICH. The owner hit exactly that -- a lit XP pill and no way to tell where to claim.
+    Career carries the count because contracts are worked one at a time and "how many" is answerable."""
+    for i in range(2):
+        _claimable(hunter.profile, _contract('Bank Me %d' % i))
+
+    body = hunter.get(reverse('career')).content.decode()
+    # THE CAREER ANCHOR, not the page. Asserted separately over the whole body, a bug that put the count chip on
+    # My Challenges while leaving Career's label right would have passed both.
+    career_pill = body.split('aria-label="Career, ', 1)[1].split('</a>', 1)[0]
+
+    assert career_pill.startswith('2 contracts ready to claim"'), 'the spoken form, on the Career pill'
+    assert 'pp-subpill__tag--count">2<' in career_pill, 'and the chip inside that same anchor'
+
+
+def test_the_count_chip_caps_the_same_way_the_nav_badge_does(hunter):
+    """A rail pill is `white-space: nowrap`, so a three-digit count would push its neighbours into the
+    overflow sheet. Same `9+` cap as the nav badge, for the same reason."""
+    for i in range(11):
+        _claimable(hunter.profile, _contract('Many %d' % i))
+
+    body = hunter.get(reverse('career')).content.decode()
+
+    assert 'pp-subpill__tag--count">9+<' in body
+
+
+def test_the_my_challenges_tab_carries_the_xp_mark(hunter, monkeypatch):
+    """The other half of the split. Patched at the service the context processor reads, because building a
+    Job Coverage run with a finished square takes a contract, a concept and an IGDB match -- and what is under
+    test here is the STRIP, not the predicate (which `test_challenge_xp_marker` owns)."""
+    from trophies.services import career_attention as svc
+
+    monkeypatch.setattr(svc, 'has_unclaimed_challenge_xp', lambda _p: True)
+
+    body = hunter.get(reverse('career')).content.decode()
+
+    assert 'pp-subpill__tag--xp">XP<' in body
+    assert 'aria-label="My Challenges, Job XP waiting to be claimed"' in body
+
+
+def test_a_quiet_account_gets_no_chips_on_the_strip(hunter):
+    """The marks appear only when there is something to say -- the same rule the nav markers follow."""
+    body = hunter.get(reverse('career')).content.decode()
+
+    # THE POSITIVE CONTROL FIRST. Two absence assertions also pass when the strip stops rendering at all -- an
+    # exception in `hub_subnav`, a `hub_section=None`, a template guard regression -- and then this test is
+    # reporting "no chips" about a page with no sub-nav.
+    assert 'pp-subpill' in body, 'the strip itself must be there for an absence to mean anything'
+    assert 'pp-subpill__tag--count' not in body
+    assert 'pp-subpill__tag--xp' not in body
+
+
+def test_the_soon_chip_is_untouched_by_the_marks():
+    """THE OVERRIDE MUST NOT EAT A LABEL. `tags` replaces an item's chip, and 'Soon' is a chip on a DIFFERENT
+    item -- so a marked strip and a labelled one have to coexist. Amber also means "not ready yet" on this site,
+    which is why the marks got their own kinds rather than borrowing that look.
+
+    ON A SYNTHETIC HUB, and that is the fix rather than a preference. This ran against the real My Pursuit hub,
+    which has NO tagged items -- so the loop that checked them never executed and a mutation making the
+    override clobber every config chip passed. Pointing it at the Community hub instead (whose Challenges item
+    still carries 'Soon') would work today and rot the moment chunk 5 takes that tag off. A hub built here
+    cannot rot, and the thing under test is the builder, not the config.
+    """
+    from core.hub_subnav import HubSubnavConfig, HubSubnavItem, build_rendered_items
+
+    hub = HubSubnavConfig(
+        key='test_hub', label='Test', icon=None, prefixes=('/test/',),
+        items=(
+            HubSubnavItem('career', 'Career', 'career'),
+            HubSubnavItem('later', 'Later', 'my_challenges', tag='Soon', tag_aria='coming soon'),
+        ),
+    )
+
+    items = build_rendered_items(hub, is_authenticated=True, is_member=True,
+                                 tags={'career': ('3', 'count', '3 contracts ready to claim')})
+    by_slug = {i.slug: i for i in items}
+
+    assert by_slug['career'].tag == '3' and by_slug['career'].tag_kind == 'count'
+    assert by_slug['career'].tag_aria == '3 contracts ready to claim'
+    assert by_slug['later'].tag == 'Soon', 'a config chip must survive the override'
+    assert by_slug['later'].tag_aria == 'coming soon', 'including how it is spoken'
+    assert by_slug['later'].tag_kind == '', 'and keep its own look'
+
+
+def test_the_strip_asks_nothing_outside_my_pursuit(hunter):
+    """It renders on every page of the site, so a question about somebody's contracts must not be asked on
+    `/games/`. Gated on the hub key before any read."""
+    from plat_pursuit.context_processors import _subnav_marks
+
+    class _Req:
+        user = hunter.profile.user
+
+    with CaptureQueriesContext(connection) as captured:
+        assert _subnav_marks(_Req(), 'browse') is None
+
+    assert captured.captured_queries == []
+
+
+def test_the_marks_cost_nothing_beyond_the_navs_own_reads(hunter):
+    """Both values are the same cached per-profile reads the navbar performs, so once the nav has asked them
+    the strip's questions are free. That is what makes a marker on every page acceptable at all."""
+    from plat_pursuit.context_processors import _subnav_marks
+    from trophies.services import career_attention as svc
+
+    _claimable(hunter.profile, _contract('Warm The Cache'))
+
+    class _Req:
+        user = hunter.profile.user
+
+    svc.claimable_count(hunter.profile)          # what the navbar does first
+    svc.has_unclaimed_challenge_xp(hunter.profile)
+
+    with CaptureQueriesContext(connection) as captured:
+        marks = _subnav_marks(_Req(), 'my_pursuit')
+
+    assert marks and 'career' in marks
+    assert captured.captured_queries == [], 'read from the cache the nav markers just filled'
+
+
+def test_the_preview_door_lights_the_strip_too(hunter):
+    """`?preview=career-markers` exists because the marks only show when there is something to say, which makes
+    them the hardest thing on the site to look at deliberately. It lit the three NAV markers and left the strip
+    BARE, which would have read as a broken feature rather than as a preview -- the strip's marks had no door at
+    all until an audit found it.
+
+    STAFF, like every other preview door. The first version of this test forgot that and failed, which was the
+    feature being right: an ordinary hunter must not be able to force markers on.
+    """
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+
+    body = hunter.get('/career/?preview=career-markers', **CF).content.decode()
+
+    assert 'pp-subpill__tag--count' in body, 'the door lights the Career count'
+    assert 'pp-subpill__tag--xp' in body, 'and the My Challenges mark'
+
+
+def test_the_preview_door_forces_the_count_on_the_strip_too(hunter):
+    """`&n=12` is how the `9+` cap gets looked at, and `&n=0` is how the XP mark is seen on its own. The strip
+    reads the SAME tuple the nav's own processor reads, so the two cannot show different states."""
+    user = hunter.profile.user
+    user.is_staff = True
+    user.save(update_fields=['is_staff'])
+
+    many = hunter.get('/career/?preview=career-markers&n=12', **CF).content.decode()
+    none = hunter.get('/career/?preview=career-markers&n=0', **CF).content.decode()
+
+    assert 'pp-subpill__tag--count">9+<' in many, 'the cap, on the strip'
+    assert 'pp-subpill__tag--count' not in none, 'and no count at all at n=0'
+    assert 'pp-subpill__tag--xp' in none, 'while the XP mark stands alone'
+
+
+def test_an_ordinary_hunter_cannot_open_the_strips_preview_door(hunter):
+    """It goes through `core.previews.previewing` like every other preview door."""
+    body = hunter.get('/career/?preview=career-markers', **CF).content.decode()
+
+    assert 'pp-subpill__tag--count' not in body, 'no staff, no door'
+    assert 'pp-subpill__tag--xp' not in body
+
+
+def test_the_mobile_sheet_carries_the_mark_too(hunter):
+    """TWO RENDER SITES, and only one was pinned. The strip collapses below `lg` into a sheet, and every
+    assertion here was `'...' in body` -- which the RAIL's copy satisfies, so deleting the kind from the sheet
+    alone left the suite green. A mutation proved it."""
+    for i in range(2):
+        _claimable(hunter.profile, _contract('Sheet %d' % i))
+
+    body = hunter.get(reverse('career')).content.decode()
+    sheet = body.split('id="subnav-sheet"', 1)
+    assert len(sheet) == 2, 'the sheet must render; this pin is about ITS copy of the chip'
+
+    assert 'pp-subpill__tag--count' in sheet[1], 'the sheet draws the kind, not just the rail'
+
+
+def test_an_override_with_no_text_changes_nothing(hunter):
+    """ALL THREE PARTS OR NONE. `tag_kind` and `tag_aria` used to fall back independently of `tag`, so an
+    override carrying only an aria string left the chip reading 'Soon' while a screen reader heard something
+    else -- the backwards announcement `HubSubnavItem.tag_aria`'s own comment was written about. A mutation
+    dropping the `tag_kind` guard passed 176 tests before this."""
+    from core.hub_subnav import HubSubnavConfig, HubSubnavItem, build_rendered_items
+
+    hub = HubSubnavConfig(
+        key='test_hub', label='Test', icon=None, prefixes=('/test/',),
+        items=(HubSubnavItem('later', 'Later', 'my_challenges', tag='Soon', tag_aria='coming soon'),),
+    )
+
+    items = build_rendered_items(hub, is_authenticated=True,
+                                 tags={'later': ('', 'count', 'now available')})
+    later = items[0]
+
+    assert later.tag == 'Soon', 'no text means no override'
+    assert later.tag_aria == 'coming soon', 'including how it is spoken'
+    assert later.tag_kind == '', 'and it keeps the label look, not a mark colour'
+
+
+def test_the_active_count_chip_is_not_monochrome():
+    """ON `/career/` THE CAREER PILL IS ACTIVE -- a primary label on a primary-tinted background -- and its count
+    chip was primary-on-primary beside it. That is the invisibility the `'Soon'` chip's own comment in this file
+    forbids, in the one place a hunter is standing when they act on the count. The nav's badge solves it with a
+    solid fill and the page background as the text colour; the chip does the same so the two read as one object.
+    """
+    css = _chrome_css()
+
+    rule = css.split('.pp-subpill.is-active .pp-subpill__tag--count {', 1)
+    assert len(rule) == 2, 'the active count chip has no rule of its own'
+    body = rule[1].split('}', 1)[0]
+
+    assert 'background: var(--pp-primary)' in body, 'a solid fill, not a tint of the label colour'
+    assert 'color: var(--pp-bg-0)' in body, 'and the page background as the text, like the nav badge'
+
+
+def test_a_failure_in_the_marks_costs_the_chips_not_the_strip(hunter, monkeypatch):
+    """THE STRIP IS WAYFINDING and must never be the thing a page loses. `hub_subnav`'s blanket handler returns
+    `{'hub_section': None}`, which removes the whole strip -- so every read `_subnav_marks` performs has to be
+    inside its own `try`, chips included. The guard on the profile sat OUTSIDE it, and `hasattr` swallows only
+    `AttributeError`, so a `DatabaseError` on that reverse-OneToOne lookup took the strip away.
+
+    THIS PROCESSOR RUNS FIRST (`hub_subnav` precedes `career_attention` in settings), so it owns the earliest
+    profile lookup on a My Pursuit page and is the likeliest place to raise.
+    """
+    from django.db import DatabaseError
+
+    from trophies.services import career_attention as svc
+
+    def boom(_profile):
+        raise DatabaseError('the marker table is on fire')
+
+    monkeypatch.setattr(svc, 'claimable_count', boom)
+
+    body = hunter.get(reverse('career')).content.decode()
+
+    assert 'pp-subpill' in body, 'the strip survives a failure in its marks'
+    assert 'pp-subpill__tag--count' not in body, 'and simply has no chip'
+
+
+# -- the collapsed mobile bar: the marks where a phone can see them ---------------------------
+
+def _mbar(body):
+    """The collapsed sub-nav button, whole. Below `lg` this is the ONLY part of the strip a phone shows."""
+    return body.split('class="pp-sub__mbar"', 1)[1].split('</button>', 1)[0]
+
+
+def test_the_collapsed_bar_carries_the_marks(hunter, monkeypatch):
+    """THE FEATURE STOPPED AT 1024px WITHOUT THIS. Below `lg` the rail is `hidden` and every pill lives in a
+    sheet that is `visibility: hidden` until the bar is pressed -- so the chips that say WHICH page owes
+    something were unreachable on a phone, which is exactly where the bottom tab bar shows only the single
+    AGGREGATE marker. That is the ambiguity the marks exist to resolve (owner, 2026-09-30)."""
+    from trophies.services import career_attention as svc
+
+    monkeypatch.setattr(svc, 'has_unclaimed_challenge_xp', lambda _p: True)
+    for i in range(3):
+        _claimable(hunter.profile, _contract('Bar %d' % i))
+
+    bar = _mbar(hunter.get(reverse('career')).content.decode())
+
+    # MATCHED ON THE WHOLE SPAN, because the bar's chips carry a third class (`pp-sub__mtag`) after the kind --
+    # so the rail's `kind">text<` shape does not appear here. An assertion that assumes one element's attribute
+    # order is an assertion about markup rather than about behaviour.
+    assert 'pp-subpill__tag--count pp-sub__mtag" aria-hidden="true">3</span>' in bar, (
+        'the count, on the thing a phone shows')
+    assert 'pp-subpill__tag--xp pp-sub__mtag" aria-hidden="true">XP</span>' in bar, (
+        'and the XP mark beside it')
+
+
+def test_the_collapsed_bar_speaks_its_whole_state_once(hunter, monkeypatch):
+    """`aria-hidden` on the chips, everything in the button's own name -- the same split the nav item uses. Two
+    chips announced separately inside a button already named "My Pursuit, Career" is three interruptions for one
+    fact."""
+    from trophies.services import career_attention as svc
+
+    monkeypatch.setattr(svc, 'has_unclaimed_challenge_xp', lambda _p: True)
+    _claimable(hunter.profile, _contract('Spoken Once'))
+
+    bar = _mbar(hunter.get(reverse('career')).content.decode())
+
+    assert 'aria-label="My Pursuit, Career, 1 contract ready to claim, Job XP waiting to be claimed"' in bar
+    assert bar.count('aria-hidden="true"') >= 2, 'the chips themselves say nothing'
+
+
+def test_a_quiet_account_leaves_the_collapsed_bar_alone(hunter):
+    """No marks means no `aria-label` either: the button keeps its contents-derived name, which is what it had
+    before any of this existed."""
+    bar = _mbar(hunter.get(reverse('career')).content.decode())
+
+    assert 'pp-subpill__tag' not in bar
+    assert 'aria-label' not in bar, 'an unmarked bar is unchanged'
+
+
+def test_a_soon_label_does_not_ride_the_collapsed_bar():
+    """ONLY ATTENTION MARKS. A config chip like 'Soon' is a label on one item, not something waiting for the
+    hunter -- summarising it on the bar would say "look in here" about a page that is not ready yet. The context
+    key filters on `tag_kind`, which only a mark sets."""
+    from core.hub_subnav import HubSubnavConfig, HubSubnavItem, build_rendered_items
+
+    hub = HubSubnavConfig(
+        key='test_hub', label='Test', icon=None, prefixes=('/test/',),
+        items=(
+            HubSubnavItem('career', 'Career', 'career'),
+            HubSubnavItem('later', 'Later', 'my_challenges', tag='Soon', tag_aria='coming soon'),
+        ),
+    )
+    items = build_rendered_items(hub, is_authenticated=True,
+                                 tags={'career': ('2', 'count', '2 contracts ready to claim')})
+
+    marked = [i.slug for i in items if i.tag_kind]
+
+    assert marked == ['career'], "'Soon' carries no kind, so it is not a mark"
+
+
+def test_the_marks_hold_their_width_when_the_page_name_is_long():
+    """AT 375px SOMETHING HAS TO GIVE, and it must be the page name. `.pp-sub__mcur` is the only flexible child
+    and already ellipsises; the chips are `flex-shrink: 0` so flexbox cannot shrink them instead and clip a
+    two-character word. Without this a hunter on "Rate My Games" would lose the marks rather than the label."""
+    css = _chrome_css()
+
+    assert 'flex-shrink: 0' in _sub_rule(css, '.pp-sub__mtag'), 'the marks must not be the thing that shrinks'
+    cur = _sub_rule(css, '.pp-sub__mcur')
+    assert 'text-overflow: ellipsis' in cur and 'min-width: 0' in cur, 'and the page name must be'
+
+
+def _sub_rule(css, selector):
+    """One single-line rule's body, by exact selector. `chrome.css` writes these on one line."""
+    marker = selector + ' {'
+    assert marker in css, 'no rule for %s -- this guard would pass vacuously' % selector
+    return css.split(marker, 1)[1].split('}', 1)[0]
+
+
+def test_a_soon_label_does_not_ride_the_collapsed_bar_on_a_real_page(hunter, monkeypatch):
+    """THE FILTER IN THE CONTEXT PROCESSOR, pinned where it can fail. The sibling test above checks
+    `build_rendered_items` with a synthetic hub, which leaves the processor's own
+    `[i for i in items if i.tag_kind]` uncovered -- a mutation widening it to `i.tag or i.tag_kind` broke
+    nothing.
+
+    THE TAG IS INJECTED NOW, and that is a repair rather than a weakening. This test used to rely on the
+    Community rail's Challenges item carrying a real `tag='Soon'`. The Challenges rebuild shipped the real
+    pages, dropped that tag, and added a second rail item -- and in doing so removed the LAST config `tag`
+    anywhere in `hub_subnav.py`. So the premise silently emptied: with no item carrying a tag, a widened
+    filter produces nothing on any real page and `assert 'pp-subpill__tag' not in bar` could no longer
+    fail. The branch that deleted the premise owed this file an update and did not make one.
+
+    Injecting a tag onto a real rail item keeps what made this test worth having over its synthetic sibling
+    -- a real request, through the real processor, rendering the real strip -- without depending on a
+    config value that is somebody else's to change.
+
+    What it guards: a 'Soon' label riding the collapsed bar says "something of yours is waiting in here"
+    about a page that is not ready, and amber is the one colour on this site that means the opposite of a
+    reward.
+    """
+    import dataclasses
+
+    from core import hub_subnav
+
+    community = next(h for h in hub_subnav.HUB_SUBNAV_CONFIG if h.key == 'community')
+    tagged = dataclasses.replace(community.items[0], tag='Soon')
+    patched = dataclasses.replace(community, items=[tagged] + list(community.items[1:]))
+    monkeypatch.setattr(
+        hub_subnav, 'HUB_SUBNAV_CONFIG',
+        [patched if h.key == 'community' else h for h in hub_subnav.HUB_SUBNAV_CONFIG])
+
+    body = hunter.get('/community/hunters/').content.decode()
+    if 'class="pp-sub__mbar"' not in body:
+        import pytest as _pytest
+        _pytest.skip('the Community hub no longer renders a collapsed strip on this URL')
+    bar = _mbar(body)
+
+    # THE TAG MUST REACH THE EXPANDED STRIP, or the injection did not take and the assertion below is
+    # vacuous again -- which is exactly the failure this rewrite is for.
+    assert 'Soon' in body, 'the injected tag never rendered; this test is not exercising the filter'
+    assert 'pp-subpill__tag' not in bar, "a label is not a mark; only attention marks ride the bar"

@@ -1,0 +1,85 @@
+{% load humanize %}{% comment %}"How Challenges work": the system intro, on the `.pp-howto` mold the Career explainer wears.
+
+AUTO-OPENED ONCE, on My Challenges only, and gated SERVER-side: `data-auto` renders only while the
+viewer has not been shown the CURRENT version (`tutorials.intro_is_due`). Everywhere else, including
+the public hub, it is the recall link's modal and nothing more -- `DetailModal` records only an armed
+dismissal, so opening it by hand never writes.
+
+TWO VERSIONS, ONE MARKER. `intro_version` is `beta` while the members-first beta runs and `live` after,
+and the dismissal posts the version this page RENDERED, never a hard-coded one: "a marker, not a
+receipt". A hunter who dismissed the beta intro is shown the live one once, because its copy changed.
+
+`data-preview` IS THE TEAM DOOR (`?preview=challenges-intro`, `?preview=challenges-intro-live`): it
+opens, and records nothing. Never alongside `data-auto`; the view decides which.
+
+The types come from the view as data (`intro_types`), so a fourth type joins this list with its card.
+{% endcomment %}
+<div class="pp-detail-modal pp-howto" id="challenges-intro" data-ctut
+     data-setting="{{ intro_flag }}" data-value="{{ intro_version }}"
+     {% if show_challenges_intro %}data-auto{% elif preview_challenges_intro %}data-preview{% endif %} hidden>
+    <div class="pp-detail-modal__scrim" data-ctut-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog pp-ctut__dialog" role="dialog" aria-modal="true" aria-labelledby="challenges-intro-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-ctut-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+            <h2 class="pp-howto__title" id="challenges-intro-title">
+                <svg class="pp-howto__title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                How Challenges work
+            </h2>
+            <p class="pp-forge__lede">Pick a challenge and fill every square by playing. {{ intro_types|length|apnumber|capfirst }} to choose from:</p>
+
+            {% comment %}THE TYPE TILE IN PLACE OF A NUMERAL: these three are alternatives, not steps, so
+            numbering them would say "do these in order". The tile is the same `.pp-ctype` each type's card
+            wears on My Challenges, so a reader meets the glyph here before they meet it there.{% endcomment %}
+            <div class="cxp__stack">
+                {% for t in intro_types %}
+                <div class="cxp__beat">
+                    <span class="pp-ctype" aria-hidden="true">{% include 'partials/icons/challenge_type.html' with type=t.type size='' %}</span>
+                    <div>
+                        <div class="cxp__label">{{ t.label }}</div>
+                        <p class="cxp__copy">{{ t.pitch }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <p class="pp-ctut__kicker">Every run</p>
+            <div class="cxp__stack">
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">1</span>
+                    <div>
+                        <div class="cxp__label">One at a time</div>
+                        <p class="cxp__copy">You can have one run of each challenge going. Finish it, then start a fresh one.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">2</span>
+                    <div>
+                        <div class="cxp__label">Titles to earn</div>
+                        <p class="cxp__copy">Your first two finished A-Z and Job Coverage runs each earn a title. Job Coverage also pays job XP for every square, and the Plat Calendar hands out titles as its days fill.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">3</span>
+                    <div>
+                        <div class="cxp__label">The Hall of Fame</div>
+                        <p class="cxp__copy">Finished runs go up for the whole community to see.</p>
+                    </div>
+                </div>
+            </div>
+
+            {% comment %}THE ONLY LINE THE TWO VERSIONS DISAGREE ON, which is why the version is a marker:
+            the live intro is this modal without it. Additive, like the beta card on My Challenges --
+            nothing here stays members-only, and the copy says when it opens rather than what is withheld.{% endcomment %}
+            {% if intro_version == 'beta' %}
+            <p class="pp-ctut__note">
+                <span class="bd-chip bd-chip--warning shrink-0">Beta</span>
+                <span>Members are starting runs first. Everyone can start one when the beta ends.</span>
+            </p>
+            {% endif %}
+
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-ctut-close>Got it</button>
+            </div>
+        </div>
+    </div>
+</div>

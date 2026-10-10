@@ -16,6 +16,7 @@ Key Django settings, third-party integrations, and constants files used across P
 | `CACHES` | `django-redis` | Single cache backend at `REDIS_URL` |
 | `EMAIL_BACKEND` | SendGrid (prod) / Console (debug) | `django-sendgrid-v5` in production |
 | `STATIC_FILES_STORAGE` | WhiteNoise | S3 via `django-storages` optional |
+| `CHALLENGES_BETA_MEMBERS_ONLY` | Env var, default `True` | While on, only members can START a Challenge run; the hub, every run and the Hall of Fame stay public. See the beta switch under [Key Settings Gotchas](#key-settings-gotchas) |
 
 ### Third-Party Integrations
 
@@ -103,6 +104,10 @@ The primary constants file (~235 lines). Contains:
   blast the site sends. Both are deploy-checklist items. `PP_LAUNCH_DATE` parses at
   settings-import time, so a malformed value fails boot on EVERY service, not just the
   greeting: validate the string before pasting it into the environment.
+- **Challenges beta switch**: `CHALLENGES_BETA_MEMBERS_ONLY` defaults on. Ending the beta means setting
+  it to exactly `False` and restarting. The parse is `== 'True'`, so any other value (`true`, `1`, `yes`)
+  ALSO opens creation to everyone. Flipping it also moves the Challenges system intro from its `beta`
+  version to `live`, which shows the intro once more to everyone who saw the beta one.
 - **CORS has no current consumer**: it existed for the React Native Expo dev server, and the mobile API was removed in 2026-08 (see [Mobile App](../guides/mobile-app.md)). The web app is same-origin. Left configured because it is inert without `CORS_ALLOWED_ORIGINS` set, and a mobile rebuild will want it back.
 
 ## Related Docs

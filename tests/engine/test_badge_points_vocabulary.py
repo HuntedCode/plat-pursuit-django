@@ -36,6 +36,24 @@ CAREER_WORDS = ('career', 'job', 'contract', 'pursuer')
 # here is the deliberate act of declaring which economy it belongs to.
 CAREER_PATHS = ('career', 'contract', 'job', 'pursuer')
 
+# INDIVIDUAL FILES, for a career surface whose path says nothing and whose line cannot carry a keyword.
+# Relative to `templates/`, POSIX separators.
+#
+# The Job Coverage square's unclaimed-XP pip is the case this exists for: the mark is the two characters
+# "XP" inside a ~109px cell, so there is no room for "Job XP" and no attribute on the line to carry the
+# word. Its sibling `_rewards_panel.html` needs no entry -- "Job XP per finished square" exempts itself.
+#
+# A FILE LIST RATHER THAN 'challenge' IN `CAREER_PATHS`, because that tuple matches any path part as a
+# substring and would exempt every template under `templates/challenges/`. The challenge BADGE is a
+# deferred follow-up branch, and a badge surface living in `templates/challenges/` is precisely what this
+# guard should catch -- so the directory must stay unexempt.
+CAREER_FILES = (
+    'challenges/partials/_square_body.html',
+    # The owed-XP chip on a Job Coverage card: the mark is the two characters "XP", and the line beside it
+    # already says "waiting" rather than anything a keyword would match. Same reasoning as the square's pip.
+    'challenges/my_challenges.html',
+)
+
 # A rendered text node: between > and <, containing no tags or template expressions.
 TEXT_NODE = re.compile(r'>[^<>{}]*\bXP\b[^<>]*<')
 
@@ -46,6 +64,8 @@ def _product_templates():
         if any(part in EXEMPT_DIRS for part in parts):
             continue
         if any(c in part for part in parts for c in CAREER_PATHS):
+            continue
+        if '/'.join(parts) in CAREER_FILES:
             continue
         yield path
 
@@ -67,6 +87,35 @@ def test_no_badge_surface_still_says_xp_to_the_reader():
         'these badge surfaces still show "XP" to the reader; badge XP is Badge Points:\n  '
         + '\n  '.join(offenders)
     )
+
+
+def test_every_declared_career_file_exists_and_still_says_xp():
+    """A DECLARATION THAT OUTLIVES ITS SURFACE IS A HOLE IN THE GUARD.
+
+    `CAREER_FILES` names individual templates that may show "XP", which is a standing exemption -- so each
+    entry has to keep earning it. A renamed or deleted file leaves an entry that silently excuses nothing
+    today and could excuse a badge surface at that path tomorrow; an entry for a file that no longer shows
+    XP at all is an exemption nobody needs, and the next reader cannot tell which kind they are looking at.
+    """
+    for rel in CAREER_FILES:
+        path = TEMPLATES / Path(rel)
+        assert path.exists(), '%s is declared a career surface but does not exist' % rel
+        assert TEXT_NODE.search(path.read_text(encoding='utf-8')), (
+            '%s no longer shows XP to a reader, so its exemption is dead and should be removed' % rel
+        )
+        # AND THE ENTRY MUST BE THE REASON THE FILE IS EXEMPT. One already covered by `CAREER_PATHS` or
+        # `EXEMPT_DIRS` excuses nothing while looking exactly like one that does.
+        #
+        # ASKED DIRECTLY, not via `_product_templates()`. "It is not in the un-exempt list" is true of a
+        # redundant entry too -- the path rule keeps it out either way -- so that form of the assertion
+        # passes under both states and pins neither.
+        parts = Path(rel).parts
+        assert not any(c in part for part in parts for c in CAREER_PATHS), (
+            '%s is already exempt by path (CAREER_PATHS), so this entry excuses nothing' % rel
+        )
+        assert not any(part in EXEMPT_DIRS for part in parts), (
+            '%s is already exempt by directory (EXEMPT_DIRS), so this entry excuses nothing' % rel
+        )
 
 
 def test_the_career_economy_keeps_the_word_xp():

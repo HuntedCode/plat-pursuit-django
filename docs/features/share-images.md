@@ -122,6 +122,73 @@ stroke-dash geometry with hexes attached from `completion_card_service.DISCIPLIN
 `plat_card.html` (same contract as the recap card's pin), the two embedded faces, no `var(--)`,
 ownership on the endpoint and the tab, and graceful degrade when the card build fails.
 
+## The Challenge Card (a run's share card)
+
+The fourth sibling (2026-10). One 1200x630 card per challenge run, **built one type at a time** (owner's
+call) and now covering all three: A-Z, Job Coverage and the Plat Calendar. `share_card.SHAREABLE_TYPES`
+stays as the gate a fourth type needs on day one: a type outside it 404s on both doors and shows no button,
+rather than inheriting another type's layout.
+
+**One shell, a board per type.** The header, brand and plaque are shared; the board is an include chosen by
+`kind` (`shareables/partials/_challenge_card_{az,jobs,calendar}.html`). The two cover boards draw their
+squares through one partial, `_challenge_card_square.html`, whose only per-type difference is the MARK: a
+letter, or the job's glyph in its discipline colour. **The plaque's numbers are data**: `share_card` builds a
+`stats` list per type (letters; jobs + job XP; days + struck months) and the template loops it, instead of a
+row of `{% if kind %}` branches.
+
+**A-Z layout: the alphabet strip.** A-M over N-Z, thirteen covers a row, each lettered, with a full-width
+plaque below (avatar, name + mark, the earned title, letters done, days, date). Two rows of thirteen is
+what makes it read as the alphabet; the live board's 9x3 grid reads as "a lot of games". Squares use the
+board's vocabulary: **done** (full cover, green check while the run is live), **assigned** (cover dimmed
+behind a primary border), **open** (dashed well, letter set large).
+
+**Job Coverage layout: five discipline shelves.** One shelf per discipline in the radar's order, headed by
+its glyph and name in its colour, covers two across and three deep at 78x104, and the sixth cell is that
+discipline's tally (4/5, in the discipline's colour once the shelf is full). The shelves come from
+`slot_render.slot_groups`, the live board's own grouping. The plaque adds a fourth stat, **job XP paid**:
+`rewards.summary`'s `paid_xp`, the reward panel's figure, so XP still behind a Claim button never appears on
+a card.
+
+**Why three deep, and what it cost.** The first cut was three across and two deep at 64x85, and the art was
+too small to make out (owner, 2026-10-08). Fifteen columns was the reason; standing the shelves on end gets
+ten, and covers near the A-Z card's 80x107. The extra height comes from this card's header (no subline: the
+plaque's 13/25 says it) and a slimmer plaque (`share_card._PLAQUE['slim']`). A-Z keeps its own.
+
+**Plat Calendar layout: the year overview.** The run page's year overview (the All crest's panel): twelve
+month rows by up to 31 days, a filled day (shovelware-free, the one lens) in its month's hue, a day-number ruler on top and each month's
+tally at the right; a struck month wears its hue on that label and tally, which the page does not (it has
+crests for that, the card has none). Built from `calendar_render.calendar_groups`, the
+page's own builder. **No numerals in the squares**, unlike the page from `md:`: at ~37% embed scale a 12px
+numeral is 4px of noise, and a strong fill reads at any size. The hues are `share_card.MONTH_HUES`, a port
+of the page's `--cal-c` table (Chromium renders `oklch()` natively); a test reads the stylesheet and fails if
+the two disagree. The plaque counts **days** (n/365) and **months struck** (n/12), with no "days in" figure:
+"164/365 days" beside "87 days in" reads as two day counts arguing. Its title can show **mid-run**, because the
+Calendar's ladder is climbed during a run (Calendar Marker at 50 days), unlike the other two types' titles.
+
+**Finished AND in-progress runs** are shareable (owner's call): halfway through is worth showing, and the
+header pill (and, on A-Z, the subline) say which it is. A hidden run has no card.
+
+**Where it lives:** a Share button on the run's own page (owner only) and on My Challenges (each live run
+card and each finished row; Share sits before Hide, so the soft-destructive action is last). One `#cc-share`
+dialog per page, and only on a page with something to share (`has_shareable` on My Challenges: a hunter with
+no live or finished run of a shareable type ships no dialog, script or grounds), opened by any `[data-challenge-share]`
+button; it is the share modal's `.pc-modal` shell without the rating and art-ground parts.
+
+**Images are cached for the DOWNLOAD only.** The preview hands the browser the remote cover URLs; caching
+on preview would be up to 27 synchronous `requests.get` calls on modal open. The PNG path caches them in
+parallel (8 workers), each distinct URL once, and a failed one degrades that square to no art.
+
+**Grounds:** the eight designed ones via `trophies.themes.get_ground_themes()` -- `get_plat_card_themes()`
+minus the art backings, the same palette the recap's and the Profile Card's PICKERS offer (each PNG endpoint
+still validates `?theme=` its own way). A run is many games, or none on the Calendar, so there is no one image to back it. An unknown
+`?theme=` falls back to Substrate rather than 400ing.
+
+**Covers are the small IGDB variant** (`display_image_url_small`, 180x256) for squares of at most 80x107. A cold cache
+is up to 27 downloads, 8 at a time: fewer waves than in series, but not a bound on the total, because
+`requests`' timeout is per connect and per read.
+
+**Pins:** `tests/engine/test_challenge_share_card.py`.
+
 ## The share modal
 
 `templates/shareables/partials/share_modal.html` + `static/js/plat-cards.js`.
@@ -198,6 +265,8 @@ Either way, a successful save **invalidates the preview cache** for that complet
 | GET | `/api/v1/recap/<year>/<month>/html/` | Yes | Monthly recap preview |
 | GET | `/api/v1/recap/<year>/<month>/png/` | Yes | Monthly recap download |
 | GET | `/api/v1/share-temp/<filename>` | No | Serve a cached temp image |
+| GET | `/my-challenges/<id>/card/` | Yes (owner) | Challenge card preview markup + download filename (JSON) |
+| GET | `/my-challenges/<id>/card.png?theme=` | Yes (owner) | Challenge card download |
 
 Cards are keyed on the game's **default `TrophyGroup`**, not the `ProfileTrophyGroup` row: TrophyGroup
 ids are stable where the denorm may legitimately be rebuilt, and ownership is then answered by the same
@@ -224,6 +293,9 @@ art the card already offers.
 | `trophies/views/shareables_views.py` | `PlatCardsView` |
 | `templates/shareables/plat_card.html` | **The card.** Landscape 1200x630, both variants |
 | `templates/shareables/profile_card.html` | **The Profile Card.** Landscape 1200x630, one variant |
+| `templates/shareables/challenge_card.html` + `partials/_challenge_card_{az,jobs,calendar,square}.html` | **The Challenge Card.** Landscape 1200x630: the shared shell, one board per type, and the square the two cover boards draw |
+| `challenges/services/share_card.py` | The Challenge Card payload, its image caching, and `SHAREABLE_TYPES` |
+| `templates/challenges/partials/_share_dialog.html` + `_share_button.html` + `static/js/challenge-share.js` | The Challenge Card dialog and its triggers |
 | `templates/trophies/partials/profile_detail/tabs/card_tab.html` + `static/js/profile-card-tab.js` + `static/css/components/profile-card-tab.css` | The profile page's Card tab (inline preview + download) |
 | `templates/shareables/plat_cards.html` | The page |
 | `templates/shareables/partials/plat_card_results.html` | Grid partial (HTMX swaps + infinite-scroll pages) |
@@ -235,6 +307,23 @@ art the card already offers.
 
 ## Gotchas and Pitfalls
 
+- **Challenge card: the preview never caches images, and the dialog keeps no preview cache.** The
+  preview hands the browser remote cover URLs; only the PNG caches them (up to 27 cold `requests.get`
+  calls otherwise, on modal open). And unlike the plat modal there is no client cache: the picker rewrites
+  squares in place without a reload, so a cached preview would disagree with the freshly rendered PNG.
+- **Challenge card: one download button serves every run on My Challenges.** It relies on
+  `CardDownload.reset()` dropping the render in flight (a generation counter); reopening the dialog for a
+  second run mid-render otherwise saved the first run's PNG under the second's name.
+- **Challenge card: Job Coverage shelf geometry is computed, never fixed.** A deleted `Job` gives its square
+  a SIXTH shelf and a staff edit to `Job.discipline` gives a shelf of SIX; both overflowed the canvas when
+  the sizes were hardcoded. `share_card._shelf_geometry` keeps three rows and shrinks covers to fit, and
+  returns the designed 78x104 on the designed shape. A job square with no glyph falls back to a briefcase
+  rather than printing its slug.
+- **Challenge card: `MONTH_HUES` is a hand port of the page's `--cal-c` table.** Change a month's hue in
+  `challenges.css` and `test_the_calendar_card_wears_the_pages_month_hues` fails until the card's copy
+  follows.
+- **Challenge card: the Calendar draws ONE lens.** A filled day is `in_clean`; `in_all` holds shovelware
+  platinums too and is never drawn. A shovelware-only day is a real row that must render empty.
 - **The card renders with no stylesheet.** Playwright uses `page.set_content()` in an `about:blank`
   origin: no CSS file, no custom properties, no network. Every style is inline and every colour is a
   hand-ported hex. Keep the token map in `plat_card.html`'s header in sync with `input.css`.

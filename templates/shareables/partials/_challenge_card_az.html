@@ -1,0 +1,17 @@
+{% comment %}
+The A-Z card's board: the ALPHABET STRIP (owner's pick), A-M over N-Z, every cover lettered. Two rows of
+thirteen is what makes it read as the alphabet; the live board's 9x3 grid reads as "a lot of games".
+
+GEOMETRY: 13 x 80px + 12 x 6px = 1112px, exactly the card's content width. Covers are 80x107 (3:4).
+
+Expects: rows (share_card.build_card_context), is_complete.
+{% endcomment %}
+<div style="display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;">
+    {% for row in rows %}
+    <div style="display: flex; gap: 6px;">
+        {% for sq in row %}
+        {% include 'shareables/partials/_challenge_card_square.html' with w=80 h=107 mark_px=27 well_px=40 %}
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>

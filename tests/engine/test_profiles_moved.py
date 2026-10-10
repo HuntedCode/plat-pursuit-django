@@ -98,8 +98,11 @@ def test_hunters_is_a_community_surface_now():
     # `challenges` joined 2026-09-19: a coming-soon PAGE, not a redirect, because a hub of two
     # while a third is weeks away reads as the whole offering. It sits LAST and wears a
     # `Soon` tag -- the two things you can use should not sit behind the one you cannot. See
-    # `test_challenges_coming_soon.py`.
-    assert [i.slug for i in match['hub'].items] == ['lists', 'profiles', 'challenges']
+    # `test_challenges_live.py`.
+    # `challenges_hall_of_fame` joined the rail 2026-09-30 with the real Challenges pages. Exact equality
+    # is kept deliberately -- see the same assertion in `test_community_hub_returned.py`.
+    assert [i.slug for i in match['hub'].items] == [
+        'lists', 'profiles', 'challenges', 'challenges_hall_of_fame']
     assert match['active_slug'] == 'profiles'
 
     # ...and Browse's Catalog lost exactly one entry. 'jobs' joined in 2026-08 (`/jobs/` is the public

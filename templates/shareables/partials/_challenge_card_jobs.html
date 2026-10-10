@@ -1,0 +1,35 @@
+{% comment %}
+The Job Coverage card's board: FIVE SHELVES, one per discipline (owner's pick, 2026-10-08), in the radar's
+order and in each discipline's colour -- the same grouping the live board draws, because 25 jobs are really
+five groups of five and laying them out as one strip broke every group across a row.
+
+Each shelf is two covers across and three deep, and the sixth cell is the discipline's tally (4/5): the
+one number a hunter reading a shelf wants, in the space the 2x3 arrangement leaves free anyway. (It was
+three across and two deep first, at 64x85, and the art was too small to make out. Ten columns rather than
+fifteen is what gets the covers to the A-Z card's size.)
+
+GEOMETRY IS COMPUTED, in `share_card._shelf_geometry`, because the catalogue can change the board's shape:
+a deleted `Job` puts its square on a SIXTH shelf, and a staff edit to `Job.discipline` makes a shelf of SIX.
+Both overflowed the card when this was hardcoded. On the designed shape (five shelves of five) it comes out
+at the designed numbers: 78x104 covers, 162px shelves, ~75px between them with `space-between`.
+
+Expects: shelves and board (share_card.build_card_context), is_complete.
+{% endcomment %}
+<div style="display: flex; justify-content: space-between; flex-shrink: 0;">
+    {% for shelf in shelves %}
+    <div style="width: {{ board.shelf_w }}px; flex-shrink: 0;">
+        <div style="display: flex; align-items: center; gap: 7px; padding-bottom: 7px; margin-bottom: 9px; border-bottom: 2px solid {{ shelf.colour }};">
+            {% if shelf.glyph %}<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="{{ shelf.colour }}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">{{ shelf.glyph|safe }}</svg>{% endif %}
+            <span style="font-size: 14px; line-height: 1.2; font-weight: 700; color: {{ shelf.colour }}; letter-spacing: 0.13em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ shelf.label }}</span>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            {% for sq in shelf.squares %}
+            {% include 'shareables/partials/_challenge_card_square.html' with w=board.cover_w h=board.cover_h mark_px=board.mark_px well_px=board.well_px %}
+            {% endfor %}
+            <div style="width: {{ board.cover_w }}px; height: {{ board.cover_h }}px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+                <span style="font-family: 'Bricolage Grotesque', 'Inter', sans-serif; font-size: {{ board.tally_px }}px; font-weight: 700; line-height: 1; color: {% if shelf.done == shelf.total %}{{ shelf.colour }}{% else %}#f0f6fd{% endif %}; letter-spacing: -0.02em;">{{ shelf.done }}<span style="font-size: {{ board.tally_sub_px }}px; color: #8a939f;">/{{ shelf.total }}</span></span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>

@@ -183,7 +183,7 @@ PREMIUM_PERKS = [
      'name': 'Beta access',
      'everyone': 'Everything, when it ships',
      'member': 'Try upcoming features while they are still taking shape, before anyone else.',
-     'example': 'First through the door when Challenges returns.',
+     'example': 'First through the door on Challenges, members-first while it is in beta.',
      'wide': True},
 ]
 

@@ -23,6 +23,25 @@ from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
+from challenges.views import (
+    CalendarDayView,
+    AssignSlotView,
+    ChallengeDetailView,
+    ChallengesBrowseView,
+    ClearSlotView,
+    HallOfFameView,
+    HistoryPickerView,
+    SearchPickerView,
+    SlotPickerView,
+    HideChallengeView,
+    MyChallengesView,
+    OpeningSeenView,
+    ChallengeCardHTMLView,
+    ChallengeCardPNGView,
+    RedeemAllView,
+    RedeemSlotView,
+    StartChallengeView,
+)
 from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, CreateListView,
                             CreateListWithConceptView, CreateSectionView, DeleteListView,
                             DeleteSectionView, GameListDetailView, ListGameSearchView,
@@ -33,7 +52,7 @@ from gamelists.views import (AddConceptView, AssignItemView, BrowseListsView, Cr
 from core.staff_views import (AdminHubView, DecisionLogView, HideTakeView, LiftRestrictionView,
                               PeopleSearchView, PersonView, RestrictionListView, RestrictView,
                               ReverseDecisionView)
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ChallengesComingSoonView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, DesignLabView, PursuerCardRanksPreviewView, WhatsNewView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap,
@@ -42,6 +61,7 @@ from core.sitemaps import (
     # Game Lists system. Two different things whose names are one word apart, which is the same
     # collision that made the sitemap a landmine in the first place.
     GameListSitemap,
+    ChallengeSitemap,
 )
 
 sitemaps = {
@@ -59,6 +79,10 @@ sitemaps = {
     # rebuilt `gamelists.GameList` -- it reversed `list_detail`, which resolves to the new app, so
     # enabling it unchanged would have published thousands of legacy ids against new-app routes.
     'lists': GameListSitemap,
+    # Finished challenge runs (2026-09). The two BROWSE pages ride `StaticViewSitemap`; this is the
+    # detail set behind the Hall of Fame. Finished only -- an in-flight run's page changes with every
+    # square, so its `lastmod` would be stale within days.
+    'challenges': ChallengeSitemap,
     # for the revamp, since nothing else about the system was deleted.
 }
 from trophies.views import (ModCenterView, QuickTakeQueueView, GameFlagQueueView,
@@ -402,9 +426,25 @@ urlpatterns = [
     # them deliberately -- the rebuild edits in place and has no such address.
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
     path('community/lists/create/', CreateListView.as_view(), name='list_create'),
-    # CHALLENGES, as a real page rather than a redirect while the system is rebuilt. Same URL and
-    # same name the real browse will take, so nothing that links here changes when it lands.
-    path('community/challenges/', ChallengesComingSoonView.as_view(), name='challenges'),
+    # CHALLENGES. The placeholder held this URL and this `name` so the real browse could take both
+    # without changing a single link -- which is what happened here.
+    #
+    # TWO PAGES (owner, 2026-09-30): this one lists runs IN PROGRESS, and the Hall of Fame below lists the
+    # finished ones. The Hall of Fame is NESTED under this path so the Community hub's prefix matching
+    # resolves the HUB for both.
+    #
+    # NESTING DOES NOT LIGHT THE ITEM, which an earlier version of this claimed. Prefix matching picks the
+    # hub; the active item is an exact `url_name` match against that hub's items, so the Hall of Fame
+    # highlights because it has its own `HubSubnavItem` -- not because of where its URL sits. The claim
+    # mattered because it hid a real gap: `challenge_detail`, under the same prefix, had no rail entry at
+    # all, so every run page rendered the Community strip unlit. It has one now, in
+    # `_URL_NAME_TO_SLUG_OVERRIDES`.
+    #
+    # THE HALL OF FAME MUST COME FIRST. Django resolves in order and `<int:challenge_id>` would not match
+    # `hall-of-fame`, so this is not a live trap today -- but a future `<slug:...>` detail route would
+    # swallow it, and the ordering is free insurance against that.
+    path('community/challenges/', ChallengesBrowseView.as_view(), name='challenges'),
+    path('community/challenges/hall-of-fame/', HallOfFameView.as_view(), name='challenges_hall_of_fame'),
     path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
     # The list's own write endpoints. Under the page's path rather than /api/v1/, because they are
     # this page's behaviour and share its gate -- routing them through the API app would mean a
@@ -452,6 +492,80 @@ urlpatterns = [
          name='list_create_with_concept'),
     path('community/lists/<int:list_id>/edit/', RedirectView.as_view(url='/', permanent=False), name='list_edit'),
     path('my-lists/', MyListsView.as_view(), name='my_lists'),
+
+    # ── My Challenges (2026-09) ───────────────────────────────────────────────────────────────────
+    # A ROOT path, like `/my-lists/`, and for the same reason: the hub is resolved by PATH PREFIX, so
+    # a personal page living under `/community/` would light the Community rail instead of My Pursuit ->
+    # Tools, where a login-gated page about your own runs belongs. The public browse and Hall of Fame
+    # hold `/community/challenges/` and `/community/challenges/hall-of-fame/` above. (This line used to
+    # call that URL "still the placeholder", which stopped being true the moment `ChallengesBrowseView` took
+    # it -- and the placeholder view itself is now deleted, not merely unrouted.)
+    #
+    # The two write endpoints sit under this page's path rather than /api/v1/, because they are this
+    # page's behaviour and share its gate -- routing them through the API app would mean a second
+    # permission stack that has to agree with the first. Same argument the list writes above make.
+    #
+    # `start` takes a TYPE, not an id: there is nothing to address yet, and which run you get (fresh,
+    # resumed, or the one already going) is the service's decision rather than the caller's.
+    path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
+    path('my-challenges/start/<str:challenge_type>/', StartChallengeView.as_view(),
+         name='challenge_start'),
+    # THE PICKER'S FIVE DOORS, under the personal path because every one of them is about the hunter's own
+    # run -- three reads that need the hunter's completions to answer, and two writes.
+    # THE HISTORY VIEW, beside the search door because it is the same kind of thing: a read over the whole
+    # catalogue rather than about one square. No `<slug:key>`, deliberately -- the point of it is that the
+    # hunter is not thinking about a particular square yet.
+    path('my-challenges/<int:challenge_id>/history/', HistoryPickerView.as_view(),
+         name='challenge_history'),
+    path('my-challenges/<int:challenge_id>/search/', SearchPickerView.as_view(),
+         name='challenge_search'),
+    # `<slug:key>`, NOT `<str:key>`, and this is a fix rather than tidying. `str` matches `[^/]+`, so
+    # `%00` decoded to a NUL byte, reached `slots.filter(key=key)`, and psycopg refused it at
+    # parameter-dump time -- an unhandled `DataError` and a 500 on all three doors, repeatable by any
+    # linked hunter on their own run. `resolve`'s docstring claimed the key was untrusted and answered
+    # 404; for that one input it answered 500.
+    #
+    # `slug` matches `[-a-zA-Z0-9_]+`, which accepts every real key ('B' and 'card-shark' alike) and
+    # rejects NUL and every metacharacter at the ROUTER, before a query exists to poison. The same class
+    # of bug as the search term's, in the sibling parameter, found only because the fix for one of them
+    # re-asserted immunity for both.
+    path('my-challenges/<int:challenge_id>/slot/<slug:key>/', SlotPickerView.as_view(),
+         name='challenge_slot'),
+    path('my-challenges/<int:challenge_id>/slot/<slug:key>/assign/', AssignSlotView.as_view(),
+         name='challenge_assign'),
+    path('my-challenges/<int:challenge_id>/slot/<slug:key>/clear/', ClearSlotView.as_view(),
+         name='challenge_clear'),
+    # THE RUN'S OWN PAGE, under `/community/challenges/` rather than `/my-challenges/`, because it is
+    # PUBLIC: a finished run is something you show somebody, and the Hall of Fame links here. The
+    # personal page above is the hunter's own working surface; this is the artefact.
+    path('community/challenges/<int:challenge_id>/', ChallengeDetailView.as_view(),
+         name='challenge_detail'),
+    # ONE SQUARE OF A PLAT CALENDAR, fetched by the board when a day is opened. Under the PUBLIC detail
+    # prefix rather than `my-challenges/`, and the distinction is OWNER-ONLY vs PUBLIC rather than write
+    # vs read: everything under the personal prefix is scoped to your own runs, including its reads (the
+    # page itself and the three picker doors, which `challenges/views.py` meters under
+    # `CHALLENGE_READ_RATELIMIT_GROUP`). This is a read of a public artefact gated by `readable_by`, so
+    # it belongs beside the page it serves.
+    path('community/challenges/<int:challenge_id>/day/<int:month>/<int:day>/',
+         CalendarDayView.as_view(), name='challenge_calendar_day'),
+    path('my-challenges/<int:challenge_id>/hide/', HideChallengeView.as_view(),
+         name='challenge_hide'),
+    # THE OPENING CEREMONY'S ACKNOWLEDGEMENT, under the owner-only prefix with every other write: the
+    # ceremony is drawn on the PUBLIC run page, but only its owner can have seen it, and the split here
+    # is by who may call rather than by where the control is drawn.
+    path('my-challenges/<int:challenge_id>/opening-seen/', OpeningSeenView.as_view(),
+         name='challenge_opening_seen'),
+    path('my-challenges/<int:challenge_id>/card/', ChallengeCardHTMLView.as_view(),
+         name='challenge_card_html'),
+    path('my-challenges/<int:challenge_id>/card.png', ChallengeCardPNGView.as_view(),
+         name='challenge_card_png'),
+    # THE REWARD DOORS, under `/my-challenges/` with every other write even though the surface they serve
+    # is the PUBLIC run page. The split is by who may call, not by where the button is drawn: claiming is
+    # something only the owner can do, and `/my-challenges/` is this feature's owner-only prefix.
+    path('my-challenges/<int:challenge_id>/slot/<slug:key>/redeem/', RedeemSlotView.as_view(),
+         name='challenge_redeem'),
+    path('my-challenges/<int:challenge_id>/redeem-all/', RedeemAllView.as_view(),
+         name='challenge_redeem_all'),
 
     # Rate My Games wizard (ratings-only). Rehoused 2026-08 from /community/ to a root path under the
     # My Pursuit hub: it is login-required, noindex, and works only on YOUR library -- a personal tool

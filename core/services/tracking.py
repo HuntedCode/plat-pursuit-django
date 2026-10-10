@@ -15,8 +15,12 @@ it. Its per-response Set-Cookie had also been silently disabling Cloudflare edge
 caching site-wide. Traffic analytics now come from Cloudflare and Search Console,
 which measure at the edge and cost nothing per request.
 
-Challenge.view_count survived the removal: it is incremented inline by the three
-challenge detail views, independent of this module.
+Challenge.view_count is GONE TOO. It belonged to the retired `trophies.Challenge`, whose
+three detail views incremented it inline; both the field and the views went with
+`0281_drop_challenge_system`. The rebuilt `challenges.Challenge` deliberately has no such
+column -- nothing was reading it, and view counts now come from the edge like everything
+else. This paragraph is kept rather than deleted because it used to say the opposite, and
+there is a live `Challenge` model again for it to mislead somebody about.
 """
 import logging
 

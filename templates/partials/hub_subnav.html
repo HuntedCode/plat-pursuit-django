@@ -38,7 +38,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                 <a href="{{ item.url }}" class="pp-subpill{% if item.slug == hub_subnav_active_slug %} is-active{% endif %}"
                    data-subnav-pill data-group="{{ group.grouper }}"
                    {% if item.tag %}aria-label="{{ item.label }}, {% firstof item.tag_aria item.tag %}"{% endif %}
-                   {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}{% if item.tag %}<span class="pp-subpill__tag">{{ item.tag }}</span>{% endif %}</a>
+                   {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}{% if item.tag %}<span class="pp-subpill__tag{% if item.tag_kind %} pp-subpill__tag--{{ item.tag_kind }}{% endif %}">{{ item.tag }}</span>{% endif %}</a>
                 {% endfor %}
             </div>
             {% endfor %}
@@ -53,10 +53,25 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
 
     {# Mobile (<lg): current-page trigger -> grouped sheet. #}
     <div class="container mx-auto lg:hidden px-3">
-        <button type="button" class="pp-sub__mbar" data-subnav-toggle aria-expanded="false" aria-controls="subnav-sheet">
+        {% comment %}THE MARKS RIDE THE COLLAPSED BAR, because without them the feature stopped at 1024px.
+        Below `lg` the rail above is `hidden` and every pill lives in a sheet that is `visibility: hidden` until
+        this button is pressed -- so on a phone the chips that say WHICH page owes something were unreachable,
+        while the bottom tab bar showed only the single aggregate marker. That is the exact ambiguity the marks
+        exist to resolve, so they have to be on the thing a phone actually shows (owner, 2026-09-30).
+
+        AFTER THE PAGE NAME, BEFORE THE CHEVRON. `.pp-sub__mcur` is the only flexible child (it ellipsises), and
+        the chips are `flex-shrink: 0`, so a long page name like "Rate My Games" truncates and the marks survive
+        at 375px rather than being pushed out.
+
+        `aria-hidden` ON THE CHIPS, with the whole state in the button's own `aria-label` -- the same split the
+        nav item uses. Two chips announced separately inside a button whose name is already "My Pursuit, Career"
+        is three interruptions for one fact.{% endcomment %}
+        <button type="button" class="pp-sub__mbar" data-subnav-toggle aria-expanded="false" aria-controls="subnav-sheet"
+                {% if hub_subnav_marks %}aria-label="{{ hub_subnav_label }}{% if hub_subnav_active_label %}, {{ hub_subnav_active_label }}{% endif %}{% for mark in hub_subnav_marks %}, {% firstof mark.tag_aria mark.tag %}{% endfor %}"{% endif %}>
             {% include 'partials/_hub_subnav_icon.html' with icon=hub_subnav_icon %}
             <span class="pp-sub__mhub">{{ hub_subnav_label }}</span>
             {% if hub_subnav_active_label %}<span class="pp-sub__mdot" aria-hidden="true">&middot;</span><span class="pp-sub__mcur">{{ hub_subnav_active_label }}</span>{% endif %}
+            {% for mark in hub_subnav_marks %}<span class="pp-subpill__tag pp-subpill__tag--{{ mark.tag_kind }} pp-sub__mtag" aria-hidden="true">{{ mark.tag }}</span>{% endfor %}
             <svg class="pp-sub__mchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
     </div>
@@ -71,7 +86,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                     {# The overflow sheet renders the same pill; see the rail above for the aria note. #}
                     <a href="{{ item.url }}" class="pp-subpill{% if item.slug == hub_subnav_active_slug %} is-active{% endif %}"
                        {% if item.tag %}aria-label="{{ item.label }}, {% firstof item.tag_aria item.tag %}"{% endif %}
-                       {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}{% if item.tag %}<span class="pp-subpill__tag">{{ item.tag }}</span>{% endif %}</a>
+                       {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}{% if item.tag %}<span class="pp-subpill__tag{% if item.tag_kind %} pp-subpill__tag--{{ item.tag_kind }}{% endif %}">{{ item.tag }}</span>{% endif %}</a>
                     {% endfor %}
                 </div>
             </div>

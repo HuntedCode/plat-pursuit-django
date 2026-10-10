@@ -1,0 +1,106 @@
+{% load humanize %}{% comment %}"How the <type> works": one run type's rules, on the same `.pp-howto` mold as the system intro.
+
+RENDERED ON EVERY RUN PAGE, for every reader, because the recall link in the header is for everybody --
+a visitor reading somebody's A-Z run can ask what the squares mean. AUTO-OPENED for one reader only: the
+OWNER, on their first visit to a run of this type (`show_type_tutorial`), and never on the same load as a
+Calendar run's opening ceremony, which goes first.
+
+A STICKY FLAG PER TYPE (`tutorial_flag`, one of `tutorials.TYPE_FLAGS`), posted through the existing
+`ui_flag` branch. How A-Z works does not change when the beta ends, so a boolean is the honest shape.
+
+THE NUMBERS ARE CONTEXT, NOT COPY: `hatch_threshold`, `slot_job_xp` and `calendar_rungs` come from the
+constants the run actually applies, so the tutorial cannot teach a figure the run disagrees with.
+{% endcomment %}
+<div class="pp-detail-modal pp-howto" id="challenge-tutorial" data-ctut
+     data-setting="ui_flag" data-value="{{ tutorial_flag }}"
+     {% if show_type_tutorial %}data-auto{% elif preview_type_tutorial %}data-preview{% endif %} hidden>
+    <div class="pp-detail-modal__scrim" data-ctut-close></div>
+    <div class="pp-detail-modal__dialog pp-howto__dialog pp-ctut__dialog" role="dialog" aria-modal="true" aria-labelledby="challenge-tutorial-title" tabindex="-1">
+        <button type="button" class="pp-detail-modal__close" data-ctut-close aria-label="Close">&times;</button>
+        <div class="pp-detail-modal__body pp-howto__body">
+            <h2 class="pp-howto__title" id="challenge-tutorial-title">
+                {% include 'partials/icons/challenge_type.html' with type=challenge.challenge_type size='pp-howto__title-icon' %}
+                How the {{ challenge.get_challenge_type_display }} works
+            </h2>
+
+            {% if challenge.challenge_type == 'calendar' %}
+            <p class="pp-forge__lede">{{ challenge.total_slots }} days, one square for each. A day fills with a shovelware-free platinum earned on that date, in any year.</p>
+            <div class="cxp__stack">
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">1</span>
+                    <div>
+                        <div class="cxp__label">It fills itself</div>
+                        <p class="cxp__copy">Your whole platinum history counts, and every new platinum fills its day when your profile syncs. There is nothing to pick.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">2</span>
+                    <div>
+                        <div class="cxp__label">Titles along the way</div>
+                        <p class="cxp__copy">A title at {% for days in calendar_rungs %}{% if forloop.last %} and {% elif not forloop.first %}, {% endif %}{{ days }}{% endfor %} days. The last one finishes the run.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">3</span>
+                    <div>
+                        <div class="cxp__label">Open any day</div>
+                        <p class="cxp__copy">See every game that filled it. One day can hold several platinums.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">4</span>
+                    <div>
+                        <div class="cxp__label">Your clock, your days</div>
+                        <p class="cxp__copy">A platinum counts on the date you earned it in your own timezone. One earned on 29 February counts for 28 February.</p>
+                    </div>
+                </div>
+            </div>
+            {% elif challenge.challenge_type == 'az' or challenge.challenge_type == 'jobs' %}
+            <p class="pp-forge__lede">{% if challenge.challenge_type == 'az' %}{{ challenge.total_slots }} squares, one for each letter. Fill each one with a game whose name starts with that letter.{% else %}{{ challenge.total_slots }} squares, one for each job, grouped by discipline. Fill each one with a game that carries that job.{% endif %}</p>
+            <div class="cxp__stack">
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">1</span>
+                    <div>
+                        <div class="cxp__label">Pick a game</div>
+                        <p class="cxp__copy">Open a square and choose a game {% if challenge.challenge_type == 'az' %}that starts with its letter{% else %}that carries its job{% endif %}. Any Job Board game you have not completed yet can go in, once per run.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">2</span>
+                    <div>
+                        <div class="cxp__label">Finish it</div>
+                        <p class="cxp__copy">The square completes when you complete that game's contract. A platinum is not required.</p>
+                    </div>
+                </div>
+                {% if challenge.challenge_type == 'jobs' %}
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">3</span>
+                    <div>
+                        <div class="cxp__label">Claim the job XP</div>
+                        <p class="cxp__copy">Every completed square pays {{ slot_job_xp|intcomma }} XP to its job, on top of the contract's own. Claim it on this page.</p>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">{% if challenge.challenge_type == 'jobs' %}4{% else %}3{% endif %}</span>
+                    <div>
+                        <div class="cxp__label">Change your mind</div>
+                        <p class="cxp__copy">Clear an unfinished square and pick again whenever you like. A completed square stays locked.</p>
+                    </div>
+                </div>
+                <div class="cxp__beat">
+                    <span class="cxp__num" aria-hidden="true">{% if challenge.challenge_type == 'jobs' %}5{% else %}4{% endif %}</span>
+                    <div>
+                        <div class="cxp__label">Help on {% if challenge.challenge_type == 'az' %}hard letters{% else %}thin jobs{% endif %}</div>
+                        <p class="cxp__copy">A {% if challenge.challenge_type == 'az' %}letter{% else %}job{% endif %} with {{ hatch_threshold }} or fewer games left for you can take one you already completed.{% if challenge.challenge_type == 'az' %} On your first A-Z run, games you finished after joining can also fill letters straight away.{% endif %}</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="pp-howto__actions">
+                <button type="button" class="pp-howto__got" data-ctut-close>Got it</button>
+            </div>
+        </div>
+    </div>
+</div>

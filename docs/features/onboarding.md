@@ -139,6 +139,14 @@ can be wrong breaks the account permanently and nothing in the UI can undo it:
 | never moves backwards | a stale tab dismissed after a newer visit would rewind it and re-show a wave already read |
 
 Doc: [job-board-contracts.md](../design/rebuild/job-board-contracts.md).
+
+**The fourth shape: `challenges_intro_seen`** (the Challenges system intro). A VERSION string, `beta` or
+`live`, the newest version of the intro this hunter was SHOWN. Its own API branch, not in `UI_FLAGS`;
+validated by `challenges.services.tutorials.merged_intro_marker`: unknown values and any version above
+the current one are a 400, and it never rewinds. The per-type Challenges tutorials are ordinary sticky
+flags (`challenge_tutorial_<type>`), in `UI_FLAGS` via `tutorials.TYPE_FLAGS`. Doc:
+[challenge-systems.md](challenge-systems.md#the-tutorials).
+
 Client discipline (from the badge howto + timezone modal prior art):
 
 - Fire-and-forget `PlatPursuit.API.post('/api/v1/user/quick-settings/', {setting: 'ui_flag',

@@ -1,0 +1,543 @@
+{% load humanize %}{% comment %}The Plat Calendar's detail board: a crest row that doubles as the month switcher, and one
+month panel at a time.
+
+ONE LENS: A DAY IS FILLED BY A SHOVELWARE-FREE PLATINUM (owner, 2026-10-04). There were three, with a
+`.pp-switch` between the crests and the board to move between them, and the collapse took the switcher,
+the per-cell `{lens: bool}` dict, the `:has()` reveal rules, the doubled per-lens figures and the
+lens-blind screen-reader text with it. The owner's reasoning is the right distinction: "contracts fuel
+the other challenges but those are more curated sets of games and this is more wholistic". A Contract is
+a curated subset of the catalogue; a Calendar is a hunter's whole platinum history laid against the year.
+
+WHY A SWITCHER AND NOT A WALL OF TWELVE MONTHS (owner, 2026-10-04, choosing between three mockups).
+A whole year at 375px is tiny: the Hall of Fame hero draws exactly that and its cells land under 5px,
+which is a density read rather than something you can point at. One month at a time gives a 44px cell --
+the touch minimum -- and it gives the crests a job beyond decoration: they ARE the tabs. The
+year-at-a-glance read is not lost, it lives on the hero where it belongs.
+
+A DAY HAS NO WEEKDAY, which is why this grid has no `S M T W T F S` head and must never grow one. A
+square is a (month, day) pair with NO year -- "3 March" means every 3 March in the hunter's history -- so
+any weekday alignment would be a different lie every year. `calendar_render`'s module docstring states it
+at the source. The grid is a plain numbered one.
+
+ALL TWELVE PANELS ARE IN THE DOM. The rows are already fetched (one query for the whole board), so
+rendering everything and revealing with `hidden` makes the switch instant and request-free.
+
+NO COVER ART ANYWHERE (owner): "I don't think we do cover art for the calendar. Instead, we can let the
+user click on a day and it'll pop-up a modal that shows them games that satisfy that day." A day holding a
+platinum is a `<button>` that opens that sheet; the rest stay `<div>`s.
+{% endcomment %}
+<div class="pp-cal">
+
+    {% comment %}THE CREST ROW. Thirteen tabs -- twelve months and the whole-year overview -- and the
+    run's trophy shelf.
+
+    A SCROLLING SNAP STRIP AT MOBILE, thirteen across from `md:`. Thirteen tabs inside 375px is 20px each --
+    half the 44px touch minimum, and far too small for a face to say anything -- so the strip keeps each
+    crest at a real size and lets the row scroll instead.
+    SCROLLING IS THE EXCEPTION, NOT A HOUSE RULE. CLAUDE.md's mobile criterion says to OMIT rather than
+    scroll, and the nearest precedent, `.nc__filter`, opens "IT WRAPS. It must not scroll". What makes
+    this different is that the twelve are the board's NAVIGATION: omitting any puts a month out of reach,
+    and wrapping to two rows of six stacks a second row of chrome over a board already behind a switcher.
+
+    THE FACE IS THE MONTH'S ABBREVIATION, NOT A ROMAN NUMERAL, and this departs from the plan on purpose
+    so it can be argued rather than discovered. The plan specified a numeral, settled before the layout
+    was -- and the layout turned these coins into the SWITCHER. A switcher's first job is identification,
+    and there is room for exactly three glyphs: the face is 12px, the project's type floor. `AUG` says
+    the month outright; `VIII` is four glyphs and says it only to somebody already counting. The rim
+    still carries position, which was the numeral's structural argument.
+
+    THE CREST IS A BOOLEAN, AND ITS COLOUR IS THE MONTH. The crest used to be a metal -- bronze, silver
+    or gold for the hardest of three lenses to complete the month -- which made it a cross-lens value on
+    a page that switched lens, and cost two separate audit findings. One lens means one state, struck or
+    not, which freed the colour axis for the twelve month hues the stylesheet now keys on `data-month`.
+    That is why the hues are coherent here and were rejected when the crest was planned: a month hue and
+    a lens metal on one coin were two colour systems competing for the same object.{% endcomment %}
+    <div class="pp-cal__crests" role="tablist" aria-label="Month, or the whole year">
+        {% comment %}THE WHOLE YEAR, FIRST IN THE ROW (owner, 2026-10-05: "is there a possiblity for us
+        to add an 'All' crest that shows a mini-version of the entire year at a glance"). An overview is
+        where a reader starts, so it sits left of January -- but it is NOT the opening tab, because the
+        board opens on the CURRENT month and that decision is older and more useful.
+
+        NO `data-month`, WHICH IS THE WHOLE COLOUR DECISION. The hue table keys on that attribute, so
+        omitting it leaves `--cal-c` to this crest's own rule: a near-neutral silver, no month's hue.
+        Twelve hues each mean one specific month, and a thirteenth would either steal one of those
+        meanings or add a second colour axis to an object that already carries two.
+
+        ITS RIM IS A DIAL OF THE YEAR, not a thirteenth "which month" mark. A month crest lights ONE of
+        twelve slots; this one lights a slot per STRUCK month, on the same `--seg` mechanism, so the coin
+        says which months are finished at a glance and cannot be mistaken for a month's own crest. Unlit
+        slots are simply the track showing through, so a year with nothing struck draws a bare rim rather
+        than a special case.{% endcomment %}
+        <button type="button" role="tab"
+                class="pp-cal__crest pp-cal__crest--all{% if calendar_totals.struck == 12 %} pp-cal__crest--struck{% endif %}"
+                id="cal-tab-all" aria-controls="cal-month-all"
+                {% comment %}NEVER THE OPEN TAB. `month.is_open` marks the current month and exactly one
+                group carries it, so this is unconditionally false rather than a fourteenth thing that
+                could claim to be open.{% endcomment %}
+                aria-selected="false"
+                tabindex="0"
+                style="--pct: {% widthratio calendar_totals.done challenge.total_slots 100 %};">
+            <span class="pp-cal__coin" aria-hidden="true">
+                <svg class="pp-cal__rim" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+                    <circle class="pp-cal__rim-track" cx="22" cy="22" r="16" pathLength="100" />
+                    {% for month in calendar_months %}{% if month.is_struck %}
+                    <circle class="pp-cal__rim-seg" cx="22" cy="22" r="16" pathLength="100"
+                            style="--seg: {{ forloop.counter0 }};" />
+                    {% endif %}{% endfor %}
+                    <circle class="pp-cal__arc-track" cx="22" cy="22" r="20" pathLength="100" />
+                    <circle class="pp-cal__arc" cx="22" cy="22" r="20" pathLength="100" />
+                </svg>
+                {% comment %}THREE CHARACTERS, matching `JAN`'s rhythm exactly, so the row reads as
+                thirteen coins of one set rather than one odd one out.{% endcomment %}
+                <span class="pp-cal__face">ALL</span>
+                <span class="pp-cal__sub">{{ calendar_totals.done }}/{{ challenge.total_slots }}</span>
+            </span>
+            <span class="sr-only">
+                The whole year: {{ calendar_totals.done }} of {{ challenge.total_slots }} days,
+                {{ calendar_totals.struck }} of 12 months complete.
+            </span>
+        </button>
+        {% for month in calendar_months %}
+        <button type="button" role="tab"
+                class="pp-cal__crest{% if month.is_struck %} pp-cal__crest--struck{% endif %}"
+                id="cal-tab-{{ month.slug }}" aria-controls="{{ month.dom_id }}"
+                {% comment %}`month.is_open` RATHER THAN `forloop.first`. The board opened on January
+                whatever the date, so a hunter arriving in October had to find October before the page
+                told them anything about now (owner, 2026-10-05). The flag is computed once in
+                `calendar_groups` and read in BOTH places -- here and on the panel below -- because two
+                independent expressions eventually disagree, and the switcher's `isActive` reads this
+                attribute to find the live tab.{% endcomment %}
+                aria-selected="{% if month.is_open %}true{% else %}false{% endif %}"
+                {% comment %}EVERY CREST IS TAB-REACHABLE AS RENDERED, and `wireTablist` narrows it to
+                one on boot -- its `syncTabindex()` runs at wire time, so the roving behaviour arrives in
+                the same tick as the arrow keys that make it navigable. The server used to render the
+                rover itself, which with JavaScript off meant Tab skipped eleven crests and no arrow key
+                moved between them: a roving tabindex is only safe once something is doing the roving.
+
+                `aria-controls` IS LOAD-BEARING, not decoration: the script resolves the panel through it
+                rather than by matching list positions, so rendering the panels in a different order
+                could not desync the script from the accessible tree.{% endcomment %}
+                tabindex="0"
+                {% comment %}`data-month` IS BACK, AND NOW IT HAS A READER. Three state attributes were
+                deleted from this board for having none, and that note warned the next person off
+                re-adding one -- so this is the exception stated plainly: the stylesheet keys the twelve
+                month hues on it (`.pp-cal__crest[data-month="7"] { --cal-c: ... }`). The alternative
+                was twelve modifier classes or `:nth-child`, and an attribute carrying a number the CSS
+                reads is both tidier and self-documenting.
+
+                `--pct` IS THE COMPLETION ARC'S LENGTH, through `widthratio` -- the one piece of
+                arithmetic a Django template is allowed to do, and the same thing `_run_card.html` uses
+                for its progress bar. No new field on the group for a number that is a ratio of two
+                figures already on it.{% endcomment %}
+                data-month="{{ forloop.counter }}"
+                style="--pct: {% widthratio month.done month.total 100 %};">
+            <span class="pp-cal__coin" aria-hidden="true">
+                {% comment %}THE RIM SAYS WHICH MONTH BY POSITION -- twelve segments, one lit. One circle
+                is the track, a second is dashed to a single segment and rotated into place by `--seg`,
+                and the arithmetic lives in CSS so the template passes an index rather than a stroke
+                offset.
+                THE TWELVE SIT IN THE GAUGE'S NOTCH-FREE ARC, not around the full circle: the counter
+                plate occupies the bottom, and a rim that tiled all 360 degrees put four months
+                underneath it. January is at the lower left and December at the lower right.
+                `pathLength="100"` IS WHAT MAKES THAT HONEST, and it is the house pattern: the contract
+                card's `.rp-ring__seg` normalises the same way, so a dash array is in hundredths of the
+                path and no raw circumference appears anywhere.{% endcomment %}
+                <svg class="pp-cal__rim" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+                    {% comment %}TWO CONCENTRIC RINGS SAYING DIFFERENT THINGS. The inner twelve segments
+                    say WHICH month, by position; the outer arc says HOW MUCH of it is filled (owner:
+                    "give each one a ring along the outside that fills based on completion for that
+                    month... add the ring, don't remove anything"). The radii are measured for clear air
+                    between them -- the stylesheet carries the sum.{% endcomment %}
+                    <circle class="pp-cal__rim-track" cx="22" cy="22" r="16" pathLength="100" />
+                    <circle class="pp-cal__rim-seg" cx="22" cy="22" r="16" pathLength="100"
+                            style="--seg: {{ forloop.counter0 }};" />
+                    <circle class="pp-cal__arc-track" cx="22" cy="22" r="20" pathLength="100" />
+                    <circle class="pp-cal__arc" cx="22" cy="22" r="20" pathLength="100" />
+                </svg>
+                <span class="pp-cal__face">{{ month.slug|upper }}</span>
+                {% comment %}THE MONTH'S PROGRESS, INSIDE THE COIN (owner, 2026-10-04: "now that the
+                medallions have more room, perhaps we put the counter inside of them?... We don't have to
+                do it for every use of the medallions but for these larger ones"). Which is why the
+                wrapper is hidden until `lg:` -- a 44px coin at mobile has no room for a second line, and
+                the stylesheet carries the arithmetic.
+
+                ONE FIGURE NOW, not three. This carried a per-lens count that followed the checked radio,
+                sharing `.pp-cal__count` with the month head so one set of `:has()` rules governed both.
+                With one lens it is simply how much of the month is filled, and the class goes with the
+                rules that needed it.
+
+                NO `aria` WORK NEEDED: the coin is already `aria-hidden`, and the `sr-only` label below
+                states the month and its progress in full.{% endcomment %}
+                <span class="pp-cal__sub">{{ month.done }}/{{ month.total }}</span>
+            </span>
+            {% comment %}THE WHOLE LABEL FOR A SCREEN READER, because the visible face is an abbreviation
+            and the crest's state is carried in colour.{% endcomment %}
+            <span class="sr-only">
+                {{ month.label }}: {{ month.done }} of {{ month.total }} days{% if month.is_struck %}, complete{% endif %}.
+            </span>
+        </button>
+        {% endfor %}
+    </div>
+
+    {% comment %}THE YEAR PANEL: twelve rows of up to 31, one row per month, columns aligned on
+    day-of-month. NOT the Hall of Fame hero's shape, and the reason is in that template's own comment --
+    its seven rows "are NOT weekdays ... Seven is simply what makes 365 cells read as a block at hero
+    width". At hero width that is the right trade; here there is room for rows that MEAN something, and
+    the gain is threefold: a row is a month, a column is a date, and each row can wear its own hue off
+    the existing `[data-month]` table. It is also the cheaper shape, which is the part worth knowing
+    before anyone "unifies" the two: this is a nested loop over `calendar_months` and the `cards` the
+    month grids below already draw, so it needs no new render function and no new query, while a 7x53
+    grid would need a flat 365-cell list in `calendar_day_keys()` order.
+
+    A CELL CARRIES ITS DATE FROM `md:` UP (owner, 2026-10-05: "putting numbers in the boxes would
+    really help, especially with the 'at a glance' feel of it"). Which breakpoint is arithmetic: 12px is
+    the stylesheet's type floor, a two-digit tabular numeral advances about 14.4px at that size, and 31
+    columns inside the 343px a 375px viewport gives this panel is an 8.9px cell. Numerals at mobile would
+    need either sub-floor type or a horizontally scrolling year, and a year you scroll is not a year at a
+    glance. From 768 the cell is ~19.6px and from 1024 ~31.4px.
+    THE FILL RECIPE CHANGES WITH THE NUMERAL, and that part was measured rather than assumed: `--pp-text`
+    on the mobile cell's strong 68% tint holds 2.27:1 at December and a dark ink manages 3.54 at best, so
+    NO text colour works on it. From `md:` the cell takes the day square's own shipped recipe (a 22% tint
+    with a 45% ring, already measured at 7.30-9.95 for white text) -- so the overview and the board agree
+    and nothing new had to be proven.
+
+    A CELL IS STILL NOT A CONTROL, which is a different question from whether it is CLICKABLE. The ROW is
+    the click target and a cell is inside it, so "click a box or one of the rows" both land on the same
+    handler (owner, 2026-10-05) -- one target per month rather than 365, which is also what keeps this
+    off the 44px touch minimum argument: the row is the full width of the panel.
+    IT JUMPS TO THE MONTH'S TAB, NOT TO THE DAY MODAL. A 9px square opening the same dialog that a 44px
+    day square opens one tab away would be a worse affordance, not an extra one; switching to the month
+    is the thing the overview is for and the day's own square is then right there at full size.
+
+    AND THE ROW IS DELIBERATELY NOT A `<button>`, which looks like a mistake unless the reasoning is
+    written down. The matrix is `aria-hidden`, so a focusable control inside it would be the classic
+    focusable-in-hidden-subtree bug -- reachable by Tab and announced as nothing. Dropping `aria-hidden`
+    instead would mean twelve row buttons announcing exactly what the twelve crests above them already
+    announce, which is a duplicate list rather than an improvement. So the overview is a POINTER surface
+    throughout: its hover peek and its click-to-jump are both pointer conveniences, and the accessible
+    and keyboard path is the crest tablist, which does the same job with arrow keys at 44px. That is the
+    same division the peek already lives by.
+
+    `aria-hidden` ON THE MATRIX, with an `sr-only` summary beside it. 365 cells of bare numerals announce
+    a wall of digits, and every fact in here is already stated by the twelve month panels and the title
+    ladder -- so this is a duplicate VIEW of content that is reachable, not content with no accessible
+    path. The same call `_run_hero.html` makes about its own board, for the same reason.{% endcomment %}
+    {% comment %}NO MODIFIER CLASS ON THE SECTION. One was here and had no rule: the panel's two-column
+    layout comes from `.pp-cal__panel` and the matrix takes the day grid's `grid-area`, so there was
+    nothing for a `--year` modifier to carry -- which is what
+    `test_every_class_reaches_the_compiled_bundle` exists to catch.{% endcomment %}
+    {% comment %}`tabindex="0"` BECAUSE NOTHING INSIDE IS FOCUSABLE: the matrix is `aria-hidden`, so without
+    it a keyboard user tabbing from the crests skipped the panel entirely (the WAI-ARIA tabs pattern).{% endcomment %}
+    <section class="pp-cal__panel" role="tabpanel" id="cal-month-all"
+             aria-labelledby="cal-tab-all" tabindex="0" hidden>
+        <div class="pp-cal__head">
+            <h3 class="pp-cal__month">The whole year</h3>
+            <p class="pp-cal__tally">{{ calendar_totals.done }} / {{ challenge.total_slots }}</p>
+        </div>
+
+        <p class="sr-only">
+            {{ calendar_totals.done }} of {{ challenge.total_slots }} days filled,
+            {{ calendar_totals.struck }} of 12 months complete.
+            Open a month tab above for its days one by one.
+        </p>
+
+        <div class="pp-cal__year" aria-hidden="true">
+            {% for month in calendar_months %}
+            {% comment %}`data-month` ON THE ROW, which is the entire hue wiring: the table is keyed
+            `.pp-cal [data-month="N"]`, a descendant selector, so a row inside the board picks up its
+            month's `--cal-c` with no new declaration anywhere.{% endcomment %}
+            <div class="pp-cal__yrow" data-month="{{ forloop.counter }}"
+                 {% comment %}THE TAB THIS ROW JUMPS TO, named by ID rather than by index. The script
+                 resolves it with `getElementById` and finds its position in the tab list from there, so
+                 the overview cannot desync from the row of crests the way two parallel orderings
+                 eventually do -- the same argument `aria-controls` already wins on the crests.
+                 {% endcomment %}
+                 data-cal-jump="cal-tab-{{ month.slug }}">
+                <span class="pp-cal__ylabel">{{ month.slug|upper }}</span>
+                {% for card in month.cards %}
+                {% comment %}THE PEEK RIDES THE SAME PREDICATE AS THE MONTH GRID -- `card.counts`, i.e.
+                the square has platinums on it, shovelware or not. A cell with nothing to say carries no
+                attributes and the pointer passes over it without disturbing the month's figures.
+                `--on` IS `card.filled`, the lens the board draws, so a shovelware-only day reads as
+                open here exactly as it does on its own month's grid.{% endcomment %}
+                <span class="pp-cal__ycell{% if card.filled %} pp-cal__ycell--on{% endif %}{% if card.is_today %} pp-cal__ycell--today{% endif %}"{% if card.heat %} data-heat="{{ card.heat }}"{% endif %}
+                      {% if card.counts %}data-peek-label="{{ card.label }}"
+                      data-peek-plats="{{ card.plats }}"
+                      data-peek-on="{{ card.earned_on|date:'j M Y' }}"
+                      data-peek-clean="{% if card.filled %}1{% else %}0{% endif %}"{% endif %}>
+                    <span class="pp-cal__ynum">{{ card.day }}</span></span>
+                {% endfor %}
+            </div>
+            {% endfor %}
+            {% comment %}THE KEY, built from the same cell classes, so it shows whichever encoding the cells use at
+            this width (a shade on a phone, a bar under the numeral from `md:`). No `data-month`, so it takes the
+            site's progress colour rather than one month's.{% endcomment %}
+            <div class="pp-cal__ykey">
+                <span>Fewer</span>
+                {% for level in '1234' %}<span class="pp-cal__ycell pp-cal__ycell--on pp-cal__ykeycell" data-heat="{{ level }}"></span>{% endfor %}
+                <span>More</span>
+            </div>
+        </div>
+
+        {% comment %}THE YEAR'S OWN FIGURES, in the same two faces every month panel carries -- which is
+        also what makes the peek work in here: `wireDayPeek` resolves the faces through
+        `cell.closest('.pp-cal__panel')`, so a panel without a stats column would have no face to swap
+        and a hover would do nothing.{% endcomment %}
+        <div class="pp-cal__stats">
+            {% include "challenges/partials/_calendar_peek.html" with hint="Open its month for the games" %}
+            <div class="pp-cal__facts" data-cal-facts>
+                <h4 class="pp-cal__stats-head">The year</h4>
+                <dl class="pp-cal__statlist">
+                    <div class="pp-cal__stat">
+                        <dt>Months complete</dt>
+                        <dd><span class="pp-tally">{{ calendar_totals.struck }}</span> of 12</dd>
+                    </div>
+                    <div class="pp-cal__stat">
+                        <dt>Still open</dt>
+                        <dd><span class="pp-tally">{{ calendar_totals.open }}</span> day{{ calendar_totals.open|pluralize }}</dd>
+                    </div>
+                    {% comment %}THE COMPARISON FIGURE, shown only where it differs. `all` counts the
+                    days without the shovelware exclusion, so on a hunter with none of it the two are
+                    equal and the row would restate the headline.{% endcomment %}
+                    {% if calendar_totals.all > calendar_totals.done %}
+                    <div class="pp-cal__stat">
+                        <dt>Days with any platinum</dt>
+                        <dd><span class="pp-tally">{{ calendar_totals.all }}</span></dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </section>
+
+    {% comment %}ONE PANEL PER MONTH. `hidden` on the inactive eleven rather than `display:none` in CSS,
+    so the panels are correct before any stylesheet or script arrives and a reader never meets twelve
+    months of squares at once.{% endcomment %}
+    {% for month in calendar_months %}
+    {% comment %}`data-month` ON THE PANEL TOO, which is what carries the month's colour into its own
+    content (owner: "when swapping tabs I think we should incorporate the colors of that month into the
+    content of the tab"). The twelve hue declarations are keyed on `[data-month]` under `.pp-cal` rather
+    than on the crest, so one set of rules serves the coin and the panel and the two cannot drift.
+    {% endcomment %}
+    <section class="pp-cal__panel" role="tabpanel" id="{{ month.dom_id }}"
+             aria-labelledby="cal-tab-{{ month.slug }}" data-month="{{ forloop.counter }}"
+             {% if not month.is_open %}hidden{% endif %}>
+        <div class="pp-cal__head">
+            <h3 class="pp-cal__month">{{ month.label }}</h3>
+            <p class="pp-cal__tally">{{ month.done }} / {{ month.total }}</p>
+        </div>
+
+        {% comment %}A REAL LIST, for the reason the slot board's grid gives at length: sibling divs each
+        ending in screen-reader text read as one run-on sentence, and `role="list"` is not
+        belt-and-braces because Tailwind's preflight strips the implicit role from an unstyled list on
+        WebKit -- the dominant pairing for a 375px base layout.{% endcomment %}
+        <ul class="pp-cal__grid" role="list">
+            {% for card in month.cards %}
+            {% comment %}A MODIFIER CLASS RATHER THAN DATA ATTRIBUTES. A filled day used to carry up to
+            three of `data-all`/`data-clean`/`data-contracts` so `.pp-cal:has(input:checked)` could decide
+            which one painted. One lens needs one state, and a modifier is what the rest of this
+            stylesheet uses for exactly that.
+
+            `earned_on` IS DELIBERATELY NOT PRINTED. It belongs in the day modal, where there is room to
+            say WHAT filled the square rather than only when. (It was also unprintable before the
+            collapse, for a reason that has now gone: it held the earliest date across any lens, so it
+            could date a square that was empty in the lens being viewed.)
+
+            A BARE `<li>`, with no class of its own: it carried one whose only rule was a `display: block`
+            that a grid item does not need, and a class with no rule renders with no styling, which is
+            what `test_every_class_reaches_the_compiled_bundle` exists to catch.
+
+            `--rev` RESTARTS PER MONTH, which inverts the slot board's rule on purpose. `slot_cards`
+            stamps a run-wide index because its squares are ONE grid; these are twelve panels of which one
+            is visible, each re-entering whenever it is switched to. A run-wide index put every cell past
+            the twelfth on the same capped delay, so eleven months had no cascade and -- because
+            un-hiding an element restarts its animations -- a switched-to panel arrived blank and then
+            popped all 31 squares at once.{% endcomment %}
+            {% comment %}A BUTTON ONLY WHERE THERE IS SOMETHING TO OPEN, and a plain `div` otherwise.
+            The alternative -- one `<button disabled>` for all 365 -- would be a single element and the
+            wrong semantics: an empty square is not a temporarily-unavailable control, it is not a
+            control. A disabled button also still carries the role, so a screen reader would announce
+            three hundred of them.
+
+            THE TWO BRANCHES MUST STAY IN STEP, which is the hazard of duplicating an element: both
+            carry `--rev` (the per-month entrance cascade) and both carry the same screen-reader label.
+            `test_both_day_cell_branches_carry_the_same_state` pins that, because the failure mode is a
+            cascade or a label silently existing on only one kind of square.{% endcomment %}
+            <li>
+                {% if card.counts %}
+                <button type="button"
+                        class="pp-cal__day pp-cal__day--open{% if card.filled %} pp-cal__day--on{% endif %}{% if card.is_today %} pp-cal__day--today{% endif %}"
+                        style="--rev: {{ forloop.counter0 }};"
+                        data-month="{{ card.month }}"
+                        {% comment %}WHAT THE SIDE COLUMN SHOWS ON HOVER, carried on the square rather
+                        than fetched: every figure is already known at render time, and a hover that
+                        asked the server would put a request behind every mouse movement across a
+                        365-cell grid. Only openable squares carry it, which is the same predicate the
+                        click uses -- a square that previews what it will not open is worse than one
+                        that does neither.{% endcomment %}
+                        data-peek-label="{{ card.label }}"
+                        data-peek-plats="{{ card.plats }}"
+                        data-peek-on="{{ card.earned_on|date:'j M Y' }}"
+                        data-peek-clean="{% if card.filled %}1{% else %}0{% endif %}"
+                        data-day-url="{% url 'challenge_calendar_day' challenge.id card.month card.day %}">
+                    <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
+                    {% comment %}NO "Open." IN THE NAME. The button role already announces that it is a
+                    control, and the word was a promise this square cannot keep without a script: with JS
+                    off a reader heard "Open., button" on three hundred squares and nothing happened on
+                    any of them. The inert branch says only the date, and so does this one.{% endcomment %}
+                    {% if card.filled and card.plats > 1 %}
+                    {% comment %}ONLY WHERE A DAY STACKS. Most filled days hold exactly one platinum, so a
+                    count on every one of them would print "1" across the board -- the same information as
+                    "filled", just louder. The same threshold the side column's "busiest day" uses, and
+                    for the same reason.
+
+                    `card.filled`, NOT `card.counts`. A square that is `in_all` and not `in_clean` carries
+                    the SHOVELWARE-INCLUSIVE count (the field's own comment says so), so badging it would
+                    advertise a figure this board excludes on a square it deliberately draws empty.
+
+                    `x` RATHER THAN A BARE NUMERAL, because a second number in the corner of a cell whose
+                    content is already a number reads as part of the date. "x4" cannot.{% endcomment %}
+                    <span class="pp-cal__stack" aria-hidden="true">&times;{{ card.plats }}</span>
+                    {% endif %}
+                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% if card.plats > 1 %}, {{ card.plats }} platinums{% endif %}{% endif %}.{% if card.is_today %} Today.{% endif %}</span>
+                </button>
+                {% else %}
+                {% comment %}NO COUNT BADGE ON THIS BRANCH, and not by omission: a filled square is
+                always an openable one. `in_clean` implies `in_all` -- the database enforces it with
+                `calendarday_clean_implies_all` -- so a cell that draws always took the button branch
+                above, and a badge here could never render.{% endcomment %}
+                <div class="pp-cal__day{% if card.filled %} pp-cal__day--on{% endif %}{% if card.is_today %} pp-cal__day--today{% endif %}"
+                     style="--rev: {{ forloop.counter0 }};">
+                    <span class="pp-cal__num" aria-hidden="true">{{ card.day }}</span>
+                    <span class="sr-only">{{ card.label }}{% if card.filled %}: filled{% endif %}.{% if card.is_today %} Today.{% endif %}</span>
+                </div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+
+        {% comment %}THE MONTH'S FIGURES, in a column beside its grid (owner, 2026-10-04: "could we
+        potentially float something to the right side that helps the user in some way? Some cool monthly
+        stats or something? Just feels like the page is a bit empty and we have room to fill").
+
+        INSIDE THE PANEL RATHER THAN IN A COLUMN OF ITS OWN, which is the decision that makes this cheap:
+        the stats are per MONTH and only one month is ever visible, so living in the panel means they
+        switch with it for free. A sibling column would need the script to toggle twelve more blocks in
+        step with the twelve panels, which is a second ordering to keep aligned -- the exact class of
+        thing `aria-controls` was introduced here to avoid.
+
+        EVERY FIGURE IS ARITHMETIC OVER CELLS ALREADY IN HAND, so the board is still one query. The
+        genuinely interesting stat -- which games landed on a given day -- needs the hunter's trophy rows
+        and belongs to the day-detail slice.
+
+        EACH ROW IS CONDITIONAL, because a stat that reads "0" or "none" is worse than an absent one: on
+        a fresh run this column would otherwise be a stack of zeroes. A finished month shows no "open"
+        row, a month with no shovelware shows no exclusion row, and a month whose squares hold one
+        platinum each shows no "busiest day" -- every filled square would qualify.
+        NO COUNT OF ROWS IN THIS PARAGRAPH, deliberately: it said "six zeroes" when there were five, was
+        corrected to five, and the next slice added a sixth.
+
+        AN EMPTY MONTH SHOWS ITS EMPTINESS AND AT MOST ONE FIGURE, and the earlier wording claimed
+        "only its emptiness", which was false twice over. `open` is
+        `total - done`, so an untouched January is 31 open -- and the column drew "STILL OPEN / 31 days"
+        directly above "No days filled in January yet.", which on a fresh run is twelve panels each
+        stating the length of its own month under a line saying nothing is in it. That is the column of
+        zeroes these conditionals exist to prevent, wearing a different number. `month.done` gates it:
+        "still open" answers "how much is left", and nothing is left of a month not yet started.
+
+        THE EXCLUSION ROW IS THE DELIBERATE EXCEPTION, and it is NOT gated on `month.done`. A hunter
+        whose only March platinums are on flagged games sees "EXCLUDED / 3 shovelware" above "No days
+        filled in March yet." -- which is the same figure-above-a-blank-month shape that "still open" was
+        gated to remove, and is kept because it ANSWERS the blank rather than restating it. "31 open" on
+        an untouched month tells a hunter the length of March; "3 excluded" tells them why March is
+        empty, which is the one question the panel otherwise leaves hanging.
+
+        A `<dl>` OF `<div>`-WRAPPED PAIRS, and the wrapper is required rather than tidy: `<dl>` permits
+        only `dt`, `dd` and `div`, so a per-pair `div` is the one way to group them. Note the stylesheet
+        must leave this list `display: block` -- a grid or flex `<dl>` loses its term/definition mapping
+        in Chromium and WebKit, which is the same role-stripping hazard `role="list"` answers on the day
+        grid, with no attribute available to answer it here.{% endcomment %}
+        {% comment %}TWO FACES IN ONE BOX, stacked in a grid cell rather than swapped in flow. The
+        month's figures and the day peek occupy the same grid area, so the column's height is the taller
+        of the two and NOTHING MOVES when a pointer crosses the grid -- a column that resized on hover
+        would shift the board under the cursor, which is the worst possible response to a hover.
+        IT TOOK TWO ATTEMPTS TO MAKE THAT SENTENCE TRUE. The faces were swapped with the `hidden`
+        ATTRIBUTE, which is `display: none` -- and an element with no box is not a grid item, contributes
+        nothing to the container's size, and leaves the grid-area stacking inert. Exactly one face was
+        ever in layout, so this bordered, tinted panel visibly shrank by about 96px on every hover and
+        below `lg:` took the page's scroll height with it.
+        THE FIRST FIX KEPT THE ATTRIBUTE and overrode it in the stylesheet, which cannot work: Tailwind's
+        preflight ships `[hidden]:where(:not([hidden=until-found])) { display: none !important }`, and no
+        normal author declaration beats an important one -- not with more specificity, not from a layer,
+        not with `!important` of its own. Measured in a browser against the compiled bundle, the panel
+        still went 170px to 74px.
+        SO THE STATE IS A CLASS. `.pp-cal__face--off` has nothing to out-rank, and rendering it here
+        rather than applying it in script keeps the no-JS state correct: the panel opens on the month's
+        figures, and an empty peek never flashes.
+        {% endcomment %}
+        <div class="pp-cal__stats">
+            {% include "challenges/partials/_calendar_peek.html" with hint="Open for the games" %}
+            <div class="pp-cal__facts" data-cal-facts>
+            <h4 class="pp-cal__stats-head">{{ month.label }} at a glance</h4>
+            <dl class="pp-cal__statlist">
+                {% if month.done and month.open %}
+                <div class="pp-cal__stat">
+                    <dt>Still open</dt>
+                    <dd><span class="pp-tally">{{ month.open }}</span> day{{ month.open|pluralize }}</dd>
+                </div>
+                {% endif %}
+                {% if month.rank %}
+                <div class="pp-cal__stat">
+                    <dt>Rank among months</dt>
+                    <dd>{{ month.rank }}{% if month.rank == 1 %}st{% elif month.rank == 2 %}nd{% elif month.rank == 3 %}rd{% else %}th{% endif %} best</dd>
+                </div>
+                {% endif %}
+                {% if month.busiest %}
+                <div class="pp-cal__stat">
+                    {% comment %}THE BUSIEST SQUARE. The month is the panel's own title, so the day
+                    number alone is unambiguous here and "4 on the 12th" fits a 230px column where
+                    "4 platinums on 12 July" would wrap. `|ordinal` is `humanize`'s, not a local
+                    chain.{% endcomment %}
+                    <dt>Busiest day</dt>
+                    {% comment %}THE NOUN IS `sr-only`, NOT ABSENT. Every sibling row names what its
+                    number counts ("29 days", "3 shovelware"); this one read "4 on the 12th" with the
+                    word "platinums" nowhere in it, which is thin on screen and meaningless aloud. The
+                    230px column is the argument against a VISIBLE noun, not against one that costs no
+                    width.{% endcomment %}
+                    <dd><span class="pp-tally">{{ month.busiest.plats }}</span><span class="sr-only"> platinums</span> on the {{ month.busiest.day|ordinal }}</dd>
+                </div>
+                {% endif %}
+                {% if month.first %}
+                <div class="pp-cal__stat">
+                    {% comment %}THE OLDEST AND NEWEST SQUARES IN THIS MONTH, which is the nostalgic half
+                    of what a calendar is for -- a hunter looking at March wants to know when they first
+                    filled one of its days. `|date` so the format follows the project's locale rather
+                    than being spelled out here.{% endcomment %}
+                    <dt>First filled</dt>
+                    <dd>{{ month.first|date:"j M Y" }}</dd>
+                </div>
+                {% endif %}
+                {% if month.last and month.last != month.first %}
+                <div class="pp-cal__stat">
+                    <dt>Most recent</dt>
+                    <dd>{{ month.last|date:"j M Y" }}</dd>
+                </div>
+                {% endif %}
+                {% if month.shovelware %}
+                <div class="pp-cal__stat">
+                    <dt>Excluded</dt>
+                    <dd><span class="pp-tally">{{ month.shovelware }}</span> shovelware</dd>
+                </div>
+                {% endif %}
+            </dl>
+            {% if not month.done %}
+            {% comment %}THE ONE CASE WITH NOTHING TO LIST. Every row above is conditional, so an
+            untouched month would leave an empty column -- and an empty panel beside a full grid reads as
+            a render fault rather than as a fact about the month.{% endcomment %}
+            <p class="pp-cal__statempty">No days filled in {{ month.label }} yet.</p>
+            {% endif %}
+            </div>
+        </div>
+    </section>
+    {% endfor %}
+</div>

@@ -23,15 +23,35 @@
     background: color-mix(in oklab, var(--cta-c, var(--pp-primary)) 16%, transparent);
     border: 1px solid color-mix(in oklab, var(--cta-c, var(--pp-primary)) 45%, transparent);
     border-radius: var(--pp-radius-sm);
-    transition: box-shadow 0.15s ease;
+    /* `opacity` JOINS THE TRANSITION so the inert state arrives rather than snapping. Every request-bound
+       button on the site dims to 0.55 the instant it is pressed (see the `:disabled` rule below) and the jump
+       was the only feedback a slow connection got. A 0.15s fade is not a progress cue, but it is the
+       difference between a button that went dead and one that is working. */
+    transition: box-shadow 0.15s ease, opacity 0.15s ease;
     cursor: pointer;
 }
 
-.pp-cta:hover:not(:disabled) {
+.pp-cta:hover:not(:disabled):not([aria-disabled="true"]) {
     box-shadow: 0 0 14px color-mix(in oklab, var(--cta-c, var(--pp-primary)) 30%, transparent);
 }
 
-.pp-cta:disabled {
+/* THE LOOK FOR BOTH SPELLINGS OF INERT, and the second one was missing.
+
+   Two pages deliberately use `aria-disabled="true"` rather than `disabled` -- My Challenges' gated
+   Start and My Lists' at-cap New-list button -- because a truly disabled button takes no pointer
+   events (so a `title` never appears) and leaves the tab order (so it cannot be reached by keyboard).
+   Both wrote that reasoning down. Neither noticed that every inert style here keys on the NATIVE
+   `:disabled` pseudo-class, so both buttons kept full opacity, `cursor: pointer`, the hover glow and
+   the press transform. They looked completely live while refusing to do anything.
+
+   `game-detail.css` solved the same problem locally by pairing the attribute with an `.is-inert` LOOK
+   class. Doing it in the primitive instead means the attribute alone is enough, which is what both
+   those templates already assume -- and it repairs the Lists button, which shipped with this.
+
+   NOT `pointer-events: none`: that would take back the hover and focus reachability the attribute was
+   chosen for. The cursor says no; the submit handler and the service do the refusing. */
+.pp-cta:disabled,
+.pp-cta[aria-disabled="true"] {
     opacity: 0.55;
     cursor: not-allowed;
     box-shadow: none;
@@ -48,7 +68,7 @@
     border-color: var(--pp-border);
 }
 
-.pp-cta--ghost:hover:not(:disabled) {
+.pp-cta--ghost:hover:not(:disabled):not([aria-disabled="true"]) {
     color: var(--pp-text);
     border-color: color-mix(in oklab, var(--cta-c, var(--pp-primary)) 45%, var(--pp-border));
     box-shadow: 0 0 10px color-mix(in oklab, var(--cta-c, var(--pp-primary)) 20%, transparent);
@@ -61,10 +81,10 @@
     border-color: color-mix(in oklab, var(--cta-c) 45%, var(--pp-border));
 }
 
-.pp-cta--danger:hover:not(:disabled) {
+.pp-cta--danger:hover:not(:disabled):not([aria-disabled="true"]) {
     box-shadow: 0 0 10px color-mix(in oklab, var(--cta-c) 25%, transparent);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-    .pp-cta:active:not(:disabled) { transform: translateY(1px); }
+    .pp-cta:active:not(:disabled):not([aria-disabled="true"]) { transform: translateY(1px); }
 }

@@ -50,6 +50,12 @@ DEFERRED_IMPORT_HEAVY = [
     # or a cron, where a dangling import is a log line rather than a 500 somebody reports.
     'trophies/services/psn_api_service.py',
     'trophies/services/contract_service.py',
+    # Challenges (2026-09). `challenge_service` is reached from the sync path and defers one import;
+    # `eligibility` defers none and is here for its MODULE-level imports, which this scan also checks;
+    # the command runs as a nightly step, which is offline surface by the standard applied above.
+    'challenges/services/challenge_service.py',
+    'challenges/services/eligibility.py',
+    'challenges/management/commands/process_challenges.py',
     'trophies/services/badge_orchestrator.py',
     'trophies/services/badge_adapters.py',
     'trophies/sync_utils.py',
@@ -75,8 +81,17 @@ DEFERRED_IMPORT_HEAVY = [
 
 #: First-party top-level packages. Matched on the FIRST DOTTED SEGMENT, not `startswith`: a raw prefix
 #: match makes 'api' swallow a third-party `apiclient` and 'core' swallow `coreapi`.
+#: `challenges` and `gamelists` were MISSING until 2026-09, and the consequence was not cosmetic: a
+#: non-first-party module is resolved with `find_spec` and its NAMES are never checked, so
+#: `token_keeper`'s `from challenges.services.challenge_service import detect_for_profile` -- on the
+#: sync hot path, deliberately placed outside its try/except so a missing module would be LOUD -- was
+#: skipped entirely. Renaming or deleting that function would have left this guard green while every
+#: sync raised. Exactly the failure class the file exists for, hiding in its own membership test.
+#:
+#: `gamelists` is added at the same time as future-proofing only: nothing in the scanned list imports it
+#: today, so that half fixes no live gap.
 FIRST_PARTY = {'trophies', 'core', 'api', 'notifications', 'users', 'milestones', 'fundraiser',
-               'art_reveal', 'plat_pursuit', 'payments'}
+               'art_reveal', 'plat_pursuit', 'payments', 'challenges', 'gamelists'}
 
 
 def _is_first_party(module_name):

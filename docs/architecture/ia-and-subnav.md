@@ -80,11 +80,41 @@ that is merely *new* still has to fit one of the four.
 ("hunters are another thing you browse"), and while a profile is mostly PSN data, you look for a
 community member where the community is. It keeps `/hunters/` — a sub-nav move, not a URL move.
 
+### Challenges: a public page under a hub that does not exist yet
+
+Worth recording because it looks like a mistake and is not. The rebuilt Challenge system ships two
+surfaces, at two prefixes, for two different reasons:
+
+| Surface | Route name | Prefix | Why there |
+|---|---|---|---|
+| My Challenges | `my_challenges`, plus `challenge_start` and the run's write doors | `/my-challenges/` | personal, login-gated, a working surface |
+| A run's own page | `challenge_detail` | `community/challenges/<id>/` | **public.** A finished run is something you show somebody |
+
+`community/challenges/` is now the real browse page (runs in progress), with `community/challenges/hall-of-fame/`
+beside it for the finished ones — both rail items, both public read-only. The coming-soon placeholder that
+held this URL is **deleted** (`ChallengesComingSoonView` and its template are gone, 2026-09), which is what
+it was written for: it held the URL and the route name so the real browse could take both without a single
+link changing.
+
+The run page predates both, and the reason it was given a permanent public address first still stands: it is
+somebody's artefact rather than a hub item, so it needed an address that would not move when the hub around
+it arrived.
+
+**Its rail highlight needs a line in `_URL_NAME_TO_SLUG_OVERRIDES`,** and it shipped without one. Prefix
+matching resolves the *hub*; the active *item* is an exact `url_name` match, so `challenge_detail` lit
+nothing until it was mapped to the `challenges` item — the same silent failure this doc records for
+`job_detail`. Nesting a URL under a hub's prefix never lights an item.
+
+It has one consequence already handled: the run page's breadcrumb is the PUBLIC trail, not the owner's.
+Pointing it at *My Pursuit → My Challenges* sent anonymous readers to a login screen from a page that never
+asked them to sign in, and sent signed-in visitors to THEIR OWN runs from a page about somebody else's.
+
 **What did NOT move, and why the line holds:**
 
-- **My Lists and My Challenges will stay in My Pursuit → Tools.** The private side of a public system is
+- **My Lists and My Challenges stay in My Pursuit → Tools.** The private side of a public system is
   still personal and login-gated, exactly as *Collection* stays in My Pursuit while *Badges* sits in
-  Browse. A hub is not a feature's address; it is a mode.
+  Browse. A hub is not a feature's address; it is a mode. (`/my-challenges/` shipped there in
+  `feature/challenges/rebuild`, so this one is settled rather than planned.)
 - **Leaderboards stays raw PSN standings.** Challenge boards and the Hall of Fame will go to
   Community, because what they rank is participation in a PlatPursuit activity rather than a PSN
   fact.
@@ -267,6 +297,21 @@ both halves of what lives here, where "Membership" would name only one of them.
 - **Dynamic items** resolve their own URL (kwargs) before reaching the template; pass them via the
   `extras` tuple (the Profile item is the surviving example). Prefer piggybacking existing cache
   keys over new per-request DB reads.
+- **Attention marks** (2026-09-30) are per-viewer chips on an EXISTING item, so they come through
+  `build_rendered_items(..., tags={slug: (text, kind, aria)})` rather than `extras`. `tags` overrides an
+  item's chip ATOMICALLY {DASH} text, `tag_kind` and `tag_aria` together {DASH} so an entry with no text leaves the
+  config's own `'Soon'` untouched, and a mark can never wear a label's word or vice versa.
+  `RenderedSubnavItem.tag_kind` picks the look: `''` is the amber `'Soon'` chip, `count` the nav's primary
+  number, `xp` its accent lozenge. The marks must NOT borrow amber: on this site amber means "not ready yet",
+  which is the opposite of what a claimable reward says.
+
+  Today's only producer is `_subnav_marks` in `plat_pursuit/context_processors.py`: the My Pursuit strip's
+  Career item carries the claimable-contract count and My Challenges carries the XP mark, because the parent
+  nav item AGGREGATES and, with two pages now paying job XP, could not say which one it meant. It piggybacks
+  the nav's two cached keys (`career:claimable:<pk>`, `career:chalxp:<pk>`) exactly as the bullet above asks,
+  is gated on the `my_pursuit` hub key before any read, honours `?preview=career-markers` the same way the nav
+  does, and fails closed. Note `hub_subnav` is registered BEFORE `career_attention`, so the strip is the one
+  that pays a cold miss.
 
 ### The strip: desktop row + mobile collapse-to-grid
 

@@ -1,0 +1,62 @@
+{% comment %}One run as a card: in flight on `/community/challenges/`, in flight or finished on a hunter's
+profile tab. A finish shown off at full size is the Hall of Fame's `_run_hero.html`, because a finished run is
+a different object from a run in progress and neither is served well by the other's shape.
+
+NO COVER ART HERE, and the reason has changed even though the answer has not. It used to be cost -- a cover
+join per entry, with the `raw_response` blob that caused the May 2026 OOM sitting behind it. That objection
+is answered: `slot_render.boards_for` resolves every square of every run on a page in a FIXED number of
+queries -- six where a Job Coverage run is present, five without it, and fewer when there is nothing to
+resolve. Its own docstring carries the range; quoting a single number here is how this comment was wrong
+twice (first "four or five", the per-run figure for `slot_cards`, then a flat "five", which is only the
+A-Z-only case). What is left is a judgement about SUBJECT. An in-flight run's honest
+subject is how far along it is, and a mosaic of the squares already done says the opposite -- it shows the
+finished part of an unfinished thing. So this card keeps the run's own vocabulary (type, hunter, Horizon,
+Tally) and the art waits for the finish.
+
+A FINISHED STATE, for the profile's Challenges tab (2026-10-09). The Challenges page never sends one (its
+queryset is `is_complete=False`); a hunter's own tab lists their finished runs too, as the same card with the
+finish date on its foot line. No Finished chip beside the type: on a phone the two chips wrapped onto two lines
+and made finished cards taller than their neighbours, to say what the foot already says. The Hall of Fame keeps its own hero for a finish shown off at full size.
+
+`hide_hunter` drops the name line, for that same tab: every card there belongs to the profile it sits on.
+
+THE WHOLE CARD IS THE LINK. A run has one destination and no secondary action, so a nested anchor would be a
+second tab stop to the same place -- the browse-card pattern the design system settles on.
+
+`index` desyncs the supporter shimmer per card, which is why the mark takes it rather than inheriting it.
+{% endcomment %}
+{% load humanize mark_tags %}
+<a class="pp-crun pp-centry" href="{% url 'challenge_detail' run.pk %}">
+    <div class="pp-crun__head">
+        {% comment %}THE TYPE, as a chip with its name rather than an icon alone: a glyph by itself would need
+        decoding. `.bd-chip` is the house pill, the same one the run's own header uses for its state, and the
+        type's glyph rides inside it -- the one the run header and My Challenges wear, sized up a touch by
+        `.pp-crun__type svg` because Lucide's `case-sensitive` only fills the middle third of its box.
+        {% endcomment %}
+        <span class="bd-chip bd-chip--ghost pp-crun__type">{% include 'partials/icons/challenge_type.html' with type=run.challenge_type size='' %}{{ run.short_label }}</span>
+    </div>
+
+    {% comment %}THE HUNTER IS THE SUBJECT of this card -- the run's name is auto-generated and identical
+    across every run of a type, so the name would be the least informative thing on it. `name_mark` so a
+    supporter's mark travels here as it does on every other surface that credits somebody.{% endcomment %}
+    {% if not hide_hunter %}
+    <p class="pp-crun__hunter">{% name_mark name=run.profile.display_psn_username|default:run.profile.psn_username mark=run.profile.display_mark size='sm' index=index %}</p>
+    {% endif %}
+
+    <div class="pp-crun__tally">
+        <span class="pp-tally pp-tally--sm">{{ run.completed_count }}<span class="pp-crun__of">/{{ run.total_slots }}</span></span>
+        <span class="pp-crun__label">{{ run.unit }}</span>
+    </div>
+
+    {% comment %}The Horizon primitive, not a hand-rolled bar. `progress` is computed in the template because
+    it is a ratio of two fields already on the row -- no query, and `widthratio` is the one arithmetic Django
+    templates do honestly (the reward card's own comment records what chained `add` filters produce).{% endcomment %}
+    <div class="pp-crun__bar">
+        {% widthratio run.completed_count run.total_slots 100 as run_progress %}
+        {% include 'components/horizon.html' with progress=run_progress height='6px' %}
+    </div>
+
+    {% comment %}A CALENDAR SAYS WHEN IT LAST MOVED, NOT WHEN IT STARTED: it is filled from history at creation,
+    so "200/365 · Started 2 hours ago" implied two hundred days of progress since this morning.{% endcomment %}
+    <p class="pp-crun__foot">{% if run.is_complete %}Finished <time datetime="{{ run.completed_at|date:'c' }}">{{ run.completed_at|date:'j M Y' }}</time>{% elif run.challenge_type == 'calendar' %}Updated {{ run.updated_at|naturaltime }}{% else %}Started {{ run.created_at|naturaltime }}{% endif %}</p>
+</a>

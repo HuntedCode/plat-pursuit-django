@@ -1,0 +1,64 @@
+{% comment %}The toolbar both public challenge pages share: hunter search, the type switcher, and sort.
+
+ONE PARTIAL FOR TWO PAGES, taking `browse_url` and `form_id` from the host. The controls are identical; only
+the endpoint they submit to and the sorts on offer differ, and both of those are data.
+
+THE TYPE SWITCHER IS RADIO INPUTS INSIDE THE FORM, not a row of links, and that is the whole reason it is
+built this way -- `franchise_list.html` records it: switching preserves the active search and sort, native
+checked state and the browser Back button stay correct with no JS, and everything auto-applies through
+`browse-filters.js`. A switcher made of anchors would drop `?q=` and `?sort=` on every press.
+
+`data-live-search` + `data-page-search` are the shared filter controller's hooks; `hx-indicator` points at
+the grid so the spinner is the thing being replaced.{% endcomment %}
+<form data-browse-form data-live-search id="{{ form_id }}"
+      hx-get="{{ browse_url }}"
+      hx-target="#browse-results"
+      hx-push-url="true"
+      hx-swap="innerHTML"
+      hx-trigger="submit"
+      hx-indicator="#browse-results">
+    <div class="flex items-center justify-center md:justify-end mt-4 mb-3">
+        <div class="pp-switch pp-switch--ctypes" role="group" aria-label="Challenge type">
+            {% for value, display in types %}
+            <label class="pp-switch__chip">
+                <input type="radio" name="type" value="{{ value }}" class="sr-only" {% if selected_type == value %}checked{% endif %} />
+                {% comment %}EACH TYPE WEARS ITS OWN GLYPH, the shared one its run cards and My Challenges use.
+                This had three hand-inlined branches -- a `T` for A-Z, its own briefcase, and an `else` -- so the
+                Calendar fell into the `else` and wore the four-square grid that means "All".{% endcomment %}
+                {% if value %}
+                {% include 'partials/icons/challenge_type.html' with type=value size='' %}
+                {% else %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                {% endif %}
+                {{ display }}
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="pp-toolbar-card pp-gbrowse__toolbar">
+        <div class="pp-gbrowse__bar">
+            <span class="pp-bgal__search" data-search-wrap>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                {% comment %}BY HUNTER, and the placeholder says so. Runs are named automatically -- every A-Z
+                run carries the same name -- so there is no title to search and offering one would promise a
+                match that cannot happen.{% endcomment %}
+                <input type="text" name="q" value="{{ query }}" placeholder="Search hunters&hellip;" aria-label="Search by PSN name" data-page-search />
+                <span class="pp-search-spin" aria-hidden="true"></span>
+                <button type="button" class="pp-search-clear" data-search-clear tabindex="-1" aria-label="Clear search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+                <kbd class="pp-search-kbd" title="Press / to search" aria-hidden="true">/</kbd>
+            </span>
+
+            <label class="pp-gbrowse__sort">
+                <span class="sr-only">Sort</span>
+                <select name="sort" class="pp-gallery__select">
+                    {% for value, display in sorts %}
+                    <option value="{{ value }}" {% if selected_sort == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+    </div>
+</form>

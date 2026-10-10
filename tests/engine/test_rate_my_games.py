@@ -76,7 +76,9 @@ def test_it_sits_with_the_other_personal_tools():
     assert match['hub'].key == 'my_pursuit', 'the page no longer resolves to the personal hub'
     assert match['active_slug'] == 'rate_my_games'
     tools = [i.slug for i in match['hub'].items if i.group == 'Tools']
-    assert tools == ['shareables', 'recap', 'rate_my_games', 'my_lists'], tools
+    # The whole Tools list, so this test also notices a NEIGHBOUR moving -- which is how it caught
+    # `my_challenges` arriving. Rate My Games' own placement is the subject; the list is the witness.
+    assert tools == ['shareables', 'recap', 'rate_my_games', 'my_lists', 'my_challenges'], tools
 
 
 # ── One form, two hosts ───────────────────────────────────────────────────────────────────────────

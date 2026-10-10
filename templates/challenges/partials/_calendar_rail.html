@@ -1,0 +1,45 @@
+{% comment %}The day-marker LADDER: the five Calendar titles, which ones are earned, and how far to the next.
+
+IT REPLACED A LINEAR RAIL (owner, 2026-10-08: it "doesn't really do a great job of explaining what you get
+at the various milestones"). The rail drew five pips and five numbers and never said what a number was
+worth. Each rung now names its title and its state, so the header answers "what do I get, and when" without
+the tutorial.
+
+FIVE EQUAL CELLS, each filling across its own span (see `calendar_render.marker_rail`), because the linear
+rail put the 50 and 100 rungs about 40px apart on a phone, with no room for a title beside either.
+
+ONE MARKUP, TWO LAYOUTS: a row of five columns from `md:`, where each cell's bar joins the next into one
+segmented track; a list on a phone, where five columns of ~58px cannot hold "Calendar Chronicler" at the
+12px floor. On the phone a state glyph leads each row, and only the CURRENT rung keeps its bar, the one whose span the run is in. That is usually the next rung,
+but not on a second run below 50 days, where the first rung is already held and the next one's span has not
+started.
+
+THE FILE AND CONTEXT KEY KEEP THE RAIL'S NAME (`calendar_rail`): the ceremony reads the same dict, and a
+rename would touch every reader for no change in behaviour. The BLOCK is `.pp-cal-ladder`.
+
+"ALREADY YOURS" ONLY TO THE OWNER: the page is public, and a visitor reading a stranger's run is told
+"Already held" instead -- the second-person rule the opening ceremony's gate follows.
+
+THE COMPARISON FIGURE stays as a quiet footnote: `in_all` is the same days without the shovelware
+exclusion, which is what makes the count mean something read aloud.
+{% endcomment %}
+<div class="pp-cal-ladder">
+    {% comment %}AN ORDERED LIST, with `role="list"` because preflight's `list-style: none` strips the implicit
+    role on WebKit. The bars and glyphs are `aria-hidden`: the text in each item says everything they draw.{% endcomment %}
+    <ol class="pp-cal-ladder__rungs" role="list">
+        {% for rung in calendar_rail.markers %}
+        <li class="pp-cal-ladder__rung pp-cal-ladder__rung--{{ rung.state }}{% if rung.current %} pp-cal-ladder__rung--current{% endif %}" style="--fill: {{ rung.fill }}%; --rung: {{ forloop.counter0 }};">
+            <span class="pp-cal-ladder__bar" aria-hidden="true"><span class="pp-cal-ladder__barfill"></span></span>
+            <span class="pp-cal-ladder__glyph" aria-hidden="true">{% if rung.state == 'earned' or rung.state == 'reached' or rung.state == 'held' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{% endif %}</span>
+            <span class="pp-cal-ladder__text">
+                <span class="pp-cal-ladder__days">{{ rung.days }} days</span>
+                <span class="pp-cal-ladder__title">{{ rung.title }}</span>
+            </span>
+            <span class="pp-cal-ladder__status">{% if rung.state == 'earned' %}Earned{% elif rung.state == 'reached' %}Title pending{% elif rung.state == 'held' %}{% if is_owner %}Already yours{% else %}Already held{% endif %}{% elif rung.state == 'next' %}{{ rung.to_go }} to go{% elif rung.finishes %}Finishes the run{% else %}<span class="sr-only">Not yet earned</span>{% endif %}</span>
+        </li>
+        {% endfor %}
+    </ol>
+    {% if calendar_totals.all > calendar_rail.done %}
+    <p class="pp-cal-ladder__aside">{{ calendar_totals.all }} days with any platinum</p>
+    {% endif %}
+</div>

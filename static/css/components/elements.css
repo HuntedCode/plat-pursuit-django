@@ -140,12 +140,22 @@
 @media (min-width: 1024px) { .lab-dna { width: 132px; height: 132px; } }
 .lab-dna__ring { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: center; animation: labDnaIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .lab-dna__track { fill: none; stroke: var(--pp-bg-3); stroke-width: 12; }
-.lab-dna__arc { fill: none; stroke: var(--disc); stroke-width: 12; filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 60%, transparent)); transition: opacity 0.2s ease; }
+.lab-dna__arc { fill: none; stroke: var(--disc); stroke-width: 12; filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 60%, transparent)); transition: opacity 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease; }
 /* Idle spin of the discipline arcs (the centered Level sits in a separate overlay, so it stays put):
    a slow creep for most of the cycle, then a quick eased "whoosh" full spin. Hover pauses it. */
 .lab-dna__arcs { transform-box: fill-box; transform-origin: center; animation: labDnaSpin 26s infinite; }
 .lab-dna:hover .lab-dna__arcs { animation-play-state: paused; }
-.lab-dna__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; animation: labDnaCenter 0.45s 0.28s ease both; }
+/* `backwards`, NOT `both`, AND THE DIFFERENCE IS THE WHOLE ARC-HOVER FEATURE. A forwards fill persists the
+   final keyframe in the ANIMATION ORIGIN, which outranks every normal author declaration -- so `both` here
+   pinned `opacity: 1` forever and the two hover rules below (`.lab-dna:has(...) .lab-dna__center { opacity: 0 }`)
+   could never fire. The peek then faded in UNDERNEATH the still-visible Pursuer Level: two numbers and two
+   caps stacked, which reads as half-broken rather than as nothing. The transition cannot rescue it either,
+   since before/after-change styles are both computed WITH animations applied, so no transition starts.
+   The Hall of Fame worked only because the plaque kills this animation and re-fires it `backwards` itself.
+   Dropping the forwards half is visually free: `labDnaCenter`'s `to` (`opacity: 1; transform: none`) is
+   already this element's resting state. `.lab-dna__ring` keeps `both` deliberately -- same hazard, but
+   nothing declares a competing transform on it; if anything ever does, it needs this same word. */
+.lab-dna__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; animation: labDnaCenter 0.45s 0.28s ease backwards; }
 .lab-dna__level { display: block; font-size: 26px; line-height: 1; color: var(--pp-text); }  /* face via shared .pp-tally; resting = calm (the ring is the flourish, not the number) */
 /* Digit-responsive: the Pursuer Level is uncapped, so step the font down per extra digit
    so the number always nests comfortably inside the ring (inner d ~70px / ~79px) instead
@@ -167,7 +177,185 @@
     92%  { transform: rotate(360deg); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); } /* ...then a quick whoosh */
     100% { transform: rotate(720deg); }                                                       /* 720 === 0, seamless loop */
 }
-@media (prefers-reduced-motion: reduce) { .lab-dna__ring, .lab-dna__center, .lab-dna__arcs { animation: none; } }
+/* ── ARC HOVER: pop the arc, dim its siblings, swap the centre for that discipline's level ───────────
+ *
+ * THE `data-disc` HOOKS WERE *NOT* UNUSED, which four comments in this changeset originally claimed. A
+ * pre-existing block in `career.html` (`focusDisc`) wired arc AND legend hover with inline `style.opacity`,
+ * dimming arcs to 0.16 and legend rows to 0.4. An audit found it; one grep for `data-disc` would have. It
+ * was the third reuse miss on this feature, after the Pursuer Card's discipline band and the Frame's
+ * corner diamonds.
+ *
+ * THAT JS IS NOW DELETED and this rule set is the single implementation. The legend half of it lives in
+ * the `.lab-dna-pair` block at the bottom of this file, because the legend is a SIBLING of `.lab-dna` in
+ * `career.html` -- no `.lab-dna`-scoped selector can reach it, so the correlation needs a wrapper. Read
+ * that block before changing anything here: the two halves are one feature.
+ *
+ * NO JAVASCRIPT HERE, for the list's sake: the Hall of Fame stacks eight of these, so a scripted version
+ * means either 40 listeners or one delegated handler hit-testing SVG geometry. `:has()` costs nothing at
+ * runtime and is supported from Chrome 105 / Safari 15.4 / Firefox 121.
+ *
+ * ON THE SUPPORT FLOOR: an earlier version of this cited "this project's Chrome 111 / Safari 16.2", a floor
+ * that exists NOWHERE in the repo -- no `browserslist`, no lightningcss targets, no doc. The real floor is
+ * whatever Tailwind v4 requires (Chrome 111 / Safari 16.4 / Firefox 128), inherited implicitly, and `:has()`
+ * clears it on all three. Worth stating because the invented figure read like a checked constraint.
+ *
+ * ONLY ONE ARC ANIMATES AT A TIME, and the animated properties are `opacity`, `stroke-width` AND `filter`
+ * on a single `r=42` circle. An earlier version of this comment said "no `filter` transition", which this
+ * same diff falsified by adding one to `.lab-dna__arc`. It is within the rule rather than an exception to
+ * it: `motion-patterns.md` PRESCRIBES this shape (a zero-blur resting `drop-shadow` growing on hover, with
+ * `transition: filter`) and forbids it only on PAGE-SIZED elements. `.rp-ring__seg` already ships the same
+ * transition on a 58-66px ring.
+ *
+ * HOVER-ONLY IS ACCEPTABLE HERE because the peek is enrichment, not the only route to the number: Career
+ * renders all five as visible legend text, and nothing is removed from any accessible name. Touch devices
+ * simply do not get it, which is why it was not made the only home for the data.
+ *
+ * FIVE SLUG RULES, one per discipline, and the hardcoding is sound: `Job.DISCIPLINES` is a fixed `choices`
+ * set and `:root` in this file already hardcodes `--disc-combat` and friends the same way. What is DATA is
+ * how many jobs each discipline holds, not which five exist.
+ *
+ * GATED ON A REAL POINTER. `(any-hover: hover) and (any-pointer: fine)` is the house gate, documented in
+ * `badge-medallion.md`: plain `hover`/`pointer` check the PRIMARY device, which is `coarse` on a
+ * touchscreen laptop even with a mouse attached. Without the gate a tap on a touchscreen applies `:hover`
+ * and holds it until the next tap elsewhere -- and on Career the ring is not inside a link, so a stray tap
+ * would blank the Pursuer Level (the hero's headline number) and leave a 9px discipline cap in its place.
+ * An earlier comment here said "touch devices simply do not get it", which was false: they got a stuck
+ * version of it. */
+.lab-dna__peek {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    text-align: center;
+    pointer-events: none;   /* never steal the hover from the arc underneath */
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+/* Reuses `.lab-dna__level` / `.lab-dna__cap` so every size rung -- base, `--sm`, the 1024 bump -- applies
+   without a second set of figures. Only the colour differs, which is what ties the number to its arc. */
+.lab-dna__level--peek { color: var(--disc); }
+
+/* NO SIZE OR TRACKING OVERRIDE ON THE PEEK'S LABEL, and the attempt at one is worth recording because it
+ * made things worse in a way that looked clever.
+ *
+ * "EXPLORATION" overflowed the ring's inner hole -- eleven characters at `.lab-dna__cap`'s `0.2em` tracking,
+ * which is tuned for the five-character resting "LEVEL". The repair tightened the tracking and pinned
+ * `max-width: 60%` (the hole is 60% of the ring: `r=42`, `stroke-width: 12`, 120-unit viewBox).
+ *
+ * THE PERCENTAGE HAD NO DEFINITE CONTAINING BLOCK. `.lab-dna__peek` is a `place-content: center` grid, so
+ * its tracks are sized to their CONTENT -- `60%` therefore resolved against each label's own width, not
+ * against the ring, and clipped all five to 60% of themselves. The owner: "now they are all being shorted.
+ * It was only Exploration that was causing problems."
+ *
+ * THE FIX IS IN THE DATA, NOT THE CSS: `job_render.DISCIPLINE_SHORT` gives that one name a short form, so
+ * every label fits at the shared tracking and nothing is clipped. One word was the problem; one word got
+ * changed. */
+
+.lab-dna__center { transition: opacity 0.18s ease; }
+
+/* THE HOUSE RECIPE FOR EMPHASISING A RING SEGMENT, borrowed rather than invented: `.rp-ring__seg.is-linked`
+   on the reward panel thickens the stroke (3.4 -> 5, +47%) and brightens its drop-shadow. Here it is
+   12 -> 16, +33% -- SIMILAR rather than "the same proportions", as an earlier version claimed. That file's
+   base transition also carries a long `stroke-dasharray`; only its reduced-motion rule is the
+   `stroke-width` / `filter` pair quoted above.
+   Dimming the siblings uses the `transition: opacity` the arc has carried from the start, which is the
+   clearest sign a cross-highlight was always the intent -- the `data-disc` attributes were the other half
+   of that intent, and Career's JS had already acted on it. */
+/* THE GATE WRAPS THE HOVER RULES ONLY, and getting that boundary wrong is worth recording: the first
+   attempt opened it before `.lab-dna__peek`'s BASE rule, which put `opacity: 0`, `position: absolute` and
+   `pointer-events: none` inside it -- so on any touch device the peeks would have rendered visible, static
+   and in flow, five of them stacked inside the ring. A gate belongs around the BEHAVIOUR, never around the
+   resting state that behaviour reveals. */
+@media (any-hover: hover) and (any-pointer: fine) {
+.lab-dna:has(.lab-dna__arc:hover) .lab-dna__center { opacity: 0; }
+.lab-dna:has(.lab-dna__arc:hover) .lab-dna__arc { opacity: 0.2; }
+/* More specific than the dim rule above AND later, so the hovered arc wins both ways. */
+.lab-dna:has(.lab-dna__arc:hover) .lab-dna__arc:hover {
+    opacity: 1;
+    stroke-width: 16;
+    filter: drop-shadow(0 0 7px color-mix(in oklab, var(--disc) 85%, transparent));
+}
+
+.lab-dna:has(.lab-dna__arc[data-disc="combat"]:hover) .lab-dna__peek[data-disc="combat"],
+.lab-dna:has(.lab-dna__arc[data-disc="exploration"]:hover) .lab-dna__peek[data-disc="exploration"],
+.lab-dna:has(.lab-dna__arc[data-disc="mind"]:hover) .lab-dna__peek[data-disc="mind"],
+.lab-dna:has(.lab-dna__arc[data-disc="heart"]:hover) .lab-dna__peek[data-disc="heart"],
+.lab-dna:has(.lab-dna__arc[data-disc="finesse"]:hover) .lab-dna__peek[data-disc="finesse"] { opacity: 1; }
+
+}
+
+/* THE 76px RING CANNOT HOLD A SIX-LETTER CAP AT THE SHARED TRACKING. Measured from `Inter-Bold.ttf`'s own
+   advances: at 7px/0.16em "COMBAT" inks 38.3px and "FINESSE" 36.9px, against a 35.7px chord at the cap's
+   baseline -- the budget being a CHORD of the hole, not its diameter, and the hole being 56.7% of the ring
+   while an arc is thickened to 16 (r 34, not 36). So Combat overflowed by ~1.3px and Finesse by ~0.6px on
+   the home lobby below 1024px. Tightening the tracking for THIS size only buys ~3.4px on six letters.
+   Scoped to `--sm` rather than applied globally, which is the mistake the first attempt at this made.
+   OUTSIDE the gate above, like every other resting-state declaration: it sizes type the hover reveals,
+   it is not itself a hover rule. An earlier revision left this paragraph inside the gate while its rule
+   sat outside, which is a smaller version of the boundary mistake recorded a few lines up. */
+.lab-dna--sm .lab-dna__peek .lab-dna__cap { letter-spacing: 0.08em; }
+
+/* The arcs already pause their spin on ring hover (`.lab-dna:hover .lab-dna__arcs`), which is what makes a
+   moving target hoverable on Career and the lobby. The plaque kills the spin outright. */
+
+/* ── THE LEGEND LINK, for hosts that pair the ring with one ──────────────────────────────────────────
+ *
+ * Career shows a `.lab-dna-legend` beside the ring and used to cross-highlight the two with ~27 lines of
+ * JS (`career.html`, `focusDisc`). That JS predated the CSS above, reached only Career, dimmed with INLINE
+ * opacity that beat the stylesheet, and left one gesture behaving two ways once the CSS arrived: hovering an
+ * arc peeked, hovering a legend row did not. This replaces it.
+ *
+ * SCOPED TO `.lab-dna-pair`, WHICH IS THE WHOLE POINT. The ring and the legend are SIBLINGS, so no
+ * `.lab-dna`-scoped selector can correlate them -- a common ancestor is required, and Career's wrapper had
+ * no class. Hosts without a legend (the home lobby, the Hall of Fame plaque) have no such wrapper, so none
+ * of these rules match there and the `.lab-dna`-scoped set above remains the whole behaviour. That is the
+ * constraint this was built to: the plaque had to keep working untouched.
+ *
+ * `[data-disc]:hover` COVERS BOTH GESTURES IN ONE SET. Inside the wrapper the only hoverable elements
+ * carrying `data-disc` are the arcs and the legend rows -- the peeks carry it too but are
+ * `pointer-events: none`, so they can never match. One rule set therefore serves "hovered the arc" and
+ * "hovered the row" identically, which is what makes the two halves finally agree.
+ *
+ * THE ARC'S THICKEN STAYS ON ARC HOVER ONLY (the `.lab-dna`-scoped rule above). Spotlighting an arc from
+ * the legend is a pointer-at-a-distance gesture; growing the stroke under a cursor that is not there reads
+ * as a glitch, and the JS did not do it either. */
+@media (any-hover: hover) and (any-pointer: fine) {
+    .lab-dna-pair:has(.lab-dna-legend li:hover) .lab-dna__arcs { animation-play-state: paused; }
+
+    .lab-dna-pair:has([data-disc]:hover) .lab-dna__center { opacity: 0; }
+    .lab-dna-pair:has([data-disc]:hover) .lab-dna__arc { opacity: 0.2; }
+    .lab-dna-pair:has([data-disc]:hover) .lab-dna-legend li { opacity: 0.4; }
+
+    /* Per slug, because CSS cannot correlate "the hovered thing" with "the thing sharing its slug" without
+       naming the slug. One rule per discipline, three targets each: the peek, the arc, the legend row. */
+    .lab-dna-pair:has([data-disc="combat"]:hover) .lab-dna__peek[data-disc="combat"],
+    .lab-dna-pair:has([data-disc="combat"]:hover) .lab-dna__arc[data-disc="combat"],
+    .lab-dna-pair:has([data-disc="combat"]:hover) .lab-dna-legend [data-disc="combat"] { opacity: 1; }
+
+    .lab-dna-pair:has([data-disc="exploration"]:hover) .lab-dna__peek[data-disc="exploration"],
+    .lab-dna-pair:has([data-disc="exploration"]:hover) .lab-dna__arc[data-disc="exploration"],
+    .lab-dna-pair:has([data-disc="exploration"]:hover) .lab-dna-legend [data-disc="exploration"] { opacity: 1; }
+
+    .lab-dna-pair:has([data-disc="mind"]:hover) .lab-dna__peek[data-disc="mind"],
+    .lab-dna-pair:has([data-disc="mind"]:hover) .lab-dna__arc[data-disc="mind"],
+    .lab-dna-pair:has([data-disc="mind"]:hover) .lab-dna-legend [data-disc="mind"] { opacity: 1; }
+
+    .lab-dna-pair:has([data-disc="heart"]:hover) .lab-dna__peek[data-disc="heart"],
+    .lab-dna-pair:has([data-disc="heart"]:hover) .lab-dna__arc[data-disc="heart"],
+    .lab-dna-pair:has([data-disc="heart"]:hover) .lab-dna-legend [data-disc="heart"] { opacity: 1; }
+
+    .lab-dna-pair:has([data-disc="finesse"]:hover) .lab-dna__peek[data-disc="finesse"],
+    .lab-dna-pair:has([data-disc="finesse"]:hover) .lab-dna__arc[data-disc="finesse"],
+    .lab-dna-pair:has([data-disc="finesse"]:hover) .lab-dna-legend [data-disc="finesse"] { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lab-dna__ring, .lab-dna__center, .lab-dna__arcs { animation: none; }
+    /* THE HOVER TRANSITIONS STAY, following `.rp-ring__seg`'s own reduced-motion rule, which keeps its
+       `stroke-width` / `filter` transitions and drops only the long `stroke-dasharray` one. These are 0.2s
+       state changes that convey information, not decorative motion -- and a peek that snaps in with no
+       fade reads as a glitch rather than as a quieter animation. */
+}
 
 .lab-dna-legend { display: grid; gap: 3px; }
 .lab-dna-legend li { display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: 8px; font-size: 12px; color: var(--pp-text-dim); cursor: default; transition: opacity 0.2s ease; }
@@ -1335,4 +1523,101 @@
     /* Shorter than the 18vh above: the covers have to clear the footer on a 667px screen. */
     .nc__hero-art { max-height: 15vh; }
     .nc__toolbar { padding-top: 8px; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+ * THE PURSUER RANK TABLE (Career, 2026-10-09). The hero's rank bar is a button (`.pgl-open`) that opens
+ * `_rank_ladder.html`: every rank, its five divisions and the level each starts at.
+ *
+ * THE RANK HUE NEVER CARRIES TEXT. `--rank-*` runs from a grey (Newbie) to a near-white (Ascendant), so a
+ * name or number drawn in it fails contrast at one end or the other. The hue is on the dot, the stripe and
+ * the tint behind the current division; the words stay on the text tokens.
+ * ───────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.pgl-open {
+    display: block; width: calc(100% + 16px); margin: 10px -8px 0; padding: 6px 8px;
+    text-align: left; color: inherit; font: inherit; background: none; border: 0; border-radius: 12px;
+    cursor: pointer; transition: background-color 0.18s ease, box-shadow 0.18s ease;
+}
+.pgl-open .pgl { margin-top: 0; }
+.pgl-open:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pgl__more { display: inline-block; width: 12px; height: 12px; margin-left: 2px; vertical-align: -1px; opacity: 0.7; transition: transform 0.18s ease, opacity 0.18s ease; }
+/* Hover only where hover is real: on touch the tint would stick on the bar after the modal closes. */
+@media (hover: hover) {
+    .pgl-open:hover { background: color-mix(in oklab, var(--pgl-cur-c, var(--pp-primary)) 7%, transparent); box-shadow: 0 0 0 1px color-mix(in oklab, var(--pgl-cur-c, var(--pp-primary)) 22%, transparent); }
+    .pgl-open:hover .pgl__more { transform: translateX(2px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .pgl-open:hover .pgl__more { transform: none; } }
+
+/* THE DIALOG IS A FRAME, the new-contracts modal's pattern (`.nc__dialog` above): pinned to 88vh, the
+   header holds still and only `.prk-list` scrolls. `.pp-howto` plus the class outranks the mold's 940px
+   whatever the import order. `min-width: 0` because a grid item's content-based minimum re-arms whenever
+   its overflow is visible, and the shared close rule makes it visible for the fade. */
+.pp-howto .prk-dialog {
+    width: min(560px, 100%); max-height: 88vh; overflow: hidden; min-width: 0;
+    display: flex; flex-direction: column;
+}
+.pp-howto .prk-dialog > .pp-detail-modal__body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+/* A PHONE GIVES THE LIST THE ROOM. At 375px the fixed header left space for about one rank, so below md the
+   "Got it" button goes (the pinned close X and the scrim still dismiss) and the lede and summary tighten. */
+@media (max-width: 767.98px) {
+    #rank-ladder .pp-howto__actions { display: none; }
+    #rank-ladder .pp-forge__lede { margin-bottom: 10px; }
+    #rank-ladder .prk-now { margin-bottom: 10px; padding: 8px 10px; }
+}
+
+.prk-now {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 14px; padding: 10px 12px;
+    border-radius: 12px; background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    border-left: 3px solid var(--rk);
+}
+.prk-now__label { font-size: 16px; font-weight: 800; color: var(--pp-text); }
+.prk-now__lv { font-size: 12px; color: var(--pp-text-dim); }
+.prk-now__lv b { color: var(--pp-text); }
+.prk-now__next { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--pp-text-mute); }
+
+/* The scroll container. Positioned, so it is each row's offsetParent (the open-time centring reads one
+   offsetTop). `overscroll-behavior` because the page has no scroll lock behind the modal. */
+.prk-list {
+    list-style: none; margin: 0; padding: 0 4px 2px 0; display: flex; flex-direction: column; gap: 6px;
+    position: relative; flex: 1 1 auto; min-height: 120px; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+.prk {
+    padding: 9px 10px 10px 12px; border-radius: 12px; background: var(--pp-bg-1); border: 1px solid var(--pp-border);
+    border-left: 3px solid color-mix(in oklab, var(--rk) 70%, transparent);
+}
+.prk.is-locked { border-left-color: var(--pp-bg-3); }
+.prk.is-current {
+    background: color-mix(in oklab, var(--rk) 8%, var(--pp-bg-1));
+    border-color: color-mix(in oklab, var(--rk) 45%, var(--pp-border)); border-left-color: var(--rk);
+    box-shadow: 0 0 14px color-mix(in oklab, var(--rk) 18%, transparent);
+}
+.prk__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.prk__dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 999px; background: var(--rk); box-shadow: 0 0 8px color-mix(in oklab, var(--rk) 55%, transparent); }
+.prk.is-locked .prk__dot { background: var(--pp-bg-3); box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--rk) 60%, transparent); }
+.prk__name { font-size: 14px; font-weight: 800; color: var(--pp-text); }
+.prk.is-locked .prk__name { color: var(--pp-text-dim); }
+.prk__here {
+    font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text);
+    padding: 2px 7px; border-radius: 999px; background: color-mix(in oklab, var(--rk) 24%, transparent);
+    border: 1px solid color-mix(in oklab, var(--rk) 55%, transparent);
+}
+.prk__lv { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prk__meta { margin: 3px 0 0 17px; font-size: 0.78rem; color: var(--pp-text-dim); }
+
+.prk__divs { list-style: none; margin: 8px 0 0 17px; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.prk__div {
+    display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 4px 2px 5px;
+    border-radius: 8px; background: var(--pp-bg-2); border: 1px solid transparent;
+}
+.prk__div-n { font-size: 12px; font-weight: 800; color: var(--pp-text-mute); }
+.prk__div-lv { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.prk__div.is-reached { border-color: color-mix(in oklab, var(--rk) 30%, transparent); }
+.prk__div.is-reached .prk__div-n, .prk__div.is-reached .prk__div-lv { color: var(--pp-text-dim); }
+.prk__div.is-current { background: color-mix(in oklab, var(--rk) 22%, var(--pp-bg-2)); border-color: var(--rk); }
+.prk__div.is-current .prk__div-n, .prk__div.is-current .prk__div-lv { color: var(--pp-text); }
+@media (min-width: 768px) {
+    .prk { padding: 10px 14px 11px 14px; }
+    .prk__divs { gap: 6px; }
+    .prk__div { flex-direction: row; justify-content: center; gap: 6px; padding: 5px 4px; }
 }

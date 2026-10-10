@@ -38,9 +38,22 @@ from django.core.management.base import BaseCommand
 #:      rewrites ProfileGame.progress for the affected games, dropping owners back below 100%
 #:   6. process_contracts --all reads ProfileGame.progress, so it MUST follow the DLC sweep or it would
 #:      stamp contract reaches that step 5 is about to invalidate
-#:   7. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
+#:   7. process_challenges completes Challenge squares whose contract the owner has finished, which it
+#:      reads from the `EarnedContract` rows step 6 writes -- so it MUST follow it. Run first it would
+#:      sweep yesterday's rows and report nothing to do on exactly the night a contract went live.
+#:      No watermark of its own: it asks a bounded question (which filled, unfinished squares name a
+#:      contract their owner finished?) over a very small table, so there is nothing to
+#:      ration and a cursor would only create a way to miss something (26 rows for a letter run, 25 for
+#:      a jobs run).
+#:      DELIBERATELY NOT a `DEPENDS_ON` entry, despite reading like one. That map makes a step SKIP, and
+#:      a half-written `EarnedContract` set is not a poisoned input here: completion is additive and
+#:      sticky, so this sweeps what it can see and picks up the rest tomorrow. Most of what it completes
+#:      may well have been stamped on earlier nights, in which case skipping it forfeits work unrelated
+#:      to tonight's failure. (Expected rather than measured -- the feature has not shipped.) Contrast `clean standings`, whose whole argument is that a rebuild MATERIALIZES a
+#:      snapshot that never consistently existed.
+#:   8. recompute_milestones reads badge standings, ProfileJobXP and the profile counters, so it is last
 #:      among the writers
-#:   8. audit_badge_coverage   read-only report; last because it is the least urgent
+#:   9. audit_badge_coverage   read-only report; last because it is the least urgent
 #:
 #: STEPS 1 AND 2 MOVED HERE (2026-09) from `update_shovelware`'s own 04:00 Render entry -- the same slot
 #: this command runs in, so the two overlapped and the order between them was undefined. Folding them in
@@ -59,11 +72,11 @@ from django.core.management.base import BaseCommand
 #: it in too is the right end state and is left as the next bite of the standing FOLLOW-UP in
 #: docs/guides/cron-jobs.md, rather than widening a leaderboard branch into the contracts pipeline.
 #:
-#: Steps 6 and 7 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
+#: Steps 6, 7 and 8 are the DRIFT NETS, and they are the reason this list is not just the badge chain.
 #: Sync only evaluates what a sync TOUCHED, so anything authored after a hunter last touched the relevant
 #: game is invisible to them forever without a sweep. `evaluate_badges --all` has always been badges'
-#: net; contracts and milestones had none. A Contract published for a game 10,000 hunters already
-#: platinumed reached exactly zero of them until this ran.
+#: net; contracts, challenges and milestones had none. A Contract published for a game 10,000 hunters
+#: already platinumed reached exactly zero of them until this ran.
 #:
 #: Step 6 runs INCREMENTAL. A full contract sweep is O(contracts x candidates) and, stacked on step 4's
 #: pass over every profile, put this chain past any plausible window. Incremental sweeps only Contracts
@@ -77,6 +90,7 @@ STEPS = [
     ('badge evaluation', 'evaluate_badges', {'all': True}),
     ('DLC detection', 'detect_dlc_and_refresh', {}),
     ('contract detection', 'process_contracts', {'all_profiles': True, 'incremental': True}),
+    ('challenge detection', 'process_challenges', {}),
     ('milestone recompute', 'recompute_milestones', {}),
     ('badge coverage audit', 'audit_badge_coverage', {}),
 ]

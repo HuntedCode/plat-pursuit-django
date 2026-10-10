@@ -252,7 +252,12 @@ cannot fail a sync.
 
 ### Challenge Progress
 
-**Challenges retired (2026-08).** The A-Z / Calendar / Genre challenge checks were removed from `_job_sync_complete()` with the Challenge system.
+Two calls in the **`stats_badges`** phase of `_job_sync_complete()`, each wrapped so a failure is logged and never breaks the sync:
+
+- `challenges.services.challenge_service.detect_for_profile(profile)` completes every A-Z / Job Coverage square whose contract the hunter has now finished (an `EarnedContract` row exists). It **must follow** `check_profile_contracts`, which is what writes that row, or squares finished on this very sync would wait for the nightly sweep.
+- `challenges.services.calendar_fill.refresh_for_profile(profile)` refreshes the hunter's Plat Calendar runs from the platinums this sync wrote: the fill set is computed once and each run is contained.
+
+The nightly `process_challenges` is the drift net for both (see [Cron Jobs](../guides/cron-jobs.md#process_challenges)).
 
 ### Milestones
 

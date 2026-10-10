@@ -158,6 +158,40 @@ Used in premium analytics modules where multiple stat groups sit side by side.
 </div>
 ```
 
+### Recessed Case (a surface artwork sits *in*)
+
+The complement to Inner Panels. Inner Panels lighten to come *up* off the card; a case darkens to go
+*down* into it. Reach for it when a container holds **artwork or media in a grid** rather than text, where
+the point is to make the content pop off a plane instead of grouping some stats.
+
+```css
+border-radius: 11px;
+border: 1px solid var(--pp-border);
+background: var(--pp-bg-1);               /* ONE STEP BELOW ITS HOST -- see the gotcha */
+box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+```
+
+**The background token is relative to what the case sits on, not fixed.** The two instances differ for
+that reason, and copying either blindly is the mistake:
+
+| Instance | Background | Why that one |
+|---|---|---|
+| Challenge run frame (`challenges.css`, `.pp-chero__frame`) | `--pp-bg-1`, untinted | Sits on a `--pp-bg-2` card. One step down separates; two reads as a hole. |
+| Game Lists arranging surface (`gamelists.css`) | `--pp-bg-0` + 5% `--pp-primary` | A transient *mode*, not a permanent container — it wants maximum separation, and the accent tint is what says "you are in a mode" rather than "this is a case". |
+
+Pair it with content that visibly lifts. The Game Lists comment is right that the darker plane and the
+raised cards are **one signal**; a case under flat content just looks like a hole.
+
+**Gotchas and Pitfalls**
+
+| Trap | Why |
+|---|---|
+| Copying a token instead of the step | On a `--pp-bg-2` card, `--pp-bg-0` is rgb(5,8,12) against rgb(43,49,56) and reads as a hole punched through it; `--pp-bg-1` (rgb(24,29,35)) separates cleanly. On the page substrate the same two tokens trade places. Pick by the host surface. |
+| A border with no surface change | Only half the fix. The container still shares the card's colour, so it still blends — the surface is the separation, the border is just the edge. |
+| Nesting cases inside cases | A case inside a case inside a card is the frame-in-a-frame the challenge board shipped and had removed. One case beside one plate, not five nested. |
+| **Putting it on the wrong element** | The case belongs on whichever element owns the radius and the clip, not on its child. The challenge board got the surface and border first; since it is the frame's only child and the frame has no padding, `border-box` made the two boxes coincident, so the child's opaque background painted over the frame's surface **and all three of its inset shadows** (an inset shadow paints under children). It looked right and silently buried a tuned effect. Give the container the paint and leave the child as layout. |
+| Forgetting the text on it | Any label sitting directly on the case moved surfaces. Re-measure: darker helps light text, but "it was fine before" is not an argument. See the contrast note under Color and Contrast Tokens. |
+
 ### List Item Rows (icon + text + metadata)
 
 Used for game lists, badge lists, activity feeds, leaderboard entries.
@@ -241,7 +275,7 @@ Shared primitive for ANY tier/rank progression (`static/css/components/elements.
 </div>
 ```
 
-- **Consumers**: Pursuer rank ladder (Career hero, `.pgl--rank`), job prestige ladder (job detail), claim ceremony rank-up (`.is-charging`), badge tier ascent rail (`.pgl--static`). Reuse it — don't re-roll a ladder.
+- **Consumers**: Pursuer rank ladder (Career hero, `.pgl--rank`, wrapped in the `.pgl-open` button that opens the full rank table; a `.pgl` inside a button must be built from spans), job prestige ladder (job detail), claim ceremony rank-up (`.is-charging`), badge tier ascent rail (`.pgl--static`). Reuse it — don't re-roll a ladder.
 - **`.pgl--static`**: disables the entrance choreography (rung draw cascade, current-rung bloom, division ticks) for a resting filled rail — use inside HTMX swap islands or wherever you just want the meter.
 - **Reduced motion**: the mount animations are gated; the resting filled state is the reduced-motion fallback.
 
@@ -652,7 +686,11 @@ lets `currentColor`/token colours flow). The Lucide signature to match:
   re-copied/updated later). Size with Tailwind `w-*`/`h-*`; colour via `stroke` (a token, not a hex).
 - **Shared includes** live in `templates/partials/icons/` (`check`, `percent`, `user`, `octagon-alert`
   via `privacy_warning.html`, `globe`, etc.) — reuse these rather than re-inlining. Each takes `color` +
-  `size` params. Job icons are the Lucide sprite behind the `{% job_icon %}` templatetag.
+  `size` params. Job icons are the Lucide sprite behind the `{% job_icon %}` templatetag. **A challenge
+  type's glyph** is `partials/icons/challenge_type.html` (`type`, `size`, optional `extra_class`): `case-sensitive` for A-Z,
+  `briefcase` for Job Coverage, `calendar-days` for the Plat Calendar, the generic flag for anything else.
+  Every surface that names a type uses it, so a type looks the same on My Challenges, the hub and its run
+  page.
 - **Brand-mark exceptions** (NOT Lucide, deliberately): `partials/icons/ps_logo.html` (the PlayStation
   wordmark) and `partials/icons/pp_logo.html` (the PlatPursuit logo image). Use these for their brands;
   Lucide has no equivalent and shouldn't.
@@ -694,6 +732,8 @@ These conventions apply site-wide and are not affected by the redesign:
 ### Game Image Fallback Chain
 
 Use `{{ game.display_image_url }}` — this is the single source of truth for the IGDB-first fallback chain. Pair it with `{% if game.has_cover_art %}` when the template needs to differentiate styling (real cover art gets `object-cover object-top`; the generic `title_icon_url` fallback gets `object-contain p-3`).
+
+**Three variants share that chain and differ only in the IGDB size they request** — `display_image_url` (`cover_big`), `display_image_url_small` (`cover_small_2x`, for surfaces drawing many covers at thumbnail size) and `display_image_url_large` (`cover_big_2x`, for share cards). Choose by **device** pixels, not CSS pixels: multiply the rendered CSS width by 3 before picking, because a phone is the high-DPI case and that is where a too-small source looks worst. [igdb-integration.md](../architecture/igdb-integration.md) has the sizes, the reasoning and a worked example.
 
 The chain `Game.display_image_url` implements:
 

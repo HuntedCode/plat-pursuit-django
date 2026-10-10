@@ -867,6 +867,54 @@ class Game(models.Model):
         return self._display_image_url(igdb_size='cover_big_2x')
 
     @property
+    def display_image_url_small(self):
+        """display_image_url variant requesting IGDB's `t_cover_small_2x`
+        (180x256) instead of `t_cover_big` (264x374). Same 3:4 portrait
+        ratio. For surfaces that render MANY covers at thumbnail size --
+        the challenge Hall of Fame board draws 25-26 of them per row.
+
+        WHY THE `_2x` OF SMALL RATHER THAN `cover_small` ITSELF, which is
+        the trap this exists to document. A phone is the HIGH-DPI case, so
+        a 90x128 source looks comfortably big only at 1x. `cover_small`
+        would be visibly soft on nearly every phone -- worst on the device
+        class a smaller source is meant to help.
+
+        THE TWO BOARDS ARE DIFFERENT SIZES, which an earlier version of
+        this docstring got wrong by measuring one and describing both.
+        A-Z is NINE squares across, Job Coverage is FIVE per shelf
+        (`challenges.css`, `.pp-chero--az` / `--jobs .pp-chero__sq`):
+
+            A-Z   32px at 375 -> 112px at the container cap
+            jobs  60px at 375 ->  99px
+
+        So the device-pixel demand spans ~97px (A-Z at 375 on a 3x phone)
+        to ~225px (A-Z at the cap on a 2x desktop).
+
+        180 IS THE DELIBERATE UNDER-SERVE, and the real figure is worth
+        stating plainly: it covers a 3x phone on the jobs board (179)
+        exactly, and is ~20% short of the A-Z board at desktop-retina.
+        The only step up is `cover_big` (264), which would cover every
+        case and surrender the whole 53% saving. A 1.25x upscale on a
+        112px cell is the price; bandwidth on phones is what it buys.
+        (An earlier version said "~10% short", which was derived from the
+        wrong maximum -- the trade is twice what it claimed.)
+
+        NOT FOR THE DETAIL PAGE. `.pp-csq-grid` renders 3-7 columns
+        (3 / 4 at 640 / 6 at 768 / 7 at 1024), so its squares run ~109px
+        at base, ~176px at the top of the 4-column band, and ~131px at
+        1024 -- consistently larger than the hero's, and wanting
+        `cover_big`. A density `srcset` would serve both properly, but
+        the project has no precedent for one (`landing.html`'s is
+        webp/png format switching, not resolution), so two named sizes
+        stay the cheaper answer.
+
+        PSN fallback URLs are unchanged -- they have no size knob, so a
+        concept without a trusted IGDB match still serves full-size art.
+        A partial win by construction, worth stating rather than finding.
+        """
+        return self._display_image_url(igdb_size='cover_small_2x')
+
+    @property
     def has_cover_art(self):
         """True if display_image_url returns real cover art (IGDB/PSN), not
         just the generic title_icon_url fallback. Templates use this to
@@ -3029,7 +3077,17 @@ class ContractXPGrant(models.Model):
     base_t; other sources leave those null. (Model rename to JobXPGrant is optional polish.)
     """
     TIER_CHOICES = [('platinum', 'Platinum'), ('full', '100%')]
-    SOURCE_CHOICES = [('contract', 'Contract'), ('quest', 'Quest'), ('event', 'Event'), ('manual', 'Manual')]
+    # 'challenge' carries `source_id` = the ChallengeSlot id, which is also half of its idempotency
+    # guard -- see the two constraints in Meta. `grant_job_xp` has no built-in idempotency for
+    # null-`earned_contract` grants, and this ledger is append-only, so a double-pay can only ever be
+    # offset, never removed.
+    #
+    # NOT the first non-contract source, despite being the first with constraints: `seed_career_demo`
+    # writes `source='seed'`, and that value is absent from this list -- which is why no blanket
+    # source check sits beside the two new constraints below. Adding one would break that command.
+    # Either add 'seed' here or leave the gap knowingly; it is recorded rather than silently inherited.
+    SOURCE_CHOICES = [('contract', 'Contract'), ('quest', 'Quest'), ('event', 'Event'),
+                      ('manual', 'Manual'), ('challenge', 'Challenge')]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='contract_xp_grants')
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='xp_grants')
@@ -3050,6 +3108,42 @@ class ContractXPGrant(models.Model):
         unique_together = ['earned_contract', 'job', 'tier']
         indexes = [
             models.Index(fields=['profile', 'job'], name='xpgrant_profile_job_idx'),
+        ]
+        constraints = [
+            # THE 'challenge' SOURCE OWNING ITS IDEMPOTENCY, as the comment above requires of every
+            # null-`earned_contract` source. A challenge slot pays its job exactly once: `source_id`
+            # is the slot's id, so this is one row per (profile, job, slot).
+            #
+            # A guard here rather than only in the service because this ledger is APPEND-ONLY: there
+            # is no delete path to undo a double-pay, only a negating row, so the database is the
+            # right place to refuse the second write. `challenges.models.ChallengeSlot.xp_redeemed_at`
+            # is the other half, and catches the same mistake one layer earlier with a better message.
+            # NOTE there is no writer yet: `challenges/services/` is empty until the rewards chunk, so
+            # both of these rules are currently exercised only by tests.
+            #
+            # The condition is SCOPING, not protection, and it is worth being exact about that: a
+            # blanket unique over these four columns would behave identically for the sibling sources,
+            # because `contract` and `manual` rows carry `source_id=None` and Postgres treats NULLs as
+            # DISTINCT in a unique index -- they would never collide either way. What naming the
+            # source buys is that a future `quest` or `event` integration is left to own its own
+            # idempotency, per the rule stated above, instead of silently inheriting this one.
+            models.UniqueConstraint(
+                fields=['profile', 'job', 'source', 'source_id'],
+                condition=Q(source='challenge'),
+                name='xpgrant_challenge_once_per_slot'),
+            # AND THE HALF THAT MAKES THE UNIQUE ABOVE MEAN ANYTHING. Same NULL-distinctness fact,
+            # pointing the other way this time: without this, a challenge grant written with
+            # `source_id=None` collides with nothing and can be inserted without limit, which is
+            # exactly the unbounded double-pay the unique index was added to prevent. Found by audit
+            # after the unique had already been written and tested -- the tests used a real
+            # `source_id`, so they never went near the hole.
+            #
+            # Expressed as "a challenge grant must identify its slot" rather than fixed with
+            # `nulls_distinct=False`, because that is the true statement about the data. A challenge
+            # grant with no slot is not a deduplication problem; it is a row nobody can trace.
+            models.CheckConstraint(
+                condition=~Q(source='challenge') | Q(source_id__isnull=False),
+                name='xpgrant_challenge_needs_source_id'),
         ]
 
     def __str__(self):
@@ -4268,6 +4362,14 @@ class UserTitle(models.Model):
         ('badge', 'Badge'),
         ('milestone', 'Milestone'),
         ('badge_series', 'Badge Series'),   # grouping-badge rebuild: series-level title, kept distinct from legacy 'badge'
+        # Challenge completion titles, to be granted by `challenges.services.rewards` (not yet built)
+        # with `source_id` = the Challenge id. DELIBERATELY NOT routed through `BadgeSeries.title`, which is one nullable
+        # FK meaning "the title for this series": challenges award TWO titles (first completion and
+        # second), and expressing that as a second FK would ripple through `badge_adapters`,
+        # `sync_series_titles` (which groups by title ACROSS series and would prune the second one as
+        # orphaned) and `title_views`. The challenge system owns these rows outright instead, which
+        # also keeps them standing while the badge half of the reward is still deferred.
+        ('challenge', 'Challenge'),
     ]
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='user_titles')

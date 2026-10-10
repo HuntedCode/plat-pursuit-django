@@ -1844,3 +1844,15 @@ def get_plat_card_themes():
             entry['game_image_source'] = data.get('game_image_source', 'game_image')
         out.append((key, entry))
     return out
+
+
+def get_ground_themes():
+    """`get_plat_card_themes` without the art backings: the DESIGNED grounds only.
+
+    For every card that has no single game to back it -- the recap, the Profile Card, a challenge run. An
+    art ground on one of those would composite nothing and silently render as a gradient, so their PICKERS
+    must not offer it. The PNG endpoints each validate `?theme=` their own way (the challenge card falls
+    back to the house ground; the recap and the Profile Card check `GRADIENT_THEMES`), so this is the
+    pickers' shared palette, not a shared validator.
+    """
+    return [(key, theme) for key, theme in get_plat_card_themes() if not theme.get('is_game_art')]

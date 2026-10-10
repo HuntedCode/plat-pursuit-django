@@ -102,6 +102,17 @@ Disallow: /community/lists/*/sections/
 # blocked and the detail pages are in a sitemap, which makes the shape guessable.
 Disallow: /community/lists/*/edit/
 
+# Challenges (2026-10). The browse page, the Hall of Fame and the run pages ARE crawlable, and finished runs are
+# in a sitemap. These two are not pages:
+#
+#   /my-challenges/   personal and login-only, so a crawler gets a redirect to login; the picker, share and
+#                     write doors under it answer JSON, a PNG or POST-only
+#   .../day/          a Calendar day square: a bare HTML fragment fetched into the run page's sheet
+#
+# `*/day/` cannot match a run page: `/community/challenges/<id>/` has no `/day/` segment after the id.
+Disallow: /my-challenges/
+Disallow: /community/challenges/*/day/
+
 # Profile-scoped variants of canonical pages (/games/<np>/<user>/ etc.) are NOT
 # handled here any more (2026-08-23, SEO Lane 0). The old wildcard rules
 # (/games/*/*) ALSO matched the canonical pages themselves: in robots syntax `*`

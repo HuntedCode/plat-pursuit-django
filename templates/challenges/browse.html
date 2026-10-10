@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Challenges{% endblock %}
+{% block meta_description %}{{ seo_description }}{% endblock %}
+
+{% block content %}
+<div class="pp-gbrowse">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% comment %}THE PAGE HEADER CARD, to the design system's spec: `border-l-4 border-l-primary`, the body
+    cascading in, and a `.pp-tally` headline number. The number is the count of runs IN FLIGHT, which is the
+    honest headline for this page -- it is the one thing a visitor cannot get from the grid at a glance, and it
+    says the system is being used.
+
+    IT REPLACED A COMING-SOON PLACEHOLDER at this same URL, so a reader arriving from an old link lands on the
+    real thing rather than a redirect.{% endcomment %}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6 pp-head-cascade">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Challenges</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        Runs in progress across the community. Finished ones move to the
+                        <a href="{% url 'challenges_hall_of_fame' %}" class="link link-hover">Hall of Fame</a>.
+                    </p>
+                    {% comment %}THE INTRO, ON REQUEST ONLY. This page is public and browsed by people who may never
+                    start a run, so it never opens itself here; My Challenges is where it auto-opens.{% endcomment %}
+                    <button type="button" class="pp-edhint mt-2" data-ctut-open="challenges-intro">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        How Challenges work
+                    </button>
+                </div>
+
+                <div class="text-right flex items-baseline gap-1 whitespace-nowrap md:block shrink-0">
+                    {% comment %}NO `data-countup`: neither script this page loads initialises it, and
+                    `utils.js` has no global auto-init for it -- see the matching note on the Hall of Fame's
+                    header. The number renders from its text node.{% endcomment %}
+                    <span class="pp-tally text-primary leading-none font-bold text-sm md:text-3xl">{{ in_flight }}</span>
+                    {% comment %}`text-xs` (12px) at every width -- see the matching note on the Hall of
+                    Fame's header. 10.4px is below the project's type floor, and the CSS guard cannot see a
+                    Tailwind arbitrary value in a template.{% endcomment %}
+                    <span class="text-xs text-base-content/50 md:mt-1 md:block md:uppercase md:tracking-wider">in flight</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %}NO TOOLBAR OVER AN EMPTY PAGE: with no runs at all, a search box and type chips filter nothing.
+    Kept whenever a filter is set, so a reader can always clear what they typed.{% endcomment %}
+    {% if in_flight or has_filters or query %}
+    {% include 'challenges/partials/_browse_toolbar.html' with browse_url=browse_url form_id='ch-form' %}
+    {% endif %}
+
+    {% comment %}THE STABLE SWAP TARGET. Only its contents are replaced, so the sentinel and spinner below --
+    which live OUTSIDE it -- survive every filter change rather than being torn out by the thing that needs
+    them.{% endcomment %}
+    <div id="browse-results">
+        {% include 'challenges/partials/browse_results.html' %}
+    </div>
+
+    <div id="ch-sentinel" class="h-4" aria-hidden="true"></div>
+    <div id="ch-loading" class="pp-gbrowse__loading hidden"><span class="pp-gbrowse__spinner" aria-hidden="true"></span></div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+    <script src="{% static 'js/challenges-browse.js' %}"></script>
+    <script src="{% static 'js/challenge-tutorials.js' %}"></script>
+{% endblock %}
+
+{% block fixed_overlays %}
+{{ block.super }}
+{% include 'challenges/partials/_challenges_intro.html' %}
+{% endblock %}

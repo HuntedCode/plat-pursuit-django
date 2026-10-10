@@ -1,0 +1,182 @@
+{% load humanize %}
+{% comment %}WHAT THIS RUN PAYS, and the place its XP is claimed.
+
+WHY THE CLAIM BUTTON IS NOT ON THE SQUARE. A square is ~109px wide at 375px -- `slot_render` already
+records that the job chip does not fit one, which is why a square draws the atom's parts by hand -- so a
+button inside it would be either below the 44px touch floor or the only thing in the tile. A reward has its
+own surface instead: full-width rows with room for an icon, a name and a real target.
+
+THE TALLY IS THE CLAIMED TOTAL, NOT THE OUTSTANDING ONE, and that is a correction worth recording. It
+showed what was WAITING at first, which made the one animated number in the feature count DOWN toward zero
+on every claim -- the exact inverse of what the Tally primitive is for ("make numbers feel earned, not
+reported"). And the head was gated on something being owed, so it VANISHED on the last claim: Claim-all
+clears every square by definition, so it never animated at all, and the most meaningful claim of a run got
+the least feedback. A claimed total only grows, so it is the number that earns the motion -- and a head that
+never disappears also stops ~72px of page jumping out from under the board.
+
+SERVER-RENDERED AND RE-RENDERED, like `_square_body.html`: a claim changes the total, the row list and the
+Claim-all count together, so the reply carries this markup rather than having the client patch four things
+and drift from what this file says a reward looks like.
+
+Params: challenge, rewards (`rewards.summary`), is_owner.{% endcomment %}
+
+<div class="pp-cpay">
+    {% if rewards.per_square %}
+    {% comment %}A REAL HEADING, and an icon like every other block on this page has. Without one the
+    reward block was invisible in a screen reader's heading list (the page went `h1` straight to the
+    shelves' `h2`s) and a sighted reader met a large accent number with a lowercase caption and nothing
+    saying what the block was. The smaller Start card had a "REWARD" label; this one did not.{% endcomment %}
+    <h2 id="cpay-head" class="pp-cpay__name">
+        <svg class="pp-cpay__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/>
+            <path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>
+        </svg>
+        Reward
+    </h2>
+    <div class="pp-cpay__head">
+        <div class="pp-cpay__figure">
+            {% comment %}`.pp-tally--md` rather than a raw `font-size`. The rungs carry the variable font's
+            `opsz` axis and a tightened line-height; the base `.pp-tally` is deliberately metrics-free -- a
+            retrofit shim, not the API for new numbers -- so a raw 28px renders as a scaled-up SMALL number,
+            which is the thing that axis exists to prevent.
+
+            AND NO `--glow`. The glow means "this is a reward", but the page's own subject tally (the run's
+            completion count) does not carry it, and a secondary number glowing while the primary one does
+            not is backwards. The accent colour already says what this number is.{% endcomment %}
+            <span class="pp-cpay__xp pp-tally pp-tally--md">{% if rewards.paid_xp %}+{% endif %}<span data-countup="{{ rewards.paid_xp }}">{{ rewards.paid_xp|intcomma }}</span></span>
+            <span class="pp-cpay__cap">Job XP claimed</span>
+        </div>
+        <div class="pp-cpay__act">
+            {% comment %}WHAT IS STILL OWED, beside the button that claims it. A fact at body size, so it
+            does not become a second headline competing with the total.{% endcomment %}
+            {% if rewards.pending_xp %}
+            <span class="pp-cpay__owed">+{{ rewards.pending_xp|intcomma }} waiting</span>
+            {% endif %}
+            {% comment %}COUNTS THE CLAIMABLE, not the rows: the rows are every finished square including the
+            ones already paid, so counting them would offer "Claim all (25)" with nothing left to claim.{% endcomment %}
+            {% if is_owner and rewards.claimable_count %}
+            <button type="button" class="pp-cta" data-cpay-all>
+                Claim all ({{ rewards.claimable_count }})
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% comment %}A LEDGER OF THE RUN'S FINISHED SQUARES, paid ones included -- so a claim moves a row into the
+    collapsed half rather than deleting it. (This used to end "which is what the dual-state markup below needs
+    to mean anything". There is no dual-state markup: each row renders exactly one of claim / claimed /
+    nothing-to-claim. The claim was retracted in `rewards.summary` and in `challenges.css`; this was the third
+    copy.)
+
+    `row.claimable` is the same predicate the write uses, so a Claim button can never offer a payout the
+    write would skip. A square whose `Job` left the catalogue is neither paid nor claimable: it keeps its
+    place in the ledger with nothing to claim, because a finished square disappearing from its own record is
+    worse than one that cannot be paid.{% endcomment %}
+    {% comment %}TWO LISTS, NOT ONE, and the split is what keeps this panel from burying the board (owner,
+    2026-09-30). A finished Job Coverage run has 25 finished squares: ~1,250px of ledger on desktop and
+    ~2,300px at 375px where the rows wrap, ALL of it above the grid the page is about -- and on a finished run,
+    the one most likely to be read by somebody else, every row is inert. So the rows a hunter can act on stay
+    in the open and the paid ones collapse behind a disclosure that says how many there are. A fully-paid run
+    is then one line.
+
+    `<details>` RATHER THAN A JS TOGGLE because it works before any script runs and is keyboard- and
+    screen-reader-complete for nothing. IT DOES NOT PRESERVE THE OPEN STATE, which an earlier version of this
+    comment claimed as its advantage over a JS toggle: the server emits it closed on every render, so a hunter
+    who had the receipts open finds them shut after their next claim. That is the accepted cost, not a feature,
+    and it is why the post-claim acknowledgement had to land on the summary rather than inside the list.
+
+    ORDER WITHIN EACH LIST IS STILL `position`, so a square's place in the run is preserved; only the two
+    groups are separated.{% endcomment %}
+    {% if rewards.unpaid_count %}
+    <ul class="pp-cpay__rows" role="list">
+        {% for row in rewards.rows %}{% if not row.is_paid %}
+        <li class="pp-cpay__row">
+            {% comment %}NO PER-ROW XP FIGURE, and dropping it bought the row its game name back. It is the
+            same flat number on all 25 rows, already stated in the head and the footer -- and it cost ~53px
+            of a 303px row at 375px, which was more than the game name had left over.{% endcomment %}
+            {% if row.job %}
+            {% comment %}NO `job_title`: `.pp-jobchip__name` renders the same string with no clamp, so a
+            `title` repeating fully-visible text is noise a screen reader reads twice. (The `title` on the game
+            name below IS right -- that one is ellipsised.){% endcomment %}
+            {% include 'partials/jobs/_job_chip.html' with job=row.job extra_class='pp-cpay__chip' %}
+            {% else %}
+            {% comment %}THE HOUSE PILL, not a seventh recipe. `.bd-chip` is the strangler replacement for
+            DaisyUI's badge, this feature already uses it for the run's status chip, and the one-off it
+            replaces matched it on every property except padding.{% endcomment %}
+            <span class="bd-chip pp-cpay__chip">{{ row.label }}</span>
+            {% endif %}
+            <span class="pp-cpay__game" title="{{ row.game_name }}">{{ row.game_name }}</span>
+            {% comment %}THE PAID STATE IS A FACT ABOUT THE RUN, so a visitor sees it too: on a finished run
+            it is the only per-row state there is, and hiding it left a Hall of Fame reader with 25
+            undifferentiated pills. Only the BUTTON belongs to the owner.
+
+            `aria-label` because the visible word is the same on every row -- in a screen reader's button
+            list, twenty-five "Claim" buttons are one button.{% endcomment %}
+            {% comment %}NO PAID BRANCH HERE. This loop only runs for `not row.is_paid`, so an
+            `{% templatetag openblock %} elif row.is_paid {% templatetag closeblock %}` was unreachable -- and it
+            was carrying the checkmark comment for a checkmark that renders in the OTHER loop, which is how a
+            comment ends up documenting code it is nowhere near.{% endcomment %}
+            {% if is_owner and row.claimable %}
+            <button type="button" class="pp-cta pp-cta--ghost pp-cpay__claim"
+                    aria-label="Claim {{ row.xp|intcomma }} XP for {{ row.label }}"
+                    data-cpay-claim="{{ row.key }}">Claim</button>
+            {% elif is_owner %}
+            {% comment %}Its job left the catalogue, so nothing can ever pay it. Said in the HUNTER's terms:
+            "Job removed" reports a fact about our curation desk to somebody who does not know we have one,
+            and implies something was taken from them.{% endcomment %}
+            <span class="pp-cpay__gone">Nothing to claim</span>
+            {% endif %}
+        </li>
+        {% endif %}{% endfor %}
+    </ul>
+    {% endif %}
+
+    {% comment %}THE PAID ROWS, collapsed. No per-row hook: these carried `data-cpay-row` for a post-claim
+    flash that targeted rows by key, and that flash moved onto the drawer itself once it turned out a row inside
+    a closed `<details>` is `display: none` and could never animate. The attribute went with it rather than
+    staying as a hook nothing reads.{% endcomment %}
+    {% if rewards.paid_count %}
+    <details class="pp-cpay__done">
+        <summary class="pp-cpay__done-sum">
+            {% comment %}Literal, and a count rather than a verb: "Claimed (25)" says what is inside without
+            implying the disclosure does anything.{% endcomment %}
+            Claimed ({{ rewards.paid_count }})
+        </summary>
+        <ul class="pp-cpay__rows pp-cpay__rows--done" role="list">
+            {% for row in rewards.rows %}{% if row.is_paid %}
+            <li class="pp-cpay__row pp-cpay__row--paid">
+                {% if row.job %}
+                {% include 'partials/jobs/_job_chip.html' with job=row.job extra_class='pp-cpay__chip' %}
+                {% else %}
+                <span class="bd-chip pp-cpay__chip">{{ row.label }}</span>
+                {% endif %}
+                <span class="pp-cpay__game" title="{{ row.game_name }}">{{ row.game_name }}</span>
+                <span class="pp-cpay__claimed">
+                    {% comment %}The house checkmark partial, not `&check;`. That entity is a FONT glyph --
+                    thin and baseline-misaligned in Segoe UI, a different weight on iOS, absent from some
+                    fallback stacks -- and the square's own check in `_square_body.html` is an inlined SVG. Two
+                    checkmarks in one feature drawn two different ways is the drift the design system's
+                    iconography rule exists to stop. (The square's check is a documented exception for its own
+                    stroke weight at 11px; this one is at text size, where the partial is right.){% endcomment %}
+                    {% include 'partials/icons/checkmark.html' with size='pp-cpay__tick' color='currentColor' %}
+                    Claimed
+                </span>
+            </li>
+            {% endif %}{% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+
+    {% comment %}The rate, stated once, AND WHAT A WHOLE RUN PAYS (owner, 2026-09-30). The second figure is
+    here rather than in the headline because the headline measures what has been CLAIMED and should keep
+    meaning that for the whole run -- on a fresh run it is a large accent zero, and the honest fix is to put
+    the forward-looking number where a hunter asking "what is this worth" will read it, not to swap what the
+    big number means part-way through.
+
+    It carried "paid to that square's job" as well, which is mechanism -- prose belongs in a comment like this
+    one, not in the 12px line under a reward.{% endcomment %}
+    <p class="pp-cpay__foot">{{ rewards.per_square|intcomma }} Job XP per finished square,
+        {{ rewards.full_xp|intcomma }} for a full run.</p>
+    {% endif %}
+</div>

@@ -89,6 +89,7 @@ Fast early promotions (a division every ~3 games at Recruit) widening to ~60 gam
 - **Newbie** and **Ascendant** are the divisionless bookends: a humble floor (a brand-new account, every element at level 1) and a transcendent, open-ended ceiling (past it the raw Pursuer Level number is the flex, same cap-less spirit as the elements' Legend). The 9 middle tiers each split into **5 divisions**, entering at **V** and climbing to **I** (the gamer-ranked convention) — `1 + 9×5 + 1 = 47` rungs.
 - Divisions are computed by splitting each tier's `[min, next_tier_floor)` range into 5 equal bands — so calibration only tunes the **~10 tier thresholds**, not 47 numbers.
 - **Where it lives:** **inline next to the Pursuer name**, separated by a `·` (`Pursuer1 · Warden III`) — the DNA ring keeps its plain `Level` cap. The hero exposes it as `hero.pursuer_rank` (`{key, name, division, division_roman, label, next_label, levels_to_next, …}`); the inline rank (`.lab-rankline`) is tier-keyed (`--<key>`) so the top ranks glow and tiers can carry per-rank display flair later.
+- **The whole ladder is one tap away (2026-10-09).** The Career hero's rank bar is a button (`.pgl-open`) that opens `trophies/partials/career/_rank_ladder.html`: all eleven tiers, each divisioned tier's five floors, "You are here" on the current tier and division, and the date each reached tier was logged (`ProgressionMilestone`). Its data is `leveling.pursuer_rank_table(level)`, which writes the division floors out with the same even split `pursuer_rank_for_level` uses. **Gotcha when retuning thresholds:** the split is only exact while each tier's range divides by 5 (every tier does today). A threshold that breaks that makes the table round a floor while the hero bands by truncation; `test_career_rank_ladder.py` walks every level and fails if the two ever disagree, so fix the split rather than the test.
 - **Names + thresholds are locked from the games model** (above) — all config, so if the curated Contract pool ends up too small for ~1,000 completions the apex slides down without touching the shape.
 
 ## The ledger is the universal source of truth
@@ -111,5 +112,28 @@ Fast early promotions (a division every ~3 games at Recruit) widening to ~60 gam
 - **Tiers carry prestige, not the curve.** Don't be tempted to re-add curve escalation "to make high levels feel earned" — that breaks modifier fungibility. Use tier spacing instead.
 - **The ledger is append-only; the cache is `Sum(ledger)`.** Any future "remove / decay / expire XP" feature MUST delete or write a negating ledger row, **never** just decrement `ProfileJobXP` — `recompute_job_xp` rebuilds from the ledger and would resurrect the removed XP.
 - **`grant_job_xp` has NO built-in idempotency for non-contract sources.** Contracts are guarded by `unique_together(earned_contract, job, tier)` + the accepted timestamps. Quests/events (null `earned_contract`) are unconstrained — the first quest/event integration must own idempotency (e.g. `get_or_create` on `(profile, job, source, source_id)` or a partial unique index), or it will double-pay into the permanent ledger.
+  **A first claimant now exists: `source='challenge'`**, reserved by the Challenge rebuild for a completed Job
+  Coverage square. It took the partial-unique route (`xpgrant_challenge_once_per_slot` on profile + job +
+  source + `source_id`, where `source_id` is the `ChallengeSlot` id) **plus a check constraint requiring
+  `source_id`** — because Postgres treats NULLs as distinct, so without the second one a grant written with no
+  `source_id` collides with nothing and the unique index buys nothing at all. Copy both, not just the first.
+  **It writes now**: `challenges.services.rewards.redeem_slot` / `redeem_all`, one flat 6,000 per finished
+  square, stamped by `ChallengeSlot.xp_redeemed_at` under the run's row lock so a second press is a sentence
+  rather than an `IntegrityError`.
+- **A grant is BRACKETED or its Pursuer milestones are lost forever.** `grant_job_xp_bulk` logs JOB_TIER
+  milestones and nothing else, so the caller must read `_pursuer_level` before and after and call
+  `_log_rank_milestones`. This is not cosmetic: `ranks_crossed(old, new)` is `old < min <= new`, so a rank an
+  unbracketed grant crossed is never logged **and can never be logged afterwards** — the next claim starts
+  from the already-raised level, and the Career hero shows a permanently blank date on a rung the hunter
+  really did cross. The challenge redeem lost exactly this in its first version; both its paths now go through
+  one `_grant` helper so neither can forget. `accept_contracts_bulk` is the original of that envelope.
+- **The claim ceremony is ONE builder, and it only works inside the write.**
+  `contract_service.ceremony_payload` builds the payload both doors answer with (`static/js/claim-ceremony.js`
+  plays it); it was extracted from `claim` when the challenge redeem needed the same animation. Every number
+  in it is a difference between a reading taken before the grant and one taken after, so it **cannot** be
+  rebuilt on a later request: a level is a threshold, and any other payout landing in the gap gets attributed
+  to this one. A design that deferred the challenge celebration to the hunter's next Career visit was
+  abandoned on precisely that reasoning: a tier bloom a Contract claim had earned would have played over a
+  challenge square's reward. It never shipped, so that is the mechanism and not a reported incident.
 - **The model is named `ContractXPGrant` but is source-agnostic.** A rename to `JobXPGrant` is optional polish; the `source` field is what matters.
 - **Lab display:** the cap-based "mastered" state is gone — the Lab shows the element's prestige **tier** (rank on the tile/detail + a "N to <next tier>" goal). Done.

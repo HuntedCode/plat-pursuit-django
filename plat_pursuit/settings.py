@@ -250,6 +250,7 @@ INSTALLED_APPS = [
     'allauth.account',
     'djstripe',
     'gamelists.apps.GameListsConfig',
+    'challenges.apps.ChallengesConfig',
     'notifications.apps.NotificationsConfig',
     'fundraiser.apps.FundraiserConfig',
     'art_reveal.apps.ArtRevealConfig',
@@ -532,6 +533,20 @@ PAYMENT_SELF_HEAL_ENABLED = os.getenv('PAYMENT_SELF_HEAL_ENABLED', 'False') == '
 # newly-resolved title from inside the sync worker. Off-switch so "capture is eating disk" is an
 # env-var flip and a worker restart rather than a deploy.
 PSN_METADATA_CAPTURE_ENABLED = os.getenv('PSN_METADATA_CAPTURE_ENABLED', 'True') == 'True'
+
+# The Challenges beta: while True, only members can START a run. Browsing the hub, reading any run and
+# the Hall of Fame are public to everyone throughout -- this gates creation and nothing else, which is
+# what makes it a DIAL (members go first) rather than a door (a feature free hunters cannot reach).
+#
+# Defaults True so the beta is on the moment the feature ships, and ending it is an env-var flip plus a
+# restart rather than a deploy -- the owner's call on timing, taken without a release.
+#
+# Read ONLY by `challenge_service.creation_is_open_to`, so the rule has one enforcement point. In
+# particular NOT by `trophies.mixins.PremiumRequiredMixin`, which REDIRECTS to `beta_access_required`:
+# bouncing a free hunter out of a parked feature is the behaviour that was rejected when Challenges
+# was first parked, and `tests/engine/test_challenges_live.py` pins that decision
+# (inverted from `test_challenges_coming_soon.py` when the real pages shipped).
+CHALLENGES_BETA_MEMBERS_ONLY = os.getenv('CHALLENGES_BETA_MEMBERS_ONLY', 'True') == 'True'
 
 
 # Internationalization

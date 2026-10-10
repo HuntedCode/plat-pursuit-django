@@ -71,9 +71,11 @@ class RenderedSubnavItem:
     url_name alone. The resolver lives in the context processor so NoReverseMatch
     failures degrade to "skip this item" rather than 500.
 
-    ``icon`` is an optional Lucide-style icon name. The template renders
-    a matching SVG inline when set; items without an icon render as
-    label-only pills.
+    ``icon`` is an optional Lucide-style icon name, and NOTHING RENDERS IT (verified 2026-09).
+    The sub-nav template draws only the HUB's icon, through ``_hub_subnav_icon.html``, which
+    handles four hub keys and has no else branch; ``item.icon`` appears in no template on the
+    site. Every item renders as a label-only pill whatever this says. Kept because the values
+    read as intent, but do not expect a glyph, and do not treat two items sharing one as a bug.
 
     ``group`` is the rail group label (e.g. 'Catalog'); the template groups
     consecutive same-group items under a quiet separator.
@@ -82,6 +84,13 @@ class RenderedSubnavItem:
     HubSubnavItem. It has to be repeated here rather than read off the config: the
     template only ever sees these, which is exactly why the first cut rendered nothing
     -- the `{% if item.tag %}` was true of the config object the template never gets.
+
+    ``tag_kind`` picks the chip's LOOK: '' is the default amber 'Soon' chip, 'count' the nav's
+    primary number, 'xp' its accent lozenge. It exists because the two attention marks added in
+    2026-09 -- a claimable-contract count on Career, unclaimed challenge XP on My Challenges --
+    are not labels like 'Soon'. They are the same signals the parent My Pursuit nav item carries,
+    and the nav tells its three markers apart by shape and colour; a sub-nav drawing them as amber
+    'Soon' chips would contradict that one level down, and on this site amber means "not ready yet".
     """
     slug: str
     label: str
@@ -90,6 +99,7 @@ class RenderedSubnavItem:
     group: str = ''
     tag: str = ''
     tag_aria: str = ''
+    tag_kind: str = ''
 
 
 @dataclass(frozen=True)
@@ -175,6 +185,8 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         # was frozen when the rebuilt pages shipped, and a hub is a nav grouping rather than a URL
         # namespace -- `/recap/` and `/collection/` are here on the same footing.
         '/my-lists/',
+        # `/my-challenges/` (2026-09), on exactly the same footing and for exactly the same reason.
+        '/my-challenges/',
     ),
     # Grouped rail: Progress = the gamification progression surfaces (Career merges the old Lab +
     # Research Panel); Tools = personal outputs. Profile is appended to Tools as a dynamic extra.
@@ -192,6 +204,10 @@ MY_PURSUIT_HUB = HubSubnavConfig(
         # feature's address. (The un-hide checklist originally put it in Community; the IA
         # decision that followed put it here, and that decision wins.)
         HubSubnavItem('my_lists', 'My Lists', 'my_lists', 'list', auth_required=True, group='Tools'),
+        # MY CHALLENGES, beside My Lists and for the identical argument: the private side of a public
+        # system is still personal. The public browse and Hall of Fame keep their Community slot.
+        HubSubnavItem('my_challenges', 'My Challenges', 'my_challenges', 'flag',
+                      auth_required=True, group='Tools'),
     ),
 )
 
@@ -276,7 +292,13 @@ COMMUNITY_HUB = HubSubnavConfig(
     items=(
         HubSubnavItem('lists', 'Game Lists', 'lists_browse', 'list'),
         HubSubnavItem('profiles', 'Hunters', 'profiles_list', 'user'),
-        # A COMING-SOON PAGE EARNS A RAIL ITEM, which is not obvious. It is here because the rail is
+        # HISTORICAL, AND SUPERSEDED BY THE BLOCK BELOW -- kept only because the reasoning about where a
+    # not-yet item belongs is worth having if this ever happens again. Challenges shipped (2026-09), so
+    # there is no `Soon` tag on this rail and no coming-soon page behind it; the paragraph's "LAST, AND
+    # TAGGED" instruction and its citation of `test_the_unfinished_item_says_so_on_the_pill` are both dead
+    # (that test died with `test_challenges_coming_soon.py`). Read it as a record, not as the rule.
+    #
+    # A COMING-SOON PAGE EARNS A RAIL ITEM, which is not obvious. It is here because the rail is
         # how somebody learns what this hub contains, and a hub of two while a third is weeks away
         # reads as the whole offering. The page it points at is real and says so plainly -- the rule
         # set when Challenges was parked was a page, never a redirect. It keeps its slug and url_name
@@ -286,8 +308,15 @@ COMMUNITY_HUB = HubSubnavConfig(
         # the one you cannot; tagged because a pill that looks like its neighbours promises a
         # destination like its neighbours, and somebody clicking it deserves to know before they do.
         # Dropping the tag is what marks the feature as shipped.
-        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag', tag='Soon',
-                      tag_aria='coming soon'),
+        # TWO ITEMS, and the `tag='Soon'` is gone (owner, 2026-09-30). Challenges lists the runs IN PROGRESS
+        # and the Hall of Fame the finished ones -- two audiences, two pages, so a visitor can reach the
+        # finished runs without first passing a page of half-filled boards.
+        #
+        # THE TAG HAD TO GO IN THE SAME CHANGE. A chip reading "Soon" outliving the thing it described tells
+        # every visitor the page is not ready, and dropping it is what marks the feature shipped -- which is
+        # exactly what `test_the_unfinished_item_says_so_on_the_pill` was written to hold until this moment.
+        HubSubnavItem('challenges', 'Challenges', 'challenges', 'flag'),
+        HubSubnavItem('challenges_hall_of_fame', 'Hall of Fame', 'challenges_hall_of_fame', 'award'),
     ),
 )
 
@@ -335,6 +364,15 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # (`job_detail` vs `jobs_browse`), so every one of them needs a line here; the item shipping without
     # one is silent, because the strip still renders.
     'job_detail': ('browse', 'jobs'),
+    # A run's own page, which is PUBLIC and now sitemap-indexed. Missed when the Challenges pages shipped,
+    # so every hero on the Hall of Fame linked to a page that rendered the Community strip with nothing
+    # lit -- exactly the `job_detail` failure described above, which is why that paragraph says every
+    # detail page needs a line here.
+    #
+    # IT POINTS AT `challenges`, NOT `challenges_hall_of_fame`. A run reached from the Hall of Fame is
+    # finished and one reached from the browse page is not, and the rail cannot know which; `challenges`
+    # is the parent of both URLs and the broader of the two answers, so it is the honest one.
+    'challenge_detail': ('community', 'challenges'),
     # The whole roadmap family is /games/<np>/-scoped (you reach every one FROM a list), so all
     # four light with the list family. The _ctg editor and BOTH public reader routes had no line
     # at all before -- the silent-unlit trap, on sitemap-indexed pages for the readers.
@@ -347,6 +385,22 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # just with nothing lit. That is the `job_detail` failure documented above, and it is why these
     # three exist rather than being left to the prefix match.
     'list_detail': ('community', 'lists'),
+    # My Challenges' write endpoints. They redirect to the page, so a reader rarely sees a rail
+    # rendered under these names -- but an item shipping without a line here is SILENT, and a future
+    # error path that re-renders rather than redirecting would inherit an unlit strip.
+    # The picker's doors are fetch-only, so no strip ever renders for them -- but an item
+    # without a line here is silently unhighlighted, and a future non-JSON fallback would
+    # inherit the gap rather than announce it.
+    'challenge_slot': ('my_pursuit', 'my_challenges'),
+    'challenge_search': ('my_pursuit', 'my_challenges'),
+    'challenge_assign': ('my_pursuit', 'my_challenges'),
+    'challenge_clear': ('my_pursuit', 'my_challenges'),
+    'challenge_start': ('my_pursuit', 'my_challenges'),
+    'challenge_hide': ('my_pursuit', 'my_challenges'),
+    # The reward doors. They serve the PUBLIC run page, but they live under `/my-challenges/` because only
+    # an owner may call them -- and this map is keyed on the route, so they belong with their siblings here.
+    'challenge_redeem': ('my_pursuit', 'my_challenges'),
+    'challenge_redeem_all': ('my_pursuit', 'my_challenges'),
     'profile_detail': ('community', 'profiles'),
     'trophy_case': ('community', 'profiles'),
     # Reviews archived 2026-05. The notice page matches the COMMUNITY hub by prefix (2026-09) --
@@ -451,6 +505,7 @@ def build_rendered_items(
     is_member: bool = False,
     active_slug: str | None = None,
     extras: tuple[RenderedSubnavItem, ...] = (),
+    tags: dict[str, tuple[str, str, str]] | None = None,
 ) -> tuple[RenderedSubnavItem, ...]:
     """
     Return the hub's sub-nav items resolved into ``RenderedSubnavItem``s
@@ -463,6 +518,15 @@ def build_rendered_items(
     - ``extras`` are appended at the end of the strip and are passed
       through unchanged (caller is responsible for URL resolution since
       extras may need kwargs, e.g. the Fundraiser tab).
+    - ``tags`` OVERRIDES a config item's chip, as ``{slug: (text, kind, aria)}``. Attention
+      marks are per-viewer and per-request (a claimable count, unclaimed XP), so they cannot
+      live in ``HUB_SUBNAV_CONFIG`` the way 'Soon' does -- and they are an override rather
+      than an ``extras`` entry because they attach to an item that already exists. An empty
+      or missing text leaves the config's own chip ENTIRELY alone -- text, kind and aria together.
+      That last part is a fix: `tag_aria` used to fall back independently of `tag`, so
+      ``{'challenges': ('', '', 'now available')}`` left the chip reading 'Soon' while a screen
+      reader heard "now available". The chip's three parts are one atomic override, which is the
+      same backwards-announcement hazard ``HubSubnavItem.tag_aria``'s own comment records.
     """
     rendered: list[RenderedSubnavItem] = []
     for item in hub.items:
@@ -478,8 +542,15 @@ def build_rendered_items(
             url = reverse(item.url_name)
         except NoReverseMatch:
             continue
+        tag, tag_kind, tag_aria = (tags or {}).get(item.slug) or ('', '', '')
+        # ALL THREE OR NONE. An override with no TEXT is not an override -- taking its `aria` or its `kind`
+        # anyway would let a chip read 'Soon' while announcing something else, or wear a mark's colour with a
+        # label's word.
+        override = bool(tag)
         rendered.append(RenderedSubnavItem(
             slug=item.slug, label=item.label, url=url, icon=item.icon, group=item.group,
-            tag=item.tag, tag_aria=item.tag_aria))
+            tag=tag if override else item.tag,
+            tag_aria=tag_aria if override else item.tag_aria,
+            tag_kind=tag_kind if override else ''))
     rendered.extend(extras)
     return tuple(rendered)

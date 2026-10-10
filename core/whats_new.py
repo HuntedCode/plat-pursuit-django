@@ -36,7 +36,8 @@ class Entry:
     want for a new announcement. Give a new announcement a new id.
 
     `beats` are (label, copy) pairs rendered as the numbered stack the Career explainer and the 1.0
-    greeting both use. Two or three; this is a notice, not a changelog page.
+    greeting both use. Two or three, or a fourth when a second, smaller change rides the same release;
+    this is a notice, not a changelog page.
 
     `link_url` is a path we own, never an external URL: the modal is a trusted surface that opens itself
     over the page, and a link out of it is a phishing shape. Enforced by `safe_link_url`, which the
@@ -83,6 +84,29 @@ class Entry:
 
 #: NEWEST FIRST. See the module docstring before adding one.
 ENTRIES: tuple[Entry, ...] = (
+    Entry(
+        id='2026-10-challenges-beta',
+        published=date(2026, 10, 10),
+        title='Challenges are here, in beta',
+        beats=(
+            ('Three to choose from',
+             'A-Z: one game for every letter. Job Coverage: one game for every job. Plat Calendar: a '
+             'shovelware-free platinum on every day of the year.'),
+            ('Members start first',
+             'Members can start runs during the beta. Everyone can browse the runs in progress and the '
+             'Hall of Fame now, and start their own when the beta ends.'),
+            ('Titles to earn',
+             'Your first two finished A-Z and Job Coverage runs each earn a title, Job Coverage pays job XP '
+             'for every job, and the Plat Calendar hands out titles as its days fill.'),
+            # Rides the same release (owner, 2026-10-09), so it shares the announcement rather than
+            # opening a second modal on the same visit.
+            ('Also new: every Pursuer rank',
+             'Tap the rank bar on your Career page to see all eleven ranks, their divisions and the level '
+             'each one starts at.'),
+        ),
+        link_label='See the challenges',
+        link_url='/community/challenges/',
+    ),
     Entry(
         id='2026-09-game-lists',
         published=date(2026, 9, 22),

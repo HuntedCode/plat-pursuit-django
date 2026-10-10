@@ -113,7 +113,9 @@ def test_my_pursuit_items_grouped_progress_tools():
     # the hub-less lobby).
     assert groups['Progress'] == ['career', 'collection', 'milestones', 'titles']
     # My Stats is hidden for 1.0 (staff-gated, off the rail). Profile is the dynamic extra.
-    assert groups['Tools'] == ['shareables', 'recap', 'rate_my_games', 'my_lists']
+    # `my_challenges` joined Tools with the Challenges rebuild: personal and login-gated, so it
+    # belongs beside My Lists rather than in Community, which owns the public browse.
+    assert groups['Tools'] == ['shareables', 'recap', 'rate_my_games', 'my_lists', 'my_challenges']
     assert resolve_hub_subnav(_req('/games/'))['hub'].key == 'browse'
 
 

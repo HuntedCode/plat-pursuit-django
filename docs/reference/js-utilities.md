@@ -612,8 +612,8 @@ still hand-roll it; migrating them is a follow-up, not a prerequisite.
 **The common practice for every server-rendered share card.** Pairs with
 `components/download-button.css` (the `.pp-dl` state classes) and
 `partials/download_button_icons.html` (the three glyphs, all shipped, CSS picks one). Live on the plat
-card modal, the recap ceremony, and the recap's below-fold panel — which between them had three copies of
-fetch-blob-anchor before this.
+card modal, the recap ceremony, the recap's below-fold panel (which between them had three copies of
+fetch-blob-anchor before this), the Profile Card tab, and the challenge share dialog.
 
 The PNG is composed by headless Chromium on the server, so the press is **not** instant: `busy` is the
 load-bearing state, not `done`. And the file lands somewhere the page cannot see, so `done` is the only
@@ -629,7 +629,8 @@ Points worth knowing before you touch it:
 
 | Thing | Why |
 |---|---|
-| `url` / `filename` are **functions** | Resolved at press time. The ground and the art index both change while a modal is open, and a URL captured at bind time saves the card the hunter was looking at a minute ago |
+| `url` / `filename` are **functions** | Resolved at PRESS time, both of them. The ground and the art index change while a modal is open, so a URL captured at bind time saves the card the hunter was looking at a minute ago. The filename used to be read when the blob LANDED, seconds later, by which point a closed dialog had cleared its card and the file saved under a generic name |
+| `reset()` **drops the render in flight** | A surface that reuses one button across cards (the challenge dialog on My Challenges, reopened for a second run mid-render) calls `reset()` when it switches. A generation counter makes the first press's completion a no-op: without it that blob saved under the second card's name and flipped the second card's button to "Saved". Both the save and the failure path check it |
 | `disabled` is **derived** | From the caller's reason (`setBlocked`, e.g. preview still loading) and the in-flight one, never written by either. They used to race: a theme swap re-disabled the button while the "Saved" revert timer was queued to re-enable it, and whichever fired last won |
 | idle label belongs to the **caller** | Unless `labels.idle` is passed, idle means "whatever it said before" — the plat card names its variant ("Download 100% card") and a fixed string demoted it to a generic "Download" the first time it was used |
 | the width is **pinned** at press | The stylesheet's `min-width` only knows OUR three labels, so a longer caller label shrank the button 50px mid-press and shuffled the row it sits in. Measured, not guessed — it depends on the font that loaded |

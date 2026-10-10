@@ -60,7 +60,7 @@ def cover_games_for(concept_ids):
     # pathological and a slightly-wrong cover is the right trade against an unbounded read.
     # ORDERED BEFORE THE SLICE. A LIMIT with no ORDER BY lets Postgres return any rows it likes, so
     # once any concept on the page has more stacks than the budget absorbs, WHICH stacks arrive
-    # varies between two identical requests -- and `_sort_key` below then picks the best of a
+    # varies between two identical requests -- and `sort_key` below then picks the best of a
     # different set each time. That is exactly the "same list renders a different cover on two
     # consecutive loads, reads as a bug and cannot be reproduced on request" failure the pk
     # tiebreak was added to prevent; the tiebreak made the PICK deterministic and left the FETCH
@@ -76,13 +76,19 @@ def cover_games_for(concept_ids):
     best = {}
     for game in rows:
         current = best.get(game.concept_id)
-        if current is None or _sort_key(game) < _sort_key(current):
+        if current is None or sort_key(game) < sort_key(current):
             best[game.concept_id] = game
     return best
 
 
-def _sort_key(game):
+def sort_key(game):
     """Deterministic, and deterministic is the point.
+
+    PUBLIC because it has a second consumer: `challenges.services.slot_render` picks one cover per
+    CONTRACT, which is this rule applied one level up (a contract's member concepts, rather than a
+    list item's stacks). It was briefly copied there instead, which would have given the expression
+    below two homes -- and the paragraph below is the record of what happens to this expression when
+    it is written twice.
 
     Platform priority first, then pk. Without the pk tiebreak two lists on the same platform would
     resolve by whatever order the database happened to return, so the same list could render a

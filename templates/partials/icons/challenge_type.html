@@ -1,0 +1,9 @@
+{% comment %}
+The icon for a challenge TYPE: Lucide `case-sensitive` (Aa) for A-Z, `briefcase` for Job Coverage (the
+same paths as the job-icon library's, so it matches the share card's fallback glyph), `calendar-days` for
+the Plat Calendar. One partial, so a type looks the same on My Challenges, the hub cards and the run page.
+
+Usage: {% include 'partials/icons/challenge_type.html' with type=run.challenge_type size='w-5 h-5' %}
+`type` is the `Challenge.challenge_type` key. An unknown type draws the generic challenge flag rather
+than nothing, so a fourth type is never iconless before it gets its own.
+{% endcomment %}<svg class="{{ size|default:'w-5 h-5' }} inline-block flex-shrink-0 {{ extra_class }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{% if type == 'az' %}<path d="m3 15 4-8 4 8"/><path d="M4 13h6"/><circle cx="18" cy="12" r="3"/><path d="M21 9v6"/>{% elif type == 'jobs' %}<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>{% elif type == 'calendar' %}<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/>{% else %}<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>{% endif %}</svg>

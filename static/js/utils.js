@@ -2732,6 +2732,11 @@ const CardDownload = {
         // download already in flight -- so `disabled` is DERIVED from both. Setting it directly from
         // either one is how a finished download re-enables a button its owner wanted kept shut.
         let blocked = false, busy = false, revertTimer = null, state = 'idle';
+        // WHICH PRESS IS CURRENT. A render takes seconds, and a surface that reuses one button across cards
+        // can `reset()` it for another card mid-render (the challenge dialog on My Challenges, reopened for a
+        // second run). Without this the first press's blob then saved under the second card's name and
+        // flipped the new card's button to "Saved". A stale completion is dropped: no save, no state change.
+        let generation = 0;
 
         const sync = () => { button.disabled = blocked || busy; };
 
@@ -2774,16 +2779,21 @@ const CardDownload = {
             if (state === 'idle') { button.style.minWidth = `${Math.ceil(button.offsetWidth)}px`; }
             setState('busy');
             if (opts.onStart) { opts.onStart(); }
+            const mine = ++generation;
+            // Named at PRESS time, like the URL: by the time the render lands the surface may have closed
+            // or moved on, and its idea of "the current card" with it.
+            const filename = opts.filename();
             fetch(opts.url(), { credentials: 'same-origin' })
                 .then((res) => {
                     if (!res.ok) { throw new Error(String(res.status)); }
                     return res.blob();
                 })
                 .then((blob) => {
+                    if (mine !== generation) { return; }
                     const href = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = href;
-                    a.download = opts.filename();
+                    a.download = filename;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -2796,13 +2806,16 @@ const CardDownload = {
                             opts.toast || 'Card saved to your downloads.', 'success', 3200);
                     }
                 })
-                .catch((err) => fail(
-                    // The renderer is rate-limited per user, and "try again" is bad advice for the one
-                    // failure where trying again is exactly what caused it.
-                    err && err.message === '403'
-                        ? 'Too many cards at once. Give it a minute.'
-                        : "Couldn't render that card. Try again in a moment.",
-                    err));
+                .catch((err) => {
+                    if (mine !== generation) { return; }
+                    fail(
+                        // The renderer is rate-limited per user, and "try again" is bad advice for the one
+                        // failure where trying again is exactly what caused it.
+                        err && err.message === '403'
+                            ? 'Too many cards at once. Give it a minute.'
+                            : "Couldn't render that card. Try again in a moment.",
+                        err);
+                });
         };
 
         if (opts.autoBind !== false) {
@@ -2814,7 +2827,7 @@ const CardDownload = {
             setBlocked(on) { blocked = !!on; sync(); },
             // For surfaces that reuse one button across several cards: a new card must never be greeted
             // with the previous one's "Saved", and the pending revert timer has to be cancelled with it.
-            reset() { setState('idle'); },
+            reset() { generation += 1; setState('idle'); },
             state() { return state; },
         };
         button._ppDownload = handle;
