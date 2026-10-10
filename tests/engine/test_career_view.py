@@ -2,8 +2,8 @@
 
 Pins that /career/ renders both the job views and the folded-in Contracts browse, that
 ?view=contracts deep-links the Contracts tab, that the old /research-panel/ 301s into it, and that
-the whole surface is linked-profile gated. Plus source-text pins on the board controller's status-chip
-re-tap guard (there is no JS runner).
+the whole surface is linked-profile gated. Plus source-text pins on the board controller's
+identical-query dedupe in fetchPage (there is no JS runner).
 """
 import itertools
 
@@ -151,46 +151,80 @@ def test_contracts_endpoints_gated_to_linked_profile(client):
 
 
 def _career_js(start, end):
-    """The career.html source between two UNIQUE anchors, comments stripped so prose about a guard
-    cannot pass for the guard. The `//` strip is naive: a `//` inside a string literal in the slice
-    would be eaten too, which can only make a pin fail (never pass), so a confusing failure here is
-    worth checking for that first."""
+    """The career.html source from a UNIQUE `start` anchor to the first `end` after it, comments stripped
+    so prose about a guard cannot pass for the guard. The `//` strip is naive: a `//` inside a string
+    literal in the slice would be eaten too, which can only make a pin fail (never pass), so a confusing
+    failure here is worth checking for that first."""
     import pathlib
     import re
 
     src = (pathlib.Path(__file__).resolve().parents[2]
            / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
-    assert src.count(start) == 1 and src.count(end) == 1, f'the anchors moved: {start!r} / {end!r}'
-    code = src.split(start, 1)[1].split(end, 1)[0]
+    assert src.count(start) == 1, f'the start anchor is missing or no longer unique: {start!r}'
+    rest = src.split(start, 1)[1]
+    assert end in rest, f'no {end!r} after {start!r}'
+    code = rest.split(end, 1)[0]
     code = re.sub(r'/\*.*?\*/', '', code, flags=re.S)
     return re.sub(r'(?m)//.*$', '', code)
 
 
-def test_tapping_the_active_status_chip_does_not_refetch():
-    """Re-tapping the active status chip (or the claim banner's jump, which clicks it for you) refetched
-    the board it was already showing, and `fetchPage` aborted the request in flight for an identical
-    one: prod logged a run of eleven aborted `?status=claimable&page=1` requests from one user. No JS
-    runner, so this is source text. The guard must sit after the `closest` lookup and BEFORE the chip
-    takes `is-active` (below that it would block every tap) and before the fetch."""
+def test_an_identical_board_request_is_dropped():
+    """A page-1 fetch for the board already on screen, or already on its way, is dropped: a re-tapped
+    active chip, the claim banner's jump re-clicking it, Clear filters with nothing set, a repeated radar
+    jump. Each refetched an identical board, aborting any request already in flight, and prod logged a
+    run of eleven aborted `?status=claimable&page=1` requests from one user. No JS runner, so this is
+    source text. The check must run before the abort and the fetch, record the query it lets through,
+    and live in the PAGE-1 branch: hoisted out of it, every scroll-append would match the board on
+    screen and infinite scroll would silently stop."""
     import re
 
-    code = _career_js('// Status quick-filter (single-select).', '// Sort control.')
-    guard = re.search(
-        r"if\s*\(\s*chip\.classList\.contains\('is-active'\)\s*&&\s*!boardStale\s*\)\s*return\s*;", code)
-    assert guard, 'tapping the active chip refetches the board again (or never retries a failed one)'
-    for later in ("chip.classList.add('is-active')", 'fetchPage('):
-        at = code.find(later)
-        assert at != -1, f'{later!r} is gone from the handler, so this pin no longer checks the order'
-        assert guard.start() < at, f'the guard runs after {later!r}'
-
-
-def test_a_failed_board_fetch_lets_the_active_chip_retry():
-    """The guard's premise is that the active chip names the board on screen. A failed page-1 fetch
-    breaks it: the chip is already lit and the grid is still the board from before. `boardStale` marks
-    that state so a re-tap retries instead of doing nothing. Set in the failure branch, cleared by the
-    next page-1 fetch."""
     code = _career_js('function fetchPage(n, append) {', 'var sentIO')
-    failure = code[code.find('.catch('):]
-    assert '.catch(' in code, 'fetchPage lost its failure branch, so this pin no longer checks it'
-    assert 'if (!append) boardStale = true;' in failure, 'a failed fetch no longer marks the board stale'
-    assert 'boardStale = false;' in code[:code.find('fetch(RESULTS_URL')], 'a new fetch never clears it'
+    at = code.find('if (!append) {')
+    assert at != -1, "fetchPage lost its page-1 branch, so this pin no longer checks it"
+    page1 = code[at:code.index('}', at)]   # the branch holds no braces of its own
+    check = re.search(r'if\s*\(\s*query\s*===\s*boardQuery\s*\)\s*return\s*;', page1)
+    assert check, 'an identical board request is fetched again (or the check left the page-1 branch)'
+    assert re.search(r'boardQuery\s*=\s*query\s*;', page1[check.end():]), 'the query it lets through is never recorded'
+    for later in ('controller.abort()', 'fetch(RESULTS_URL'):
+        where = code.find(later)
+        assert where != -1, f'{later!r} is gone from fetchPage, so this pin no longer checks the order'
+        assert at + check.start() < where, f'the identical-query check runs after {later!r}'
+
+
+def test_a_failed_board_load_can_be_retried_with_the_same_query():
+    """After a failed page-1 load the grid is still the board from before it, so the same query must be
+    allowed again (a re-tap is the obvious retry). The failure branch is the ONLY place it is cleared: a
+    clear on the success path would let every identical request through again."""
+    import re
+
+    code = _career_js('function fetchPage(n, append) {', 'var sentIO')
+    at = code.find('.catch(')
+    assert at != -1, 'fetchPage lost its failure branch, so this pin no longer checks it'
+    assert 'if (!append) boardQuery = null;' in code[at:], 'a failed load blocks retrying the same query'
+    assert len(re.findall(r'boardQuery\s*=\s*null', code)) == 1, 'boardQuery is cleared outside the failure branch'
+
+
+def test_the_server_rendered_board_counts_as_on_screen():
+    """The first page comes from the server for the URL's params, so the query seeded from the URL is
+    recorded as the board on screen. Without it, the first re-tap after load refetches the SSR board."""
+    code = _career_js('seedFromURL();', 'initCards(list);')
+    assert code.lstrip().startswith('boardQuery = buildParams(1);'), 'the SSR board is not recorded'
+
+
+def test_build_params_encodes_every_field_of_the_board_state():
+    """Dropping an identical query is only safe if an identical query asks for the same filters. A field
+    of `state` that buildParams never EMITS would let a real change through as a duplicate and be dropped
+    (without the scope line, Board and History at their default sorts are both `page=1`). So each field
+    must sit on a line that writes its own key, not merely be read somewhere in the function. A new field
+    fails here until it is given a key below and an emitting line."""
+    import re
+
+    keys = {'status': 'status', 'jobs': 'job', 'disciplines': 'discipline', 'q': 'q', 'sort': 'sort',
+            'platforms': 'platform', 'newOnly': 'new', 'scope': 'scope'}
+    literal = _career_js('var state = {', '};')
+    fields = re.findall(r'(\w+)\s*:', literal)
+    assert sorted(fields) == sorted(keys), f'the board state is now {fields}: map every field to its key'
+    lines = _career_js('function buildParams(n) {', 'function noFilters').splitlines()
+    for field, key in keys.items():
+        assert any(f'state.{field}' in ln and (f"p.set('{key}'" in ln or f"p.append('{key}'" in ln)
+                   for ln in lines), f'buildParams never emits state.{field} as {key!r}'

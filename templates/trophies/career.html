@@ -1346,14 +1346,22 @@ function ppCountUp(el, dur) {
             c.setAttribute('aria-pressed', c.classList.contains('is-active') ? 'true' : 'false');
         });
     }
-    // boardStale: the last page-1 fetch FAILED, so the grid still shows the board from before it while the
-    // chips already name the new one. The status chip's re-tap guard reads it, so a re-tap retries.
-    var reqSeq = 0, controller = null, boardStale = false;
+    // boardQuery: the page-1 query of the board on screen, or of the one on its way (null after a failed
+    // load, when the grid is still the board from before it). A page-1 fetch for the SAME query is dropped:
+    // a re-tapped active chip, the claim banner's jump re-clicking it, Clear filters with nothing set, a
+    // repeated radar jump. Each refetched an identical board, aborting any request already in flight.
+    // Safe because buildParams encodes every field of `state`, so an equal query asks for the same filters.
+    var reqSeq = 0, controller = null, boardQuery = null;
     function fetchPage(n, append) {
         if (!RESULTS_URL) return;
         syncAria();
         if (append && busy) return;                          // don't stack scroll-appends onto an in-flight load
-        if (!append) { syncURL(); boardStale = false; }      // reflect the (just-committed) filters in the URL
+        if (!append) {
+            var query = buildParams(1);
+            if (query === boardQuery) return;                // already on screen, or on its way
+            boardQuery = query;
+            syncURL();                                       // reflect the (just-committed) filters in the URL
+        }
         if (!append && controller) controller.abort();      // a filter change supersedes any in-flight request
         var myReq = ++reqSeq;                                // any later fetchPage supersedes this response
         controller = ('AbortController' in window) ? new AbortController() : null;
@@ -1396,7 +1404,7 @@ function ppCountUp(el, dur) {
                 if ((e && e.name === 'AbortError') || myReq !== reqSeq) return;   // superseded -> the newer request owns state
                 busy = false; if (loading) loading.hidden = true;
                 if (searchField) searchField.setBusy(false);
-                if (!append) boardStale = true;              // the grid is still the old board
+                if (!append) boardQuery = null;              // the grid is still the old board, so the same query may retry
                 if (Toast) Toast.error('Could not load Contracts. Please try again.');
             });
     }
@@ -1419,10 +1427,6 @@ function ppCountUp(el, dur) {
     // Status quick-filter (single-select).
     if (statusBar) statusBar.addEventListener('click', function (e) {
         var chip = e.target.closest('.rp-chip'); if (!chip) return;
-        // The active chip already names the board on screen or in flight. Refetching it (a re-tap, or the
-        // claim banner's jump clicking it again) only fetched an identical board, aborting any request
-        // already in flight. Unless that fetch failed: then the grid is the OLD board and a re-tap retries.
-        if (chip.classList.contains('is-active') && !boardStale) return;
         statusBar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
         chip.classList.add('is-active');
         state.status = chip.dataset.filter || '';
@@ -1658,6 +1662,7 @@ function ppCountUp(el, dur) {
     // Initial: seed from the URL + apply the SSR facet counts, then start infinite scroll. No fetch --
     // the server already rendered page 1 for these exact params (shareable/reload-safe, no flash).
     seedFromURL();
+    boardQuery = buildParams(1);   // the SSR board, so re-asking for it on load is a no-op too
     applyFacets(readFacets(document));
     updateAdvCount();
     syncAria();
