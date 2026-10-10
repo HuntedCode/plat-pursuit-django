@@ -37,8 +37,8 @@ its own short list, and repeating it per page would re-run its trophy read for r
 `badge_only` narrows every list to contracts with a game in a live badge (`eligibility.in_live_badge`), and
 `platforms` to contracts with a game on any of them (`eligibility.on_platforms`); `_scope` applies both. Every
 row also carries its PLATFORMS, the union over the contract's member games, read in one query per page, and its
-AVAILABILITY: `delisted` / `unobtainable` when EVERY member game is (owner, 2026-10-11). One stack still listed
-or still obtainable means the contract can still be done, so the flag is not shown.
+AVAILABILITY: `delisted` / `unobtainable` when no way to finish the contract (any stack of its own concepts, or a
+bundle as a whole) has a listed / obtainable stack (owner, 2026-10-10). See `_decorations`.
 
 THE TWO SLOT-SHAPED PANELS carry a DB `COUNT` beside their slice, because "12 of 340" is a fact a hunter can
 act on. `history_panel` deliberately does NOT: membership there depends on a completion date read from trophy
@@ -520,13 +520,14 @@ def _decorations(contracts):
     the same union Browse Games' cards and the game page show), each with the colour tone the platform tags
     elsewhere use.
 
-    AVAILABILITY ASKS "CAN THIS STILL BE FINISHED?" (owner, 2026-10-11): `delisted` when no way to finish the
+    AVAILABILITY ASKS "CAN THIS STILL BE FINISHED?" (owner, 2026-10-10): `delisted` when no way to finish the
     contract has a listed game, `unobtainable` when none has an obtainable one. A contract is done through ANY
     one of its own (anchored) concepts' stacks, so one listed stack there clears the flag; or through a bundle,
     which counts only as a WHOLE (`_detect_tiers`), so a bundle clears it only when every one of its concepts has
     a listed stack. Pooling bundle games with the rest under-warned: a bundle of one delisted and one listed
     episode looked available while it could not be finished. A contract with no member games on record says
-    nothing, rather than "all of none"
+    nothing, rather than "all of none". A concept with no games on record yet is UNKNOWN, not unavailable: it
+    never makes a flag show (see `_finishable`), because the flags name a fact about stacks that do exist.
 
     One `Game` query for the page, however many contracts: bounded by the page, never by a hunter's library.
     """
@@ -560,9 +561,14 @@ def _decorations(contracts):
 
 def _finishable(membership, games_by_concept, ok):
     """Whether some way to finish a contract has a game `ok` accepts: any anchored concept with one, or a bundle
-    whose every concept has one. See `_decorations` for why a bundle only counts whole."""
+    whose every concept has one. See `_decorations` for why a bundle only counts whole.
+
+    A CONCEPT WITH NO GAMES ON RECORD COUNTS AS OK. Nothing about it is delisted or unobtainable; it simply has not
+    synced. Counting it as a failure labelled a bundle of one listed episode and one not-yet-synced one
+    "Delisted", which names a fact that is not true."""
     def has(concept_id):
-        return any(ok(g) for g in games_by_concept.get(concept_id, []))
+        games = games_by_concept.get(concept_id)
+        return not games or any(ok(g) for g in games)
 
     return (any(has(cid) for cid in membership['anchored'])
             or any(all(has(cid) for cid in bundle) for bundle in membership['bundles']))

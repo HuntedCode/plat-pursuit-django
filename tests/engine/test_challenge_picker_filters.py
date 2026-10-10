@@ -533,7 +533,7 @@ def test_a_square_label_can_ellipsise_on_a_phone():
     assert '.pp-cpick__key-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' in _phone_block()
 
 
-# ── availability: delisted / unobtainable only when EVERY stack is ────────────────────────────────
+# ── availability: delisted / unobtainable only when the contract can no longer be finished ────────────────────────────────
 
 def _stack(contract, *, delisted=False, obtainable=True):
     """Another trophy list (stack) of the same game."""
@@ -596,6 +596,41 @@ def test_a_listed_stack_of_the_contracts_own_game_outweighs_a_broken_bundle():
     bundle.concepts.add(rider)
     _, _, avail = picker._decorations([contract])
     assert avail[contract.id] == []
+
+
+def test_a_whole_listed_bundle_outweighs_the_contracts_own_delisted_game():
+    """The mirror of the case above: the contract's own concept is gone, but a bundle whose every episode is
+    listed is still a way through. A rule that ignored bundles whenever there is an anchored concept fails here."""
+    contract = _contract('Bravo Gone Own')
+    contract.concept.games.update(is_delisted=True)
+    bundle = ContractBundle.objects.create(contract=contract, label='Season')
+    for _ in range(2):
+        rider = ConceptFactory()
+        GameFactory(concept=rider)
+        bundle.concepts.add(rider)
+    _, _, avail = picker._decorations([contract])
+    assert avail[contract.id] == []
+
+
+def test_an_episode_not_synced_yet_is_unknown_not_delisted():
+    """An episode with no games on record has nothing delisted about it, so it cannot make the flag show."""
+    _SEQ['n'] += 1
+    contract = Contract.objects.create(name='Bundle Pending', slug='pf-pend-%d' % _SEQ['n'], is_live=True,
+                                       igdb_id=847_000 + _SEQ['n'])
+    bundle = ContractBundle.objects.create(contract=contract, label='Season')
+    listed = ConceptFactory()
+    GameFactory(concept=listed)
+    bundle.concepts.add(listed, ConceptFactory())   # the second has no games yet
+    _, _, avail = picker._decorations([contract])
+    assert avail[contract.id] == []
+
+
+def test_unobtainable_but_still_listed_says_only_unobtainable():
+    profile = _hunter()
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    locked = _contract('Bravo Locked')
+    locked.concept.games.update(is_obtainable=False)
+    assert _flags_for(profile, challenge, 'Bravo Locked') == ['unobtainable']
 
 
 def test_a_contract_with_no_games_on_record_is_not_flagged():

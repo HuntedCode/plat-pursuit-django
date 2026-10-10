@@ -752,7 +752,7 @@
                 tag.textContent = p.name;
                 wrap.appendChild(tag);
             });
-            // DELISTED / UNOBTAINABLE, sent only when EVERY stack of the game is (owner, 2026-10-11), as the house
+            // DELISTED / UNOBTAINABLE, sent only when the contract can no longer be finished (owner, 2026-10-10), as the house
             // alert chip -- the error tone the game page's own flags use. A fact worth stopping on before you
             // pick, so it is a chip and not a flat tag like the platforms beside it.
             flags.forEach(function (flag) {
