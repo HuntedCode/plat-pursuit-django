@@ -744,6 +744,33 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   stamp (or a non-trusted match) is *not* a member even if the id matches — the gate is all three.
 - **Per-job totals MUST aggregate in the DB.** Never iterate a whale's `ContractXPGrant`/
   `EarnedContract` rows in Python to total job XP — `Sum().values('job')`. (The May 2026 OOM rule.)
+- **Never `.distinct()` the annotated board, and never filter it through a join.** `annotated_contracts`
+  hangs a dozen correlated subqueries off every live contract. `count()` and `aggregate()` drop the
+  ones they never read, unless the query is DISTINCT: then every column is part of the result, so every
+  subquery runs for every row. `_filter_contracts` used to end in `.distinct()` to hide the duplicates
+  its `jobs__` joins produced. On prod (2026-10-10, 3,387 live contracts) that made the board's count
+  0.98 s instead of 0.07 s, and `contracts_page` plus `board_facets` (eight queries between them, timed
+  on prod) took about 4 s of every `/career/` load, making it the slowest page on the site. No board
+  filter joins a to-many relation now: the job, platform and game-title matches are `EXISTS`
+  (`_job_exists`, `_platform_exists`, and an inline `Exists` for game titles), and the rest read
+  the contract's own columns or annotations, so a contract is one row however many of its jobs or
+  games match. A new filter over an M2M or a reverse FK has to be an `EXISTS` too.
+  `test_board_queries_never_select_distinct` fails on any `SELECT DISTINCT` from the board (Board
+  and History), its facets, the empty-state suggestion, or job detail's contract counts.
+  This is about cost, not memory: the rows are the curated catalogue, so every user pays it, not
+  just whales.
+- **The claim banner counts claimables regardless of platform; the board filters by platform.**
+  `claimable_summary` has no platform condition, while the board defaults to current-gen. So the
+  banner's jump and its href open Ready to Claim with **every platform lit**, which shows the legacy
+  and VR claimables the default hid (`test_the_claim_banner_count_matches_the_board_it_opens`). The
+  client's "every platform" is read from the page's platform chips, which a test keeps equal to
+  `ALL_PLATFORMS`, in order (so a repeat banner tap is a deduped no-op). **Known gap:** "every platform"
+  is still `_platform_exists(ALL_PLATFORMS)`, "has a member game on some platform", so a claimable with
+  no platform-tagged member (a bundle contract, or a game with an empty `title_platform`) is counted by
+  the banner and shown by no board. Treating all six as "no filter" was tried and reverted (2026-10-10):
+  lighting the sixth chip then added a block of contracts no chip count accounted for, and their cards
+  render without games. It belongs to the bundle-only follow-up under **Deferred / open**, where bundle
+  games feed `_platform_exists` and the card.
 - **Don't recompute granted XP from the Contract's *current* config.** Read the ledger. A
   Contract that changes its jobs or `T` later must not retroactively rewrite past grants.
 - **Unique `igdb_id` is what guarantees "once per game."** Two Contracts can't share an IGDB id,

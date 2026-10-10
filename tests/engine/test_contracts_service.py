@@ -406,6 +406,86 @@ def test_server_multi_job_is_anded():
     assert 'mj-both' in slugs and 'mj-one' not in slugs   # AND (a game with both), not OR
 
 
+def test_job_filters_never_duplicate_a_contract():
+    """Two jobs of one discipline is the shape a JOIN through the jobs M2M returns twice: the discipline
+    matches both, and so does a search hitting both job names. The board used to hide those duplicates
+    behind a DISTINCT that cost every query its unused annotations; the filters are EXISTS now, so one
+    contract is one row. Fails if the discipline or search filter goes back to a join without the
+    DISTINCT. (A `jobs__slug` join cannot duplicate, since slugs are unique, so the jobs leg here only
+    proves the AND still narrows to this contract.)"""
+    profile = ProfileFactory()
+    _contract('dup-twin', ('gunslinger', 'slayer'))   # both combat; 'sl' is in both job names
+    for filters in ({'disciplines': ['combat']},
+                    {'jobs': ['gunslinger'], 'disciplines': ['combat']},
+                    {'q': 'sl'}):
+        page = contracts_page(profile, platforms=[], **filters)
+        assert _slugs(page) == ['dup-twin'], filters
+        assert page['total'] == 1, filters
+        facets = board_facets(profile, platforms=[], **filters)
+        assert facets['status']['all'] == 1, filters
+        assert facets['discipline'] == {'combat': 1}, filters   # distinct CONTRACTS, not jobs
+
+
+def test_the_claim_banner_count_matches_the_board_it_opens(client):
+    """The banner's "N ready to claim" (`claimable_summary`) ignores platform, but the board defaults to
+    current-gen, so legacy and VR claimables were counted and never shown. The banner's jump (and its
+    href) now open Ready to Claim with every platform lit (`allPlatforms` on pp:board-filter in
+    career.html); this pins, through the real results endpoint, that that board holds the banner's N.
+
+    Known gap, deliberately not pinned: a claimable with NO platform-tagged member game (a bundle contract,
+    or a game with an empty title_platform) still misses every platform filter. That is the bundle
+    follow-up in docs/design/rebuild/job-board-contracts.md, where bundle games feed the platform match."""
+    from trophies.services.contracts_service import claimable_summary
+    from trophies.util_modules.constants import ALL_PLATFORMS
+
+    profile = ProfileFactory(is_linked=True)
+    legacy_and_vr = ('cb-ps3', 'cb-vita', 'cb-psvr2')
+    for slug, platform in zip(legacy_and_vr, ('PS3', 'PSVITA', 'PSVR2')):
+        c, _con, g = _contract(slug)
+        g.title_platform = [platform]
+        g.save(update_fields=['title_platform'])
+        plat = Trophy.objects.create(game=g, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
+        EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
+        ProfileGameFactory(profile=profile, game=g, progress=100, has_plat=True)
+        contract_service.mark_contract_reached(profile, c)
+
+    banner = claimable_summary(profile)['count']
+    assert banner == 3
+    assert contracts_page(profile, status='claimable')['total'] == 0, 'the current-gen default hides all three'
+    every = contracts_page(profile, status='claimable', platforms=list(ALL_PLATFORMS))
+    assert sorted(_slugs(every)) == sorted(legacy_and_vr) and every['total'] == banner
+
+    client.force_login(profile.user)
+    resp = client.get('/career/contracts/results/', [('status', 'claimable')]
+                      + [('platform', p) for p in ALL_PLATFORMS] + [('page', '1')])
+    assert resp.status_code == 200 and resp['X-Total'] == str(banner)
+
+
+def test_board_queries_never_select_distinct():
+    """A DISTINCT over the annotated board stops Django dropping the annotations a query never reads,
+    so every correlated subquery runs for every live contract: on prod (2026-10-10, 3,387 contracts)
+    it made the board's count 0.98 s instead of 0.07 s. Pinned on the SQL actually executed, with the
+    job, discipline, search and platform filters all switched on, so re-adding `.distinct()` anywhere on
+    the path fails here. `COUNT(DISTINCT ...)` in the facets is a different thing and does not match."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from trophies.services.contracts_service import job_contract_counts
+
+    profile = ProfileFactory()
+    _contract('nd-one', ('gunslinger', 'slayer'))
+    filters = {'q': 'sl', 'jobs': ['gunslinger'], 'disciplines': ['combat'], 'platforms': ['PS5']}
+    with CaptureQueriesContext(connection) as ctx:
+        for scope in ('board', 'history'):   # History adds its own banked-XP annotations
+            contracts_page(profile, scope=scope, **filters)
+            board_facets(profile, scope=scope, **filters)
+            suggest_relaxation(profile, scope=scope, **filters)
+        job_contract_counts('gunslinger')     # job detail's header figures
+    assert ctx.captured_queries, 'nothing was captured, so nothing was checked'
+    offenders = [q['sql'] for q in ctx.captured_queries if 'SELECT DISTINCT' in q['sql'].upper()]
+    assert not offenders, offenders[0][:300]
+
+
 def test_server_sort_by_job_count():
     profile = ProfileFactory()
     _contract('jc-many', ('gunslinger', 'mage'))   # 2 jobs

@@ -188,7 +188,7 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
     return (
         Contract.objects.filter(is_live=True)
         .annotate(
-            has_jobs=Exists(Job.objects.filter(contracts=OuterRef('pk'))),   # jobless -> awards nothing
+            has_jobs=_job_exists(),   # jobless -> awards nothing
             # Do the member games DEFINE a platinum? (mirrors contract_service._has_platinum) -- drives
             # the card's tier split; games with no plat pay the full T at 100% instead.
             defines_plat=Exists(Trophy.objects.filter(
@@ -258,6 +258,13 @@ def _platform_exists(platforms):
     ))
 
 
+def _job_exists(**job_filter):
+    """A contract that levels a job matching `job_filter` (none = any job), as an EXISTS rather than a
+    join through the jobs M2M. The same reason as _platform_exists: a join returns one row per matching
+    job, and deduplicating those rows needs a DISTINCT the board cannot afford. See _filter_contracts."""
+    return Exists(Job.objects.filter(contracts=OuterRef('pk'), **job_filter))
+
+
 def new_contract_cutoff():
     """Contracts that first went live at/after this instant are NEW. One definition, read by the
     board filter, the card marker and the announcer."""
@@ -290,13 +297,13 @@ def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platform
         qs = qs.filter(fully_banked=False)
     if status and status != 'all':
         qs = qs.filter(status=status)
-    # Jobs + disciplines are ANDed: "driver + slayer" = a contract that levels BOTH. Each chained
-    # .filter() on the jobs M2M is a separate join (AND); a single __in would be OR (any).
+    # Jobs + disciplines are ANDed: "driver + slayer" = a contract that levels BOTH. One EXISTS per
+    # selected value (AND); a single __in would be OR (any).
     for slug in (jobs or ()):
-        qs = qs.filter(jobs__slug=slug)
+        qs = qs.filter(_job_exists(slug=slug))
     for disc in (disciplines or ()):
         if disc and disc != 'all':
-            qs = qs.filter(jobs__discipline=disc)
+            qs = qs.filter(_job_exists(discipline=disc))
     if new_only:
         # went_live_at is NULL for everything published before the field existed (the launch set),
         # so they correctly read as "not new" rather than flooding the chip on day one.
@@ -308,12 +315,19 @@ def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platform
         # annotated Exists over the igdb path rather than a relational join.
         game_name_match = Exists(Game.objects.filter(
             title_name__icontains=q, **_member_at_igdb('concept__')))
-        qs = qs.annotate(_game_name_match=game_name_match).filter(
+        qs = qs.annotate(_game_name_match=game_name_match,
+                         _job_name_match=_job_exists(name__icontains=q)).filter(
             Q(name__icontains=q)
             | Q(_game_name_match=True)
-            | Q(jobs__name__icontains=q)
+            | Q(_job_name_match=True)
         )
-    return qs.distinct()
+    # No DISTINCT, and no filter here may need one: none joins a to-many relation. The job, platform and
+    # game-title matches are EXISTS, and the rest read the contract's own columns or annotations, so a
+    # contract is one row however many of its jobs or games match. A DISTINCT over the annotated board
+    # stops Django dropping the annotations a query never reads, so every correlated subquery in
+    # annotated_contracts runs for every live contract. Measured on prod (2026-10-10, 3,387 live
+    # contracts): the board's count took 0.98 s with it and 0.07 s without, for the same rows.
+    return qs
 
 
 def _card_prefetch(qs):
@@ -570,9 +584,12 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
                  scope='board', new_only=False):
     """Facet counts for the toolbar chips. Each dimension counts the catalog filtered by the OTHER
     active filters (so picking PS5 doesn't zero out PS4's count, and status counts reflect your
-    current discipline/platform view). Cheap + whale-safe: the live-Contract catalog is bounded and
-    curated (never the user's library), so these are a few small aggregates. `scope` constrains every
-    facet to the active Board/History set."""
+    current discipline/platform view). Whale-safe: the rows are the curated live-Contract catalog, never
+    the user's library. Not free, though: that catalog is in the thousands, and each aggregate evaluates
+    correlated subqueries per row (e.g. the has_jobs gate, the Board/History split, the per-platform
+    EXISTS, and status wherever it is counted or filtered), so the cost scales with the catalog for
+    EVERY user.
+    `scope` constrains every facet to the active Board/History set."""
     if platforms is None:                     # match contracts_page: absent -> current-gen, so the
         platforms = list(MODERN_PLATFORMS)    # status counts agree with the board's default total
     base = annotated_contracts(profile, disc_levels)
