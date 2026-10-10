@@ -170,8 +170,8 @@ def _career_js(start, end):
 
 def test_an_identical_board_request_is_dropped():
     """A page-1 fetch for the board already on screen, or already on its way, is dropped: a re-tapped
-    active chip, the claim banner's jump re-clicking it, Clear filters with nothing set, a repeated radar
-    jump. Each refetched an identical board, aborting any request already in flight, and prod logged a
+    active chip, a repeated claim-banner jump, Clear filters with nothing set, a repeated radar jump.
+    Each refetched an identical board, aborting any request already in flight, and prod logged a
     run of eleven aborted `?status=claimable&page=1` requests from one user. No JS runner, so this is
     source text. The check must run before the abort and the fetch, record the query it lets through,
     and live in the PAGE-1 branch: hoisted out of it, every scroll-append would match the board on
@@ -209,6 +209,61 @@ def test_the_server_rendered_board_counts_as_on_screen():
     recorded as the board on screen. Without it, the first re-tap after load refetches the SSR board."""
     code = _career_js('seedFromURL();', 'initCards(list);')
     assert code.lstrip().startswith('boardQuery = buildParams(1);'), 'the SSR board is not recorded'
+
+
+def test_the_claim_banner_jump_opens_the_board_on_every_claimable():
+    """The banner's jump clicked the Ready to Claim chip, which kept whatever scope was showing: from
+    History it lit a hidden chip, the server dropped the status, and the hunter stayed on History. It now
+    hands the board a status filter with every platform lit (the banner counts claimables on every
+    platform; the server half is pinned in test_contracts_service). Source text, no JS runner."""
+    import re
+
+    jump = _career_js("document.querySelectorAll('[data-lab-goto]')", 'scrollIntoView')
+    assert re.search(r"dispatchEvent\(\s*new CustomEvent\(\s*'pp:board-filter',\s*\{\s*detail:\s*"
+                     r"\{\s*status:\s*f,\s*allPlatforms:\s*true\s*\}", jump), 'the banner no longer opens the board filter'
+    assert '.click()' not in jump, 'the banner clicks a chip again, which keeps a History scope'
+
+    handler = _career_js("document.addEventListener('pp:board-filter'", 'fetchPage(1, false);')
+    for needle, why in (("state.scope = 'board';", 'the jump no longer leaves History'),
+                        ("state.status = f.status || '';", 'the jump drops the status it was given'),
+                        ('f.allPlatforms ? VALID_PLATS.slice() : null', 'the jump no longer asks for every platform'),
+                        ('var lit = state.platforms || DEFAULT_PLATS;', 'the platform chips do not show what was asked'),
+                        ("(state.status || 'all') === c.dataset.filter", 'the status chips do not show the jump')):
+        assert needle in handler, why
+
+
+def test_the_platform_chips_are_every_platform_the_server_knows():
+    """`VALID_PLATS` (what "every platform" means to the banner jump) is read from these chips, while the
+    server's "no restriction" test compares against ALL_PLATFORMS. A chip added or dropped on one side
+    only would quietly turn "every platform" back into a filter."""
+    import pathlib
+    import re
+
+    from trophies.util_modules.constants import ALL_PLATFORMS
+
+    src = (pathlib.Path(__file__).resolve().parents[2]
+           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    chips = re.findall(r'class="rp-chip rp-plat[^"]*" data-plat="([^"]+)"', src)
+    assert sorted(chips) == sorted(ALL_PLATFORMS), chips
+
+
+def test_the_claim_banner_links_to_the_board_it_opens(client):
+    """The banner carries the jump's hook, and its href is the same board (Ready to Claim, every platform),
+    so a new tab, a copied link or a no-JS tap lands on the N it counts."""
+    from django.utils import timezone as tz
+    from django.utils.html import escape
+
+    from trophies.models import EarnedContract
+    from trophies.util_modules.constants import ALL_PLATFORMS
+
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    c = _live_contract('banner-claim')
+    EarnedContract.objects.create(profile=profile, contract=c, has_platinum=True, platinum_reached_at=tz.now())
+
+    body = client.get('/career/').content.decode()
+    href = '?view=contracts&status=claimable' + ''.join(f'&platform={p}' for p in ALL_PLATFORMS)
+    assert f'href="{escape(href)}" data-lab-goto="contracts" data-goto-filter="claimable"' in body
 
 
 def test_build_params_encodes_every_field_of_the_board_state():

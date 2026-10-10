@@ -129,6 +129,10 @@ class CareerView(LoginRequiredMixin, TemplateView):
         claim = contracts_service.claimable_summary(profile)
         context['claimable_count'] = claim['count']
         context['claimable'] = claim
+        # The banner's href: the same board its JS jump opens (Ready to Claim, every platform), so a new
+        # tab, a copied link or a no-JS tap lands on the N it counts rather than the current-gen default.
+        context['claim_board_url'] = '?' + urlencode(
+            [('view', 'contracts'), ('status', 'claimable')] + [('platform', p) for p in ALL_PLATFORMS])
         # Active tab on load: ?view=contracts deep-links the Contracts board.
         requested = self.request.GET.get('view')
         context['active_view'] = requested if requested in _CAREER_VIEWS else 'jobs'
