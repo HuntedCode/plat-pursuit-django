@@ -24,21 +24,38 @@ single letter's pool already runs to the hundreds and will reach four figures. E
 slice, and the expensive per-hunter work (`completion_dates`) touches only the slice -- never the pool.
 Ordering is `Lower('name')` in the database, per the project's front-facing-name rule.
 
+PAGED, 2026-10-10. Each panel was one `PAGE` and nothing more, so a square with 340 games showed 24 and
+the sheet simply ended (owner: "the modal ONLY shows 24 total games"). The square and search panels now take
+an `offset` and say whether there is `more`; the history panel takes a `cursor`, because its pages are
+filtered by a completion date SQL cannot see, so "the next 24" is not an offset into anything. That cursor is a
+KEYSET (the id of the last candidate used, resumed after it in name order), not a position, because history is
+the one panel that stays open while it is written to: an import removes its letter's candidates from the pool,
+and a position cursor would then skip games that slid back past it. The client
+fetches the next page as the sheet scrolls. The catch-up block rides only on the FIRST page of a square: it is
+its own short list, and repeating it per page would re-run its trophy read for rows already on screen.
+
+`badge_only` narrows every list to contracts with a game in a live badge (`eligibility.in_live_badge`), and
+`platforms` to contracts with a game on any of them (`eligibility.on_platforms`); `_scope` applies both. Every
+row also carries its PLATFORMS, the union over the contract's member games, read in one query per page.
+
 THE TWO SLOT-SHAPED PANELS carry a DB `COUNT` beside their slice, because "12 of 340" is a fact a hunter can
 act on. `history_panel` deliberately does NOT: membership there depends on a completion date read from trophy
 data, so an honest total would mean dating the whole pool. It reports a boolean instead, and its window is
 `HISTORY_SCAN`-sized rather than `PAGE`-sized. An earlier version of this paragraph said "every list here is a
 `PAGE`-sized slice with a DB `COUNT` beside it", which stopped being true when the third panel landed.
 """
+from django.db.models import Q
 from django.db.models.functions import Lower
 
 from challenges.models import CHALLENGE_TYPE_AZ
 from challenges.services import challenge_service as svc
 from challenges.services import eligibility
 from challenges.services.slot_render import covers_by_contract, key_atoms, label_for_key
-from trophies.models import Job
+from core.templatetags.custom_filters import platform_color_str
+from trophies.models import Contract, Game, Job
 from trophies.services.job_render import job_atom
 from trophies.templatetags.job_icons import has_icon
+from trophies.util_modules.constants import PLATFORM_DISPLAY_ORDER, ordered_platform_union
 
 #: One page of offers. 24 rather than a round 20 or 25 because it divides by 2, 3 and 4, so the grid it
 #: feeds has no ragged last row at any of the picker's column counts.
@@ -65,6 +82,21 @@ PAGE = 24
 #: trophies for, and 96 contracts is a bounded read. Beyond that, `scan_truncated` tells the panel to say so
 #: rather than imply there is nothing.
 HISTORY_SCAN = PAGE * 4
+
+#: The platforms the picker filters by, in display order, as (value, label). The labels match Browse Games'
+#: platform filter; the values are what `Game.title_platform` stores and what `?platform=` must be.
+PLATFORM_FILTERS = [(p, 'PSVita' if p == 'PSVITA' else p) for p in PLATFORM_DISPLAY_ORDER]
+#: The same labels on a row's tags, so the sheet never spells a platform two ways.
+_PLATFORM_LABELS = dict(PLATFORM_FILTERS)
+
+#: How deep a panel will page. A guard against `?offset=10**9`, not a feature: Postgres walks `OFFSET` rows
+#: before returning any, so an unbounded offset is a scan on request. The biggest single-square pool today is
+#: in the hundreds; this leaves room for the catalogue to grow tenfold.
+#:
+#: THE CEILING ENDS THE LIST, it does not hold it there. Clamping a deeper request back to the ceiling would
+#: answer `offset=5024` with the rows at 5000 again and `more: true`, so a scrolling sheet appended the same
+#: page forever. Every slice stops AT the ceiling and `more` is false past it.
+MAX_OFFSET = 5000
 
 #: A search term shorter than this matches most of the catalogue, so it is treated as no term at all --
 #: the same floor `gamelists.services.game_search` applies, and for the same reason: an unbounded
@@ -95,7 +127,8 @@ MAX_QUERY = 120
 BY_NAME = (Lower('name'), 'pk')
 
 
-def slot_panel(profile, challenge, key, *, query='', limit=PAGE, slot=None):
+def slot_panel(profile, challenge, key, *, query='', limit=PAGE, slot=None, offset=0, badge_only=False,
+               platforms=()):
     """Everything the slot-first panel draws for the `key` square.
 
     QUERY COST, counted again after the last two changes invalidated the previous figure. SIX on the
@@ -151,16 +184,23 @@ def slot_panel(profile, challenge, key, *, query='', limit=PAGE, slot=None):
             'current_name': slot.contract_name,
             'total': 0, 'showing': 0, 'rows': [],
             'catchup': [], 'catchup_more': False,
-            'locked': True,
+            'locked': True, 'offset': 0, 'more': False,
         }
 
-    pool = _narrow(eligibility.eligible_contracts(profile, challenge, key), query)
+    offset = _bounded(offset)
+    pool = _scope(_narrow(eligibility.eligible_contracts(profile, challenge, key), query),
+                  badge_only, platforms)
     total = pool.count()
-    rows = list(pool.order_by(*BY_NAME)[:limit])
+    rows = list(pool.order_by(*BY_NAME)[offset:min(offset + limit, MAX_OFFSET)])
 
-    catchup, catchup_more = _catchup_offers(profile, challenge, key, query=query, limit=limit)
+    # FIRST PAGE ONLY. See the module docstring: a later page is more of the same list, not a new panel.
+    if offset:
+        catchup, catchup_more = [], False
+    else:
+        catchup, catchup_more = _catchup_offers(profile, challenge, key, query=query, limit=limit,
+                                                badge_only=badge_only, platforms=platforms)
 
-    covers = covers_by_contract(rows + [c for c, _, _ in catchup])
+    covers, plats = _decorations(rows + [c for c, _, _ in catchup])
 
     return {
         'key': key,
@@ -172,17 +212,19 @@ def slot_panel(profile, challenge, key, *, query='', limit=PAGE, slot=None):
         'current_name': slot.contract_name,
         'total': total,
         'showing': len(rows),
-        'rows': [_row(contract, covers) for contract in rows],
+        'rows': [_row(contract, covers, plats) for contract in rows],
         # Already-completed games a rule lifts. Kept as their own list rather than mixed into `rows` with
         # a flag: they are the only offers that land a square COMPLETE and therefore LOCKED, so the
         # warning and the confirmation belong to one block of the panel rather than to scattered rows.
-        'catchup': [_catchup_row(contract, via, when, covers) for contract, via, when in catchup],
+        'catchup': [_catchup_row(contract, via, when, covers, plats) for contract, via, when in catchup],
         'catchup_more': catchup_more,
         'locked': False,
+        'offset': offset,
+        'more': offset + len(rows) < min(total, MAX_OFFSET),
     }
 
 
-def search_panel(profile, challenge, query, *, limit=PAGE):
+def search_panel(profile, challenge, query, *, limit=PAGE, offset=0, badge_only=False, platforms=()):
     """Everything the contract-first panel draws for a search term.
 
     Returns empty-handed for a term under `MIN_QUERY` rather than running the scan.
@@ -218,7 +260,7 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
         # `KeyError` on exactly one branch -- which is what happened the moment `key_labels` and
         # `key_atoms` moved to run level and this line was not updated with them.
         return {'query': query, 'total': 0, 'showing': 0, 'rows': [], 'too_short': True,
-                'key_labels': {}, 'key_atoms': {}, 'filled': {}}
+                'key_labels': {}, 'key_atoms': {}, 'filled': {}, 'offset': 0, 'more': False}
 
     slots = list(challenge.slots.all())
     open_keys = {s.key for s in slots if not s.is_completed}
@@ -234,14 +276,15 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
     # the argument had been applied to detection only.
     used_ids = {s.contract_id for s in slots if s.contract_id}
 
-    found = _narrow(eligibility.live_contracts(), query)
+    offset = _bounded(offset)
+    found = _scope(_narrow(eligibility.live_contracts(), query), badge_only, platforms)
     total = found.count()
     # NO `prefetch_related('jobs')`. It was here and it could not have worked: `fitting_keys` read the
     # jobs with `values_list`, which issues a fresh query even on a prefetched manager (the prefetch
     # caches objects, not arbitrary querysets). The bulk call below asks once for the whole page instead.
-    rows = list(found.order_by(*BY_NAME)[:limit])
+    rows = list(found.order_by(*BY_NAME)[offset:min(offset + limit, MAX_OFFSET)])
 
-    covers = covers_by_contract(rows)
+    covers, plats = _decorations(rows)
     completed = eligibility.completed_contract_ids(profile, rows)
     keys_by_contract = eligibility.fitting_keys_for(challenge, rows)
     # ATOMS, not just names. A button offering the Slayer square should look like the Slayer square --
@@ -258,7 +301,7 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
         keys = keys_by_contract.get(contract.id, set()) & open_keys
         already_here = contract.id in used_ids
         out.append({
-            **_row(contract, covers),
+            **_row(contract, covers, plats),
             # Every key it could go in, in display order. A jobs game routinely offers several. The NAMES
             # and the icons are run-level, below: they describe the squares, not this game.
             'keys': sorted(keys, key=lambda k: _key_name(atoms, k)),
@@ -269,6 +312,7 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
         })
 
     return {'query': query, 'total': total, 'showing': len(rows), 'rows': out, 'too_short': False,
+            'offset': offset, 'more': offset + len(rows) < min(total, MAX_OFFSET),
             # RUN-LEVEL, ALL THREE, because none of them is a fact about a particular result: every row
             # offers the same squares, under the same names and icons, with the same occupants. Both were
             # per-row while this very function already explained, for `filled`, why that is wrong -- 24 rows
@@ -290,7 +334,7 @@ def search_panel(profile, challenge, query, *, limit=PAGE):
             'filled': filled}
 
 
-def history_panel(profile, challenge, *, query='', limit=PAGE):
+def history_panel(profile, challenge, *, query='', limit=PAGE, cursor=None, badge_only=False, platforms=()):
     """Everything the history-first panel draws: games this hunter finished that a square will accept.
 
     ONE SHAPE, ALWAYS, open or closed. The caller renders a panel either way -- an explanation is a panel too --
@@ -322,7 +366,7 @@ def history_panel(profile, challenge, *, query='', limit=PAGE):
     joined_at = getattr(getattr(profile, 'user', None), 'date_joined', None)
     shut = {
         'open': False, 'joined_at': joined_at, 'query': clean_term(query),
-        'rows': [], 'showing': 0, 'more': False, 'scan_truncated': False,
+        'rows': [], 'showing': 0, 'more': False, 'scan_truncated': False, 'cursor': None,
     }
 
     # THE TYPE RULE FIRST, because it is the one a hunter cannot change by doing anything. A Job Coverage run
@@ -347,29 +391,44 @@ def history_panel(profile, challenge, *, query='', limit=PAGE):
 
     pool = _narrow(
         eligibility.completed_contracts_across_keys(profile, challenge, open_keys), query)
+    pool = _scope(pool, badge_only, platforms)
     # A WINDOW OF CANDIDATES, then the date filter, then a page. See `HISTORY_SCAN`: filtering first is not
     # available (membership is not a SQL predicate) and paging first hides importable games behind pre-join
     # ones. `scan` is bounded whatever the hunter's library holds.
+    #
+    # THE CURSOR IS THE LAST CANDIDATE USED, not a position (see the module docstring): the window starts just
+    # after it in `BY_NAME` order. When the page fills before the window does that is mid-window, so the undated
+    # remainder is scanned again next time rather than skipped. A keyset also needs no `MAX_OFFSET`: it never
+    # walks past rows to reach a page.
+    pool = _after(pool, cursor)
     scan = list(pool.order_by(*BY_NAME)[:HISTORY_SCAN])
     dates = eligibility.importable_dates(profile, scan, joined_at) if scan else {}
 
-    importable = [c for c in scan if dates.get(c.id) is not None]
-    rows = importable[:limit]
+    importable = [(i, c) for i, c in enumerate(scan) if dates.get(c.id) is not None]
+    rows = [c for _, c in importable[:limit]]
     # WAS THE WINDOW EXHAUSTIVE? If it filled, there are candidates nobody dated, so "nothing importable"
     # would be a claim this function cannot make. The panel says something honest instead.
     scan_truncated = len(scan) >= HISTORY_SCAN
+    if len(importable) > limit:
+        next_cursor = importable[limit - 1][1].pk
+    elif scan_truncated:
+        next_cursor = scan[-1].pk
+    else:
+        next_cursor = None
 
-    covers = covers_by_contract(rows)
+    covers, plats = _decorations(rows)
     return {
         'open': True,
         'closed_reason': '',
         'joined_at': joined_at,
         'query': clean_term(query),
-        'rows': [_history_row(c, dates[c.id], occupants, covers) for c in rows],
+        'rows': [_history_row(c, dates[c.id], occupants, covers, plats) for c in rows],
         'showing': len(rows),
         # THERE MAY BE MORE, either because the page was full or because the window was. Not "there are N
         # more": the honest total is not affordable, and a candidate count is a number about the wrong set.
-        'more': len(importable) > limit or scan_truncated,
+        'more': next_cursor is not None,
+        # WHERE THE NEXT PAGE STARTS, or None when this was the last.
+        'cursor': next_cursor,
         # AND WHETHER "NOTHING" MEANS NOTHING. With an empty page and a truncated window the panel must not
         # imply the hunter has nothing importable -- it only knows that nothing in the first `HISTORY_SCAN`
         # candidates was. The client says which, and points at the search box.
@@ -377,7 +436,7 @@ def history_panel(profile, challenge, *, query='', limit=PAGE):
     }
 
 
-def _history_row(contract, when, occupants, covers):
+def _history_row(contract, when, occupants, covers, plats):
     """One history offer: the game, the square it lands in, and when the work happened.
 
     `initial` IS THE DATABASE'S ANSWER, annotated by the pool rather than recomputed here.
@@ -391,7 +450,7 @@ def _history_row(contract, when, occupants, covers):
     What is true is narrower and enough: the pool already asked Postgres for this value, so reading it back is
     free and cannot drift from the filter that selected the row, whatever a future ICU upgrade does to folding.
     """
-    row = _row(contract, covers)
+    row = _row(contract, covers, plats)
     row['key'] = contract.initial
     row['key_label'] = label_for_key(contract.initial)
     # The date the WORK happened, read from trophy data -- never an `EarnedContract` detection stamp, which
@@ -434,6 +493,76 @@ def clean_term(query):
     return query[:MAX_QUERY]
 
 
+def clean_platforms(values):
+    """The `?platform=` values a panel may filter by: known platforms only, deduplicated, in display order.
+    Anything else is dropped rather than refused, so a stale or hand-edited link narrows less instead of
+    breaking the sheet."""
+    wanted = set(values or ())
+    return tuple(p for p, _ in PLATFORM_FILTERS if p in wanted)
+
+
+def _scope(pool, badge_only, platforms):
+    """The picker's two display filters, applied to any pool. Neither changes a rule; see `in_live_badge`."""
+    if badge_only:
+        pool = eligibility.in_live_badge(pool)
+    platforms = clean_platforms(platforms)
+    if platforms:
+        pool = eligibility.on_platforms(pool, platforms)
+    return pool
+
+
+def _decorations(contracts):
+    """(covers, platforms) for a page of contracts, sharing one membership read.
+
+    PLATFORMS ARE THE UNION over every member game, in the site's display order (`ordered_platform_union`,
+    the same union Browse Games' cards and the game page show), each with the colour tone the platform tags
+    elsewhere use. One `Game` query for the page, however many contracts: bounded by the page, never by a
+    hunter's library.
+    """
+    if not contracts:
+        return {}, {}
+    concepts = eligibility.member_concepts_by_contract(contracts)
+    covers = covers_by_contract(contracts, concepts)
+    every_concept = {cid for ids in concepts.values() for cid in ids}
+    by_concept = {}
+    if every_concept:
+        for concept_id, platforms in (Game.objects.filter(concept_id__in=every_concept)
+                                      .values_list('concept_id', 'title_platform')):
+            by_concept.setdefault(concept_id, []).append(platforms)
+    plats = {}
+    for contract_id, concept_ids in concepts.items():
+        union = ordered_platform_union(
+            lists for cid in concept_ids for lists in by_concept.get(cid, []))
+        plats[contract_id] = [{'name': _PLATFORM_LABELS.get(p, p), 'tone': platform_color_str(p)} for p in union]
+    return covers, plats
+
+
+def _after(pool, cursor):
+    """`pool` from just after contract `cursor` in `BY_NAME` order, or the whole pool for no cursor.
+
+    `(Lower(name), pk)` is a total order, so "after" is exact: same lowered name and a higher pk, or a later
+    lowered name. A cursor that is not an id, or names a contract that no longer exists, starts over rather than
+    guessing where it was."""
+    try:
+        cursor = int(cursor)
+    except (TypeError, ValueError):
+        return pool
+    anchor = Contract.objects.filter(pk=cursor).annotate(_lname=Lower('name')).values_list('_lname', flat=True).first()
+    if anchor is None:
+        return pool
+    return pool.annotate(_lname=Lower('name')).filter(Q(_lname__gt=anchor) | Q(_lname=anchor, pk__gt=cursor))
+
+
+def _bounded(position):
+    """A page position as a non-negative int no deeper than `MAX_OFFSET`. The views parse the querystring;
+    this is the floor and ceiling every panel applies, so a direct caller cannot ask for a scan either."""
+    try:
+        position = int(position)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(position, MAX_OFFSET))
+
+
 def _narrow(queryset, query):
     """Apply a search term, or don't. `icontains` on an unindexed column, knowingly -- see the module
     docstring of `gamelists.services.game_search`, which measured the same thing and recorded that no
@@ -444,7 +573,7 @@ def _narrow(queryset, query):
     return queryset.filter(name__icontains=query)
 
 
-def _catchup_offers(profile, challenge, key, *, query, limit):
+def _catchup_offers(profile, challenge, key, *, query, limit, badge_only=False, platforms=()):
     """([(contract, via, completed_at)], total) for the already-completed games a rule currently lifts.
 
     Asks `catchup_offers` for the labels AND the dates rather than deciding or re-deriving either, so the
@@ -456,6 +585,7 @@ def _catchup_offers(profile, challenge, key, *, query, limit):
     truncated list that looks complete is a lie. Not a count: see the note at the return.
     """
     pool = _narrow(eligibility.completed_contracts(profile, challenge, key), query)
+    pool = _scope(pool, badge_only, platforms)
     candidates = list(pool.order_by(*BY_NAME)[:limit])
     if not candidates:
         return [], 0
@@ -478,16 +608,17 @@ def _catchup_offers(profile, challenge, key, *, query, limit):
     return lifted, len(candidates) >= limit
 
 
-def _row(contract, covers):
+def _row(contract, covers, plats):
     return {
         'slug': contract.slug,
         'name': contract.name,
         'cover': covers.get(contract.id),
+        'platforms': plats.get(contract.id, []),
     }
 
 
-def _catchup_row(contract, via, when, covers):
-    row = _row(contract, covers)
+def _catchup_row(contract, via, when, covers, plats):
+    row = _row(contract, covers, plats)
     row['via'] = via
     # Only an `import` row has a date to show, and it is the date the WORK happened (read from trophy
     # data), never an `EarnedContract` detection stamp -- those record when we noticed, not when they did.

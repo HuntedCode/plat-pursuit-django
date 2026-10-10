@@ -366,18 +366,24 @@ def _fn(name):
 def test_a_history_import_asks_first_and_writes_once():
     """An import always locks its square, so the server's 409 was certain: two writes per letter against a
     30-a-minute budget. The question is asked in the sheet and the write goes out already confirmed."""
-    panel = _fn('renderHistoryPanel')
-    assert 'ask(button,' in panel
-    assert 'assign(picked.slug, row.key, true, button, true)' in panel
-    assert 'assign(picked.slug, row.key, false' not in panel
+    # THE ROWS ARE BUILT BY `appendHistoryRows` since the panel became paged (2026-10-10), for the first page
+    # and every later one alike, so the rule is pinned where every history offer is made.
+    assert 'appendHistoryRows(panel);' in _fn('renderHistoryPanel')
+    rows = _fn('appendHistoryRows')
+    assert 'ask(button,' in rows
+    assert 'assign(picked.slug, row.key, true, button, true)' in rows
+    assert 'assign(picked.slug, row.key, false' not in rows
 
 
 def test_an_import_keeps_the_sheet_open_on_the_history_list():
     body = _fn('assign')
     assert 'if (stay && stillOpen() && !slot.is_complete)' in body
     stay = body[body.index('if (stay && stillOpen()'):]
-    stay = stay[:stay.index('return;')]
+    # TO THE CLOSE, not to the first `return`: since 2026-10-10 a paged history list is updated in place
+    # (`dropHistoryKey`), and the reload with its `pendingNote` is the fallback when no history list is paging.
+    stay = stay[:stay.index('close(function ()')]
     assert 'applySlot(slot, null)' in stay, 'a toast behind the modal would announce nothing'
+    assert 'dropHistoryKey(key,' in stay
     assert 'loadHistory(' in stay
     assert 'pendingNote = ' in stay
     assert "pendingNote + ' '" in _fn('renderHistoryPanel'), 'the reload overwrites the confirmation'

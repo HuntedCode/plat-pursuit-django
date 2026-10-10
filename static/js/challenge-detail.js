@@ -536,6 +536,17 @@
             noteLead: dialog.querySelector('[data-cpick-note-lead]'),
             noteFacts: dialog.querySelector('[data-cpick-note-facts]'),
             histSwitch: dialog.querySelector('[data-cpick-history-switch]'),
+            // THE FILTERS (2026-10-10). Read at request time by `withFilters`, so a page can never be fetched
+            // under different filters from the panel it extends: changing one reloads the panel first.
+            qualify: dialog.querySelector('[data-cpick-qualify]'),
+            qualifyChip: dialog.querySelector('[data-cpick-qualify-chip]'),
+            badge: dialog.querySelector('[data-cpick-badge]'),
+            platforms: dialog.querySelectorAll('[data-cpick-platform]'),
+            // THE NEXT PAGE: the sentinel the observer watches, its button, and the scroll container both are
+            // measured against.
+            more: dialog.querySelector('[data-cpick-more]'),
+            moreBtn: dialog.querySelector('[data-cpick-more-btn]'),
+            body: dialog.querySelector('.pp-cpick__body'),
             // Outside the dialog: the page's own counters, which every write moves.
             tally: document.querySelector('[data-cpick-tally]'),
             horizon: runHorizon(),
@@ -554,6 +565,20 @@
         //: on screen. Exactly the hazard the identity guard in each loader exists to prevent, reintroduced one
         //: level up. Each renderer owns it now, so it can only ever describe what a reader is looking at.
         var mode = 'slot';
+
+        //: THE PANEL BEING EXTENDED, or null when nothing on screen has another page (2026-10-10; each panel
+        //: used to end at 24). Set by a renderer once its first page lands, so like `mode` it only ever
+        //: describes what a reader is looking at: `{kind, key, query, next, more, loading, empty, shown}`.
+        //: `next` is an offset for the square and search panels and a cursor for history, whose pages are
+        //: filtered by a date SQL cannot see. Every reply is checked against this object's IDENTITY, so a page
+        //: that lands after the panel was replaced is dropped rather than appended to the wrong list.
+        var paging = null;
+        //: How many pages in a row may come back EMPTY before the sheet stops fetching on its own. Only the
+        //: history panel can return one (a window of games all finished before you joined); the button
+        //: stays, so a hunter can keep looking, but scrolling alone cannot walk an unbounded history.
+        var AUTO_EMPTY_PAGES = 3;
+        //: How close (px) the sentinel must be to the bottom of the sheet before the next page is fetched.
+        var MORE_MARGIN = 240;
 
         //: The card the foot is currently asking about, and what to run if the answer is yes.
         //: Held here rather than on the element because the callback is a closure over the row.
@@ -685,6 +710,8 @@
             // staff hands, but an escaping bug here would be an XSS on every hunter who opened a picker.
             name.textContent = row.name;
             button.appendChild(name);
+            var plats = platformTags(row);
+            if (plats) { button.appendChild(plats); }
             if (label) {
                 // A NODE OR A STRING. The catch-up rows pass a sentence; the history rows pass a built element,
                 // because three facts with three different weights are not a sentence.
@@ -705,31 +732,167 @@
             return item;
         }
 
+        /** A row's platforms as the site's flat platform tags, or null for a game with none recorded. The
+         *  TONE comes from the server (`platform_color_str`, the same rule every other platform tag uses), so
+         *  the colour rule is not copied into JavaScript; it is checked as a bare word before it becomes a
+         *  class, because a class name is markup. */
+        function platformTags(row) {
+            if (!row.platforms || !row.platforms.length) { return null; }
+            var wrap = document.createElement('span');
+            wrap.className = 'pp-cpick__row-plats';
+            row.platforms.forEach(function (p) {
+                var tag = document.createElement('span');
+                tag.className = 'bd-meta-tag' + (/^[a-z]+$/.test(p.tone || '') ? ' bd-meta-tag--' + p.tone : '');
+                tag.textContent = p.name;
+                wrap.appendChild(tag);
+            });
+            return wrap;
+        }
+
+        // ── paging ────────────────────────────────────────────────────────────────────────────────
+
+        /** The filters as querystring pairs on `url`. Nothing is added for a filter left at its default, so
+         *  an unfiltered sheet asks for exactly what it always did. */
+        function withFilters(url) {
+            var extra = [];
+            if (els.badge && els.badge.checked) { extra.push('badge=1'); }
+            Array.prototype.forEach.call(els.platforms || [], function (box) {
+                if (box.checked) { extra.push('platform=' + encodeURIComponent(box.value)); }
+            });
+            if (!extra.length) { return url; }
+            return url + (url.indexOf('?') === -1 ? '?' : '&') + extra.join('&');
+        }
+
+        /** Whether a narrowing filter is on (the badge or a platform), so an empty list can say why it is empty. */
+        function filtering() {
+            return !!(els.badge && els.badge.checked)
+                || Array.prototype.some.call(els.platforms || [], function (box) { return box.checked; });
+        }
+
+        /** Show or hide the next-page control to match `paging`. */
+        function syncMore() {
+            if (!els.more) { return; }
+            els.more.hidden = !(paging && paging.more);
+            if (els.moreBtn) {
+                // `aria-disabled`, NOT `disabled`: disabling the focused button threw a keyboard user's focus out
+                // of the list. `loadMore` already refuses a second press while one is loading.
+                var busy = !!(paging && paging.loading);
+                els.moreBtn.setAttribute('aria-disabled', busy ? 'true' : 'false');
+                els.moreBtn.textContent = busy ? 'Loading...' : 'Show more';
+            }
+        }
+
+        /** A renderer's first page has landed: remember what to ask for next. */
+        function startPaging(kind, key, panel, next) {
+            paging = {
+                kind: kind, key: key, query: panel.query || '', next: next, more: !!panel.more,
+                loading: false, empty: panel.rows.length ? 0 : 1, shown: panel.rows.length,
+            };
+            syncMore();
+            keepFilling();
+        }
+
+        /** THE OBSERVER'S BLIND SPOT. It reports a CHANGE in visibility, so a sentinel that never left the
+         *  view (a short page, or an empty history window) would never ask again. Checked after every page. */
+        function keepFilling() {
+            if (!paging || !paging.more || paging.loading || paging.empty >= AUTO_EMPTY_PAGES) { return; }
+            if (!els.more || !els.body || els.more.hidden) { return; }
+            var view = els.body.getBoundingClientRect();
+            var spot = els.more.getBoundingClientRect();
+            if (spot.top - view.bottom < MORE_MARGIN) {
+                window.requestAnimationFrame(function () { loadMore(false); });
+            }
+        }
+
+        /** Fetch and append the next page of whatever is on screen. `manual` is the button: it may continue
+         *  past the empty-page cap, which only limits fetching nobody asked for. */
+        function loadMore(manual) {
+            var p = paging;
+            if (!p || !p.more || p.loading || !stillOpen()) { return; }
+            if (!manual && p.empty >= AUTO_EMPTY_PAGES) { return; }
+            if (manual) { p.empty = 0; }
+            var seq = ++requestSeq;
+            p.loading = true;
+            syncMore();
+            var url;
+            if (p.kind === 'history') {
+                url = '/my-challenges/' + challengeId + '/history/?q=' + encodeURIComponent(p.query)
+                    + '&cursor=' + encodeURIComponent(p.next);
+            } else if (p.kind === 'slot') {
+                url = '/my-challenges/' + challengeId + '/slot/' + encodeURIComponent(p.key) + '/?offset='
+                    + encodeURIComponent(p.next) + (p.query ? '&q=' + encodeURIComponent(p.query) : '');
+            } else {
+                url = '/my-challenges/' + challengeId + '/search/?q=' + encodeURIComponent(p.query)
+                    + '&offset=' + encodeURIComponent(p.next);
+            }
+            PP.API.request(withFilters(url)).then(function (panel) {
+                // IDENTITY, both of them: the sequence catches a newer request of any kind, and `paging` catches
+                // a panel replaced without one.
+                if (seq !== requestSeq || paging !== p) { return; }
+                p.loading = false;
+                if (p.kind === 'slot') { appendSlotRows(panel); }
+                else if (p.kind === 'search') { appendSearchRows(panel); }
+                else { appendHistoryRows(panel); }
+                p.next = p.kind === 'history' ? panel.cursor : panel.offset + panel.showing;
+                p.more = !!panel.more;
+                p.empty = panel.rows.length ? 0 : p.empty + 1;
+                p.shown += panel.rows.length;
+                if (p.kind === 'history') {
+                    historyCount(p.shown);
+                    // THE WHOLE HISTORY WAS WALKED AND NOTHING QUALIFIED: "nothing in the first batch" is no
+                    // longer the honest sentence, and its "search to look further" fact has nothing left to find.
+                    if (!p.more && !p.shown) { historyCount(0, true, p.query); say(els.sub.textContent); }
+                }
+                syncMore();
+                // A PRESSED BUTTON HANDS FOCUS ON to the first new offer, and the count is said: the button may
+                // be gone now, and a keyboard user should land on what they asked for rather than on nothing.
+                if (manual) {
+                    var added = panel.rows.length;
+                    if (added) {
+                        var items = els.rows.children;
+                        var first = items[items.length - added];
+                        var target = first && first.querySelector('button');
+                        if (target) { target.focus(); }
+                    }
+                    say(added ? added + ' more shown.' : 'Nothing more here.');
+                }
+                keepFilling();
+            }).catch(function (err) {
+                if (paging === p) { p.loading = false; syncMore(); }
+                if (seq !== requestSeq || !stillOpen()) { return; }
+                fail_from(err, 'More did not load. Try again.');
+            });
+        }
+
         function renderSlotPanel(panel) {
             // Any open prompt belonged to the panel being replaced.
             dropPrompts();
             mode = 'slot';
             leaveHistory();
             els.title.textContent = panel.label;
-            els.sub.textContent = panel.total === panel.showing
-                ? panel.total + (panel.total === 1 ? ' game fits' : ' games fit')
-                : 'Showing ' + panel.showing + ' of ' + panel.total;
+            // THE WHOLE COUNT, now that the whole pool can be reached. "Showing 24 of 340" described a sheet
+            // that stopped at 24.
+            // A FILTERED COUNT SAYS SO: "12 games fit" under a badge filter read as the square's capacity.
+            // AND A SEARCH COUNTS MATCHES: with "Only this square" on, a term lands here, and "3 games fit" read
+            // as the square's capacity rather than as what the term found.
+            els.sub.textContent = panel.query
+                ? panel.total + (panel.total === 1 ? ' match' : ' matches')
+                : (filtering()
+                    ? panel.total + ' shown with your filters'
+                    : panel.total + (panel.total === 1 ? ' game fits' : ' games fit'));
 
             els.rows.textContent = '';
             els.rows.classList.remove('pp-cpick__rows--search');
-            panel.rows.forEach(function (row) {
-                els.rows.appendChild(offerButton(row, null, function (picked, button) {
-                    assign(picked.slug, panel.key, false, button);
-                }));
-            });
+            appendSlotRows(panel);
 
             // THE COUNT GOES THROUGH THE LIVE REGION. It used to go only to `els.sub`, which is not one, so
             // "12 games fit" was never announced and a screen-reader user got silence on every successful
             // load. The subtitle keeps it visually; `say` is what makes it audible.
             if (!panel.rows.length) {
                 // NOT "no games left" when the catch-up block below is about to offer some: that read as a dead
-                // end directly above the way out.
-                say(panel.query ? 'Nothing matches that here.'
+                // end directly above the way out. NOR WHEN A FILTER EMPTIED IT: the games are there, hidden.
+                say(panel.query ? 'Nothing matches that here. Turn off Only this square to search every game.'
+                    : filtering() ? 'No games here match your filters.'
                     : (panel.catchup && panel.catchup.length
                         ? 'No new games left for this square. One you already finished can fill it.'
                         : 'No games left for this square.'));
@@ -746,6 +909,17 @@
                 ? 'Currently: ' + panel.current_name
                 : '';
             els.clear.hidden = !panel.slot_is_filled;
+            startPaging('slot', panel.key, panel, panel.offset + panel.showing);
+        }
+
+        /** One page of a square's offers, appended. The key comes from the PANEL, so a page always places into
+         *  the square it was fetched for. */
+        function appendSlotRows(panel) {
+            panel.rows.forEach(function (row) {
+                els.rows.appendChild(offerButton(row, null, function (picked, button) {
+                    assign(picked.slug, panel.key, false, button);
+                }));
+            });
         }
 
         function renderCatchup(panel) {
@@ -794,6 +968,8 @@
                 els.histSwitch.hidden = false;
             }
             if (els.q) { els.q.placeholder = 'Search for a game'; }
+            // "Only this square" needs a square to mean anything.
+            if (els.qualifyChip) { els.qualifyChip.hidden = (openKey === null); }
         }
 
         function renderSearchPanel(panel) {
@@ -802,9 +978,7 @@
             els.title.textContent = 'Search';
             els.sub.textContent = panel.too_short
                 ? 'Type at least two letters'
-                : (panel.total === panel.showing
-                    ? panel.total + (panel.total === 1 ? ' match' : ' matches')
-                    : 'Showing ' + panel.showing + ' of ' + panel.total);
+                : panel.total + (panel.total === 1 ? ' match' : ' matches');
             els.catchup.hidden = true;
             els.current.textContent = '';
             els.clear.hidden = true;
@@ -813,9 +987,18 @@
             leaveHistory();
 
             if (panel.too_short) { say('Type at least two letters.'); return; }
-            if (!panel.rows.length) { say('No games match that.'); return; }
+            if (!panel.rows.length) {
+                say(filtering() ? 'No games match that with your filters.' : 'No games match that.');
+                return;
+            }
             say(els.sub.textContent);
+            appendSearchRows(panel);
+            startPaging('search', null, panel, panel.offset + panel.showing);
+        }
 
+        /** One page of search results, appended. The square names, icons and occupants come from the page's own
+         *  run-level maps, which every page carries. */
+        function appendSearchRows(panel) {
             panel.rows.forEach(function (row) {
                 var card = document.createElement('li');
                 var block = document.createElement('div');
@@ -844,6 +1027,8 @@
                 // is the house primitive, not DaisyUI's badge.
                 if (row.is_completed_by_you) { head.appendChild(chip('Finished', 'success')); }
                 main.appendChild(head);
+                var plats = platformTags(row);
+                if (plats) { main.appendChild(plats); }
                 block.appendChild(main);
 
                 if (row.already_in_run) {
@@ -903,6 +1088,13 @@
                         // says "not possible", so the words do not have to, and stripping them left a lone
                         // "S" that read like the pill this change existed to get rid of.
                         pick.textContent = single ? 'Add this game to ' + keyLabel : keyLabel;
+                        // THE LABEL IN ITS OWN SPAN, so a phone's compact grid can ellipsise it: a bare text
+                        // node in a flex button cannot be truncated, only clipped mid-letter. Moved, not
+                        // rebuilt, so the assignment above stays the one place the words are written.
+                        var labelText = document.createElement('span');
+                        labelText.className = 'pp-cpick__key-label';
+                        labelText.appendChild(pick.firstChild);
+                        pick.appendChild(labelText);
                         // AFTER the text, never before: assigning `textContent` removes every child, so an
                         // icon appended above this line would be silently discarded.
                         if (atom && atom.icon) { pick.insertBefore(jobIcon(atom.icon), pick.firstChild); }
@@ -1067,16 +1259,23 @@
 
         function load(key, query) {
             var seq = ++requestSeq;
+            // A NEW PANEL ENDS THE OLD ONE'S PAGING NOW, not when it lands: a page of the old list must not be
+            // appended while the replacement is in flight.
+            paging = null;
+            syncMore();
             var url = key
                 ? '/my-challenges/' + challengeId + '/slot/' + encodeURIComponent(key) + '/'
                   + (query ? '?q=' + encodeURIComponent(query) : '')
                 : '/my-challenges/' + challengeId + '/search/?q=' + encodeURIComponent(query || '');
             say('Loading...');
-            PP.API.request(url).then(function (panel) {
+            PP.API.request(withFilters(url)).then(function (panel) {
                 // STALE REPLY GUARD, on identity. Two panels can be in flight when somebody types quickly or
                 // opens a second square, and applying the older one would show the wrong pool under the
                 // right title.
                 if (seq !== requestSeq) { return; }
+                // A NEW LIST STARTS AT THE TOP. Left scrolled deep, the sentinel of the new first page sat in
+                // view and the sheet fetched pages nobody had scrolled to.
+                if (els.body) { els.body.scrollTop = 0; }
                 if (key) { renderSlotPanel(panel); } else { renderSearchPanel(panel); }
             }).catch(function (err) {
                 // A READ THAT FAILS AFTER THE SHEET WAS DISMISSED SAYS NOTHING: there is nothing to retry,
@@ -1089,13 +1288,16 @@
 
         function loadHistory(query) {
             var seq = ++requestSeq;
+            paging = null;
+            syncMore();
             say('Loading...');
-            PP.API.request('/my-challenges/' + challengeId + '/history/?q='
-                           + encodeURIComponent(query || '')).then(function (panel) {
+            PP.API.request(withFilters('/my-challenges/' + challengeId + '/history/?q='
+                           + encodeURIComponent(query || ''))).then(function (panel) {
                 // THE SAME IDENTITY GUARD the other loads use. Two panels can be in flight when somebody
                 // types quickly or toggles the mode mid-request, and applying the older one shows the wrong
                 // pool under the right title.
                 if (seq !== requestSeq) { return; }
+                if (els.body) { els.body.scrollTop = 0; }
                 renderHistoryPanel(panel);
             }).catch(function (err) {
                 pendingNote = '';
@@ -1150,6 +1352,7 @@
                 els.histSwitch.hidden = (openKey === null);
             }
             if (els.q) { els.q.placeholder = 'Search your history'; }
+            if (els.qualifyChip) { els.qualifyChip.hidden = true; }
 
             if (!panel.open) {
                 els.sub.textContent = 'Not available on this run';
@@ -1193,23 +1396,57 @@
                 // the same lie the window was added to stop, one layer up.
                 els.sub.textContent = panel.query
                     ? 'Nothing here matches that'
-                    : (panel.scan_truncated ? 'Nothing in the first batch' : 'Nothing here yet');
+                    : (panel.scan_truncated ? 'Nothing in the first batch'
+                        : (filtering() ? 'Nothing here matches your filters' : 'Nothing here yet'));
                 if (panel.scan_truncated && !panel.query) {
                     // APPENDED AS A FACT, not concatenated onto a paragraph -- the block is a list now.
                     var li = document.createElement('li');
                     li.className = 'pp-cpick__note-fact--more';
+                    li.setAttribute('data-cpick-empty-fact', '');
                     li.textContent = 'We checked your earliest games by name and none qualified. Search for a '
                         + 'game to look further.';
                     if (els.noteFacts) { els.noteFacts.appendChild(li); }
                 }
                 say(lead + els.sub.textContent);
+                // AN EMPTY WINDOW CAN STILL HAVE A NEXT ONE. The sheet looks a little further by itself (up to
+                // `AUTO_EMPTY_PAGES`), and the button keeps going after that.
+                startPaging('history', null, panel, panel.cursor);
                 return;
             }
-            // NO "+" HERE. There is no pagination on this panel, so a plus sign names rows the hunter cannot
-            // reach -- and `more` can be true purely because the WINDOW filled, which says nothing about how
-            // many more offers exist. Say what is on screen and how to look further.
+            // NO "+" HERE: `more` can be true purely because the WINDOW filled, which says nothing about how many
+            // more offers exist. The count is what is on screen, and it grows as pages land.
             els.sub.textContent = panel.showing + ' ready to place';
-            if (panel.more) { els.sub.textContent += ' \u00b7 search to look further'; }
+            appendHistoryRows(panel);
+            say(lead + 'From your history: ' + els.sub.textContent);
+            startPaging('history', null, panel, panel.cursor);
+        }
+
+        /** The history count after a page lands. A page that found games also retires the "nothing in the
+         *  first batch" fact, which is no longer true. */
+        function historyCount(shown, exhausted, query) {
+            if (!shown && !exhausted) { return; }
+            els.sub.textContent = shown ? shown + ' ready to place'
+                : (query ? 'Nothing here matches that'
+                    : (filtering() ? 'Nothing here matches your filters' : 'Nothing here yet'));
+            var stale = dialog.querySelector('[data-cpick-empty-fact]');
+            if (stale && stale.parentNode) { stale.parentNode.removeChild(stale); }
+        }
+
+        /** An import locked `key`: drop every history offer for it from the list, say what happened, and let the pager
+         *  top the list back up if that left it short. */
+        function dropHistoryKey(key, note) {
+            var gone = 0;
+            Array.prototype.forEach.call(els.rows.querySelectorAll('li[data-cpick-key]'), function (li) {
+                if (li.getAttribute('data-cpick-key') === key) { li.parentNode.removeChild(li); gone++; }
+            });
+            paging.shown = Math.max(0, paging.shown - gone);
+            historyCount(paging.shown, !paging.more, paging.query);
+            say(note + ' ' + els.sub.textContent);
+            keepFilling();
+        }
+
+        /** One page of history offers, appended. */
+        function appendHistoryRows(panel) {
             panel.rows.forEach(function (row) {
                 // MONTH AND YEAR, no day, because the day was never the recognisable part: "Mar 2024" is what
                 // places a game in a hunter's memory.
@@ -1235,8 +1472,9 @@
                         occupant ? 'Keep ' + occupant : 'Not this one',
                         function () { assign(picked.slug, row.key, true, button, true); });
                 }));
+                // TAGGED WITH ITS SQUARE, so an import can drop that square's other offers in place.
+                els.rows.lastChild.setAttribute('data-cpick-key', row.key);
             });
-            say(lead + 'From your history: ' + els.sub.textContent);
         }
 
         /** One sentence in the note block, for the cases that only have to explain themselves. */
@@ -1345,8 +1583,15 @@
                 // reloads the page then, and the sheet goes with it.
                 if (stay && stillOpen() && !slot.is_complete) {
                     applySlot(slot, null);
-                    pendingNote = slot.game_name + ' is in ' + labelFor(key) + '.';
                     dialog.focus();
+                    // IN PLACE, NOT A RELOAD, so a hunter importing from page three stays on page three. The
+                    // square is now locked, so every offer for it goes; the cursor is a keyset, so the pages still
+                    // to come are not shifted by the games that just left the pool.
+                    if (paging && paging.kind === 'history') {
+                        dropHistoryKey(key, slot.game_name + ' is in ' + labelFor(key) + '.');
+                        return;
+                    }
+                    pendingNote = slot.game_name + ' is in ' + labelFor(key) + '.';
                     loadHistory(els.q ? els.q.value.trim() : '');
                     return;
                 }
@@ -1786,6 +2031,12 @@
             els.title.textContent = 'Choose a game';
             els.sub.textContent = '';
             say('');
+            // THE FILTERS RESET WITH THE SHEET (owner, 2026-10-10): every square opens on the defaults.
+            if (els.qualify) { els.qualify.checked = true; }
+            if (els.badge) { els.badge.checked = false; }
+            Array.prototype.forEach.call(els.platforms || [], function (box) { box.checked = false; });
+            paging = null;
+            syncMore();
         }
 
         grid.addEventListener('click', function (e) {
@@ -1827,8 +2078,11 @@
                 // AN EMPTY BOX RETURNS TO THE SQUARE'S OWN POOL rather than searching for nothing -- the
                 // slot panel is the resting state of this sheet, not a search result with no term.
                 if (!term) { load(openKey, ''); return; }
-                // A TERM SEARCHES THE WHOLE CATALOGUE, not the square's pool: somebody typing a game's name
-                // is asking the contract-first question even though they came in through a square.
+                // "ONLY THIS SQUARE" (on by default, owner 2026-10-10) keeps a term inside the square's
+                // own pool. Off, a term searches the WHOLE CATALOGUE: somebody typing a game's name is then
+                // asking the contract-first question (where does this go?) even though they came in through a
+                // square.
+                if (openKey !== null && els.qualify && els.qualify.checked) { load(openKey, term); return; }
                 load(null, term);
             };
             var guarded = function () {
@@ -1841,6 +2095,26 @@
                 queuedToken = typedToken;
                 debounced();
             });
+
+            // A FILTER CHANGE RELOADS WHAT IS ON SCREEN, through the same path a keystroke takes, so the answer
+            // is the one the box and the filters together describe. Any open question belonged to the list
+            // being replaced. The qualify toggle only changes anything while there is a term to search.
+            var refilter = function () { dropPrompts(); run(); };
+            if (els.qualify) {
+                els.qualify.addEventListener('change', function () { if (els.q.value.trim()) { refilter(); } });
+            }
+            if (els.badge) { els.badge.addEventListener('change', refilter); }
+            Array.prototype.forEach.call(els.platforms || [], function (box) {
+                box.addEventListener('change', refilter);
+            });
+        }
+
+        // THE NEXT PAGE, fetched as the sentinel nears the bottom of the sheet. The button does the same by hand.
+        if (els.moreBtn) { els.moreBtn.addEventListener('click', function () { loadMore(true); }); }
+        if (els.more && 'IntersectionObserver' in window) {
+            new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) { if (entry.isIntersecting) { loadMore(false); } });
+            }, { root: els.body || null, rootMargin: '0px 0px ' + MORE_MARGIN + 'px 0px' }).observe(els.more);
         }
 
         // THE IN-SHEET TOGGLE. Pressing it in history mode goes BACK to whatever the sheet was showing, so a

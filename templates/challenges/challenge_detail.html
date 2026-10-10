@@ -380,6 +380,38 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
             <input id="cpick-q" class="stg-input pp-cpick__search" type="search" autocomplete="off"
                    placeholder="Search for a game" data-cpick-q>
 
+            {% comment %}THE SHEET'S FILTERS (owner, 2026-10-10), on the house filter chip Browse Games uses.
+            Every one resets to its default each time the sheet opens.
+
+            "Only this square" is ON by default and decides what typing searches: on, the square's
+            own pool; off, the whole catalogue with the squares each game fits. It means nothing without a
+            square, so the script hides it in history mode and when the sheet was opened from the page's
+            history door. "In a badge" and the platforms are OFF by default and narrow every list in the sheet.
+            They are display filters only: what a square may hold, and when a rule like the hatch applies, is
+            still decided over the whole pool.{% endcomment %}
+            <div class="pp-cpick__filters" data-cpick-filters>
+                <div class="pp-cpick__fgroup">
+                    <label class="pp-bgal__chip" data-cpick-qualify-chip>
+                        <input type="checkbox" data-cpick-qualify checked>
+                        Only this square
+                    </label>
+                    <label class="pp-bgal__chip">
+                        <input type="checkbox" data-cpick-badge>
+                        <svg class="pp-cpick__fico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
+                        In a badge
+                    </label>
+                </div>
+                <div class="pp-cpick__fgroup" role="group" aria-label="Platforms">
+                    <span class="pp-cpick__flabel" aria-hidden="true">Platforms</span>
+                    {% for value, label in picker_platforms %}
+                    <label class="pp-bgal__chip">
+                        <input type="checkbox" data-cpick-platform value="{{ value }}">
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
             {% comment %}A live region INSIDE the dialog. A modal `<dialog>` makes everything outside it
             inert and removes it from the accessibility tree, so the page-level status region announces
             nothing while this is open -- the same reason `ToastManager` builds a per-dialog region.{% endcomment %}
@@ -401,19 +433,30 @@ Gated on the type, because an A-Z run references none of it and an unused sprite
                 <ul class="pp-cpick__note-facts" role="list" data-cpick-note-facts></ul>
             </div>
 
-            {% comment %}`aria-describedby` points at the note above, so a reader reaching the offers is told
-            what that block said. The note explains this list and was associated with nothing.{% endcomment %}
-            <ul class="pp-cpick__rows" role="list" data-cpick-rows aria-describedby="cpick-note"></ul>
-
-            {% comment %}THE CATCH-UP BLOCK, and it is separate from the rows above for one reason: these
+            {% comment %}THE CATCH-UP BLOCK, and it is separate from the rows below for one reason: these
             are the only offers that land a square COMPLETE and therefore LOCKED. Keeping them together
             means the warning is written once, above all of them, instead of repeated per row or -- worse --
-            omitted.{% endcomment %}
+            omitted.
+
+            ABOVE THE ROWS since the rows became an endless list (2026-10-10). Below them it was reachable only
+            after scrolling every page of a square's pool, and it is the short list a hunter most needs to see:
+            the history importer and the hatch both live here.{% endcomment %}
             <section class="pp-cpick__catchup" data-cpick-catchup hidden>
                 <h3 class="pp-cpick__catchup-title" data-cpick-catchup-title></h3>
                 <p class="pp-cpick__catchup-note" data-cpick-catchup-note></p>
                 <ul class="pp-cpick__rows" role="list" data-cpick-catchup-rows></ul>
             </section>
+
+            {% comment %}`aria-describedby` points at the note above, so a reader reaching the offers is told
+            what that block said. The note explains this list and was associated with nothing.{% endcomment %}
+            <ul class="pp-cpick__rows" role="list" data-cpick-rows aria-describedby="cpick-note"></ul>
+
+            {% comment %}THE NEXT PAGE. The script loads it when this comes into view while the sheet scrolls,
+            and the button is there for a keyboard, for a reduced-motion reader who would rather ask, and for
+            the history panel, which stops fetching by itself after a few pages that found nothing.{% endcomment %}
+            <div class="pp-cpick__more" data-cpick-more hidden>
+                <button type="button" class="pp-cta pp-cta--ghost" data-cpick-more-btn>Show more</button>
+            </div>
         </div>
 
         {% comment %}THE FOOT, which is also where a confirmation is asked when the offers are a GRID.

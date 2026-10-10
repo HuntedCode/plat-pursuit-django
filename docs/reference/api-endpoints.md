@@ -303,9 +303,9 @@ signed out is a JSON 401, an unlinked account a JSON 403. Detail in
 | `/community/challenges/<id>/day/<month>/<day>/` | `challenge_calendar_day` | GET -- a Calendar day's games, an HTML fragment |
 | `/my-challenges/` | `my_challenges` | GET -- login and a linked PSN account |
 | `/my-challenges/start/<type>/` | `challenge_start` | POST (form) -- start or resume; members-only during the beta |
-| `/my-challenges/<id>/slot/<key>/` | `challenge_slot` | GET -- what fits this square |
-| `/my-challenges/<id>/search/` | `challenge_search` | GET -- contract-first search |
-| `/my-challenges/<id>/history/` | `challenge_history` | GET -- the first-run importer's offers |
+| `/my-challenges/<id>/slot/<key>/` | `challenge_slot` | GET -- what fits this square. `?q=`, `?offset=` (paging), `?badge=1`, `?platform=` (repeatable) |
+| `/my-challenges/<id>/search/` | `challenge_search` | GET -- contract-first search. `?q=`, `?offset=`, `?badge=1`, `?platform=` |
+| `/my-challenges/<id>/history/` | `challenge_history` | GET -- the first-run importer's offers. `?q=`, `?cursor=` (paging: a keyset, the reply's `cursor`), `?badge=1`, `?platform=` |
 | `/my-challenges/<id>/slot/<key>/assign/` | `challenge_assign` | POST -- 409 with `needs_confirmation` when it would lock the square |
 | `/my-challenges/<id>/slot/<key>/clear/` | `challenge_clear` | POST -- unfinished squares only |
 | `/my-challenges/<id>/slot/<key>/redeem/` | `challenge_redeem` | POST -- claim one square's job XP |

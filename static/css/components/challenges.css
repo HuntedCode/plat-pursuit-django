@@ -973,6 +973,40 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cpick__key-swap { font-weight: 700; opacity: 0.85; }
 
+/* A PHONE GETS A COMPACT GRID OF SQUARES, not a stack of pills (owner, 2026-10-10, from hunters' screenshots).
+   Beside a 56px cover the result's column is ~250px at 375, so each 44px pill took a line of its own and a
+   six-job game stood six tall lozenges high. Below `md:` the buttons are two columns of 36px chips: the
+   label stays on one line beside its icon and ellipsises rather than wrapping, and the `::after` keeps the
+   44px touch floor without drawing it. The one-square sentence and a "replaces" button need the whole width,
+   so they span both columns. From `md:` the pills return, where the row has the room for them. */
+@media (max-width: 767.98px) {
+    .pp-cpick__keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .pp-cpick__key {
+        position: relative; min-width: 0; min-height: 36px; padding: 5px 9px;
+        flex-wrap: nowrap; border-radius: var(--pp-radius-md);
+    }
+    .pp-cpick__key-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pp-cpick__key::after { content: ''; position: absolute; inset: -3px 0; }
+    .pp-cpick__key svg { width: 14px; height: 14px; }
+    .pp-cpick__key--sentence, .pp-cpick__key--taken { grid-column: 1 / -1; }
+    .pp-cpick__key--taken { flex-wrap: wrap; }
+
+    /* AND THE GRID TAKES THE WHOLE ROW. Inside the column beside the cover each square was ~80px and every job
+       name ellipsised ("Arch..."). So on a phone the row is a grid: a smaller cover beside the title, platforms
+       and lead-in, and the squares underneath, full width. `display: contents` lifts the column's children into
+       that grid; it carries no semantics of its own, so nothing is lost by flattening it. */
+    .pp-cpick__rows--search .pp-cpick__row {
+        display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 10px; row-gap: 6px;
+        align-items: start;
+    }
+    .pp-cpick__rows--search .pp-cpick__row-art { width: 44px; grid-column: 1; grid-row: 1 / span 3; }
+    .pp-cpick__rows--search .pp-cpick__row-main { display: contents; }
+    .pp-cpick__rows--search .pp-cpick__row-main > * { grid-column: 2; }
+    .pp-cpick__rows--search .pp-cpick__row-main > .pp-cpick__keys { grid-column: 1 / -1; }
+    .pp-cpick__key--sentence .pp-cpick__key-label,
+    .pp-cpick__key--taken .pp-cpick__key-label { white-space: normal; }
+}
+
 /* THE INLINE PROMPT, which replaced a native `window.confirm`. Two buttons on the house recipe
    (`.stg-confirm__row`, used by account deletion in Settings): the SAFE one first and focused, and named
    after what it preserves rather than "Cancel".
@@ -5137,3 +5171,40 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-ptab-challenges__head:not(:first-child) { margin-top: 14px; }
 .pp-ptab-challenges__empty { grid-column: 1 / -1; }
+
+/* THE PICKER'S FILTERS (2026-10-10): two toggles, then the platforms, on the house filter chip
+   (`.pp-bgal__chip`, browse-gallery.css). `--pp-list-accent` is that chip's focus ring, which every host of it
+   defines. */
+/* ONE WRAPPING ROW, COMPACT, because the sheet's job is the games below: at 375px the stacked version spent
+   ~200px on eight chips before the first offer. The chip's padding is trimmed here only (secondary controls,
+   the design system's allowance), and the "Platforms" label waits for the room a tablet gives it -- the chips
+   name themselves. */
+.pp-cpick__filters {
+    --pp-list-accent: var(--pp-primary);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 10px;
+}
+.pp-cpick__fgroup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* 36px drawn, 44px to the finger: the `::after` widens the hit area to the sheet's touch floor without
+   making eight chips look like eight buttons. */
+.pp-cpick__filters .pp-bgal__chip { position: relative; min-height: 36px; padding: 4px 10px; }
+.pp-cpick__filters .pp-bgal__chip::after { content: ''; position: absolute; inset: -3px 0; }
+.pp-cpick__flabel {
+    display: none;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--pp-text-mute); margin-right: 2px;
+}
+@media (min-width: 768px) { .pp-cpick__flabel { display: inline; } }
+.pp-cpick__fico { width: 13px; height: 13px; margin-right: 5px; flex: 0 0 auto; }
+
+/* A ROW'S PLATFORMS, as the site's flat platform tags (`.bd-meta-tag`, chips.css): facts about the game, not
+   buttons. Their own line under the name, so a long title never shares space with them. */
+.pp-cpick__row-plats { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+/* The house tag is 0.58rem everywhere else; this sheet holds a 12px floor for anything a hunter has to read to
+   choose (see the stylesheet test), and a platform is part of that choice. */
+.pp-cpick__row-plats .bd-meta-tag { font-size: 12px; padding: 1px 6px; }
+
+/* THE NEXT-PAGE CONTROL: centred under the rows, out of the way until it is needed. */
+.pp-cpick__more { display: flex; justify-content: center; padding: 14px 0 4px; }
+.pp-cpick__more .pp-cta { min-height: 44px; }
+.pp-cpick__more[hidden] { display: none; }
+

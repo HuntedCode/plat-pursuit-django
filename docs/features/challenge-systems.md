@@ -313,11 +313,56 @@ two slot-shaped panels carry a DB `COUNT` beside their slice. **`history_panel` 
 membership there depends on a completion date read from trophy data, so an honest total would mean dating
 the whole pool. It reports a boolean and whether its window was exhaustive.
 
+### Paging and the sheet's filters (2026-10-10)
+
+Each panel used to be one `PAGE` and the sheet ended there, so a square with 340 games showed 24 (owner: "the
+modal ONLY shows 24 total games"). Now every list reaches the whole pool:
+
+| Panel | Pages by | Returns |
+|---|---|---|
+| Square, search | `?offset=` | `offset`, `more` (and the full `total`, so the subtitle is the real count) |
+| History | `?cursor=`, a KEYSET: the id of the last candidate used | `cursor` (resume after it, or null), `more` |
+
+The client (`loadMore` in `challenge-detail.js`) fetches the next page as a sentinel under the rows nears the
+bottom of the sheet, with a "Show more" button as the keyboard and fallback path. The catch-up block rides only
+the first page of a square, and it now sits ABOVE the rows: below an endless list it was unreachable.
+
+Three filters, all reset each time the sheet opens:
+
+| Filter | Default | Effect |
+|---|---|---|
+| **Only this square** | on | With a term, searches the square's own pool (`slot_panel` with `q`). Off: the catalogue-wide contract-first search. Hidden where there is no square (history mode, the page's history door). |
+| **In a badge** | off | `eligibility.in_live_badge`: a member game's concept is in a `Stage` of a series with a live group badge, Browse Games' rule. `?badge=1`. |
+| **Platforms** | none | `eligibility.on_platforms` over `Game.objects.for_platform`: a member game on ANY chosen platform. `?platform=` (repeatable; unknown values dropped). |
+
+**The filters are display filters, never rules.** `hatch_is_open`, `catchup_offers` and `assign` all read the
+unfiltered pool, so turning a filter on can never open the hatch or change which rule a square is under.
+
+Every row carries `platforms`: the union over the contract's member games in display order
+(`ordered_platform_union`), each with the `platform_color_str` tone, read in one `Game` query per page
+(`picker._decorations`, which shares one membership read with the covers).
+
+The Challenges browse page's toolbar also links **My Challenges** (`show_my_challenges`, browse page only).
+
+**On a phone, a search result's square buttons are a two-column grid under the cover**, not pills beside it.
+Beside a 56px cover each 44px pill took its own line, so a six-job game stood six tall (hunters' screenshots).
+Below `md:` the row is a grid with `display: contents` on its text column so the buttons span the full width;
+each is 36px drawn with a 44px hit area and an ellipsising label. Pills return from `md:`.
+
 ### The history window
 
 The pool is "completed, live, fits an open letter". Whether a candidate is *importable* depends on its
 date, which is not a SQL predicate — so the panel dates a `HISTORY_SCAN` (96) window and pages the result
 to `PAGE` (24).
+
+Since paging, the window starts just after the request's `cursor` in name order, and the next cursor is the last
+candidate the page used: mid-window when the page filled first, the window's end when it did not. **It is a keyset,
+not a position, because history is the one panel that stays open while it is written to.** An import locks its
+letter and drops that letter's candidates out of the pool; a position cursor then pointed past games that slid
+back, and the next page skipped them. So an import also updates the list IN PLACE (`dropHistoryKey` removes the
+locked letter's other offers) instead of reloading, and a hunter importing from page three stays on page three. A page
+can come back empty (a window of games all finished before joining) with `more` still true; the sheet keeps
+looking by itself for up to three such pages, then leaves it to the button.
 
 Slicing to `PAGE` **first** was a shipped bug: a hunter with two dozen pre-join completions early in the
 alphabet filled the window with them, and the panel said "Nothing here yet" while a post-join game sat
@@ -990,6 +1035,10 @@ agreeing with its flag); `challenges/models.py` Meta is the full set.
 ---
 
 ## Gotchas and Pitfalls
+
+**`MAX_OFFSET` ends a picker list, it never clamps one.** Clamping `offset=5024` back to 5000 re-served that
+page with `more: true`, and a scrolling sheet appended it forever. The square and search slices stop at the
+ceiling and `more` is false past it. History needs no ceiling: its keyset never walks past rows to reach a page.
 
 **The year overview carries the count two ways, and both are deliberate.** Below `md:` the cell has no
 numeral, so the shade carries the count (like the Hall of Fame year). From `md:` a numeral sits on a 22% tint

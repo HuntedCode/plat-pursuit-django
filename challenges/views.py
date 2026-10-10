@@ -658,6 +658,9 @@ class ChallengeDetailView(DetailView):
             and challenge.profile.is_linked
             and svc.importer_is_available(challenge.profile, challenge.challenge_type)
         )
+        # The picker's platform chips. A constant, not a query: what the filter offers is the platform list,
+        # not what this run's pools happen to hold.
+        context['picker_platforms'] = picker.PLATFORM_FILTERS
         # THE PUBLIC TRAIL, not the owner's. This route lives under `/community/challenges/` precisely
         # because the page is somebody's artefact rather than their working surface, and the trail has to
         # agree with that: `My Pursuit` and `My Challenges` are both login-gated, so an anonymous reader
@@ -819,7 +822,9 @@ class SlotPickerView(_SlotView):
         if challenge is None:
             return self.not_found()
         panel = picker.slot_panel(request.user.profile, challenge, key,
-                                  query=request.GET.get('q', ''), slot=slot)
+                                  query=request.GET.get('q', ''), slot=slot,
+                                  offset=request.GET.get('offset', 0), badge_only=_badge_only(request),
+                                  platforms=_platforms(request))
         return JsonResponse(_panel_json(panel))
 
 
@@ -844,7 +849,9 @@ class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
         if challenge is None:
             return self.not_found()
         panel = picker.history_panel(request.user.profile, challenge,
-                                    query=request.GET.get('q', ''))
+                                    query=request.GET.get('q', ''),
+                                    cursor=request.GET.get('cursor'), badge_only=_badge_only(request),
+                                    platforms=_platforms(request))
         return JsonResponse({
             'open': panel['open'],
             'closed_reason': panel['closed_reason'],
@@ -854,6 +861,7 @@ class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
             'query': panel['query'],
             'showing': panel['showing'],
             'more': panel['more'],
+            'cursor': panel['cursor'],
             # WHETHER "NOTHING" MEANS NOTHING. Computed by the panel and, until now, dropped here -- so
             # three comments claimed the client explains which kind of empty it is while the client was
             # never told. The data fix is worthless without the delivery.
@@ -863,6 +871,7 @@ class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
                 'name': r['name'],
                 'cover': _cover_url(r['cover']),
                 'cover_is_art': _cover_is_art(r['cover']),
+                'platforms': r['platforms'],
                 'key': r['key'],
                 'key_label': r['key_label'],
                 'completed_at': r['completed_at'].isoformat() if r['completed_at'] else None,
@@ -881,17 +890,22 @@ class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
         challenge = self.editable_run(request, challenge_id)
         if challenge is None:
             return self.not_found()
-        panel = picker.search_panel(request.user.profile, challenge, request.GET.get('q', ''))
+        panel = picker.search_panel(request.user.profile, challenge, request.GET.get('q', ''),
+                                    offset=request.GET.get('offset', 0), badge_only=_badge_only(request),
+                                    platforms=_platforms(request))
         return JsonResponse({
             'query': panel['query'],
             'total': panel['total'],
             'showing': panel['showing'],
+            'offset': panel['offset'],
+            'more': panel['more'],
             'too_short': panel['too_short'],
             'rows': [{
                 'slug': r['slug'],
                 'name': r['name'],
                 'cover': _cover_url(r['cover']),
                 'cover_is_art': _cover_is_art(r['cover']),
+                'platforms': r['platforms'],
                 'keys': r['keys'],
                 'already_in_run': r['already_in_run'],
                 'is_completed_by_you': r['is_completed_by_you'],
@@ -1150,6 +1164,16 @@ def _slot_json(challenge, slot):
     return payload
 
 
+def _platforms(request):
+    """The picker's platform filter: every `?platform=` value, cleaned by the picker (unknown ones dropped)."""
+    return picker.clean_platforms(request.GET.getlist('platform'))
+
+
+def _badge_only(request):
+    """The picker's "Only games in a badge" toggle, off unless the request says exactly `badge=1`."""
+    return request.GET.get('badge') == '1'
+
+
 def _panel_json(panel):
     """`slot_panel`'s payload, with `Game` objects reduced to URLs."""
     return {
@@ -1169,14 +1193,19 @@ def _panel_json(panel):
         # exist yet, which is how a field ships and then quietly means nothing.
         'locked': panel['locked'],
         'catchup_more': panel['catchup_more'],
+        # PAGING: where this page started, and whether another follows. The client asks for
+        # `offset + showing` next.
+        'offset': panel['offset'],
+        'more': panel['more'],
         'rows': [{'slug': r['slug'], 'name': r['name'], 'cover': _cover_url(r['cover']),
-                  'cover_is_art': _cover_is_art(r['cover'])}
+                  'cover_is_art': _cover_is_art(r['cover']), 'platforms': r['platforms']}
                  for r in panel['rows']],
         'catchup': [{
             'slug': r['slug'],
             'name': r['name'],
             'cover': _cover_url(r['cover']),
             'cover_is_art': _cover_is_art(r['cover']),
+            'platforms': r['platforms'],
             'via': r['via'],
             # ISO 8601 so the client can format it with `TimeFormatter` rather than being handed a
             # server-rendered string in the server's idea of a locale.

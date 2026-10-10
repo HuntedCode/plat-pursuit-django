@@ -488,7 +488,7 @@ def label_for_key(key):
     return key if len(key) == 1 else key.replace('-', ' ').title()
 
 
-def covers_by_contract(contracts):
+def covers_by_contract(contracts, concepts_by_contract=None):
     """{contract_id: Game} for every contract that has one, in a fixed number of queries.
 
     PUBLIC because the picker needs the same thing for its own bounded page of results. It was
@@ -515,7 +515,10 @@ def covers_by_contract(contracts):
     if not contracts:
         return {}
 
-    concepts_by_contract = member_concepts_by_contract(contracts)
+    # PASSED IN when the caller needs the same map for something else (the picker's platforms), so the
+    # membership read happens once per page rather than once per use.
+    if concepts_by_contract is None:
+        concepts_by_contract = member_concepts_by_contract(contracts)
     every_concept = {cid for ids in concepts_by_contract.values() for cid in ids}
     if not every_concept:
         return {}
