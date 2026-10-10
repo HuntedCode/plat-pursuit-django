@@ -884,7 +884,7 @@ class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
                 'name': r['name'],
                 'cover': _cover_url(r['cover']),
                 'cover_is_art': _cover_is_art(r['cover']),
-                'platforms': r['platforms'],
+                'platforms': r['platforms'], 'availability': r['availability'],
                 'key': r['key'],
                 'key_label': r['key_label'],
                 'completed_at': r['completed_at'].isoformat() if r['completed_at'] else None,
@@ -918,7 +918,7 @@ class SearchPickerView(_EditableRunMixin, _ChallengeJsonView):
                 'name': r['name'],
                 'cover': _cover_url(r['cover']),
                 'cover_is_art': _cover_is_art(r['cover']),
-                'platforms': r['platforms'],
+                'platforms': r['platforms'], 'availability': r['availability'],
                 'keys': r['keys'],
                 'already_in_run': r['already_in_run'],
                 'is_completed_by_you': r['is_completed_by_you'],
@@ -1211,14 +1211,14 @@ def _panel_json(panel):
         'offset': panel['offset'],
         'more': panel['more'],
         'rows': [{'slug': r['slug'], 'name': r['name'], 'cover': _cover_url(r['cover']),
-                  'cover_is_art': _cover_is_art(r['cover']), 'platforms': r['platforms']}
+                  'cover_is_art': _cover_is_art(r['cover']), 'platforms': r['platforms'], 'availability': r['availability']}
                  for r in panel['rows']],
         'catchup': [{
             'slug': r['slug'],
             'name': r['name'],
             'cover': _cover_url(r['cover']),
             'cover_is_art': _cover_is_art(r['cover']),
-            'platforms': r['platforms'],
+            'platforms': r['platforms'], 'availability': r['availability'],
             'via': r['via'],
             # ISO 8601 so the client can format it with `TimeFormatter` rather than being handed a
             # server-rendered string in the server's idea of a locale.
