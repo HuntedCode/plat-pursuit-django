@@ -774,8 +774,10 @@
             if (!els.more) { return; }
             els.more.hidden = !(paging && paging.more);
             if (els.moreBtn) {
+                // `aria-disabled`, NOT `disabled`: disabling the focused button threw a keyboard user's focus out
+                // of the list. `loadMore` already refuses a second press while one is loading.
                 var busy = !!(paging && paging.loading);
-                els.moreBtn.disabled = busy;
+                els.moreBtn.setAttribute('aria-disabled', busy ? 'true' : 'false');
                 els.moreBtn.textContent = busy ? 'Loading...' : 'Show more';
             }
         }
@@ -839,9 +841,21 @@
                     historyCount(p.shown);
                     // THE WHOLE HISTORY WAS WALKED AND NOTHING QUALIFIED: "nothing in the first batch" is no
                     // longer the honest sentence, and its "search to look further" fact has nothing left to find.
-                    if (!p.more && !p.shown) { historyCount(0, true); }
+                    if (!p.more && !p.shown) { historyCount(0, true, p.query); say(els.sub.textContent); }
                 }
                 syncMore();
+                // A PRESSED BUTTON HANDS FOCUS ON to the first new offer, and the count is said: the button may
+                // be gone now, and a keyboard user should land on what they asked for rather than on nothing.
+                if (manual) {
+                    var added = panel.rows.length;
+                    if (added) {
+                        var items = els.rows.children;
+                        var first = items[items.length - added];
+                        var target = first && first.querySelector('button');
+                        if (target) { target.focus(); }
+                    }
+                    say(added ? added + ' more shown.' : 'Nothing more here.');
+                }
                 keepFilling();
             }).catch(function (err) {
                 if (paging === p) { p.loading = false; syncMore(); }
@@ -859,9 +873,13 @@
             // THE WHOLE COUNT, now that the whole pool can be reached. "Showing 24 of 340" described a sheet
             // that stopped at 24.
             // A FILTERED COUNT SAYS SO: "12 games fit" under a badge filter read as the square's capacity.
-            els.sub.textContent = filtering()
-                ? panel.total + ' shown with your filters'
-                : panel.total + (panel.total === 1 ? ' game fits' : ' games fit');
+            // AND A SEARCH COUNTS MATCHES: with "Only this square" on, a term lands here, and "3 games fit" read
+            // as the square's capacity rather than as what the term found.
+            els.sub.textContent = panel.query
+                ? panel.total + (panel.total === 1 ? ' match' : ' matches')
+                : (filtering()
+                    ? panel.total + ' shown with your filters'
+                    : panel.total + (panel.total === 1 ? ' game fits' : ' games fit'));
 
             els.rows.textContent = '';
             els.rows.classList.remove('pp-cpick__rows--search');
@@ -873,7 +891,7 @@
             if (!panel.rows.length) {
                 // NOT "no games left" when the catch-up block below is about to offer some: that read as a dead
                 // end directly above the way out. NOR WHEN A FILTER EMPTIED IT: the games are there, hidden.
-                say(panel.query ? 'Nothing matches that here.'
+                say(panel.query ? 'Nothing matches that here. Turn off Only this square to search every game.'
                     : filtering() ? 'No games here match your filters.'
                     : (panel.catchup && panel.catchup.length
                         ? 'No new games left for this square. One you already finished can fill it.'
@@ -970,7 +988,7 @@
 
             if (panel.too_short) { say('Type at least two letters.'); return; }
             if (!panel.rows.length) {
-                say(filtering() ? 'No games match that with these filters.' : 'No games match that.');
+                say(filtering() ? 'No games match that with your filters.' : 'No games match that.');
                 return;
             }
             say(els.sub.textContent);
@@ -1405,12 +1423,26 @@
 
         /** The history count after a page lands. A page that found games also retires the "nothing in the
          *  first batch" fact, which is no longer true. */
-        function historyCount(shown, exhausted) {
+        function historyCount(shown, exhausted, query) {
             if (!shown && !exhausted) { return; }
             els.sub.textContent = shown ? shown + ' ready to place'
-                : (filtering() ? 'Nothing here matches your filters' : 'Nothing here yet');
+                : (query ? 'Nothing here matches that'
+                    : (filtering() ? 'Nothing here matches your filters' : 'Nothing here yet'));
             var stale = dialog.querySelector('[data-cpick-empty-fact]');
             if (stale && stale.parentNode) { stale.parentNode.removeChild(stale); }
+        }
+
+        /** An import locked `key`: drop every history offer for it from the list, say what happened, and let the pager
+         *  top the list back up if that left it short. */
+        function dropHistoryKey(key, note) {
+            var gone = 0;
+            Array.prototype.forEach.call(els.rows.querySelectorAll('li[data-cpick-key]'), function (li) {
+                if (li.getAttribute('data-cpick-key') === key) { li.parentNode.removeChild(li); gone++; }
+            });
+            paging.shown = Math.max(0, paging.shown - gone);
+            historyCount(paging.shown, !paging.more, paging.query);
+            say(note + ' ' + els.sub.textContent);
+            keepFilling();
         }
 
         /** One page of history offers, appended. */
@@ -1440,6 +1472,8 @@
                         occupant ? 'Keep ' + occupant : 'Not this one',
                         function () { assign(picked.slug, row.key, true, button, true); });
                 }));
+                // TAGGED WITH ITS SQUARE, so an import can drop that square's other offers in place.
+                els.rows.lastChild.setAttribute('data-cpick-key', row.key);
             });
         }
 
@@ -1549,8 +1583,15 @@
                 // reloads the page then, and the sheet goes with it.
                 if (stay && stillOpen() && !slot.is_complete) {
                     applySlot(slot, null);
-                    pendingNote = slot.game_name + ' is in ' + labelFor(key) + '.';
                     dialog.focus();
+                    // IN PLACE, NOT A RELOAD, so a hunter importing from page three stays on page three. The
+                    // square is now locked, so every offer for it goes; the cursor is a keyset, so the pages still
+                    // to come are not shifted by the games that just left the pool.
+                    if (paging && paging.kind === 'history') {
+                        dropHistoryKey(key, slot.game_name + ' is in ' + labelFor(key) + '.');
+                        return;
+                    }
+                    pendingNote = slot.game_name + ' is in ' + labelFor(key) + '.';
                     loadHistory(els.q ? els.q.value.trim() : '');
                     return;
                 }

@@ -27,7 +27,10 @@ Ordering is `Lower('name')` in the database, per the project's front-facing-name
 PAGED, 2026-10-10. Each panel was one `PAGE` and nothing more, so a square with 340 games showed 24 and
 the sheet simply ended (owner: "the modal ONLY shows 24 total games"). The square and search panels now take
 an `offset` and say whether there is `more`; the history panel takes a `cursor`, because its pages are
-filtered by a completion date SQL cannot see, so "the next 24" is not an offset into anything. The client
+filtered by a completion date SQL cannot see, so "the next 24" is not an offset into anything. That cursor is a
+KEYSET (the id of the last candidate used, resumed after it in name order), not a position, because history is
+the one panel that stays open while it is written to: an import removes its letter's candidates from the pool,
+and a position cursor would then skip games that slid back past it. The client
 fetches the next page as the sheet scrolls. The catch-up block rides only on the FIRST page of a square: it is
 its own short list, and repeating it per page would re-run its trophy read for rows already on screen.
 
@@ -41,6 +44,7 @@ data, so an honest total would mean dating the whole pool. It reports a boolean 
 `HISTORY_SCAN`-sized rather than `PAGE`-sized. An earlier version of this paragraph said "every list here is a
 `PAGE`-sized slice with a DB `COUNT` beside it", which stopped being true when the third panel landed.
 """
+from django.db.models import Q
 from django.db.models.functions import Lower
 
 from challenges.models import CHALLENGE_TYPE_AZ
@@ -48,7 +52,7 @@ from challenges.services import challenge_service as svc
 from challenges.services import eligibility
 from challenges.services.slot_render import covers_by_contract, key_atoms, label_for_key
 from core.templatetags.custom_filters import platform_color_str
-from trophies.models import Game, Job
+from trophies.models import Contract, Game, Job
 from trophies.services.job_render import job_atom
 from trophies.templatetags.job_icons import has_icon
 from trophies.util_modules.constants import PLATFORM_DISPLAY_ORDER, ordered_platform_union
@@ -82,6 +86,8 @@ HISTORY_SCAN = PAGE * 4
 #: The platforms the picker filters by, in display order, as (value, label). The labels match Browse Games'
 #: platform filter; the values are what `Game.title_platform` stores and what `?platform=` must be.
 PLATFORM_FILTERS = [(p, 'PSVita' if p == 'PSVITA' else p) for p in PLATFORM_DISPLAY_ORDER]
+#: The same labels on a row's tags, so the sheet never spells a platform two ways.
+_PLATFORM_LABELS = dict(PLATFORM_FILTERS)
 
 #: How deep a panel will page. A guard against `?offset=10**9`, not a feature: Postgres walks `OFFSET` rows
 #: before returning any, so an unbounded offset is a scan on request. The biggest single-square pool today is
@@ -328,7 +334,7 @@ def search_panel(profile, challenge, query, *, limit=PAGE, offset=0, badge_only=
             'filled': filled}
 
 
-def history_panel(profile, challenge, *, query='', limit=PAGE, cursor=0, badge_only=False, platforms=()):
+def history_panel(profile, challenge, *, query='', limit=PAGE, cursor=None, badge_only=False, platforms=()):
     """Everything the history-first panel draws: games this hunter finished that a square will accept.
 
     ONE SHAPE, ALWAYS, open or closed. The caller renders a panel either way -- an explanation is a panel too --
@@ -390,11 +396,12 @@ def history_panel(profile, challenge, *, query='', limit=PAGE, cursor=0, badge_o
     # available (membership is not a SQL predicate) and paging first hides importable games behind pre-join
     # ones. `scan` is bounded whatever the hunter's library holds.
     #
-    # THE CURSOR IS A POSITION IN THE POOL, not a count of offers: the window starts there, and the next
-    # page starts just past the last candidate this one used. When the page fills before the window does,
-    # that is mid-window, so the undated remainder is scanned again next time rather than skipped.
-    cursor = _bounded(cursor)
-    scan = list(pool.order_by(*BY_NAME)[cursor:min(cursor + HISTORY_SCAN, MAX_OFFSET)])
+    # THE CURSOR IS THE LAST CANDIDATE USED, not a position (see the module docstring): the window starts just
+    # after it in `BY_NAME` order. When the page fills before the window does that is mid-window, so the undated
+    # remainder is scanned again next time rather than skipped. A keyset also needs no `MAX_OFFSET`: it never
+    # walks past rows to reach a page.
+    pool = _after(pool, cursor)
+    scan = list(pool.order_by(*BY_NAME)[:HISTORY_SCAN])
     dates = eligibility.importable_dates(profile, scan, joined_at) if scan else {}
 
     importable = [(i, c) for i, c in enumerate(scan) if dates.get(c.id) is not None]
@@ -403,12 +410,10 @@ def history_panel(profile, challenge, *, query='', limit=PAGE, cursor=0, badge_o
     # would be a claim this function cannot make. The panel says something honest instead.
     scan_truncated = len(scan) >= HISTORY_SCAN
     if len(importable) > limit:
-        next_cursor = cursor + importable[limit - 1][0] + 1
+        next_cursor = importable[limit - 1][1].pk
     elif scan_truncated:
-        next_cursor = cursor + len(scan)
+        next_cursor = scan[-1].pk
     else:
-        next_cursor = None
-    if next_cursor is not None and next_cursor >= MAX_OFFSET:
         next_cursor = None
 
     covers, plats = _decorations(rows)
@@ -528,8 +533,24 @@ def _decorations(contracts):
     for contract_id, concept_ids in concepts.items():
         union = ordered_platform_union(
             lists for cid in concept_ids for lists in by_concept.get(cid, []))
-        plats[contract_id] = [{'name': p, 'tone': platform_color_str(p)} for p in union]
+        plats[contract_id] = [{'name': _PLATFORM_LABELS.get(p, p), 'tone': platform_color_str(p)} for p in union]
     return covers, plats
+
+
+def _after(pool, cursor):
+    """`pool` from just after contract `cursor` in `BY_NAME` order, or the whole pool for no cursor.
+
+    `(Lower(name), pk)` is a total order, so "after" is exact: same lowered name and a higher pk, or a later
+    lowered name. A cursor that is not an id, or names a contract that no longer exists, starts over rather than
+    guessing where it was."""
+    try:
+        cursor = int(cursor)
+    except (TypeError, ValueError):
+        return pool
+    anchor = Contract.objects.filter(pk=cursor).annotate(_lname=Lower('name')).values_list('_lname', flat=True).first()
+    if anchor is None:
+        return pool
+    return pool.annotate(_lname=Lower('name')).filter(Q(_lname__gt=anchor) | Q(_lname=anchor, pk__gt=cursor))
 
 
 def _bounded(position):

@@ -173,7 +173,10 @@ def test_history_pages_by_cursor_and_covers_every_importable_game_once():
     first = picker.history_panel(profile, challenge)
     second = picker.history_panel(profile, challenge, cursor=first['cursor'])
 
-    assert first['showing'] == picker.PAGE and first['more'] is True and first['cursor'] == picker.PAGE
+    by_name = {c.name: c for c in made}
+    # A KEYSET: the cursor is the last offer this page used.
+    assert first['showing'] == picker.PAGE and first['more'] is True
+    assert first['cursor'] == by_name[first['rows'][-1]['name']].pk
     assert second['more'] is False and second['cursor'] is None
     seen = _names(first['rows']) + _names(second['rows'])
     assert sorted(seen) == sorted(c.name for c in made) and len(set(seen)) == len(seen)
@@ -187,11 +190,12 @@ def test_a_history_page_that_fills_mid_window_resumes_right_after_its_last_offer
     profile.user.date_joined = joined
     profile.user.save(update_fields=['date_joined'])
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
-    good = []
+    good, made = [], {}
     for i in range(picker.PAGE * 2 + 2):
         before = i % 2 == 0
         c = _importable(profile, 'Alpha %03d' % i,
                         earned=joined - timedelta(days=5) if before else joined + timedelta(days=5))
+        made[c.name] = c
         if not before:
             good.append(c.name)
 
@@ -199,7 +203,7 @@ def test_a_history_page_that_fills_mid_window_resumes_right_after_its_last_offer
     second = picker.history_panel(profile, challenge, cursor=first['cursor'])
 
     assert _names(first['rows']) == good[:picker.PAGE]
-    assert first['cursor'] == 2 * picker.PAGE, 'the 24th offer is the 48th candidate, so the next page starts after it'
+    assert first['cursor'] == made[good[picker.PAGE - 1]].pk, 'the next page starts just after the 24th offer'
     assert _names(second['rows']) == good[picker.PAGE:]
 
 
@@ -211,15 +215,47 @@ def test_a_history_window_of_pre_join_games_still_hands_on_a_cursor():
     profile.user.date_joined = joined
     profile.user.save(update_fields=['date_joined'])
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
-    for i in range(picker.HISTORY_SCAN):
-        _importable(profile, 'Alpha %03d' % i, earned=joined - timedelta(days=100))
+    early = [_importable(profile, 'Alpha %03d' % i, earned=joined - timedelta(days=100))
+             for i in range(picker.HISTORY_SCAN)]
     late = _importable(profile, 'Zulu Late', earned=joined + timedelta(days=2))
 
     first = picker.history_panel(profile, challenge)
     second = picker.history_panel(profile, challenge, cursor=first['cursor'])
 
-    assert first['rows'] == [] and first['more'] is True and first['cursor'] == picker.HISTORY_SCAN
+    assert first['rows'] == [] and first['more'] is True and first['cursor'] == early[-1].pk
     assert _names(second['rows']) == [late.name] and second['more'] is False
+
+
+def test_an_import_mid_list_does_not_make_the_next_page_skip_games():
+    """History is the one panel that stays open while it is written to. An import locks its letter, which drops
+    that letter's candidates out of the pool; a POSITION cursor then pointed past games that slid back, and the
+    next page skipped them. A keyset resumes after the last offer whatever left the pool before it."""
+    profile = _hunter()
+    joined = timezone.now() - timedelta(days=400)
+    profile.user.date_joined = joined
+    profile.user.save(update_fields=['date_joined'])
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    after = joined + timedelta(days=5)
+    alphas = [_importable(profile, 'Alpha %03d' % i, earned=after) for i in range(picker.PAGE)]
+    bravos = [_importable(profile, 'Bravo %03d' % i, earned=after) for i in range(picker.PAGE)]
+
+    first = picker.history_panel(profile, challenge)
+    assert _names(first['rows']) == [c.name for c in alphas]
+    svc.assign(challenge, profile, 'A', alphas[0], acknowledge_lock=True)   # the import: A is now locked
+
+    second = picker.history_panel(profile, challenge, cursor=first['cursor'])
+    assert _names(second['rows']) == [c.name for c in bravos], 'no Bravo may be skipped'
+
+
+def test_a_cursor_that_is_not_a_contract_starts_over():
+    profile = _hunter()
+    joined = timezone.now() - timedelta(days=400)
+    profile.user.date_joined = joined
+    profile.user.save(update_fields=['date_joined'])
+    challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
+    only = _importable(profile, 'Alpha One', earned=joined + timedelta(days=1))
+    for junk in ('nope', 10 ** 9, None):
+        assert _names(picker.history_panel(profile, challenge, cursor=junk)['rows']) == [only.name]
 
 
 # ── the badge filter ─────────────────────────────────────────────────────────────────────────────
@@ -298,7 +334,7 @@ def test_every_row_carries_its_platforms_in_display_order_with_a_tone():
     row = picker.slot_panel(profile, challenge, 'B')['rows'][0]
 
     assert row['platforms'] == [{'name': 'PS5', 'tone': 'primary'}, {'name': 'PS4', 'tone': 'accent'},
-                                {'name': 'PSVITA', 'tone': 'secondary'}]
+                                {'name': 'PSVita', 'tone': 'secondary'}]   # the filter chip's own label
 
 
 def test_the_search_and_history_rows_carry_platforms_too():
@@ -349,15 +385,27 @@ def test_the_square_door_reads_offset_badge_and_platforms(client):
 
 
 def test_the_history_and_search_doors_carry_their_paging(client):
+    """Both doors pass paging through, with enough rows that a next page exists: a one-row result or a closed
+    history panel would satisfy a weaker check without paging anything."""
     profile = _hunter(client)
+    joined = timezone.now() - timedelta(days=400)
+    profile.user.date_joined = joined
+    profile.user.save(update_fields=['date_joined'])
     challenge = svc.start(profile, CHALLENGE_TYPE_AZ)
-    _contract('Quill One')
+    _many('Quill', picker.PAGE + 1)
+    for i in range(picker.PAGE + 1):
+        _importable(profile, 'Alpha %03d' % i, earned=joined + timedelta(days=1))
 
-    search = client.get(reverse('challenge_search', args=[challenge.pk]), {'q': 'Quill'}).json()
-    history = client.get(reverse('challenge_history', args=[challenge.pk])).json()
+    search_url = reverse('challenge_search', args=[challenge.pk])
+    search = client.get(search_url, {'q': 'Quill'}).json()
+    assert search['more'] is True and search['offset'] == 0 and search['rows'][0]['platforms']
+    assert len(client.get(search_url, {'q': 'Quill', 'offset': picker.PAGE}).json()['rows']) == 1
 
-    assert search['more'] is False and search['offset'] == 0 and search['rows'][0]['platforms']
-    assert 'cursor' in history
+    history_url = reverse('challenge_history', args=[challenge.pk])
+    history = client.get(history_url).json()
+    assert history['open'] is True and history['more'] is True and isinstance(history['cursor'], int)
+    rest = client.get(history_url, {'cursor': history['cursor']}).json()
+    assert len(rest['rows']) == 1 and rest['more'] is False
 
 
 # ── the sheet ────────────────────────────────────────────────────────────────────────────────────
@@ -398,6 +446,24 @@ def test_the_qualify_toggle_keeps_a_term_in_the_square():
     run = run[:run.index('};')]
     assert "if (openKey !== null && els.qualify && els.qualify.checked) { load(openKey, term); return; }" in run
     assert run.index('els.qualify.checked') < run.index('load(null, term);')
+
+
+def test_an_import_updates_the_history_list_in_place():
+    """Reloading put a hunter who imported from page three back on page one, every time."""
+    assign = JS[JS.index('function assign(slug, key, confirmed, button, stay) {'):]
+    stay = assign[assign.index('if (stay && stillOpen() && !slot.is_complete)'):]
+    stay = stay[:stay.index('close(function ()')]
+    assert stay.index("dropHistoryKey(key,") < stay.index('loadHistory(')
+    assert "els.rows.lastChild.setAttribute('data-cpick-key', row.key);" in JS
+
+
+def test_show_more_keeps_focus_and_hands_it_on():
+    sync = JS[JS.index('function syncMore() {'):]
+    sync = sync[:sync.index('\n        }')]
+    assert "setAttribute('aria-disabled'" in sync and '.disabled =' not in sync
+    more = JS[JS.index('function loadMore(manual) {'):]
+    more = more[:more.index('\n        }')]
+    assert 'if (target) { target.focus(); }' in more
 
 
 def test_a_filtered_list_says_it_is_filtered():
@@ -457,7 +523,7 @@ def test_a_phone_lays_the_squares_out_as_a_full_width_two_column_grid():
     assert '.pp-cpick__rows--search .pp-cpick__row-main { display: contents; }' in block
     assert '.pp-cpick__rows--search .pp-cpick__row-main > .pp-cpick__keys { grid-column: 1 / -1; }' in block
     # Drawn smaller, still 44px to the finger.
-    assert 'min-height: 36px;' in block and "content: ''; position: absolute; inset: -4px 0;" in block
+    assert 'min-height: 36px;' in block and "content: ''; position: absolute; inset: -3px 0;" in block
 
 
 def test_a_square_label_can_ellipsise_on_a_phone():

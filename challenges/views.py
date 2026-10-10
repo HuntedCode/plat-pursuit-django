@@ -850,7 +850,7 @@ class HistoryPickerView(_EditableRunMixin, _ChallengeJsonView):
             return self.not_found()
         panel = picker.history_panel(request.user.profile, challenge,
                                     query=request.GET.get('q', ''),
-                                    cursor=request.GET.get('cursor', 0), badge_only=_badge_only(request),
+                                    cursor=request.GET.get('cursor'), badge_only=_badge_only(request),
                                     platforms=_platforms(request))
         return JsonResponse({
             'open': panel['open'],

@@ -986,9 +986,10 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
         flex-wrap: nowrap; border-radius: var(--pp-radius-md);
     }
     .pp-cpick__key-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pp-cpick__key::after { content: ''; position: absolute; inset: -4px 0; }
+    .pp-cpick__key::after { content: ''; position: absolute; inset: -3px 0; }
     .pp-cpick__key svg { width: 14px; height: 14px; }
-    .pp-cpick__key--sentence, .pp-cpick__key--taken { grid-column: 1 / -1; flex-wrap: wrap; }
+    .pp-cpick__key--sentence, .pp-cpick__key--taken { grid-column: 1 / -1; }
+    .pp-cpick__key--taken { flex-wrap: wrap; }
 
     /* AND THE GRID TAKES THE WHOLE ROW. Inside the column beside the cover each square was ~80px and every job
        name ellipsised ("Arch..."). So on a phone the row is a grid: a smaller cover beside the title, platforms
@@ -5186,7 +5187,7 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 /* 36px drawn, 44px to the finger: the `::after` widens the hit area to the sheet's touch floor without
    making eight chips look like eight buttons. */
 .pp-cpick__filters .pp-bgal__chip { position: relative; min-height: 36px; padding: 4px 10px; }
-.pp-cpick__filters .pp-bgal__chip::after { content: ''; position: absolute; inset: -4px 0; }
+.pp-cpick__filters .pp-bgal__chip::after { content: ''; position: absolute; inset: -3px 0; }
 .pp-cpick__flabel {
     display: none;
     font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
@@ -5204,5 +5205,6 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 
 /* THE NEXT-PAGE CONTROL: centred under the rows, out of the way until it is needed. */
 .pp-cpick__more { display: flex; justify-content: center; padding: 14px 0 4px; }
+.pp-cpick__more .pp-cta { min-height: 44px; }
 .pp-cpick__more[hidden] { display: none; }
 

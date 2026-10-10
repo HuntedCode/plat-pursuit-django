@@ -379,8 +379,11 @@ def test_an_import_keeps_the_sheet_open_on_the_history_list():
     body = _fn('assign')
     assert 'if (stay && stillOpen() && !slot.is_complete)' in body
     stay = body[body.index('if (stay && stillOpen()'):]
-    stay = stay[:stay.index('return;')]
+    # TO THE CLOSE, not to the first `return`: since 2026-10-10 a paged history list is updated in place
+    # (`dropHistoryKey`), and the reload with its `pendingNote` is the fallback when no history list is paging.
+    stay = stay[:stay.index('close(function ()')]
     assert 'applySlot(slot, null)' in stay, 'a toast behind the modal would announce nothing'
+    assert 'dropHistoryKey(key,' in stay
     assert 'loadHistory(' in stay
     assert 'pendingNote = ' in stay
     assert "pendingNote + ' '" in _fn('renderHistoryPanel'), 'the reload overwrites the confirmation'

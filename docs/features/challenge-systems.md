@@ -321,7 +321,7 @@ modal ONLY shows 24 total games"). Now every list reaches the whole pool:
 | Panel | Pages by | Returns |
 |---|---|---|
 | Square, search | `?offset=` | `offset`, `more` (and the full `total`, so the subtitle is the real count) |
-| History | `?cursor=`, a position in the candidate pool | `cursor` (where the next page starts, or null), `more` |
+| History | `?cursor=`, a KEYSET: the id of the last candidate used | `cursor` (resume after it, or null), `more` |
 
 The client (`loadMore` in `challenge-detail.js`) fetches the next page as a sentinel under the rows nears the
 bottom of the sheet, with a "Show more" button as the keyboard and fallback path. The catch-up block rides only
@@ -355,8 +355,12 @@ The pool is "completed, live, fits an open letter". Whether a candidate is *impo
 date, which is not a SQL predicate — so the panel dates a `HISTORY_SCAN` (96) window and pages the result
 to `PAGE` (24).
 
-Since paging, the window starts at the request's `cursor`, and the next page starts just past the last
-candidate the page used: mid-window when the page filled first, after the whole window when it did not. A page
+Since paging, the window starts just after the request's `cursor` in name order, and the next cursor is the last
+candidate the page used: mid-window when the page filled first, the window's end when it did not. **It is a keyset,
+not a position, because history is the one panel that stays open while it is written to.** An import locks its
+letter and drops that letter's candidates out of the pool; a position cursor then pointed past games that slid
+back, and the next page skipped them. So an import also updates the list IN PLACE (`dropHistoryKey` removes the
+locked letter's other offers) instead of reloading, and a hunter importing from page three stays on page three. A page
 can come back empty (a window of games all finished before joining) with `more` still true; the sheet keeps
 looking by itself for up to three such pages, then leaves it to the button.
 
@@ -1033,8 +1037,8 @@ agreeing with its flag); `challenges/models.py` Meta is the full set.
 ## Gotchas and Pitfalls
 
 **`MAX_OFFSET` ends a picker list, it never clamps one.** Clamping `offset=5024` back to 5000 re-served that
-page with `more: true`, and a scrolling sheet appended it forever. Every picker slice stops at the ceiling and
-`more` is false past it.
+page with `more: true`, and a scrolling sheet appended it forever. The square and search slices stop at the
+ceiling and `more` is false past it. History needs no ceiling: its keyset never walks past rows to reach a page.
 
 **The year overview carries the count two ways, and both are deliberate.** Below `md:` the cell has no
 numeral, so the shade carries the count (like the Hall of Fame year). From `md:` a numeral sits on a 22% tint
