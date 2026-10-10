@@ -105,9 +105,12 @@ matching resolves the *hub*; the active *item* is an exact `url_name` match, so 
 nothing until it was mapped to the `challenges` item — the same silent failure this doc records for
 `job_detail`. Nesting a URL under a hub's prefix never lights an item.
 
-It has one consequence already handled: the run page's breadcrumb is the PUBLIC trail, not the owner's.
-Pointing it at *My Pursuit → My Challenges* sent anonymous readers to a login screen from a page that never
-asked them to sign in, and sent signed-in visitors to THEIR OWN runs from a page about somebody else's.
+Its trail depends on WHO IS LOOKING (owner, 2026-10-10). A visitor gets the PUBLIC trail and rail, *Home /
+Challenges* under Community: pointing everybody at *My Pursuit → My Challenges* sent anonymous readers to a login
+screen from a page that never asked them to sign in, and sent signed-in visitors to THEIR OWN runs from a page
+about somebody else's. The run's OWNER gets *Home / My Pursuit / My Challenges / <run>*, the My Pursuit rail with
+My Challenges lit, and a "Back to My Challenges" button, because for them the page is a working surface they
+swap to and from. The rail half uses the per-request override below.
 
 **What did NOT move, and why the line holds:**
 
@@ -283,7 +286,10 @@ both halves of what lives here, where "Membership" would name only one of them.
 - **Config.** `HubSubnavConfig(key, label, icon, prefixes, items)` + `HubSubnavItem(slug, label,
   url_name, icon, auth_required, divider_before)` (frozen dataclasses). `HUB_SUBNAV_CONFIG` holds
   My Pursuit / Browse / Leaderboards / Support.
-- **Resolution.** `resolve_hub_subnav(request)`: (1) `_URL_NAME_TO_SLUG_OVERRIDES` — sub-pages whose
+- **Resolution.** `resolve_hub_subnav(request)`: (0) a VIEW's own answer, `request.hub_subnav_override =
+  (hub_key, slug)`, for a page whose hub depends on the viewer rather than its URL (the challenge run page for its
+  owner); the context processor reads it after the view has run, and an unknown hub key falls through to the
+  rules below rather than blanking the rail; (1) `_URL_NAME_TO_SLUG_OVERRIDES` — sub-pages whose
   url_name differs from their tab short-circuit here (e.g. `game_detail` → Browse/trophy-lists:
   the whole `/games/<np>/` list family, roadmaps included, lights the list-level catalogue,
   while the concept `game_page` lights Games); (2) the
