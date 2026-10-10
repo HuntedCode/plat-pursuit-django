@@ -13,6 +13,7 @@ carries no trusted-status gate, same as _build_other_versions: trusted-ness gate
 page (Concept.game_page_url), not membership.
 """
 import logging
+from dataclasses import dataclass
 
 from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django.http import Http404, HttpResponsePermanentRedirect
@@ -45,6 +46,50 @@ def _platform_priority_case():
         *[When(title_platform__contains=plat, then=Value(idx))
           for idx, plat in enumerate(PLATFORM_PRIORITY_ORDER)],
         default=Value(999), output_field=IntegerField(),
+    )
+
+
+@dataclass(frozen=True)
+class SharedListFlags:
+    """The game flags that hold for EVERY trophy list on a Game page (owner, 2026-10-10).
+
+    Shaped like a `Game` for exactly the attributes `_game_flags.html` reads, so the Game page reuses the Trophy
+    List page's partial rather than copying its chips. A flag one list carries and another does not belongs to
+    that list (its own page shows it); naming it for the whole game would tell a hunter on the good list that
+    their game is broken.
+    """
+    is_shovelware: bool
+    is_delisted: bool
+    is_obtainable: bool
+    has_online_trophies: bool
+    has_buggy_trophies: bool
+
+    @property
+    def has_chips(self):
+        """Whether the flags row has a chip to draw. Shovelware is left out because it rides the platform row
+        instead (as on the Trophy List page). Gating the partial on this is also what keeps its "No Known Issues"
+        chip off the Game page: the row only renders when a real flag is shared, so the clean state can never
+        show, and a game whose lists disagree is not a game with no known issues."""
+        return (self.is_delisted or not self.is_obtainable
+                or self.has_online_trophies or self.has_buggy_trophies)
+
+
+def shared_list_flags(games):
+    """`SharedListFlags` for `games` (a page's trophy lists, already in memory), or None for none.
+
+    ALL for every flag, with `is_obtainable` read the other way round: the page says Unobtainable only when NO
+    list is obtainable, which is "every list unobtainable". Pure Python over rows the page has already loaded,
+    so it costs no query.
+    """
+    games = list(games)
+    if not games:
+        return None
+    return SharedListFlags(
+        is_shovelware=all(g.is_shovelware for g in games),
+        is_delisted=all(g.is_delisted for g in games),
+        is_obtainable=any(g.is_obtainable for g in games),
+        has_online_trophies=all(g.has_online_trophies for g in games),
+        has_buggy_trophies=all(g.has_buggy_trophies for g in games),
     )
 
 
@@ -231,6 +276,7 @@ class GamePageView(ConceptContextMixin, TemplateView):
         # live on the switcher chips; the hero describes the WORK. The shared util is also what
         # the condensed Browse card uses, so the two surfaces cannot disagree.
         context['all_platforms'] = ordered_platform_union(g.title_platform for g in self.list_set)
+        context['list_flags'] = shared_list_flags(self.list_set)
         context['host_game'] = host
         # The concept partials (ratings/about/versions) read `game` -- the HOST game, elected
         # anonymously, so the concept furniture never varies by viewer.
