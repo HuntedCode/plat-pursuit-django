@@ -4,7 +4,31 @@ pytest-django reads DJANGO_SETTINGS_MODULE from pyproject.toml, so no settings
 wiring is needed here. Fixtures below are convenience wrappers over the factories.
 """
 
+import types
+
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _ratelimit_clock_is_fixed(monkeypatch):
+    """Pin the RATE LIMITER's clock for every test, and nothing else's.
+
+    `django_ratelimit` counts in FIXED windows keyed on `int(time.time())`, so a test that spends a whole
+    minute's budget (60 requests, then expects a 403) failed at random whenever its requests straddled a window
+    boundary: the count reset partway and the 61st was answered. That is what flaked
+    `test_the_hall_of_fame_meters_each_caller_separately...` on 2026-10-10, and six other tests shared the shape.
+
+    One fixture for the whole class rather than one per file. The per-file version (`frozen_window`) patched
+    `time.time` on the `time` MODULE, which froze it for every caller in the test, not just the limiter; this
+    swaps only the limiter's own `time` reference for a stand-in, so nothing else notices.
+    Every limiter call reads `time.time()` (`django_ratelimit/core.py`), which is all the stand-in provides.
+    """
+    import time as real_time
+
+    import django_ratelimit.core as rl_core
+
+    now = real_time.time()
+    monkeypatch.setattr(rl_core, 'time', types.SimpleNamespace(time=lambda: now))
 
 
 @pytest.fixture(scope="session")

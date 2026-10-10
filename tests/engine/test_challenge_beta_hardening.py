@@ -63,16 +63,6 @@ def _contract(name, *, jobs=()):
     return c
 
 
-@pytest.fixture
-def frozen_window(monkeypatch):
-    """django_ratelimit counts in FIXED windows keyed on `int(time.time())`, so a test that spends a whole
-    minute's budget fails at random if it happens to straddle a window boundary. Pin the limiter's clock."""
-    import django_ratelimit.core as rl_core
-
-    now = rl_core.time.time()
-    monkeypatch.setattr(rl_core.time, 'time', lambda: now)
-
-
 def _finish_calendar(run):
     CalendarDay.objects.filter(challenge=run).update(in_all=True, in_clean=True, plat_count=1,
                                                      earned_on=dt.date(2020, 1, 1))
@@ -306,7 +296,7 @@ def test_the_picker_swaps_the_panel_it_is_sent():
 
 # ── the picker's read doors meter HEAD ───────────────────────────────────────────────────────────
 
-def test_head_requests_spend_the_picker_budget(frozen_window):
+def test_head_requests_spend_the_picker_budget():
     """`View.setup` aliases `head` to the wrapped `get`, so `method='GET'` alone let a HEAD run the pool
     scan unmetered. Measured by behaviour: a source-text pin cannot prove what a decorator counts."""
     client = Client()
@@ -318,7 +308,7 @@ def test_head_requests_spend_the_picker_budget(frozen_window):
     assert statuses[90] == 429, 'the 91st HEAD in a minute was not refused'
 
 
-def test_a_tripped_write_limit_answers_json_the_sheet_can_show(frozen_window):
+def test_a_tripped_write_limit_answers_json_the_sheet_can_show():
     """A blocked request used to render the HTML 403 page, so the sheet had no `error` to read and could only
     say "That did not save." A JSON 429 carries the reason."""
     from challenges.views import RATE_LIMITED_MESSAGE
@@ -335,7 +325,7 @@ def test_a_tripped_write_limit_answers_json_the_sheet_can_show(frozen_window):
     assert resp.json()['error'] == RATE_LIMITED_MESSAGE
 
 
-def test_a_tripped_start_limit_is_said_on_the_page(frozen_window):
+def test_a_tripped_start_limit_is_said_on_the_page():
     """Start is a FORM, so its refusal is a message on the page it returns to, never a JSON body."""
     from challenges.views import RATE_LIMITED_MESSAGE
 

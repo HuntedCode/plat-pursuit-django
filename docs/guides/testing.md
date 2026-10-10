@@ -51,13 +51,21 @@ elsewhere (CI sets these for its own Postgres service).
 ## Running
 
 ```bash
-pytest                      # whole suite
+pytest -n 12                # whole suite, in parallel (~2 min locally; ~12 min serial)
+pytest                      # whole suite, one process
 pytest tests/               # just the cross-cutting harness/spine tests
 pytest trophies/            # one app
 pytest -k absorb            # tests matching a keyword
 pytest path/to/test_x.py::test_name   # a single test
 pytest --create-db          # force a fresh test DB (default reuses it for speed)
 ```
+
+**Run the whole suite in parallel** (`pytest-xdist`, in `requirements-dev.txt`). The suite is ~7,500 tests at
+~0.1s each, nearly all database setup, so it is bound by running one at a time, not by any slow test. Each worker
+gets its own test database (pytest-django names them per worker) and the Django cache is in-memory per process,
+so workers share nothing. 12 workers is the local sweet spot: past that the Postgres container is the bottleneck,
+and a worker number with no reused database pays to build one. Leave `-n` off for a single file or test, where
+starting workers costs more than it saves. CI runs `pytest -n auto`.
 
 ### Run what you changed, not everything
 
@@ -149,6 +157,11 @@ Because Render deploys from `main`, a failing test cannot reach production. *(Th
 gate is wired after the first spine tests exist — a gate over zero tests is moot.)*
 
 ## Gotchas and Pitfalls
+
+- **The rate limiter's clock is pinned for every test** (`_ratelimit_clock_is_fixed`, root `conftest.py`).
+  `django_ratelimit` counts in fixed windows on `int(time.time())`, so a test that spent a minute's budget used
+  to flake when its requests straddled a boundary. Only the limiter's own `time` reference is swapped, so every
+  other clock still runs. No per-test fixture is needed for a new rate-limit test.
 
 - **Postgres required.** A connection error on first run usually means
   `docker compose -f docker-compose.test.yml up -d` wasn't run. A "password authentication failed"

@@ -96,5 +96,9 @@ jobs:
       - name: Install Playwright chromium
         run: python -m playwright install --with-deps chromium
 
+      # ONE WORKER PER CORE (`-n auto`, 4 on GitHub's runner). The suite is ~7,500 tests at ~0.1s each, nearly
+      # all database setup, so it is bound by being run one at a time rather than by any slow test: locally 12
+      # workers took it from 12 minutes to 2. Each worker gets its own test database (pytest-django names them
+      # per worker) and the Django cache is in-memory per process, so workers share nothing.
       - name: Run tests
-        run: pytest
+        run: pytest -n auto
