@@ -744,6 +744,21 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   stamp (or a non-trusted match) is *not* a member even if the id matches — the gate is all three.
 - **Per-job totals MUST aggregate in the DB.** Never iterate a whale's `ContractXPGrant`/
   `EarnedContract` rows in Python to total job XP — `Sum().values('job')`. (The May 2026 OOM rule.)
+- **Never `.distinct()` the annotated board, and never filter it through a join.** `annotated_contracts`
+  hangs a dozen correlated subqueries off every live contract. `count()` and `aggregate()` drop the
+  ones they never read, unless the query is DISTINCT: then every column is part of the result, so every
+  subquery runs for every row. `_filter_contracts` used to end in `.distinct()` to hide the duplicates
+  its `jobs__` joins produced. On prod (2026-10-10, 3,387 live contracts) that made the board's count
+  0.98 s instead of 0.07 s, and `contracts_page` plus `board_facets` (eight queries between them, timed
+  on prod) took about 4 s of every `/career/` load, making it the slowest page on the site. No board
+  filter joins a to-many relation now: the job, platform and game-title matches are `EXISTS`
+  (`_job_exists`, `_platform_exists`, and an inline `Exists` for game titles), and the rest read
+  the contract's own columns or annotations, so a contract is one row however many of its jobs or
+  games match. A new filter over an M2M or a reverse FK has to be an `EXISTS` too.
+  `test_board_queries_never_select_distinct` fails on any `SELECT DISTINCT` from the board (Board
+  and History), its facets, the empty-state suggestion, or job detail's contract counts.
+  This is about cost, not memory: the rows are the curated catalogue, so every user pays it, not
+  just whales.
 - **Don't recompute granted XP from the Contract's *current* config.** Read the ledger. A
   Contract that changes its jobs or `T` later must not retroactively rewrite past grants.
 - **Unique `igdb_id` is what guarantees "once per game."** Two Contracts can't share an IGDB id,

@@ -406,6 +406,51 @@ def test_server_multi_job_is_anded():
     assert 'mj-both' in slugs and 'mj-one' not in slugs   # AND (a game with both), not OR
 
 
+def test_job_filters_never_duplicate_a_contract():
+    """Two jobs of one discipline is the shape a JOIN through the jobs M2M returns twice: the discipline
+    matches both, and so does a search hitting both job names. The board used to hide those duplicates
+    behind a DISTINCT that cost every query its unused annotations; the filters are EXISTS now, so one
+    contract is one row. Fails if the discipline or search filter goes back to a join without the
+    DISTINCT. (A `jobs__slug` join cannot duplicate, since slugs are unique, so the jobs leg here only
+    proves the AND still narrows to this contract.)"""
+    profile = ProfileFactory()
+    _contract('dup-twin', ('gunslinger', 'slayer'))   # both combat; 'sl' is in both job names
+    for filters in ({'disciplines': ['combat']},
+                    {'jobs': ['gunslinger'], 'disciplines': ['combat']},
+                    {'q': 'sl'}):
+        page = contracts_page(profile, platforms=[], **filters)
+        assert _slugs(page) == ['dup-twin'], filters
+        assert page['total'] == 1, filters
+        facets = board_facets(profile, platforms=[], **filters)
+        assert facets['status']['all'] == 1, filters
+        assert facets['discipline'] == {'combat': 1}, filters   # distinct CONTRACTS, not jobs
+
+
+def test_board_queries_never_select_distinct():
+    """A DISTINCT over the annotated board stops Django dropping the annotations a query never reads,
+    so every correlated subquery runs for every live contract: on prod (2026-10-10, 3,387 contracts)
+    it made the board's count 0.98 s instead of 0.07 s. Pinned on the SQL actually executed, with the
+    job, discipline, search and platform filters all switched on, so re-adding `.distinct()` anywhere on
+    the path fails here. `COUNT(DISTINCT ...)` in the facets is a different thing and does not match."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    from trophies.services.contracts_service import job_contract_counts
+
+    profile = ProfileFactory()
+    _contract('nd-one', ('gunslinger', 'slayer'))
+    filters = {'q': 'sl', 'jobs': ['gunslinger'], 'disciplines': ['combat'], 'platforms': ['PS5']}
+    with CaptureQueriesContext(connection) as ctx:
+        for scope in ('board', 'history'):   # History adds its own banked-XP annotations
+            contracts_page(profile, scope=scope, **filters)
+            board_facets(profile, scope=scope, **filters)
+            suggest_relaxation(profile, scope=scope, **filters)
+        job_contract_counts('gunslinger')     # job detail's header figures
+    assert ctx.captured_queries, 'nothing was captured, so nothing was checked'
+    offenders = [q['sql'] for q in ctx.captured_queries if 'SELECT DISTINCT' in q['sql'].upper()]
+    assert not offenders, offenders[0][:300]
+
+
 def test_server_sort_by_job_count():
     profile = ProfileFactory()
     _contract('jc-many', ('gunslinger', 'mage'))   # 2 jobs
