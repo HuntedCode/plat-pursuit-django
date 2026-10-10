@@ -973,6 +973,39 @@ button.pp-csq:focus-visible { outline: 2px solid var(--pp-primary); outline-offs
 }
 .pp-cpick__key-swap { font-weight: 700; opacity: 0.85; }
 
+/* A PHONE GETS A COMPACT GRID OF SQUARES, not a stack of pills (owner, 2026-10-10, from hunters' screenshots).
+   Beside a 56px cover the result's column is ~250px at 375, so each 44px pill took a line of its own and a
+   six-job game stood six tall lozenges high. Below `md:` the buttons are two columns of 36px chips: the
+   label stays on one line beside its icon and ellipsises rather than wrapping, and the `::after` keeps the
+   44px touch floor without drawing it. The one-square sentence and a "replaces" button need the whole width,
+   so they span both columns. From `md:` the pills return, where the row has the room for them. */
+@media (max-width: 767.98px) {
+    .pp-cpick__keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .pp-cpick__key {
+        position: relative; min-width: 0; min-height: 36px; padding: 5px 9px;
+        flex-wrap: nowrap; border-radius: var(--pp-radius-md);
+    }
+    .pp-cpick__key-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pp-cpick__key::after { content: ''; position: absolute; inset: -4px 0; }
+    .pp-cpick__key svg { width: 14px; height: 14px; }
+    .pp-cpick__key--sentence, .pp-cpick__key--taken { grid-column: 1 / -1; flex-wrap: wrap; }
+
+    /* AND THE GRID TAKES THE WHOLE ROW. Inside the column beside the cover each square was ~80px and every job
+       name ellipsised ("Arch..."). So on a phone the row is a grid: a smaller cover beside the title, platforms
+       and lead-in, and the squares underneath, full width. `display: contents` lifts the column's children into
+       that grid; it carries no semantics of its own, so nothing is lost by flattening it. */
+    .pp-cpick__rows--search .pp-cpick__row {
+        display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 10px; row-gap: 6px;
+        align-items: start;
+    }
+    .pp-cpick__rows--search .pp-cpick__row-art { width: 44px; grid-column: 1; grid-row: 1 / span 3; }
+    .pp-cpick__rows--search .pp-cpick__row-main { display: contents; }
+    .pp-cpick__rows--search .pp-cpick__row-main > * { grid-column: 2; }
+    .pp-cpick__rows--search .pp-cpick__row-main > .pp-cpick__keys { grid-column: 1 / -1; }
+    .pp-cpick__key--sentence .pp-cpick__key-label,
+    .pp-cpick__key--taken .pp-cpick__key-label { white-space: normal; }
+}
+
 /* THE INLINE PROMPT, which replaced a native `window.confirm`. Two buttons on the house recipe
    (`.stg-confirm__row`, used by account deletion in Settings): the SAFE one first and focused, and named
    after what it preserves rather than "Cancel".

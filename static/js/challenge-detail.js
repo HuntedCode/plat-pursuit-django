@@ -1070,6 +1070,13 @@
                         // says "not possible", so the words do not have to, and stripping them left a lone
                         // "S" that read like the pill this change existed to get rid of.
                         pick.textContent = single ? 'Add this game to ' + keyLabel : keyLabel;
+                        // THE LABEL IN ITS OWN SPAN, so a phone's compact grid can ellipsise it: a bare text
+                        // node in a flex button cannot be truncated, only clipped mid-letter. Moved, not
+                        // rebuilt, so the assignment above stays the one place the words are written.
+                        var labelText = document.createElement('span');
+                        labelText.className = 'pp-cpick__key-label';
+                        labelText.appendChild(pick.firstChild);
+                        pick.appendChild(labelText);
                         // AFTER the text, never before: assigning `textContent` removes every child, so an
                         // icon appended above this line would be silently discarded.
                         if (atom && atom.icon) { pick.insertBefore(jobIcon(atom.icon), pick.firstChild); }

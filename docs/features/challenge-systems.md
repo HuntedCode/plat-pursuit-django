@@ -344,6 +344,11 @@ Every row carries `platforms`: the union over the contract's member games in dis
 
 The Challenges browse page's toolbar also links **My Challenges** (`show_my_challenges`, browse page only).
 
+**On a phone, a search result's square buttons are a two-column grid under the cover**, not pills beside it.
+Beside a 56px cover each 44px pill took its own line, so a six-job game stood six tall (hunters' screenshots).
+Below `md:` the row is a grid with `display: contents` on its text column so the buttons span the full width;
+each is 36px drawn with a 44px hit area and an ellipsising label. Pills return from `md:`.
+
 ### The history window
 
 The pool is "completed, live, fits an open letter". Whether a candidate is *importable* depends on its

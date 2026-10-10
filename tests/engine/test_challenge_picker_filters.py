@@ -436,3 +436,32 @@ def test_an_anonymous_browse_page_offers_no_my_challenges_button(client):
     svc.start(_hunter(), CHALLENGE_TYPE_AZ)
     assert 'data-browse-form' in client.get(reverse('challenges')).content.decode(), 'the toolbar must render'
     assert 'aria-label="My Challenges"' not in client.get(reverse('challenges')).content.decode()
+
+
+# ── the job buttons on a phone ────────────────────────────────────────────────────────────────────
+
+CSS = (ROOT / 'static' / 'css' / 'components' / 'challenges.css').read_text(encoding='utf-8')
+
+
+def _phone_block():
+    """The picker's phone-only rule block for the square buttons, comment-free."""
+    start = CSS.index('@media (max-width: 767.98px) {\n    .pp-cpick__keys {')
+    return CSS[start:CSS.index('\n}\n', start)]
+
+
+def test_a_phone_lays_the_squares_out_as_a_full_width_two_column_grid():
+    """Hunters' screenshots: beside the cover each 44px pill took its own line, so a six-job game stood six tall
+    lozenges high. On a phone the squares are a two-column grid that takes the whole row under the cover."""
+    block = _phone_block()
+    assert 'grid-template-columns: repeat(2, minmax(0, 1fr));' in block
+    assert '.pp-cpick__rows--search .pp-cpick__row-main { display: contents; }' in block
+    assert '.pp-cpick__rows--search .pp-cpick__row-main > .pp-cpick__keys { grid-column: 1 / -1; }' in block
+    # Drawn smaller, still 44px to the finger.
+    assert 'min-height: 36px;' in block and "content: ''; position: absolute; inset: -4px 0;" in block
+
+
+def test_a_square_label_can_ellipsise_on_a_phone():
+    """A bare text node in a flex button can only be clipped mid-letter, so the label gets its own span."""
+    assert "labelText.className = 'pp-cpick__key-label';" in JS
+    assert JS.index("pick.textContent = single ? 'Add this game to '") < JS.index('labelText.appendChild(pick.firstChild);')
+    assert '.pp-cpick__key-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' in _phone_block()
