@@ -308,11 +308,7 @@ def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platform
         # went_live_at is NULL for everything published before the field existed (the launch set),
         # so they correctly read as "not new" rather than flooding the chip on day one.
         qs = qs.filter(went_live_at__gte=new_contract_cutoff())
-    # Any member game on a selected platform (EXISTS, not a join). EVERY platform selected is no
-    # restriction at all, not "has a member on some platform": that reading hid every contract with no
-    # platform-tagged member game (an episodic/bundle contract has no igdb-derived members; a game can
-    # have an empty title_platform) while the claim banner, which ignores platform, still counted them.
-    if platforms and set(platforms) != set(ALL_PLATFORMS):
+    if platforms:                             # any member game on a selected platform (EXISTS, not a join)
         qs = qs.filter(_platform_exists(platforms))
     if q:
         # Member-game-title search: a member game is derived (no membership join), so match it as an

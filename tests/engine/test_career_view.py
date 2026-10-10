@@ -2,8 +2,8 @@
 
 Pins that /career/ renders both the job views and the folded-in Contracts browse, that
 ?view=contracts deep-links the Contracts tab, that the old /research-panel/ 301s into it, and that
-the whole surface is linked-profile gated. Plus source-text pins on the board controller's
-identical-query dedupe in fetchPage (there is no JS runner).
+the whole surface is linked-profile gated. Plus source-text pins (there is no JS runner) on the board
+controller's identical-query dedupe in fetchPage and on the claim banner's jump to the board.
 """
 import itertools
 
@@ -150,16 +150,21 @@ def test_contracts_endpoints_gated_to_linked_profile(client):
     assert client.get('/career/contracts/res-gate/modal/').status_code == 404
 
 
+def _career_src():
+    import pathlib
+
+    return (pathlib.Path(__file__).resolve().parents[2]
+            / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+
+
 def _career_js(start, end):
     """The career.html source from a UNIQUE `start` anchor to the first `end` after it, comments stripped
     so prose about a guard cannot pass for the guard. The `//` strip is naive: a `//` inside a string
     literal in the slice would be eaten too, which can only make a pin fail (never pass), so a confusing
     failure here is worth checking for that first."""
-    import pathlib
     import re
 
-    src = (pathlib.Path(__file__).resolve().parents[2]
-           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    src = _career_src()
     assert src.count(start) == 1, f'the start anchor is missing or no longer unique: {start!r}'
     rest = src.split(start, 1)[1]
     assert end in rest, f'no {end!r} after {start!r}'
@@ -234,17 +239,16 @@ def test_the_claim_banner_jump_opens_the_board_on_every_claimable():
 
 def test_the_platform_chips_are_every_platform_the_server_knows():
     """`VALID_PLATS` (what "every platform" means to the banner jump) is read from these chips, while the
-    server's "no restriction" test compares against ALL_PLATFORMS. A chip added or dropped on one side
-    only would quietly turn "every platform" back into a filter."""
-    import pathlib
+    banner's href (`claim_board_url`) is built from ALL_PLATFORMS. A chip missing on one side would drop a
+    platform from the jump. ORDER matters too: buildParams emits platforms in state order, so the board
+    seeded from the href and the board the jump requests are the same `boardQuery` (a repeat banner tap
+    is then a no-op) only while the chips run in ALL_PLATFORMS order."""
     import re
 
     from trophies.util_modules.constants import ALL_PLATFORMS
 
-    src = (pathlib.Path(__file__).resolve().parents[2]
-           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
-    chips = re.findall(r'class="rp-chip rp-plat[^"]*" data-plat="([^"]+)"', src)
-    assert sorted(chips) == sorted(ALL_PLATFORMS), chips
+    chips = re.findall(r'class="rp-chip rp-plat[^"]*" data-plat="([^"]+)"', _career_src())
+    assert chips == list(ALL_PLATFORMS), chips
 
 
 def test_the_claim_banner_links_to_the_board_it_opens(client):

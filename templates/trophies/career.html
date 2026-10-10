@@ -1682,8 +1682,10 @@ function ppCountUp(el, dur) {
     // Jumps to the Board: a radar point / detail bar (radar IIFE) or the claim banner dispatches
     // pp:board-filter to open the BOARD scoped to a single discipline, job or status, REPLACING any current
     // filters and any History scope. `allPlatforms` lights every platform rather than the current-gen
-    // default: the claim banner counts claimables regardless of platform, so the default would hide some of
-    // the N it promised (and every platform lit is no platform restriction server-side, see _filter_contracts). The view switch itself is the dispatcher's job; this just sets the board state + refetches.
+    // default: the claim banner counts claimables regardless of platform, so the default hid the legacy and
+    // VR ones it promised. (A contract with no platform-tagged member game, e.g. a bundle contract, still
+    // misses every platform filter: the bundle follow-up in job-board-contracts.md.) The view switch itself
+    // is the dispatcher's job; this just sets the board state + refetches.
     document.addEventListener('pp:board-filter', function (e) {
         var f = (e && e.detail) || {};
         state.scope = 'board';
