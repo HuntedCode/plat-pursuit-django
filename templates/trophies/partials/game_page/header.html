@@ -3,8 +3,9 @@
 The Game page hero: the List-detail hero's CONCEPT-LEVEL portion, same visual anatomy (gd-hero
 grid: cover / main / extras), adopted per Jeffrey's call -- everything about the WORK is as
 relevant here as there. Deliberately absent: the list-level pieces (per-list platform/region
-chips, the authed progress readout, My Stats, plat-card CTA, Outlook, flags) -- those describe ONE
-stack, and per-list data lives below the switcher, which is this page's whole anatomy. Platform
+chips, the authed progress readout, My Stats, plat-card CTA, Outlook, per-list flags) -- those describe
+ONE stack, and per-list data lives below the switcher, which is this page's whole anatomy. Flags EVERY list
+shares do show (`list_flags`, owner 2026-10-10). Platform
 chips here are the UNION across the list set; the players headline reads the aggregated
 community_stats. Badge affordances are plain links (List detail's open a modal its JS
 drives); screenshots open the SHARED lightbox (shot-lightbox.js + the shot_lightbox partial,
@@ -27,6 +28,11 @@ extracted from List detail).
                     {% for platform in all_platforms %}
                         <span class="gd-plat">{{ platform }}</span>
                     {% endfor %}
+                    {% comment %}SHOVELWARE IN THE PLATFORM ROW, where the Trophy List page shows it, and only when
+                    every list is flagged (`list_flags`, the flags all of this game's lists share).{% endcomment %}
+                    {% if list_flags.is_shovelware %}
+                        <span class="gd-plat gd-plat--warn" title="Every trophy list for this game is flagged as shovelware">Shovelware</span>
+                    {% endif %}
                 </div>
 
                 <h1 class="gd-hero__title">{{ page_title }}</h1>
@@ -50,6 +56,16 @@ extracted from List detail).
                     {% endif %}{% endwith %}
                     <span class="gd-fact"><span class="gd-fact__k">Trophy Lists</span><span class="gd-fact__v pp-tally">{{ list_set|length }}</span></span>
                 </div>
+
+                {% comment %}THE FLAGS EVERY LIST SHARES (owner, 2026-10-10): the Trophy List page's own chips, shown here
+                only when they hold for all of this game's lists. One list delisted and another not is a fact about that
+                list, so it stays on that list's page. No "No Known Issues" chip : an empty shared set
+                does not mean no list has an issue: gating on `has_chips` (a real shared flag) is what keeps that chip
+                off, since the partial only draws it when nothing is flagged. Shovelware rides the platform row above,
+                as on the list page.{% endcomment %}
+                {% if list_flags.has_chips %}
+                    {% include 'trophies/partials/_game_flags.html' with game=list_flags variant='full' hide_shovelware=True %}
+                {% endif %}
 
                 {% with igdb=concept.igdb_match %}
                 {% if igdb.is_trusted and igdb.igdb_summary %}
