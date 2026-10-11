@@ -53,6 +53,7 @@ class Command(BaseCommand):
         samples = {t: [] for t in 'ABC'}     # (played, name) per tier
         reason_samples = {'blocked': [], 'rescued': []}
         seen_igdb_pop = set()
+        flagged_groups = set()       # uncontracted ids with ANY flagged sibling (the pipeline's exclusion)
 
         n_total = 0
         for row in scanner.iter_matches():
@@ -60,6 +61,8 @@ class Command(BaseCommand):
             if row['contracted']:
                 recall[row['tier']] += 1
                 continue
+            if row['is_shovelware']:
+                flagged_groups.add(row['igdb_id'])
             if row['igdb_id'] in seen_igdb_pop:
                 continue   # sibling concepts share the IGDB page: one vote per game
             seen_igdb_pop.add(row['igdb_id'])
@@ -118,7 +121,7 @@ class Command(BaseCommand):
         w(f'  + shovelware block:  Tier A admits {pop["A"]} games, {pop_shovel["A"]} flagged '
           f'shovelware (the override blocked {reasons["blocked"]} from auto)')
         w(f'  The nightly pipeline excludes every flagged game from the queue: '
-          f'{sum(pop_shovel.values())} of this population never enter it')
+          f'{len(flagged_groups)} uncontracted games never enter it')
         if reason_samples['blocked']:
             w('  Blocked from auto (top by players):')
             for p, name in top(reason_samples['blocked']):

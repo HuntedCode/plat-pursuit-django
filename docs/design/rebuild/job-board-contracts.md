@@ -715,7 +715,7 @@ person the modal exists for.
 - **`ContractAdminForm.clean_jobs`** rejects more than `MAX_CONTRACT_JOBS` (6).
 - **The candidate queue never holds shovelware.** `evaluate_contract_candidates` excludes any IGDB
   game with a flagged member (`SHOVELWARE_FLAGGED_STATUSES`) from every tier, and deletes its
-  non-dismissed `ContractCandidate` rows. It used to route flagged would-be-A games to review as
+  uncontracted, non-dismissed `ContractCandidate` rows. It used to route flagged would-be-A games to review as
   `blocked` and let flagged games through every other Tier B route; the queue filled with games no
   curator would publish. Clearing the flag re-admits the game on the next run. The admin's
   "Stage contracts" action skips flagged ids too, for a row flagged since the last nightly run (or a
@@ -760,8 +760,9 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
 - **The shovelware filter follows the ENGINE's membership, not the board's.** The board shows a
   satisfier bundle's games only on bundle-only contracts (`_member_game_match`), but
   `_detect_tiers` credits a bundle on EVERY contract, so a flagged bundle game can satisfy a
-  normal contract (with the rest of its bundle) too. `holds_shovelware_q` therefore counts every bundle. Its id sets are NULL-free on
-  purpose: the "No" side negates them, and one NULL in a `NOT IN` set matches nothing.
+  normal contract (with the rest of its bundle) too. `holds_shovelware_q` therefore counts every
+  bundle. Its id sets are NULL-free on purpose: the "No" side negates them, and one NULL in a
+  `NOT IN` set matches nothing.
 - **A claim refreshes Career in place; it no longer reloads the page (2026-10).** A claim levels real
   jobs, so the hero (ring, rank bar), the rank table, the banner, the stats, the Jobs dossier + sheet +
   detail panels, the radar, the tab counts and the nav badges are all stale, and each claim used to reload

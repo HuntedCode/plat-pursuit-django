@@ -47,7 +47,7 @@ Nightly maintenance of the contract-candidate queue (the media-density rule; see
 jobs auto-suggested) under `--max-stage 150` per run in player-demand order; review/snooze
 queues live in the ContractCandidate admin. MUST run after `update_shovelware` (04:00): the
 shovelware exclusion reads the flags it writes. Shovelware-flagged games (any flagged sibling
-excludes the whole IGDB game) are never queued, and their existing non-dismissed rows are
+excludes the whole IGDB game) are never queued, and their uncontracted non-dismissed rows are
 deleted, so a game flagged after it queued drops out on the next run; clearing the flag
 (`manually_cleared`) re-admits it the run after. Idempotent; one bad row cannot abort the batch
 (per-candidate savepoints). `--dry-run` previews, prune count included. Only a LIVE contract

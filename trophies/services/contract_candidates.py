@@ -42,17 +42,6 @@ def pyramid_is_degenerate(defined, min_earnable=DEFAULT_MIN_EARNABLE):
     return gold > bronze
 
 
-def flagged_igdb_ids(igdb_ids):
-    """The ids in `igdb_ids` with a shovelware-flagged member, behind the scanner's gate (anchored
-    concept, trusted match). For callers that stage one candidate at a time without a full scan."""
-    return set(Game.objects.filter(
-        shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
-        concept__anchor_migration_completed_at__isnull=False,
-        concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
-        concept__igdb_match__igdb_id__in=igdb_ids,
-    ).values_list('concept__igdb_match__igdb_id', flat=True))
-
-
 class CatalogScanner:
     """One pass of shared lookups over the anchored catalogue, then per-match bucketing.
 

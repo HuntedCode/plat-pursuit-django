@@ -309,6 +309,7 @@ def test_admin_stage_action_creates_contract():
     cand = ContractCandidate.objects.get(igdb_id=96071)
     assert cand.status == ContractCandidate.STATUS_STAGED
     assert cand.contract is not None and cand.contract.is_live is False
+    assert not any('Skipped' in m.message for m in request._messages)
 
 
 # --- shovelware: excluded from the queue, pruned when flagged later, re-admitted when cleared ---
@@ -452,4 +453,49 @@ def test_admin_stage_action_skips_flagged_games():
     assert flagged.status == ContractCandidate.STATUS_REVIEW and flagged.contract is None
     assert not Contract.objects.filter(igdb_id=97081).exists()
     assert ContractCandidate.objects.get(igdb_id=97082).status == ContractCandidate.STATUS_STAGED
-    assert 'Skipped 1 shovelware-flagged' in [m.message for m in request._messages][0]
+    assert any('Skipped 1 shovelware-flagged' in m.message for m in request._messages)
+
+
+def _stage_via_admin(queryset):
+    from django.contrib.admin.sites import AdminSite
+    from django.test import RequestFactory
+    from django.contrib.messages.storage.fallback import FallbackStorage
+
+    from trophies.admin import ContractCandidateAdmin
+
+    request = RequestFactory().post('/')
+    request.session = {}
+    request._messages = FallbackStorage(request)
+    ContractCandidateAdmin(ContractCandidate, AdminSite()).stage_contracts(request, queryset)
+    return [m.message for m in request._messages]
+
+
+@pytest.mark.parametrize('anchored,match_status', [(False, 'accepted'), (True, 'rejected')],
+                         ids=['unanchored', 'untrusted'])
+def test_admin_stage_ignores_a_flag_outside_the_member_gate(anchored, match_status):
+    """A flagged game on a concept that is not a member (un-anchored, or an untrusted match) at the same
+    igdb id is not the candidate's flag, exactly as the nightly scanner sees it: the row still stages."""
+    _game(97091, 'Clean Member', shots=5, played=30)
+    _run()
+    outsider = ConceptFactory(anchor_migration_completed_at=timezone.now() if anchored else None)
+    IGDBMatchFactory(concept=outsider, igdb_id=97091, status=match_status)
+    GameFactory(concept=outsider, defined_trophies=_REAL, shovelware_status='auto_flagged')
+
+    messages = _stage_via_admin(ContractCandidate.objects.filter(igdb_id=97091))
+
+    assert ContractCandidate.objects.get(igdb_id=97091).status == ContractCandidate.STATUS_STAGED
+    assert not any('Skipped' in m for m in messages)
+
+
+def test_admin_stage_marks_a_contracted_flagged_row_done():
+    """An already-contracted id goes done as it always did, flagged or not, and is not counted as a
+    shovelware skip (the action would never have staged it)."""
+    _game(97101, 'Hand Made', shots=5, played=30)
+    _run()
+    Contract.objects.create(name='Hand Made', slug='hand-made', igdb_id=97101, is_live=False)
+    _flag(97101)
+
+    messages = _stage_via_admin(ContractCandidate.objects.filter(igdb_id=97101))
+
+    assert ContractCandidate.objects.get(igdb_id=97101).status == ContractCandidate.STATUS_DONE
+    assert not any('Skipped' in m for m in messages)

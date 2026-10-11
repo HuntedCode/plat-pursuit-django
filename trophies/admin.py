@@ -4726,27 +4726,28 @@ class ContractCandidateAdmin(admin.ModelAdmin):
     @admin.action(description='Stage contracts (create is_live=False, auto-suggest jobs)')
     def stage_contracts(self, request, queryset):
         from trophies.management.commands.evaluate_contract_candidates import Command as _Ev
-        from trophies.services.contract_candidates import flagged_igdb_ids
+        from trophies.services.contracts_service import flagged_igdb_ids
         stager = _Ev()
-        n = 0
+        n = skipped = 0
         cands = list(queryset.exclude(status__in=(ContractCandidate.STATUS_STAGED,
                                                   ContractCandidate.STATUS_DONE)))
         # A row flagged since the last nightly prune (or a legacy dismissed 'blocked' row) never stages.
         flagged = flagged_igdb_ids([c.igdb_id for c in cands])
         for cand in cands:
-            if cand.igdb_id in flagged:
-                continue
             if Contract.objects.filter(igdb_id=cand.igdb_id).exists():
                 cand.status = ContractCandidate.STATUS_DONE
                 cand.save(update_fields=['status'])
+                continue
+            if cand.igdb_id in flagged:
+                skipped += 1
                 continue
             cand.contract = stager._stage_contract(cand)
             cand.status = ContractCandidate.STATUS_STAGED
             cand.save(update_fields=['contract', 'status'])
             n += 1
         msg = f'Staged {n} contract(s) (is_live=False -- publish from the Contract admin).'
-        if flagged:
-            msg += f' Skipped {len(flagged)} shovelware-flagged game(s).'
+        if skipped:
+            msg += f' Skipped {skipped} shovelware-flagged game(s).'
         self.message_user(request, msg)
 
     @admin.action(description='Dismiss (sticky: the rule never re-queues these)')

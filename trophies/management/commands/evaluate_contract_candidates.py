@@ -192,7 +192,7 @@ class Command(BaseCommand):
                 if cand.status != ContractCandidate.STATUS_STAGED:   # staged saved above
                     cand.save(update_fields=['status', 'evaluated_at'])
             done_qs.update(status=ContractCandidate.STATUS_DONE, evaluated_at=now)
-            prune_qs.delete()
+            counts['pruned'] = prune_qs.delete()[0]   # the real count, not the pre-transaction estimate
 
         w(self.style.SUCCESS(
             f"Evaluated {len(best)} uncontracted games: {counts['new']} new, "

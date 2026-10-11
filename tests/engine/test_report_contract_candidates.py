@@ -83,7 +83,7 @@ def test_tiers_guard_and_v2_rules():
     assert 'Bare Page' in c
     # The override and the rescue are each named with their haul.
     assert 'the override blocked 1 from auto' in out
-    assert 'excludes every flagged game from the queue: 1 of this population' in out
+    assert 'excludes every flagged game from the queue: 1 uncontracted games never enter it' in out
     assert 'Promoted to review: 1 games' in out
     assert 'Flagged But Polished' in out.split('Blocked from auto')[1].split('franchise rescue')[0]
     assert 'Old AAA Classic' in out.split('The franchise rescue')[1].split('Recall')[0]
@@ -101,7 +101,7 @@ def test_precision_ladder_readout():
     assert 'No guard:            video => contract would auto-admit 3 games, 2 flagged shovelware' in out
     assert '+ pyramid guard:     2 would remain, 1 flagged shovelware' in out
     assert '+ shovelware block:  Tier A admits 1 games, 0 flagged shovelware (the override blocked 1 from auto)' in out
-    assert 'excludes every flagged game from the queue: 2 of this population never enter it' in out
+    assert 'excludes every flagged game from the queue: 2 uncontracted games never enter it' in out
 
 
 def test_rescue_honesty_check():

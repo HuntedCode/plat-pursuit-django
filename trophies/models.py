@@ -2992,7 +2992,8 @@ class ContractCandidate(models.Model):
     igdb_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=500, blank=True)   # snapshot of the IGDB name
     tier = models.CharField(max_length=1, choices=TIER_CHOICES)
-    # '' | 'rescued'. Shovelware is excluded, never queued; only legacy DISMISSED rows still read 'blocked'.
+    # '' | 'rescued'. Shovelware is excluded, never queued; only legacy rows (dismissed, or staged/done
+    # before the exclusion shipped) still read 'blocked'.
     reason = models.CharField(max_length=16, blank=True)
     players = models.PositiveIntegerField(default=0)      # max played_count snapshot (demand rank)
     # No bare db_index: the (status, -players) composite below leads on status.
