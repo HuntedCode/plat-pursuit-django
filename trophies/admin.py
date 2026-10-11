@@ -4709,9 +4709,9 @@ class ContractAdminForm(forms.ModelForm):
 @admin.register(ContractCandidate)
 class ContractCandidateAdmin(admin.ModelAdmin):
     """The contract-candidate queue (evaluate_contract_candidates maintains it nightly).
-    Work top-down by players: review B-tier rows (blocked = shovelware-override demotions,
-    rescued = franchise promotions out of snooze); stage/dismiss from the actions. `dismissed`
-    is sticky -- the rule never overrides it."""
+    Work top-down by players: review B-tier rows (rescued = franchise promotions out of
+    snooze); stage/dismiss from the actions. `dismissed` is sticky -- the rule never overrides
+    it. Shovelware-flagged games never appear: the nightly run prunes them."""
     list_display = ('name', 'igdb_id', 'tier', 'reason', 'status', 'players',
                     'contract', 'evaluated_at')
     list_filter = ('status', 'tier', 'reason')
@@ -4726,10 +4726,16 @@ class ContractCandidateAdmin(admin.ModelAdmin):
     @admin.action(description='Stage contracts (create is_live=False, auto-suggest jobs)')
     def stage_contracts(self, request, queryset):
         from trophies.management.commands.evaluate_contract_candidates import Command as _Ev
+        from trophies.services.contract_candidates import flagged_igdb_ids
         stager = _Ev()
         n = 0
-        for cand in queryset.exclude(status__in=(ContractCandidate.STATUS_STAGED,
-                                                 ContractCandidate.STATUS_DONE)):
+        cands = list(queryset.exclude(status__in=(ContractCandidate.STATUS_STAGED,
+                                                  ContractCandidate.STATUS_DONE)))
+        # A row flagged since the last nightly prune (or a legacy dismissed 'blocked' row) never stages.
+        flagged = flagged_igdb_ids([c.igdb_id for c in cands])
+        for cand in cands:
+            if cand.igdb_id in flagged:
+                continue
             if Contract.objects.filter(igdb_id=cand.igdb_id).exists():
                 cand.status = ContractCandidate.STATUS_DONE
                 cand.save(update_fields=['status'])
@@ -4738,7 +4744,10 @@ class ContractCandidateAdmin(admin.ModelAdmin):
             cand.status = ContractCandidate.STATUS_STAGED
             cand.save(update_fields=['contract', 'status'])
             n += 1
-        self.message_user(request, f'Staged {n} contract(s) (is_live=False -- publish from the Contract admin).')
+        msg = f'Staged {n} contract(s) (is_live=False -- publish from the Contract admin).'
+        if flagged:
+            msg += f' Skipped {len(flagged)} shovelware-flagged game(s).'
+        self.message_user(request, msg)
 
     @admin.action(description='Dismiss (sticky: the rule never re-queues these)')
     def dismiss(self, request, queryset):
@@ -4756,11 +4765,29 @@ class ContractCandidateAdmin(admin.ModelAdmin):
         self.message_user(request, msg)
 
 
+class HoldsShovelwareFilter(SimpleListFilter):
+    """Contracts (live and staged) a shovelware-flagged game can satisfy: the curation sweep for flags
+    that landed after a contract was made. The candidate queue already excludes flagged games."""
+    title = 'holds shovelware'
+    parameter_name = 'shovelware'
+
+    def lookups(self, request, model_admin):
+        return (('yes', 'Yes'), ('no', 'No'))
+
+    def queryset(self, request, queryset):
+        from trophies.services.contracts_service import holds_shovelware_q
+        if self.value() == 'yes':
+            return queryset.filter(holds_shovelware_q())
+        if self.value() == 'no':
+            return queryset.exclude(holds_shovelware_q())
+        return queryset
+
+
 @admin.register(Contract)
 class ContractAdmin(admin.ModelAdmin):
     form = ContractAdminForm
     list_display = ('name', 'igdb_id', 'is_live', 'job_list', 'member_count', 'created_at')
-    list_filter = ('is_live', 'jobs')
+    list_filter = ('is_live', HoldsShovelwareFilter, 'jobs')
     list_editable = ('is_live',)
     search_fields = ('name', 'slug', 'igdb_id')
     prepopulated_fields = {'slug': ('name',)}

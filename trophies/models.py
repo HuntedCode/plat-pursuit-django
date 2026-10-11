@@ -2975,7 +2975,8 @@ class ContractCandidate(models.Model):
     Status is the STAFF ledger, tier is the RULE's current verdict; the nightly run refreshes
     tier/players/name but only moves status FORWARD (snoozed -> review/staged on promotion) --
     `dismissed` is a sticky staff verdict the rule never overrides, and `done` marks an id
-    that gained a real contract.
+    that gained a real contract. Shovelware-flagged games have NO row: the nightly run deletes
+    their non-dismissed rows and re-admits them only once the flag is cleared.
     """
     TIER_CHOICES = [('A', 'A (auto)'), ('B', 'B (review)'), ('C', 'C (snooze)')]
     STATUS_STAGED = 'staged'       # contract auto-created (is_live=False), awaiting publish
@@ -2991,7 +2992,8 @@ class ContractCandidate(models.Model):
     igdb_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=500, blank=True)   # snapshot of the IGDB name
     tier = models.CharField(max_length=1, choices=TIER_CHOICES)
-    reason = models.CharField(max_length=16, blank=True)  # '' | 'blocked' | 'rescued'
+    # '' | 'rescued'. Shovelware is excluded, never queued; only legacy DISMISSED rows still read 'blocked'.
+    reason = models.CharField(max_length=16, blank=True)
     players = models.PositiveIntegerField(default=0)      # max played_count snapshot (demand rank)
     # No bare db_index: the (status, -players) composite below leads on status.
     status = models.CharField(max_length=12, choices=STATUS_CHOICES)

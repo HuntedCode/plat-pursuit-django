@@ -2,12 +2,15 @@
 trophies/services/contract_candidates.py) over the uncontracted catalogue and maintain the
 ContractCandidate ledger.
 
-Per uncontracted IGDB game (siblings vote once; a flagged sibling blocks the whole group from
-auto -- the shovelware override holds at GROUP level, not just per concept):
+Per uncontracted IGDB game (siblings vote once):
+- Shovelware -> EXCLUDED. Any flagged member (a flagged sibling excludes the whole group: a clean
+  sibling must not launder a flagged game back in) keeps the game out of the queue entirely, and
+  its existing non-dismissed rows are deleted. Self-healing: clear the flag (manually_cleared)
+  and the next run evaluates the game afresh.
 - Tier A -> a STAGED Contract is auto-created (is_live=False, jobs auto-suggested via the
   genre/theme detector), in DEMAND ORDER under --max-stage per run so the staged queue grows
   at a publishable pace. Over-cap A games wait as `review` (tier A) and stage on later runs.
-- Tier B -> `review` (with the blocked/rescued reason recorded for the queue).
+- Tier B -> `review` (with the rescued reason recorded for the queue).
 - Tier C -> `snoozed`, re-evaluated every run: IGDB pages gain media late, franchise links
   land late -- snooze is a re-check, never a verdict.
 
@@ -19,7 +22,7 @@ The status ledger:
 - Status writes are TARGETED (only rows whose status this run changes), never a blanket
   write-back, so a staff action landing mid-run isn't clobbered wholesale.
 
-Run nightly at 04:45, AFTER update_shovelware (04:00) -- the shovelware override reads the
+Run nightly at 04:45, AFTER update_shovelware (04:00) -- the shovelware exclusion reads the
 flags it writes. Idempotent; --dry-run reports without writing. One bad row cannot abort the
 batch: each staging runs in its own savepoint and a failure leaves that candidate in review.
 """
@@ -32,8 +35,7 @@ from django.utils.text import slugify
 
 from trophies.models import Contract, ContractCandidate
 from trophies.services.contract_candidates import (
-    DEFAULT_MIN_EARNABLE, DEFAULT_MIN_SHOTS, REASON_BLOCKED, TIER_AUTO, TIER_REVIEW,
-    TIER_SNOOZE, CatalogScanner,
+    DEFAULT_MIN_EARNABLE, DEFAULT_MIN_SHOTS, TIER_AUTO, TIER_SNOOZE, CatalogScanner,
 )
 from trophies.services.job_detection import suggest_jobs_for_contract
 
@@ -62,8 +64,8 @@ class Command(BaseCommand):
         existing = {c.igdb_id: c for c in ContractCandidate.objects.all()}
 
         # Dedup siblings to the best-signal row per IGDB game (tier A < B < C lexically; more
-        # players wins within a tier) -- and hold the SHOVELWARE OVERRIDE at group level: a
-        # clean sibling must not launder a flagged game into Tier A (the pre-prod audit's F2).
+        # players wins within a tier) -- and EXCLUDE shovelware at group level: a clean sibling
+        # must not launder a flagged game back into the queue (the pre-prod audit's F2).
         best = {}
         group_flagged = set()
         for row in scanner.iter_matches():
@@ -75,17 +77,19 @@ class Command(BaseCommand):
             if cur is None or (row['tier'], -row['players']) < (cur['tier'], -cur['players']):
                 best[row['igdb_id']] = row
         for igdb_id in group_flagged:
-            row = best.get(igdb_id)
-            if row is not None and row['tier'] == TIER_AUTO:
-                row['tier'] = TIER_REVIEW
-                row['reason'] = REASON_BLOCKED
+            best.pop(igdb_id, None)
+        # Every non-dismissed row of a flagged game goes (dismissed is a staff verdict, kept).
+        # contract__isnull guards a contract staged mid-run; an uncontracted id has none anyway.
+        prune_qs = ContractCandidate.objects.filter(
+            igdb_id__in=group_flagged & existing.keys(), contract__isnull=True,
+        ).exclude(status=ContractCandidate.STATUS_DISMISSED)
 
         creates = []
         field_updates = []       # rows whose rule fields changed (targeted, no status writes)
         status_updates = []      # rows whose STATUS this run changes (targeted saves)
         stage_pool = []
         counts = {'new': 0, 'promoted': 0, 'recovered': 0, 'done': 0, 'staged': 0,
-                  'stage_failed': 0}
+                  'stage_failed': 0, 'pruned': 0}
 
         for igdb_id, row in best.items():
             cand = existing.get(igdb_id)
@@ -142,13 +146,15 @@ class Command(BaseCommand):
             igdb_id__in=live_igdb,
         ).exclude(status=ContractCandidate.STATUS_DONE)
         counts['done'] = done_qs.count()
+        counts['pruned'] = prune_qs.count()
 
         stage_pool.sort(key=lambda c: -c.players)
         to_stage = stage_pool[:max_stage]
 
         if dry:
             w(f"DRY RUN: {counts['new']} new, {counts['promoted']} snooze-promotions, "
-              f"{counts['recovered']} recovered, {counts['done']} done, would stage "
+              f"{counts['recovered']} recovered, {counts['done']} done, "
+              f"{counts['pruned']} shovelware pruned, would stage "
               f"{len(to_stage)} (cap {max_stage}, pool {len(stage_pool)})")
             for c in to_stage[:10]:
                 w(f'  would stage: {c.name}  ({c.players} players)')
@@ -186,12 +192,14 @@ class Command(BaseCommand):
                 if cand.status != ContractCandidate.STATUS_STAGED:   # staged saved above
                     cand.save(update_fields=['status', 'evaluated_at'])
             done_qs.update(status=ContractCandidate.STATUS_DONE, evaluated_at=now)
+            prune_qs.delete()
 
         w(self.style.SUCCESS(
             f"Evaluated {len(best)} uncontracted games: {counts['new']} new, "
             f"{counts['promoted']} snooze-promotions, {counts['recovered']} recovered, "
             f"{counts['staged']} staged (cap {max_stage}, pool {len(stage_pool)}, "
-            f"{counts['stage_failed']} failed), {counts['done']} done (went live)."))
+            f"{counts['stage_failed']} failed), {counts['done']} done (went live), "
+            f"{counts['pruned']} shovelware pruned."))
 
     def _stage_contract(self, cand):
         """Create the staged (is_live=False) Contract for a Tier A candidate: unique slug

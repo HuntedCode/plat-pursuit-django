@@ -116,7 +116,9 @@ class Command(BaseCommand):
         w(f'  + pyramid guard:     {pop["A"] + reasons["blocked"]} would remain, '
           f'{reason_shovel["blocked"]} flagged shovelware')
         w(f'  + shovelware block:  Tier A admits {pop["A"]} games, {pop_shovel["A"]} flagged '
-          f'shovelware (the override sent {reasons["blocked"]} to review)')
+          f'shovelware (the override blocked {reasons["blocked"]} from auto)')
+        w(f'  The nightly pipeline excludes every flagged game from the queue: '
+          f'{sum(pop_shovel.values())} of this population never enter it')
         if reason_samples['blocked']:
             w('  Blocked from auto (top by players):')
             for p, name in top(reason_samples['blocked']):
@@ -125,7 +127,8 @@ class Command(BaseCommand):
 
         w(head('The franchise rescue (would-be snoozes with real IP)'))
         w(f'  Promoted to review: {reasons["rescued"]} games '
-          f'({reason_shovel["rescued"]} of them flagged shovelware -- the honesty check)')
+          f'({reason_shovel["rescued"]} of them flagged shovelware -- the honesty check; '
+          f'the pipeline excludes those)')
         for p, name in top(reason_samples['rescued']):
             w(f'    - {name}  ({p} players)')
         w('')

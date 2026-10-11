@@ -10,10 +10,15 @@ The rule, over anchored + trusted-matched concepts:
           the AAA-back-catalog fix: old, static IGDB pages never gain media).
   Tier C (snooze): under min_shots screenshots, no video, no franchise membership.
 
+The tiers are the RULE's verdict, shovelware included, because the calibration report measures
+the override. The nightly pipeline goes further and EXCLUDES every flagged game from the queue
+whatever its tier (`is_shovelware` on each row), so REASON_BLOCKED is a report-only bucket and
+never lands in the ContractCandidate ledger.
+
 Calibration (17.9k matches, prod): Tier A 0% flagged shovelware with the override; recall vs
 942 staff-curated contracts = 100% surfaced (78% A / 22% B / 0% C).
 """
-from trophies.models import ConceptFranchise, Contract, Game, IGDBMatch
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES, ConceptFranchise, Contract, Game, IGDBMatch
 
 DEFAULT_MIN_SHOTS = 4
 DEFAULT_MIN_EARNABLE = 15
@@ -21,7 +26,7 @@ DEFAULT_MIN_EARNABLE = 15
 TIER_AUTO = 'A'
 TIER_REVIEW = 'B'
 TIER_SNOOZE = 'C'
-REASON_BLOCKED = 'blocked'   # would-be A, shovelware-flagged: never auto-accepts
+REASON_BLOCKED = 'blocked'   # would-be A, shovelware-flagged (report-only: the pipeline excludes it)
 REASON_RESCUED = 'rescued'   # would-be C, franchise member: real IP with a thin page
 
 
@@ -35,6 +40,17 @@ def pyramid_is_degenerate(defined, min_earnable=DEFAULT_MIN_EARNABLE):
     if earnable < min_earnable:
         return True
     return gold > bronze
+
+
+def flagged_igdb_ids(igdb_ids):
+    """The ids in `igdb_ids` with a shovelware-flagged member, behind the scanner's gate (anchored
+    concept, trusted match). For callers that stage one candidate at a time without a full scan."""
+    return set(Game.objects.filter(
+        shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
+        concept__anchor_migration_completed_at__isnull=False,
+        concept__igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES,
+        concept__igdb_match__igdb_id__in=igdb_ids,
+    ).values_list('concept__igdb_match__igdb_id', flat=True))
 
 
 class CatalogScanner:
@@ -67,7 +83,7 @@ class CatalogScanner:
             size = sum(v or 0 for v in defined.values())
             if size >= sum(v or 0 for v in (self.biggest.get(g['concept_id']) or {}).values()):
                 self.biggest[g['concept_id']] = defined
-            if g['shovelware_status'] in ('auto_flagged', 'manually_flagged'):
+            if g['shovelware_status'] in SHOVELWARE_FLAGGED_STATUSES:
                 self.shovelware.add(g['concept_id'])
             self.played[g['concept_id']] = max(
                 self.played.get(g['concept_id'], 0), g['played_count'] or 0)

@@ -713,6 +713,17 @@ person the modal exists for.
   A stage's `concept_bundles` (episodic) carry over to a single `igdb_id=None` Contract (deduped
   by slug). Only anchored concepts create contracts.
 - **`ContractAdminForm.clean_jobs`** rejects more than `MAX_CONTRACT_JOBS` (6).
+- **The candidate queue never holds shovelware.** `evaluate_contract_candidates` excludes any IGDB
+  game with a flagged member (`SHOVELWARE_FLAGGED_STATUSES`) from every tier, and deletes its
+  non-dismissed `ContractCandidate` rows. It used to route flagged would-be-A games to review as
+  `blocked` and let flagged games through every other Tier B route; the queue filled with games no
+  curator would publish. Clearing the flag re-admits the game on the next run. The admin's
+  "Stage contracts" action skips flagged ids too, for a row flagged since the last nightly run (or a
+  legacy dismissed `blocked` row).
+- **Contract admin "holds shovelware" filter** (`HoldsShovelwareFilter`, built on
+  `contracts_service.holds_shovelware_q`): live AND staged contracts a flagged game can satisfy. The
+  sweep for games flagged AFTER their contract was made, which the candidate pipeline cannot reach
+  (a contracted id is out of its hands). Detection only: unpublish or delete from the changelist.
 
 ## Coverage audit (keeps the pool ⊇ badge games)
 
@@ -746,6 +757,11 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   trusted gate. Forgetting the trusted gate lets a `pending_review`/`rejected` match leak in.
 - **Only ANCHORED + TRUSTED concepts are members.** A concept with a raw IGDB id but no anchor
   stamp (or a non-trusted match) is *not* a member even if the id matches — the gate is all three.
+- **The shovelware filter follows the ENGINE's membership, not the board's.** The board shows a
+  satisfier bundle's games only on bundle-only contracts (`_member_game_match`), but
+  `_detect_tiers` credits a bundle on EVERY contract, so a flagged bundle game can satisfy a
+  normal contract (with the rest of its bundle) too. `holds_shovelware_q` therefore counts every bundle. Its id sets are NULL-free on
+  purpose: the "No" side negates them, and one NULL in a `NOT IN` set matches nothing.
 - **A claim refreshes Career in place; it no longer reloads the page (2026-10).** A claim levels real
   jobs, so the hero (ring, rank bar), the rank table, the banner, the stats, the Jobs dossier + sheet +
   detail panels, the radar, the tab counts and the nav badges are all stale, and each claim used to reload
