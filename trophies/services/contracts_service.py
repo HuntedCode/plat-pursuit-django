@@ -14,14 +14,14 @@ from datetime import timedelta
 
 from django.core.paginator import Paginator
 from django.db.models import (
-    Avg, BooleanField, Case, CharField, Count, DateTimeField, Exists, ExpressionWrapper, F, IntegerField,
-    Max, OuterRef, Q, Subquery, Sum, Value, When,
+    Avg, BooleanField, Case, CharField, Count, DateTimeField, Exists, ExpressionWrapper, F, FilteredRelation,
+    IntegerField, Max, OuterRef, Q, Subquery, Sum, Value, When,
 )
 from django.db.models.functions import Cast, Coalesce, Floor
 from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractBundle, ContractXPGrant, EarnedContract, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP,
+    Contract, ContractBundle, ContractXPGrant, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP,
     Trophy,
 )
 from trophies.services import job_render
@@ -181,7 +181,6 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
             profile=profile,
             **_member_at_igdb('game__concept__'),
         )
-        ec = EarnedContract.objects.filter(profile=profile, contract=OuterRef('pk'))
         # A bundle-only contract completes when EVERY concept in one of its bundles is done, so "best single
         # game" would read one finished episode of five as 100%. Its progress is the BEST BUNDLE's average
         # over its concepts (each concept at its best game, an unplayed one at 0), floored so it never reads
@@ -191,15 +190,23 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
             Coalesce(Subquery(member_pg.order_by('-progress').values('progress')[:1]), 0),
             _bundle_progress(profile), output_field=IntegerField())
         any_plat = Exists(member_pg.filter(has_plat=True))
-        plat_reached = Subquery(ec.values('platinum_reached_at')[:1])
-        plat_accepted = Subquery(ec.values('platinum_accepted_at')[:1])
-        full_reached = Subquery(ec.values('full_reached_at')[:1])
-        full_accepted = Subquery(ec.values('full_accepted_at')[:1])
+        # The hunter's EarnedContract row as ONE filtered LEFT JOIN (`_ec`), not a correlated subquery per
+        # field. Django inlines an annotation's whole expression at every reference, and status, its sort
+        # keys and the Board/History split all reference these stamps: as subqueries that came to over a
+        # hundred subplans per contract row, and most of the board's cost on prod (2026-10). A column
+        # reference costs nothing to repeat. Safe as a join: EarnedContract is unique on (profile,
+        # contract), so a contract still matches at most one row and the board needs no DISTINCT.
+        # Downstream, filter on the annotation NAMES (`plat_accepted`, `status`...), never on `_ec__...`:
+        # Django adds that as a second INNER JOIN, which silently drops every contract with no row.
+        plat_reached = F('_ec__platinum_reached_at')
+        plat_accepted = F('_ec__platinum_accepted_at')
+        full_reached = F('_ec__full_reached_at')
+        full_accepted = F('_ec__full_accepted_at')
         # The FROZEN platinum flag from EarnedContract (set at first reach) -- the same signal the accept
         # engine uses to decide the tier split (contract_service._has_platinum, which unions the satisfier
         # bundles). Gate the History split on THIS, not the live `defines_plat`, which describes what the
         # members define TODAY: the row's split was frozen at first reach and is what accepting pays.
-        ec_has_platinum = Subquery(ec.values('has_platinum')[:1])
+        ec_has_platinum = F('_ec__has_platinum')
     else:
         max_progress, any_plat = Value(0), Value(False)
         none_dt = Value(None, output_field=DateTimeField())
@@ -219,8 +226,12 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
         .annotate(c=Count('pk')).values('c')[:1]
     ), 0)
 
+    contracts = Contract.objects.filter(is_live=True)
+    if profile is not None:
+        contracts = contracts.annotate(
+            _ec=FilteredRelation('earned_by', condition=Q(earned_by__profile=profile)))
     return (
-        Contract.objects.filter(is_live=True)
+        contracts
         .annotate(
             has_jobs=_job_exists(),   # jobless -> awards nothing
             # Do the member games DEFINE a platinum? (home members, or a bundle-only contract's bundle games:
@@ -247,8 +258,9 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
                                 plat_accepted='plat_accepted', full_reached='full_reached',
                                 full_accepted='full_accepted'), then=Value('claimable')),
             When(Q(plat_accepted__isnull=False) | Q(full_accepted__isnull=False), then=Value('accepted')),
-            When(Q(max_progress__gte=100) | Q(any_plat=True), then=Value('pursuing')),
-            When(max_progress__gt=0, then=Value('pursuing')),
+            # ONE progress test, not two (`>= 100` already implies `> 0`): `max_progress` is a correlated
+            # subquery, and every mention of it here is inlined again wherever `status` is referenced.
+            When(Q(max_progress__gt=0) | Q(any_plat=True), then=Value('pursuing')),
             default=Value('available'), output_field=CharField(),
         ))
         .annotate(
