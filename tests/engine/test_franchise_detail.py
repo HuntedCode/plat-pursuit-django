@@ -14,6 +14,7 @@ from django.urls import reverse
 from tests.factories import (
     ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory, ProfileGameFactory,
 )
+from tests.query_counting import cold_capture
 
 pytestmark = pytest.mark.django_db
 
@@ -176,8 +177,6 @@ def test_sort_change_returns_group_partial(client):
 
 def test_detail_no_per_group_n_plus_1(client):
     """Query count must be CONSTANT regardless of member count -- a fixed ceiling would hide a small N+1."""
-    from django.db import connection
-    from django.test.utils import CaptureQueriesContext
 
     small = _franchise('Small IP', 'small-ip')
     for i in range(3):
@@ -192,7 +191,7 @@ def test_detail_no_per_group_n_plus_1(client):
 
     def _q(slug):
         call_command('recompute_tag_covers', verbosity=0)   # fill denorms OUTSIDE the capture
-        with CaptureQueriesContext(connection) as ctx:
+        with cold_capture() as ctx:
             assert raw.get(reverse('franchise_detail', kwargs={'slug': slug})).status_code == 200
         return len(ctx)
 

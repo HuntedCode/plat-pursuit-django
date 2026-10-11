@@ -38,6 +38,7 @@ from challenges.models import (CALENDAR_MONTH_DAYS, CHALLENGE_TYPE_AZ, CHALLENGE
 from challenges.services import calendar_fill
 from challenges.services import calendar_render
 from tests.factories import ProfileFactory, UserFactory
+from tests.query_counting import cold_capture
 
 #: The repo root, for the pins that read a template as text.
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -142,9 +143,9 @@ def test_the_detail_page_stays_flat_however_many_days_are_filled():
     CalendarDay.objects.filter(challenge=full).update(in_all=True, in_clean=True)
 
     client = Client()
-    with CaptureQueriesContext(connection) as empty_cost:
+    with cold_capture() as empty_cost:
         client.get(_url(empty))
-    with CaptureQueriesContext(connection) as full_cost:
+    with cold_capture() as full_cost:
         client.get(_url(full))
 
     assert len(full_cost) == len(empty_cost), (

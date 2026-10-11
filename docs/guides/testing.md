@@ -163,6 +163,19 @@ gate is wired after the first spine tests exist — a gate over zero tests is mo
 
 ## Gotchas and Pitfalls
 
+- **Every test starts with an empty Django cache** (`_cache_starts_empty`, root `conftest.py`). The test cache is
+  in-memory per process and used to leak between tests: site-wide values a render caches (the live group badges,
+  the current art-reveal event, the milestone rarity denominator) were filled by whichever test ran first, so
+  query-count tests and cache-reading tests passed or failed depending on order. Parallel and shuffled runs exposed
+  four (2026-10-10). If a test needs a cached value, it sets it itself.
+- **Comparing two renders' query counts? Use `cold_capture()`** (`tests/query_counting.py`) instead of
+  `CaptureQueriesContext`. It empties the cache before counting, so both renders start cold. Plain capture compares
+  a cold first render (which pays to fill the caches) with a warm second one and reports a difference that has
+  nothing to do with what the test measures.
+- **Order independence is checkable.** `pip install pytest-randomly`, then
+  `pytest -n 12 -p randomly --randomly-seed=<N>` with a few seeds. It is not a project dependency (installed, it
+  shuffles every run), so uninstall it afterwards.
+
 - **The rate limiter's clock is pinned for every test** (`_ratelimit_clock_is_fixed`, root `conftest.py`).
   `django_ratelimit` counts in fixed windows on `int(time.time())`, so a test that spent a minute's budget used
   to flake when its requests straddled a boundary. Only the limiter's own `time` reference is swapped, so every
