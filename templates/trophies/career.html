@@ -403,7 +403,7 @@
         endpoint re-emits this island on each filter swap; the JS reads it out of the fragment). {% endcomment %}
         {{ contracts_facets|json_script:"rp-facets" }}
         <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch"
-             data-results-url="{% url 'contracts_results' %}" data-accept-url="{% url 'api:project-accept' %}" data-has-next="{{ contracts_has_next|yesno:'1,0' }}">
+             data-results-url="{% url 'contracts_results' %}" data-accept-url="{% url 'api:project-accept' %}" data-total="{{ contracts_total }}" data-has-next="{{ contracts_has_next|yesno:'1,0' }}">
             {% for p in contracts %}
             {% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=contract_disciplines %}
             {% endfor %}

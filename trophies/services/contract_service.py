@@ -296,8 +296,8 @@ def contract_by_concept_map(concept_ids, *, live_only=True, prefetch_jobs=True):
     is still unresolved and one on a hit, plus the jobs prefetch per fetch when `prefetch_jobs`. A concept
     whose own contract is NOT live (under `live_only`) is unresolved by the igdb pass, so it can map to a
     live bundle-only contract that lists it, as sync would credit (`check_profile_contracts`); it maps back
-    to its home once that is published. The replacement for the old `ContractMembership.objects.filter(concept_id__in=...)`
-    pattern in the board/views."""
+    to its home once that is published. The replacement for the old
+    `ContractMembership.objects.filter(concept_id__in=...)` pattern in the board/views."""
     concept_ids = list(concept_ids)
     rows = (
         Concept.objects

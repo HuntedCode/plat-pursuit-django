@@ -254,8 +254,11 @@ def _board_keys(src):
 
     lit = re.findall(r"var BOARD_KEYS = \[([^\]]*)\]", src)
     assert len(lit) == 1, f'expected one BOARD_KEYS literal, found {len(lit)}'
-    sync = src.split('function syncURL', 1)[1].split('var bp =', 1)[0]   # up to where it re-writes the keys
-    assert 'BOARD_KEYS.forEach(function (k) { params.delete(k); })' in sync, 'syncURL no longer clears BOARD_KEYS'
+    # syncURL writes `boardSearch()`, which clears the keys before re-writing them from the board's state.
+    built = src.split('function boardSearch()', 1)[1].split('var bp =', 1)[0]   # up to where it re-writes the keys
+    assert 'BOARD_KEYS.forEach(function (k) { params.delete(k); })' in built, 'the URL builder no longer clears BOARD_KEYS'
+    sync = src.split('function syncURL()', 1)[1].split('history.replaceState(null', 1)[0]
+    assert 'var qs = boardSearch();' in sync, 'syncURL no longer writes through the shared builder'
     return set(re.findall(r"'([a-z_]+)'", lit[0]))
 
 

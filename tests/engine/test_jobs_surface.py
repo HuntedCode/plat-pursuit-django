@@ -1058,8 +1058,10 @@ def test_career_still_declares_the_observer_its_reveal_depends_on():
         assert f'var {name}' in career, f'`initReveal` reads `{name}` but nothing declares it'
         assert name in body
 
-    # And the call order that made the failure invisible: `initCards` runs before the scroller starts.
-    assert career.index('initCards(list);') < career.index('observeSentinel();')
+    # And the call order that made the failure invisible: `initCards` runs before the scroller starts, at the
+    # board's init (scoped there: `renderBoard` and fetchPage's failure branch also call these, in their own order).
+    init = career[career.index('    seedFromURL();\n'):]
+    assert init.index('initCards(list);') < init.index('observeSentinel();')
 
 
 def test_the_contract_cards_stagger_in_and_reveal_on_job_detail(client):

@@ -73,6 +73,10 @@ def test_every_refresh_region_is_on_the_page(client):
     body = _page(client, claimable=True)
     missing = [sel for sel, pattern in _REGIONS.items() if not re.search(pattern, body)]
     assert not missing, f'not on the rendered page: {missing}'
+    # The board's page 1 is rendered out of the same page (`boardFromPage`), which reads its total and
+    # has-next from #rp-list itself.
+    rp_list = re.search(r'<div id="rp-list"[^>]*>', body).group(0)
+    assert re.search(r'data-total="\d+"', rp_list) and re.search(r'data-has-next="[01]"', rp_list)
 
 
 def test_the_banner_region_renders_even_with_nothing_to_claim(client):
@@ -101,11 +105,18 @@ def test_a_claim_refreshes_in_place_and_only_reloads_as_a_fallback():
     # rejecting Promise.all, which would reload while the overlay is still animating.
     assert 'Promise.all([page, shown])' in refresh
     assert re.search(r"\.catch\(function \(\) \{ return null; \}\);", refresh), 'a failed fetch cuts the ceremony off'
-    # The board on screen is stale though its filters are not: the dedupe must not drop the refetch...
-    assert refresh.index('boardQuery = null;') < refresh.index('fetchPage(1, false);')
-    # ...and a hidden board refetches when shown, not now (fetchPage writes its params into the URL).
-    assert 'if (panel && panel.hidden) refetchOnShow = true; else fetchPage(1, false);' in refresh
-    assert 'if (refetchOnShow) { refetchOnShow = false; boardQuery = null; fetchPage(1, false); }' in _script()
+    # ONE render per claim: the page is fetched for the BOARD'S state (on Jobs/Radar the address bar has had
+    # the board's params stripped), and the board's page 1 comes out of that same page rather than a second
+    # /results/ round trip. Nothing on this path writes the URL, so no tab's URL can collect board params.
+    assert "fetch(location.pathname + '?' + boardSearch()" in refresh
+    assert "boardFromPage(out[0].getElementById('rp-list'))" in refresh and 'fetchPage(' not in refresh
+    from_page = _code('function boardFromPage(freshList) {', 'var sentIO')
+    assert from_page.index('if (controller) controller.abort();') < from_page.index('renderBoard(')
+    assert '++reqSeq;' in from_page, 'a board fetch in flight could land on top of the refreshed board'
+    assert from_page.index('renderBoard(') < from_page.index('boardQuery = buildParams(1);'), \
+        'the refreshed board is not recorded as the board on screen (the dedupe)'
+    # syncURL and the refresh share the one builder, so the page fetched is the board the URL would name.
+    assert 'var qs = boardSearch();' in _code('function syncURL() {', 'function updateEmptyStates')
     # A finished refresh releases the claim guard, or every later claim in this page view is ignored.
     assert refresh.index('claiming = false;') > refresh.index('swapRegions(out[0])')
     nothing = apply[apply.index('if (!res.granted)'):]

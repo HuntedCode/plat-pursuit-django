@@ -210,11 +210,10 @@ nothing. The owner chose to keep payouts as they are and make everything agree w
   Count them with `EarnedContract.objects.filter(has_platinum=False, platinum_reached_at__isnull=False,
   platinum_accepted_at__isnull=True)`.
 - **The card's tier split** reads the hunter's frozen flag once they have a row (`project_card`), so it
-  always shows what accepting pays: one bar paying the whole T for a row frozen `False`. This also
-  changes cards in the OTHER direction: a bundle-only contract's member-only `defines_plat` is always
-  `False`, so its cards showed one bar even for a hunter whose row pays a platinum tier; they now show
-  the split and the platinum claim. Before first reach (no row) they still read `defines_plat`, until
-  the bundle follow-up teaches it bundles.
+  always shows what accepting pays: one bar paying the whole T for a row frozen `False`, and the split
+  plus the platinum claim for a row whose frozen flag pays a platinum tier (a bundle-only contract's card
+  showed one bar for those before, when `defines_plat` read home members only). Before first reach (no
+  row) the card reads `defines_plat`, which is bundle-aware for bundle-only contracts since 2026-10.
 
 `tests/engine/test_pending_tier_rule.py` holds every reader to the engine across all 32 combinations
 of the five fields.
@@ -414,7 +413,8 @@ endpoint or schema**:
 - **History** (`scope='history'`) = **fully banked** contracts, gated on the `fully_banked` annotation:
   `full_accepted` set AND — when this user's FROZEN `EarnedContract.has_platinum` is true — `plat_accepted`
   set too. Gate on `ec_has_platinum` (a subquery of the frozen flag, bundle-aware, matching the accept
-  engine), **not** the member-only `defines_plat` (always false for episodic/bundle contracts). A
+  engine), **not** the live `defines_plat`, which says what the members define TODAY while the row's split
+  was frozen at first reach and is what accepting paid. A
   partially-banked contract (platinum claimed, 100% still to earn) stays on the Board — it has XP left.
 
 History cards read the user's **actual banked XP from the ledger** (`_attach_banked`: one grouped
@@ -750,8 +750,9 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   jobs, so the hero (ring, rank bar), the rank table, the banner, the stats, the Jobs dossier + sheet +
   detail panels, the radar, the tab counts and the nav badges are all stale, and each claim used to reload
   the whole page (one reload per contract when clearing a backlog). `career.js` `refreshAfterClaim`
-  fetches the page again WHILE the ceremony plays and swaps each region in `REFRESH_REGIONS` from it, then
-  refetches the board. The page is the one renderer, so nothing re-derives a number client-side (the
+  fetches the page again WHILE the ceremony plays (for the board's own state, `boardSearch`), swaps each
+  region in `REFRESH_REGIONS` from it, and renders the board's page 1 from that same page
+  (`boardFromPage`), so a claim costs one page render, not a page plus a board. The page is the one renderer, so nothing re-derives a number client-side (the
   alternative, HTML fragments in the claim reply, would have meant nine new partials kept equal to the
   page). Rules that keep it working:
   - **Contents are swapped, never the elements**, so listeners and observers on the region elements
@@ -779,10 +780,10 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   its `jobs__` joins produced. On prod (2026-10-10, 3,387 live contracts) that made the board's count
   0.98 s instead of 0.07 s, and `contracts_page` plus `board_facets` (eight queries between them, timed
   on prod) took about 4 s of every `/career/` load, making it the slowest page on the site. No board
-  filter joins a to-many relation now: the job, platform and game-title matches are `EXISTS`
-  (`_job_exists`, `_platform_exists`, and an inline `Exists` for game titles), and the rest read
-  the contract's own columns or annotations, so a contract is one row however many of its jobs or
-  games match. A new filter over an M2M or a reverse FK has to be an `EXISTS` too.
+  filter joins a to-many relation now: the job matches are `EXISTS` (`_job_exists`), the platform and
+  game-title matches are hashed id sets (`_member_game_match`, see the bundle-only entry below), and the
+  rest read the contract's own columns or annotations, so a contract is one row however many of its jobs
+  or games match. A new filter over an M2M or a reverse FK has to take one of those two shapes too.
   `test_board_queries_never_select_distinct` fails on any `SELECT DISTINCT` from the board (Board
   and History), its facets, the empty-state suggestion, or job detail's contract counts.
   This is about cost, not memory: the rows are the curated catalogue, so every user pays it, not
