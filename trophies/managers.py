@@ -147,11 +147,9 @@ class GameQuerySet(models.QuerySet):
 
     def exclude_shovelware(self):
         """
-        Exclude shovelware games.
-
-        Shovelware is identified via rule-based detection:
-        games with >= 90% platinum earn rate, their concept siblings,
-        and all games from blacklisted publishers (any flagged concept).
+        Exclude shovelware games: any `SHOVELWARE_FLAGGED_STATUSES` status (auto or manual).
+        `manually_cleared` counts as clean. Who gets flagged, and why, is
+        docs/reference/shovelware-detection.md.
 
         Returns:
             QuerySet: Non-shovelware games

@@ -6,7 +6,7 @@ Usage: python manage.py force_platinum_notification
 """
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
-from trophies.models import EarnedTrophy, Trophy, Profile
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, Trophy, Profile
 from django.utils import timezone
 import logging
 
@@ -35,7 +35,7 @@ class Command(BaseCommand):
             trophy__trophy_type='platinum',
             earned=True,
         ).exclude(
-            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
         ).first()
 
         if not earned_plat:

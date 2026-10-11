@@ -18,7 +18,7 @@ from collections import Counter, defaultdict
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
-from trophies.models import Concept
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES, Concept
 
 
 class Command(BaseCommand):
@@ -42,9 +42,7 @@ class Command(BaseCommand):
                 Concept.objects
                 .exclude(concept_id__startswith='PP_')
                 .exclude(
-                    games__shovelware_status__in=[
-                        'auto_flagged', 'manually_flagged',
-                    ]
+                    games__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES
                 )
                 .filter(
                     Q(games__title_platform__contains='PS4')

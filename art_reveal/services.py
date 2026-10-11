@@ -12,14 +12,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from django.db.models import Q
-from trophies.models import BadgeSeries, Concept, EarnedTrophy
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES, BadgeSeries, Concept, EarnedTrophy
 
 from .models import ArtRevealEvent
 
 logger = logging.getLogger(__name__)
-
-# Games whose shovelware status disqualifies their platinums from the count.
-_SHOVELWARE_EXCLUDED = ('auto_flagged', 'manually_flagged')
 
 # Cache key for the active-event lookup (mirrors plat_pursuit.context_processors
 # .active_fundraiser). Stores the pk, or 0 to mean "no active event".
@@ -63,7 +60,7 @@ def compute_badge_platinum_count(*, since):
             trophy__trophy_type='platinum',
             trophy__game__concept_id__in=_badge_concept_ids(),
         )
-        .exclude(trophy__game__shovelware_status__in=_SHOVELWARE_EXCLUDED)
+        .exclude(trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES)
         .count()
     )
 

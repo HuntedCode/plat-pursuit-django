@@ -20,7 +20,7 @@ from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import HtmxListMixin
 from trophies.views.concept_context import ConceptContextMixin
-from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, ProfileTrophyGroup, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating
+from ..models import SHOVELWARE_FLAGGED_STATUSES, Game, Trophy, Profile, EarnedTrophy, ProfileGame, ProfileTrophyGroup, TrophyGroup, Concept, FeaturedGuide, Stage, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 from .browse_helpers import (
@@ -1527,7 +1527,7 @@ class RecentlyAddedView(HtmxListMixin, ListView):
                 qs = qs.filter(trophies__trophy_type='platinum').distinct()
 
             if self.request.GET.get('hide_shovelware'):
-                qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+                qs = qs.exclude_shovelware()
 
             # Sort within the capped pool
             if sort_val == 'alpha':
@@ -1576,7 +1576,7 @@ class RecentlyAddedView(HtmxListMixin, ListView):
                 qs = qs.filter(platform_q)
 
             if self.request.GET.get('hide_shovelware'):
-                qs = qs.exclude(game__shovelware_status__in=['auto_flagged', 'manually_flagged'])
+                qs = qs.exclude(game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES)
 
             # Sort within the capped pool
             if sort_val == 'alpha':

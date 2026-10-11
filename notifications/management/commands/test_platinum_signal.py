@@ -6,7 +6,7 @@ Usage: python manage.py test_platinum_signal
 """
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
-from trophies.models import EarnedTrophy, Trophy, Game, Profile
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, Trophy, Game, Profile
 from django.utils import timezone
 
 User = get_user_model()
@@ -31,7 +31,7 @@ class Command(BaseCommand):
         platinum_trophy = Trophy.objects.filter(
             trophy_type='platinum',
         ).exclude(
-            game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
         ).exclude(
             earnedtrophy__profile=profile,
             earnedtrophy__earned=True
