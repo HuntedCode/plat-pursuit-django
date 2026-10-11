@@ -51,6 +51,7 @@ export default [
         confetti: 'readonly',
         marked: 'readonly',
         DOMPurify: 'readonly',
+        Chart: 'readonly',   // static/js/vendor/chart.umd.min.js, loaded before career.js
       },
     },
     rules: {

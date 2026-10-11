@@ -251,13 +251,13 @@ def test_every_board_param_the_url_can_gain_is_also_cleared():
     """syncURL() wipes a FIXED key list before re-appending what buildParams emits. A key written
     but never cleared survives being switched off -- the URL keeps claiming a filter the board has
     dropped, seedFromURL turns it back on next reload, and switching it on again appends a
-    duplicate. Read out of the template rather than asserted by hand so a NEW filter added to
+    duplicate. Read out of static/js/career.js rather than asserted by hand so a NEW filter added to
     buildParams without a matching delete fails here instead of in someone's shared link."""
-    import pathlib
     import re
 
-    src = (pathlib.Path(__file__).resolve().parents[2]
-           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    from tests.career_sources import career_script
+
+    src = career_script()
 
     body = src.split('function buildParams', 1)[1].split('function noFilters', 1)[0]
     emitted = set(re.findall(r"p\.(?:set|append)\('([a-z_]+)'", body))
@@ -274,11 +274,11 @@ def test_leaving_the_contracts_tab_strips_every_board_param():
     stays clean. Its list is a SECOND copy of syncURL's, and it had drifted: 'new' was missing, so
     leaving with Latest on kept `?new=1` on the Jobs URL, and a reload of that link rendered the board
     narrowed with Latest switched back on. Every key syncURL clears must be stripped here too."""
-    import pathlib
     import re
 
-    src = (pathlib.Path(__file__).resolve().parents[2]
-           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    from tests.career_sources import career_script
+
+    src = career_script()
     cleared = set(re.findall(r"'([a-z_]+)'",
                              src.split('function syncURL', 1)[1].split('.forEach', 1)[0]))
     assert cleared, 'syncURL lost its key list, so this pin no longer checks anything'
@@ -327,13 +327,13 @@ def test_a_hand_typed_latest_cannot_narrow_history(client):
     assert params['new_only'] is False
 
 
-def test_the_client_and_the_server_agree_about_it(client):
+def test_the_client_and_the_server_agree_about_it():
     """Fixing only seedFromURL would mean the page loads narrowed by the SSR render and silently
-    widens on the next fetch. Both sides drop it, so both agree."""
-    profile = ProfileFactory(is_linked=True)
-    client.force_login(profile.user)
+    widens on the next fetch. Both sides drop it, so both agree. (The server side is pinned above;
+    this reads the client's seedFromURL out of static/js/career.js.)"""
+    from tests.career_sources import career_script
 
-    src = client.get('/career/?view=contracts').content.decode()
+    src = career_script()
     seed = src.split('function seedFromURL', 1)[1].split('state.newOnly', 1)[1].split(';', 1)[0]
 
     assert "'history'" in seed, 'seedFromURL honours ?new=1 in History; the server does not'

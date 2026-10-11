@@ -585,15 +585,12 @@ def test_the_announcement_link_actually_opens_the_contracts_tab(client, posted):
     assert resp.context['new_window_days']
 
 
-def test_the_deep_link_scrolls_the_board_into_view(client):
+def test_the_deep_link_scrolls_the_board_into_view():
     """`new` is the one filter that arrives from an EXTERNAL link, so the reader has no idea the
-    board is filtered unless the page takes them to it."""
-    from core.services.contract_announcer import BOARD_URL
+    board is filtered unless the page takes them to it. (The scroll lives in static/js/career.js.)"""
+    from tests.career_sources import career_script
 
-    profile = ProfileFactory(is_linked=True)
-    client.force_login(profile.user)
-
-    src = client.get(BOARD_URL).content.decode()
+    src = career_script()
 
     guard = src.split('function scrollToFilteredBoard', 1)[1].split('return;', 2)[1]
     assert "qp.has('new')" in guard, 'a Latest deep link lands above the board it filtered'

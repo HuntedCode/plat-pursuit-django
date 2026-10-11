@@ -137,7 +137,9 @@ def test_the_collage_motion_contract_holds():
     assert 'window.ppHoldCareerModal = function' in gate, 'the backstop cannot be cancelled'
     assert 'DOMContentLoaded' in gate, 'the deadline is measured from parse again'
 
-    career = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    from tests.career_sources import career_script
+
+    career = career_script()   # the kick-offs live in static/js/career.js
     assert career.count('ppAfterCareerModal') == 3, (
         'the three on-load choreography kick-offs must all ride the modal gate'
     )

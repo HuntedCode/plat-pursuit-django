@@ -89,7 +89,7 @@ almost always a specific detail that question surfaces:
 
 | Beat | Files |
 |------|-------|
-| The whole surface | `templates/trophies/career.html`, `trophies/services/career_service.py` |
+| The whole surface | `templates/trophies/career.html` (markup), `static/js/career.js` (its script, moved out of the template 2026-10), `trophies/services/career_service.py` |
 | Claim ceremony (the signature moment) | `static/js/claim-ceremony.js`, `static/css/components/claim-ceremony.css` |
 | Rank ladder + label/bar pulse + charging strain | `static/css/components/elements.css` (`.pgl--rank`) |
 | Modal recede / content-only step-away | `elements.css` (`.pp-receded`, `#page-recede`), `templates/base.html` |
