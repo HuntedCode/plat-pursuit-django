@@ -746,6 +746,13 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   trusted gate. Forgetting the trusted gate lets a `pending_review`/`rejected` match leak in.
 - **Only ANCHORED + TRUSTED concepts are members.** A concept with a raw IGDB id but no anchor
   stamp (or a non-trusted match) is *not* a member even if the id matches — the gate is all three.
+- **The card's 25-cell job map is paid 600 times a page** (24 cards x 25 cells), and was about half of
+  `/career/`'s HTML. So a cell carries only what is read (2026-10): the family colour as a class
+  (`rp-jobcell--<discipline>`, not an inline style), the glyph via `job_icon_use_bare` (no presentation
+  attributes; `.rp-jobcell svg` in elements.css supplies fill/stroke, which inherit into the `<use>`), no
+  whitespace between cells, and `data-slug` on LIT cells only (the ring link and the reveal read nothing
+  else). Every cell keeps its `title`, the only way to name a dim one. The shared `job_icon_use` is
+  unchanged and pinned: ten other hosts rely on its attributes. Dev's board went 683 KB to 529 KB.
 - **Per-job totals MUST aggregate in the DB.** Never iterate a whale's `ContractXPGrant`/
   `EarnedContract` rows in Python to total job XP — `Sum().values('job')`. (The May 2026 OOM rule.)
 - **Never `.distinct()` the annotated board, and never filter it through a join.** `annotated_contracts`

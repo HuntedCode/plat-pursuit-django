@@ -595,3 +595,34 @@ def test_server_sort_by_progress_and_name():
     _contract('aaa-first')
     names = _slugs(contracts_page(profile, sort='name'))
     assert names.index('aaa-first') < names.index('zzz-last')
+
+
+def test_the_card_job_map_is_trimmed_but_still_names_every_job():
+    """The 25-cell map is paid 600 times a page (24 cards x 25), so a cell carries only what is read: the
+    family colour as a class (no inline style), the glyph via `job_icon_use_bare`, `data-slug` on LIT cells
+    only (the ring link and the reveal read nothing else), and a `title` on every cell, the only way to
+    name a dim one on hover."""
+    import re
+
+    from django.template.loader import render_to_string
+    from trophies.services.contracts_service import job_roster
+
+    profile = ProfileFactory()
+    _contract('trim-card', ('gunslinger', 'mage'))
+    card = next(c for c in contracts_page(profile, platforms=[])['contracts'] if c['slug'] == 'trim-card')
+    html = render_to_string('trophies/partials/contracts/_contract_card.html',
+                            {'p': card, 'disciplines': job_roster(), 'profile': profile})
+    grid = html.split('class="rp-jobgrid"', 1)[1].split('</div>', 1)[0]
+    cells = re.findall(r'<span class="rp-jobcell [^"]*"[^>]*>', grid)
+    lit = [c for c in cells if 'is-lit' in c]
+    dim = [c for c in cells if 'is-lit' not in c]
+
+    assert len(cells) == Job.objects.count() and len(lit) == 2
+    assert all('data-slug="' in c for c in lit), 'a lit cell lost the slug the ring link reads'
+    assert all('data-slug' not in c for c in dim), 'dim cells carry a slug nothing reads'
+    assert all(' title="' in c for c in cells), 'a cell can no longer be named on hover'
+    assert all(re.search(r'rp-jobcell--(combat|exploration|mind|heart|finesse)\b', c) for c in cells)
+    assert 'style=' not in grid, 'an inline style is back on the 600-cell map'
+    assert grid.count('<use href="#jobicon-') == len(cells), 'a cell lost its glyph'
+    assert 'stroke-width' not in grid and 'viewBox' not in grid, 'the map is back on the attribute-heavy glyph'
+    assert '\n' not in grid, 'whitespace between cells is paid 600 times a page'
