@@ -27,7 +27,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
 | 03:45 UTC daily | `recompute_tag_covers` | Daily | Since 2026-08-31 also fills `Franchise/Company.game_count+version_count` and `Genre/Theme.game_count+player_count+avg_rating` -- the columns the Franchises/Companies/Genres browse pages FILTER on, so a browse-visible entity's counts are at most a day stale and a brand-new entity appears after this run. (Its reads are link tables + games/players/ratings; it does NOT depend on `recalc_earn_rates` -- the slot order is historical) |
 | ~~05:30 UTC daily~~ | ~~`recompute_milestones`~~ | **Folded into `nightly` (step 8)** | Do NOT create a separate entry. The old 05:30 slot existed to follow `recalc_profile_counters`, but that dependency is not real: no milestone metric reads any of the four counters that job writes. |
-| 04:45 UTC daily | `evaluate_contract_candidates` | Daily | Runs AFTER `update_shovelware` (04:00 -- the shovelware override reads the flags): evaluates the media-density contract rule over new/changed trusted matches, auto-STAGES Tier A contracts (`is_live=False`, jobs auto-suggested, `--max-stage 150`/run in player-demand order) and maintains the ContractCandidate review/snooze queues in admin. Idempotent; `--dry-run` to preview |
+| 04:45 UTC daily | `evaluate_contract_candidates` | Daily | Runs AFTER `update_shovelware` (04:00 -- the shovelware exclusion reads the flags): evaluates the media-density contract rule over new/changed trusted matches, auto-STAGES Tier A contracts (`is_live=False`, jobs auto-suggested, `--max-stage 150`/run in player-demand order) and maintains the ContractCandidate review/snooze queues in admin. Idempotent; `--dry-run` to preview |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
@@ -46,9 +46,12 @@ Nightly maintenance of the contract-candidate queue (the media-density rule; see
 `trophies/services/contract_candidates.py`). Auto-stages Tier A contracts (`is_live=False`,
 jobs auto-suggested) under `--max-stage 150` per run in player-demand order; review/snooze
 queues live in the ContractCandidate admin. MUST run after `update_shovelware` (04:00): the
-shovelware override reads the flags it writes. Idempotent; one bad row cannot abort the batch
-(per-candidate savepoints). `--dry-run` previews. Only a LIVE contract marks a candidate
-`done`; staged rows wait for publish.
+shovelware exclusion reads the flags it writes. Shovelware-flagged games (any flagged sibling
+excludes the whole IGDB game) are never queued, and their uncontracted non-dismissed rows are
+deleted, so a game flagged after it queued drops out on the next run; clearing the flag
+(`manually_cleared`) re-admits it the run after. Idempotent; one bad row cannot abort the batch
+(per-candidate savepoints). `--dry-run` previews, prune count included. Only a LIVE contract
+marks a candidate `done`; staged rows wait for publish.
 
 ### refresh_profiles
 
@@ -473,7 +476,7 @@ historical pass after Phase 3's rematch run.
   re-evaluates each; then releases developers who have fallen below the blacklist threshold. INCREMENTAL
   and idempotent -- it is `backfill_shovelware` that resets every auto-flagged status and rebuilds from
   scratch. Respects manual locks and flags.
-- **Dependencies**: none upstream, but current earn-rate data (from recent syncs) improves accuracy. DOWNSTREAM there are two: `recompute_clean_standings` (`nightly` step 2) rebuilds the Shovelware Free board from these flags and is SKIPPED if this step fails, and `evaluate_contract_candidates` (04:45) reads them for its shovelware override.
+- **Dependencies**: none upstream, but current earn-rate data (from recent syncs) improves accuracy. DOWNSTREAM there are two: `recompute_clean_standings` (`nightly` step 2) rebuilds the Shovelware Free board from these flags and is SKIPPED if this step fails, and `evaluate_contract_candidates` (04:45) reads them to keep flagged games out of the contract-candidate queue.
 - **Idempotency**: Fully safe to re-run. The command reconciles incrementally (it is `backfill_shovelware` that resets and rebuilds from scratch). Locked and manually flagged games are preserved.
 - **Failure impact**: The shovelware list becomes stale. New shovelware games are not excluded from challenge eligibility until the next successful run.
 
@@ -628,7 +631,7 @@ Key ordering rules:
 1. `refresh_profiles` depends on TokenKeeper being alive to process queued syncs.
 2. `send_monthly_recap_emails` **must** run after `generate_monthly_recaps --finalize`. The 6-hour gap (00:05 to 06:00) on the 3rd of each month ensures this.
 3. `send_weekly_digest` runs Monday morning, covering the previous ISO week (Monday to Sunday).
-4. `evaluate_contract_candidates` (04:45) must follow `update_shovelware` (04:00) -- the shovelware override reads the flags it writes.
+4. `evaluate_contract_candidates` (04:45) must follow `update_shovelware` (04:00) -- the shovelware exclusion reads the flags it writes.
 5. All other jobs are independent and can run in any order relative to each other.
 
 ---

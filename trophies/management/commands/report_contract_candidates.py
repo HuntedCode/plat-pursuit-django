@@ -53,6 +53,7 @@ class Command(BaseCommand):
         samples = {t: [] for t in 'ABC'}     # (played, name) per tier
         reason_samples = {'blocked': [], 'rescued': []}
         seen_igdb_pop = set()
+        flagged_groups = set()       # uncontracted ids with ANY flagged sibling (the pipeline's exclusion)
 
         n_total = 0
         for row in scanner.iter_matches():
@@ -60,6 +61,8 @@ class Command(BaseCommand):
             if row['contracted']:
                 recall[row['tier']] += 1
                 continue
+            if row['is_shovelware']:
+                flagged_groups.add(row['igdb_id'])
             if row['igdb_id'] in seen_igdb_pop:
                 continue   # sibling concepts share the IGDB page: one vote per game
             seen_igdb_pop.add(row['igdb_id'])
@@ -116,7 +119,9 @@ class Command(BaseCommand):
         w(f'  + pyramid guard:     {pop["A"] + reasons["blocked"]} would remain, '
           f'{reason_shovel["blocked"]} flagged shovelware')
         w(f'  + shovelware block:  Tier A admits {pop["A"]} games, {pop_shovel["A"]} flagged '
-          f'shovelware (the override sent {reasons["blocked"]} to review)')
+          f'shovelware (the override blocked {reasons["blocked"]} from auto)')
+        w(f'  The nightly pipeline excludes every flagged game from the queue: '
+          f'{len(flagged_groups)} uncontracted games never enter it')
         if reason_samples['blocked']:
             w('  Blocked from auto (top by players):')
             for p, name in top(reason_samples['blocked']):
@@ -125,7 +130,8 @@ class Command(BaseCommand):
 
         w(head('The franchise rescue (would-be snoozes with real IP)'))
         w(f'  Promoted to review: {reasons["rescued"]} games '
-          f'({reason_shovel["rescued"]} of them flagged shovelware -- the honesty check)')
+          f'({reason_shovel["rescued"]} of them flagged shovelware -- the honesty check; '
+          f'the pipeline excludes those)')
         for p, name in top(reason_samples['rescued']):
             w(f'    - {name}  ({p} players)')
         w('')

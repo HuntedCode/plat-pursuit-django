@@ -21,8 +21,8 @@ from django.db.models.functions import Cast, Coalesce, Floor
 from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractBundle, ContractXPGrant, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP,
-    Trophy,
+    SHOVELWARE_FLAGGED_STATUSES, Contract, ContractBundle, ContractXPGrant, Game, IGDBMatch, Job,
+    ProfileGame, ProfileJobXP, Trophy,
 )
 from trophies.services import job_render
 from trophies.services.contract_service import pending_tier_q
@@ -320,6 +320,36 @@ def _member_game_match(**game_filter):
     bundle = Contract.objects.filter(is_live=True, igdb_id__isnull=True).filter(
         Exists(Game.objects.filter(**game_filter, concept__contract_bundles__contract=OuterRef('pk')))).values('pk')
     return ExpressionWrapper(Q(pk__in=home) | Q(pk__in=bundle), output_field=BooleanField())
+
+
+def holds_shovelware_q():
+    """A Contract (live OR staged) with a shovelware-flagged game that can satisfy it, for the Contract
+    admin's curation filter. Follows the ENGINE's membership, not the board's: home members at the raw
+    igdb_id, plus the concepts of ANY satisfier bundle (`contract_service._detect_tiers` credits a bundle
+    on every contract, so a flagged bundle game can satisfy the contract, with its bundle, even where the
+    board hides it).
+
+    Two uncorrelated id sets, kept NULL-free: the admin's "No" side negates this, and a NULL in a `NOT IN`
+    set would make it match nothing."""
+    flagged = Game.objects.filter(shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES)
+    home = _flagged_home_members().values('concept__igdb_match__igdb_id')
+    bundle = flagged.filter(concept__contract_bundles__isnull=False).values(
+        'concept__contract_bundles__contract')
+    return Q(igdb_id__in=home) | Q(pk__in=bundle)
+
+
+def _flagged_home_members():
+    """Shovelware-flagged games of member concepts (anchored + trusted, non-null igdb_id): the same gate
+    the candidate scanner applies, so the admin and the nightly run agree on what a flagged id is."""
+    return Game.objects.filter(shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES, **_member_gate(),
+                               concept__igdb_match__igdb_id__isnull=False)
+
+
+def flagged_igdb_ids(igdb_ids):
+    """The ids in `igdb_ids` with a shovelware-flagged member. For the candidate admin's stage action,
+    which stages a handful of rows without a full catalogue scan."""
+    return set(_flagged_home_members().filter(concept__igdb_match__igdb_id__in=igdb_ids)
+               .values_list('concept__igdb_match__igdb_id', flat=True))
 
 
 def _platform_exists(platforms):
