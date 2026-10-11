@@ -3493,9 +3493,15 @@ def test_the_discipline_highlight_has_one_implementation(client):
     # either outright is a false positive, which is the substring trap this suite keeps paying for.
     # `animationPlayState` is the sharpest marker: inline spin control is what the shared
     # `.lab-dna:hover .lab-dna__arcs` rule already does declaratively.
+    # BOTH FILES: Career's JS moved to static/js/career.js, and the template alone now holds no script, so
+    # checking only it would pass whatever came back.
+    from tests.career_sources import career_script
+
+    script = career_script()
+    assert 'function fetchPage(' in script, 'career.js is not the Career script, so this checks nothing'
     for dead in ('focusDisc', 'clearDisc(', 'animationPlayState'):
-        assert dead not in career, (
-            'the JS discipline highlight is back in career.html (%s) -- it dimmed with inline styles that '
+        assert dead not in career and dead not in script, (
+            'the JS discipline highlight is back on Career (%s) -- it dimmed with inline styles that '
             'beat the shared stylesheet, which is what made Career the one host that looked different'
             % dead)
 

@@ -10,7 +10,6 @@ falling back to DESCRIPTIONS). SYMBOLS / SHAPES are legacy marks kept for the jo
 still render them. The XP math uses the REAL leveling helpers + real `ProfileJobXP`. All assembly is
 bounded by the ~25-row Job catalog, so Python iteration is safe (no whale risk).
 """
-import json
 import math
 import random
 
@@ -255,7 +254,8 @@ def build_profile_jobs(profile):
     """Assemble the full jobs/disciplines view for a profile from real `ProfileJobXP`.
 
     Returns the `disciplines` list (each discipline with its job tiles + average level, header
-    icon, played count, fill + per-discipline radar JSON), the overall radar series, and totals.
+    icon, played count, XP), the Career radar's whole dataset under `radar` (axis max, a series per
+    mode, job slugs per discipline), and totals.
     Bounded by the Job catalog (~25 rows); safe to iterate.
     """
     rows = {
@@ -302,12 +302,9 @@ def build_profile_jobs(profile):
             'jobs': tiles, 'avg': avg,
             'played': sum(1 for t in tiles if t['started']),  # jobs in this discipline you've touched
             'xp_total': disc_xp,                              # real XP earned across this discipline
-            'radar_labels_json': json.dumps([t['name'] for t in tiles]),
-            'radar_data_json': json.dumps([t['level'] for t in tiles]),
         })
 
     max_avg = max(radar_values) if radar_values else 0
-    radar_max = max(10, int(math.ceil((max_avg + 1) / 5.0)) * 5)
 
     return {
         'disciplines': disciplines,
@@ -315,12 +312,21 @@ def build_profile_jobs(profile):
         # top-tier/started count that is ~0 or ~everything for most of the userbase).
         'avg_level': round(total_level / atomic, 1) if atomic else 0,
         'highest_level': max((t['level'] for t in all_tiles), default=1),
-        'radar_labels_json': json.dumps(list(DISCIPLINE_LABELS.values())),
-        'radar_data_json': json.dumps(radar_values),
-        # Axis max scales to the family averages (the overview series), rounded up to a
-        # "nice" value, so the overview fills well; a family's drill-down with an outlier
-        # job above this just soft-extends (Chart.js suggestedMax).
-        'radar_max': radar_max,
+        # The Career radar's whole dataset, emitted once as a json_script island for static/js/career.js.
+        'radar': {
+            # Axis max scales to the family averages (the overview series), rounded up to a
+            # "nice" value, so the overview fills well; a family's drill-down with an outlier
+            # job above this just soft-extends (Chart.js suggestedMax).
+            'max': max(10, int(math.ceil((max_avg + 1) / 5.0)) * 5),
+            # One series per mode: the five family averages, then each family's jobs in radar order.
+            'modes': {
+                'overview': {'labels': list(DISCIPLINE_LABELS.values()), 'values': radar_values},
+                **{d['slug']: {'labels': [t['name'] for t in d['jobs']], 'values': [t['level'] for t in d['jobs']]}
+                   for d in disciplines},
+            },
+            # Slug per radar index in each family mode, for the click-to-filter jump.
+            'job_slugs': {d['slug']: [t['slug'] for t in d['jobs']] for d in disciplines},
+        },
         'total_level': total_level,
         'total_xp': total_xp,
         'total': atomic,

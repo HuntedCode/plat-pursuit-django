@@ -34,7 +34,7 @@
     }
     var easeOut = function (t) { return 1 - Math.pow(1 - t, 3); };
 
-    // rAF number count-up (self-contained; career.html's ppCountUp isn't in this scope). `alive`
+    // rAF number count-up (self-contained; career.js's ppCountUp isn't in this scope). `alive`
     // (optional) lets the caller stop the loop early if the ceremony was dismissed mid-count.
     function countUp(el, to, dur, alive) {
         return new Promise(function (resolve) {

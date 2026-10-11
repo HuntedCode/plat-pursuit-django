@@ -441,7 +441,7 @@ are different moments and both callers use both.
 own card, or hovering one job lights that slug on every card in the wall that happens to level it. The item
 selector differs per page (Career's 25-cell map vs job detail's named tiles); everything else is shared.
 
-**Callers:** `career.html` (all five) and `job_detail.html` (all five). Each was extracted the moment a
+**Callers:** Career's `static/js/career.js` (all five) and `job_detail.html` (all five). Each was extracted the moment a
 second caller appeared -- see the "shuffle" note in [motion-patterns](motion-patterns.md) for why that
 threshold and not sooner.
 
