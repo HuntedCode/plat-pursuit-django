@@ -61,9 +61,7 @@ def _get_concept_and_group(concept_id, group_id_str):
     # Shovelware gate: reject if every game in the concept is flagged.
     # Concepts with zero games are allowed through (not-yet-synced state).
     games = concept.games.all()
-    if games.exists() and not games.exclude(
-        shovelware_status__in=['auto_flagged', 'manually_flagged'],
-    ).exists():
+    if games.exists() and not games.exclude_shovelware().exists():
         return None, None, Response(
             {'error': 'Review Hub is not available for this game.'},
             status=status.HTTP_403_FORBIDDEN,

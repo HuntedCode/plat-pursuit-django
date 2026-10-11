@@ -3,7 +3,7 @@ import logging
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from trophies.models import Concept, DeveloperReputation, Game
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES, Concept, DeveloperReputation, Game
 from trophies.services.shovelware_detection_service import ShovelwareDetectionService
 
 logger = logging.getLogger("psn_api")
@@ -132,7 +132,7 @@ class Command(BaseCommand):
     def _status_counts():
         return {
             'flagged': Game.objects.filter(
-                shovelware_status__in=['auto_flagged', 'manually_flagged'],
+                shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
             ).count(),
             'clean': Game.objects.filter(shovelware_status='clean').count(),
             'locked': Game.objects.filter(shovelware_lock=True).count(),

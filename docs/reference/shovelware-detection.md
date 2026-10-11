@@ -229,5 +229,9 @@ per-game property and the queryset filter cannot answer differently.
 it drives a daily celebration post ([community-trophy-tracker.md](../features/community-trophy-tracker.md)).
 That is a second policy, not a bug -- do not "fix" it by folding it into the constant.
 
-Several other call sites still re-type the tuple or re-derive the rule inline; repointing them at the
-constant is a tracked cleanup, not a behaviour change.
+Every call site reads the constant, `Game.is_shovelware`, or `Game.objects.exclude_shovelware()` (the
+form to prefer on a Game queryset). The one exception is `trophies/services/contract_candidates.py`,
+repointed separately (PR #127). The COMPLEMENT, `('clean', 'manually_cleared')`, is still retyped in a few
+places (`admin.py`, `anchor_concepts.py`, `job_detection.py`, `report_concept_taxonomy.py`). Those filter
+on "has a non-flagged game", which on a multi-valued join is not the same query as an exclude on this
+constant, so they cannot be swapped mechanically.

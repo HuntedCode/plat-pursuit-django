@@ -92,7 +92,7 @@ class PlatinumGridView(LoginRequiredMixin, TemplateView):
                 'trophy_icon': trophy.trophy_icon_url or '',
                 'earned_date': et.earned_date_time.isoformat() if et.earned_date_time else '',
                 'psn_earn_rate': float(trophy.trophy_earn_rate or 0),
-                'is_shovelware': game.shovelware_status in ('auto_flagged', 'manually_flagged'),
+                'is_shovelware': game.is_shovelware,
                 'is_hidden': game.id in hidden_game_ids,
                 'family_id': family_id,
                 'platforms': game.title_platform or [],

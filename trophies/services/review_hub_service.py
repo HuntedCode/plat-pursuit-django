@@ -172,7 +172,7 @@ class ReviewHubService:
         if len(query) < 2:
             return []
 
-        from trophies.models import Concept
+        from trophies.models import SHOVELWARE_FLAGGED_STATUSES, Concept
 
         # Fetch instances so cover_url's IGDB-first chain works for anchored
         # concepts. API contract keeps the 'concept_icon_url' field name (JS
@@ -189,9 +189,7 @@ class ReviewHubService:
                 non_sw_game_count=Count(
                     'games',
                     filter=~Q(
-                        games__shovelware_status__in=[
-                            'auto_flagged', 'manually_flagged',
-                        ],
+                        games__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
                     ),
                 ),
                 review_count=Count(
@@ -239,9 +237,7 @@ class ReviewHubService:
 
         Returns a list of distinct concept IDs (evaluated, not a queryset).
         """
-        from trophies.models import EarnedTrophy, ProfileGame, Trophy
-
-        SHOVELWARE_STATUSES = ['auto_flagged', 'manually_flagged']
+        from trophies.models import SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy, ProfileGame, Trophy
 
         # 1. Platinumed concepts
         plat_qs = EarnedTrophy.objects.filter(
@@ -251,7 +247,7 @@ class ReviewHubService:
         )
         if not include_shovelware:
             plat_qs = plat_qs.exclude(
-                trophy__game__shovelware_status__in=SHOVELWARE_STATUSES,
+                trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
             )
         plat_concept_ids = set(
             plat_qs.values_list('trophy__game__concept_id', flat=True).distinct()
@@ -266,7 +262,7 @@ class ReviewHubService:
         )
         if not include_shovelware:
             completion_qs = completion_qs.exclude(
-                game__shovelware_status__in=SHOVELWARE_STATUSES,
+                game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
             )
         full_completion_concept_ids = set(
             completion_qs.values_list('game__concept_id', flat=True).distinct()

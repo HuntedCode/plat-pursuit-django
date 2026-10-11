@@ -26,10 +26,8 @@ from django.views.generic import ListView, TemplateView
 
 from core.services import completion_card_service as cards
 from trophies.mixins import HtmxListMixin
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES
 from trophies.themes import get_available_themes_for_grid, get_plat_card_themes
-
-#: Hidden by default on this page -- see PlatCardsView.get_queryset.
-SHOVELWARE_STATUSES = ('auto_flagged', 'manually_flagged')
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +123,7 @@ class PlatCardsView(LoginRequiredMixin, _RequireLinkedProfileMixin, HtmxListMixi
         # the hunter's OWN completions, and the asset-flip platinums are the ones they least want to
         # scroll past looking for the game they actually care about.
         if not self.request.GET.get('show_shovelware'):
-            qs = qs.exclude(trophy_group__game__shovelware_status__in=SHOVELWARE_STATUSES)
+            qs = qs.exclude(trophy_group__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES)
 
         return qs.order_by(*self._SORTS[self._sort()])
 

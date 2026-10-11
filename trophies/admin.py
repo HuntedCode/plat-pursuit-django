@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation, ContractCandidate, ModerationAction
+from .models import SHOVELWARE_FLAGGED_STATUSES, Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, BlurbReport, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP, PlatformGroup, BadgeSeries, GroupBadge, UserGroupBadge, PSNConceptData, PSNRawPayload, PSNTitleObservation, ContractCandidate, ModerationAction
 
 
 # Register your models here.
@@ -827,8 +827,6 @@ class ConceptShovelwareFilter(SimpleListFilter):
     title = 'Shovelware status'
     parameter_name = 'shovelware'
 
-    _FLAGGED_STATUSES = ('auto_flagged', 'manually_flagged')
-
     def lookups(self, request, model_admin):
         return (
             ('any_flagged', 'Has any flagged game (auto or manual)'),
@@ -843,7 +841,7 @@ class ConceptShovelwareFilter(SimpleListFilter):
         value = self.value()
         if value == 'any_flagged':
             return queryset.filter(
-                games__shovelware_status__in=self._FLAGGED_STATUSES
+                games__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES
             ).distinct()
         if value in ('auto_flagged', 'manually_flagged', 'manually_cleared'):
             return queryset.filter(games__shovelware_status=value).distinct()
@@ -858,7 +856,7 @@ class ConceptShovelwareFilter(SimpleListFilter):
             # No game has a flagged status (manually_cleared counts as clean
             # because staff explicitly OK'd it). Also excludes empty concepts.
             return queryset.filter(games__isnull=False).exclude(
-                games__shovelware_status__in=self._FLAGGED_STATUSES
+                games__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES
             ).distinct()
         return queryset
 

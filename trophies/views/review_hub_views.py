@@ -140,10 +140,7 @@ class ReviewHubDetailView(DetailView):
         self._concept_games = list(concept.games.all())
 
         # Shovelware gate: 404 if all games in concept are shovelware
-        if self._concept_games and all(
-            g.shovelware_status in ('auto_flagged', 'manually_flagged')
-            for g in self._concept_games
-        ):
+        if self._concept_games and all(g.is_shovelware for g in self._concept_games):
             raise Http404("Review Hub is not available for this game.")
 
         return concept

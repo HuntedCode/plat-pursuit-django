@@ -60,7 +60,7 @@ class WeeklyDigestService:
 
         Returns: {total, bronze, silver, gold, platinum}
         """
-        from trophies.models import EarnedTrophy
+        from trophies.models import SHOVELWARE_FLAGGED_STATUSES, EarnedTrophy
 
         counts = EarnedTrophy.objects.filter(
             profile=profile,
@@ -68,7 +68,7 @@ class WeeklyDigestService:
             earned_date_time__gte=week_start,
             earned_date_time__lt=week_end,
         ).exclude(
-            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
         ).aggregate(
             total=Count('id'),
             bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
@@ -149,7 +149,7 @@ class WeeklyDigestService:
             top_platted_games: [{game_name, game_image, game_slug, plat_count}, ...],
         }
         """
-        from trophies.models import Concept, EarnedTrophy, Review, Profile
+        from trophies.models import SHOVELWARE_FLAGGED_STATUSES, Concept, EarnedTrophy, Review, Profile
 
         # ── Site-wide trophy stats ──
         trophy_stats = EarnedTrophy.objects.filter(
@@ -157,7 +157,7 @@ class WeeklyDigestService:
             earned_date_time__gte=week_start,
             earned_date_time__lt=week_end,
         ).exclude(
-            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
         ).aggregate(
             total_trophies=Count('id'),
             total_platinums=Count('id', filter=Q(trophy__trophy_type='platinum')),
@@ -169,7 +169,7 @@ class WeeklyDigestService:
             earned_date_time__gte=week_start,
             earned_date_time__lt=week_end,
         ).exclude(
-            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
         ).values('profile_id').distinct().count()
 
         # ── Total reviews this week ──
@@ -203,7 +203,7 @@ class WeeklyDigestService:
                 earned_date_time__lt=week_end,
                 trophy__game__concept__isnull=False,
             ).exclude(
-                trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+                trophy__game__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES,
             ).values(
                 'trophy__game__concept_id',
             ).annotate(

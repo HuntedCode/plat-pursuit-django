@@ -209,7 +209,7 @@ def apply_game_browse_filters(qs, form, sort_val=''):
             Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum')
         ))
     if form.cleaned_data.get('filter_shovelware'):
-        qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+        qs = qs.exclude_shovelware()
 
     if form.cleaned_data.get('in_badge'):
         # Series that ship a live GROUP badge (grouping-badge system); a game is "in a badge" if its concept

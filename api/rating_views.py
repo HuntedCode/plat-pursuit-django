@@ -424,7 +424,7 @@ class WizardQueueView(APIView):
             if include_shovelware:
                 clean_concept_ids = set(
                     Game.objects.filter(concept_id__in=paginated_ids)
-                    .exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+                    .exclude_shovelware()
                     .values_list('concept_id', flat=True).distinct()
                 )
                 shovelware_concept_ids = set(paginated_ids) - clean_concept_ids
@@ -574,7 +574,7 @@ class WizardQueueView(APIView):
         if include_shovelware:
             clean_concept_ids = set(
                 Game.objects.filter(concept_id__in=dlc_concept_ids)
-                .exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+                .exclude_shovelware()
                 .values_list('concept_id', flat=True).distinct()
             )
             shovelware_concept_ids = set(dlc_concept_ids) - clean_concept_ids

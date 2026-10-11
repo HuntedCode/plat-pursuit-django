@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from trophies.models import Concept
+from trophies.models import SHOVELWARE_FLAGGED_STATUSES, Concept
 from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
 
 
@@ -102,7 +102,7 @@ class Command(BaseCommand):
                 game_count=Count('games'),
                 non_shovelware_count=Count(
                     'games',
-                    filter=~Q(games__shovelware_status__in=['auto_flagged', 'manually_flagged']),
+                    filter=~Q(games__shovelware_status__in=SHOVELWARE_FLAGGED_STATUSES),
                 ),
             )
             .filter(game_count__gte=2, non_shovelware_count__gt=0)
