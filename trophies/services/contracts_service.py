@@ -261,7 +261,8 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
                                default=Value(0), output_field=IntegerField()),
             # Fully banked = every tier this contract offers the user has been accepted (the History
             # gate). The 100% tier must be banked, and the platinum tier too when this user's contract
-            # HAS a platinum (frozen `ec_has_platinum`, bundle-aware -- not member-only `defines_plat`).
+            # HAS a platinum (frozen `ec_has_platinum`, bundle-aware -- not the live `defines_plat`, which says
+            # what the members define TODAY while the row's split was frozen at first reach).
             # Distinct from status='accepted', which fires on EITHER tier -- a plat-banked contract with
             # 100% still to earn is NOT fully banked, so it stays on the Board (has XP remaining).
             fully_banked=Case(

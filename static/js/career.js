@@ -826,6 +826,7 @@ function ppCountUp(el, dur) {
         // so the fallback reload still waits for the ceremony instead of cutting it off mid-animation.
         // The URL carries the BOARD'S state (`boardSearch`), not just the address bar: on Jobs or Radar the
         // bar has had the board's params stripped, and the page renders the board its URL asks for.
+        var asked = buildParams(1);   // the board this page will render; see boardFromPage
         var page = fetch(location.pathname + '?' + boardSearch(), { credentials: 'same-origin' })
             .then(function (r) { if (!r.ok) throw new Error('refresh ' + r.status); return r.text(); })
             .then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); })
@@ -835,7 +836,7 @@ function ppCountUp(el, dur) {
             applyScopeUI(state.scope);   // a swapped-in Claim all must still hide in History
             // The fetched page already holds this board, page 1 with its facets and total: render it from
             // there rather than asking /results/ to build the same board a second time.
-            boardFromPage(out[0].getElementById('rp-list'));
+            boardFromPage(out[0], asked);
             claiming = false;
             // A keyboard claim's button may be gone (its card left the view): put focus somewhere stable,
             // without jumping the page up to the tab strip.
@@ -854,8 +855,8 @@ function ppCountUp(el, dur) {
             markAccepted(card);
             // Drop the card if it no longer belongs in the current view: the claimable filter (it's now
             // accepted), or the Board scope once it's fully banked (it graduates to History). We can't know
-            // "fully banked" client-side, so on the Board we remove it and let the refresh's board refetch
-            // reconcile -- a fully-banked one won't come back; a partially-banked one (100% still to earn)
+            // "fully banked" client-side, so on the Board we remove it and let the refresh's board (rendered
+            // from the re-fetched page) reconcile -- a fully-banked one won't come back; a partially-banked one (100% still to earn)
             // reappears from the server.
             if (state.status === 'claimable' || state.scope === 'board') card.remove();
         });
@@ -1114,8 +1115,10 @@ function ppCountUp(el, dur) {
     }
     // Put a page of cards on the board: a fetched /results/ page (`fetchPage`), or page 1 of the board
     // inside a whole re-fetched Career page (`boardFromPage`, after a claim). `scope` holds the cards and,
-    // for page 1, the #rp-facets island.
-    function renderBoard(scope, more, total, append, n) {
+    // for page 1, the #rp-facets island. `settled`: the cards arrive as they will stay, with no entrance
+    // stagger and no reveal (count-up, ring draw, ignite): a board refreshed after a claim is the board the
+    // hunter was already looking at, so only what changed should look different.
+    function renderBoard(scope, more, total, append, n, settled) {
         busy = false; if (loading) loading.hidden = true;
         if (searchField) searchField.setBusy(false);
         hasNext = more; setCount(total);
@@ -1129,24 +1132,36 @@ function ppCountUp(el, dur) {
             list.innerHTML = '';
             applyFacets(readFacets(scope));   // facets ride the page-1 swap
         }
+        if (settled) cards.forEach(function (c) { c.dataset.revealed = '1'; });   // cardReveal skips a revealed card
         cards.forEach(function (c) { list.appendChild(c); });
         pageNo = n;
         initCards(list);
-        staggerCards(cards);
+        if (!settled) staggerCards(cards);
         updateEmptyStates();
         observeSentinel();
     }
     // After a claim: page 1 of the board as the re-fetched Career page rendered it, for the board's own
     // state (`boardSearch`), so it is exactly what `fetchPage(1)` would return. Supersedes any fetch in
     // flight, and records that query as the board on screen (the dedupe).
-    function boardFromPage(freshList) {
-        if (!freshList) { boardQuery = null; fetchPage(1, false); return; }
+    //
+    // ONLY IF THE BOARD STILL ASKS FOR THAT STATE. The ceremony can be dismissed (or there is none, on the
+    // toast path) while the page is still on its way, and the hunter can change a filter in that window. The
+    // fetched page then holds a board they have left: rendering it would put the old cards under the new
+    // chip, and recording the new query would make the dedupe drop the re-tap that should fix it. So a
+    // changed state gets its own fetch instead (a post-claim one, since the claim had already landed).
+    function boardFromPage(doc, asked) {
+        if (buildParams(1) !== asked) { boardQuery = null; fetchPage(1, false); return; }
+        var freshList = doc.getElementById('rp-list'), facets = doc.getElementById('rp-facets');
+        if (!freshList) { reloadKeepingView(); return; }   // not a Career page after all: the honest answer
         if (controller) controller.abort();
         ++reqSeq;
-        // Scoped to the list's container, which holds just the #rp-facets island and the list itself.
-        renderBoard(freshList.parentNode, freshList.dataset.hasNext === '1',
-                    parseInt(freshList.dataset.total || '0', 10), false, 1);
-        boardQuery = buildParams(1);
+        // Hand renderBoard exactly the cards and the facets island, not the whole panel they sit in.
+        var holder = document.createElement('div');
+        if (facets) holder.appendChild(facets);
+        holder.appendChild(freshList);
+        renderBoard(holder, freshList.dataset.hasNext === '1',
+                    parseInt(freshList.dataset.total || '0', 10), false, 1, true);
+        boardQuery = asked;
     }
     var sentIO = hasIO ? new IntersectionObserver(function (entries) {
         if (entries[0].isIntersecting && hasNext && !busy) fetchPage(pageNo + 1, true);
