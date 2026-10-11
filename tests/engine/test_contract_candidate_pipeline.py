@@ -1,6 +1,6 @@
 """The nightly contract-candidate pipeline (evaluate_contract_candidates + ContractCandidate):
 staged auto-creation under the demand-ordered cap, the queue statuses, sticky dismissals,
-snooze promotions, and done-marking. The RULE itself is pinned in
+snooze promotions, done-marking, and the shovelware exclusion + prune. The RULE itself is pinned in
 test_report_contract_candidates; this suite pins what the pipeline DOES with its verdicts."""
 from io import StringIO
 
@@ -9,7 +9,7 @@ from django.core.management import call_command
 from django.utils import timezone
 
 from tests.factories import ConceptFactory, ConceptGenreFactory, GameFactory, GenreFactory, IGDBMatchFactory
-from trophies.models import Contract, ContractCandidate
+from trophies.models import ConceptFranchise, Contract, ContractCandidate, Franchise, Game
 
 pytestmark = pytest.mark.django_db
 
@@ -82,15 +82,15 @@ def test_cap_stages_by_demand_and_rest_waits_in_review():
 
 
 def test_b_and_c_land_in_their_queues():
-    _game(95021, 'Flagged Trailer', videos=1, shovelware='auto_flagged', played=50)
+    _game(95021, 'Stacked Trailer', videos=1, defined=_STACK, played=50)
     _game(95022, 'Bare Page', shots=1)
 
     _run()
 
-    blocked = ContractCandidate.objects.get(igdb_id=95021)
-    assert blocked.status == ContractCandidate.STATUS_REVIEW
-    assert blocked.tier == 'B' and blocked.reason == 'blocked'
-    assert blocked.contract is None   # never auto-staged
+    review = ContractCandidate.objects.get(igdb_id=95021)
+    assert review.status == ContractCandidate.STATUS_REVIEW
+    assert review.tier == 'B' and review.reason == ''
+    assert review.contract is None   # never auto-staged
 
     snoozed = ContractCandidate.objects.get(igdb_id=95022)
     assert snoozed.status == ContractCandidate.STATUS_SNOOZED and snoozed.tier == 'C'
@@ -195,10 +195,9 @@ def test_staged_becomes_done_only_when_the_contract_goes_live():
     assert cand.status == ContractCandidate.STATUS_DONE
 
 
-def test_flagged_sibling_blocks_the_whole_group():
-    """The audit's F2: the shovelware override holds at GROUP level. A clean sibling with a
-    trailer must not launder a flagged game's IGDB id into Tier A -- the group lands in review
-    as blocked, and no contract is staged."""
+def test_flagged_sibling_excludes_the_whole_group():
+    """The audit's F2: the shovelware exclusion holds at GROUP level. A clean sibling with a
+    trailer must not launder a flagged game's IGDB id back in -- no candidate, no contract."""
     _game(96011, 'Clean Sibling', videos=1, played=50)
     flagged = ConceptFactory(unified_title='Flagged Sibling')
     flagged.anchor_migration_completed_at = timezone.now()
@@ -209,9 +208,7 @@ def test_flagged_sibling_blocks_the_whole_group():
 
     _run()
 
-    cand = ContractCandidate.objects.get(igdb_id=96011)
-    assert cand.status == ContractCandidate.STATUS_REVIEW
-    assert cand.tier == 'B' and cand.reason == 'blocked'
+    assert not ContractCandidate.objects.filter(igdb_id=96011).exists()
     assert not Contract.objects.filter(igdb_id=96011).exists()
 
 
@@ -278,7 +275,7 @@ def test_admin_dismiss_skips_staged_rows():
     from trophies.admin import ContractCandidateAdmin
 
     _game(96061, 'Staged One', videos=1, played=10)
-    _game(96062, 'Review One', videos=1, shovelware='auto_flagged', played=5)
+    _game(96062, 'Review One', shots=5, played=5)
     _run()
 
     admin = ContractCandidateAdmin(ContractCandidate, AdminSite())
@@ -300,7 +297,7 @@ def test_admin_stage_action_creates_contract():
 
     from trophies.admin import ContractCandidateAdmin
 
-    _game(96071, 'Stage Me', videos=1, shovelware='auto_flagged', played=30)   # review (blocked)
+    _game(96071, 'Stage Me', shots=5, played=30)   # review (tier B)
     _run()
 
     admin = ContractCandidateAdmin(ContractCandidate, AdminSite())
@@ -312,3 +309,193 @@ def test_admin_stage_action_creates_contract():
     cand = ContractCandidate.objects.get(igdb_id=96071)
     assert cand.status == ContractCandidate.STATUS_STAGED
     assert cand.contract is not None and cand.contract.is_live is False
+    assert not any('Skipped' in m.message for m in request._messages)
+
+
+# --- shovelware: excluded from the queue, pruned when flagged later, re-admitted when cleared ---
+
+def _flag(igdb_id, status='auto_flagged'):
+    Game.objects.filter(concept__igdb_match__igdb_id=igdb_id).update(shovelware_status=status)
+
+
+@pytest.mark.parametrize('kwargs', [
+    {'videos': 1},                                    # would-be A (the old 'blocked' path)
+    {'videos': 1, 'defined': _STACK},                 # B: video + degenerate pyramid
+    {'shots': 5},                                     # B: screenshots, no video
+    {'shots': 1},                                     # C: snooze
+], ids=['would-be-A', 'B-degenerate', 'B-screenshots', 'C-snooze'])
+@pytest.mark.parametrize('flag', ['auto_flagged', 'manually_flagged'])
+def test_flagged_game_is_never_queued(kwargs, flag):
+    """Every route into the ledger is closed to a flagged game, not just the auto tier."""
+    _game(97001, 'Flagged', shovelware=flag, played=100, **kwargs)
+
+    _run()
+
+    assert not ContractCandidate.objects.exists()
+    assert not Contract.objects.exists()
+
+
+def test_flagged_franchise_rescue_is_never_queued():
+    """The rescue promotes thin pages with real IP; a flagged one stays out all the same."""
+    concept, _ = _game(97011, 'Franchise Junk', shots=1, shovelware='auto_flagged')
+    franchise = Franchise.objects.create(igdb_id=97011, name='Junk Series', slug='junk-series',
+                                         source_type='franchise')
+    ConceptFranchise.objects.create(concept=concept, franchise=franchise)
+
+    _run()
+
+    assert not ContractCandidate.objects.exists()
+
+
+def test_manually_cleared_counts_as_clean():
+    """`manually_cleared` is a human's "this is fine": the game queues (and auto-stages) normally."""
+    _game(97021, 'Cleared Game', videos=1, shovelware='manually_cleared', played=40)
+
+    _run()
+
+    assert ContractCandidate.objects.get(igdb_id=97021).status == ContractCandidate.STATUS_STAGED
+
+
+def test_rows_of_a_newly_flagged_game_are_pruned():
+    """A game flagged after it queued: its review and snoozed rows are deleted on the next run.
+    Other rows are untouched."""
+    _game(97031, 'Review Row', shots=5, played=10)
+    _game(97032, 'Snoozed Row', shots=1)
+    _game(97033, 'Clean Bystander', shots=5)
+    _run()
+    assert ContractCandidate.objects.count() == 3
+
+    _flag(97031)
+    _flag(97032)
+    out = _run()
+
+    assert set(ContractCandidate.objects.values_list('igdb_id', flat=True)) == {97033}
+    assert '2 shovelware pruned' in out
+
+
+def test_prune_keeps_dismissed_and_staged_rows():
+    """Dismissed is a staff verdict (kept). A staged row has a real contract behind it, so the id is
+    contracted and out of the pipeline's hands -- the Contract admin's shovelware filter finds it."""
+    _game(97041, 'Dismissed Row', shots=5)
+    _game(97042, 'Staged Row', videos=1, played=90)
+    _run()
+    ContractCandidate.objects.filter(igdb_id=97041).update(status=ContractCandidate.STATUS_DISMISSED)
+    assert ContractCandidate.objects.get(igdb_id=97042).status == ContractCandidate.STATUS_STAGED
+
+    _flag(97041)
+    _flag(97042)
+    _run()
+
+    assert ContractCandidate.objects.get(igdb_id=97041).status == ContractCandidate.STATUS_DISMISSED
+    staged = ContractCandidate.objects.get(igdb_id=97042)
+    assert staged.status == ContractCandidate.STATUS_STAGED and staged.contract is not None
+
+
+def test_prune_takes_a_limbo_row_whose_staged_contract_was_deleted():
+    """A staged row whose contract staff deleted (SET_NULL) is uncontracted again. Clean, it would
+    recover to review; flagged, it is pruned instead of sitting as staged forever."""
+    _game(97051, 'Limbo Row', videos=1, played=20)
+    _run()
+    cand = ContractCandidate.objects.get(igdb_id=97051)
+    cand.contract.delete()
+    _flag(97051)
+
+    _run()
+
+    assert not ContractCandidate.objects.filter(igdb_id=97051).exists()
+
+
+def test_clearing_the_flag_readmits_the_game():
+    """Self-healing: pruning is not a verdict. Clear the flag and the next run queues it afresh."""
+    _game(97061, 'False Positive', shots=5, played=15, shovelware='auto_flagged')
+    _run()
+    assert not ContractCandidate.objects.exists()
+
+    _flag(97061, 'manually_cleared')
+    _run()
+
+    cand = ContractCandidate.objects.get(igdb_id=97061)
+    assert cand.status == ContractCandidate.STATUS_REVIEW and cand.tier == 'B'
+
+
+def test_dry_run_reports_the_prune_without_deleting():
+    _game(97071, 'Will Be Pruned', shots=5)
+    _run()
+    _flag(97071)
+
+    out = _run(dry_run=True)
+
+    assert '1 shovelware pruned' in out
+    assert ContractCandidate.objects.filter(igdb_id=97071).exists()
+
+
+def test_admin_stage_action_skips_flagged_games():
+    """A row flagged since the last nightly prune never stages from the admin either; a clean row in
+    the same selection still does."""
+    from django.contrib.admin.sites import AdminSite
+    from django.test import RequestFactory
+    from django.contrib.messages.storage.fallback import FallbackStorage
+
+    from trophies.admin import ContractCandidateAdmin
+
+    _game(97081, 'Flagged Today', shots=5, played=30)
+    _game(97082, 'Clean Today', shots=5, played=20)
+    _run()
+    _flag(97081, 'manually_flagged')
+
+    admin = ContractCandidateAdmin(ContractCandidate, AdminSite())
+    request = RequestFactory().post('/')
+    request.session = {}
+    request._messages = FallbackStorage(request)
+    admin.stage_contracts(request, ContractCandidate.objects.all())
+
+    flagged = ContractCandidate.objects.get(igdb_id=97081)
+    assert flagged.status == ContractCandidate.STATUS_REVIEW and flagged.contract is None
+    assert not Contract.objects.filter(igdb_id=97081).exists()
+    assert ContractCandidate.objects.get(igdb_id=97082).status == ContractCandidate.STATUS_STAGED
+    assert any('Skipped 1 shovelware-flagged' in m.message for m in request._messages)
+
+
+def _stage_via_admin(queryset):
+    from django.contrib.admin.sites import AdminSite
+    from django.test import RequestFactory
+    from django.contrib.messages.storage.fallback import FallbackStorage
+
+    from trophies.admin import ContractCandidateAdmin
+
+    request = RequestFactory().post('/')
+    request.session = {}
+    request._messages = FallbackStorage(request)
+    ContractCandidateAdmin(ContractCandidate, AdminSite()).stage_contracts(request, queryset)
+    return [m.message for m in request._messages]
+
+
+@pytest.mark.parametrize('anchored,match_status', [(False, 'accepted'), (True, 'rejected')],
+                         ids=['unanchored', 'untrusted'])
+def test_admin_stage_ignores_a_flag_outside_the_member_gate(anchored, match_status):
+    """A flagged game on a concept that is not a member (un-anchored, or an untrusted match) at the same
+    igdb id is not the candidate's flag, exactly as the nightly scanner sees it: the row still stages."""
+    _game(97091, 'Clean Member', shots=5, played=30)
+    _run()
+    outsider = ConceptFactory(anchor_migration_completed_at=timezone.now() if anchored else None)
+    IGDBMatchFactory(concept=outsider, igdb_id=97091, status=match_status)
+    GameFactory(concept=outsider, defined_trophies=_REAL, shovelware_status='auto_flagged')
+
+    messages = _stage_via_admin(ContractCandidate.objects.filter(igdb_id=97091))
+
+    assert ContractCandidate.objects.get(igdb_id=97091).status == ContractCandidate.STATUS_STAGED
+    assert not any('Skipped' in m for m in messages)
+
+
+def test_admin_stage_marks_a_contracted_flagged_row_done():
+    """An already-contracted id goes done as it always did, flagged or not, and is not counted as a
+    shovelware skip (the action would never have staged it)."""
+    _game(97101, 'Hand Made', shots=5, played=30)
+    _run()
+    Contract.objects.create(name='Hand Made', slug='hand-made', igdb_id=97101, is_live=False)
+    _flag(97101)
+
+    messages = _stage_via_admin(ContractCandidate.objects.filter(igdb_id=97101))
+
+    assert ContractCandidate.objects.get(igdb_id=97101).status == ContractCandidate.STATUS_DONE
+    assert not any('Skipped' in m for m in messages)
