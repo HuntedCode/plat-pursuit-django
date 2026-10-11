@@ -30,7 +30,7 @@ from trophies.services import badge_leaderboards as lb
 from trophies.views import board_helpers
 from trophies.views.board_helpers import suggest_json, window_params
 
-from trophies.services import contracts_service
+from trophies.services import contract_service, contracts_service
 from trophies.services.career_service import build_career_context
 from trophies.services.job_render import DISCIPLINE_ICON, DISCIPLINE_LABELS, discipline_order
 from trophies.util_modules.leveling import xp_for_level
@@ -90,6 +90,15 @@ def _board_facets(profile, disc_levels, params, total):
     return {**f, 'suggest': suggest}
 
 
+def claim_board_url():
+    """Career's Contracts board on Ready to Claim with every platform lit: where every claim entry point
+    lands (the banner's href and its JS jump, job detail's Claim link). Every platform because the
+    claimable count ignores platform while the board defaults to current-gen, so a new tab, a copied
+    link or a no-JS tap still finds the N it was promised."""
+    return reverse('career') + '?' + urlencode(
+        [('view', 'contracts'), ('status', 'claimable')] + [('platform', p) for p in ALL_PLATFORMS])
+
+
 class CareerView(LoginRequiredMixin, TemplateView):
     """The Pursuer's Career. Linked-profile gated; renders the viewer's job identity + the
     Contracts (job board) browse + the pending-rewards rail on one surface."""
@@ -124,15 +133,12 @@ class CareerView(LoginRequiredMixin, TemplateView):
         context['profile'] = profile
         context['viewer_has_linked_profile'] = True
         context['xp_total'] = CONTRACT_XP_TOTAL
-        # Pending-rewards rail + "Claim all" count: ALL claimable contracts (one DB aggregate), not
+        # Pending-rewards rail + "Claim all" count: ALL claimable contracts (aggregated in the DB), not
         # just page 1 -- so the count is right no matter the paging/filters.
-        claim = contracts_service.claimable_summary(profile)
+        claim = contract_service.claimable_summary(profile)
         context['claimable_count'] = claim['count']
         context['claimable'] = claim
-        # The banner's href: the same board its JS jump opens (Ready to Claim, every platform), so a new
-        # tab, a copied link or a no-JS tap lands there rather than on the current-gen default.
-        context['claim_board_url'] = '?' + urlencode(
-            [('view', 'contracts'), ('status', 'claimable')] + [('platform', p) for p in ALL_PLATFORMS])
+        context['claim_board_url'] = claim_board_url()   # the banner's href
         # Active tab on load: ?view=contracts deep-links the Contracts board.
         requested = self.request.GET.get('view')
         context['active_view'] = requested if requested in _CAREER_VIEWS else 'jobs'
@@ -525,6 +531,7 @@ class JobContractsView(View):
         resp = render(request, 'trophies/partials/job_detail/_contract_results.html', {
             'contracts': data['contracts'], 'job': job, 'profile': profile,
             'new_window_days': NEW_CONTRACT_WINDOW_DAYS,   # the New marker's tooltip on appended cards
+            'claim_board_url': claim_board_url(),           # a claimable card's link to the board
         })
         # `X-Has-Next` lets the scroller stop one fetch EARLIER than the empty-page fallback would --
         # the same signal `ContractsResultsView` sends. The shared `InfiniteScroller` reads it as of the
@@ -682,4 +689,5 @@ class JobDetailView(DetailView):
             # has to page by the same number the endpoint does. Passed rather than written as a literal in
             # the template, where a drifted copy would silently skip or repeat a page.
             'contracts_per_page': contracts_service.CONTRACTS_PER_PAGE,
+            'claim_board_url': claim_board_url(),   # a claimable card's link to the board
         }

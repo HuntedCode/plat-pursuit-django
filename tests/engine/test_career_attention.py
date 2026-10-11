@@ -13,7 +13,7 @@ from django.utils import timezone
 from tests.engine._tree import source_files
 from tests.factories import ProfileFactory
 from trophies.models import Contract, EarnedContract, Job
-from trophies.services import career_attention, contracts_service
+from trophies.services import career_attention, contract_service, contracts_service
 
 pytestmark = pytest.mark.django_db
 
@@ -82,17 +82,26 @@ def _claimable(profile, contract):
 
 # -- the claim count --------------------------------------------------------------------------
 
+def _board_claimable(profile):
+    """The board's own count: its annotated status (the Ready to Claim chip, unscoped) and the banner's
+    summary, which must agree with each other before either can be compared with the badge."""
+    board = contracts_service.annotated_contracts(profile, with_ranking=False).filter(status='claimable').count()
+    banner = contract_service.claimable_summary(profile)['count']
+    assert board == banner, f'the board says {board} claimable and the banner {banner}'
+    return board
+
+
 def test_the_count_matches_the_board(hunter):
-    """The badge and the board must agree or the badge is lying. This count is deliberately NOT
-    computed the board's way -- the board annotates the whole catalogue with four correlated
-    subqueries, which is the wrong shape for something on every page -- so the two definitions are
-    pinned together here."""
+    """The badge and the board must agree or the badge is lying. The badge is NOT computed the board's
+    way -- the board annotates the whole catalogue with correlated subqueries, which is the wrong shape
+    for something on every page -- so the two are pinned together here (both now read the engine's
+    pending rule, `contract_service.pending_tier_q`)."""
     for i in range(3):
         _claimable(hunter.profile, _contract('Claim Me %d' % i))
     _contract('Untouched')
 
     assert career_attention.claimable_count(hunter.profile) == 3
-    assert contracts_service.claimable_summary(hunter.profile)['count'] == 3
+    assert _board_claimable(hunter.profile) == 3
 
 
 def test_an_accepted_reward_stops_counting(hunter):
@@ -102,7 +111,7 @@ def test_an_accepted_reward_stops_counting(hunter):
     cache.clear()
 
     assert career_attention.claimable_count(hunter.profile) == 0
-    assert contracts_service.claimable_summary(hunter.profile)['count'] == 0
+    assert _board_claimable(hunter.profile) == 0
 
 
 def test_an_unpublished_or_jobless_contract_never_counts(hunter):
@@ -112,7 +121,7 @@ def test_an_unpublished_or_jobless_contract_never_counts(hunter):
     _claimable(hunter.profile, _contract('No Jobs Yet', jobs=[]))
 
     assert career_attention.claimable_count(hunter.profile) == 0
-    assert contracts_service.claimable_summary(hunter.profile)['count'] == 0
+    assert _board_claimable(hunter.profile) == 0
 
 
 def test_the_count_is_cached_and_the_claim_path_clears_it(hunter):

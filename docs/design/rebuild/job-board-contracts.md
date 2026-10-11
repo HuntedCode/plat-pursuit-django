@@ -780,6 +780,22 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   and History), its facets, the empty-state suggestion, or job detail's contract counts.
   This is about cost, not memory: the rows are the curated catalogue, so every user pays it, not
   just whales.
+- **ONE claimable source, live only (2026-10-10).** `contract_service.claimable_contracts` (a LIVE
+  contract with jobs, under `pending_tier_q`) is what the banner, the Contracts tab badge, the nav
+  badge, the accept API's `claimable_count` and **Claim all** all read. Claim all used to pay pending
+  rows on contracts that had gone non-live, which nothing showed; those rows are kept, so a republished
+  contract is claimable again. `claimable_summary` totals the XP in SQL (`_pending_xp_expr`), the
+  numeric twin of `_pending_tiers`, so the banner shows what is actually waiting (a contract with its
+  platinum banked contributes its 30%, not its whole T). `test_claim_live.py` holds the two forms
+  together, including the 5005 x 0.70 half-up boundary.
+- **Every claim entry point lands on the claim board** (`career_views.claim_board_url()`: Ready to
+  Claim, every platform). The banner's href and jump use it. The Contracts tab lands there on the FIRST
+  entry to Contracts in a visit, if the board is still the untouched default and the badge is above 0
+  (`landingQuery` in career.js). The landing is spent on that first entry whether it fires or not, and
+  is never armed when the URL carries a board filter or the page loads straight onto Contracts (the
+  hunter has already seen the board), so it never swaps out a board somebody is using. The radar jump
+  changes the board before opening the tab, so it is never hijacked. Job detail, which has no claim
+  controller, links a claimable card to it ("Claim in Career").
 - **The claim banner counts claimables regardless of platform; the board filters by platform.**
   `claimable_summary` has no platform condition, while the board defaults to current-gen. So the
   banner's jump and its href open Ready to Claim with **every platform lit**, which shows the legacy

@@ -168,7 +168,14 @@ The map branch stays the default and is what Career renders, untouched.
                     <span class="rp-reward-xp__cap">total XP</span>
                 </div>
                 <div class="rp-status">
-                    {% if p.status == 'claimable' or p.status == 'accepted' %}
+                    {% if job and p.status == 'claimable' %}
+                        {% comment %} JOB DETAIL has no claim controller (the board's lives in career.js), so the
+                        Claim button rendered here did nothing. It links to the board that can claim instead:
+                        Ready to Claim, every platform (`claim_board_url`). {% endcomment %}
+                        <a class="btn btn-xs btn-primary" href="{{ claim_board_url }}" title="Claim it on your Career board">Claim in Career</a>
+                    {% elif job and p.status == 'accepted' %}
+                        <span class="rp-cta__done">Claimed &check;</span>
+                    {% elif p.status == 'claimable' or p.status == 'accepted' %}
                         {% comment %} Both rendered; .rp-row--accepted reveals the right one via CSS. The label
                         names which tier(s) an accept will bank (plat / 100% / both). {% endcomment %}
                         <button type="button" class="btn btn-xs btn-primary rp-accept" data-slug="{{ p.slug }}" title="{% if p.claim_plat and p.claim_full %}Claim both tiers, +{{ p.xp_total|intcomma }} XP{% elif p.claim_plat %}Claim the platinum tier, +{{ p.plat_xp|intcomma }} XP{% elif p.claim_full %}Claim the 100% tier, +{{ p.bonus_xp|intcomma }} XP{% else %}Claim your reward{% endif %}">Claim{% if p.claim_plat and p.claim_full %} both{% elif p.claim_plat %} plat{% elif p.claim_full and p.has_plat %} 100%{% endif %}</button>

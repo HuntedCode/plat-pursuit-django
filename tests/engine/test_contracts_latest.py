@@ -247,6 +247,18 @@ def test_scroll_appended_cards_get_the_tooltip_window(client):
     assert 'last %d days' % NEW_CONTRACT_WINDOW_DAYS in content
 
 
+def _board_keys(src):
+    """career.js's BOARD_KEYS (what syncURL clears), read from the one literal, after checking syncURL
+    really clears by it rather than by a list of its own."""
+    import re
+
+    lit = re.findall(r"var BOARD_KEYS = \[([^\]]*)\]", src)
+    assert len(lit) == 1, f'expected one BOARD_KEYS literal, found {len(lit)}'
+    sync = src.split('function syncURL', 1)[1].split('var bp =', 1)[0]   # up to where it re-writes the keys
+    assert 'BOARD_KEYS.forEach(function (k) { params.delete(k); })' in sync, 'syncURL no longer clears BOARD_KEYS'
+    return set(re.findall(r"'([a-z_]+)'", lit[0]))
+
+
 def test_every_board_param_the_url_can_gain_is_also_cleared():
     """syncURL() wipes a FIXED key list before re-appending what buildParams emits. A key written
     but never cleared survives being switched off -- the URL keeps claiming a filter the board has
@@ -263,8 +275,7 @@ def test_every_board_param_the_url_can_gain_is_also_cleared():
     emitted = set(re.findall(r"p\.(?:set|append)\('([a-z_]+)'", body))
     emitted.discard('page')   # syncURL strips page explicitly
 
-    cleared = set(re.findall(r"'([a-z_]+)'",
-                             src.split('function syncURL', 1)[1].split('.forEach', 1)[0]))
+    cleared = _board_keys(src)
 
     assert emitted <= cleared, f"buildParams emits {emitted - cleared}, which syncURL never clears"
 
@@ -279,8 +290,7 @@ def test_leaving_the_contracts_tab_strips_every_board_param():
     from tests.career_sources import career_script
 
     src = career_script()
-    cleared = set(re.findall(r"'([a-z_]+)'",
-                             src.split('function syncURL', 1)[1].split('.forEach', 1)[0]))
+    cleared = _board_keys(src)
     assert cleared, 'syncURL lost its key list, so this pin no longer checks anything'
 
     calls = re.findall(r"syncViewParam\(name,\s*\{[^}]*params:\s*\[([^\]]*)\]", src)
