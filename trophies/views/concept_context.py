@@ -459,7 +459,7 @@ class ConceptContextMixin:
         """Spine cross-link: the Contract this game belongs to + the Jobs it levels.
 
         The job list is game-intrinsic (identical for every viewer); only the
-        banked/claimable state reflects the target profile. Cheap -- two bounded
+        banked/claimable state reflects the target profile. Cheap -- a few bounded
         queries via contract_by_concept_map (jobs prefetched), plus one for the
         authed state lookup. Display-only here; the authoritative claim flow lives
         on /career/.

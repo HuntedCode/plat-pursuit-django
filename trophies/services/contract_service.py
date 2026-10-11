@@ -284,26 +284,53 @@ def grant_job_xp_bulk(profile, grants, *, first_claim=False):
 
 
 def contract_by_concept_map(concept_ids, *, live_only=True, prefetch_jobs=True):
-    """Batch resolve concept_id -> Contract via the igdb key (ANCHORED + TRUSTED concepts whose
-    raw igdb_id keys a Contract). Two bounded queries instead of a per-concept lookup -- the
-    replacement for the old `ContractMembership.objects.filter(concept_id__in=...)` pattern in
-    the board/views. Concepts with no matching contract are simply absent from the map."""
+    """Batch resolve concept_id -> Contract. Concepts with no contract are simply absent from the map.
+
+    1. The igdb key: ANCHORED + TRUSTED concepts whose raw igdb_id keys a Contract (its home).
+    2. For concepts left unresolved: a bundle-only Contract (igdb_id NULL, e.g. an episodic season)
+       that lists the concept in one of its bundles, so an episode's game page shows the season it
+       belongs to. The igdb home always wins; a concept in several bundle-only contracts maps to the
+       lowest id, so the answer is stable. Ungated, like the engine's bundle detection.
+
+    Bounded, never per concept: the igdb pass is two queries, the bundle pass one more whenever a concept
+    is still unresolved and one on a hit, plus the jobs prefetch per fetch when `prefetch_jobs`. A concept
+    whose own contract is NOT live (under `live_only`) is unresolved by the igdb pass, so it can map to a
+    live bundle-only contract that lists it, as sync would credit (`check_profile_contracts`); it maps back
+    to its home once that is published. The replacement for the old `ContractMembership.objects.filter(concept_id__in=...)`
+    pattern in the board/views."""
+    concept_ids = list(concept_ids)
     rows = (
         Concept.objects
-        .filter(id__in=list(concept_ids), anchor_migration_completed_at__isnull=False,
+        .filter(id__in=concept_ids, anchor_migration_completed_at__isnull=False,
                 igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES)
         .values_list('id', 'igdb_match__igdb_id')
     )
     concept_igdb = {cid: gid for cid, gid in rows if gid is not None}
-    if not concept_igdb:
-        return {}
-    cq = Contract.objects.filter(igdb_id__in=set(concept_igdb.values()))
-    if live_only:
-        cq = cq.filter(is_live=True)
-    if prefetch_jobs:
-        cq = cq.prefetch_related('jobs')
-    by_igdb = {c.igdb_id: c for c in cq}
-    return {cid: by_igdb[gid] for cid, gid in concept_igdb.items() if gid in by_igdb}
+
+    def fetch(cq):
+        if live_only:
+            cq = cq.filter(is_live=True)
+        if prefetch_jobs:
+            cq = cq.prefetch_related('jobs')
+        return cq
+
+    result = {}
+    if concept_igdb:
+        by_igdb = {c.igdb_id: c for c in fetch(Contract.objects.filter(igdb_id__in=set(concept_igdb.values())))}
+        result = {cid: by_igdb[gid] for cid, gid in concept_igdb.items() if gid in by_igdb}
+
+    remaining = [cid for cid in concept_ids if cid not in result]
+    if remaining:
+        pairs = Contract.objects.filter(igdb_id__isnull=True, bundles__concepts__in=remaining)
+        if live_only:
+            pairs = pairs.filter(is_live=True)
+        lowest = {}
+        for cid, kid in pairs.values_list('bundles__concepts__id', 'id'):
+            lowest[cid] = min(lowest.get(cid, kid), kid)
+        if lowest:
+            by_pk = {c.pk: c for c in fetch(Contract.objects.filter(pk__in=set(lowest.values())))}
+            result.update({cid: by_pk[kid] for cid, kid in lowest.items() if kid in by_pk})
+    return result
 
 
 def _detect_tiers(profile, contract, member_ids):

@@ -437,9 +437,9 @@ def test_the_claim_banner_count_matches_the_board_it_opens(client):
     href) now open Ready to Claim with every platform lit (`allPlatforms` on pp:board-filter in
     career.html); this pins, through the real results endpoint, that that board holds the banner's N.
 
-    Known gap, deliberately not pinned: a claimable with NO platform-tagged member game (a bundle contract,
-    or a game with an empty title_platform) still misses every platform filter. That is the bundle
-    follow-up in docs/design/rebuild/job-board-contracts.md, where bundle games feed the platform match."""
+    Bundle-only claimables are pinned in test_bundle_contracts.py. Known gap, deliberately not pinned: a
+    claimable whose member games ALL have an empty title_platform still misses every platform filter (see
+    the claim-banner gotcha in docs/design/rebuild/job-board-contracts.md)."""
     from trophies.services.contract_service import claimable_summary
     from trophies.util_modules.constants import ALL_PLATFORMS
 

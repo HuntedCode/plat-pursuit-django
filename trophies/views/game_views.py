@@ -221,7 +221,7 @@ def build_game_card_context(page_games, request, condensed=False):
         }
     ctx['badge_map'] = badge_map
 
-    # concept -> home contract (live only) + its jobs (1 query + jobs prefetch).
+    # concept -> its live contract (igdb home, else a bundle-only one) + its jobs (contract_by_concept_map).
     contract_map = {}
     for concept_id, ct in contract_by_concept_map(concept_ids, live_only=True).items():
         jobs = list(ct.jobs.all())

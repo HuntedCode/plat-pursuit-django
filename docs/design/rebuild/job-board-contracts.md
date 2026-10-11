@@ -730,26 +730,9 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
 
 ## Deferred / open
 
-- **FOLLOW-UP — bundle-only (episodic) contracts must render like any other contract everywhere**
-  (decided 2026-07-19). Today a Contract with `igdb_id=None` (episodic, members come only from
-  `ContractBundle.concepts`) has **no igdb-derived members**, so the board shows it with
-  `game_count=0`, no cover, and a possibly-wrong tier split. This carried over faithfully from the
-  old membership model (which was home-members-only too), but the desired behavior is: an
-  episodic/bundle-only contract shows its **bundle games** and its real completion/tier state
-  everywhere a normal contract does. Touch points to union the bundle concepts' games (in addition
-  to the igdb-derived members) — all in `contracts_service.py` unless noted:
-  - `_member_games` / `_member_games_by_igdb` — surface bundle games (cover + `game_count`).
-  - `annotated_contracts`: `member_pg` (drives `max_progress` / `any_plat` → board progress) and
-    `defines_plat` (the tier split) — mirror `contract_service._has_platinum`, which already unions
-    `contract.bundles`.
-  - `_platform_exists` (platform filter) and `_filter_contracts` search (member-game titles).
-  - **Reverse direction** (game → its contract): `contract_by_concept_map` (`contract_service.py`)
-    resolves only via igdb; a bundle-episode game won't find its contract, so badge/game/pursuer
-    cards omit the contract hook for episode games. Decide whether episode games should show the
-    contract, and if so add a bundle path to the map.
-  Simplest shape: a small `contract_member_games_qs(contract)` / batch variant that returns
-  `igdb-derived ∪ bundle` games, used by all the board readers; and a bundle branch in
-  `contract_by_concept_map` for the reverse lookup.
+- **Bundle-only (episodic) contracts render like any other contract: DONE (2026-10-10).** See
+  **Bundle-only contracts** under Gotchas. Normal contracts that also carry a satisfier bundle were
+  deliberately left as they were (owner decision: bundle-only).
 - **XP numbers + curve + tiers**: DONE — see [xp-economy.md](xp-economy.md) (T=6,000, flat
   cap-less K=3,000, prestige tiers). Exact-number *calibration* is CLOSED (keeping current values).
 - **Pursuer rank** (profile-wide, distinct from job tiers) — built.
@@ -801,13 +784,12 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   banner's jump and its href open Ready to Claim with **every platform lit**, which shows the legacy
   and VR claimables the default hid (`test_the_claim_banner_count_matches_the_board_it_opens`). The
   client's "every platform" is read from the page's platform chips, which a test keeps equal to
-  `ALL_PLATFORMS`, in order (so a repeat banner tap is a deduped no-op). **Known gap:** "every platform"
-  is still `_platform_exists(ALL_PLATFORMS)`, "has a member game on some platform", so a claimable with
-  no platform-tagged member (a bundle contract, or a game with an empty `title_platform`) is counted by
-  the banner and shown by no board. Treating all six as "no filter" was tried and reverted (2026-10-10):
-  lighting the sixth chip then added a block of contracts no chip count accounted for, and their cards
-  render without games. It belongs to the bundle-only follow-up under **Deferred / open**, where bundle
-  games feed `_platform_exists` and the card.
+  `ALL_PLATFORMS`, in order (so a repeat banner tap is a deduped no-op). Bundle-only contracts now match
+  the platform filter through their bundle games. **Remaining gap:** "every platform" is still "has a
+  member game on some platform", so a claimable whose member games ALL have an empty `title_platform`
+  is counted by the banner and shown by no board. Treating all six as "no filter" was tried and
+  reverted (2026-10-10): lighting the sixth chip then added a block of contracts no chip count
+  accounted for.
 - **Don't recompute granted XP from the Contract's *current* config.** Read the ledger. A
   Contract that changes its jobs or `T` later must not retroactively rewrite past grants.
 - **Unique `igdb_id` is what guarantees "once per game."** Two Contracts can't share an IGDB id,
@@ -817,9 +799,30 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   the stamped credit and banked XP stay behind. The catalogue fix is only half the job; run
   `reconcile_contracts --contract <slug>` for the other half. See **Reconciliation** above.
 - **Episodic bundles are the documented exception** — they satisfy a Contract without sharing its
-  IGDB id (and don't need anchoring), which is why `ContractBundle` still exists. **Known gap
-  (see Deferred):** the board readers currently derive member games/tiers from the igdb key only,
-  so a bundle-ONLY contract renders with no games — union `contract.bundles` concepts when fixing.
+  IGDB id (and don't need anchoring), which is why `ContractBundle` still exists.
+- **Bundle-only contracts (`igdb_id` NULL) read their members from their bundles, everywhere
+  (2026-10-10).** A normal contract that also carries a satisfier bundle keeps its home members only
+  (owner decision: bundle-only), so a collection never becomes a normal contract's cover, platforms or
+  progress. Bundle concepts are UNGATED (no anchor/trust check), exactly as the engine's
+  `_detect_tiers` reads them.
+  - **Board filters** (platform, member-game search) go through `_member_game_match`: `pk IN (home
+    ids) OR pk IN (bundle ids)`, two uncorrelated id sets Postgres hashes once. Not a CASE around
+    correlated EXISTS, which in WHERE runs a subplan per contract row; not a join, which needs DISTINCT.
+  - **Per-row values** (`defines_plat`, progress) use `_home_or_bundle`, a CASE that evaluates only the
+    side the row needs (SELECT-list subqueries are per row anyway).
+  - **Progress** is the best bundle's AVERAGE over its concepts, each at its best game and an unplayed
+    one at 0, floored: a bundle needs every concept done, so "best single game" read one finished
+    episode of five as 100%.
+  - **Member games** (cards, modal) are batched per page by contract pk (`_member_games_by_contract`),
+    one extra query for all bundle-only cards; the new-contracts modal's hero covers and the Discord
+    announcer's cover and reach have the same bundle branch.
+  - **Reverse map** (`contract_by_concept_map`, game/badge/pursuer/completion cards): the igdb home
+    wins; otherwise the lowest-id live bundle-only contract listing the concept.
+  - **Engine quirk, unchanged:** `_has_platinum` is "ANY bundle concept defines a platinum" while the
+    platinum tier needs EVERY concept platted, so a bundle where one episode has no platinum keeps a
+    platinum tier that can never be reached (the 100% tier still pays its 30%).
+  - `tests/engine/test_bundle_contracts.py` pins all of the above, including no DISTINCT and a
+    constant query count however many bundle contracts a page holds.
 - **Job count is HARD-capped at 6.** Detection may surface more; `top_jobs` trims to the 6
   strongest by signal, and the admin form rejects manual sets over 6.
 - **Tiers accrue across time.** Platinum (maybe during a 2× weekend) and 100% (a week later,

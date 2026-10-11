@@ -1295,9 +1295,9 @@ function ppCountUp(el, dur) {
     // pp:board-filter to open the BOARD scoped to a single discipline, job or status, REPLACING any current
     // filters and any History scope. `allPlatforms` lights every platform rather than the current-gen
     // default: the claim banner counts claimables regardless of platform, so the default hid the legacy and
-    // VR ones it promised. (A contract with no platform-tagged member game, e.g. a bundle contract, still
-    // misses every platform filter: the bundle follow-up in job-board-contracts.md.) The view switch itself
-    // is the dispatcher's job; this just sets the board state + refetches.
+    // VR ones it promised. (Only a contract whose member games ALL have no platform tags still misses every
+    // platform filter; see the claim-banner gotcha in job-board-contracts.md.) The view switch itself is the
+    // dispatcher's job; this just sets the board state + refetches.
     document.addEventListener('pp:board-filter', function (e) {
         var f = (e && e.detail) || {};
         state.scope = 'board';
