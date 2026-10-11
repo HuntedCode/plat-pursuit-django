@@ -788,6 +788,22 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   and History), its facets, the empty-state suggestion, or job detail's contract counts.
   This is about cost, not memory: the rows are the curated catalogue, so every user pays it, not
   just whales.
+- **An annotation is inlined again at EVERY reference, so a subquery referenced N times runs N times.**
+  Django does not reuse a SELECT alias inside another expression: `status`, its sort keys and the
+  Board/History split each paste in the full SQL of what they reference. With the hunter's
+  EarnedContract stamps as one correlated subquery per field, prod's page query held 116 SubPlan nodes,
+  each run per contract row (2026-10-11, about 0.57 s of execution, after the DISTINCT fix). The stamps are now
+  ONE filtered LEFT JOIN (`_ec`, a `FilteredRelation` on `earned_by` for this profile), and a column
+  reference costs nothing to repeat. That join is safe only because EarnedContract is unique on
+  (profile, contract): a contract still matches at most one row, so it adds no duplicates and needs no
+  DISTINCT. Do not copy it onto a to-many relation (use `EXISTS` there, per the entry above). Filter
+  the annotation names (`plat_accepted`, `status`), never `_ec__...`: Django adds a path filter as a
+  SECOND, inner join, which silently drops every contract the hunter has no row for. The status
+  CASE also tests `max_progress` once (`> 0`, since `>= 100` implies it), because the progress
+  subquery is not a join and still pays per mention. On dev this took the page query from 176 subplans
+  to 66 SubPlan nodes. `test_the_board_reads_the_hunters_claim_row_through_one_join` pins the shape on the executed SQL;
+  `test_another_hunters_claim_row_neither_duplicates_nor_leaks_into_the_board` pins the join's
+  profile condition.
 - **ONE claimable source, live only (2026-10-10).** `contract_service.claimable_contracts` (a LIVE
   contract with jobs, under `pending_tier_q`) is what the banner, the Contracts tab badge, the nav
   badge, the accept API's `claimable_count` and **Claim all** all read. Claim all used to pay pending

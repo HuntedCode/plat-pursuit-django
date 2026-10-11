@@ -626,3 +626,44 @@ def test_the_card_job_map_is_trimmed_but_still_names_every_job():
     assert grid.count('<use href="#jobicon-') == len(cells), 'a cell lost its glyph'
     assert 'stroke-width' not in grid and 'viewBox' not in grid, 'the map is back on the attribute-heavy glyph'
     assert '\n' not in grid, 'whitespace between cells is paid 600 times a page'
+
+
+def test_the_board_reads_the_hunters_claim_row_through_one_join():
+    """The board's status, its sort keys and the Board/History split all read the hunter's EarnedContract
+    stamps. As one correlated subquery per stamp, Django inlined them again at every reference, which came to
+    116 SubPlan nodes in prod's page query, each run per contract row, and most of the board's time
+    (2026-10; dev's page query went from 176 SubPlan nodes to 66). They are one filtered LEFT JOIN now;
+    this pins the shape on the SQL actually executed: the table appears exactly once, so neither a
+    subquery nor a second join onto it (e.g. a filter on `_ec__...` instead of the annotation names,
+    which Django adds as a separate INNER JOIN that drops contracts with no row) can creep back in.
+    Board scope only: History's XP-grant subquery legitimately joins the table again."""
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    profile = ProfileFactory()
+    _contract('one-join')
+    with CaptureQueriesContext(connection) as ctx:
+        contracts_page(profile, platforms=[])
+    board = [q['sql'] for q in ctx.captured_queries if 'trophies_earnedcontract' in q['sql']]
+    assert board, 'the board stopped reading the claim stamps at all'
+    for sql in board:
+        assert sql.count('trophies_earnedcontract') == 1, sql[:200]
+        assert 'LEFT OUTER JOIN "trophies_earnedcontract"' in sql, 'the claim stamps are subqueries again'
+
+
+def test_another_hunters_claim_row_neither_duplicates_nor_leaks_into_the_board():
+    """The join is filtered to THIS hunter (and EarnedContract is unique per hunter and contract), so a second
+    hunter's row on the same contract must neither add a row nor lend its stamps to this hunter's status.
+    TWO other hunters hold rows: with one, an unfiltered join still returns one row per contract, so the
+    duplicate check could not fail."""
+    from trophies.models import EarnedContract
+
+    me, them, also = ProfileFactory(), ProfileFactory(), ProfileFactory()
+    c, _con, _g = _contract('shared-contract')
+    for other in (them, also):
+        EarnedContract.objects.create(profile=other, contract=c, full_reached_at=timezone.now())
+    page = contracts_page(me, platforms=[])
+    assert _slugs(page) == ['shared-contract'] and page['total'] == 1, 'other hunters\' rows duplicated it'
+    assert _find(page, 'shared-contract')['status'] == 'available', "another hunter's claim leaked into mine"
+    # And the owner's own row still reaches THEIR board through the same join.
+    assert _find(contracts_page(them, platforms=[]), 'shared-contract')['status'] == 'claimable'
