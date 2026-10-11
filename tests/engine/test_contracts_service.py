@@ -3,7 +3,7 @@
 The Contracts board lists live Contracts to pursue. Pins: the contract card shape (games as
 the focal point + jobs + fixed-T reward split), the per-viewer status machine
 (available / pursuing / claimable / accepted) derived from EXISTING EarnedContract rows
-(never written on this read path), jobless/non-live contracts hidden, and claimable_count.
+(never written on this read path), jobless/non-live contracts hidden, and the claimable count.
 """
 import itertools
 
@@ -13,7 +13,7 @@ from django.utils import timezone
 from trophies.models import Contract, Job, Trophy
 from trophies.services import contract_service
 from trophies.services.contracts_service import (
-    board_facets, build_contract_modal, claimable_count, contracts_page, suggest_relaxation,
+    board_facets, build_contract_modal, contracts_page, suggest_relaxation,
 )
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 from tests.factories import (
@@ -36,6 +36,11 @@ def _contract(slug, job_slugs=('gunslinger',), live=True, title='My Game'):
     IGDBMatchFactory(concept=concept, igdb_id=igdb_id)   # factory default status = auto_accepted
     game = GameFactory(concept=concept)
     return contract, concept, game
+
+
+def claimable_count(profile):
+    """The claimable count every surface shows (Claim all's, the banner's, the nav badge's)."""
+    return contract_service.claimable_contracts(profile).count()
 
 
 def _project(ctx, slug):
@@ -430,12 +435,12 @@ def test_the_claim_banner_count_matches_the_board_it_opens(client):
     """The banner's "N ready to claim" (`claimable_summary`) ignores platform, but the board defaults to
     current-gen, so legacy and VR claimables were counted and never shown. The banner's jump (and its
     href) now open Ready to Claim with every platform lit (`allPlatforms` on pp:board-filter in
-    career.html); this pins, through the real results endpoint, that that board holds the banner's N.
+    static/js/career.js); this pins, through the real results endpoint, that that board holds the banner's N.
 
-    Known gap, deliberately not pinned: a claimable with NO platform-tagged member game (a bundle contract,
-    or a game with an empty title_platform) still misses every platform filter. That is the bundle
-    follow-up in docs/design/rebuild/job-board-contracts.md, where bundle games feed the platform match."""
-    from trophies.services.contracts_service import claimable_summary
+    Bundle-only claimables are pinned in test_bundle_contracts.py. Known gap, deliberately not pinned: a
+    claimable whose member games ALL have an empty title_platform still misses every platform filter (see
+    the claim-banner gotcha in docs/design/rebuild/job-board-contracts.md)."""
+    from trophies.services.contract_service import claimable_summary
     from trophies.util_modules.constants import ALL_PLATFORMS
 
     profile = ProfileFactory(is_linked=True)
@@ -590,3 +595,34 @@ def test_server_sort_by_progress_and_name():
     _contract('aaa-first')
     names = _slugs(contracts_page(profile, sort='name'))
     assert names.index('aaa-first') < names.index('zzz-last')
+
+
+def test_the_card_job_map_is_trimmed_but_still_names_every_job():
+    """The 25-cell map is paid 600 times a page (24 cards x 25), so a cell carries only what is read: the
+    family colour as a class (no inline style), the glyph via `job_icon_use_bare`, `data-slug` on LIT cells
+    only (the ring link and the reveal read nothing else), and a `title` on every cell, the only way to
+    name a dim one on hover."""
+    import re
+
+    from django.template.loader import render_to_string
+    from trophies.services.contracts_service import job_roster
+
+    profile = ProfileFactory()
+    _contract('trim-card', ('gunslinger', 'mage'))
+    card = next(c for c in contracts_page(profile, platforms=[])['contracts'] if c['slug'] == 'trim-card')
+    html = render_to_string('trophies/partials/contracts/_contract_card.html',
+                            {'p': card, 'disciplines': job_roster(), 'profile': profile})
+    grid = html.split('class="rp-jobgrid"', 1)[1].split('</div>', 1)[0]
+    cells = re.findall(r'<span class="rp-jobcell [^"]*"[^>]*>', grid)
+    lit = [c for c in cells if 'is-lit' in c]
+    dim = [c for c in cells if 'is-lit' not in c]
+
+    assert len(cells) == Job.objects.count() and len(lit) == 2
+    assert all('data-slug="' in c for c in lit), 'a lit cell lost the slug the ring link reads'
+    assert all('data-slug' not in c for c in dim), 'dim cells carry a slug nothing reads'
+    assert all(' title="' in c for c in cells), 'a cell can no longer be named on hover'
+    assert all(re.search(r'rp-jobcell--(combat|exploration|mind|heart|finesse)\b', c) for c in cells)
+    assert 'style=' not in grid, 'an inline style is back on the 600-cell map'
+    assert grid.count('<use href="#jobicon-') == len(cells), 'a cell lost its glyph'
+    assert 'stroke-width' not in grid and 'viewBox' not in grid, 'the map is back on the attribute-heavy glyph'
+    assert '\n' not in grid, 'whitespace between cells is paid 600 times a page'

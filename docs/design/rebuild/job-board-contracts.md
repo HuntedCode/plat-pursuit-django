@@ -188,17 +188,35 @@ detection on them anyway, every night, to re-confirm what it had already written
 461 of every 462 candidates. The cost now tracks UNSTAMPED pairs, which shrinks as the catalogue
 matures rather than growing with users × contracts.
 
-**Ask the platinum question fresh.** `EarnedContract.has_platinum` is frozen when the row is created
-and never updated, while membership is IGDB-derived and can gain a platinum-bearing game later. A
-row written before that keeps saying `False` forever, so excluding on it would strand that hunter's
-platinum tier permanently and silently. The sweep asks `_has_platinum(contract, member_ids)` once per
-Contract instead — one catalogue-bounded `.exists()` against thousands of skipped detections.
+**The frozen flag rules the platinum tier (decided 2026-10-10).** `EarnedContract.has_platinum` is
+frozen when the row is created and never updated, while membership is IGDB-derived and can gain a
+platinum-bearing game later. The sweep used to ask `_has_platinum` fresh so that such a row would
+still get its platinum STAMPED, but `_pending_tiers` pays by the frozen flag, so the stamp was never
+paid: the contract read "claimable" forever (banner, nav badge, Claim all) and accepting granted
+nothing. The owner chose to keep payouts as they are and make everything agree with the engine:
 
-**The fresh question fixes the STAMP, not the PAYOUT.** `_pending_tiers` still gates on the frozen
-`has_platinum`, so a hunter whose row was created before the contract had a platinum ends up with
-`platinum_reached_at` correctly stamped and the tier never offered, never paid, no error. Entirely
-pre-existing and orthogonal to the sweep -- but the sentence above should not be read as resolving
-it.
+- **One rule for "pending".** `contract_service.plat_tier_pending` / `full_tier_pending` /
+  `has_pending_tier`, and `pending_tier_q` in SQL, are read by `_pending_tiers`, the board's status
+  (`annotated_contracts`), `claimable_contracts`, the nav badge (`career_attention`) and the game page's
+  contract row. The platinum arm requires `has_platinum=True`.
+- **No stamp the engine won't pay.** `plat_stamp_due` gates `mark_contract_reached`, the sweep's
+  `_apply` and `verify_profile_sync`. A new row is never affected (`_has_platinum` and `_detect_tiers`
+  read the same members, so a reached platinum always comes with `has_platinum=True`).
+- **The sweep still asks `_has_platinum` fresh**, because that is the answer a NEW row gets. But a row
+  frozen `False` is **settled** once its 100% is stamped (`_settled_profiles`), since it can never take
+  the platinum stamp. `test_a_row_frozen_without_a_platinum_is_settled_and_never_stamped` replaced the
+  old `..._is_asked_fresh_not_read_off_the_row`, which pinned the opposite.
+- **Rows already stamped need no migration**: every reader ignores the stamp, so they read banked.
+  Count them with `EarnedContract.objects.filter(has_platinum=False, platinum_reached_at__isnull=False,
+  platinum_accepted_at__isnull=True)`.
+- **The card's tier split** reads the hunter's frozen flag once they have a row (`project_card`), so it
+  always shows what accepting pays: one bar paying the whole T for a row frozen `False`, and the split
+  plus the platinum claim for a row whose frozen flag pays a platinum tier (a bundle-only contract's card
+  showed one bar for those before, when `defines_plat` read home members only). Before first reach (no
+  row) the card reads `defines_plat`, which is bundle-aware for bundle-only contracts since 2026-10.
+
+`tests/engine/test_pending_tier_rule.py` holds every reader to the engine across all 32 combinations
+of the five fields.
 
 **Read `N candidate(s), M settled` as the alarm.** For a mature Contract the healthy steady state is
 `0 candidate(s)` -- which is byte-identical to what a broken candidate query or a mis-passed
@@ -206,10 +224,12 @@ it.
 0 candidates with a large settled count is correct; 0 and 0 on a Contract people have completed is
 not.
 
-**`has_plat` is fresh per SWEEP OF THAT CONTRACT, not per instant.** Under `--incremental` a
-Contract that gains its first platinum may not be revisited for up to `FULL_SWEEP_INTERVAL`, so the
-weak exclusion applies until then. Bounded, self-healing, and the same window membership gains
-already had -- but "asked fresh" does not mean instantaneous.
+**`has_plat` is fresh per SWEEP OF THAT CONTRACT, not per instant.** Since rows frozen `False` are
+settled regardless (above), what `has_plat` still decides is the `has_platinum=True` rows: under it,
+they stay candidates until their platinum is stamped. A falsy `has_plat` would wrongly settle those, which
+is why it is keyword-only and undefaulted
+(`test_the_platinum_answer_cannot_be_forgotten_at_a_call_site`). Under `--incremental` a Contract may
+not be revisited for up to `FULL_SWEEP_INTERVAL`, so "asked fresh" does not mean instantaneous.
 
 ## Reconciliation — when membership changes under a hunter
 
@@ -393,7 +413,8 @@ endpoint or schema**:
 - **History** (`scope='history'`) = **fully banked** contracts, gated on the `fully_banked` annotation:
   `full_accepted` set AND — when this user's FROZEN `EarnedContract.has_platinum` is true — `plat_accepted`
   set too. Gate on `ec_has_platinum` (a subquery of the frozen flag, bundle-aware, matching the accept
-  engine), **not** the member-only `defines_plat` (always false for episodic/bundle contracts). A
+  engine), **not** the live `defines_plat`, which says what the members define TODAY while the row's split
+  was frozen at first reach and is what accepting paid. A
   partially-banked contract (platinum claimed, 100% still to earn) stays on the Board — it has XP left.
 
 History cards read the user's **actual banked XP from the ledger** (`_attach_banked`: one grouped
@@ -709,26 +730,9 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
 
 ## Deferred / open
 
-- **FOLLOW-UP — bundle-only (episodic) contracts must render like any other contract everywhere**
-  (decided 2026-07-19). Today a Contract with `igdb_id=None` (episodic, members come only from
-  `ContractBundle.concepts`) has **no igdb-derived members**, so the board shows it with
-  `game_count=0`, no cover, and a possibly-wrong tier split. This carried over faithfully from the
-  old membership model (which was home-members-only too), but the desired behavior is: an
-  episodic/bundle-only contract shows its **bundle games** and its real completion/tier state
-  everywhere a normal contract does. Touch points to union the bundle concepts' games (in addition
-  to the igdb-derived members) — all in `contracts_service.py` unless noted:
-  - `_member_games` / `_member_games_by_igdb` — surface bundle games (cover + `game_count`).
-  - `annotated_contracts`: `member_pg` (drives `max_progress` / `any_plat` → board progress) and
-    `defines_plat` (the tier split) — mirror `contract_service._has_platinum`, which already unions
-    `contract.bundles`.
-  - `_platform_exists` (platform filter) and `_filter_contracts` search (member-game titles).
-  - **Reverse direction** (game → its contract): `contract_by_concept_map` (`contract_service.py`)
-    resolves only via igdb; a bundle-episode game won't find its contract, so badge/game/pursuer
-    cards omit the contract hook for episode games. Decide whether episode games should show the
-    contract, and if so add a bundle path to the map.
-  Simplest shape: a small `contract_member_games_qs(contract)` / batch variant that returns
-  `igdb-derived ∪ bundle` games, used by all the board readers; and a bundle branch in
-  `contract_by_concept_map` for the reverse lookup.
+- **Bundle-only (episodic) contracts render like any other contract: DONE (2026-10-10).** See
+  **Bundle-only contracts** under Gotchas. Normal contracts that also carry a satisfier bundle were
+  deliberately left as they were (owner decision: bundle-only).
 - **XP numbers + curve + tiers**: DONE — see [xp-economy.md](xp-economy.md) (T=6,000, flat
   cap-less K=3,000, prestige tiers). Exact-number *calibration* is CLOSED (keeping current values).
 - **Pursuer rank** (profile-wide, distinct from job tiers) — built.
@@ -742,6 +746,31 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   trusted gate. Forgetting the trusted gate lets a `pending_review`/`rejected` match leak in.
 - **Only ANCHORED + TRUSTED concepts are members.** A concept with a raw IGDB id but no anchor
   stamp (or a non-trusted match) is *not* a member even if the id matches — the gate is all three.
+- **A claim refreshes Career in place; it no longer reloads the page (2026-10).** A claim levels real
+  jobs, so the hero (ring, rank bar), the rank table, the banner, the stats, the Jobs dossier + sheet +
+  detail panels, the radar, the tab counts and the nav badges are all stale, and each claim used to reload
+  the whole page (one reload per contract when clearing a backlog). `career.js` `refreshAfterClaim`
+  fetches the page again WHILE the ceremony plays (for the board's own state, `boardSearch`), swaps each
+  region in `REFRESH_REGIONS` from it, and renders the board's page 1 from that same page
+  (`boardFromPage`), so a claim costs one page render, not a page plus a board. The page is the one renderer, so nothing re-derives a number client-side (the
+  alternative, HTML fragments in the claim reply, would have meant nine new partials kept equal to the
+  page). Rules that keep it working:
+  - **Contents are swapped, never the elements**, so listeners and observers on the region elements
+    survive. Anything INSIDE a region is delegated (banner jump, job tiles in dossier and sheet, dossier
+    tilt) or listens for `pp:career-refreshed` (radar re-reads `#career-radar`; the dossier reveal marks
+    the new bands revealed and drops its observer).
+  - **A region must render on both sides** (`data-career-panel="banner"` wraps the banner even with
+    nothing to claim). If a region's count differs between the two pages (a first claim drew a hero that
+    was not there), or the fetch fails, it falls back to `reloadKeepingView`.
+  - **New behaviour on a node inside a region must be delegated**, or it works until the first claim.
+  - `test_claim_in_place.py` holds every selector to the rendered page and the flow to its shape.
+- **The card's 25-cell job map is paid 600 times a page** (24 cards x 25 cells), and was about half of
+  `/career/`'s HTML. So a cell carries only what is read (2026-10): the family colour as a class
+  (`rp-jobcell--<discipline>`, not an inline style), the glyph via `job_icon_use_bare` (no presentation
+  attributes; `.rp-jobcell svg` in elements.css supplies fill/stroke, which inherit into the `<use>`), no
+  whitespace between cells, and `data-slug` on LIT cells only (the ring link and the reveal read nothing
+  else). Every cell keeps its `title`, the only way to name a dim one. The shared `job_icon_use` is
+  unchanged and pinned: ten other hosts rely on its attributes. Dev's board went 683 KB to 529 KB.
 - **Per-job totals MUST aggregate in the DB.** Never iterate a whale's `ContractXPGrant`/
   `EarnedContract` rows in Python to total job XP — `Sum().values('job')`. (The May 2026 OOM rule.)
 - **Never `.distinct()` the annotated board, and never filter it through a join.** `annotated_contracts`
@@ -751,26 +780,41 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   its `jobs__` joins produced. On prod (2026-10-10, 3,387 live contracts) that made the board's count
   0.98 s instead of 0.07 s, and `contracts_page` plus `board_facets` (eight queries between them, timed
   on prod) took about 4 s of every `/career/` load, making it the slowest page on the site. No board
-  filter joins a to-many relation now: the job, platform and game-title matches are `EXISTS`
-  (`_job_exists`, `_platform_exists`, and an inline `Exists` for game titles), and the rest read
-  the contract's own columns or annotations, so a contract is one row however many of its jobs or
-  games match. A new filter over an M2M or a reverse FK has to be an `EXISTS` too.
+  filter joins a to-many relation now: the job matches are `EXISTS` (`_job_exists`), the platform and
+  game-title matches are hashed id sets (`_member_game_match`, see the bundle-only entry below), and the
+  rest read the contract's own columns or annotations, so a contract is one row however many of its jobs
+  or games match. A new filter over an M2M or a reverse FK has to take one of those two shapes too.
   `test_board_queries_never_select_distinct` fails on any `SELECT DISTINCT` from the board (Board
   and History), its facets, the empty-state suggestion, or job detail's contract counts.
   This is about cost, not memory: the rows are the curated catalogue, so every user pays it, not
   just whales.
+- **ONE claimable source, live only (2026-10-10).** `contract_service.claimable_contracts` (a LIVE
+  contract with jobs, under `pending_tier_q`) is what the banner, the Contracts tab badge, the nav
+  badge, the accept API's `claimable_count` and **Claim all** all read. Claim all used to pay pending
+  rows on contracts that had gone non-live, which nothing showed; those rows are kept, so a republished
+  contract is claimable again. `claimable_summary` totals the XP in SQL (`_pending_xp_expr`), the
+  numeric twin of `_pending_tiers`, so the banner shows what is actually waiting (a contract with its
+  platinum banked contributes its 30%, not its whole T). `test_claim_live.py` holds the two forms
+  together, including the 5005 x 0.70 half-up boundary.
+- **Every claim entry point lands on the claim board** (`career_views.claim_board_url()`: Ready to
+  Claim, every platform). The banner's href and jump use it. The Contracts tab lands there on the FIRST
+  entry to Contracts in a visit, if the board is still the untouched default and the badge is above 0
+  (`landingQuery` in career.js). The landing is spent on that first entry whether it fires or not, and
+  is never armed when the URL carries a board filter or the page loads straight onto Contracts (the
+  hunter has already seen the board), so it never swaps out a board somebody is using. The radar jump
+  changes the board before opening the tab, so it is never hijacked. Job detail, which has no claim
+  controller, links a claimable card to it ("Claim in Career").
 - **The claim banner counts claimables regardless of platform; the board filters by platform.**
   `claimable_summary` has no platform condition, while the board defaults to current-gen. So the
   banner's jump and its href open Ready to Claim with **every platform lit**, which shows the legacy
   and VR claimables the default hid (`test_the_claim_banner_count_matches_the_board_it_opens`). The
   client's "every platform" is read from the page's platform chips, which a test keeps equal to
-  `ALL_PLATFORMS`, in order (so a repeat banner tap is a deduped no-op). **Known gap:** "every platform"
-  is still `_platform_exists(ALL_PLATFORMS)`, "has a member game on some platform", so a claimable with
-  no platform-tagged member (a bundle contract, or a game with an empty `title_platform`) is counted by
-  the banner and shown by no board. Treating all six as "no filter" was tried and reverted (2026-10-10):
-  lighting the sixth chip then added a block of contracts no chip count accounted for, and their cards
-  render without games. It belongs to the bundle-only follow-up under **Deferred / open**, where bundle
-  games feed `_platform_exists` and the card.
+  `ALL_PLATFORMS`, in order (so a repeat banner tap is a deduped no-op). Bundle-only contracts now match
+  the platform filter through their bundle games. **Remaining gap:** "every platform" is still "has a
+  member game on some platform", so a claimable whose member games ALL have an empty `title_platform`
+  is counted by the banner and shown by no board. Treating all six as "no filter" was tried and
+  reverted (2026-10-10): lighting the sixth chip then added a block of contracts no chip count
+  accounted for.
 - **Don't recompute granted XP from the Contract's *current* config.** Read the ledger. A
   Contract that changes its jobs or `T` later must not retroactively rewrite past grants.
 - **Unique `igdb_id` is what guarantees "once per game."** Two Contracts can't share an IGDB id,
@@ -780,9 +824,30 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   the stamped credit and banked XP stay behind. The catalogue fix is only half the job; run
   `reconcile_contracts --contract <slug>` for the other half. See **Reconciliation** above.
 - **Episodic bundles are the documented exception** — they satisfy a Contract without sharing its
-  IGDB id (and don't need anchoring), which is why `ContractBundle` still exists. **Known gap
-  (see Deferred):** the board readers currently derive member games/tiers from the igdb key only,
-  so a bundle-ONLY contract renders with no games — union `contract.bundles` concepts when fixing.
+  IGDB id (and don't need anchoring), which is why `ContractBundle` still exists.
+- **Bundle-only contracts (`igdb_id` NULL) read their members from their bundles, everywhere
+  (2026-10-10).** A normal contract that also carries a satisfier bundle keeps its home members only
+  (owner decision: bundle-only), so a collection never becomes a normal contract's cover, platforms or
+  progress. Bundle concepts are UNGATED (no anchor/trust check), exactly as the engine's
+  `_detect_tiers` reads them.
+  - **Board filters** (platform, member-game search) go through `_member_game_match`: `pk IN (home
+    ids) OR pk IN (bundle ids)`, two uncorrelated id sets Postgres hashes once. Not a CASE around
+    correlated EXISTS, which in WHERE runs a subplan per contract row; not a join, which needs DISTINCT.
+  - **Per-row values** (`defines_plat`, progress) use `_home_or_bundle`, a CASE that evaluates only the
+    side the row needs (SELECT-list subqueries are per row anyway).
+  - **Progress** is the best bundle's AVERAGE over its concepts, each at its best game and an unplayed
+    one at 0, floored: a bundle needs every concept done, so "best single game" read one finished
+    episode of five as 100%.
+  - **Member games** (cards, modal) are batched per page by contract pk (`_member_games_by_contract`),
+    one extra query for all bundle-only cards; the new-contracts modal's hero covers and the Discord
+    announcer's cover and reach have the same bundle branch.
+  - **Reverse map** (`contract_by_concept_map`, game/badge/pursuer/completion cards): the igdb home
+    wins; otherwise the lowest-id live bundle-only contract listing the concept.
+  - **Engine quirk, unchanged:** `_has_platinum` is "ANY bundle concept defines a platinum" while the
+    platinum tier needs EVERY concept platted, so a bundle where one episode has no platinum keeps a
+    platinum tier that can never be reached (the 100% tier still pays its 30%).
+  - `tests/engine/test_bundle_contracts.py` pins all of the above, including no DISTINCT and a
+    constant query count however many bundle contracts a page holds.
 - **Job count is HARD-capped at 6.** Detection may surface more; `top_jobs` trims to the 6
   strongest by signal, and the admin form rejects manual sets over 6.
 - **Tiers accrue across time.** Platinum (maybe during a 2× weekend) and 100% (a week later,

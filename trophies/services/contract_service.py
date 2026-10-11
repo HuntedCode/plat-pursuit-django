@@ -26,7 +26,10 @@ import logging
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
-from django.db.models import Count, Q, Sum, prefetch_related_objects
+from django.db.models import (
+    Case, Count, DecimalField, Exists, OuterRef, Q, Sum, Value, When, prefetch_related_objects,
+)
+from django.db.models.functions import Cast, Coalesce, NullIf, Round
 from django.utils import timezone
 
 from trophies.models import (
@@ -73,9 +76,10 @@ def _has_platinum(contract, member_ids):
 
     Bundle concepts MUST count here: _detect_tiers can set platinum_reached purely via a
     fully-platted satisfier bundle (a multi-game collection), so freezing has_platinum
-    from members alone would strand such a contract as permanently claimable -- the accept
-    gate only banks the platinum tier when has_platinum is True, so a reached-but-not-
-    has_platinum contract shows claimable forever and re-accepting grants nothing."""
+    from members alone would freeze has_platinum=False on a row whose platinum then DOES get
+    reached, and the accept gate only banks the platinum tier when has_platinum is True. (That
+    shape used to read "claimable forever"; since 2026-10 `plat_stamp_due` refuses the stamp and
+    every reader ignores it, so it would instead be a platinum tier silently never paid.)"""
     concept_ids = set(member_ids)
     concept_ids.update(contract.bundles.values_list('concepts__id', flat=True))
     concept_ids.discard(None)
@@ -280,26 +284,53 @@ def grant_job_xp_bulk(profile, grants, *, first_claim=False):
 
 
 def contract_by_concept_map(concept_ids, *, live_only=True, prefetch_jobs=True):
-    """Batch resolve concept_id -> Contract via the igdb key (ANCHORED + TRUSTED concepts whose
-    raw igdb_id keys a Contract). Two bounded queries instead of a per-concept lookup -- the
-    replacement for the old `ContractMembership.objects.filter(concept_id__in=...)` pattern in
-    the board/views. Concepts with no matching contract are simply absent from the map."""
+    """Batch resolve concept_id -> Contract. Concepts with no contract are simply absent from the map.
+
+    1. The igdb key: ANCHORED + TRUSTED concepts whose raw igdb_id keys a Contract (its home).
+    2. For concepts left unresolved: a bundle-only Contract (igdb_id NULL, e.g. an episodic season)
+       that lists the concept in one of its bundles, so an episode's game page shows the season it
+       belongs to. The igdb home always wins; a concept in several bundle-only contracts maps to the
+       lowest id, so the answer is stable. Ungated, like the engine's bundle detection.
+
+    Bounded, never per concept: the igdb pass is two queries, the bundle pass one more whenever a concept
+    is still unresolved and one on a hit, plus the jobs prefetch per fetch when `prefetch_jobs`. A concept
+    whose own contract is NOT live (under `live_only`) is unresolved by the igdb pass, so it can map to a
+    live bundle-only contract that lists it, as sync would credit (`check_profile_contracts`); it maps back
+    to its home once that is published. The replacement for the old
+    `ContractMembership.objects.filter(concept_id__in=...)` pattern in the board/views."""
+    concept_ids = list(concept_ids)
     rows = (
         Concept.objects
-        .filter(id__in=list(concept_ids), anchor_migration_completed_at__isnull=False,
+        .filter(id__in=concept_ids, anchor_migration_completed_at__isnull=False,
                 igdb_match__status__in=IGDBMatch.TRUSTED_STATUSES)
         .values_list('id', 'igdb_match__igdb_id')
     )
     concept_igdb = {cid: gid for cid, gid in rows if gid is not None}
-    if not concept_igdb:
-        return {}
-    cq = Contract.objects.filter(igdb_id__in=set(concept_igdb.values()))
-    if live_only:
-        cq = cq.filter(is_live=True)
-    if prefetch_jobs:
-        cq = cq.prefetch_related('jobs')
-    by_igdb = {c.igdb_id: c for c in cq}
-    return {cid: by_igdb[gid] for cid, gid in concept_igdb.items() if gid in by_igdb}
+
+    def fetch(cq):
+        if live_only:
+            cq = cq.filter(is_live=True)
+        if prefetch_jobs:
+            cq = cq.prefetch_related('jobs')
+        return cq
+
+    result = {}
+    if concept_igdb:
+        by_igdb = {c.igdb_id: c for c in fetch(Contract.objects.filter(igdb_id__in=set(concept_igdb.values())))}
+        result = {cid: by_igdb[gid] for cid, gid in concept_igdb.items() if gid in by_igdb}
+
+    remaining = [cid for cid in concept_ids if cid not in result]
+    if remaining:
+        pairs = Contract.objects.filter(igdb_id__isnull=True, bundles__concepts__in=remaining)
+        if live_only:
+            pairs = pairs.filter(is_live=True)
+        lowest = {}
+        for cid, kid in pairs.values_list('bundles__concepts__id', 'id'):
+            lowest[cid] = min(lowest.get(cid, kid), kid)
+        if lowest:
+            by_pk = {c.pk: c for c in fetch(Contract.objects.filter(pk__in=set(lowest.values())))}
+            result.update({cid: by_pk[kid] for cid, kid in lowest.items() if kid in by_pk})
+    return result
 
 
 def _detect_tiers(profile, contract, member_ids):
@@ -389,7 +420,10 @@ def mark_contract_reached(profile, contract):
     )
     changed = []
     now = timezone.now()
-    if platinum_reached and ec.platinum_reached_at is None:
+    # `plat_stamp_due`, not just "unstamped": a row frozen without a platinum tier never takes the stamp.
+    # (A NEW row cannot hit that: `_has_platinum` and `_detect_tiers` read the same members and bundles,
+    # so a reached platinum always comes with has_platinum=True. Only an older row frozen False can.)
+    if platinum_reached and plat_stamp_due(ec):
         ec.platinum_reached_at = now
         changed.append('platinum_reached_at')
     if full_reached and ec.full_reached_at is None:
@@ -437,12 +471,62 @@ def check_profile_contracts(profile, concepts=None):
 _ACCEPTED_FIELD = {'platinum': 'platinum_accepted_at', 'full': 'full_accepted_at'}
 
 
+# --- the pending-tier rule: ONE definition, read by every "claimable" ---------
+#
+# A tier is pending when it is reached and not yet accepted, and the PLATINUM tier only exists for a row
+# whose frozen `has_platinum` is True: that flag decides the split `_pending_tiers` pays, so a row frozen
+# False has already been (or will be) paid the whole amount at 100%. Readers that skipped the flag counted
+# a platinum stamp the engine would never pay: the "claimable forever" contract (banner, badges, Claim
+# all) that accepting granted nothing for. Every reader now goes through these, in Python or in SQL.
+
+def plat_tier_pending(ec):
+    return bool(ec.has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None)
+
+
+def full_tier_pending(ec):
+    return bool(ec.full_reached_at and ec.full_accepted_at is None)
+
+
+def has_pending_tier(ec):
+    return plat_tier_pending(ec) or full_tier_pending(ec)
+
+
+def plat_pending_q(*, has_platinum='has_platinum', plat_reached='platinum_reached_at',
+                   plat_accepted='platinum_accepted_at'):
+    """The SQL form of `plat_tier_pending`."""
+    return Q(**{has_platinum: True, f'{plat_reached}__isnull': False, f'{plat_accepted}__isnull': True})
+
+
+def full_pending_q(*, full_reached='full_reached_at', full_accepted='full_accepted_at'):
+    """The SQL form of `full_tier_pending`."""
+    return Q(**{f'{full_reached}__isnull': False, f'{full_accepted}__isnull': True})
+
+
+def pending_tier_q(*, has_platinum='has_platinum', plat_reached='platinum_reached_at',
+                   plat_accepted='platinum_accepted_at', full_reached='full_reached_at',
+                   full_accepted='full_accepted_at'):
+    """The SQL form of `has_pending_tier`. Field names default to EarnedContract's; a caller that has the
+    five values under other names (contracts_service.annotated_contracts annotates them onto Contract)
+    passes its own."""
+    return (plat_pending_q(has_platinum=has_platinum, plat_reached=plat_reached, plat_accepted=plat_accepted)
+            | full_pending_q(full_reached=full_reached, full_accepted=full_accepted))
+
+
+def plat_stamp_due(ec):
+    """Can this row still take a `platinum_reached_at` stamp? Only while the platinum tier exists for it
+    (`has_platinum`) and is unstamped. A row frozen False never gets one: the engine would never pay it,
+    and the stamp alone is what made such a contract read "claimable" forever. Read by the writer
+    (`mark_contract_reached`), the nightly sweep and the sync verifier, so all three agree."""
+    return bool(ec.has_platinum and ec.platinum_reached_at is None)
+
+
 def _pending_tiers(ec, contract):
     """(tiers, t, multiplier) for an EarnedContract, where tiers is the reached-but-unaccepted
     [(tier, tier_total_xp), ...].
 
-    The pure XP computation shared by accept_contract (which then grants + stamps the accepted
-    fields) and claimable_summary (which totals + previews) -- no side effects, no queries. The
+    The pure XP computation behind accept_contract (which then grants + stamps the accepted
+    fields) -- no side effects, no queries. claimable_summary totals the same amounts in SQL
+    through `_pending_xp_expr`, its numeric twin, held to this by a parity test. The
     100% tier is (grand total - platinum tier), NOT its fraction rounded independently, so
     platinum + full always sum to exactly the grand total even at a .5 rounding boundary. Games
     with no platinum pay the FULL T at 100%. has_platinum is the value frozen on the
@@ -455,9 +539,9 @@ def _pending_tiers(ec, contract):
     grand_total = _tier_total(1.0, t, multiplier)
     platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, multiplier) if ec.has_platinum else 0
     tiers = []
-    if ec.has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None:
+    if plat_tier_pending(ec):
         tiers.append(('platinum', platinum_total))
-    if ec.full_reached_at and ec.full_accepted_at is None:
+    if full_tier_pending(ec):
         tiers.append(('full', (grand_total - platinum_total) if ec.has_platinum else grand_total))
     return tiers, t, multiplier
 
@@ -564,43 +648,67 @@ def accept_contracts_bulk(profile, contracts, *, first_claim=None):
 
 
 def claimable_contracts(profile):
-    """EarnedContracts with a reached-but-unaccepted tier (the pending rewards).
+    """EarnedContracts with a pending tier (`pending_tier_q`) on a LIVE contract that has jobs: the
+    rewards this hunter can bank now. THE one source for every claimable count and for Claim all, so
+    the banner, the tab, the nav badge, the API's reply and the button all agree.
+
+    LIVE ONLY (owner decision 2026-10-10). Claim all used to pay pending rows on contracts that had since
+    gone non-live, which no count, badge or board showed. Those rows are kept, so a republished
+    contract becomes claimable again. A jobless contract levels nothing, so it is not "claimable" either.
 
     Jobs are prefetched because every consumer walks them (the claim payload's per-job deltas,
     and the accept's XP split); without it a claim-all paid one query PER contract just to read
     the job list."""
-    return (
-        EarnedContract.objects.filter(profile=profile)
-        .filter(
-            Q(platinum_reached_at__isnull=False, platinum_accepted_at__isnull=True)
-            | Q(full_reached_at__isnull=False, full_accepted_at__isnull=True)
-        )
-        .select_related('contract')
-        .prefetch_related('contract__jobs')
-    )
+    return _claimable_rows(profile).select_related('contract').prefetch_related('contract__jobs')
+
+
+def _claimable_rows(profile):
+    """`claimable_contracts` without the loading, for counts and aggregates."""
+    has_jobs = Exists(Contract.jobs.through.objects.filter(contract_id=OuterRef('contract_id')))
+    return EarnedContract.objects.filter(profile=profile, contract__is_live=True).filter(pending_tier_q(), has_jobs)
+
+
+_XP = DecimalField(max_digits=20, decimal_places=4)
+
+
+def _pending_xp_expr():
+    """The XP a claimable row would bank now, in SQL: `_pending_tiers`' sum, for aggregating in the DB.
+
+    TWO FORMS OF ONE RULE, pinned together by a parity test (test_claim_live.py). Kept NUMERIC end to
+    end: Postgres `round(numeric)` rounds half away from zero, which is ROUND_HALF_UP for these positive
+    amounts, but `round(double precision)` rounds half to EVEN and would drift by 1 XP at a .5 boundary.
+    `xp_total_override` of 0 falls back to T, as Python's `or` does."""
+    m = _active_multiplier()
+    t = Cast(Coalesce(NullIf('contract__xp_total_override', 0), Value(CONTRACT_XP_TOTAL)), _XP)
+    grand = Round(t * Value(m, output_field=_XP))
+    plat = Round(t * Value(Decimal(str(CONTRACT_PLATINUM_FRAC)) * m, output_field=_XP))
+    zero = Value(Decimal(0), output_field=_XP)
+    plat_part = Case(When(plat_pending_q(), then=plat), default=zero, output_field=_XP)
+    full_part = Case(When(full_pending_q(), then=Case(When(has_platinum=True, then=grand - plat),
+                                                      default=grand, output_field=_XP)),
+                     default=zero, output_field=_XP)
+    return plat_part + full_part
 
 
 def claimable_summary(profile, peek=3):
-    """Cheap Home-glance summary of a profile's pending Contract rewards: the count, the total XP
-    waiting, a highest-XP-first peek, and how many more sit beyond the peek. Bounded by the curated
-    Contract catalog (dozens at most, never trophy-scale), so the per-row loop is whale-safe -- it
-    costs one select_related query + Decimal arithmetic, no per-row queries (_pending_tiers is pure
-    and `contract` is already joined)."""
-    rows = []
-    total = 0
-    for ec in claimable_contracts(profile):
-        tiers, _t, _mult = _pending_tiers(ec, ec.contract)
-        xp = sum(amount for _tier, amount in tiers)
-        if xp <= 0:
-            continue
-        total += xp
-        rows.append({'name': ec.contract.name, 'xp': xp})
-    rows.sort(key=lambda r: -r['xp'])
+    """A profile's pending Contract rewards: the count, the total XP waiting, a highest-XP-first peek,
+    and how many more sit beyond it. Read by Career's banner and Home's glance.
+
+    Aggregated in the DATABASE (`_pending_xp_expr`), never by walking rows: a hunter's claimables are
+    bounded by the catalogue, which is in the thousands. `count` is every claimable row, the same number
+    `claimable_contracts` gives the nav badge and the API, so the surfaces cannot disagree; only the peek
+    skips a row that would bank nothing (reachable only with an `xp_total_override` of 1)."""
+    rows = _claimable_rows(profile).annotate(pending_xp=_pending_xp_expr())
+    agg = rows.aggregate(count=Count('id'), xp=Sum('pending_xp'))
+    count = agg['count'] or 0
+    items = [{'name': r['contract__name'], 'xp': int(r['pending_xp'])}
+             for r in rows.filter(pending_xp__gt=0).order_by('-pending_xp', 'contract__name')
+             .values('contract__name', 'pending_xp')[:peek]]
     return {
-        'count': len(rows),
-        'total_xp': total,
-        'items': rows[:peek],
-        'more': max(0, len(rows) - peek),
+        'count': count,
+        'total_xp': int(agg['xp'] or 0),
+        'items': items,
+        'more': max(0, count - peek),
     }
 
 

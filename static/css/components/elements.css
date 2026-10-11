@@ -857,7 +857,14 @@
    Icons are <use> refs into the page sprite, so 25 cells x N cards stays light. */
 .rp-jobgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
 .rp-jobcell { display: grid; place-items: center; aspect-ratio: 1; border-radius: 6px; border: 1px solid transparent; background: var(--pp-bg-1); color: var(--disc); opacity: 0.34; transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
-.rp-jobcell svg { width: 64%; height: 64%; }
+.rp-jobcell svg { width: 64%; height: 64%; aspect-ratio: 1; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* The family colour by class, not an inline style per cell (24 cards x 25 cells): the glyphs come from
+   `job_icon_use_bare`, which leaves presentation to the rule above. */
+.rp-jobcell--combat { --disc: var(--disc-combat); }
+.rp-jobcell--exploration { --disc: var(--disc-exploration); }
+.rp-jobcell--mind { --disc: var(--disc-mind); }
+.rp-jobcell--heart { --disc: var(--disc-heart); }
+.rp-jobcell--finesse { --disc: var(--disc-finesse); }
 .rp-jobcell:hover { opacity: 0.72; }
 .rp-jobcell.is-lit { opacity: 1; color: var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)), var(--pp-bg-1)); border-color: color-mix(in oklab, var(--disc) 45%, transparent); --ignite-glow: color-mix(in oklab, var(--disc) 55%, transparent); }
 .rp-row:hover .rp-jobcell.is-lit { border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 0 12px color-mix(in oklab, var(--disc) 24%, transparent); }

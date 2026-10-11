@@ -54,7 +54,7 @@ All styling tokens, patterns, component blueprints, and rules are documented in 
 
 ### Reference Implementation
 
-**The Career page (`/career/`) is the finished-quality standard for the site.** Hold every page to its bar for polish and design coherence. See **[docs/design/rebuild/career-reference-standard.md](docs/design/rebuild/career-reference-standard.md)** for the dimensions that define "done" (design coherence, mobile-first fit, premium motion, performance, interaction, URL/state) and the **"what would Google/Apple do here?" polishing lens** that got it there. Exemplar files: `templates/trophies/career.html`, `static/js/claim-ceremony.js`, `static/css/components/claim-ceremony.css`.
+**The Career page (`/career/`) is the finished-quality standard for the site.** Hold every page to its bar for polish and design coherence. See **[docs/design/rebuild/career-reference-standard.md](docs/design/rebuild/career-reference-standard.md)** for the dimensions that define "done" (design coherence, mobile-first fit, premium motion, performance, interaction, URL/state) and the **"what would Google/Apple do here?" polishing lens** that got it there. Exemplar files: `templates/trophies/career.html` (with its script in `static/js/career.js`), `static/js/claim-ceremony.js`, `static/css/components/claim-ceremony.css`.
 
 The dashboard seeded the design language, but it was **deleted in 2026-08** (`/dashboard/` now 301s to `/`), so it is no longer available as a reference: Career is the bar, and the tokens and patterns live in the design system doc.
 

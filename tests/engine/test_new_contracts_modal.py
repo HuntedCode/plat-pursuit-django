@@ -1196,10 +1196,6 @@ def test_the_board_binds_its_own_dropdowns_and_not_this_modals(hunter):
     board's own popovers got no controller, and the modal's got TWO. Two controllers on one root
     means a click opens the popover and the second handler, finding it already open, closes it again
     inside the same click. Nothing ever appears, and nothing errors."""
-    from pathlib import Path
-
-    from django.conf import settings
-
     _live('Anything')
     body = hunter.get('/career/', **CF).content.decode()
 
@@ -1208,8 +1204,9 @@ def test_the_board_binds_its_own_dropdowns_and_not_this_modals(hunter):
     assert 'nc__filter' in body[first - 60:first], 'fixture wrong: the modal is not the first group'
     assert body.count('rp-discs') > 1, 'fixture wrong: the board renders no group to collide with'
 
-    career = (Path(settings.BASE_DIR) / 'templates' / 'trophies' / 'career.html').read_text(
-        encoding='utf-8')
+    from tests.career_sources import career_script
+
+    career = career_script()   # the board controller lives in static/js/career.js
     assert "document.querySelector('.rp-discs')" not in career, (
         'the board is back to taking whichever discipline group comes first in the page'
     )

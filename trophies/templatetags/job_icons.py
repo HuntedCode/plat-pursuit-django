@@ -114,6 +114,20 @@ def job_icon_use(name, css_class='w-5 h-5'):
     )
 
 
+@register.simple_tag
+def job_icon_use_bare(name):
+    """`job_icon_use` with NO presentation attributes, for a host whose stylesheet supplies them
+    (`.rp-jobcell svg` in elements.css: fill, stroke, stroke-width, caps and joins, which inherit into
+    the <use> shadow tree exactly as the attributes do, and a CSS size AND aspect ratio). No viewBox
+    either: the referenced <symbol> carries its own, but the outer svg then has no intrinsic shape, so a
+    host without a CSS width, height and `aspect-ratio: 1` gets a 300x150 box. Built for the contract
+    card's 25-cell job map, where each card repeats a glyph 25 times and the attributes were most of its
+    weight. `job_icon_use` itself is unchanged: every other host relies on its attributes."""
+    if (name or '') not in _ICONS:
+        return ''
+    return mark_safe(f'<svg aria-hidden="true"><use href="#jobicon-{name}"/></svg>')
+
+
 @register.simple_tag(takes_context=True)
 def job_tier_ladder(context, level, job_slug):
     """The 8-rung job prestige ladder for a job at `level`, with each reached rung's date merged in

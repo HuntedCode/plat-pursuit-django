@@ -247,26 +247,59 @@ def test_scroll_appended_cards_get_the_tooltip_window(client):
     assert 'last %d days' % NEW_CONTRACT_WINDOW_DAYS in content
 
 
+def _board_keys(src):
+    """career.js's BOARD_KEYS (what syncURL clears), read from the one literal, after checking syncURL
+    really clears by it rather than by a list of its own."""
+    import re
+
+    lit = re.findall(r"var BOARD_KEYS = \[([^\]]*)\]", src)
+    assert len(lit) == 1, f'expected one BOARD_KEYS literal, found {len(lit)}'
+    # syncURL writes `boardSearch()`, which clears the keys before re-writing them from the board's state.
+    built = src.split('function boardSearch()', 1)[1].split('var bp =', 1)[0]   # up to where it re-writes the keys
+    assert 'BOARD_KEYS.forEach(function (k) { params.delete(k); })' in built, 'the URL builder no longer clears BOARD_KEYS'
+    sync = src.split('function syncURL()', 1)[1].split('history.replaceState(null', 1)[0]
+    assert 'var qs = boardSearch();' in sync, 'syncURL no longer writes through the shared builder'
+    return set(re.findall(r"'([a-z_]+)'", lit[0]))
+
+
 def test_every_board_param_the_url_can_gain_is_also_cleared():
     """syncURL() wipes a FIXED key list before re-appending what buildParams emits. A key written
     but never cleared survives being switched off -- the URL keeps claiming a filter the board has
     dropped, seedFromURL turns it back on next reload, and switching it on again appends a
-    duplicate. Read out of the template rather than asserted by hand so a NEW filter added to
+    duplicate. Read out of static/js/career.js rather than asserted by hand so a NEW filter added to
     buildParams without a matching delete fails here instead of in someone's shared link."""
-    import pathlib
     import re
 
-    src = (pathlib.Path(__file__).resolve().parents[2]
-           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    from tests.career_sources import career_script
+
+    src = career_script()
 
     body = src.split('function buildParams', 1)[1].split('function noFilters', 1)[0]
     emitted = set(re.findall(r"p\.(?:set|append)\('([a-z_]+)'", body))
     emitted.discard('page')   # syncURL strips page explicitly
 
-    cleared = set(re.findall(r"'([a-z_]+)'",
-                             src.split('function syncURL', 1)[1].split('.forEach', 1)[0]))
+    cleared = _board_keys(src)
 
     assert emitted <= cleared, f"buildParams emits {emitted - cleared}, which syncURL never clears"
+
+
+def test_leaving_the_contracts_tab_strips_every_board_param():
+    """showView strips the board's params from the URL when you leave Contracts, so a Jobs or Radar link
+    stays clean. Its list is a SECOND copy of syncURL's, and it had drifted: 'new' was missing, so
+    leaving with Latest on kept `?new=1` on the Jobs URL, and a reload of that link rendered the board
+    narrowed with Latest switched back on. Every key syncURL clears must be stripped here too."""
+    import re
+
+    from tests.career_sources import career_script
+
+    src = career_script()
+    cleared = _board_keys(src)
+    assert cleared, 'syncURL lost its key list, so this pin no longer checks anything'
+
+    calls = re.findall(r"syncViewParam\(name,\s*\{[^}]*params:\s*\[([^\]]*)\]", src)
+    assert len(calls) == 1, f'expected the one showView strip list, found {len(calls)}'
+    stripped = set(re.findall(r"'([a-z_]+)'", calls[0]))
+    assert cleared <= stripped, f'leaving Contracts keeps {cleared - stripped} in the URL'
 
 
 def test_the_rendered_board_ships_facets_that_respect_latest(client):
@@ -307,13 +340,13 @@ def test_a_hand_typed_latest_cannot_narrow_history(client):
     assert params['new_only'] is False
 
 
-def test_the_client_and_the_server_agree_about_it(client):
+def test_the_client_and_the_server_agree_about_it():
     """Fixing only seedFromURL would mean the page loads narrowed by the SSR render and silently
-    widens on the next fetch. Both sides drop it, so both agree."""
-    profile = ProfileFactory(is_linked=True)
-    client.force_login(profile.user)
+    widens on the next fetch. Both sides drop it, so both agree. (The server side is pinned above;
+    this reads the client's seedFromURL out of static/js/career.js.)"""
+    from tests.career_sources import career_script
 
-    src = client.get('/career/?view=contracts').content.decode()
+    src = career_script()
     seed = src.split('function seedFromURL', 1)[1].split('state.newOnly', 1)[1].split(';', 1)[0]
 
     assert "'history'" in seed, 'seedFromURL honours ?new=1 in History; the server does not'

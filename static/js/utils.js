@@ -734,7 +734,7 @@ function debounce(fn, delay = 300) {
  * values, and prefers-reduced-motion (jumps straight to the target). Starts from 0 by default, or
  * from `opts.from` -- pass the previous value to tick a live-updating counter up OR down to its new
  * value (e.g. a filtered result count) instead of resetting to 0. This is the canonical shared
- * count-up; career.html + home-motion.js still hand-roll their own -- new callers should use this.
+ * count-up; career.js (`ppCountUp`) + home-motion.js still hand-roll their own -- new callers should use this.
  * @param {HTMLElement} el
  * @param {number} [dur=750] duration in ms
  * @param {{from?: number}} [opts] start value (default 0); pass the old value for old->new ticking

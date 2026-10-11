@@ -151,20 +151,22 @@ def test_contracts_endpoints_gated_to_linked_profile(client):
 
 
 def _career_src():
-    import pathlib
+    """The Career MARKUP (career.html). For the script, use `_career_js`."""
+    from tests.career_sources import career_template
 
-    return (pathlib.Path(__file__).resolve().parents[2]
-            / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    return career_template()
 
 
 def _career_js(start, end):
-    """The career.html source from a UNIQUE `start` anchor to the first `end` after it, comments stripped
+    """static/js/career.js from a UNIQUE `start` anchor to the first `end` after it, comments stripped
     so prose about a guard cannot pass for the guard. The `//` strip is naive: a `//` inside a string
     literal in the slice would be eaten too, which can only make a pin fail (never pass), so a confusing
     failure here is worth checking for that first."""
     import re
 
-    src = _career_src()
+    from tests.career_sources import career_script
+
+    src = career_script()
     assert src.count(start) == 1, f'the start anchor is missing or no longer unique: {start!r}'
     rest = src.split(start, 1)[1]
     assert end in rest, f'no {end!r} after {start!r}'
@@ -202,11 +204,34 @@ def test_a_failed_board_load_can_be_retried_with_the_same_query():
     clear on the success path would let every identical request through again."""
     import re
 
+    page1_failure = _failed_page1_branch()
+    assert re.search(r'boardQuery\s*=\s*null\s*;', page1_failure), 'a failed load blocks retrying the same query'
+    code = _career_js('function fetchPage(n, append) {', 'function renderBoard(')
+    assert len(re.findall(r'boardQuery\s*=\s*null', code)) == 1, 'boardQuery is cleared outside the failure branch'
+
+
+def test_a_failed_board_load_stops_infinite_scroll():
+    """After a failed page-1 load `state` holds the new filters while hasNext/pageNo still describe the OLD
+    grid, so the still-observed sentinel appended the new filters' next page onto the old cards. The
+    failure branch now stops scrolling (hasNext false, then observeSentinel(), which unobserves and only
+    re-observes while hasNext), until a page-1 load succeeds and re-arms it."""
+    import re
+
+    page1_failure = _failed_page1_branch()
+    stop = re.search(r'hasNext\s*=\s*false\s*;', page1_failure)
+    assert stop, 'a failed page-1 load leaves infinite scroll armed on the old grid'
+    rearm = page1_failure.find('observeSentinel()', stop.end())
+    assert rearm != -1, 'the sentinel is not re-evaluated after hasNext is cleared'
+
+
+def _failed_page1_branch():
+    """fetchPage's failure handler, narrowed to its `if (!append) {` block (it holds no braces of its own)."""
     code = _career_js('function fetchPage(n, append) {', 'var sentIO')
     at = code.find('.catch(')
     assert at != -1, 'fetchPage lost its failure branch, so this pin no longer checks it'
-    assert 'if (!append) boardQuery = null;' in code[at:], 'a failed load blocks retrying the same query'
-    assert len(re.findall(r'boardQuery\s*=\s*null', code)) == 1, 'boardQuery is cleared outside the failure branch'
+    start = code.find('if (!append) {', at)
+    assert start != -1, "the failure handler lost its page-1 branch, so this pin no longer checks it"
+    return code[start:code.index('}', start)]
 
 
 def test_the_server_rendered_board_counts_as_on_screen():
@@ -223,7 +248,7 @@ def test_the_claim_banner_jump_opens_the_board_on_every_claimable():
     platform; the server half is pinned in test_contracts_service). Source text, no JS runner."""
     import re
 
-    jump = _career_js("document.querySelectorAll('[data-lab-goto]')", 'scrollIntoView')
+    jump = _career_js("e.target.closest('[data-lab-goto]')", 'scrollIntoView')
     assert re.search(r"dispatchEvent\(\s*new CustomEvent\(\s*'pp:board-filter',\s*\{\s*detail:\s*"
                      r"\{\s*status:\s*f,\s*allPlatforms:\s*true\s*\}", jump), 'the banner no longer opens the board filter'
     assert '.click()' not in jump, 'the banner clicks a chip again, which keeps a History scope'
@@ -265,8 +290,11 @@ def test_the_claim_banner_links_to_the_board_it_opens(client):
     c = _live_contract('banner-claim')
     EarnedContract.objects.create(profile=profile, contract=c, has_platinum=True, platinum_reached_at=tz.now())
 
+    from trophies.views.career_views import claim_board_url
+
     body = client.get('/career/').content.decode()
-    href = '?view=contracts&status=claimable' + ''.join(f'&platform={p}' for p in ALL_PLATFORMS)
+    href = '/career/?view=contracts&status=claimable' + ''.join(f'&platform={p}' for p in ALL_PLATFORMS)
+    assert claim_board_url() == href, 'the claim board is no longer Ready to Claim on every platform'
     assert f'href="{escape(href)}" data-lab-goto="contracts" data-goto-filter="claimable"' in body
 
 
@@ -287,3 +315,68 @@ def test_build_params_encodes_every_field_of_the_board_state():
     for field, key in keys.items():
         assert any(f'state.{field}' in ln and (f"p.set('{key}'" in ln or f"p.append('{key}'" in ln)
                    for ln in lines), f'buildParams never emits state.{field} as {key!r}'
+
+
+# The board's own functions: present in career.js, absent from the template.
+_BOARD_JS_ANCHORS = ('function fetchPage(', 'function buildParams(', 'function showView(', 'function syncURL(',
+                     'function seedFromURL(', 'function applyResult(')
+
+
+def test_the_board_script_lives_in_career_js_not_the_template():
+    """The Career script moved to static/js/career.js. A pin that still read the template would find no
+    JS at all, and every `not in` assertion it makes would pass on an empty slice. This keeps the two
+    files apart: the script's functions exist in career.js and nowhere in career.html, and no template
+    syntax leaked into the static file (it is served as-is, so a tag would reach the browser literally)."""
+    from tests.career_sources import career_script, career_template
+
+    script, template = career_script(), career_template()
+    for anchor in _BOARD_JS_ANCHORS:
+        assert script.count(anchor) == 1, f'{anchor!r} is missing from career.js (or defined twice)'
+        assert anchor not in template, f'{anchor!r} is back in career.html, so a pin may be reading the wrong file'
+    assert '{%' not in script and '{{' not in script, 'Django template syntax in a static file'
+
+
+def test_career_js_loads_after_its_dependencies_and_its_data(client):
+    """career.js reads Chart (the radar), the claim ceremony, and the #career-radar island at the top
+    level, so it must load after all three and run in place: no defer/async, which would also change
+    the order against the inline gate and DEBUG harness scripts it used to run among."""
+    import re
+
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    body = client.get('/career/').content.decode()
+    tags = re.findall(r'<script[^>]*>', body)
+    chart = next(i for i, t in enumerate(tags) if 'chart.umd' in t)
+    ceremony = next(i for i, t in enumerate(tags) if 'claim-ceremony.js' in t)
+    island = next(i for i, t in enumerate(tags) if 'id="career-radar"' in t)
+    career = [i for i, t in enumerate(tags) if 'js/career.js' in t]
+    assert len(career) == 1, career
+    assert max(chart, ceremony, island) < career[0], 'career.js loads before something it reads at load'
+    assert not re.search(r'\b(defer|async)\b', tags[career[0]]), 'career.js no longer runs in document order'
+
+
+def test_the_radar_island_carries_every_mode_and_its_job_slugs(client):
+    """The radar's data used to be template-rendered into the script; it now rides #career-radar. The
+    script reads `max`, `modes.overview`, a mode per discipline (labels and values in step), and the
+    job slugs per discipline in radar order for the click-to-filter jump."""
+    import json
+    import re
+
+    from trophies.services.job_render import DISCIPLINE_LABELS
+
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    body = client.get('/career/').content.decode()
+    raw = re.search(r'<script id="career-radar" type="application/json">(.*?)</script>', body, re.S)
+    assert raw, 'the radar island did not render'
+    radar = json.loads(raw.group(1))
+    assert radar['max'] >= 10
+    assert set(radar['modes']) == {'overview', *DISCIPLINE_LABELS}
+    assert radar['modes']['overview']['labels'] == list(DISCIPLINE_LABELS.values())
+    names = dict(Job.objects.values_list('slug', 'name'))
+    for slug in DISCIPLINE_LABELS:
+        mode = radar['modes'][slug]
+        assert len(mode['labels']) == len(mode['values']) == len(radar['job_slugs'][slug]) > 0, slug
+        # IN STEP, not just the same length: clicking radar point i filters the board to job_slugs[i], so it
+        # must be the job labelled at i.
+        assert [names[s] for s in radar['job_slugs'][slug]] == mode['labels'], slug

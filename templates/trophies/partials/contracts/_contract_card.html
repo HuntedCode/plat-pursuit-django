@@ -64,7 +64,7 @@ The map branch stays the default and is what Career renders, untouched.
         or job count). LEFT = the whole 5x5 job map: all 25 jobs, one row per discipline in
         display_order. The jobs THIS contract levels are lit in their family color; the rest are
         dimmed context (brighten on hover to identify them). Icons come from the page's <use> sprite
-        (job_icon_use), defined once, not re-inlined per cell. RIGHT = the reward stack: split ring,
+        (job_icon_use_bare in the map), defined once, not re-inlined per cell. RIGHT = the reward stack: split ring,
         total XP, and a state-driven line (Claim / % / Not started). Per-tier progress lives in the
         full-width tier bars below the body. The full job pills (icon + name + XP each) live in the
         tier-2 modal (_contract_modal.html).
@@ -113,14 +113,12 @@ The map branch stays the default and is what Career renders, untouched.
             {% comment %} `rjob`, not `job`: the loop variable used to be `job`, which now SHADOWS the
             optional page-scope variable of the same name. Harmless as written -- this branch only runs
             when `job` is falsy -- but it is the kind of thing that is true until someone moves a line. {% endcomment %}
-            <div class="rp-jobgrid" role="group" aria-label="Jobs this contract levels">
-                {% for d in disciplines %}{% for rjob in d.jobs %}
-                <span class="rp-jobcell{% if rjob.slug in p.element_slugs %} is-lit{% endif %}" data-slug="{{ rjob.slug }}" style="--disc: var(--disc-{{ d.slug }});" title="{{ rjob.name }}{% if rjob.slug in p.element_slugs %} &middot; +{{ p.xp_each|intcomma }} XP{% endif %}">
-                    {% job_icon_use rjob.icon '' %}
-                    {% if rjob.slug in p.element_slugs %}<span class="sr-only">{{ rjob.name }}, +{{ p.xp_each|intcomma }} XP</span>{% endif %}
-                </span>
-                {% endfor %}{% endfor %}
-            </div>
+            {% comment %} ONE LINE, deliberately: 24 cards x 25 cells, so every byte of indentation and every
+            repeated attribute is paid 600 times a page (this map was about half the page's HTML). The family
+            colour is a class (`rp-jobcell--<discipline>`), the SVG presentation is CSS (`.rp-jobcell svg`,
+            via `job_icon_use_bare`), and only a LIT cell carries `data-slug`: the ring link and the reveal
+            read lit cells alone. A dim cell keeps its `title`, the only way to name it on hover. {% endcomment %}
+            <div class="rp-jobgrid" role="group" aria-label="Jobs this contract levels">{% for d in disciplines %}{% for rjob in d.jobs %}{% if rjob.slug in p.element_slugs %}<span class="rp-jobcell rp-jobcell--{{ d.slug }} is-lit" data-slug="{{ rjob.slug }}" title="{{ rjob.name }} &middot; +{{ p.xp_each|intcomma }} XP">{% job_icon_use_bare rjob.icon %}<span class="sr-only">{{ rjob.name }}, +{{ p.xp_each|intcomma }} XP</span></span>{% else %}<span class="rp-jobcell rp-jobcell--{{ d.slug }}" title="{{ rjob.name }}">{% job_icon_use_bare rjob.icon %}</span>{% endif %}{% endfor %}{% endfor %}</div>
             {% endif %}
 
             <span class="rp-vdiv" aria-hidden="true"></span>
@@ -168,7 +166,14 @@ The map branch stays the default and is what Career renders, untouched.
                     <span class="rp-reward-xp__cap">total XP</span>
                 </div>
                 <div class="rp-status">
-                    {% if p.status == 'claimable' or p.status == 'accepted' %}
+                    {% if job and p.status == 'claimable' %}
+                        {% comment %} JOB DETAIL has no claim controller (the board's lives in career.js), so the
+                        Claim button rendered here did nothing. It links to the board that can claim instead:
+                        Ready to Claim, every platform (`claim_board_url`). {% endcomment %}
+                        <a class="btn btn-xs btn-primary" href="{{ claim_board_url }}" title="Claim it on your Career board">Claim in Career</a>
+                    {% elif job and p.status == 'accepted' %}
+                        <span class="rp-cta__done">Claimed &check;</span>
+                    {% elif p.status == 'claimable' or p.status == 'accepted' %}
                         {% comment %} Both rendered; .rp-row--accepted reveals the right one via CSS. The label
                         names which tier(s) an accept will bank (plat / 100% / both). {% endcomment %}
                         <button type="button" class="btn btn-xs btn-primary rp-accept" data-slug="{{ p.slug }}" title="{% if p.claim_plat and p.claim_full %}Claim both tiers, +{{ p.xp_total|intcomma }} XP{% elif p.claim_plat %}Claim the platinum tier, +{{ p.plat_xp|intcomma }} XP{% elif p.claim_full %}Claim the 100% tier, +{{ p.bonus_xp|intcomma }} XP{% else %}Claim your reward{% endif %}">Claim{% if p.claim_plat and p.claim_full %} both{% elif p.claim_plat %} plat{% elif p.claim_full and p.has_plat %} 100%{% endif %}</button>

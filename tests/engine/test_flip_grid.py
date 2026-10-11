@@ -180,8 +180,9 @@ def test_career_guards_every_shared_helper_call():
     on the guard's own mention of the name (`if (PP.x) { PP.x(...) }` contains `PP.x` twice, and the first
     has no guard before it).
     """
-    root = pathlib.Path(__file__).resolve().parents[2]
-    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    from tests.career_sources import career_script
+
+    career = career_script()
 
     for helper in ('progressiveArt', 'coverCarousel', 'ringHoverLink', 'staggerCards', 'cardReveal'):
         called = [l for l in career.split('\n') if f'PP.{helper}(' in l]
@@ -204,7 +205,9 @@ def test_the_reveal_observer_is_released_when_the_cards_it_watches_are_dropped()
     """
     root = pathlib.Path(__file__).resolve().parents[2]
     utils = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
-    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    from tests.career_sources import career_script
+
+    career = career_script()
 
     assert 'disconnect: function () { if (io) { io.disconnect(); } }' in utils
 

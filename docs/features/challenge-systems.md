@@ -490,9 +490,10 @@ Consequences worth knowing:
 - The reply's `granted` figure still travels, because the toast is the **fallback** for when the player
   cannot run (a missing module, a payload with no job to animate). A toast *and* a full-screen ceremony
   announcing the same number would be two answers to one question.
-- Unlike the Career page, this path does **not** reload afterwards: the same reply already carries the
-  re-rendered panel and squares, which are applied before the overlay opens — so the page behind it is
-  already correct when the ceremony closes.
+- This path does **not** reload afterwards: the same reply already carries the re-rendered panel and
+  squares, which are applied before the overlay opens, so the page behind it is already correct when the
+  ceremony closes. (Career no longer reloads either, since 2026-10, but it re-fetches its page instead: its
+  stale panels are most of the page. See job-board-contracts.md, "A claim refreshes Career in place".)
 - **Not reloading has one cost, and it is the nav.** The chrome is server-rendered, so the XP pill on My
   Pursuit was rendered before the claim and clearing its cached answer does nothing to the lozenge already on
   screen. The reply therefore also carries `xp_pending` (profile-wide — another run may still owe), and the

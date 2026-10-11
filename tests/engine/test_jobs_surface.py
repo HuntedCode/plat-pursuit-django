@@ -20,6 +20,7 @@ from django.urls import reverse
 
 from trophies.models import Contract, EarnedContract, Job, ProfileJobXP
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
+from tests.career_sources import career_script
 from tests.factories import ProfileFactory
 
 pytestmark = pytest.mark.django_db
@@ -590,9 +591,9 @@ def test_career_still_renders_the_full_job_map(client):
     assert '{% if job %}' in src and 'rp-jobgrid' in src, 'the map branch is gone'
     # The roster loop must not use `job` as its variable: it would shadow the page-scope one, and the two
     # mean opposite things (one job vs all 25).
-    # Bounded by the LOOP, not by the next `{% endif %}` -- the first one is inline on the cell's own
-    # class attribute, so slicing there ends the window before the loop body it is checking. Third time
-    # today an index-to-the-next-delimiter slice has cut short of its subject.
+    # Bounded by the LOOP, not by the next `{% endif %}` -- an `{% endif %}` sits inside the loop body (the
+    # lit/dim branch), so slicing there ends the window before the code it is checking. Third time today
+    # an index-to-the-next-delimiter slice has cut short of its subject.
     grid = src[src.index('rp-jobgrid'):]
     grid = grid[:grid.index('{% endfor %}{% endfor %}')]
     assert '{% for rjob in d.jobs %}' in grid, 'the map loop shadows the page-scope `job` again'
@@ -695,7 +696,7 @@ def test_career_and_job_detail_settle_the_skeleton_the_SAME_way():
     import pathlib as _p
     root = _p.Path(__file__).resolve().parents[2]
     utils = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
-    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    career = career_script()   # the Career JS (static/js/career.js), not the template
 
     assert 'function progressiveArt(scope)' in utils
     assert 'window.PlatPursuit.progressiveArt = progressiveArt;' in utils
@@ -881,7 +882,7 @@ def test_the_hover_link_is_shared_with_career_not_copied():
     pages doing one thing drift, and the drift is invisible because each looks right on its own page."""
     root = pathlib.Path(__file__).resolve().parents[2]
     utils = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
-    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    career = career_script()   # the Career JS (static/js/career.js), not the template
 
     assert 'function ringHoverLink(scope, opts)' in utils
     assert 'window.PlatPursuit.ringHoverLink = ringHoverLink;' in utils
@@ -1030,7 +1031,7 @@ def test_the_hover_gallery_is_shared_with_career_not_copied():
     crossfade ends up flashing on one of them."""
     root = pathlib.Path(__file__).resolve().parents[2]
     utils = (root / 'static' / 'js' / 'utils.js').read_text(encoding='utf-8')
-    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    career = career_script()   # the Career JS (static/js/career.js), not the template
 
     assert 'function coverCarousel(scope, opts)' in utils
     assert 'window.PlatPursuit.coverCarousel = coverCarousel;' in utils
@@ -1048,8 +1049,7 @@ def test_career_still_declares_the_observer_its_reveal_depends_on():
     is why it survived a green test run and a page that still looked correct. This asserts the identifiers
     the block reads are ones it also defines.
     """
-    root = pathlib.Path(__file__).resolve().parents[2]
-    career = (root / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    career = career_script()   # the Career JS (static/js/career.js), not the template
 
     # Every identifier `initReveal` reads must be declared in the file (or be a shared helper off PP).
     body = career[career.index('function initReveal(scope)'):]
@@ -1058,8 +1058,10 @@ def test_career_still_declares_the_observer_its_reveal_depends_on():
         assert f'var {name}' in career, f'`initReveal` reads `{name}` but nothing declares it'
         assert name in body
 
-    # And the call order that made the failure invisible: `initCards` runs before the scroller starts.
-    assert career.index('initCards(list);') < career.index('observeSentinel();')
+    # And the call order that made the failure invisible: `initCards` runs before the scroller starts, at the
+    # board's init (scoped there: `renderBoard` and fetchPage's failure branch also call these, in their own order).
+    init = career[career.index('    seedFromURL();\n'):]
+    assert init.index('initCards(list);') < init.index('observeSentinel();')
 
 
 def test_the_contract_cards_stagger_in_and_reveal_on_job_detail(client):

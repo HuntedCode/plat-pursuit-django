@@ -1,6 +1,6 @@
 """The three attention markers on the My Pursuit nav item: a claim count, an XP mark, a New pill.
 
-WHY A SEPARATE MODULE. All three answers already exist elsewhere -- `contracts_service.claimable_summary`,
+WHY A SEPARATE MODULE. All three answers already exist elsewhere -- `contract_service.claimable_summary`,
 `challenges.services.rewards.redeemable_slots` / `pending_xp`, and `new_contracts_modal.new_for` -- and none
 of them can be used here. They are page-cost functions, built for one render of `/career/` or of a challenge
 run, and this runs on EVERY page of the site for every signed-in hunter, including the Django admin. So these
@@ -36,7 +36,7 @@ which is the same exclusivity the pair already had and for the same reason -- th
 import logging
 
 from django.core.cache import cache
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -68,15 +68,16 @@ def claimable_count(profile):
     """How many contracts this hunter can claim right now, cached.
 
     ANSWERED FROM `EarnedContract`, NOT THE CATALOGUE. `contracts_service` derives the same status by
-    annotating every live contract with four correlated subqueries against this hunter's rows and
-    filtering the result -- correct, and the right shape for a board that also needs progress,
-    ranking and XP. Here the question is only "how many", and all four stamps that decide it live on
-    the hunter's own `EarnedContract` rows, of which there are a handful. One indexed query over
-    their rows instead of a scan of the catalogue.
+    annotating every live contract with correlated subqueries against this hunter's rows and filtering
+    the result -- correct, and the right shape for a board that also needs progress, ranking and XP.
+    Here the question is only "how many", and all five fields that decide it (the four stamps and
+    `has_platinum`) live on the hunter's own `EarnedContract` rows. One indexed count over their rows
+    instead of a scan of the catalogue.
 
-    The definition is copied deliberately rather than shared: `is_live`, `has_jobs` and the
-    reached-but-not-accepted pair are the board's rule (`annotated_contracts`), and the badge must
-    show the same number the board does or it is lying. A test pins the two together.
+    THE SAME SOURCE AS EVERY OTHER CLAIMABLE COUNT: `contract_service.claimable_contracts` (live, has
+    jobs, the engine's pending rule). This used to be a copy, and a copy once counted a platinum stamp
+    the engine would never pay, so the badge promised a reward that Claim granted nothing for. The badge
+    must show the same number the board does or it is lying. A test pins the two together.
     """
     if profile is None:
         return 0
@@ -85,15 +86,9 @@ def claimable_count(profile):
     if hit is not None:
         return hit
 
-    from trophies.models import Contract, EarnedContract
+    from trophies.services.contract_service import claimable_contracts
 
-    has_jobs = Exists(Contract.jobs.through.objects.filter(contract_id=OuterRef('contract_id')))
-    count = (EarnedContract.objects
-             .filter(profile=profile, contract__is_live=True)
-             .filter(Q(platinum_reached_at__isnull=False, platinum_accepted_at__isnull=True)
-                     | Q(full_reached_at__isnull=False, full_accepted_at__isnull=True))
-             .annotate(has_jobs=has_jobs).filter(has_jobs=True)
-             .count())
+    count = claimable_contracts(profile).count()   # COUNT(*): select/prefetch do not run for a count
     cache.set(key, count, CLAIMABLE_TTL)
     return count
 

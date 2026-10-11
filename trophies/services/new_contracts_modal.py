@@ -117,36 +117,54 @@ _ORDER = ('status_order', '-sort_progress', '-announced_at', '-went_live_at', 'n
 
 
 def _hero_covers(heroes):
-    """{igdb_id: cover url} for the hero contracts, in ONE query.
+    """{contract.pk: cover url} for the hero contracts, in at most TWO queries.
 
     The announcer's `cover_url_for` answers this per contract, which is right for a post naming three
     games and wrong here: six heroes on every Career load would be six round trips. Same gate
     (`_member_gate`), same `display_image_url` fallback chain, same most-played tie-break -- DISTINCT
-    ON just resolves them together.
+    ON just resolves the igdb-keyed heroes together. (This is not the board's path, so its DISTINCT ON is
+    not the one test_board_queries_never_select_distinct forbids.)
+
+    A bundle-only hero (igdb_id NULL, e.g. an episodic season) has no igdb-derived members; its art is
+    its most-played BUNDLE game, ungated like the engine. Keyed by pk because those heroes all share
+    igdb_id None.
 
     `.defer(...raw_response)` is not decoration: that column is the ~30 KB IGDB blob behind the May
     2026 web-server OOM, and nothing in a cover URL reads it.
     """
+    from django.db.models import F
+
     from trophies.models import Game
     from trophies.services.contracts_service import _member_gate
 
-    ids = [c.igdb_id for c in heroes if c.igdb_id]
-    if not ids:
-        return {}
-
-    games = (Game.objects
-             .filter(**_member_gate('concept__'), concept__igdb_match__igdb_id__in=ids)
-             .select_related('concept', 'concept__igdb_match')
-             .defer('concept__igdb_match__raw_response')
-             .order_by('concept__igdb_match__igdb_id', '-played_count')
-             .distinct('concept__igdb_match__igdb_id'))
-
-    covers = {}
-    for game in games:
+    def url_of(game):
         url = game.display_image_url or ''
         # Absolute or nothing. Every source in the chain is a URLField holding a PSN or IGDB CDN
         # address, so a relative value cannot arise -- and if one ever did, no art beats broken art.
-        covers[game.concept.igdb_match.igdb_id] = url if url.startswith('http') else ''
+        return url if url.startswith('http') else ''
+
+    covers = {}
+    ids = [c.igdb_id for c in heroes if c.igdb_id]
+    if ids:
+        games = (Game.objects
+                 .filter(**_member_gate('concept__'), concept__igdb_match__igdb_id__in=ids)
+                 .select_related('concept', 'concept__igdb_match')
+                 .defer('concept__igdb_match__raw_response')
+                 .order_by('concept__igdb_match__igdb_id', '-played_count')
+                 .distinct('concept__igdb_match__igdb_id'))
+        by_igdb = {game.concept.igdb_match.igdb_id: url_of(game) for game in games}
+        covers.update({c.pk: by_igdb.get(c.igdb_id, '') for c in heroes if c.igdb_id})
+
+    bundle_only = [c.pk for c in heroes if c.igdb_id is None]
+    if bundle_only:
+        games = (Game.objects
+                 .filter(concept__contract_bundles__contract_id__in=bundle_only)
+                 .annotate(_cid=F('concept__contract_bundles__contract_id'))
+                 .select_related('concept', 'concept__igdb_match')
+                 .defer('concept__igdb_match__raw_response')
+                 .order_by('-played_count'))
+        for game in games:
+            covers.setdefault(game._cid, url_of(game))   # most played first, so the first one wins
     return covers
 
 
@@ -269,7 +287,7 @@ def new_for(profile, user, limit=MAX_LIST, preview=False):
     heroes = rows[:MAX_HEROES]
     covers = _hero_covers(heroes)
     for hero in heroes:
-        hero.cover_url = covers.get(hero.igdb_id, '')
+        hero.cover_url = covers.get(hero.pk, '')
 
     return {
         'heroes': heroes,

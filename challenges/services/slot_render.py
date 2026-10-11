@@ -23,9 +23,8 @@ is the two functions this imports. Noted rather than done, because it is somebod
 
 THERE IS A THIRD CONTRACT-COVER RESOLVER, and it is worth naming here rather than discovering later.
 `trophies.services.new_contracts_modal._hero_covers` answers "cover art for a batch of contracts" in
-ONE query rather than the three here, and would have been the better starting point -- except that it
-keys on `igdb_id` and so silently drops an admin/episodic contract whose concepts come from its
-`ContractBundle` rows, which `member_concepts_by_contract` handles. More importantly it picks a
+at most two queries rather than the three here (since 2026-10 it also resolves an admin/episodic
+contract from its `ContractBundle` rows, which it used to drop). More importantly it picks a
 contract's stack by MOST-PLAYED (`-played_count`), where this picks by platform priority. So the same
 contract can legitimately show different art on a challenge square and in Career's new-contracts modal.
 

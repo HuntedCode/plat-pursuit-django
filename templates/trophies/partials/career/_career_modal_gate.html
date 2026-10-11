@@ -2,13 +2,14 @@
 
 Career's numbers count up as they scroll into view, and the ones above the fold are in view at load --
 so on a visit that opens a modal they tick to their final values behind the scrim and are finished
-before the reader has closed it. Three blocks in career.html wrap their kick-offs in this gate.
+before the reader has closed it. Three blocks in Career's script (static/js/career.js) wrap their
+kick-offs in this gate.
 
 WHY THE PAGE OWNS IT AND NOT A MODAL. It was `ppAfterCareerHowto`, published by the explainer's own
 inline script, which was correct while the explainer was the only modal here. The new-contracts modal
 makes it two, and a gate named after one of them is a gate the other cannot use -- exactly the
 situation the lobby was in before What's New, and fixed the same way. It must also be armed
-SYNCHRONOUSLY, before career.html's own scripts run, while the modals are wired from end-of-body
+SYNCHRONOUSLY, before Career's own script (career.js) runs, while the modals are wired from end-of-body
 utils.js: a gate armed alongside the modal wiring would arm after the code waiting on it gave up.
 
 So: the page arms, and each modal reports back when nothing is going to cover the screen.
