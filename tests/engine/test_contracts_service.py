@@ -3,7 +3,7 @@
 The Contracts board lists live Contracts to pursue. Pins: the contract card shape (games as
 the focal point + jobs + fixed-T reward split), the per-viewer status machine
 (available / pursuing / claimable / accepted) derived from EXISTING EarnedContract rows
-(never written on this read path), jobless/non-live contracts hidden, and claimable_count.
+(never written on this read path), jobless/non-live contracts hidden, and the claimable count.
 """
 import itertools
 
@@ -13,7 +13,7 @@ from django.utils import timezone
 from trophies.models import Contract, Job, Trophy
 from trophies.services import contract_service
 from trophies.services.contracts_service import (
-    board_facets, build_contract_modal, claimable_count, contracts_page, suggest_relaxation,
+    board_facets, build_contract_modal, contracts_page, suggest_relaxation,
 )
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 from tests.factories import (
@@ -36,6 +36,11 @@ def _contract(slug, job_slugs=('gunslinger',), live=True, title='My Game'):
     IGDBMatchFactory(concept=concept, igdb_id=igdb_id)   # factory default status = auto_accepted
     game = GameFactory(concept=concept)
     return contract, concept, game
+
+
+def claimable_count(profile):
+    """The claimable count every surface shows (Claim all's, the banner's, the nav badge's)."""
+    return contract_service.claimable_contracts(profile).count()
 
 
 def _project(ctx, slug):
@@ -435,7 +440,7 @@ def test_the_claim_banner_count_matches_the_board_it_opens(client):
     Known gap, deliberately not pinned: a claimable with NO platform-tagged member game (a bundle contract,
     or a game with an empty title_platform) still misses every platform filter. That is the bundle
     follow-up in docs/design/rebuild/job-board-contracts.md, where bundle games feed the platform match."""
-    from trophies.services.contracts_service import claimable_summary
+    from trophies.services.contract_service import claimable_summary
     from trophies.util_modules.constants import ALL_PLATFORMS
 
     profile = ProfileFactory(is_linked=True)

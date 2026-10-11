@@ -27,7 +27,7 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | POST | `/api/v1/refresh/` | Login | Trigger profile sync |
 | GET | `/api/v1/summary/` | Login | Profile summary data |
 | POST | `/api/v1/trophy-case/` | Login | Update trophy case selections |
-| POST | `/api/v1/projects/accept/` | Login (linked) | Accept a claimable Project (`{slug}`) or all (`{all:true}`); banks XP. Returns `{granted, accepted[], claimable_count}` |
+| POST | `/api/v1/projects/accept/` | Login (linked) | Accept a claimable Project (`{slug}`) or all (`{all:true}`); banks XP. `{all:true}` banks every claimable on a LIVE contract with jobs (`contract_service.claimable_contracts`). Returns `{granted, accepted[], claimable_count, claim}` (`claimable_count` from the same source, so it matches the banner, tab and nav badge; `claim` is the ceremony payload) |
 
 ### Universal Nav Search (Open)
 

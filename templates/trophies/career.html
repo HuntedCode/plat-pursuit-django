@@ -206,7 +206,7 @@
             <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="pp-switch__chip {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Radar
             </button>
-            <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="pp-switch__chip {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">
+            <button type="button" id="career-tab-contracts" data-claimable="{{ claimable_count|default:0 }}" aria-controls="career-panel-contracts" class="pp-switch__chip {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}
             </button>
         </div>

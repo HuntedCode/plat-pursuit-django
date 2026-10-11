@@ -148,7 +148,7 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
     relevance score -- so the board filters/sorts/paginates in the database, never by iterating
     the catalog. Read-only (reads existing EarnedContract rows + a ProfileGame aggregate).
     `with_ranking=False` skips the relevance/strength discipline subqueries for callers that only
-    count/aggregate (claimable_count/summary) and never sort -- shaves two correlated subqueries."""
+    don't sort by them (the new-contracts modal, job detail's list) -- shaves two correlated subqueries."""
     weights, strengths = _disc_rankings(disc_levels)
     if profile is not None:
         member_pg = ProfileGame.objects.filter(
@@ -573,19 +573,6 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
         'has_next': page_obj.has_next(),
         'total': paginator.count,
     }
-
-
-def claimable_count(profile):
-    """Cheap DB count of claimable contracts (for the 'Claim all' button)."""
-    return annotated_contracts(profile, with_ranking=False).filter(status='claimable').count()
-
-
-def claimable_summary(profile):
-    """{count, total_xp} across ALL claimable contracts (the pending-rewards rail), independent of
-    the board's paging/filters, via one DB aggregate."""
-    agg = (annotated_contracts(profile, with_ranking=False).filter(status='claimable')
-           .aggregate(count=Count('id'), xp=Sum('xp_eff')))
-    return {'count': agg['count'] or 0, 'total_xp': agg['xp'] or 0}
 
 
 def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, jobs=None, platforms=None,

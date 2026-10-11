@@ -290,8 +290,11 @@ def test_the_claim_banner_links_to_the_board_it_opens(client):
     c = _live_contract('banner-claim')
     EarnedContract.objects.create(profile=profile, contract=c, has_platinum=True, platinum_reached_at=tz.now())
 
+    from trophies.views.career_views import claim_board_url
+
     body = client.get('/career/').content.decode()
-    href = '?view=contracts&status=claimable' + ''.join(f'&platform={p}' for p in ALL_PLATFORMS)
+    href = '/career/?view=contracts&status=claimable' + ''.join(f'&platform={p}' for p in ALL_PLATFORMS)
+    assert claim_board_url() == href, 'the claim board is no longer Ready to Claim on every platform'
     assert f'href="{escape(href)}" data-lab-goto="contracts" data-goto-filter="claimable"' in body
 
 

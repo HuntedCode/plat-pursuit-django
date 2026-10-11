@@ -772,6 +772,10 @@ function ppCountUp(el, dur) {
 
     // ---- Server-driven filter/sort + infinite scroll ----
     var RESULTS_URL = list.dataset.resultsUrl;
+    // Every URL param the board owns: what syncURL clears before re-writing, and what marks a URL as
+    // carrying a board filter. (showView's strip list, in the view IIFE, is a separate copy; a test holds
+    // it to this one.)
+    var BOARD_KEYS = ['status', 'new', 'q', 'sort', 'discipline', 'job', 'platform', 'scope'];
     var ACCEPT_URL = list.dataset.acceptUrl;
     var sentinel = document.getElementById('rp-sentinel');
     var loading = document.getElementById('rp-loading');
@@ -912,7 +916,7 @@ function ppCountUp(el, dur) {
         // dropped, and seedFromURL turns it back on next reload) and doubles up when switched on
         // again. That is the exact "a filter the controller does not fully know about" failure
         // _filter_contracts' own comment records.
-        ['status', 'new', 'q', 'sort', 'discipline', 'job', 'platform', 'scope'].forEach(function (k) { params.delete(k); });
+        BOARD_KEYS.forEach(function (k) { params.delete(k); });
         var bp = new URLSearchParams(buildParams(1)); bp.delete('page');
         bp.forEach(function (v, k) { params.append(k, v); });          // keep any non-board params (e.g. view=contracts)
         var qs = params.toString();
@@ -1254,6 +1258,14 @@ function ppCountUp(el, dur) {
     // the server already rendered page 1 for these exact params (shareable/reload-safe, no flash).
     seedFromURL();
     boardQuery = buildParams(1);   // the SSR board, so re-asking for it on load is a no-op too
+    // The Contracts tab's badge counts claimables on EVERY platform, but the default board shows
+    // current-gen with no status filter, so a tap could land on fewer than the badge promised. The FIRST
+    // time the tab is opened in a visit, onto that untouched default board, it lands on Ready to Claim
+    // (every platform) instead, the banner's jump. Armed only when the URL carried no board filter (a
+    // deep link or shared filter is never overridden), and spent on the first entry to Contracts however
+    // it happens, landing or not, so a later return never swaps out a board the hunter has been using.
+    var landingQuery = BOARD_KEYS.some(function (k) { return new URLSearchParams(location.search).has(k); })
+        ? null : boardQuery;
     applyFacets(readFacets(document));
     updateAdvCount();
     syncAria();
@@ -1261,10 +1273,22 @@ function ppCountUp(el, dur) {
     initCards(list);
     observeSentinel();
     var panel = list.closest('.lab-view');
-    if (panel && !panel.hidden) staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));  // Contracts is the landing view
+    if (panel && !panel.hidden) {
+        staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));  // Contracts is the landing view
+        landingQuery = null;   // the hunter has already seen this board, so the claim landing is spent
+    }
     document.addEventListener('pp:contracts-shown', function () {
         syncURL();   // returning to Contracts: re-add its (still-set) filters to the URL that showView scoped away
         staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));
+        // The one-time claim landing (see `landingQuery`). `boardQuery === landingQuery` means the board
+        // is still the untouched default: the radar jump changes it BEFORE clicking the tab, so it is
+        // never hijacked, and the banner's own jump asks for the same board, so the dedupe drops it.
+        var tab = document.getElementById('career-tab-contracts');
+        var landing = landingQuery;
+        landingQuery = null;   // spent on this first entry, landing or not
+        if (landing && boardQuery === landing && tab && parseInt(tab.dataset.claimable || '0', 10) > 0) {
+            document.dispatchEvent(new CustomEvent('pp:board-filter', { detail: { status: 'claimable', allPlatforms: true } }));
+        }
     });
 
     // Jumps to the Board: a radar point / detail bar (radar IIFE) or the claim banner dispatches
