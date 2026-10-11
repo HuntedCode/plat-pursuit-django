@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 def _contract_elements_for_concepts(concept_ids):
-    """Map concept_id -> [element display dicts] for concepts whose game keys a LIVE Contract
-    (igdb-derived: anchored + trusted concept sharing the Contract's igdb_id). Batched."""
+    """Map concept_id -> [element display dicts] for concepts whose game belongs to a LIVE Contract
+    (`contract_by_concept_map`: its igdb home, else a bundle-only contract listing it). Batched."""
     if not concept_ids:
         return {}
     from trophies.services.contract_service import contract_by_concept_map

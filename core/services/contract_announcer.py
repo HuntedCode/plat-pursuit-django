@@ -132,9 +132,9 @@ def highlights(contracts, limit=MAX_HIGHLIGHTS):
     PP-specific, so it measures reach on THIS site rather than globally, which is the more useful
     figure for deciding what to lead a post to this community with.
 
-    Reached through `_member_at_igdb`, the same correlated-subquery shape `annotated_contracts` uses,
-    rather than a membership join: contract membership is DERIVED from the raw igdb id, so there is no
-    join to make.
+    Reached through the members `annotated_contracts` reads (`_member_at_igdb`, or a bundle-only
+    contract's bundle games via `_home_or_bundle`), rather than a membership join: membership is DERIVED,
+    so there is no join to make.
 
     ART IS NOT A REQUIREMENT TO BE A HIGHLIGHT. The first cut skipped contracts without a usable
     cover, reasoning that a highlight with nothing to look at wastes a slot -- but the slot is a TITLE
@@ -143,13 +143,18 @@ def highlights(contracts, limit=MAX_HIGHLIGHTS):
     So every pick is titled, and `art` is '' when there is none; the caller takes the image from the
     first pick that has one.
     """
-    from trophies.models import Game               # local: keeps the module import-light
-    from trophies.services.contracts_service import _member_at_igdb
+    from django.db.models import IntegerField, OuterRef
 
-    reach = Subquery(
-        Game.objects.filter(**_member_at_igdb('concept__'))
-        .order_by('-played_count').values('played_count')[:1]
-    )
+    from trophies.models import Game               # local: keeps the module import-light
+    from trophies.services.contracts_service import _home_or_bundle, _member_at_igdb
+
+    # A bundle-only contract (igdb_id NULL) reaches hunters through its BUNDLE games, as the board reads it.
+    reach = _home_or_bundle(
+        Subquery(Game.objects.filter(**_member_at_igdb('concept__'))
+                 .order_by('-played_count').values('played_count')[:1]),
+        Subquery(Game.objects.filter(concept__contract_bundles__contract=OuterRef('pk'))
+                 .order_by('-played_count').values('played_count')[:1]),
+        output_field=IntegerField())
     # Fetch only the SCORES and sort the caller's own objects, rather than re-fetching rows we were
     # handed. Two reasons, and the second is the one that bites later: the caller's contracts arrive
     # with `jobs` prefetched, and returning fresh instances would silently drop that -- so the day a
@@ -165,7 +170,7 @@ def highlights(contracts, limit=MAX_HIGHLIGHTS):
 
 
 def cover_url_for(contract):
-    """The cover of the contract's most-played member game, or ''.
+    """The cover of the contract's most-played member game (a bundle-only contract's bundle games), or ''.
 
     Goes through `Game.display_image_url`, the single source of truth for the fallback chain
     (trusted IGDB cover -> PSN concept icon -> title image -> title icon). Reimplementing that chain
@@ -178,8 +183,13 @@ def cover_url_for(contract):
     from trophies.models import Game
     from trophies.services.contracts_service import _member_gate
 
-    game = (Game.objects
-            .filter(**_member_gate('concept__'), concept__igdb_match__igdb_id=contract.igdb_id)
+    if contract.igdb_id is None:
+        # Bundle-only (e.g. an episodic season): its members are its bundles' games, ungated like the engine.
+        # `igdb_id=None` below would have meant `IS NULL`, which the trusted gate leaves empty: no art.
+        members = Game.objects.filter(concept__contract_bundles__contract=contract)
+    else:
+        members = Game.objects.filter(**_member_gate('concept__'), concept__igdb_match__igdb_id=contract.igdb_id)
+    game = (members
             .select_related('concept', 'concept__igdb_match')
             .defer('concept__igdb_match__raw_response')
             .order_by('-played_count')

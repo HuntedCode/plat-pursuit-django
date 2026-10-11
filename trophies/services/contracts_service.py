@@ -14,14 +14,15 @@ from datetime import timedelta
 
 from django.core.paginator import Paginator
 from django.db.models import (
-    Avg, BooleanField, Case, CharField, Count, DateTimeField, Exists, F, IntegerField, Max, OuterRef,
-    Q, Subquery, Sum, Value, When,
+    Avg, BooleanField, Case, CharField, Count, DateTimeField, Exists, ExpressionWrapper, F, IntegerField,
+    Max, OuterRef, Q, Subquery, Sum, Value, When,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Cast, Coalesce, Floor
 from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractXPGrant, EarnedContract, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP, Trophy,
+    Contract, ContractBundle, ContractXPGrant, EarnedContract, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP,
+    Trophy,
 )
 from trophies.services import job_render
 from trophies.services.contract_service import pending_tier_q
@@ -143,6 +144,31 @@ def _disc_rankings(disc_levels):
     return relevance, strength
 
 
+def _home_or_bundle(home, bundle, output_field=None):
+    """Per contract row: `bundle` for a bundle-only contract (igdb_id NULL, members come from its bundles),
+    `home` for every other. A CASE, so each row evaluates exactly one of the two. For per-row values
+    (a filter on one of them, e.g. on status, is a per-row subplan as it always was). To FILTER contracts by
+    a member game, use `_member_game_match`'s hashed id sets instead (see its docstring)."""
+    return Case(When(igdb_id__isnull=True, then=bundle), default=home,
+                output_field=output_field or BooleanField())
+
+
+def _bundle_progress(profile):
+    """A bundle-only contract's progress for `profile`: its best bundle's average over its concepts, each
+    concept at its best game's progress and an unplayed one at 0 (the denominator is the bundle's
+    concepts, not the games played), floored. 0 when it has no bundle with concepts."""
+    concept_best = Coalesce(Subquery(
+        ProfileGame.objects.filter(profile=profile, game__concept_id=OuterRef('concept_id'))
+        .order_by('-progress').values('progress')[:1]), 0)
+    bundle_avg = Subquery(
+        ContractBundle.concepts.through.objects.filter(contractbundle_id=OuterRef('pk'))
+        .annotate(p=concept_best).values('contractbundle_id').annotate(a=Avg('p')).values('a')[:1])
+    best = Subquery(
+        ContractBundle.objects.filter(contract=OuterRef('pk')).annotate(a=bundle_avg)
+        .order_by(F('a').desc(nulls_last=True)).values('a')[:1])   # an empty bundle's NULL average sorts last
+    return Cast(Floor(Coalesce(best, Value(0))), IntegerField())
+
+
 def annotated_contracts(profile, disc_levels=None, with_ranking=True):
     """Live Contracts annotated IN SQL with the viewer's per-contract status/progress and a
     relevance score -- so the board filters/sorts/paginates in the database, never by iterating
@@ -156,7 +182,14 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
             **_member_at_igdb('game__concept__'),
         )
         ec = EarnedContract.objects.filter(profile=profile, contract=OuterRef('pk'))
-        max_progress = Coalesce(Subquery(member_pg.order_by('-progress').values('progress')[:1]), 0)
+        # A bundle-only contract completes when EVERY concept in one of its bundles is done, so "best single
+        # game" would read one finished episode of five as 100%. Its progress is the BEST BUNDLE's average
+        # over its concepts (each concept at its best game, an unplayed one at 0), floored so it never reads
+        # 100 before the bundle is. Separate correlated subqueries chosen by a CASE, evaluated only for those
+        # rows: never an OR across join chains, which would scan the hunter's whole ProfileGame set per row.
+        max_progress = _home_or_bundle(
+            Coalesce(Subquery(member_pg.order_by('-progress').values('progress')[:1]), 0),
+            _bundle_progress(profile), output_field=IntegerField())
         any_plat = Exists(member_pg.filter(has_plat=True))
         plat_reached = Subquery(ec.values('platinum_reached_at')[:1])
         plat_accepted = Subquery(ec.values('platinum_accepted_at')[:1])
@@ -164,8 +197,8 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
         full_accepted = Subquery(ec.values('full_accepted_at')[:1])
         # The FROZEN platinum flag from EarnedContract (set at first reach) -- the same signal the accept
         # engine uses to decide the tier split (contract_service._has_platinum, which unions the satisfier
-        # bundles). Gate the History split on THIS, not member-only `defines_plat`: an episodic/bundle
-        # contract has no igdb-derived members (defines_plat always False) yet can carry a real platinum tier.
+        # bundles). Gate the History split on THIS, not the live `defines_plat`, which describes what the
+        # members define TODAY: the row's split was frozen at first reach and is what accepting pays.
         ec_has_platinum = Subquery(ec.values('has_platinum')[:1])
     else:
         max_progress, any_plat = Value(0), Value(False)
@@ -190,11 +223,14 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
         Contract.objects.filter(is_live=True)
         .annotate(
             has_jobs=_job_exists(),   # jobless -> awards nothing
-            # Do the member games DEFINE a platinum? (a member-only cut of contract_service._has_platinum).
-            # Drives the card's tier split ONLY until the hunter has a row: from then on the row's frozen
-            # `ec_has_platinum` decides it, because that is what accepting pays (project_card).
-            defines_plat=Exists(Trophy.objects.filter(
-                trophy_type='platinum', **_member_at_igdb('game__concept__'))),
+            # Do the member games DEFINE a platinum? (home members, or a bundle-only contract's bundle games:
+            # the same members contract_service._has_platinum reads for it). Drives the card's tier split
+            # ONLY until the hunter has a row: from then on the row's frozen `ec_has_platinum` decides it,
+            # because that is what accepting pays (project_card).
+            defines_plat=_home_or_bundle(
+                Exists(Trophy.objects.filter(trophy_type='platinum', **_member_at_igdb('game__concept__'))),
+                Exists(Trophy.objects.filter(trophy_type='platinum',
+                                             game__concept__contract_bundles__contract=OuterRef('pk')))),
             max_progress=max_progress, any_plat=any_plat,
             plat_reached=plat_reached, plat_accepted=plat_accepted,
             full_reached=full_reached, full_accepted=full_accepted, ec_has_platinum=ec_has_platinum,
@@ -251,16 +287,34 @@ _SORTS = {
 }
 
 
+def _member_game_match(**game_filter):
+    """A contract with a MEMBER game matching `game_filter`, as a boolean expression usable both as a
+    filter and as an annotation. Two kinds of member:
+
+    - HOME members: games of the anchored + trusted concepts at the contract's raw igdb_id.
+    - BUNDLE members, for a bundle-only contract (igdb_id NULL, e.g. an episodic season): the games of
+      its bundles' concepts. Ungated, as the engine is (`contract_service._detect_tiers` reads bundle
+      concepts with no anchor/trust check). A normal contract that ALSO carries a satisfier bundle keeps
+      only its home members (owner decision 2026-10-10: bundle-only).
+
+    Shaped as `pk IN (home ids) OR pk IN (bundle ids)`, two UNCORRELATED id sets, not a CASE around two
+    correlated EXISTS. Postgres runs each set once and probes it hashed, and the home set keeps the
+    EXISTS semi-join it always had, whereas a CASE (or an OR of correlated EXISTS) in WHERE becomes a
+    subplan run per contract row on a board of thousands. Never a join: a join returns one row per
+    matching game, and the DISTINCT that hid those cost the board ~4 s a load (see _filter_contracts)."""
+    home = Contract.objects.filter(is_live=True, igdb_id__isnull=False).filter(
+        Exists(Game.objects.filter(**game_filter, **_member_at_igdb('concept__')))).values('pk')
+    bundle = Contract.objects.filter(is_live=True, igdb_id__isnull=True).filter(
+        Exists(Game.objects.filter(**game_filter, concept__contract_bundles__contract=OuterRef('pk')))).values('pk')
+    return ExpressionWrapper(Q(pk__in=home) | Q(pk__in=bundle), output_field=BooleanField())
+
+
 def _platform_exists(platforms):
-    """A contract with any member game on one of `platforms`, as an EXISTS subquery rather than an
-    M2M join through memberships->concept->games. The join multiplied contract rows (one per member
-    game x platform), which forced a DISTINCT and made the planner seq-scan the whole game table
-    re-evaluating the JSONB filter (~170ms on the default board). EXISTS evaluates once per contract
-    and hits the title_platform GIN index via `?|` (has_any_keys)."""
-    return Exists(Game.objects.filter(
-        title_platform__has_any_keys=list(platforms),
-        **_member_at_igdb('concept__'),
-    ))
+    """A contract with any member game (`_member_game_match`) on one of `platforms`. The match hits the
+    title_platform GIN index via `?|` (has_any_keys). It was an M2M join once, which multiplied contract
+    rows (one per member game x platform), forced a DISTINCT and made the planner seq-scan the whole game
+    table re-evaluating the JSONB filter (~170ms on the default board)."""
+    return _member_game_match(title_platform__has_any_keys=list(platforms))
 
 
 def _job_exists(**job_filter):
@@ -313,21 +367,21 @@ def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platform
         # went_live_at is NULL for everything published before the field existed (the launch set),
         # so they correctly read as "not new" rather than flooding the chip on day one.
         qs = qs.filter(went_live_at__gte=new_contract_cutoff())
-    if platforms:                             # any member game on a selected platform (EXISTS, not a join)
+    if platforms:                             # any member game on a selected platform (never a join)
         qs = qs.filter(_platform_exists(platforms))
     if q:
-        # Member-game-title search: a member game is derived (no membership join), so match it as an
-        # annotated Exists over the igdb path rather than a relational join.
-        game_name_match = Exists(Game.objects.filter(
-            title_name__icontains=q, **_member_at_igdb('concept__')))
-        qs = qs.annotate(_game_name_match=game_name_match,
+        # Member-game-title search: a member game is derived (no membership join), so it is matched the
+        # way the platform filter is (`_member_game_match`: home members, or a bundle-only contract's
+        # bundle games), never through a relational join.
+        qs = qs.annotate(_game_name_match=_member_game_match(title_name__icontains=q),
                          _job_name_match=_job_exists(name__icontains=q)).filter(
             Q(name__icontains=q)
             | Q(_game_name_match=True)
             | Q(_job_name_match=True)
         )
-    # No DISTINCT, and no filter here may need one: none joins a to-many relation. The job, platform and
-    # game-title matches are EXISTS, and the rest read the contract's own columns or annotations, so a
+    # No DISTINCT, and no filter here may need one: none joins a to-many relation. The job matches are
+    # EXISTS, the platform and game-title matches are id sets (`_member_game_match`), and the rest read
+    # the contract's own columns or annotations, so a
     # contract is one row however many of its jobs or games match. A DISTINCT over the annotated board
     # stops Django dropping the annotations a query never reads, so every correlated subquery in
     # annotated_contracts runs for every live contract. Measured on prod (2026-10-10, 3,387 live
@@ -336,8 +390,9 @@ def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platform
 
 
 def _card_prefetch(qs):
-    # Member games are igdb-derived (no membership relation to prefetch); _member_games queries them
-    # per card. Jobs stay prefetched (the card's primary payload).
+    # Member games are derived (igdb key, or a bundle-only contract's bundles), with no membership relation
+    # to prefetch; _member_games_by_contract batches them per page. Jobs stay prefetched (the card's primary
+    # payload).
     return qs.prefetch_related('jobs')
 
 
@@ -349,39 +404,40 @@ def _order_member_games(games):
 
 
 def _member_games(contract):
-    """One contract's member games newest-first. Igdb-derived: the contract's member concepts
-    (anchored + trusted at its igdb_id) resolved to their games. For a PAGE of contracts use
-    _member_games_by_igdb (one query) instead of this per-contract lookup."""
-    member_ids = contract.member_concept_ids()
-    if not member_ids:
-        return []
-    games = list(
-        Game.objects.filter(concept_id__in=member_ids)
-        .select_related('concept', 'concept__igdb_match')
-        .defer('concept__igdb_match__raw_response')
-    )
-    return _order_member_games(games)
+    """One contract's member games newest-first (home members, or a bundle-only contract's bundle games).
+    For a PAGE of contracts use _member_games_by_contract, which batches them."""
+    return _member_games_by_contract([contract]).get(contract.pk, [])
 
 
-def _member_games_by_igdb(contracts):
-    """Batch: {igdb_id: [member games newest-first]} for a whole page of contracts in ONE query,
-    so the board doesn't re-run _member_games (2 queries) per card. Null-igdb (episodic) contracts
-    contribute no key -- they have no igdb-derived members, same as the per-contract path."""
-    igdb_ids = {c.igdb_id for c in contracts if c.igdb_id is not None}
-    if not igdb_ids:
-        return {}
-    games = (
-        Game.objects.filter(
-            concept__igdb_match__igdb_id__in=igdb_ids,
-            **_member_gate(),   # anchored + trusted (concrete ids supplied above, no OuterRef)
-        )
-        .select_related('concept', 'concept__igdb_match')
-        .defer('concept__igdb_match__raw_response')
-    )
-    by_igdb = {}
-    for g in games:
-        by_igdb.setdefault(g.concept.igdb_match.igdb_id, []).append(g)
-    return {gid: _order_member_games(gl) for gid, gl in by_igdb.items()}
+def _member_games_by_contract(contracts):
+    """Batch: {contract.pk: [member games newest-first]} for a page of contracts, in at most TWO queries
+    however many cards: one for the home members of every igdb-keyed contract, one for the bundle games of
+    every bundle-only contract (igdb_id NULL, members come from its bundles, ungated like the engine).
+    Keyed by contract pk because bundle-only contracts all share igdb_id None. A game in two of a contract's
+    bundles is listed once (deduplicated here, never by DISTINCT: see test_board_queries_never_select_distinct)."""
+    def load(qs):
+        return qs.select_related('concept', 'concept__igdb_match').defer('concept__igdb_match__raw_response')
+
+    by_contract = {}
+    home_ids = {}
+    for c in contracts:
+        if c.igdb_id is not None:
+            home_ids.setdefault(c.igdb_id, []).append(c.pk)
+    if home_ids:
+        for g in load(Game.objects.filter(concept__igdb_match__igdb_id__in=home_ids, **_member_gate())):
+            for pk in home_ids[g.concept.igdb_match.igdb_id]:
+                by_contract.setdefault(pk, []).append(g)
+
+    bundle_only = [c.pk for c in contracts if c.igdb_id is None]
+    if bundle_only:
+        seen = set()
+        games = load(Game.objects.filter(concept__contract_bundles__contract_id__in=bundle_only)
+                     .annotate(_cid=F('concept__contract_bundles__contract_id')))
+        for g in games:
+            if (g._cid, g.pk) not in seen:
+                seen.add((g._cid, g.pk))
+                by_contract.setdefault(g._cid, []).append(g)
+    return {pk: _order_member_games(gl) for pk, gl in by_contract.items()}
 
 
 # The platform pills shown on every contract card (key, display label), lit when a member game
@@ -561,9 +617,9 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
         return {'contracts': [], 'page': page, 'has_next': False, 'total': paginator.count}
     page_obj = paginator.get_page(page)
     page_contracts = list(page_obj)
-    games_by_igdb = _member_games_by_igdb(page_contracts)   # one query for the whole page's members
+    games_by_contract = _member_games_by_contract(page_contracts)   # batched for the whole page's members
     cutoff = new_contract_cutoff()   # ONE clock read shared by the whole page of cards
-    cards = [project_card(c, games_by_igdb.get(c.igdb_id, []), new_cutoff=cutoff)
+    cards = [project_card(c, games_by_contract.get(c.pk, []), new_cutoff=cutoff)
              for c in page_contracts]
     if scope == 'history':
         _attach_banked(cards, page_contracts, profile)
@@ -581,8 +637,8 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
     active filters (so picking PS5 doesn't zero out PS4's count, and status counts reflect your
     current discipline/platform view). Whale-safe: the rows are the curated live-Contract catalog, never
     the user's library. Not free, though: that catalog is in the thousands, and each aggregate evaluates
-    correlated subqueries per row (e.g. the has_jobs gate, the Board/History split, the per-platform
-    EXISTS, and status wherever it is counted or filtered), so the cost scales with the catalog for
+    subqueries per row (e.g. the has_jobs gate, the Board/History split, the per-platform member match,
+    and status wherever it is counted or filtered), so the cost scales with the catalog for
     EVERY user.
     `scope` constrains every facet to the active Board/History set."""
     if platforms is None:                     # match contracts_page: absent -> current-gen, so the
@@ -619,12 +675,12 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
         new_count = status_counts.pop('new')
     # Platform chips: ignore the platform filter, respect status/discipline/job/search + scope -- so a
     # legacy platform shows its true total even while the board is defaulted to current-gen. ONE aggregate:
-    # alias each platform's member-game EXISTS, then a count-with-FILTER per platform (was a COUNT per
-    # platform -- 6 round-trips collapsed to 1; same numbers, EXISTS doesn't multiply rows so distinct holds).
+    # alias each platform's member-game match, then a count-with-FILTER per platform (was a COUNT per
+    # platform -- 6 round-trips collapsed to 1; same numbers, the match doesn't multiply rows so distinct holds).
     p_base = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs, scope=scope,
                                new_only=new_only)
     platform_counts = p_base.annotate(**{
-        f'_plat_{p}': _platform_exists([p]) for p in ALL_PLATFORMS   # resolve the correlated EXISTS per contract row
+        f'_plat_{p}': _platform_exists([p]) for p in ALL_PLATFORMS   # one member-game match per platform
     }).aggregate(**{
         p: Count('id', filter=Q(**{f'_plat_{p}': True}), distinct=True) for p in ALL_PLATFORMS
     })
