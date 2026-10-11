@@ -591,9 +591,9 @@ def test_career_still_renders_the_full_job_map(client):
     assert '{% if job %}' in src and 'rp-jobgrid' in src, 'the map branch is gone'
     # The roster loop must not use `job` as its variable: it would shadow the page-scope one, and the two
     # mean opposite things (one job vs all 25).
-    # Bounded by the LOOP, not by the next `{% endif %}` -- the first one is inline on the cell's own
-    # class attribute, so slicing there ends the window before the loop body it is checking. Third time
-    # today an index-to-the-next-delimiter slice has cut short of its subject.
+    # Bounded by the LOOP, not by the next `{% endif %}` -- an `{% endif %}` sits inside the loop body (the
+    # lit/dim branch), so slicing there ends the window before the code it is checking. Third time today
+    # an index-to-the-next-delimiter slice has cut short of its subject.
     grid = src[src.index('rp-jobgrid'):]
     grid = grid[:grid.index('{% endfor %}{% endfor %}')]
     assert '{% for rjob in d.jobs %}' in grid, 'the map loop shadows the page-scope `job` again'
