@@ -202,11 +202,34 @@ def test_a_failed_board_load_can_be_retried_with_the_same_query():
     clear on the success path would let every identical request through again."""
     import re
 
+    page1_failure = _failed_page1_branch()
+    assert re.search(r'boardQuery\s*=\s*null\s*;', page1_failure), 'a failed load blocks retrying the same query'
+    code = _career_js('function fetchPage(n, append) {', 'var sentIO')
+    assert len(re.findall(r'boardQuery\s*=\s*null', code)) == 1, 'boardQuery is cleared outside the failure branch'
+
+
+def test_a_failed_board_load_stops_infinite_scroll():
+    """After a failed page-1 load `state` holds the new filters while hasNext/pageNo still describe the OLD
+    grid, so the still-observed sentinel appended the new filters' next page onto the old cards. The
+    failure branch now stops scrolling (hasNext false, then observeSentinel(), which unobserves and only
+    re-observes while hasNext), until a page-1 load succeeds and re-arms it."""
+    import re
+
+    page1_failure = _failed_page1_branch()
+    stop = re.search(r'hasNext\s*=\s*false\s*;', page1_failure)
+    assert stop, 'a failed page-1 load leaves infinite scroll armed on the old grid'
+    rearm = page1_failure.find('observeSentinel()', stop.end())
+    assert rearm != -1, 'the sentinel is not re-evaluated after hasNext is cleared'
+
+
+def _failed_page1_branch():
+    """fetchPage's failure handler, narrowed to its `if (!append) {` block (it holds no braces of its own)."""
     code = _career_js('function fetchPage(n, append) {', 'var sentIO')
     at = code.find('.catch(')
     assert at != -1, 'fetchPage lost its failure branch, so this pin no longer checks it'
-    assert 'if (!append) boardQuery = null;' in code[at:], 'a failed load blocks retrying the same query'
-    assert len(re.findall(r'boardQuery\s*=\s*null', code)) == 1, 'boardQuery is cleared outside the failure branch'
+    start = code.find('if (!append) {', at)
+    assert start != -1, "the failure handler lost its page-1 branch, so this pin no longer checks it"
+    return code[start:code.index('}', start)]
 
 
 def test_the_server_rendered_board_counts_as_on_screen():

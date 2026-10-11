@@ -683,7 +683,7 @@ function ppCountUp(el, dur) {
         // Reflect the active tab in the URL (shareable + reload-safe) and SCOPE the contract filters to the
         // Contracts tab -- strip them when leaving (a shared Jobs/Radar link stays clean); returning re-adds
         // them from the still-set filter UI via pp:contracts-shown -> syncURL().
-        PlatPursuit.syncViewParam(name, { default: 'jobs', paramView: 'contracts', params: ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'page', 'scope'] });
+        PlatPursuit.syncViewParam(name, { default: 'jobs', paramView: 'contracts', params: ['status', 'new', 'q', 'sort', 'discipline', 'job', 'platform', 'page', 'scope'] });
         // Animate the radar in the first time it's shown (and keep it correctly sized after).
         if (name === 'radar') revealRadar();
         // Stagger the contract cards in on reveal (mirrors the Jobs tab's content animation).
@@ -1407,7 +1407,14 @@ function ppCountUp(el, dur) {
                 if ((e && e.name === 'AbortError') || myReq !== reqSeq) return;   // superseded -> the newer request owns state
                 busy = false; if (loading) loading.hidden = true;
                 if (searchField) searchField.setBusy(false);
-                if (!append) boardQuery = null;              // the grid is still the old board, so the same query may retry
+                if (!append) {
+                    boardQuery = null;                       // the grid is not the board asked for, so the same query may retry
+                    // Usually it is still the OLD board (the request failed), and hasNext/pageNo still describe it
+                    // while `state` holds the new filters: left observed, the sentinel would append the NEW filters'
+                    // next page onto the OLD grid. (Rarely the throw came from rendering a page that did arrive;
+                    // stopping is still the safe answer.) Stop scrolling until a page-1 load succeeds and re-arms it.
+                    hasNext = false; observeSentinel();
+                }
                 if (Toast) Toast.error('Could not load Contracts. Please try again.');
             });
     }
