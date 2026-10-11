@@ -37,13 +37,16 @@ import logging
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from trophies.models import (
     Contract, EarnedContract, EarnedTrophy, Profile, ProfileGame,
 )
-from trophies.services.contract_service import _detect_tiers, _has_platinum, mark_contract_reached
+from trophies.services.contract_service import (
+    _detect_tiers, _has_platinum, mark_contract_reached, plat_stamp_due,
+)
 from trophies.util_modules.cache import redis_client
 
 logger = logging.getLogger(__name__)
@@ -244,12 +247,12 @@ class Command(BaseCommand):
         for contract in contracts:
             member_ids = contract.member_concept_ids()
             marks = candidates = 0
-            # ASKED FRESH, ONCE PER CONTRACT, and deliberately not read off `EarnedContract`.
-            # `has_platinum` is frozen on the row when it is created and never updated, while
-            # membership is IGDB-derived and can gain a platinum-bearing game later -- so a row
-            # written before that would keep saying False forever, and skipping on it would strand
-            # that hunter's platinum tier permanently. That costs two catalogue-bounded reads
-            # against the thousands of per-candidate detections it lets us skip.
+            # ASKED FRESH, ONCE PER CONTRACT: does this Contract have a platinum tier TODAY? That is the
+            # question for hunters with no row yet (their row will be created with this answer). A hunter
+            # whose row is frozen `has_platinum=False` is a different case: the engine never stamps or pays
+            # that platinum (`contract_service.plat_stamp_due`, owner decision 2026-10-10: the frozen flag
+            # rules, payouts unchanged), so `_settled_profiles` counts them settled once their 100% is in.
+            # Two catalogue-bounded reads against the thousands of per-candidate detections they skip.
             has_plat = _has_platinum(contract, member_ids)
             settled = self._settled_profiles(contract, has_plat=has_plat).count()
             for profile in self._candidate_profiles(contract, member_ids, has_plat=has_plat):
@@ -280,10 +283,14 @@ class Command(BaseCommand):
 
         `full_reached_at` is required in BOTH shapes. Dropping it would call a hunter settled on the
         strength of a platinum alone and never stamp their 100% tier.
+
+        With a platinum on the Contract, the platinum stamp is also required, UNLESS the row is frozen
+        `has_platinum=False`: such a row can never take that stamp (`contract_service.plat_stamp_due`), so
+        leaving it out of this set would re-run detection on it every night for a mark that cannot come.
         """
         settled = EarnedContract.objects.filter(contract=contract, full_reached_at__isnull=False)
         if has_plat:
-            settled = settled.filter(platinum_reached_at__isnull=False)
+            settled = settled.filter(Q(platinum_reached_at__isnull=False) | Q(has_platinum=False))
         return settled
 
     @staticmethod
@@ -293,7 +300,8 @@ class Command(BaseCommand):
 
         THE SECOND HALF IS WHERE THE COST WAS. A Contract can only ever write two fields on an
         EarnedContract, `platinum_reached_at` and `full_reached_at`, and `mark_contract_reached`
-        writes each only when it is currently None. So a hunter whose applicable stamps are already
+        writes each only when it is currently None (the platinum one also only while the row has a
+        platinum tier, `plat_stamp_due`). So a hunter whose applicable stamps are already
         set cannot produce a mark tonight, or any night -- yet every sweep re-ran full tier detection
         on them. In production that was the whole cost: `462 candidate(s) -> 1 new tier mark(s)` is
         461 profiles re-confirmed and one that mattered.
@@ -301,11 +309,11 @@ class Command(BaseCommand):
         Excluding them makes the sweep scale with UNSTAMPED pairs rather than with completions, so it
         shrinks as the catalogue matures instead of growing with users x contracts.
 
-        `has_plat` is the fresh, contract-level answer (see the caller). Passed in rather than read
-        from `EarnedContract.has_platinum`, which is frozen at row creation: a Contract that gains a
-        platinum-bearing member later would leave old rows saying False, and excluding on that would
-        skip a reachable platinum tier for good. Profiles with no EarnedContract row at all are not
-        in the exclusion set, so a first-time candidate is always evaluated.
+        `has_plat` is the fresh, contract-level answer (see the caller): whether a NEW row would get a
+        platinum tier. A row frozen `has_platinum=False` is settled regardless once its 100% is stamped
+        (`_settled_profiles`), because the engine never stamps or pays that platinum. Profiles with no
+        EarnedContract row at all are not in the exclusion set, so a first-time candidate is always
+        evaluated.
 
         KEYWORD-ONLY AND UNDEFAULTED, deliberately. It carried `has_plat=None`, and a falsy value
         degrades this to its WEAK form -- excluding everyone with `full_reached_at` set whether or
@@ -376,7 +384,7 @@ class Command(BaseCommand):
             return []
         ec = EarnedContract.objects.filter(profile=profile, contract=contract).first()
         newly = []
-        if platinum_reached and (ec is None or ec.platinum_reached_at is None):
+        if platinum_reached and (ec is None or plat_stamp_due(ec)):   # what mark_contract_reached will stamp
             newly.append('platinum')
         if full_reached and (ec is None or ec.full_reached_at is None):
             newly.append('full')

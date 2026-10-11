@@ -24,6 +24,7 @@ from trophies.models import (
     Contract, ContractXPGrant, EarnedContract, Game, IGDBMatch, Job, ProfileGame, ProfileJobXP, Trophy,
 )
 from trophies.services import job_render
+from trophies.services.contract_service import pending_tier_q
 from trophies.services.job_render import DISCIPLINE_LABELS
 
 
@@ -189,8 +190,9 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
         Contract.objects.filter(is_live=True)
         .annotate(
             has_jobs=_job_exists(),   # jobless -> awards nothing
-            # Do the member games DEFINE a platinum? (mirrors contract_service._has_platinum) -- drives
-            # the card's tier split; games with no plat pay the full T at 100% instead.
+            # Do the member games DEFINE a platinum? (a member-only cut of contract_service._has_platinum).
+            # Drives the card's tier split ONLY until the hunter has a row: from then on the row's frozen
+            # `ec_has_platinum` decides it, because that is what accepting pays (project_card).
             defines_plat=Exists(Trophy.objects.filter(
                 trophy_type='platinum', **_member_at_igdb('game__concept__'))),
             max_progress=max_progress, any_plat=any_plat,
@@ -203,8 +205,11 @@ def annotated_contracts(profile, disc_levels=None, with_ranking=True):
         )
         .filter(has_jobs=True)
         .annotate(status=Case(
-            When(Q(plat_reached__isnull=False, plat_accepted__isnull=True)
-                 | Q(full_reached__isnull=False, full_accepted__isnull=True), then=Value('claimable')),
+            # The engine's own rule (contract_service.pending_tier_q), on the annotated names: a platinum
+            # stamp on a row frozen WITHOUT a platinum tier is not claimable, because accepting pays nothing.
+            When(pending_tier_q(has_platinum='ec_has_platinum', plat_reached='plat_reached',
+                                plat_accepted='plat_accepted', full_reached='full_reached',
+                                full_accepted='full_accepted'), then=Value('claimable')),
             When(Q(plat_accepted__isnull=False) | Q(full_accepted__isnull=False), then=Value('accepted')),
             When(Q(max_progress__gte=100) | Q(any_plat=True), then=Value('pursuing')),
             When(max_progress__gt=0, then=Value('pursuing')),
@@ -418,7 +423,10 @@ def project_card(c, member_games=None, new_cutoff=None):
     t = c.xp_total_override or CONTRACT_XP_TOTAL
     # Tier split for the card strip. Plat-bearing contracts pay CONTRACT_PLATINUM_FRAC of T on the
     # platinum tier and the rest at 100%; contracts whose games have no plat pay the full T at 100%.
-    has_plat = bool(getattr(c, 'defines_plat', False))
+    # Once the hunter has a row, ITS frozen flag decides the split (it is what accepting pays); the live
+    # member check `defines_plat` only speaks for a contract they have not reached yet.
+    ec_has_platinum = getattr(c, 'ec_has_platinum', None)
+    has_plat = bool(ec_has_platinum if ec_has_platinum is not None else getattr(c, 'defines_plat', False))
     plat_xp = round(t * CONTRACT_PLATINUM_FRAC) if has_plat else 0
     bonus_xp = t - plat_xp   # the "at 100%" amount (== T when there's no plat tier)
     # Per-tier bar fills (drawn like the circle's progress). Plat bar creeps with the member game's

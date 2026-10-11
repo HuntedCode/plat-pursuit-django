@@ -3039,7 +3039,9 @@ class EarnedContract(models.Model):
     yet. It only counts toward levels once the user ACCEPTS it; accepting writes the
     ContractXPGrant rows and bumps ProfileJobXP. This forces interaction to level up (no
     'starting' a Contract, but you must 'end'/accept it). A tier is claimable when its
-    *_reached_at is set and *_accepted_at is null; the accepted timestamps also make grants
+    *_reached_at is set and *_accepted_at is null, and the platinum tier only exists while
+    `has_platinum` is True (contract_service.has_pending_tier / pending_tier_q, the one rule every
+    reader uses); the accepted timestamps also make grants
     idempotent (a tier is paid at most once). See docs/design/rebuild/job-board-contracts.md."""
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='earned_contracts')
     contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='earned_by')

@@ -36,7 +36,7 @@ which is the same exclusivity the pair already had and for the same reason -- th
 import logging
 
 from django.core.cache import cache
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -70,13 +70,15 @@ def claimable_count(profile):
     ANSWERED FROM `EarnedContract`, NOT THE CATALOGUE. `contracts_service` derives the same status by
     annotating every live contract with four correlated subqueries against this hunter's rows and
     filtering the result -- correct, and the right shape for a board that also needs progress,
-    ranking and XP. Here the question is only "how many", and all four stamps that decide it live on
-    the hunter's own `EarnedContract` rows, of which there are a handful. One indexed query over
+    ranking and XP. Here the question is only "how many", and all five fields that decide it (the four
+    stamps and `has_platinum`) live on the hunter's own `EarnedContract` rows, of which there are a handful. One indexed query over
     their rows instead of a scan of the catalogue.
 
-    The definition is copied deliberately rather than shared: `is_live`, `has_jobs` and the
-    reached-but-not-accepted pair are the board's rule (`annotated_contracts`), and the badge must
-    show the same number the board does or it is lying. A test pins the two together.
+    `is_live` and `has_jobs` are the board's gates (`annotated_contracts`), and "pending" is the
+    engine's own rule, `contract_service.pending_tier_q`, shared by the board's status rather than
+    copied: a copy here once counted a platinum stamp the engine would never pay, so the badge promised
+    a reward that Claim granted nothing for. The badge must show the same number the board does or it
+    is lying. A test pins the two together.
     """
     if profile is None:
         return 0
@@ -86,12 +88,12 @@ def claimable_count(profile):
         return hit
 
     from trophies.models import Contract, EarnedContract
+    from trophies.services.contract_service import pending_tier_q
 
     has_jobs = Exists(Contract.jobs.through.objects.filter(contract_id=OuterRef('contract_id')))
     count = (EarnedContract.objects
              .filter(profile=profile, contract__is_live=True)
-             .filter(Q(platinum_reached_at__isnull=False, platinum_accepted_at__isnull=True)
-                     | Q(full_reached_at__isnull=False, full_accepted_at__isnull=True))
+             .filter(pending_tier_q())
              .annotate(has_jobs=has_jobs).filter(has_jobs=True)
              .count())
     cache.set(key, count, CLAIMABLE_TTL)
