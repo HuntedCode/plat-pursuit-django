@@ -109,11 +109,11 @@ def test_a_claim_refreshes_in_place_and_only_reloads_as_a_fallback():
     # the board's params stripped), and the board's page 1 comes out of that same page rather than a second
     # /results/ round trip. Nothing on this path writes the URL, so no tab's URL can collect board params.
     assert "fetch(location.pathname + '?' + boardSearch()" in refresh
-    assert "boardFromPage(out[0].getElementById('rp-list'))" in refresh and 'fetchPage(' not in refresh
-    from_page = _code('function boardFromPage(freshList) {', 'var sentIO')
+    assert 'boardFromPage(out[0], asked);' in refresh and 'fetchPage(' not in refresh
+    from_page = _code('function boardFromPage(doc, asked) {', 'var sentIO')
     assert from_page.index('if (controller) controller.abort();') < from_page.index('renderBoard(')
     assert '++reqSeq;' in from_page, 'a board fetch in flight could land on top of the refreshed board'
-    assert from_page.index('renderBoard(') < from_page.index('boardQuery = buildParams(1);'), \
+    assert from_page.index('renderBoard(') < from_page.index('boardQuery = asked;'), \
         'the refreshed board is not recorded as the board on screen (the dedupe)'
     # syncURL and the refresh share the one builder, so the page fetched is the board the URL would name.
     assert 'var qs = boardSearch();' in _code('function syncURL() {', 'function updateEmptyStates')
@@ -158,3 +158,39 @@ def test_what_lives_inside_a_region_is_delegated_or_listens_for_the_refresh():
     assert src.count("document.addEventListener('pp:career-refreshed'") == 2, 'the radar or the dossier reveal stopped listening'
     radar = _code("document.addEventListener('pp:career-refreshed', function () {\n            try {", 'paint(currentMode);')
     assert "RMAX = RADAR.max; DATA = RADAR.modes; JOB_SLUGS = RADAR.job_slugs;" in radar
+
+
+def test_the_refreshed_board_arrives_settled_not_replayed():
+    """After a claim the board on screen is the board the hunter was already looking at: its cards must not
+    replay the entrance (stagger, XP count-up from 0, ring draw, cell ignite), or every claim makes all 24
+    cards flash and recount. Seen frame by frame in a browser before this was fixed. `boardFromPage` renders
+    `settled`; a settled render stamps each card revealed (cardReveal skips a revealed card) and skips the
+    stagger. A filter change still animates (fetchPage passes no `settled`)."""
+    render = _code('function renderBoard(scope, more, total, append, n, settled) {', 'function boardFromPage(')
+    assert re.search(r"if \(settled\) cards\.forEach\(function \(c\) \{ c\.dataset\.revealed = '1'; \}\);", render)
+    assert render.index("c.dataset.revealed = '1'") < render.index('initCards(list);'), 'stamped after the reveal ran'
+    assert 'if (!settled) staggerCards(cards);' in render
+    from_page = _code('function boardFromPage(doc, asked) {', 'var sentIO')
+    assert re.search(r"parseInt\(freshList\.dataset\.total \|\| '0', 10\), false, 1, true\);", from_page), \
+        'the refreshed board is rendered with its entrance animations'
+    fetch_page = _code('function fetchPage(n, append) {', 'function renderBoard(')
+    assert 'renderBoard(tmp, d.hasNext, d.total, append, n);' in fetch_page, 'a filter change lost its entrance'
+
+
+def test_a_filter_changed_during_the_refresh_is_not_overwritten_by_the_fetched_board():
+    """The ceremony can be dismissed (or, on the toast path, never shown) while the page is still on its way,
+    and the hunter can tap a filter in that window. The fetched page holds the board they LEFT: rendering it
+    would show the old cards under the new chip, and recording the new query would make the dedupe drop the
+    re-tap that should fix it. So the refresh records the state it asked for BEFORE fetching, and renders the
+    page's board only if the board still asks for that state; otherwise the new state gets its own fetch."""
+    refresh = _code('function refreshAfterClaim(shown, byKeyboard) {', 'function applyResult(')
+    assert refresh.index('var asked = buildParams(1);') < refresh.index('fetch(location.pathname'), \
+        'the asked-for state is read after the fetch is sent'
+    from_page = _code('function boardFromPage(doc, asked) {', 'var sentIO')
+    guard = re.search(r'if \(buildParams\(1\) !== asked\) \{ boardQuery = null; fetchPage\(1, false\); return; \}',
+                      from_page)
+    assert guard, 'a stale fetched board can land on top of a filter the hunter changed'
+    assert guard.start() < from_page.index('renderBoard('), 'the state check runs after the render'
+    assert 'boardQuery = asked;' in from_page, 'the dedupe records a query the rendered board was not built for'
+    # And only the cards and their facets reach renderBoard, not the whole panel they were parsed in.
+    assert 'holder.appendChild(freshList);' in from_page and 'renderBoard(holder,' in from_page
