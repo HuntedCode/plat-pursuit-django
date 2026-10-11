@@ -12,6 +12,7 @@ from django.core.management import call_command
 from django.urls import reverse
 
 from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory
+from tests.query_counting import cold_capture
 
 pytestmark = pytest.mark.django_db
 
@@ -252,8 +253,6 @@ def test_whale_sorts_render(client, sort):
 
 def test_query_count_invariant_across_size(client):
     """Query count must be CONSTANT regardless of company count -- a fixed ceiling would hide a small N+1."""
-    from django.db import connection
-    from django.test.utils import CaptureQueriesContext
 
     def _seed(prefix, n):
         for i in range(n):
@@ -266,7 +265,7 @@ def test_query_count_invariant_across_size(client):
 
     def _q(params):
         call_command('recompute_tag_covers', verbosity=0)   # fill denorms OUTSIDE the capture
-        with CaptureQueriesContext(connection) as ctx:
+        with cold_capture() as ctx:
             assert raw.get(reverse('companies_list'), params).status_code == 200
         return len(ctx)
 
