@@ -10,6 +10,23 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _cache_starts_empty():
+    """Every test starts with an empty Django cache, so none can depend on what an earlier one left behind.
+
+    The test cache is in-memory per process (`settings_test.CACHES`), and it was never cleared between tests, so
+    site-wide values a render caches (the live group badges, the current art-reveal event, the milestone rarity
+    denominator) leaked from one test into the next. Whichever test ran FIRST in a process paid for filling them;
+    every later one found them warm. So a query-count test passed or failed depending on which test ran before it,
+    and a test that read a cached value passed only when some earlier test had set it. Parallel runs (`pytest -n`)
+    deal tests to workers in a different order, which is how three of these surfaced (2026-10-10), and a shuffled
+    run found the fourth. Clearing here makes every test's starting state the same.
+    """
+    from django.core.cache import cache
+
+    cache.clear()
+
+
+@pytest.fixture(autouse=True)
 def _ratelimit_clock_is_fixed(monkeypatch):
     """Pin the RATE LIMITER's clock for every test, and nothing else's.
 

@@ -15,6 +15,7 @@ from tests.factories import (
     ConceptFactory, GameFactory, IGDBMatchFactory, ProfileFactory, ProfileGameFactory,
     UserConceptRatingFactory,
 )
+from tests.query_counting import cold_capture
 
 pytestmark = pytest.mark.django_db
 
@@ -275,8 +276,6 @@ def test_detail_no_per_game_n_plus_1(client):
     """Query count must be CONSTANT regardless of catalogue size -- a fixed ceiling would hide a per-game N+1.
     Exercises the authed path (progress rings) + a multi-version group, the N+1-prone renders."""
     from trophies.models import ConceptCompany
-    from django.db import connection
-    from django.test.utils import CaptureQueriesContext
 
     profile = ProfileFactory()
     client.force_login(profile.user)
@@ -299,7 +298,7 @@ def test_detail_no_per_game_n_plus_1(client):
 
     def _q(slug):
         call_command('recompute_tag_covers', verbosity=0)   # fill denorms OUTSIDE the capture
-        with CaptureQueriesContext(connection) as ctx:
+        with cold_capture() as ctx:
             assert raw.get(reverse('company_detail', kwargs={'slug': slug})).status_code == 200
         return len(ctx)
 

@@ -13,12 +13,11 @@ import re
 from pathlib import Path
 
 import pytest
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 
 from tests.factories import ProfileFactory
 from trophies.models import Title, UserTitle
 from trophies.views.profile_views import ProfilesListView
+from tests.query_counting import cold_capture
 
 pytestmark = pytest.mark.django_db
 
@@ -96,13 +95,13 @@ def test_the_query_count_does_not_grow_with_the_number_of_hunters(client):
     for profile in _hunters(3):
         UserTitle.objects.create(profile=profile, title=title, is_displayed=True)
 
-    with CaptureQueriesContext(connection) as few:
+    with cold_capture() as few:
         client.get(URL)
 
     for profile in _hunters(9):
         UserTitle.objects.create(profile=profile, title=title, is_displayed=True)
 
-    with CaptureQueriesContext(connection) as many:
+    with cold_capture() as many:
         client.get(URL)
 
     assert len(many) == len(few), (
@@ -371,9 +370,9 @@ def test_the_dates_band_costs_no_extra_queries(client):
     for profile in _hunters(4):
         UserTitle.objects.create(profile=profile, title=title, is_displayed=True)
 
-    with CaptureQueriesContext(connection) as plain:
+    with cold_capture() as plain:
         client.get(URL, {'sort': 'plats'})
-    with CaptureQueriesContext(connection) as dated:
+    with cold_capture() as dated:
         client.get(URL, {'sort': 'recently_active'})
 
     assert len(dated) == len(plain), 'the time-based sort costs extra queries'

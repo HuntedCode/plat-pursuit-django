@@ -13,14 +13,13 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
-from django.db import connection
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from challenges.models import CHALLENGE_TYPE_AZ, CHALLENGE_TYPE_CALENDAR, CHALLENGE_TYPE_JOBS, Challenge
 from challenges.services import challenge_service as svc
 from tests.factories import ProfileFactory
+from tests.query_counting import cold_capture
 
 pytestmark = pytest.mark.django_db
 
@@ -205,7 +204,7 @@ def test_the_tab_costs_the_same_however_many_runs(client):
     svc.start(many, CHALLENGE_TYPE_AZ)
 
     def cost(profile):
-        with CaptureQueriesContext(connection) as ctx:
+        with cold_capture() as ctx:
             client.get(_url(profile, 'challenges'), HTTP_HX_REQUEST='true', **CF)
         return len(ctx.captured_queries)
 

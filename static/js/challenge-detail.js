@@ -577,6 +577,9 @@
         //: history panel can return one (a window of games all finished before you joined); the button
         //: stays, so a hunter can keep looking, but scrolling alone cannot walk an unbounded history.
         var AUTO_EMPTY_PAGES = 3;
+        //: What each availability flag reads as. A lookup rather than the raw value, so a flag this build does not
+        //: know draws nothing instead of an unlabelled chip.
+        var AVAILABILITY_LABELS = { delisted: 'Delisted', unobtainable: 'Unobtainable' };
         //: How close (px) the sentinel must be to the bottom of the sheet before the next page is fetched.
         var MORE_MARGIN = 240;
 
@@ -710,8 +713,8 @@
             // staff hands, but an escaping bug here would be an XSS on every hunter who opened a picker.
             name.textContent = row.name;
             button.appendChild(name);
-            var plats = platformTags(row);
-            if (plats) { button.appendChild(plats); }
+            var tags = rowTags(row);
+            if (tags) { button.appendChild(tags); }
             if (label) {
                 // A NODE OR A STRING. The catch-up rows pass a sentence; the history rows pass a built element,
                 // because three facts with three different weights are not a sentence.
@@ -732,19 +735,28 @@
             return item;
         }
 
-        /** A row's platforms as the site's flat platform tags, or null for a game with none recorded. The
+        /** A row's platforms as the site's flat platform tags, then its availability flags, or null for a game
+         *  with neither. The
          *  TONE comes from the server (`platform_color_str`, the same rule every other platform tag uses), so
          *  the colour rule is not copied into JavaScript; it is checked as a bare word before it becomes a
          *  class, because a class name is markup. */
-        function platformTags(row) {
-            if (!row.platforms || !row.platforms.length) { return null; }
+        function rowTags(row) {
+            var plats = row.platforms || [];
+            var flags = row.availability || [];
+            if (!plats.length && !flags.length) { return null; }
             var wrap = document.createElement('span');
             wrap.className = 'pp-cpick__row-plats';
-            row.platforms.forEach(function (p) {
+            plats.forEach(function (p) {
                 var tag = document.createElement('span');
                 tag.className = 'bd-meta-tag' + (/^[a-z]+$/.test(p.tone || '') ? ' bd-meta-tag--' + p.tone : '');
                 tag.textContent = p.name;
                 wrap.appendChild(tag);
+            });
+            // DELISTED / UNOBTAINABLE, sent only when the contract can no longer be finished (owner, 2026-10-10), as the house
+            // alert chip -- the error tone the game page's own flags use. A fact worth stopping on before you
+            // pick, so it is a chip and not a flat tag like the platforms beside it.
+            flags.forEach(function (flag) {
+                if (AVAILABILITY_LABELS[flag]) { wrap.appendChild(chip(AVAILABILITY_LABELS[flag], 'error')); }
             });
             return wrap;
         }
@@ -1027,8 +1039,8 @@
                 // is the house primitive, not DaisyUI's badge.
                 if (row.is_completed_by_you) { head.appendChild(chip('Finished', 'success')); }
                 main.appendChild(head);
-                var plats = platformTags(row);
-                if (plats) { main.appendChild(plats); }
+                var tags = rowTags(row);
+                if (tags) { main.appendChild(tags); }
                 block.appendChild(main);
 
                 if (row.already_in_run) {

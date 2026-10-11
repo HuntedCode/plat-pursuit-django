@@ -68,7 +68,7 @@ model) around ONE list viewport tab:
 - **Lazy**: default list renders server-side; other lists fetch on switch.
 - **The hero is List detail's hero, concept-half only** (owner's call, first browser pass):
   same `gd-hero` anatomy -- cover / facts / IGDB teaser / screenshots -- minus every per-list
-  piece (progress readout, My Stats, plat-card CTA, Outlook, flags) and minus the modal-bound
+  piece (progress readout, My Stats, plat-card CTA, Outlook, per-list flags) and minus the modal-bound
   buttons, whose JS lives only on List detail. One exception: the screenshot LIGHTBOX came along
   (owner's call) -- extracted into `shot-lightbox.js` + the `shot_lightbox.html` partial, one
   implementation driven by both pages, so the hero thumbs open the full FLIP/carousel viewer
@@ -77,6 +77,14 @@ model) around ONE list viewport tab:
   `concept.release_date` (the work's date, not the host list's platform date). The badge/contract
   spine sits IN the hero as one split band (badges left, contract right; each badge medallion
   links its own series page), using the vertical room the dropped progress readout freed.
+- **Flags come back for the WHOLE game only** (owner, 2026-10-10). The hero shows a game flag (Shovelware,
+  Delisted, Unobtainable, Online Trophies, Buggy Trophies) only when EVERY list in the set carries it
+  (`game_page_views.shared_list_flags`; Unobtainable means no list is obtainable). It reuses List detail's
+  `_game_flags.html` (fed a `SharedListFlags`, which has the five attributes the partial reads), Shovelware in
+  the platform row as there. A flag only some lists have stays on those lists' own pages: naming it for the
+  game would tell a hunter on the good list that their game is broken. For the same reason there is no "No
+  Known Issues" chip here: the flags row renders only when a real flag is shared (`has_chips`), so the partial's
+  clean state never shows, and an empty shared set does not mean no list has an issue.
 - **Family band** (owner's call, same pass): below the spine band, the concept's different-igdb
   siblings -- remasters, remakes, collections -- as one-hop links to THEIR Game pages, capped at
   six with a "+N more" tally. Same-igdb concepts are the switcher's territory, never family.

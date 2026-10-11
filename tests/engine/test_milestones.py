@@ -521,6 +521,10 @@ def test_build_context_for_linked_profile():
     p = ProfileFactory()
     _plats(p, 12)   # Platinum Hunter: tiers 1/5/10 earned, next rung = 25
     services.recompute_milestones(p, reconcile_discord=False)
+    # THE RARITY DENOMINATOR IS A CACHED NIGHTLY COUNT, so this test fills it itself. It used to pass only when an
+    # earlier test in the same process had left it cached: run alone, or on a different parallel worker (as
+    # `pytest -n` does), `ms_rarest` came back None and the rarity assertion below failed.
+    assert services.refresh_total_hunters() >= 1
 
     ctx = build_milestones_context(p)
     assert ctx['ms_has_progress'] is True
