@@ -206,7 +206,7 @@ def test_a_failed_board_load_can_be_retried_with_the_same_query():
 
     page1_failure = _failed_page1_branch()
     assert re.search(r'boardQuery\s*=\s*null\s*;', page1_failure), 'a failed load blocks retrying the same query'
-    code = _career_js('function fetchPage(n, append) {', 'var sentIO')
+    code = _career_js('function fetchPage(n, append) {', 'function renderBoard(')
     assert len(re.findall(r'boardQuery\s*=\s*null', code)) == 1, 'boardQuery is cleared outside the failure branch'
 
 

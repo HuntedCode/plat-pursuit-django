@@ -120,9 +120,9 @@ def job_icon_use_bare(name):
     (`.rp-jobcell svg` in elements.css: fill, stroke, stroke-width, caps and joins, which inherit into
     the <use> shadow tree exactly as the attributes do, and a CSS size AND aspect ratio). No viewBox
     either: the referenced <symbol> carries its own, but the outer svg then has no intrinsic shape, so a
-    host without a CSS width, height and `aspect-ratio: 1` gets a 300x150 box. Built for the contract card's 25-cell job map, where each card
-    repeats a glyph 25 times and the attributes were most of its weight. `job_icon_use` itself is
-    unchanged: every other host relies on its attributes."""
+    host without a CSS width, height and `aspect-ratio: 1` gets a 300x150 box. Built for the contract
+    card's 25-cell job map, where each card repeats a glyph 25 times and the attributes were most of its
+    weight. `job_icon_use` itself is unchanged: every other host relies on its attributes."""
     if (name or '') not in _ICONS:
         return ''
     return mark_safe(f'<svg aria-hidden="true"><use href="#jobicon-{name}"/></svg>')

@@ -435,7 +435,7 @@ def test_the_claim_banner_count_matches_the_board_it_opens(client):
     """The banner's "N ready to claim" (`claimable_summary`) ignores platform, but the board defaults to
     current-gen, so legacy and VR claimables were counted and never shown. The banner's jump (and its
     href) now open Ready to Claim with every platform lit (`allPlatforms` on pp:board-filter in
-    career.html); this pins, through the real results endpoint, that that board holds the banner's N.
+    static/js/career.js); this pins, through the real results endpoint, that that board holds the banner's N.
 
     Bundle-only claimables are pinned in test_bundle_contracts.py. Known gap, deliberately not pinned: a
     claimable whose member games ALL have an empty title_platform still misses every platform filter (see

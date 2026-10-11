@@ -600,8 +600,8 @@ function ppCountUp(el, dur) {
 
 // The discipline cross-highlight (hover an arc or a legend row -> spotlight that discipline) used to live
 // here as ~27 lines of JS. It is now declarative in `elements.css`, scoped to `.lab-dna-pair` (career.html's
-// hero wrapper), and
-// shared with the home lobby and the Hall of Fame plaque -- which the JS never reached, so those two had no
+// hero wrapper), and shared with the home lobby and the Hall of Fame plaque -- which the JS never reached, so
+// those two had no
 // highlight until the CSS was written and then briefly had a SECOND implementation alongside this one.
 //
 // What the JS did and the CSS now does: dim the other arcs, dim the other legend rows, pause the spin, and
@@ -794,7 +794,8 @@ function ppCountUp(el, dur) {
         { sel: '.pp-sub__mbar', attrs: ['aria-label'] },
     ];
     function swapRegions(fresh) {
-        // Entrance animations already played here: the new nodes arrive settled rather than replaying them.
+        // The header cascade already played here, so a swapped-in header arrives without it. (The hero's own
+        // ring and rank-bar keyframes do replay: a fresh draw of the bar the claim just moved.)
         fresh.querySelectorAll('.pp-head-cascade').forEach(function (n) { n.classList.remove('pp-head-cascade'); });
         var pairs = [];
         for (var i = 0; i < REFRESH_REGIONS.length; i++) {
@@ -820,21 +821,21 @@ function ppCountUp(el, dur) {
         catch (e) { return Promise.resolve(); }
     }
     var claiming = false;   // one claim at a time: a second click mid-ceremony would race the refresh
-    var refetchOnShow = false;   // the board went stale while its tab was hidden: refetch when it is shown
     function refreshAfterClaim(shown, byKeyboard) {
         // Fetched AND parsed while the ceremony plays. A failed fetch resolves to null rather than rejecting,
         // so the fallback reload still waits for the ceremony instead of cutting it off mid-animation.
-        var page = fetch(location.href, { credentials: 'same-origin' })
+        // The URL carries the BOARD'S state (`boardSearch`), not just the address bar: on Jobs or Radar the
+        // bar has had the board's params stripped, and the page renders the board its URL asks for.
+        var page = fetch(location.pathname + '?' + boardSearch(), { credentials: 'same-origin' })
             .then(function (r) { if (!r.ok) throw new Error('refresh ' + r.status); return r.text(); })
             .then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); })
             .catch(function () { return null; });
         Promise.all([page, shown]).then(function (out) {
             if (!out[0] || !swapRegions(out[0])) { reloadKeepingView(); return; }
             applyScopeUI(state.scope);   // a swapped-in Claim all must still hide in History
-            boardQuery = null;          // the board on screen is stale even though its filters are not
-            // fetchPage(1) writes the board's params into the URL, so on a hidden Contracts tab (the hunter
-            // moved to Jobs or Radar during the ceremony) it would put them on that tab's URL. Defer it.
-            if (panel && panel.hidden) refetchOnShow = true; else fetchPage(1, false);
+            // The fetched page already holds this board, page 1 with its facets and total: render it from
+            // there rather than asking /results/ to build the same board a second time.
+            boardFromPage(out[0].getElementById('rp-list'));
             claiming = false;
             // A keyboard claim's button may be gone (its card left the view): put focus somewhere stable,
             // without jumping the page up to the tab strip.
@@ -1029,8 +1030,9 @@ function ppCountUp(el, dur) {
     }
 
     // ---- Shareable filter state in the URL (History API -- no reload, hot-swap untouched) ----
-    function syncURL() {
-        if (!window.history || !history.replaceState) return;
+    // The page's query string with the board's params replaced by the board's STATE: what syncURL writes into
+    // the address bar, and the URL a claim refresh fetches (so the page it gets back renders this board).
+    function boardSearch() {
         var params = new URLSearchParams(location.search);
         // EVERY key buildParams can emit has to be listed here. A key that is written but never
         // cleared survives being switched off (the URL keeps claiming a filter the board has
@@ -1040,7 +1042,11 @@ function ppCountUp(el, dur) {
         BOARD_KEYS.forEach(function (k) { params.delete(k); });
         var bp = new URLSearchParams(buildParams(1)); bp.delete('page');
         bp.forEach(function (v, k) { params.append(k, v); });          // keep any non-board params (e.g. view=contracts)
-        var qs = params.toString();
+        return params.toString();
+    }
+    function syncURL() {
+        if (!window.history || !history.replaceState) return;
+        var qs = boardSearch();
         history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
     }
 
@@ -1088,26 +1094,8 @@ function ppCountUp(el, dur) {
             })
             .then(function (d) {
                 if (myReq !== reqSeq) return;                // superseded: a newer request now owns busy + the grid
-                busy = false; if (loading) loading.hidden = true;
-                if (searchField) searchField.setBusy(false);
-                hasNext = d.hasNext; setCount(d.total);
                 var tmp = document.createElement('div'); tmp.innerHTML = d.html;
-                var cards = Array.prototype.slice.call(tmp.querySelectorAll('.rp-row'));
-                // DISCONNECT before dropping the cards: the reveal observer holds a strong reference to
-                // every card that has not yet scrolled into view, so replacing the list without releasing
-                // them retains a detached node per card, per filter change, for the life of the page.
-                // `initCards` below re-observes whatever replaces them.
-                if (!append) {
-                    if (cardRevealer) { cardRevealer.disconnect(); }
-                    list.innerHTML = '';
-                    applyFacets(readFacets(tmp));   // facets ride the page-1 swap
-                }
-                cards.forEach(function (c) { list.appendChild(c); });
-                pageNo = n;
-                initCards(list);
-                staggerCards(cards);
-                updateEmptyStates();
-                observeSentinel();
+                renderBoard(tmp, d.hasNext, d.total, append, n);
             })
             .catch(function (e) {
                 if ((e && e.name === 'AbortError') || myReq !== reqSeq) return;   // superseded -> the newer request owns state
@@ -1123,6 +1111,42 @@ function ppCountUp(el, dur) {
                 }
                 if (Toast) Toast.error('Could not load Contracts. Please try again.');
             });
+    }
+    // Put a page of cards on the board: a fetched /results/ page (`fetchPage`), or page 1 of the board
+    // inside a whole re-fetched Career page (`boardFromPage`, after a claim). `scope` holds the cards and,
+    // for page 1, the #rp-facets island.
+    function renderBoard(scope, more, total, append, n) {
+        busy = false; if (loading) loading.hidden = true;
+        if (searchField) searchField.setBusy(false);
+        hasNext = more; setCount(total);
+        var cards = Array.prototype.slice.call(scope.querySelectorAll('.rp-row'));
+        // DISCONNECT before dropping the cards: the reveal observer holds a strong reference to
+        // every card that has not yet scrolled into view, so replacing the list without releasing
+        // them retains a detached node per card, per filter change, for the life of the page.
+        // `initCards` below re-observes whatever replaces them.
+        if (!append) {
+            if (cardRevealer) { cardRevealer.disconnect(); }
+            list.innerHTML = '';
+            applyFacets(readFacets(scope));   // facets ride the page-1 swap
+        }
+        cards.forEach(function (c) { list.appendChild(c); });
+        pageNo = n;
+        initCards(list);
+        staggerCards(cards);
+        updateEmptyStates();
+        observeSentinel();
+    }
+    // After a claim: page 1 of the board as the re-fetched Career page rendered it, for the board's own
+    // state (`boardSearch`), so it is exactly what `fetchPage(1)` would return. Supersedes any fetch in
+    // flight, and records that query as the board on screen (the dedupe).
+    function boardFromPage(freshList) {
+        if (!freshList) { boardQuery = null; fetchPage(1, false); return; }
+        if (controller) controller.abort();
+        ++reqSeq;
+        // Scoped to the list's container, which holds just the #rp-facets island and the list itself.
+        renderBoard(freshList.parentNode, freshList.dataset.hasNext === '1',
+                    parseInt(freshList.dataset.total || '0', 10), false, 1);
+        boardQuery = buildParams(1);
     }
     var sentIO = hasIO ? new IntersectionObserver(function (entries) {
         if (entries[0].isIntersecting && hasNext && !busy) fetchPage(pageNo + 1, true);
@@ -1399,7 +1423,6 @@ function ppCountUp(el, dur) {
         landingQuery = null;   // the hunter has already seen this board, so the claim landing is spent
     }
     document.addEventListener('pp:contracts-shown', function () {
-        if (refetchOnShow) { refetchOnShow = false; boardQuery = null; fetchPage(1, false); }   // stale since a claim
         syncURL();   // returning to Contracts: re-add its (still-set) filters to the URL that showView scoped away
         staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));
         // The one-time claim landing (see `landingQuery`). `boardQuery === landingQuery` means the board
