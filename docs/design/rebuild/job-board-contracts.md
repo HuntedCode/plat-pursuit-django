@@ -188,17 +188,36 @@ detection on them anyway, every night, to re-confirm what it had already written
 461 of every 462 candidates. The cost now tracks UNSTAMPED pairs, which shrinks as the catalogue
 matures rather than growing with users × contracts.
 
-**Ask the platinum question fresh.** `EarnedContract.has_platinum` is frozen when the row is created
-and never updated, while membership is IGDB-derived and can gain a platinum-bearing game later. A
-row written before that keeps saying `False` forever, so excluding on it would strand that hunter's
-platinum tier permanently and silently. The sweep asks `_has_platinum(contract, member_ids)` once per
-Contract instead — one catalogue-bounded `.exists()` against thousands of skipped detections.
+**The frozen flag rules the platinum tier (decided 2026-10-10).** `EarnedContract.has_platinum` is
+frozen when the row is created and never updated, while membership is IGDB-derived and can gain a
+platinum-bearing game later. The sweep used to ask `_has_platinum` fresh so that such a row would
+still get its platinum STAMPED, but `_pending_tiers` pays by the frozen flag, so the stamp was never
+paid: the contract read "claimable" forever (banner, nav badge, Claim all) and accepting granted
+nothing. The owner chose to keep payouts as they are and make everything agree with the engine:
 
-**The fresh question fixes the STAMP, not the PAYOUT.** `_pending_tiers` still gates on the frozen
-`has_platinum`, so a hunter whose row was created before the contract had a platinum ends up with
-`platinum_reached_at` correctly stamped and the tier never offered, never paid, no error. Entirely
-pre-existing and orthogonal to the sweep -- but the sentence above should not be read as resolving
-it.
+- **One rule for "pending".** `contract_service.plat_tier_pending` / `full_tier_pending` /
+  `has_pending_tier`, and `pending_tier_q` in SQL, are read by `_pending_tiers`, the board's status
+  (`annotated_contracts`), `claimable_contracts`, the nav badge (`career_attention`) and the game page's
+  contract row. The platinum arm requires `has_platinum=True`.
+- **No stamp the engine won't pay.** `plat_stamp_due` gates `mark_contract_reached`, the sweep's
+  `_apply` and `verify_profile_sync`. A new row is never affected (`_has_platinum` and `_detect_tiers`
+  read the same members, so a reached platinum always comes with `has_platinum=True`).
+- **The sweep still asks `_has_platinum` fresh**, because that is the answer a NEW row gets. But a row
+  frozen `False` is **settled** once its 100% is stamped (`_settled_profiles`), since it can never take
+  the platinum stamp. `test_a_row_frozen_without_a_platinum_is_settled_and_never_stamped` replaced the
+  old `..._is_asked_fresh_not_read_off_the_row`, which pinned the opposite.
+- **Rows already stamped need no migration**: every reader ignores the stamp, so they read banked.
+  Count them with `EarnedContract.objects.filter(has_platinum=False, platinum_reached_at__isnull=False,
+  platinum_accepted_at__isnull=True)`.
+- **The card's tier split** reads the hunter's frozen flag once they have a row (`project_card`), so it
+  always shows what accepting pays: one bar paying the whole T for a row frozen `False`. This also
+  changes cards in the OTHER direction: a bundle-only contract's member-only `defines_plat` is always
+  `False`, so its cards showed one bar even for a hunter whose row pays a platinum tier; they now show
+  the split and the platinum claim. Before first reach (no row) they still read `defines_plat`, until
+  the bundle follow-up teaches it bundles.
+
+`tests/engine/test_pending_tier_rule.py` holds every reader to the engine across all 32 combinations
+of the five fields.
 
 **Read `N candidate(s), M settled` as the alarm.** For a mature Contract the healthy steady state is
 `0 candidate(s)` -- which is byte-identical to what a broken candidate query or a mis-passed
@@ -206,10 +225,12 @@ it.
 0 candidates with a large settled count is correct; 0 and 0 on a Contract people have completed is
 not.
 
-**`has_plat` is fresh per SWEEP OF THAT CONTRACT, not per instant.** Under `--incremental` a
-Contract that gains its first platinum may not be revisited for up to `FULL_SWEEP_INTERVAL`, so the
-weak exclusion applies until then. Bounded, self-healing, and the same window membership gains
-already had -- but "asked fresh" does not mean instantaneous.
+**`has_plat` is fresh per SWEEP OF THAT CONTRACT, not per instant.** Since rows frozen `False` are
+settled regardless (above), what `has_plat` still decides is the `has_platinum=True` rows: under it,
+they stay candidates until their platinum is stamped. A falsy `has_plat` would wrongly settle those, which
+is why it is keyword-only and undefaulted
+(`test_the_platinum_answer_cannot_be_forgotten_at_a_call_site`). Under `--incremental` a Contract may
+not be revisited for up to `FULL_SWEEP_INTERVAL`, so "asked fresh" does not mean instantaneous.
 
 ## Reconciliation — when membership changes under a hunter
 

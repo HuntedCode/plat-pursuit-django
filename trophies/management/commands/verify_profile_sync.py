@@ -210,7 +210,7 @@ class Command(BaseCommand):
         and is complete by construction: an EarnedContract only exists where credit was stamped.
         """
         from trophies.models import Contract, EarnedContract
-        from trophies.services.contract_service import _detect_tiers, credit_is_orphaned
+        from trophies.services.contract_service import _detect_tiers, credit_is_orphaned, plat_stamp_due
 
         missing = orphaned = 0
         earned = {
@@ -239,7 +239,9 @@ class Command(BaseCommand):
                 continue
             # ONE per contract, not per tier: the check is labelled "contracts", and a contract with
             # both tiers unstamped is one thing to fix, not two.
-            missing_platinum = platinum_reached and not (ec and ec.platinum_reached_at)
+            # `plat_stamp_due`: a row frozen without a platinum tier never takes that stamp, so it is not
+            # missing (and `process_contracts`, which this message points staff at, would not write it).
+            missing_platinum = platinum_reached and (ec is None or plat_stamp_due(ec))
             missing_full = full_reached and not (ec and ec.full_reached_at)
             if missing_platinum or missing_full:
                 missing += 1

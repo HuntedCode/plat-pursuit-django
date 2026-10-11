@@ -73,9 +73,10 @@ def _has_platinum(contract, member_ids):
 
     Bundle concepts MUST count here: _detect_tiers can set platinum_reached purely via a
     fully-platted satisfier bundle (a multi-game collection), so freezing has_platinum
-    from members alone would strand such a contract as permanently claimable -- the accept
-    gate only banks the platinum tier when has_platinum is True, so a reached-but-not-
-    has_platinum contract shows claimable forever and re-accepting grants nothing."""
+    from members alone would freeze has_platinum=False on a row whose platinum then DOES get
+    reached, and the accept gate only banks the platinum tier when has_platinum is True. (That
+    shape used to read "claimable forever"; since 2026-10 `plat_stamp_due` refuses the stamp and
+    every reader ignores it, so it would instead be a platinum tier silently never paid.)"""
     concept_ids = set(member_ids)
     concept_ids.update(contract.bundles.values_list('concepts__id', flat=True))
     concept_ids.discard(None)
@@ -389,7 +390,10 @@ def mark_contract_reached(profile, contract):
     )
     changed = []
     now = timezone.now()
-    if platinum_reached and ec.platinum_reached_at is None:
+    # `plat_stamp_due`, not just "unstamped": a row frozen without a platinum tier never takes the stamp.
+    # (A NEW row cannot hit that: `_has_platinum` and `_detect_tiers` read the same members and bundles,
+    # so a reached platinum always comes with has_platinum=True. Only an older row frozen False can.)
+    if platinum_reached and plat_stamp_due(ec):
         ec.platinum_reached_at = now
         changed.append('platinum_reached_at')
     if full_reached and ec.full_reached_at is None:
@@ -437,6 +441,44 @@ def check_profile_contracts(profile, concepts=None):
 _ACCEPTED_FIELD = {'platinum': 'platinum_accepted_at', 'full': 'full_accepted_at'}
 
 
+# --- the pending-tier rule: ONE definition, read by every "claimable" ---------
+#
+# A tier is pending when it is reached and not yet accepted, and the PLATINUM tier only exists for a row
+# whose frozen `has_platinum` is True: that flag decides the split `_pending_tiers` pays, so a row frozen
+# False has already been (or will be) paid the whole amount at 100%. Readers that skipped the flag counted
+# a platinum stamp the engine would never pay: the "claimable forever" contract (banner, badges, Claim
+# all) that accepting granted nothing for. Every reader now goes through these, in Python or in SQL.
+
+def plat_tier_pending(ec):
+    return bool(ec.has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None)
+
+
+def full_tier_pending(ec):
+    return bool(ec.full_reached_at and ec.full_accepted_at is None)
+
+
+def has_pending_tier(ec):
+    return plat_tier_pending(ec) or full_tier_pending(ec)
+
+
+def pending_tier_q(*, has_platinum='has_platinum', plat_reached='platinum_reached_at',
+                   plat_accepted='platinum_accepted_at', full_reached='full_reached_at',
+                   full_accepted='full_accepted_at'):
+    """The SQL form of `has_pending_tier`. Field names default to EarnedContract's; a caller that has the
+    five values under other names (contracts_service.annotated_contracts annotates them onto Contract)
+    passes its own."""
+    return (Q(**{has_platinum: True, f'{plat_reached}__isnull': False, f'{plat_accepted}__isnull': True})
+            | Q(**{f'{full_reached}__isnull': False, f'{full_accepted}__isnull': True}))
+
+
+def plat_stamp_due(ec):
+    """Can this row still take a `platinum_reached_at` stamp? Only while the platinum tier exists for it
+    (`has_platinum`) and is unstamped. A row frozen False never gets one: the engine would never pay it,
+    and the stamp alone is what made such a contract read "claimable" forever. Read by the writer
+    (`mark_contract_reached`), the nightly sweep and the sync verifier, so all three agree."""
+    return bool(ec.has_platinum and ec.platinum_reached_at is None)
+
+
 def _pending_tiers(ec, contract):
     """(tiers, t, multiplier) for an EarnedContract, where tiers is the reached-but-unaccepted
     [(tier, tier_total_xp), ...].
@@ -455,9 +497,9 @@ def _pending_tiers(ec, contract):
     grand_total = _tier_total(1.0, t, multiplier)
     platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, multiplier) if ec.has_platinum else 0
     tiers = []
-    if ec.has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None:
+    if plat_tier_pending(ec):
         tiers.append(('platinum', platinum_total))
-    if ec.full_reached_at and ec.full_accepted_at is None:
+    if full_tier_pending(ec):
         tiers.append(('full', (grand_total - platinum_total) if ec.has_platinum else grand_total))
     return tiers, t, multiplier
 
@@ -571,10 +613,7 @@ def claimable_contracts(profile):
     the job list."""
     return (
         EarnedContract.objects.filter(profile=profile)
-        .filter(
-            Q(platinum_reached_at__isnull=False, platinum_accepted_at__isnull=True)
-            | Q(full_reached_at__isnull=False, full_accepted_at__isnull=True)
-        )
+        .filter(pending_tier_q())
         .select_related('contract')
         .prefetch_related('contract__jobs')
     )

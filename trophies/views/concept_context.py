@@ -503,12 +503,11 @@ class ConceptContextMixin:
         # unlinked viewer (no target_profile) reads the neutral "Available".
         if target_profile:
             from trophies.models import EarnedContract
+            from trophies.services.contract_service import has_pending_tier
             ec = EarnedContract.objects.filter(profile=target_profile, contract=contract).first()
             if ec:
-                plat_claimable = bool(ec.platinum_reached_at and not ec.platinum_accepted_at)
-                full_claimable = bool(ec.full_reached_at and not ec.full_accepted_at)
                 fully_banked = bool(ec.full_accepted_at and (not ec.has_platinum or ec.platinum_accepted_at))
-                if plat_claimable or full_claimable:
+                if has_pending_tier(ec):   # the engine's rule: a platinum it would not pay is not claimable
                     status = 'claimable'
                 elif fully_banked:
                     status = 'banked'

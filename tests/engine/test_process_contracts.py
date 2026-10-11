@@ -332,22 +332,33 @@ def test_a_contract_with_no_platinum_settles_on_the_full_tier_alone():
     assert '0 candidate(s), 1 settled' in out
 
 
-def test_the_platinum_question_is_asked_fresh_not_read_off_the_row():
-    """`EarnedContract.has_platinum` is frozen when the row is created and never updated, while
-    membership is IGDB-derived and can gain a platinum-bearing game later. Excluding on the frozen
-    value would strand that hunter's platinum tier for good, silently."""
+def test_a_row_frozen_without_a_platinum_is_settled_and_never_stamped():
+    """INVERTED 2026-10-10 (owner decision: the frozen flag rules, payouts unchanged). This test used to
+    pin the opposite, `..._is_asked_fresh_not_read_off_the_row`: a row frozen `has_platinum=False` on a
+    contract that later gained a platinum stayed a candidate so the sweep could stamp that platinum. But
+    the engine never PAYS a platinum on such a row (`_pending_tiers` sizes tiers by the frozen flag), so
+    the stamp only made the contract read "claimable" forever while Claim granted nothing. Now
+    `plat_stamp_due` refuses the stamp, and the sweep counts the row settled once its 100% is in, rather
+    than re-running detection on it every night for a mark that cannot come."""
     contract, game, plat = _completable_contract('c-frozen')
     profile = ProfileFactory(psn_username='frozen-hunter')
     _complete(profile, game, plat)
     _run('--all')
 
-    # The row says "no platinum here" while the contract now has one, and the platinum tier is
-    # unstamped. Reading the row would exclude this hunter; asking the contract does not.
+    # The row says "no platinum here" while the contract now has one, and the platinum tier is unstamped.
     EarnedContract.objects.filter(profile=profile, contract=contract).update(
         has_platinum=False, platinum_reached_at=None)
 
     out = _run('--all')
-    assert '1 candidate(s)' in out, 'the sweep trusted the frozen flag and skipped a reachable tier'
+    assert '0 candidate(s), 1 settled' in out, 'a row that can never take the platinum stamp is re-swept nightly'
+    ec = EarnedContract.objects.get(profile=profile, contract=contract)
+    assert ec.platinum_reached_at is None, 'the sweep stamped a platinum the engine will never pay'
+
+    # And the engine's own writer refuses it too, not just the sweep's candidate filter.
+    from trophies.services.contract_service import mark_contract_reached
+    mark_contract_reached(profile, contract)
+    ec.refresh_from_db()
+    assert ec.platinum_reached_at is None, 'mark_contract_reached stamped a platinum the frozen flag rules out'
 
 
 def test_the_platinum_answer_cannot_be_forgotten_at_a_call_site():
