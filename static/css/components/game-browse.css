@@ -118,12 +118,20 @@
     -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-t), #000 calc(100% - var(--fade-b)), transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-t), #000 calc(100% - var(--fade-b)), transparent 100%); }
 /* Letter row: horizontal scroll on phones (A-Z is a lot of chips), wraps on tablet+. Same scroll-aware fade
-   on the left/right edges (JS-driven); at 768px+ it wraps and there's nothing to scroll. */
+   on the left/right edges (JS-driven); at 768px+ it wraps and there's nothing to scroll.
+   CONTAINED, because a scroll strip in the page column leaks its intrinsic width upward and a phone answers
+   by widening the layout viewport: opening the drawer zoomed iOS Safari out to ~1175px (iPhone 12, 2026-10-11
+   report). `contain: layout size` is the measured fix (the Plat Calendar crest row hit the same thing); both
+   keywords are load-bearing, and size containment sizes the box as if empty, so the intrinsic height must
+   match one chip (5px + 5px padding, 18px line, 2px border). Chips must not shrink, or "0-9" breaks to two
+   lines and overflows the contained height. */
 .pp-gbrowse__fchips--letters { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px;
+    contain: layout size; contain-intrinsic-height: 30px;
     --fade-l: 0px; --fade-r: 0px;
     -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
     mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%); }
-@media (min-width: 768px) { .pp-gbrowse__fchips--letters { flex-wrap: wrap; overflow-x: visible; } }
+.pp-gbrowse__fchips--letters > .pp-bgal__chip { flex-shrink: 0; }
+@media (min-width: 768px) { .pp-gbrowse__fchips--letters { flex-wrap: wrap; overflow-x: visible; contain: none; } }
 /* Two range-slider groups (Ratings + Time) side by side on wider screens. */
 .pp-gbrowse__ftwo { display: grid; grid-template-columns: 1fr; gap: 13px 26px; }
 @media (min-width: 768px) { .pp-gbrowse__ftwo { grid-template-columns: 1fr 1fr; align-items: start; } }

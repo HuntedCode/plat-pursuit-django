@@ -8,6 +8,8 @@ a past-end page 404s). Also pins whale-safety (bounded query count).
 """
 
 import itertools
+import pathlib
+import re
 
 import pytest
 from django.urls import reverse
@@ -735,3 +737,56 @@ def test_query_count_is_whale_safe(client, django_assert_max_num_queries):
     with django_assert_max_num_queries(21):
         resp = client.get(url, params)
     assert resp.status_code == 200
+
+
+def _letter_row_rules():
+    """Every `.pp-gbrowse__fchips--letters` rule in game-browse.css, comment-stripped and flattened, each
+    with the at-rule prelude it sits in (None at top level). Comments are stripped because the rule's own
+    comment names the declarations this test asserts on."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    css = (root / 'static' / 'css' / 'components' / 'game-browse.css').read_text(encoding='utf-8')
+    flat = ' '.join(re.sub(r'/\*.*?\*/', '', css, flags=re.S).split())
+    sel = re.escape('.pp-gbrowse__fchips--letters')
+    rules = [(m.group(1), m.group(2)) for m in
+             re.finditer(r'(@media [^{]*\{ )?' + sel + r' \{([^}]*)\}', flat)]
+    shrink = re.findall(sel + r' > \.pp-bgal__chip \{([^}]*)\}', flat)
+    chip = re.findall(r'(?<![\w-])\.pp-bgal__chip \{([^}]*)\}', ' '.join(re.sub(
+        r'/\*.*?\*/', '', (root / 'static' / 'css' / 'components' / 'browse-gallery.css')
+        .read_text(encoding='utf-8'), flags=re.S).split()))
+    return rules, shrink, chip
+
+
+def test_the_letter_row_cannot_widen_the_page():
+    """iPhone REPORT, 2026-10-11: opening the filter drawer zoomed iOS Safari out to a third of its scale.
+    The phone-width letter row is a nowrap `overflow-x: auto` strip of ~1170px in a ~330px box, and a scroll
+    strip in the page column leaks its intrinsic width upward: a mobile browser answers by widening the
+    layout viewport (emulated iPhone 12: `innerWidth` 1175 against a 390 layout viewport). The same row
+    ships on Browse Games, the genre/theme pages, and Trophy Lists.
+
+    Source text because the suite has no browser, so this pins the MECHANISM, verified in Chromium under
+    real device emulation (iPhone SE/12/14 Pro Max, Pixel 7, iPad Mini) on all three pages.
+    `contain: layout size` is the measured fix (the Plat Calendar crest row, same defect). Both keywords are
+    load-bearing, and size containment sizes the box as if empty, so the intrinsic height must equal one
+    chip. It is switched off at md:, where the row wraps and its height comes from its chips."""
+    rules, shrink, chip = _letter_row_rules()
+
+    base = [body for at, body in rules if at is None]
+    assert len(base) == 1, 'the phone letter-row rule moved or split: %d matches' % len(base)
+    assert 'overflow-x: auto' in base[0], 'the phone row is no longer a scroll strip; revisit this pin'
+    assert 'contain: layout size' in base[0], 'the strip can widen the layout viewport again'
+    assert 'contain-intrinsic-height: 30px' in base[0], 'size containment with no matching height clips the chips'
+
+    # The 30px IS one chip: 5px + 5px padding, 12px text on an 18px line, 1px + 1px border. A chip restyle
+    # must revisit the contained height, so the chip's box is pinned alongside it.
+    assert len(chip) == 1, 'the base chip rule moved or split: %d matches' % len(chip)
+    assert 'padding: 5px 12px' in chip[0] and 'font-size: 12px' in chip[0], (
+        'the chip box changed; re-measure it and update contain-intrinsic-height on the letter row'
+    )
+
+    # A shrinking chip breaks "0-9" onto two lines, which overflows the contained height.
+    assert len(shrink) == 1 and 'flex-shrink: 0' in shrink[0], 'letter chips can shrink and wrap their label'
+
+    md = [body for at, body in rules if at and 'min-width: 768px' in at]
+    assert len(md) == 1 and 'contain: none' in md[0], (
+        'size containment survives into the band where the row wraps, which collapses its height'
+    )
