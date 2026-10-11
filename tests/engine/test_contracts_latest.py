@@ -269,6 +269,26 @@ def test_every_board_param_the_url_can_gain_is_also_cleared():
     assert emitted <= cleared, f"buildParams emits {emitted - cleared}, which syncURL never clears"
 
 
+def test_leaving_the_contracts_tab_strips_every_board_param():
+    """showView strips the board's params from the URL when you leave Contracts, so a Jobs or Radar link
+    stays clean. Its list is a SECOND copy of syncURL's, and it had drifted: 'new' was missing, so
+    leaving with Latest on kept `?new=1` on the Jobs URL, and a reload of that link rendered the board
+    narrowed with Latest switched back on. Every key syncURL clears must be stripped here too."""
+    import pathlib
+    import re
+
+    src = (pathlib.Path(__file__).resolve().parents[2]
+           / 'templates' / 'trophies' / 'career.html').read_text(encoding='utf-8')
+    cleared = set(re.findall(r"'([a-z_]+)'",
+                             src.split('function syncURL', 1)[1].split('.forEach', 1)[0]))
+    assert cleared, 'syncURL lost its key list, so this pin no longer checks anything'
+
+    calls = re.findall(r"syncViewParam\(name,\s*\{[^}]*params:\s*\[([^\]]*)\]", src)
+    assert len(calls) == 1, f'expected the one showView strip list, found {len(calls)}'
+    stripped = set(re.findall(r"'([a-z_]+)'", calls[0]))
+    assert cleared <= stripped, f'leaving Contracts keeps {cleared - stripped} in the URL'
+
+
 def test_the_rendered_board_ships_facets_that_respect_latest(client):
     """The service half is pinned above; this is the WIRING. `_board_facets` builds its kwargs from
     a hand-listed key tuple, so new_only can be threaded into the service and still never reach it
