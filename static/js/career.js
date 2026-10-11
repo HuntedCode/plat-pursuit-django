@@ -206,6 +206,17 @@ function ppCountUp(el, dur) {
             slider.style.opacity = '1';
         }
 
+        // A claim refreshed the page in place (`refreshAfterClaim`), swapping a fresh #career-radar island in:
+        // re-read it and repaint the mode on screen. Not yet painted -> the first reveal paints the new data.
+        document.addEventListener('pp:career-refreshed', function () {
+            try { RADAR = JSON.parse(document.getElementById('career-radar').textContent); } catch (e) { return; }
+            RMAX = RADAR.max; DATA = RADAR.modes; JOB_SLUGS = RADAR.job_slugs;
+            chart.options.scales.r.suggestedMax = RMAX;
+            // On screen: repaint now. Hidden: let the next reveal paint it, so the morph is actually seen.
+            var view = canvas.closest('.lab-view');
+            if (view && view.hidden) radarPainted = false; else if (radarPainted) paint(currentMode);
+        });
+
         // Paint + position the slider the first time the radar tab is actually on screen (a Chart drawn
         // while its tab is display:none animates on a 0-size canvas -> finishes invisibly -> "pops").
         revealRadar = function () {
@@ -278,22 +289,23 @@ function ppCountUp(el, dur) {
     var initTab = document.querySelector('.pp-switch__chip[data-view].is-active');
     if (initTab) { setTimeout(function () { if (initTab.classList.contains('is-active')) { PlatPursuit.igniteTab(initTab); } }, 260); }
 
-    // Rail / deep-link jumps to a specific Career view without a reload.
-    document.querySelectorAll('[data-lab-goto]').forEach(function (el) {
-        el.addEventListener('click', function (e) {
-            e.preventDefault();
-            showView(el.dataset.labGoto);
-            // A status jump (the claim banner) opens the Board on that status across every platform. It used to
-            // click the status chip, which kept whatever scope was showing: from History it lit a hidden chip,
-            // the server dropped the status there, and the hunter stayed on History.
-            var f = el.dataset.gotoFilter;
-            if (f) document.dispatchEvent(new CustomEvent('pp:board-filter', { detail: { status: f, allPlatforms: true } }));
-            // Scroll the Career view up under the sticky chrome (scroll-padding-top handles the offset)
-            // so the toolbar + the now-filtered board come into view -- 'nearest' barely moved since the
-            // banner sits right above the tabs.
-            var tabs = document.querySelector('.pp-switch');
-            if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
+    // Rail / deep-link jumps to a specific Career view without a reload. DELEGATED: a claim refreshes the
+    // banner in place (`refreshAfterClaim`), and a listener bound to the old node would leave the new dead.
+    document.addEventListener('click', function (e) {
+        var el = e.target.closest && e.target.closest('[data-lab-goto]');
+        if (!el) return;
+        e.preventDefault();
+        showView(el.dataset.labGoto);
+        // A status jump (the claim banner) opens the Board on that status across every platform. It used to
+        // click the status chip, which kept whatever scope was showing: from History it lit a hidden chip,
+        // the server dropped the status there, and the hunter stayed on History.
+        var f = el.dataset.gotoFilter;
+        if (f) document.dispatchEvent(new CustomEvent('pp:board-filter', { detail: { status: f, allPlatforms: true } }));
+        // Scroll the Career view up under the sticky chrome (scroll-padding-top handles the offset)
+        // so the toolbar + the now-filtered board come into view -- 'nearest' barely moved since the
+        // banner sits right above the tabs.
+        var tabs = document.querySelector('.pp-switch');
+        if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 })();
 
@@ -483,10 +495,18 @@ function ppCountUp(el, dur) {
             hideNow();
         }
     }
-    document.querySelectorAll('.ptile').forEach(function (t) {
-        t.addEventListener('click', function () { openEl(t.dataset.slug, t); });
-        t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEl(t.dataset.slug, t); } });
-    });
+    // DELEGATED on the Jobs panel (dossier tiles and sheet rows both carry .ptile): a claim refreshes their
+    // markup in place (`refreshAfterClaim`), and listeners bound per tile would leave the new ones dead.
+    var jobsPanel = document.getElementById('career-panel-jobs');
+    if (jobsPanel) {
+        jobsPanel.addEventListener('click', function (e) {
+            var t = e.target.closest('.ptile'); if (t) openEl(t.dataset.slug, t);
+        });
+        jobsPanel.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var t = e.target.closest('.ptile'); if (t) { e.preventDefault(); openEl(t.dataset.slug, t); }
+        });
+    }
     var rpListEl = document.getElementById('rp-list');   // delegated: streamed-in cards work too
     if (rpListEl) rpListEl.addEventListener('click', function (e) {
         var b = e.target.closest('.rp-tier2-btn');
@@ -620,6 +640,13 @@ function ppCountUp(el, dur) {
     (window.ppAfterCareerModal || function (f) { f(); })(function () {
         bands.forEach(function (b) { io.observe(b); });
     });
+    // A claim refreshed the dossier in place (`refreshAfterClaim`): its new bands arrive final (bars and
+    // levels are server-rendered), but `jdoss--js` hides any band without `is-revealed`. Show them, and let go
+    // of the old bands the observer still holds.
+    document.addEventListener('pp:career-refreshed', function () {
+        io.disconnect();
+        jdoss.querySelectorAll('.jdoss__band').forEach(function (b) { b.classList.add('is-revealed'); });
+    });
 })();
 
 // Premium: cursor-tracking 3D tilt on the dossier job tiles (hover-capable, motion-OK devices only).
@@ -628,18 +655,27 @@ function ppCountUp(el, dur) {
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (!canHover || reduce) return;
     var MAX = 6;   // max tilt degrees
-    document.querySelectorAll('.jdoss .job').forEach(function (tile) {
-        var r = null;   // base (untilted) rect, cached on enter so the tilt can't feed back on itself
-        tile.addEventListener('mouseenter', function () { r = tile.getBoundingClientRect(); });
-        tile.addEventListener('mousemove', function (e) {
-            if (!r) r = tile.getBoundingClientRect();
-            var px = (e.clientX - r.left) / r.width - 0.5;
-            var py = (e.clientY - r.top) / r.height - 0.5;
-            tile.style.transition = 'transform 0.08s ease';
-            tile.style.transform = 'perspective(600px) rotateX(' + (-py * MAX).toFixed(2) + 'deg) rotateY(' + (px * MAX).toFixed(2) + 'deg) translateY(-3px) scale(1.02)';
-        });
-        tile.addEventListener('mouseleave', function () { r = null; tile.style.transition = 'transform 0.3s ease'; tile.style.transform = ''; });
+    // DELEGATED on the dossier, tracking the tile under the cursor: a claim refreshes the tiles in place
+    // (`refreshAfterClaim`), and listeners bound per tile would leave the new ones flat.
+    var jdoss = document.querySelector('.jdoss');
+    if (!jdoss) return;
+    var tile = null, r = null;   // r: the base (untilted) rect, cached on enter so the tilt can't feed back on itself
+    function settle(t) { t.style.transition = 'transform 0.3s ease'; t.style.transform = ''; }
+    jdoss.addEventListener('mouseover', function (e) {
+        var t = e.target.closest('.job');
+        if (t === tile) return;
+        if (tile) settle(tile);
+        tile = t; r = t ? t.getBoundingClientRect() : null;
     });
+    jdoss.addEventListener('mousemove', function (e) {
+        if (!tile) return;
+        if (!r) r = tile.getBoundingClientRect();
+        var px = (e.clientX - r.left) / r.width - 0.5;
+        var py = (e.clientY - r.top) / r.height - 0.5;
+        tile.style.transition = 'transform 0.08s ease';
+        tile.style.transform = 'perspective(600px) rotateX(' + (-py * MAX).toFixed(2) + 'deg) rotateY(' + (px * MAX).toFixed(2) + 'deg) translateY(-3px) scale(1.02)';
+    });
+    jdoss.addEventListener('mouseleave', function () { if (tile) settle(tile); tile = null; r = null; });
 })();
 
 // Contracts board: server-driven filter/sort + infinite scroll. Per-card behaviors (progressive
@@ -714,10 +750,11 @@ function ppCountUp(el, dur) {
         if (!btn) return;
         if (count > 0) { btn.textContent = 'Claim all (' + count + ')'; btn.disabled = false; } else { btn.remove(); }
     }
-    // Reload after a claim but KEEP the tab the user is on. The Career tabs are client-side only, so a
-    // plain reload would land them back on the default Jobs tab. Reflect the visible panel into ?view=
-    // (the server reads it to set the active tab) and preserve the rest of the querystring (the contracts
-    // board's filters/sort). If nothing changed, force a plain reload so it still refreshes.
+    // The FALLBACK after a claim (`refreshAfterClaim` below is the normal path): a full reload that KEEPS the
+    // tab the user is on. The Career tabs are client-side only, so a plain reload would land them back on
+    // the default Jobs tab. Reflect the visible panel into ?view= (the server reads it to set the active tab)
+    // and preserve the rest of the querystring (the board's filters/sort). If nothing changed, force a plain
+    // reload so it still refreshes.
     function reloadKeepingView() {
         var vis = document.querySelector('.lab-view:not([hidden])');
         var v = vis && vis.dataset.view;
@@ -727,7 +764,88 @@ function ppCountUp(el, dur) {
         if (url.href === window.location.href) window.location.reload();
         else window.location.replace(url.href);   // replace (not assign): a refresh shouldn't add a history entry
     }
-    function applyResult(res) {
+
+    // ---- After a claim: refresh the page IN PLACE ----
+    // A claim levels real jobs, so the hero (ring, rank bar), the rank table, the banner, the stats, the Jobs
+    // dossier + sheet + detail panels, the radar, the tab counts and the nav badges are all stale. Every claim
+    // used to reload the whole page for that (one reload per contract when clearing a backlog). Instead, the
+    // page is fetched again while the ceremony plays and each region below is swapped from it: the page is
+    // the ONE renderer, so nothing here re-derives a number and nothing can drift from the template.
+    // Contents are swapped, never the elements, so listeners on them survive; whatever lives INSIDE a region
+    // is delegated (banner jump, job tiles, tilt) or listens for `pp:career-refreshed` (radar, dossier
+    // reveal). Regions are paired in document order; if a region's count differs between the two pages (a
+    // first claim drew a hero that was not there), the page changed shape and a reload is the honest answer.
+    var CAREER_PATH = location.pathname;
+    var REFRESH_REGIONS = [
+        { sel: '[data-career-panel="hero"]', attrs: ['style'] },              // style carries the dominant glow
+        { sel: '#rank-ladder .prk-now', attrs: ['style'] },
+        { sel: '#rank-ladder .prk-list', attrs: [] },
+        { sel: '[data-career-panel="banner"]', attrs: [] },
+        { sel: '[data-career-panel="summary"]', attrs: [] },
+        { sel: '[data-career-panel="claim-all"]', attrs: [] },
+        { sel: '#career-panel-jobs .jdoss', attrs: [] },
+        { sel: '#career-panel-jobs .jsheet', attrs: [] },
+        { sel: '#element-details', attrs: [] },
+        { sel: '#career-radar', attrs: [] },
+        { sel: '.pp-switch__chip[data-view="contracts"]', attrs: ['data-claimable'] },
+        { sel: 'a.pp-navhub[href="' + CAREER_PATH + '"]', attrs: ['aria-label'] },
+        { sel: 'a.mobile-tabbar-item[href="' + CAREER_PATH + '"]', attrs: ['aria-label'] },
+        { sel: 'a.pp-subpill[href="' + CAREER_PATH + '"]', attrs: ['aria-label'] },
+        { sel: '.pp-sub__mbar', attrs: ['aria-label'] },
+    ];
+    function swapRegions(fresh) {
+        // Entrance animations already played here: the new nodes arrive settled rather than replaying them.
+        fresh.querySelectorAll('.pp-head-cascade').forEach(function (n) { n.classList.remove('pp-head-cascade'); });
+        var pairs = [];
+        for (var i = 0; i < REFRESH_REGIONS.length; i++) {
+            var reg = REFRESH_REGIONS[i];
+            var cur = document.querySelectorAll(reg.sel), next = fresh.querySelectorAll(reg.sel);
+            if (cur.length !== next.length) return false;
+            for (var j = 0; j < cur.length; j++) pairs.push([cur[j], next[j], reg.attrs]);
+        }
+        var sheet = document.querySelector('.jsheet');
+        if (sheet) sheet.classList.remove('jsheet--revealing');   // its cascade has played; new rows arrive settled
+        pairs.forEach(function (p) {
+            p[0].innerHTML = p[1].innerHTML;
+            p[2].forEach(function (a) {
+                if (p[1].hasAttribute(a)) p[0].setAttribute(a, p[1].getAttribute(a)); else p[0].removeAttribute(a);
+            });
+        });
+        document.dispatchEvent(new CustomEvent('pp:career-refreshed'));
+        return true;
+    }
+    // The ceremony must never cost the refresh of XP already banked: one that throws, or rejects, resolves.
+    function played(Ceremony, claim) {
+        try { return Promise.resolve(Ceremony.play(claim)).catch(function () {}); }
+        catch (e) { return Promise.resolve(); }
+    }
+    var claiming = false;   // one claim at a time: a second click mid-ceremony would race the refresh
+    var refetchOnShow = false;   // the board went stale while its tab was hidden: refetch when it is shown
+    function refreshAfterClaim(shown, byKeyboard) {
+        // Fetched AND parsed while the ceremony plays. A failed fetch resolves to null rather than rejecting,
+        // so the fallback reload still waits for the ceremony instead of cutting it off mid-animation.
+        var page = fetch(location.href, { credentials: 'same-origin' })
+            .then(function (r) { if (!r.ok) throw new Error('refresh ' + r.status); return r.text(); })
+            .then(function (html) { return new DOMParser().parseFromString(html, 'text/html'); })
+            .catch(function () { return null; });
+        Promise.all([page, shown]).then(function (out) {
+            if (!out[0] || !swapRegions(out[0])) { reloadKeepingView(); return; }
+            applyScopeUI(state.scope);   // a swapped-in Claim all must still hide in History
+            boardQuery = null;          // the board on screen is stale even though its filters are not
+            // fetchPage(1) writes the board's params into the URL, so on a hidden Contracts tab (the hunter
+            // moved to Jobs or Radar during the ceremony) it would put them on that tab's URL. Defer it.
+            if (panel && panel.hidden) refetchOnShow = true; else fetchPage(1, false);
+            claiming = false;
+            // A keyboard claim's button may be gone (its card left the view): put focus somewhere stable,
+            // without jumping the page up to the tab strip.
+            var a = document.activeElement;
+            if (byKeyboard && (!a || a === document.body || !a.isConnected)) {
+                var tab = document.getElementById('career-tab-contracts');
+                if (tab) tab.focus({ preventScroll: true });
+            }
+        }).catch(function () { reloadKeepingView(); });
+    }
+    function applyResult(res, byKeyboard) {
         (res.accepted || []).forEach(function (slug) {
             var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
             var card = list.querySelector('.rp-row[data-slug="' + sel + '"]');
@@ -735,40 +853,43 @@ function ppCountUp(el, dur) {
             markAccepted(card);
             // Drop the card if it no longer belongs in the current view: the claimable filter (it's now
             // accepted), or the Board scope once it's fully banked (it graduates to History). We can't know
-            // "fully banked" client-side, so on the Board we remove it and let the post-ceremony reload
+            // "fully banked" client-side, so on the Board we remove it and let the refresh's board refetch
             // reconcile -- a fully-banked one won't come back; a partially-banked one (100% still to earn)
-            // reappears from the server. That reload happens right after, so the flicker is imperceptible.
+            // reappears from the server.
             if (state.status === 'claimable' || state.scope === 'board') card.remove();
         });
         refreshAcceptAll(res.claimable_count || 0);
+        if (!res.granted) { claiming = false; return; }   // nothing banked: nothing on the page is stale
         // The claim ceremony IS the feedback (the award flows into the jobs it leveled). Toast only
         // as a fallback when the ceremony module or its payload isn't available.
-        // A claim levels real jobs, so the Jobs (dossier + sheet), Radar, and hero panels -- ALL built
-        // from the server's career context -- are now stale in the DOM (the tabs render once on load and
-        // just toggle). Refresh once the moment is over so every panel reflects the new levels. We reload
-        // rather than patch client-side because the radar canvas + per-discipline geometry can't be
-        // re-derived without duplicating career_service; a reload is correct across every surface at once.
-        var claim = res.claim, Ceremony = PP.ClaimCeremony;
+        var claim = res.claim, Ceremony = PP.ClaimCeremony, shown;
         if (Ceremony && claim && claim.jobs && claim.jobs.length) {
-            Ceremony.play(claim).then(reloadKeepingView);   // refresh (on the same tab) after the ceremony closes
+            shown = played(Ceremony, claim);
         } else {
-            if (Toast && res.granted) Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
-            if (res.granted) setTimeout(reloadKeepingView, 1100);   // no ceremony -> still refresh, same tab
+            if (Toast) Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+            shown = Promise.resolve();
         }
+        refreshAfterClaim(shown, byKeyboard);   // fetched while the ceremony plays, swapped once it closes
     }
-    async function accept(payload, btn) {
-        if (!API) return;
+    async function accept(payload, btn, byKeyboard) {
+        if (!API || claiming) return;
+        claiming = true;
         if (btn) { btn.disabled = true; btn.classList.add('btn-disabled'); }
-        try { applyResult(await API.post(ACCEPT_URL, payload)); }
+        try { applyResult(await API.post(ACCEPT_URL, payload), byKeyboard); }
         catch (err) {
+            claiming = false;
             var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
             if (Toast) Toast.show((data && data.error) || 'Could not claim the Contract.', 'error');
             if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
         }
     }
-    list.addEventListener('click', function (e) { var b = e.target.closest('.rp-accept'); if (b) { e.preventDefault(); accept({ slug: b.dataset.slug }, b); } });
-    var allBtn = document.getElementById('rp-accept-all');
-    if (allBtn) allBtn.addEventListener('click', function () { accept({ all: true }, allBtn); });
+    // `e.detail === 0`: a keyboard activation (a mouse click counts at least 1).
+    list.addEventListener('click', function (e) { var b = e.target.closest('.rp-accept'); if (b) { e.preventDefault(); accept({ slug: b.dataset.slug }, b, e.detail === 0); } });
+    // DELEGATED: Claim all is a refresh region, so the button is replaced after a claim.
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('#rp-accept-all');
+        if (b) accept({ all: true }, b, e.detail === 0);
+    });
 
     // ---- Server-driven filter/sort + infinite scroll ----
     var RESULTS_URL = list.dataset.resultsUrl;
@@ -1278,6 +1399,7 @@ function ppCountUp(el, dur) {
         landingQuery = null;   // the hunter has already seen this board, so the claim landing is spent
     }
     document.addEventListener('pp:contracts-shown', function () {
+        if (refetchOnShow) { refetchOnShow = false; boardQuery = null; fetchPage(1, false); }   // stale since a claim
         syncURL();   // returning to Contracts: re-add its (still-set) filters to the URL that showView scoped away
         staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));
         // The one-time claim landing (see `landingQuery`). `boardQuery === landingQuery` means the board
