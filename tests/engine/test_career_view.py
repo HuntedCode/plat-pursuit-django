@@ -248,7 +248,7 @@ def test_the_claim_banner_jump_opens_the_board_on_every_claimable():
     platform; the server half is pinned in test_contracts_service). Source text, no JS runner."""
     import re
 
-    jump = _career_js("document.querySelectorAll('[data-lab-goto]')", 'scrollIntoView')
+    jump = _career_js("e.target.closest('[data-lab-goto]')", 'scrollIntoView')
     assert re.search(r"dispatchEvent\(\s*new CustomEvent\(\s*'pp:board-filter',\s*\{\s*detail:\s*"
                      r"\{\s*status:\s*f,\s*allPlatforms:\s*true\s*\}", jump), 'the banner no longer opens the board filter'
     assert '.click()' not in jump, 'the banner clicks a chip again, which keeps a History scope'

@@ -5,8 +5,10 @@ starts at. Opened by the hero's rank bar (`[data-rank-open]`), which shows the 1
 what one asks for in a rung `title`, and a title never shows on a phone.
 
 Expects `table` (`leveling.pursuer_rank_table`, with `reached_at` per tier from career_service) and `level`
-(the Pursuer Level). Server-rendered and safe to be: a claim reloads the page, so the table never goes stale
-under an open Career.
+(the Pursuer Level). Server-rendered and safe to be: a claim refreshes `.prk-now` and `.prk-list` in place
+(career.js `refreshAfterClaim` swaps them from a fresh render of the page), so the table never goes stale
+under an open Career. The modal shell stays: its script holds `el` and `list` from load, which is why the
+refresh swaps their CONTENTS and never the elements.
 
 A MANUAL modal on the `.pp-detail-modal` mold, driven by `PlatPursuit.DetailModal`: no `data-auto`, no
 `onDismiss`, nothing recorded, so it is not part of the page's modal gate (`_career_modal_gate.html`) and

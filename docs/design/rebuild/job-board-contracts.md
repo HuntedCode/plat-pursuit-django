@@ -746,6 +746,23 @@ Home membership is derived, so a merge has **no membership rows to re-point**. `
   trusted gate. Forgetting the trusted gate lets a `pending_review`/`rejected` match leak in.
 - **Only ANCHORED + TRUSTED concepts are members.** A concept with a raw IGDB id but no anchor
   stamp (or a non-trusted match) is *not* a member even if the id matches — the gate is all three.
+- **A claim refreshes Career in place; it no longer reloads the page (2026-10).** A claim levels real
+  jobs, so the hero (ring, rank bar), the rank table, the banner, the stats, the Jobs dossier + sheet +
+  detail panels, the radar, the tab counts and the nav badges are all stale, and each claim used to reload
+  the whole page (one reload per contract when clearing a backlog). `career.js` `refreshAfterClaim`
+  fetches the page again WHILE the ceremony plays and swaps each region in `REFRESH_REGIONS` from it, then
+  refetches the board. The page is the one renderer, so nothing re-derives a number client-side (the
+  alternative, HTML fragments in the claim reply, would have meant nine new partials kept equal to the
+  page). Rules that keep it working:
+  - **Contents are swapped, never the elements**, so listeners and observers on the region elements
+    survive. Anything INSIDE a region is delegated (banner jump, job tiles in dossier and sheet, dossier
+    tilt) or listens for `pp:career-refreshed` (radar re-reads `#career-radar`; the dossier reveal marks
+    the new bands revealed and drops its observer).
+  - **A region must render on both sides** (`data-career-panel="banner"` wraps the banner even with
+    nothing to claim). If a region's count differs between the two pages (a first claim drew a hero that
+    was not there), or the fetch fails, it falls back to `reloadKeepingView`.
+  - **New behaviour on a node inside a region must be delegated**, or it works until the first claim.
+  - `test_claim_in_place.py` holds every selector to the rendered page and the flow to its shape.
 - **The card's 25-cell job map is paid 600 times a page** (24 cards x 25 cells), and was about half of
   `/career/`'s HTML. So a cell carries only what is read (2026-10): the family colour as a class
   (`rp-jobcell--<discipline>`, not an inline style), the glyph via `job_icon_use_bare` (no presentation

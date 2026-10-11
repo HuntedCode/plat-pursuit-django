@@ -30,7 +30,7 @@
 
     {% if hero %}
     {# ── Pursuer hero: identity + the disciplines composition ring (ambient glow tinted by your strongest discipline) ── #}
-    <section class="card career-hero bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 relative overflow-hidden"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
+    <section data-career-panel="hero" class="card career-hero bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3 relative overflow-hidden"{% if hero.dominant_disc %} style="--dominant: var(--disc-{{ hero.dominant_disc }});"{% endif %}>
         <div class="card-body p-4 md:p-6 lg:p-7 pp-head-cascade">
             <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
                 {# Identity #}
@@ -118,6 +118,10 @@
     {% if hero.rank_table %}{% include 'trophies/partials/career/_rank_ladder.html' with table=hero.rank_table level=hero.pursuer_level %}{% endif %}
 
     {# ── Pending rewards rail: the claim CTA co-located with the jobs it levels ── #}
+    {% comment %} Wrapped in an ALWAYS-rendered region: a claim refreshes the page's panels in place
+    (career.js `refreshAfterClaim`), and the last claim must be able to empty this, which needs a
+    container to empty. Every `data-career-panel` is one of those regions. {% endcomment %}
+    <div data-career-panel="banner">
     {% if claimable.count %}
     <a href="{{ claim_board_url }}" data-lab-goto="contracts" data-goto-filter="claimable" class="claim-banner claim-banner--gold card bg-base-200/90 border-2 border-primary/40 hover:border-primary transition-colors group mb-3">
         <div class="card-body p-3 md:p-4 flex-row items-center gap-3 md:gap-4">
@@ -132,6 +136,7 @@
         </div>
     </a>
     {% endif %}
+    </div>
 
     {% if career %}
     {% comment %} First-visit "how it works" modal (auto-open server-gated via ui_flags,
@@ -170,7 +175,7 @@
             </div>
 
             {# Summary stats (aggregates you can't read off the grid) #}
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            <div data-career-panel="summary" class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
                 <div class="scard">
                     <div class="scard__label">Tiers earned</div>
                     <div class="scard__value pp-tally text-primary" data-countup="{{ tiers_earned }}">{{ tiers_earned }}</div>
@@ -292,9 +297,10 @@
                     <span class="pp-switch__lbl">History</span>
                 </button>
             </div>
-            {% if claimable_count %}
-            <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>
-            {% endif %}
+            {% comment %} An always-rendered refresh region (`display: contents`, so the toolbar's layout is
+            untouched): a claim refreshes it in place, which can bring the button back (a claimable that
+            arrived since the page loaded) as well as remove it. Its click is delegated in career.js. {% endcomment %}
+            <span data-career-panel="claim-all" class="contents">{% if claimable_count %}<button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>{% endif %}</span>
         </div>
         {% comment %} Icon sprite: define all job glyphs once, BEFORE the toolbar's discipline
         popovers and the cards both reference them via <use>. {% endcomment %}
