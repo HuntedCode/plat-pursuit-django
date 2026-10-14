@@ -23,6 +23,7 @@ from pathlib import Path
 from django.conf import settings
 from PIL import Image
 
+from trophies.image_utils import ALLOWED_IMAGE_FORMATS
 from trophies.themes import GRADIENT_THEMES, _clean_css
 
 logger = logging.getLogger(__name__)
@@ -98,10 +99,13 @@ def _file_to_data_uri_resized(file_path, max_size=200):
             logger.warning(f"[PLAYWRIGHT] File not found for resize: {file_path}")
             return ''
 
-        img = Image.open(p)
+        # Media includes admin uploads that never passed validate_image, so open with the
+        # upload allowlist: any other format (SVG, fonts, BMP, ...) raises and takes the
+        # raw-embed fallback below without Pillow ever parsing it.
+        img = Image.open(p, formats=ALLOWED_IMAGE_FORMATS)
 
-        # Skip non-raster formats (SVG, fonts)
-        if img.format not in ('PNG', 'JPEG', 'WEBP', 'GIF', None):
+        # A JPEG variant such as MPO reports its own name; embed it untouched too.
+        if img.format not in ALLOWED_IMAGE_FORMATS:
             return _file_to_data_uri(file_path)
 
         # Resize if either dimension exceeds max_size

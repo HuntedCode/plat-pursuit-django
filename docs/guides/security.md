@@ -145,12 +145,12 @@ An npm advisory is therefore a build-machine concern (crafted input to a build t
 
 The only `npm ci` deprecation warning is `eslint@9.39.5` (end of support). Clearing it means ESLint 10, a major upgrade, so it is deferred.
 
-**Python: 96 unique advisories across 15 packages in `requirements.txt`. Report only; nothing upgraded yet.**
+**Python: 96 unique advisories across 15 packages in `requirements.txt`.** Django and Pillow, the two High rows, were upgraded on 2026-10-14 (see [Image Uploads](#image-uploads) for the Pillow follow-through). The rest are still open.
 
 | Package | Pinned | Clears all | Why it matters here | Priority |
 |---------|--------|------------|---------------------|----------|
-| Django | 5.2.7 | 5.2.17 (same 5.2 LTS line) | 30 advisories: SQL injection in `FilteredRelation` / `order_by` column aliases and `_connector` dict expansion, ASGI and multipart DoS, cache-middleware response leaks, `get_signed_cookie` salt collision | High |
-| Pillow | 12.0.0 | 12.3.0 | 19 advisories, several heap out-of-bounds writes / memory corruption (PSD, EPS, JPEG2000, GD, PCF/BDF fonts, coordinate APIs). `trophies/image_utils.py` calls `Image.open()` on user uploads with no `formats=` allowlist, so those parsers are reachable | High |
+| Django | 5.2.7 | 5.2.17 (same 5.2 LTS line) | 30 advisories: SQL injection in `FilteredRelation` / `order_by` column aliases and `_connector` dict expansion, ASGI and multipart DoS, cache-middleware response leaks, `get_signed_cookie` salt collision | High (fixed: 5.2.17) |
+| Pillow | 12.0.0 | 12.3.0 | 19 advisories, several heap out-of-bounds writes / memory corruption (PSD, EPS, JPEG2000, GD, PCF/BDF fonts, coordinate APIs). `trophies/image_utils.py` called `Image.open()` on user uploads with no `formats=` allowlist, so those parsers were reachable | High (fixed: 12.3.0, and uploads now reach only the allowed decoders) |
 | djangorestframework | 3.16.1 | 3.17.2 | `request.data` parsing can bypass Django's upload memory limits; AdminRenderer data leak on 400s | Medium |
 | urllib3 | 2.5.0 | 2.8.0 | Decompression bombs in streaming, cross-origin redirect header leak, proxy TLS settings ignored. Affects outbound calls (PSN, IGDB, Discord, S3) | Medium |
 | cryptography | 46.0.3 | 50.0.0 | 46.0.7 (patch) clears three; the bundled-OpenSSL advisory and the rest need 48 to 50 (major) | Medium |
@@ -163,6 +163,22 @@ The only `npm ci` deprecation warning is `eslint@9.39.5` (end of support). Clear
 | Markdown | 3.7 | 3.8.1 | Crash on malformed HTML-like input; renders staff-authored broadcast emails only | Low |
 | requests, idna, python-dotenv | 2.32.5, 3.11, 1.2.1 | 2.33.0, 3.15, 1.2.2 | Temp-file name in a zip helper, idna DoS on long input, `.env` symlink follow (local only) | Low |
 
+## Image Uploads
+
+User uploads (roadmap images in `api/roadmap_views.py`, notification banners in `notifications/views.py`) go through `trophies/image_utils.py`: `validate_image` first, then `process_roadmap_image` or `optimize_image`. All three open the file through `_open_upload`, which passes `formats=ALLOWED_IMAGE_FORMATS` (JPEG, PNG, WEBP, GIF) to `Image.open()`.
+
+That allowlist is enforced **before** decoding, not after. Without `formats=`, Pillow sniffs the bytes and runs whichever of its many parsers matches, so a crafted PSD or EPS reached that parser (the source of most Pillow memory-corruption advisories) before the old format check could reject it. Any other format now fails with `UnidentifiedImageError`, which `validate_image` turns into "must be a valid JPEG, PNG, WEBP, or GIF image." (Pillow raises the same error for a corrupt file in an allowed format, hence "valid".) One variant gets through the decoder: the JPEG decoder returns multi-picture phone photos as `MPO`, and the format check after opening rejects those by name, as it did before.
+
+Share-card rendering (`core/services/playwright_renderer.py`) inlines `/media/` files, which include admin uploads that never passed `validate_image`, so it opens them with the same allowlist; anything else is embedded untouched rather than parsed.
+
+`tests/engine/test_image_utils.py` pins all of this with a tripwire on the TIFF parser: the tests fail if a disallowed parser runs at all, even when the upload is rejected afterwards.
+
+| Limit | Value |
+|-------|-------|
+| Formats | `ALLOWED_IMAGE_FORMATS` (JPEG, PNG, WEBP, GIF) |
+| Dimensions | `MAX_IMAGE_DIMENSION` (3840px), roadmap output capped at `ROADMAP_MAX_DIMENSION` (2400px) |
+| File size | per call: 10 MB roadmap images, 5 MB banners |
+
 ## Gotchas and Pitfalls
 
 - **CSP and new CDN resources.** If you add a new external script, stylesheet, font, or image source, you must update the CSP directives in settings.py or the resource will be blocked. A blocked resource fails *silently* apart from a console entry: the Cloudflare analytics beacon was CSP-blocked once and the dashboard read zero traffic while the site was being hammered.
@@ -170,5 +186,6 @@ The only `npm ci` deprecation warning is `eslint@9.39.5` (end of support). Clear
 - **CORS localhost leak.** Before this hardening, localhost origins were unconditionally added to production CORS. Always gate development-only origins behind `if DEBUG`.
 - **`throttle_classes = []` disables DRF throttling.** If you see this on a view, it's intentionally removing DRF's built-in throttling. Make sure `django-ratelimit` is used as a replacement, not that throttling is simply absent.
 - **Mobile signup is protected by a different rate limit and skips the honeypot.** `MobileSignupView` in `api/mobile_auth_views.py` calls allauth's base `SignupForm` directly rather than going through `SignupView`, so neither `ACCOUNT_RATE_LIMITS['signup']` nor the honeypot in `CustomUserCreationForm` apply. The view IS protected by its own `@ratelimit(key='ip', rate='3/m', method='POST', block=True)` decorator (django-ratelimit, returns 429 on excess). Web signup uses the allauth path (`5/m/ip` + honeypot); mobile uses django-ratelimit (`3/m/ip`, no honeypot). Both are throttled, just via different mechanisms.
+- **Never `Image.open()` a user upload directly.** Use `_open_upload` (or the helpers that call it) in `trophies/image_utils.py`, or pass `formats=ALLOWED_IMAGE_FORMATS` as the card renderer does. A bare `Image.open()` runs every Pillow parser again, and a format check afterwards is too late: the parser has already run. Django's `ImageField` form validation also opens files with every decoder, but it is only reached from the staff-only admin.
 - **`npm audit` overstates production risk.** It reports every advisory as a production one, because the Tailwind toolchain sits in `dependencies` rather than `devDependencies`. None of it is served. Check the "Where each dependency tree runs" table before treating an npm critical as a site incident, and never answer one with `npm audit fix --force`: it installs versions outside the declared `package.json` ranges (majors included), and the rebuilt CSS is then no longer guaranteed identical.
 - **Log filter blast radius.** `SuppressBotMagnet405` is attached at the handler level, so any logger that routes through `console` benefits. The filter only matches the exact `Method Not Allowed (...): /<bot-magnet-path>` pattern, so other warnings are unaffected — but if you add a new logger that legitimately emits that exact string for a real endpoint, it will be swallowed. Update `BOT_MAGNET_405_PATTERN` if a new bot-magnet path needs adding.
