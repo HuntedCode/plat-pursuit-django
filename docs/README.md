@@ -101,7 +101,7 @@ How-to and operational documentation.
 | [Email Setup](guides/email-setup.md) | SendGrid configuration, Cloudflare email routing |
 | [Mobile App](guides/mobile-app.md) | Why the mobile API was removed, and what to know when rebuilding it |
 | [Social Media Strategy](guides/social-media-strategy.md) | Platform strategy, content pillars, calendar, growth tactics |
-| [Security](guides/security.md) | Security headers, CSP, rate limiting, CORS, admin log privacy |
+| [Security](guides/security.md) | Security headers, CSP, rate limiting, CORS, admin log privacy, dependency advisory triage |
 | [Staging / Beta](guides/staging.md) | Team-only (staff + mods) `beta.platpursuit.com`: Render + DNS + env setup, the `BETA` gate |
 
 ## Reference
