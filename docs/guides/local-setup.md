@@ -1,6 +1,6 @@
 # Local Development Setup
 
-How to get PlatPursuit running locally for development. The stack is Django 5.2.7 + PostgreSQL 15 + Redis 7, with a separate Token Keeper worker process for PSN sync jobs.
+How to get PlatPursuit running locally for development. The stack is Django 5.2.17 + PostgreSQL 15 + Redis 7, with a separate Token Keeper worker process for PSN sync jobs.
 
 ## Prerequisites
 
