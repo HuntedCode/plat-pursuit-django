@@ -147,7 +147,8 @@ class AdminNotificationCenterView(StaffRequiredMixin, TemplateView):
                 validate_image(banner_image, max_size_mb=5, image_type='banner image')
                 optimized_banner_image = optimize_image(banner_image, max_width=2048, max_height=2048, quality=85)
             except ValidationError as e:
-                messages.error(request, str(e))
+                # .messages[0], not str(e): str() of a ValidationError is a list repr.
+                messages.error(request, e.messages[0])
                 return redirect('admin_notification_center')
 
         if action == 'schedule':

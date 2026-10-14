@@ -15,6 +15,7 @@ service.
 import logging
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
@@ -384,6 +385,12 @@ class RoadmapImageUploadView(APIView):
 
         try:
             validate_image(image, max_size_mb=10)
+        except ValidationError as e:
+            # .messages[0], not str(e): str() of a ValidationError is a list repr.
+            return Response(
+                {'error': e.messages[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except Exception as e:
             return Response(
                 {'error': str(e)},
@@ -393,16 +400,22 @@ class RoadmapImageUploadView(APIView):
         watermark_raw = (request.data.get('watermark') or 'true').strip().lower()
         watermark = watermark_raw not in ('false', '0', 'no', 'off')
 
-        # Wrap the processing + storage pipeline so an exception inside
-        # Pillow / default_storage doesn't bubble up as an HTML 500
-        # (which the editor's JS can't parse, leaving the author with
-        # a generic "Image save failed." toast and no detail to share).
-        # process_roadmap_image has its own fallback to the raw file on
-        # Pillow errors; this catch covers the storage backend (S3
-        # timeout, disk full, permissions, etc.) and any leak through
-        # the fallback.
+        # An image the pipeline can't process is refused (it has already
+        # logged why) rather than stored raw, which would keep the file's
+        # EXIF, GPS included, and its own extension.
         try:
             processed = process_roadmap_image(image, watermark=watermark)
+        except ValidationError as e:
+            return Response(
+                {'error': e.messages[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Wrap storage so an exception inside default_storage doesn't
+        # bubble up as an HTML 500 (which the editor's JS can't parse,
+        # leaving the author with a generic "Image save failed." toast and
+        # no detail to share): S3 timeout, disk full, permissions, etc.
+        try:
             filename = f"roadmaps/images/{uuid.uuid4().hex[:12]}_{processed.name}"
             saved_path = default_storage.save(filename, processed)
             url = default_storage.url(saved_path)
@@ -421,11 +434,11 @@ class RoadmapImageUploadView(APIView):
             )
             # Return the exception class + a truncated message so the
             # author can paste it to support; truncating bounds the
-            # response size if Pillow / boto3 returns a verbose error.
+            # response size if boto3 returns a verbose error.
             return Response(
                 {
                     'error': (
-                        f'Image processing or storage failed: '
+                        f'Image storage failed: '
                         f'{type(e).__name__}: {str(e)[:200]}'
                     ),
                 },
