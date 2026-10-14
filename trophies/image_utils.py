@@ -4,7 +4,6 @@ Handles optimization, resizing, and compression.
 """
 import logging
 import os
-import sys
 from io import BytesIO
 
 from django.conf import settings
@@ -26,6 +25,26 @@ MAX_IMAGE_DIMENSION = 3840  # 4K resolution
 ROADMAP_MAX_DIMENSION = 2400
 ROADMAP_WATERMARK_TEXT = 'www.platpursuit.com'
 
+#: The extension each pipeline output gets. A stored name never keeps the uploader's own
+#: extension: storage serves by extension, so a PNG named `x.html` would be served as HTML.
+SAVED_EXTENSIONS = {'JPEG': 'jpg', 'PNG': 'png', 'WEBP': 'webp', 'GIF': 'gif'}
+
+#: Shown when a pipeline cannot process an upload. The upload is refused rather than stored
+#: raw, because a raw file keeps its metadata (EXIF, including GPS) and its own extension.
+PROCESSING_FAILED_MESSAGE = (
+    "We couldn't process this image. Try saving it as a JPEG or PNG and uploading it again."
+)
+
+#: Transparency is flattened onto this colour (the guides and banners sit on light cards).
+FLATTEN_BACKGROUND = (255, 255, 255)
+
+#: Longest name stem kept from an upload. Storage names have length limits (255 bytes on most
+#: filesystems, before the roadmap UUID prefix), and nothing past this helps anyone.
+MAX_STORED_STEM_LENGTH = 64
+
+#: 16-bit samples are scaled by this to 8 bits before conversion.
+SIXTEEN_TO_EIGHT_BIT = 1 / 256
+
 
 def _open_upload(image_file):
     """Open an uploaded file with only the allowed decoders.
@@ -35,6 +54,42 @@ def _open_upload(image_file):
     check runs. A file in any other format raises UnidentifiedImageError.
     """
     return Image.open(image_file, formats=ALLOWED_IMAGE_FORMATS)
+
+
+def _flatten_to_rgb(img):
+    """Return `img` as RGB: transparency composited onto white, any other mode converted.
+
+    Everything downstream (the watermark, the JPEG encoder) expects RGB. Greyscale (L) and
+    CMYK photos used to slip through unconverted, and the watermark then produced RGBA,
+    which JPEG cannot store.
+    """
+    if img.mode == 'RGB':
+        return img
+    if img.mode in ('RGBA', 'LA', 'PA') or (img.mode == 'P' and 'transparency' in img.info):
+        rgba = img.convert('RGBA')
+        background = Image.new('RGB', img.size, FLATTEN_BACKGROUND)
+        background.paste(rgba, mask=rgba.split()[-1])
+        return background
+    if img.mode.startswith('I'):
+        # 16-bit greyscale (how Pillow opens a 16-bit PNG). A straight convert clips every
+        # sample above 255, which turns almost the whole image white, so scale it down first.
+        img = img.convert('I').point(lambda v: v * SIXTEEN_TO_EIGHT_BIT).convert('L')
+    return img.convert('RGB')
+
+
+def _as_upload(output, original_name, save_format):
+    """Wrap encoded bytes as an upload named for the format they were saved in.
+
+    The stem is trimmed of leading dots (so `.png` cannot become a hidden `.png.png`) and
+    capped at MAX_STORED_STEM_LENGTH.
+    """
+    base_stem = os.path.splitext(os.path.basename(original_name or ''))[0]
+    stem = base_stem.lstrip('.')[:MAX_STORED_STEM_LENGTH] or 'image'
+    output.seek(0)
+    return InMemoryUploadedFile(
+        output, 'ImageField', f'{stem}.{SAVED_EXTENSIONS[save_format]}',
+        f'image/{save_format.lower()}', output.getbuffer().nbytes, None,
+    )
 
 
 def optimize_image(image_file, max_width=3840, max_height=3840, quality=85):
@@ -48,56 +103,37 @@ def optimize_image(image_file, max_width=3840, max_height=3840, quality=85):
         quality: JPEG quality (1-100)
 
     Returns:
-        InMemoryUploadedFile: Optimized image
+        InMemoryUploadedFile: Optimized image, named for its format
+
+    Raises:
+        ValidationError: If the image cannot be processed. The raw upload is never
+            returned in its place (see PROCESSING_FAILED_MESSAGE).
     """
     try:
         img = _open_upload(image_file)
         original_format = img.format
-
-        # Convert RGBA/LA to RGB (handle transparency)
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'RGBA':
-                background.paste(img, mask=img.split()[-1])
-            else:
-                background.paste(img)
-            img = background
+        img = _flatten_to_rgb(img)
 
         # Resize if too large
         if img.width > max_width or img.height > max_height:
             img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
 
-        # Save to BytesIO
+        # Save to BytesIO (re-encoding drops all metadata)
         output = BytesIO()
         save_format = 'JPEG' if original_format in ['JPEG', 'JPG'] else original_format
-
-        # Save with optimization
         img.save(
             output,
             format=save_format,
             quality=quality,
             optimize=True
         )
-        output.seek(0)
-
-        # Create InMemoryUploadedFile
-        optimized_file = InMemoryUploadedFile(
-            output,
-            'ImageField',
-            image_file.name,
-            f'image/{save_format.lower()}',
-            sys.getsizeof(output),
-            None
-        )
 
         logger.info(f"Optimized {image_file.name}: {img.width}x{img.height}")
-        return optimized_file
+        return _as_upload(output, image_file.name, save_format)
 
     except Exception as e:
-        logger.error(f"Image optimization failed: {e}")
-        # Return original on failure
-        image_file.seek(0)
-        return image_file
+        logger.exception("Image optimization failed; refusing the upload.")
+        raise ValidationError(PROCESSING_FAILED_MESSAGE) from e
 
 
 def validate_image(image_file, max_size_mb=5, image_type='image'):
@@ -200,14 +236,11 @@ def _watermark_font(image_width):
 def _apply_watermark(img, text=ROADMAP_WATERMARK_TEXT):
     """Composite a semi-transparent watermark onto the bottom-right corner.
 
-    Writes onto an RGBA overlay and composites back to the source's mode so
-    JPEG output stays JPEG. Adds a soft drop shadow for legibility on light
+    Takes and returns RGB (process_roadmap_image flattens first), writing
+    through an RGBA overlay. Adds a soft drop shadow for legibility on light
     and dark images alike.
     """
-    if img.mode != 'RGBA':
-        base = img.convert('RGBA')
-    else:
-        base = img.copy()
+    base = img.convert('RGBA')
 
     overlay = Image.new('RGBA', base.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
@@ -232,10 +265,7 @@ def _apply_watermark(img, text=ROADMAP_WATERMARK_TEXT):
     )
     draw.text((x, y), text, font=font, fill=(255, 255, 255, 235), anchor='rd')
 
-    composited = Image.alpha_composite(base, overlay)
-    if img.mode == 'RGB':
-        return composited.convert('RGB')
-    return composited
+    return Image.alpha_composite(base, overlay).convert('RGB')
 
 
 def process_roadmap_image(image_file, watermark=True, max_dimension=ROADMAP_MAX_DIMENSION,
@@ -243,11 +273,12 @@ def process_roadmap_image(image_file, watermark=True, max_dimension=ROADMAP_MAX_
     """Full pipeline for roadmap image uploads.
 
     EXIF auto-rotate, metadata strip, max-dimension cap, optional watermark,
-    re-encode at the given quality. Returns an `InMemoryUploadedFile` ready
-    for `default_storage.save()`.
+    re-encode at the given quality. Returns an `InMemoryUploadedFile`, named
+    for its output format, ready for `default_storage.save()`.
 
-    Falls back to returning the original file (rewound) on any processing
-    error so an unexpected Pillow edge case can't block an upload entirely.
+    Raises ValidationError if anything fails. It used to fall back to the raw
+    upload, which stored the file with its EXIF (GPS included) and its own
+    extension; refusing the upload is the safe failure.
     """
     try:
         img = _open_upload(image_file)
@@ -256,17 +287,7 @@ def process_roadmap_image(image_file, watermark=True, max_dimension=ROADMAP_MAX_
         # Auto-rotate based on EXIF orientation BEFORE stripping metadata.
         # exif_transpose returns a rotated copy with EXIF orientation cleared.
         img = ImageOps.exif_transpose(img) or img
-
-        # Convert RGBA / palette / LA to RGB for non-PNG output paths.
-        if img.mode in ('RGBA', 'LA', 'P'):
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'RGBA':
-                background.paste(img, mask=img.split()[-1])
-            elif img.mode == 'LA':
-                background.paste(img.convert('RGBA'), mask=img.convert('RGBA').split()[-1])
-            else:
-                background.paste(img.convert('RGBA'))
-            img = background
+        img = _flatten_to_rgb(img)
 
         if img.width > max_dimension or img.height > max_dimension:
             img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
@@ -288,21 +309,7 @@ def process_roadmap_image(image_file, watermark=True, max_dimension=ROADMAP_MAX_
             save_kwargs['quality'] = quality
             save_kwargs['method'] = 6
         img.save(output, **save_kwargs)
-        output.seek(0)
-
-        new_name = image_file.name
-        if save_format == 'JPEG' and not new_name.lower().endswith(('.jpg', '.jpeg')):
-            new_name = new_name.rsplit('.', 1)[0] + '.jpg'
-
-        return InMemoryUploadedFile(
-            output, 'ImageField', new_name,
-            f'image/{save_format.lower()}',
-            sys.getsizeof(output), None,
-        )
-    except Exception:
-        logger.exception("Roadmap image processing failed; falling back to raw upload.")
-        try:
-            image_file.seek(0)
-        except Exception:
-            pass
-        return image_file
+        return _as_upload(output, image_file.name, save_format)
+    except Exception as e:
+        logger.exception("Roadmap image processing failed; refusing the upload.")
+        raise ValidationError(PROCESSING_FAILED_MESSAGE) from e

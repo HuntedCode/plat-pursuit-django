@@ -179,6 +179,20 @@ Share-card rendering (`core/services/playwright_renderer.py`) inlines `/media/` 
 | Dimensions | `MAX_IMAGE_DIMENSION` (3840px), roadmap output capped at `ROADMAP_MAX_DIMENSION` (2400px) |
 | File size | per call: 10 MB roadmap images, 5 MB banners |
 
+### What gets stored
+
+Both pipelines re-encode every upload, and only the re-encoded file is ever stored:
+
+| Rule | How | Why |
+|------|-----|-----|
+| No metadata | Re-encoding writes no EXIF, so a phone photo's GPS location is dropped (the roadmap path applies EXIF orientation first). `_flatten_to_rgb` first converts every colour mode to RGB: transparency onto `FLATTEN_BACKGROUND` (white), 16-bit greyscale scaled to 8 bits rather than clipped | Greyscale and CMYK photos used to crash the roadmap watermark step, and the fallback then stored the raw file, GPS included |
+| Named for its format | `_as_upload` keeps the uploaded name's stem (leading dots trimmed, capped at `MAX_STORED_STEM_LENGTH`) and sets the extension from the saved format (`SAVED_EXTENSIONS`) | Storage serves by extension: a PNG named `x.html` used to be stored, and served, as HTML |
+| Refused, never stored raw | Any processing failure raises `ValidationError(PROCESSING_FAILED_MESSAGE)`; the roadmap endpoint returns it as a 400, the banner form as an error message | A raw upload keeps both its metadata and its own extension |
+
+`tests/engine/test_image_utils.py` and `tests/engine/test_roadmap_image_upload.py` pin all three. The metadata tests use JPEG and PNG photos that really carry a GPS block (a guard test checks the fixture), so "GPS was stripped" cannot pass vacuously.
+
+Greyscale PNGs are stored as RGB (about three times the bytes, identical to look at). Accepted: one RGB path keeps both pipelines simple. The banner pipeline does not apply EXIF orientation, so a sideways phone photo stays sideways there (banners are staff-made and the notification center is parked).
+
 ## Gotchas and Pitfalls
 
 - **CSP and new CDN resources.** If you add a new external script, stylesheet, font, or image source, you must update the CSP directives in settings.py or the resource will be blocked. A blocked resource fails *silently* apart from a console entry: the Cloudflare analytics beacon was CSP-blocked once and the dashboard read zero traffic while the site was being hammered.
@@ -186,6 +200,7 @@ Share-card rendering (`core/services/playwright_renderer.py`) inlines `/media/` 
 - **CORS localhost leak.** Before this hardening, localhost origins were unconditionally added to production CORS. Always gate development-only origins behind `if DEBUG`.
 - **`throttle_classes = []` disables DRF throttling.** If you see this on a view, it's intentionally removing DRF's built-in throttling. Make sure `django-ratelimit` is used as a replacement, not that throttling is simply absent.
 - **Mobile signup is protected by a different rate limit and skips the honeypot.** `MobileSignupView` in `api/mobile_auth_views.py` calls allauth's base `SignupForm` directly rather than going through `SignupView`, so neither `ACCOUNT_RATE_LIMITS['signup']` nor the honeypot in `CustomUserCreationForm` apply. The view IS protected by its own `@ratelimit(key='ip', rate='3/m', method='POST', block=True)` decorator (django-ratelimit, returns 429 on excess). Web signup uses the allauth path (`5/m/ip` + honeypot); mobile uses django-ratelimit (`3/m/ip`, no honeypot). Both are throttled, just via different mechanisms.
+- **Never store a user's image bytes as uploaded, and never let them pick the extension.** A new upload path should go through `process_roadmap_image` or `optimize_image` (or reuse `_flatten_to_rgb` and `_as_upload`), and treat their `ValidationError` as "refuse the upload". Falling back to the raw file "so nothing is blocked" is exactly what leaked GPS data.
 - **Never `Image.open()` a user upload directly.** Use `_open_upload` (or the helpers that call it) in `trophies/image_utils.py`, or pass `formats=ALLOWED_IMAGE_FORMATS` as the card renderer does. A bare `Image.open()` runs every Pillow parser again, and a format check afterwards is too late: the parser has already run. Django's `ImageField` form validation also opens files with every decoder, but it is only reached from the staff-only admin.
 - **`npm audit` overstates production risk.** It reports every advisory as a production one, because the Tailwind toolchain sits in `dependencies` rather than `devDependencies`. None of it is served. Check the "Where each dependency tree runs" table before treating an npm critical as a site incident, and never answer one with `npm audit fix --force`: it installs versions outside the declared `package.json` ranges (majors included), and the rebuilt CSS is then no longer guaranteed identical.
 - **Log filter blast radius.** `SuppressBotMagnet405` is attached at the handler level, so any logger that routes through `console` benefits. The filter only matches the exact `Method Not Allowed (...): /<bot-magnet-path>` pattern, so other warnings are unaffected — but if you add a new logger that legitimately emits that exact string for a real endpoint, it will be swallowed. Update `BOT_MAGNET_405_PATTERN` if a new bot-magnet path needs adding.
