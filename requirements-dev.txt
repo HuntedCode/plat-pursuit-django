@@ -10,3 +10,6 @@ factory-boy==3.3.1      # model fixtures (build a Profile/Concept/Badge in one l
 fakeredis==2.26.1       # in-memory Redis for tests that touch the raw redis client
 responses==0.25.3       # mock outbound HTTP (PSN / IGDB / Discord) at the boundary
 freezegun==1.5.1        # freeze time for date-sensitive engine logic
+
+black==26.10.1          # formatter (was pinned in the production requirements)
+pip-audit==2.10.1       # dependency advisory gate; CI runs it on requirements.txt

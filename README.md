@@ -43,9 +43,9 @@ A PlayStation trophy tracking community web application built with Django, Tailw
      python -m venv venv
      venv\Scripts\activate  # On Windows
      ```
-   - Install dependencies:
+   - Install dependencies (the production requirements plus the test and formatting tools):
      ```bash
-     pip install -r requirements.txt
+     pip install -r requirements-dev.txt
      ```
    - Set up PostgreSQL:
      - In pgAdmin, create database `plat_pursuit_dev` and user `plat_user` with password (e.g., `securepass`).
