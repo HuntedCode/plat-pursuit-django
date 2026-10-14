@@ -163,6 +163,7 @@ The only `npm ci` deprecation warning is `eslint@9.39.5` (end of support). Clear
 | Markdown | 3.7 | 3.8.1 | Crash on malformed HTML-like input; renders staff-authored broadcast emails only | Low |
 | requests, idna, python-dotenv | 2.32.5, 3.11, 1.2.1 | 2.33.0, 3.15, 1.2.2 | Temp-file name in a zip helper, idna DoS on long input, `.env` symlink follow (local only) | Low |
 
+## Gotchas and Pitfalls
 
 - **CSP and new CDN resources.** If you add a new external script, stylesheet, font, or image source, you must update the CSP directives in settings.py or the resource will be blocked. A blocked resource fails *silently* apart from a console entry: the Cloudflare analytics beacon was CSP-blocked once and the dashboard read zero traffic while the site was being hammered.
 - **Rate limit key.** All `django-ratelimit` decorators use `key='user'` which requires authentication. For unauthenticated endpoints, use `key='ip'` instead. Allauth's `ACCOUNT_RATE_LIMITS` uses its own format (`'<count>/<period>[/<scope>]'` where scope is `ip` or `key`).
