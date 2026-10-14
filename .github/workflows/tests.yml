@@ -79,6 +79,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      # Fails on any known advisory in the PRODUCTION requirements, which is what the Docker image
+      # installs. Every transitive dependency is pinned there, so --no-deps audits exactly what ships.
+      # To accept an advisory that has no usable fix, add `--ignore-vuln <ID>` here AND record why in
+      # docs/guides/security.md (Dependency Advisories); an ignore without a reason is a bug.
+      - name: Audit Python dependencies
+        run: pip-audit -r requirements.txt --no-deps --disable-pip --progress-spinner off
+
       # The share-card layout tests measure a real render in a real browser, because that class of
       # bug (a fixed-canvas card silently clipping its own title) cannot be caught by asserting on
       # markup -- it is a question about pixels. The pip package ships with requirements; the browser
