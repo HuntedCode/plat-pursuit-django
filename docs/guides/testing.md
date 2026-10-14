@@ -29,7 +29,8 @@ pip install -r requirements-dev.txt
 
 # start the disposable test Postgres (5544, separate from dev):
 docker compose -f docker-compose.test.yml up -d
-# optional: a local redis on 6379 so leaderboard writes persist during tests
+# a local redis on 6379 (required by any test that uses the database; a run
+# without it stops at once with a message saying so)
 docker compose up -d redis
 
 # run the suite (zero config: settings_test defaults to localhost:5544)
@@ -207,5 +208,15 @@ gate is wired after the first spine tests exist — a gate over zero tests is mo
   redis client (token_keeper / leaderboards) is pointed at `localhost` (DB index
   15) via a `REDIS_URL` override in `settings_test.py` — `.env` uses the
   Docker-internal `redis` host, which would hang on DNS timeouts locally. Run
-  `docker compose up -d redis` so those writes succeed; if redis is down they
-  refuse instantly and are swallowed (leaderboard writes are best-effort).
+  `docker compose up -d redis` so those writes succeed.
+- **Redis is required for database tests, and a missing one is stopped up front.**
+  Leaderboard writes are best-effort, so a down Redis does not fail them, it slows
+  them: on Windows a connect to a closed local port retries for about two seconds
+  per address instead of being refused, so every signal-driven write stalls. A
+  2026-10 parallel run on a fresh Windows laptop crawled for over half an hour with
+  idle workers and no error, and 28 Redis-dependent tests failed anyway. The
+  `_redis_preflight` fixture in `conftest.py` (`tests/redis_preflight.py`) now PINGs
+  the test Redis before the test DB is created or migrated, with no connect retries,
+  and stops the session within a couple of seconds with a message naming the URL
+  (password masked) and `docker compose up -d redis`. Only the `django_db_setup`
+  wrapper requests it, so the DB-free suites still run with no services at all.

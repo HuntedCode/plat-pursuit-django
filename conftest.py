@@ -49,7 +49,29 @@ def _ratelimit_clock_is_fixed(monkeypatch):
 
 
 @pytest.fixture(scope="session")
-def django_db_setup(django_db_setup, django_db_blocker):
+def _redis_preflight(request):
+    """Stop the run with a clear message if the test Redis is down (tests/redis_preflight.py).
+
+    Database tests write through the raw redis client, and on Windows a missing Redis makes the
+    run crawl instead of fail. Requested by the django_db_setup wrapper below, AHEAD of
+    pytest-django's own fixture, so it runs before the test DB is created or migrated (minutes
+    under --create-db) and, like the re-seed, never for a DB-free run.
+    """
+    import os
+
+    from tests.redis_preflight import redis_unreachable_reason
+
+    # settings_test points REDIS_URL at the test Redis before anything imports the client.
+    reason = redis_unreachable_reason(os.environ["REDIS_URL"])
+    if reason:
+        # Stop the run after this test rather than pytest.exit(): an exit inside a pytest-xdist
+        # worker reads as a crash and buries the message under an INTERNALERROR traceback.
+        request.session.shouldstop = reason
+        pytest.fail(reason, pytrace=False)
+
+
+@pytest.fixture(scope="session")
+def django_db_setup(_redis_preflight, django_db_setup, django_db_blocker):
     """Re-seed the migration-seeded Job catalog if the (reused) test DB has lost it.
 
     Data migrations run only when the test DB is CREATED, but --reuse-db keeps the DB across

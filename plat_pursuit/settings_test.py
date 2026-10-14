@@ -65,8 +65,11 @@ ALLOWED_HOSTS = ["testserver", "localhost", "127.0.0.1"]
 # in trophies/util_modules/cache.py) at localhost instead of the Docker-internal
 # "redis" host that .env uses. Without this, every signal-driven leaderboard
 # write hangs on a DNS-resolution timeout before its try/except swallows it,
-# making the suite crawl. With localhost it either succeeds (local redis up, DB
-# index 15 keeps it isolated) or refuses instantly. Set before cache.py imports.
+# making the suite crawl. With localhost it succeeds when the local redis is up
+# (DB index 15 keeps it isolated). It does NOT refuse instantly when redis is down:
+# Windows retries a closed local port for ~2 s per address, which crawled the suite
+# the same way, so conftest's preflight (tests/redis_preflight.py) stops the run
+# with a clear message instead. Set before cache.py imports.
 os.environ["REDIS_URL"] = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/15")
 
 # Never redirect to HTTPS or require secure cookies during tests (would 301 the
