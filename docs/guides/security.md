@@ -105,11 +105,69 @@ Easter egg probability rolls are performed server-side. The client cannot determ
 
 Admin action logs use `user_id` instead of email addresses to avoid PII in log storage. This applies to notification sending, subscription admin actions, and fundraiser claim management.
 
-## Gotchas and Pitfalls
+## Dependency Advisories
+
+### Where each dependency tree runs
+
+The two trees carry very different risk, so weigh advisories by where the code actually executes.
+
+| Tree | Installed by | Reaches users? |
+|------|--------------|----------------|
+| npm (`package.json`) | Dev machines and CI (`npm ci`, then `npm run build` / `npm run lint`) | **No.** Tailwind compiles `static/css/output.css`, which is committed; the Dockerfile never runs npm. The one npm package whose code is served, SortableJS, ships as a hand-vendored copy (`static/js/vendor/Sortable.min.js`, 1.15.7), not from `node_modules`. |
+| Python `requirements.txt` | The production Docker image | **Yes.** This is the runtime. |
+| Python `requirements-dev.txt` | Dev and CI only | No. |
+
+An npm advisory is therefore a build-machine concern (crafted input to a build tool), while an advisory in `requirements.txt` is a production concern.
+
+### Running a triage
+
+| Step | Command |
+|------|---------|
+| npm audit | `npm audit` and `npm audit --omit=dev` (identical today, because the Tailwind toolchain is listed under `dependencies`) |
+| npm fix | `npm audit fix` **without** `--force`, so `package.json` ranges are respected and only the lockfile moves |
+| Verify npm | `npm run build`, then confirm `static/css/output.css` hashes the same as before the fix; `npm run lint`; if `@parcel/watcher` moved, smoke-test `npm run watch` with a real content change |
+| Python audit | `pip install pip-audit` into the venv (do not add it to requirements), then `python -m pip_audit -r requirements.txt --no-deps --disable-pip`. Every transitive dependency is pinned, so `--no-deps` audits exactly what ships |
+
+### 2026-10 triage
+
+**npm: 10 advisories (1 critical, 8 high, 1 moderate), all build-only, all fixed by `npm audit fix` (lockfile only, no direct dependency changed version).** Rebuilt CSS was byte-identical.
+
+| Package | Severity | Pulled in by | Was, now |
+|---------|----------|--------------|----------|
+| tar | critical | `@tailwindcss/oxide` | 7.5.2, 7.5.22 |
+| postcss | high | direct (unused by the Tailwind v4 CLI) | 8.5.6, 8.5.30 |
+| braces, micromatch | high | `@parcel/watcher` (watch mode) | removed (watcher 2.6.0 dropped them) |
+| picomatch | high | `@parcel/watcher` | 2.3.1, 4.0.7 (the range watcher 2.6.0 asks for) |
+| browserslist | high | `autoprefixer` | 4.26.3, 4.29.3 |
+| nanoid | high | `postcss` | 3.3.11, 3.3.20 |
+| source-map-js | high | `postcss`, `@tailwindcss/node` | 1.2.1, 1.2.2 |
+| baseline-browser-mapping | moderate | `browserslist` | 2.8.16, 2.11.28 |
+
+The only `npm ci` deprecation warning is `eslint@9.39.5` (end of support). Clearing it means ESLint 10, a major upgrade, so it is deferred.
+
+**Python: 96 unique advisories across 15 packages in `requirements.txt`. Report only; nothing upgraded yet.**
+
+| Package | Pinned | Clears all | Why it matters here | Priority |
+|---------|--------|------------|---------------------|----------|
+| Django | 5.2.7 | 5.2.17 (same 5.2 LTS line) | 30 advisories: SQL injection in `FilteredRelation` / `order_by` column aliases and `_connector` dict expansion, ASGI and multipart DoS, cache-middleware response leaks, `get_signed_cookie` salt collision | High |
+| Pillow | 12.0.0 | 12.3.0 | 19 advisories, several heap out-of-bounds writes / memory corruption (PSD, EPS, JPEG2000, GD, PCF/BDF fonts, coordinate APIs). `trophies/image_utils.py` calls `Image.open()` on user uploads with no `formats=` allowlist, so those parsers are reachable | High |
+| djangorestframework | 3.16.1 | 3.17.2 | `request.data` parsing can bypass Django's upload memory limits; AdminRenderer data leak on 400s | Medium |
+| urllib3 | 2.5.0 | 2.8.0 | Decompression bombs in streaming, cross-origin redirect header leak, proxy TLS settings ignored. Affects outbound calls (PSN, IGDB, Discord, S3) | Medium |
+| cryptography | 46.0.3 | 50.0.0 | 46.0.7 (patch) clears three; the bundled-OpenSSL advisory and the rest need 48 to 50 (major) | Medium |
+| bleach | 6.2.0 | 6.4.0 | Disallowed URI schemes survive in `href` when `a` + `href` are allowed, which `checklist_service.py` does. The advisory rates it as not directly exploitable in browsers | Medium |
+| tornado | 6.5.2 | 6.5.9 | 14 advisories, but nothing imports tornado and no installed package requires it. Remove the pin rather than upgrade it | Low (remove) |
+| black | 25.9.0 | 26.3.1 | A formatter pinned in the production requirements; belongs in `requirements-dev.txt` | Low (move) |
+| sqlparse | 0.5.3 | 0.6.0 | DoS on crafted SQL; Django uses it for SQL formatting, not on request input | Low |
+| django-allauth | 65.13.1 | 65.14.1 | Open redirect only with SAML IdP-initiated SSO, which is not configured | Low |
+| Werkzeug | 3.1.4 | 3.1.9 | `safe_join` Windows device names; only pulled in by `sendgrid`, never serves files | Low |
+| Markdown | 3.7 | 3.8.1 | Crash on malformed HTML-like input; renders staff-authored broadcast emails only | Low |
+| requests, idna, python-dotenv | 2.32.5, 3.11, 1.2.1 | 2.33.0, 3.15, 1.2.2 | Temp-file name in a zip helper, idna DoS on long input, `.env` symlink follow (local only) | Low |
+
 
 - **CSP and new CDN resources.** If you add a new external script, stylesheet, font, or image source, you must update the CSP directives in settings.py or the resource will be blocked. A blocked resource fails *silently* apart from a console entry: the Cloudflare analytics beacon was CSP-blocked once and the dashboard read zero traffic while the site was being hammered.
 - **Rate limit key.** All `django-ratelimit` decorators use `key='user'` which requires authentication. For unauthenticated endpoints, use `key='ip'` instead. Allauth's `ACCOUNT_RATE_LIMITS` uses its own format (`'<count>/<period>[/<scope>]'` where scope is `ip` or `key`).
 - **CORS localhost leak.** Before this hardening, localhost origins were unconditionally added to production CORS. Always gate development-only origins behind `if DEBUG`.
 - **`throttle_classes = []` disables DRF throttling.** If you see this on a view, it's intentionally removing DRF's built-in throttling. Make sure `django-ratelimit` is used as a replacement, not that throttling is simply absent.
 - **Mobile signup is protected by a different rate limit and skips the honeypot.** `MobileSignupView` in `api/mobile_auth_views.py` calls allauth's base `SignupForm` directly rather than going through `SignupView`, so neither `ACCOUNT_RATE_LIMITS['signup']` nor the honeypot in `CustomUserCreationForm` apply. The view IS protected by its own `@ratelimit(key='ip', rate='3/m', method='POST', block=True)` decorator (django-ratelimit, returns 429 on excess). Web signup uses the allauth path (`5/m/ip` + honeypot); mobile uses django-ratelimit (`3/m/ip`, no honeypot). Both are throttled, just via different mechanisms.
+- **`npm audit` overstates production risk.** It reports every advisory as a production one, because the Tailwind toolchain sits in `dependencies` rather than `devDependencies`. None of it is served. Check the "Where each dependency tree runs" table before treating an npm critical as a site incident, and never answer one with `npm audit fix --force`: it installs versions outside the declared `package.json` ranges (majors included), and the rebuilt CSS is then no longer guaranteed identical.
 - **Log filter blast radius.** `SuppressBotMagnet405` is attached at the handler level, so any logger that routes through `console` benefits. The filter only matches the exact `Method Not Allowed (...): /<bot-magnet-path>` pattern, so other warnings are unaffected — but if you add a new logger that legitimately emits that exact string for a real endpoint, it will be swallowed. Update `BOT_MAGNET_405_PATTERN` if a new bot-magnet path needs adding.
