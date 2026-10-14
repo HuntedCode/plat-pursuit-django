@@ -39,7 +39,7 @@ git clone <repo-url>
 cd PlatPursuit
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install -r requirements.txt
+pip install -r requirements-dev.txt  # production requirements plus test and formatting tools (black)
 ```
 
 ### 2. Install Playwright (Optional)
