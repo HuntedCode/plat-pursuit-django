@@ -126,7 +126,8 @@ An npm advisory is therefore a build-machine concern (crafted input to a build t
 | npm audit | `npm audit` and `npm audit --omit=dev` (identical today, because the Tailwind toolchain is listed under `dependencies`) |
 | npm fix | `npm audit fix` **without** `--force`, so `package.json` ranges are respected and only the lockfile moves |
 | Verify npm | `npm run build`, then confirm `static/css/output.css` hashes the same as before the fix; `npm run lint`; if `@parcel/watcher` moved, smoke-test `npm run watch` with a real content change |
-| Python audit | `pip install pip-audit` into the venv (do not add it to requirements), then `python -m pip_audit -r requirements.txt --no-deps --disable-pip`. Every transitive dependency is pinned, so `--no-deps` audits exactly what ships |
+| Python audit | `pip install -r requirements-dev.txt` (it pins `pip-audit`), then `pip-audit -r requirements.txt --no-deps --disable-pip`. Every transitive dependency is pinned, so `--no-deps` audits exactly what ships. CI runs the same command as a gate ("Audit Python dependencies" in `.github/workflows/tests.yml`); to accept an advisory with no usable fix, add `--ignore-vuln <ID>` there and a row here saying why |
+| Python pins | After a bump, install `requirements.txt` into a clean venv and compare `pip freeze` with the pins: every installed package must be pinned (or the audit cannot see it) and every pin installed |
 
 ### 2026-10 triage
 
@@ -145,23 +146,23 @@ An npm advisory is therefore a build-machine concern (crafted input to a build t
 
 The only `npm ci` deprecation warning is `eslint@9.39.5` (end of support). Clearing it means ESLint 10, a major upgrade, so it is deferred.
 
-**Python: 96 unique advisories across 15 packages in `requirements.txt`.** Django and Pillow, the two High rows, were upgraded on 2026-10-14 (see [Image Uploads](#image-uploads) for the Pillow follow-through). The rest are still open.
+**Python: 96 unique advisories across 15 packages in `requirements.txt`, all cleared by 2026-10-14.** Django and Pillow, the two High rows, went first (see [Image Uploads](#image-uploads) for the Pillow follow-through); a follow-up PR took every other row. `pip-audit` now reports no known vulnerabilities, and CI fails on any new one.
 
 | Package | Pinned | Clears all | Why it matters here | Priority |
 |---------|--------|------------|---------------------|----------|
 | Django | 5.2.7 | 5.2.17 (same 5.2 LTS line) | 30 advisories: SQL injection in `FilteredRelation` / `order_by` column aliases and `_connector` dict expansion, ASGI and multipart DoS, cache-middleware response leaks, `get_signed_cookie` salt collision | High (fixed: 5.2.17) |
 | Pillow | 12.0.0 | 12.3.0 | 19 advisories, several heap out-of-bounds writes / memory corruption (PSD, EPS, JPEG2000, GD, PCF/BDF fonts, coordinate APIs). `trophies/image_utils.py` called `Image.open()` on user uploads with no `formats=` allowlist, so those parsers were reachable | High (fixed: 12.3.0, and uploads now reach only the allowed decoders) |
-| djangorestframework | 3.16.1 | 3.17.2 | `request.data` parsing can bypass Django's upload memory limits; AdminRenderer data leak on 400s | Medium |
-| urllib3 | 2.5.0 | 2.8.0 | Decompression bombs in streaming, cross-origin redirect header leak, proxy TLS settings ignored. Affects outbound calls (PSN, IGDB, Discord, S3) | Medium |
-| cryptography | 46.0.3 | 50.0.0 | 46.0.7 (patch) clears three; the bundled-OpenSSL advisory and the rest need 48 to 50 (major) | Medium |
-| bleach | 6.2.0 | 6.4.0 | Disallowed URI schemes survive in `href` when `a` + `href` are allowed, which `checklist_service.py` does. The advisory rates it as not directly exploitable in browsers | Medium |
-| tornado | 6.5.2 | 6.5.9 | 14 advisories, but nothing imports tornado and no installed package requires it. Remove the pin rather than upgrade it | Low (remove) |
-| black | 25.9.0 | 26.3.1 | A formatter pinned in the production requirements; belongs in `requirements-dev.txt` | Low (move) |
-| sqlparse | 0.5.3 | 0.6.0 | DoS on crafted SQL; Django uses it for SQL formatting, not on request input | Low |
-| django-allauth | 65.13.1 | 65.14.1 | Open redirect only with SAML IdP-initiated SSO, which is not configured | Low |
-| Werkzeug | 3.1.4 | 3.1.9 | `safe_join` Windows device names; only pulled in by `sendgrid`, never serves files | Low |
-| Markdown | 3.7 | 3.8.1 | Crash on malformed HTML-like input; renders staff-authored broadcast emails only | Low |
-| requests, idna, python-dotenv | 2.32.5, 3.11, 1.2.1 | 2.33.0, 3.15, 1.2.2 | Temp-file name in a zip helper, idna DoS on long input, `.env` symlink follow (local only) | Low |
+| djangorestframework | 3.16.1 | 3.17.2 | `request.data` parsing can bypass Django's upload memory limits; AdminRenderer data leak on 400s | Medium (fixed: 3.17.2) |
+| urllib3 | 2.5.0 | 2.8.0 | Decompression bombs in streaming, cross-origin redirect header leak, proxy TLS settings ignored. Affects outbound calls (PSN, IGDB, Discord, S3) | Medium (fixed: 2.8.0) |
+| cryptography | 46.0.3 | 50.0.0 | 46.0.7 (patch) clears three; the bundled-OpenSSL advisory and the rest need 48 to 50 (major) | Medium (fixed: 50.0.2; only `sendgrid` requires it, `>=45.0.6`, and nothing calls it) |
+| bleach | 6.2.0 | 6.4.0 | Disallowed URI schemes survive in `href` when `a` + `href` are allowed, which `checklist_service.py` does. The advisory rates it as not directly exploitable in browsers | Medium (fixed: 6.4.0, but bleach's changelog says it is no longer maintained and future advisories will get no fix; replacing it with `nh3` is a follow-up) |
+| tornado | 6.5.2 | 6.5.9 | 14 advisories, but nothing imports tornado and no installed package requires it. Remove the pin rather than upgrade it | Low (removed) |
+| black | 25.9.0 | 26.3.1 | A formatter pinned in the production requirements; belongs in `requirements-dev.txt` | Low (moved to dev as 26.10.1; its helper packages left the production pins with it and are resolved by pip in dev, since 26.x needs newer ones) |
+| sqlparse | 0.5.3 | 0.6.0 | DoS on crafted SQL; Django uses it for SQL formatting, not on request input | Low (fixed: 0.6.0) |
+| django-allauth | 65.13.1 | 65.14.1 | Open redirect only with SAML IdP-initiated SSO, which is not configured | Low (fixed: 65.14.1) |
+| Werkzeug | 3.1.4 | 3.1.9 | `safe_join` Windows device names; only pulled in by `sendgrid`, never serves files | Low (fixed: 3.1.9) |
+| Markdown | 3.7 | 3.8.1 | Crash on malformed HTML-like input; renders staff-authored broadcast emails only | Low (fixed: 3.8.1; with the app's `extra`, `nl2br`, `sane_lists` extensions it renders sample broadcasts byte-identically to 3.7) |
+| requests, idna, python-dotenv | 2.32.5, 3.11, 1.2.1 | 2.33.0, 3.15, 1.2.2 | Temp-file name in a zip helper, idna DoS on long input, `.env` symlink follow (local only) | Low (fixed) |
 
 ## Image Uploads
 
@@ -202,5 +203,7 @@ Greyscale PNGs are stored as RGB (about three times the bytes, identical to look
 - **Mobile signup is protected by a different rate limit and skips the honeypot.** `MobileSignupView` in `api/mobile_auth_views.py` calls allauth's base `SignupForm` directly rather than going through `SignupView`, so neither `ACCOUNT_RATE_LIMITS['signup']` nor the honeypot in `CustomUserCreationForm` apply. The view IS protected by its own `@ratelimit(key='ip', rate='3/m', method='POST', block=True)` decorator (django-ratelimit, returns 429 on excess). Web signup uses the allauth path (`5/m/ip` + honeypot); mobile uses django-ratelimit (`3/m/ip`, no honeypot). Both are throttled, just via different mechanisms.
 - **Never store a user's image bytes as uploaded, and never let them pick the extension.** A new upload path should go through `process_roadmap_image` or `optimize_image` (or reuse `_flatten_to_rgb` and `_as_upload`), and treat their `ValidationError` as "refuse the upload". Falling back to the raw file "so nothing is blocked" is exactly what leaked GPS data.
 - **Never `Image.open()` a user upload directly.** Use `_open_upload` (or the helpers that call it) in `trophies/image_utils.py`, or pass `formats=ALLOWED_IMAGE_FORMATS` as the card renderer does. A bare `Image.open()` runs every Pillow parser again, and a format check afterwards is too late: the parser has already run. Django's `ImageField` form validation also opens files with every decoder, but it is only reached from the staff-only admin.
+- **An unpinned package is invisible to the Python audit.** `pip-audit --no-deps` checks only what `requirements.txt` names, but pip still installs whatever a pinned package needs. `pyee` (required by `playwright`) shipped unpinned until 2026-10, so every image took whichever 12.x pip found that day (playwright bounds it to `>=12,<13`) and no audit ever saw it. After any bump, run the clean-venv comparison in "Running a triage".
+- **The pip-audit gate can turn an unrelated PR red.** It checks the advisory database at run time, so a newly published advisory (or the database being unreachable) fails CI on a PR that changed no dependencies. That is the point: bump the package, or, if no usable fix exists, add `--ignore-vuln <ID>` in `tests.yml` with a row here saying why. Do not remove the step to get a PR through.
 - **`npm audit` overstates production risk.** It reports every advisory as a production one, because the Tailwind toolchain sits in `dependencies` rather than `devDependencies`. None of it is served. Check the "Where each dependency tree runs" table before treating an npm critical as a site incident, and never answer one with `npm audit fix --force`: it installs versions outside the declared `package.json` ranges (majors included), and the rebuilt CSS is then no longer guaranteed identical.
 - **Log filter blast radius.** `SuppressBotMagnet405` is attached at the handler level, so any logger that routes through `console` benefits. The filter only matches the exact `Method Not Allowed (...): /<bot-magnet-path>` pattern, so other warnings are unaffected — but if you add a new logger that legitimately emits that exact string for a real endpoint, it will be swallowed. Update `BOT_MAGNET_405_PATTERN` if a new bot-magnet path needs adding.
