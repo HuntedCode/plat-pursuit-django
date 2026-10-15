@@ -30,6 +30,7 @@ from trophies.services.activity_service import DAYS_PER_PAGE
 from trophies.mixins import HtmxListMixin
 from trophies.psn_manager import PSNManager
 from trophies.services.sync_service import SyncService
+from trophies.services.verification_service import PRIVATE_HISTORY_MESSAGE
 
 logger = logging.getLogger("psn_api")
 
@@ -1253,11 +1254,18 @@ class ProfileVerifyView(LoginRequiredMixin, View):
             return JsonResponse({'error': 'Profile not found'}, status=404)
 
         if profile.sync_status == 'error':
-            return JsonResponse({'error': 'Sync error. Make sure your "Gaming History" permission is set to "Anybody"'}, status=400)
+            if not profile.psn_history_public:
+                return JsonResponse({'error': PRIVATE_HISTORY_MESSAGE}, status=400)
+            return JsonResponse({'error': 'PSN sync failed. Please try again in a few minutes.'}, status=400)
 
         verified = False
         synced = False
         if profile.last_synced.timestamp() > start_time_float:
+            # The sync that bumps last_synced also records whether Gaming History is private, and a
+            # private profile must not link: it would never sync a trophy. Without this the poll
+            # linked it, because the privacy error status arrives seconds later.
+            if not profile.psn_history_public:
+                return JsonResponse({'error': PRIVATE_HISTORY_MESSAGE}, status=400)
             synced = True
             verified = profile.verify_code(profile.about_me)
             if verified:

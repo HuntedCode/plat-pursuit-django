@@ -11,6 +11,15 @@ from django.utils import timezone
 
 logger = logging.getLogger('psn_api')
 
+#: What both verify paths (the Discord bot's and the website's) say when the PSN profile's Gaming
+#: History is private. Verification refuses until it is public: a private profile could otherwise
+#: link and then never sync a trophy. The code stays valid, so flipping the setting and verifying
+#: again is all it takes.
+PRIVATE_HISTORY_MESSAGE = (
+    "This PSN profile's Gaming History is private. In your PlayStation privacy settings, set "
+    "Gaming History to 'Anybody', then verify again."
+)
+
 
 class VerificationService:
     """Handles PSN profile verification logic."""

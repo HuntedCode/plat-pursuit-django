@@ -5,7 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication, TokenAuthentication
 from api.permissions import IsDiscordBot
 from .serializers import GenerateCodeSerializer, VerifySerializer, ProfileSerializer, TrophyCaseSerializer, CommentSerializer, CommentCreateSerializer
-from trophies.models import Profile, Comment, Concept
+from trophies.models import Profile, Comment, Concept, DiscordAlreadyLinkedError
+from trophies.services.verification_service import PRIVATE_HISTORY_MESSAGE
 from trophies.services.comment_service import CommentService
 from django.conf import settings
 from django.core.paginator import Paginator
@@ -109,10 +110,7 @@ class VerifyView(APIView):
                         break
                     if not profile.psn_history_public:
                         logger.warning(f"Privacy error detected for profile {profile.id} during verify.")
-                        return Response(
-                            {'success': False, 'message': 'This PSN profile has its privacy settings enabled. Please set your gaming history to public and try again.'},
-                            status=status.HTTP_403_FORBIDDEN,
-                        )
+                        return Response({'success': False, 'message': PRIVATE_HISTORY_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
                     if profile.sync_status == 'error':
                         logger.warning(f"Sync error for profile {profile.id} during verify.")
                         return Response(
@@ -124,6 +122,15 @@ class VerifyView(APIView):
                 if profile.last_synced <= start_time:
                     logger.warning(f"Sync timeout for profile {profile.id} after {timeout_seconds}s.")
                     return Response({'success': False, 'message': 'Sync timed out. Try again later.'}, status=status.HTTP_408_REQUEST_TIMEOUT)
+
+                # Privacy is decided in the same save that moves last_synced (the PSN profile summary
+                # shows trophy level 0 when Gaming History is private), so a finished sync that left
+                # the history private ends here. Checked inside the loop alone, it never fired: the
+                # sync-finished break always won, and a private profile could link with no trophies
+                # to sync.
+                if not profile.psn_history_public:
+                    logger.info(f"Verify refused for profile {profile.id}: Gaming History is private.")
+                    return Response({'success': False, 'message': PRIVATE_HISTORY_MESSAGE}, status=status.HTTP_403_FORBIDDEN)
 
                 if profile.verify_code(profile.about_me):
                     profile.link_discord(discord_id)
@@ -151,13 +158,20 @@ class VerifyView(APIView):
                             recompute_milestones(profile, reconcile_discord=True)
                         except Exception:
                             logger.exception(f"[verify] milestone recompute failed for {psn_username}")
-                    sync_discord_roles(profile)
+                    # Guarded like the two calls above: the link has committed, so a failed role push
+                    # must not turn it into an error (the user would be linked on the site, refused a
+                    # retry as already linked, and never get the Verified role). /sync-roles
+                    # reconciles any role this misses.
+                    try:
+                        sync_discord_roles(profile)
+                    except Exception:
+                        logger.exception(f"[verify] Discord role sync failed for {psn_username}")
                     return Response({'success': True, 'message': 'Verified and linked successfully!'})
                 else:
                     return Response({'success': False, 'message': 'Verification failed. Check code and try again.'})
             except Profile.DoesNotExist:
                 return Response({'error': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
-            except ValueError as e:
+            except DiscordAlreadyLinkedError as e:
                 return Response({'success': False, 'message': str(e)}, status=status.HTTP_409_CONFLICT)
             except Exception as e:
                 logger.exception(f"Verify error for {psn_username}: {e}")

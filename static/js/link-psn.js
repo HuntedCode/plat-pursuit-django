@@ -138,9 +138,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!active) return;
 
                     stopPolling();
-                    const msg = error.message || 'An unexpected error occurred.';
-                    ToastManager.error(`Error checking status: ${msg}`);
-                    redirectAfterDelay(linkPsnUrl, 2000);
+                    // The poll refuses with a 400 and the reason in `error` (a private Gaming History,
+                    // a failed sync). `error.message` is only "API request failed: 400", which is all
+                    // users used to see. Feature-tested like quick-add.js: on a cached older utils.js a
+                    // bare call would throw inside this handler and lose the toast entirely.
+                    const reasonOf = PlatPursuit.API.failureMessage
+                        ? PlatPursuit.API.failureMessage(error)
+                        : Promise.resolve(null);
+                    reasonOf.then(reason => {
+                        ToastManager.error(reason || 'Could not check verification. Please try again.');
+                        redirectAfterDelay(linkPsnUrl, reason ? 4000 : 2000);
+                    });
                 });
         }
 

@@ -392,3 +392,17 @@ class ProfileTrophyGroupFactory(factory.django.DjangoModelFactory):
     trophy_group = factory.SubFactory(TrophyGroupFactory)
     progress = 100
     last_trophy_at = factory.LazyFunction(timezone.now)
+
+
+def bot_api_client():
+    """An APIClient authenticated as the Discord bot (IsDiscordBot matches on the token key)."""
+    from django.conf import settings
+    from rest_framework.authtoken.models import Token
+    from rest_framework.test import APIClient
+
+    user = UserFactory()
+    Token.objects.filter(user=user).delete()
+    token = Token.objects.create(user=user, key=settings.BOT_API_KEY)
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
+    return client

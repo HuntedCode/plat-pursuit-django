@@ -18,11 +18,8 @@ Covered here:
 from unittest.mock import patch
 
 import pytest
-from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
-from rest_framework.test import APIClient
 
 from core.services.weekly_digest_service import WeeklyDigestService
 from trophies.models import (
@@ -30,7 +27,7 @@ from trophies.models import (
 )
 from tests.factories import (
     BadgeSeriesFactory, ConceptFactory, GameFactory, GroupBadgeFactory, PlatformGroupFactory,
-    ProfileFactory, StageFactory, UserFactory,
+    ProfileFactory, StageFactory, bot_api_client,
 )
 
 pytestmark = pytest.mark.django_db
@@ -61,16 +58,6 @@ def _finish(profile, game):
         profile=profile, trophy_group=tg, defaults={'progress': 100, 'last_trophy_at': timezone.now()})
 
 
-def _bot_client():
-    """An APIClient authenticated as the Discord bot (IsDiscordBot matches on the token key)."""
-    user = UserFactory()
-    Token.objects.filter(user=user).delete()
-    token = Token.objects.create(user=user, key=settings.BOT_API_KEY)
-    client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
-    return client
-
-
 # --- the bot's /recheck-badges ------------------------------------------------
 
 
@@ -81,7 +68,7 @@ def test_recheck_awards_through_the_new_engine_and_reports_it():
     _, badge, game = _earnable_series('souls', 'Souls Series')
     _finish(profile, game)
 
-    resp = _bot_client().post(reverse('api:recheck-badges'), {'discord_id': '555'}, format='json')
+    resp = bot_api_client().post(reverse('api:recheck-badges'), {'discord_id': '555'}, format='json')
 
     assert resp.status_code == 200
     body = resp.json()
@@ -120,7 +107,7 @@ def test_recheck_ignores_dormant_editions_and_stays_silent(mock_send):
     )
     StageFactory(series_slug='unreleased', stage_number=1).concepts.add(game.concept)
 
-    body = _bot_client().post(reverse('api:recheck-badges'), {'discord_id': '559'}, format='json').json()
+    body = bot_api_client().post(reverse('api:recheck-badges'), {'discord_id': '559'}, format='json').json()
 
     assert body['badges_checked'] == 1, 'the dormant edition was counted'
     assert UserGroupBadge.objects.filter(profile=profile, group_badge=live_badge).exists()
@@ -133,7 +120,7 @@ def test_recheck_reports_nothing_when_the_hunter_does_not_qualify():
     profile = ProfileFactory(discord_id='556', is_discord_verified=True)
     _earnable_series('souls', 'Souls Series')   # game exists, but the profile never finished it
 
-    body = _bot_client().post(reverse('api:recheck-badges'), {'discord_id': '556'}, format='json').json()
+    body = bot_api_client().post(reverse('api:recheck-badges'), {'discord_id': '556'}, format='json').json()
 
     assert body['awarded'] == []
     assert not UserGroupBadge.objects.filter(profile=profile).exists()
@@ -147,7 +134,7 @@ def test_recheck_revokes_a_badge_the_hunter_no_longer_qualifies_for():
     # Held, but nothing backs it up -- the profile has no completed game.
     UserGroupBadge.objects.create(profile=profile, group_badge=badge)
 
-    body = _bot_client().post(reverse('api:recheck-badges'), {'discord_id': '557'}, format='json').json()
+    body = bot_api_client().post(reverse('api:recheck-badges'), {'discord_id': '557'}, format='json').json()
 
     assert len(body['revoked']) == 1
     assert 'Souls Series' in body['revoked'][0]
@@ -156,7 +143,7 @@ def test_recheck_revokes_a_badge_the_hunter_no_longer_qualifies_for():
 
 def test_recheck_rejects_an_unverified_profile():
     profile = ProfileFactory(discord_id='558', is_discord_verified=False)
-    resp = _bot_client().post(reverse('api:recheck-badges'), {'discord_id': '558'}, format='json')
+    resp = bot_api_client().post(reverse('api:recheck-badges'), {'discord_id': '558'}, format='json')
     assert resp.status_code == 400
     assert not UserGroupBadge.objects.filter(profile=profile).exists()
 
